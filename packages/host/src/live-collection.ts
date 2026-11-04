@@ -34,7 +34,6 @@ import {
   type FieldChange,
   type ROW_GONE,
   type RowCollection,
-  rowChanges,
   rowOf,
   syncedCollection,
 } from "@repo/sync";
@@ -81,32 +80,6 @@ export function rowAt<Row extends object, Key extends string>(
 ): WithoutVirtualProps<Row> | undefined {
   const stored = collection.get(key);
   return stored === undefined ? undefined : rowOf<WithoutVirtualProps<Row>>(stored);
-}
-
-/**
- * Draws `rows` over a collection inside a write's transaction: an insert, a
- * whole-row update, or a delete for each row that differs from what it
- * shows, and nothing for the rest.
- */
-export function drawRows<Row extends object, Key extends string>(
-  collection: RowCollection<Row, Key>,
-  rows: readonly Row[],
-): void {
-  const keyed = (each: readonly Row[]) =>
-    new Map(each.map((row) => [collection.getKeyFromItem(row), row]));
-  const shown = collection.toArray.map((stored) => rowOf<Row>(stored));
-  for (const change of rowChanges(keyed(shown), keyed(rows))) {
-    if (change.type === "delete") collection.delete(change.key);
-    else if (change.type === "insert") collection.insert(change.value);
-    else
-      collection.update(collection.getKeyFromItem(change.value), (draft) => {
-        // Note that a key the row no longer carries is left undefined, which `rowOf` drops, since a draft keeps its keys.
-        for (const name of Object.keys(draft)) {
-          if (!name.startsWith("$") && !(name in change.value)) Reflect.deleteProperty(draft, name);
-        }
-        Object.assign(draft, change.value);
-      });
-  }
 }
 
 /**
@@ -161,12 +134,6 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
   readonly confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => void;
   /** Takes a write's own answer that one row is gone in the read's place, as `confirmRow` takes a change. */
   readonly confirmGone: (key: Key) => void;
-  /**
-   * Takes a write's own answer of a row it made in the read's place, as
-   * `confirmRow` takes a change. A row the read answered already is left as
-   * it answered it, which is as new.
-   */
-  readonly confirmNew: (row: Row) => void;
   /**
    * Waits until the rows the read answered first satisfy `until`, at once
    * where they do already: how a write whose service hands no transaction
@@ -238,10 +205,6 @@ export function answeredCollection<Row extends object, Key extends string>(optio
         const next = new Map(held());
         next.delete(key);
         take(next);
-      },
-      confirmNew: (row: Row) => {
-        const key = options.getKey(row);
-        if (!held().has(key)) take(new Map(held()).set(key, row));
       },
       carried,
     };

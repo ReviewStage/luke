@@ -38,6 +38,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
@@ -690,20 +691,28 @@ const ArchivableAgentSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
   conversationSeq: Schema.Number,
+  runAgents: Schema.Number,
 });
 
-/** An agent a run started that its automation archives once it finishes well: its run, whose it is, its id, its conversation and how far its lines had run when read, when it was made, and when it was put away where it already was. */
+/** An agent of a run that its automation archives once it finishes well: its run and how many agents that run has, whose it is, its id, its conversation and how far its lines had run when read, when it was made, and when it was put away where it already was. */
 export type ArchivableRunAgent = typeof ArchivableAgentSchema.Type;
 
+/** An agent of the same run, counted beside the one read. */
+const runAgent = alias(agentTable, "run_agent");
+
 /**
- * The agents runs fired at or after `since` started for automations that
+ * The agents of runs fired at or after `since` for automations that
  * archive their successful runs and start a new agent each run, whose
  * archive the sweep has not settled yet and that hold no open inbox item,
- * at most `limit`, oldest run first. Note that an agent waiting on the
- * inbox is left for a later sweep, because archiving it would put away the
- * question it is waiting on, that one the sweep settled is never read
- * again, so an agent the developer brought back stays, and that one whose
- * starter left the workspace is read again only once they are back.
+ * at most `limit`, oldest run first and a run's agents together. A run's
+ * agents are every agent naming it (`automation_run_id`): the one it
+ * started and the ones those started with no task, each read with how
+ * many the run has, so the sweep can tell a run read whole. Note that an
+ * agent waiting on the inbox is left for a later sweep, because archiving
+ * it would put away the question it is waiting on, that a run the sweep
+ * settled is never read again, so an agent the developer brought back
+ * stays, and that one whose starter left the workspace is read again only
+ * once they are back.
  */
 const findArchivableAgents = SqlSchema.findAll({
   Request: Schema.Struct({ since: Schema.Date, limit: Schema.Number }),
@@ -719,10 +728,14 @@ const findArchivableAgents = SqlSchema.findAll({
           createdAt: agentTable.createdAt,
           archivedAt: agentTable.archivedAt,
           conversationSeq: conversations.nextMessageSeq,
+          runAgents: sql<number>`(${queryBuilder
+            .select({ count: sql`count(*)::int` })
+            .from(runAgent)
+            .where(eq(runAgent.automationRunId, automationRun.id))})`,
         })
         .from(automationRun)
         .innerJoin(automation, eq(automation.id, automationRun.automationId))
-        .innerJoin(agentTable, eq(agentTable.id, automationRun.agentId))
+        .innerJoin(agentTable, eq(agentTable.automationRunId, automationRun.id))
         .innerJoin(conversations, eq(conversations.id, agentTable.conversationId))
         .where(
           and(
@@ -748,7 +761,7 @@ const findArchivableAgents = SqlSchema.findAll({
             noOpenPullRequest,
           ),
         )
-        .orderBy(asc(automationRun.firedAt))
+        .orderBy(asc(automationRun.firedAt), asc(automationRun.id), asc(agentTable.id))
         .limit(limit),
     ),
 });
@@ -1364,7 +1377,7 @@ export function startedRunAgents(
   return findStartedAgents({ automationId, since });
 }
 
-/** The agents of runs fired at or after `since` that their automations archive once finished well, as above, at most `limit`, oldest run first. */
+/** The agents of runs fired at or after `since` that their automations archive once finished well, each with how many agents its run has, as above, at most `limit`, oldest run first. */
 export function archivableRunAgents(
   since: Date,
   limit: number,
@@ -1383,7 +1396,7 @@ const writeArchiveSettled = SqlSchema.void({
     ),
 });
 
-/** Marks what becomes of the run's agent as settled, archived or left standing for good, so no later sweep reads it again. */
+/** Marks what becomes of the run's agents as settled, archived or left standing for good, so no later sweep reads them again. */
 export function settleRunArchive(runId: string): TaskStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (now) => writeArchiveSettled({ runId, now }));
 }
@@ -1506,6 +1519,38 @@ export function withAutomationLocked<A, E, R>(
 ): Effect.Effect<A, E | TaskStoreFailure, R | DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(Effect.andThen(lockAutomationRow(automationId), effect)),
+  );
+}
+
+const findCurrentRun = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            or(eq(automationRun.agentId, agentId), eq(automationRun.claimedAgentId, agentId)),
+          ),
+        )
+        .orderBy(desc(automationRun.settledAt), desc(automationRun.firedAt))
+        .limit(1),
+    ),
+});
+
+/**
+ * The run the agent works on now: the one last handed to it, started by it
+ * or claimed to be sent to it; none for an agent no run was handed to.
+ * Note that a run claimed for a same-agent automation's agent counts from
+ * its claim, because its line reaches the agent before the run holds it.
+ */
+export function currentAutomationRun(agentId: string): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findCurrentRun(agentId),
+    Option.map((run) => run.id),
   );
 }
 

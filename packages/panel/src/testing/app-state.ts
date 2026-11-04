@@ -15,7 +15,7 @@ import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
-import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TasksView } from "@repo/features/tasks-view";
 import {
   type AppAutomationReads,
   type AppBrowserTabs,
@@ -123,6 +123,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.HISTORY]: NO_KEYS_HELD,
     [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
@@ -227,6 +228,8 @@ export interface HostReadsHanded {
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
   readonly deliverIntegrations: (next: AppWorkspaceIntegrations) => void;
   readonly deliverSlackChannels: (next: AppSlackChannels) => void;
+  /** The account's task list, as the host lays it whole. */
+  readonly deliverTasks: (next: TasksView) => void;
 }
 
 /** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
@@ -308,6 +311,7 @@ export function handHostReads(first: {
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
     deliverIntegrations: (next) => deliver({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: next }),
     deliverSlackChannels: (next) => deliver({ [LIVE_READ.SLACK_CHANNELS]: next }),
+    deliverTasks: (next) => deliver({ tasks: next }),
   };
 }
 

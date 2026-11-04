@@ -128,7 +128,6 @@ import {
   notKept,
   unreachedAs,
 } from "../act.js";
-import { streamFrom } from "../act-stream.js";
 import { ADMIN_TAB, type AdminView, adminViewOfLink } from "../admin/routing.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -2567,25 +2566,25 @@ export function useTasksTab(input: {
     setRelationMenu((held) => ({ taskId, kind, request: (held?.request ?? 0) + 1 }));
   };
 
-  // A fixture's task reads its staged history through the same acts (`tasks-fixture.ts`).
+  // A fixture's task reads its staged history through the same acts, and holds it on its staged document (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
-      readPage: (taskId, before) =>
-        act(ACT_KIND.TASKS_REVISIONS, {
-          taskId,
-          ...(before === undefined ? undefined : { before }),
-        }),
-      // A follow that broke is opened again, so the newest page never stops moving for good.
-      followNewest: (taskId, take) =>
-        streamFrom(() => act(ACT_KIND.TASKS_HISTORY_FOLLOW, { taskId }), take),
+      readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
       readRevision: (taskId, seq) => act(ACT_KIND.TASKS_REVISION, { taskId, seq }),
       restore: (taskId, seq) => act(ACT_KIND.TASKS_RESTORE, { taskId, seq }),
     }),
     [act],
   );
+  const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
+  // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.
+  const heldHistory = useHostRead(
+    LIVE_READ.HISTORY,
+    shown && historyOpen ? historyTaskId : undefined,
+  );
   const history = usePlanHistory({
     source: historySource,
-    taskId: region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined,
+    taskId: historyTaskId,
+    history: heldHistory,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.task.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.task.name : undefined,
     shown: shown && historyOpen,
@@ -2671,8 +2670,20 @@ export function useTasksTab(input: {
       setStandIn(undefined);
       setHistoryFor(undefined);
     }
+    // Note that the host opens a start's task at once, so a bare one pressed on Home's own
+    // composer, whose page the task's took the place of, says its refusal in a toast, as no
+    // card stands to say it.
+    const saidInToast = handed === undefined && !stays && newTaskAsk === undefined;
     // Note that a refusal keeps what refused it, so the box that shows it reports that in its place.
     const refusedWith = (note: ComposerNote): ComposerNote => {
+      if (saidInToast) {
+        toast({
+          words: note.text,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.TASK_START, cause: note.cause },
+        });
+      }
       if (handed !== undefined) {
         letGoOfPage();
         // Note that what stood before the press comes back only where the developer went nowhere since.

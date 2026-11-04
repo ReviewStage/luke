@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentSummary } from "@repo/features/agent-wire";
+import type { AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
@@ -27,6 +27,7 @@ import {
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import {
   SENTRY_LEVEL,
   SENTRY_TRIGGER_EVENT,
@@ -58,6 +59,7 @@ import {
   handHostReads,
   holdAutomations,
   holdIntegrations,
+  stateWith,
 } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -153,6 +155,29 @@ const CI_DIGEST = {
   turnId: null,
 } as const;
 
+/** An agent on no task in the workspace, working in the automations' repository, as the task list carries it. */
+function onLedger(agent: AgentSummary): TasklessAgent {
+  return {
+    ...agent,
+    automationId: null,
+    workspaceId: WORKSPACE.id,
+    repository: "acme/ledger",
+    activityAt: agent.createdAt,
+  };
+}
+
+/** The task list as the host lays it: failed before it carried any agent where the test says so, else carrying the test's agents on no task. */
+function tasksView(): TasksView {
+  return agentListRefused
+    ? { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.FAILED }
+    : {
+        ...IDLE_TASKS_VIEW,
+        listStatus: TASKS_READ.READY,
+        taskAgents: [],
+        tasklessAgents: workspaceAgents,
+      };
+}
+
 let root: Root | undefined;
 /** The service's automations, as a read of the list answers them and a change changes them. */
 let standing: AutomationSummary[] = [];
@@ -188,10 +213,10 @@ let changes: unknown[] = [];
 let creates: AutomationCreateParams[] = [];
 /** Every automation deleted, by its id. */
 let deletes: string[] = [];
-/** Every ask for a workspace's agents, as the act carried it. */
+/** Every search of a workspace's agents, as the act carried it. */
 let agentsAsked: unknown[] = [];
-/** The workspace's newest agents on the repository, as a read with no words answers them. */
-let workspaceAgents: readonly AgentSummary[] = [];
+/** Every agent on no task the task list carries, as the host lays it. */
+let workspaceAgents: readonly TasklessAgent[] = [];
 /** The agents a search for `words` finds, as the service answers it. */
 let agentsFound: (words: string) => readonly AgentSummary[] = () => [];
 /** The service's runs of every automation, newest first, as a read of one's runs answers them. */
@@ -216,8 +241,10 @@ let catalogReads = 0;
 let catalogRefused = false;
 /** Whether the catalog marks every model as one no credential of the reader's pays for. */
 let catalogUnconnected = false;
-/** Whether the workspace's newest agents answer that they could not be read. */
+/** Whether the task list failed before it carried the workspace's agents. */
 let agentListRefused = false;
+/** Lays the task list on the window again, as the host does once it reads it. */
+let deliverTasks: (next: TasksView) => void = () => undefined;
 /** Whether a search among the workspace's agents answers that it could not be made. */
 let agentSearchRefused = false;
 /** Whether the account's tasks were about no repository lately, so a new automation starts with none. */
@@ -282,7 +309,7 @@ beforeEach(() => {
   creates = [];
   deletes = [];
   agentsAsked = [];
-  workspaceAgents = [CI_DIGEST];
+  workspaceAgents = [onLedger(CI_DIGEST)];
   agentsFound = () => [];
   runs = [];
   workspaceRuns = [];
@@ -311,6 +338,8 @@ beforeEach(() => {
   integrationsFollowed = new Set();
   workspaceIntegrations = NO_KEYS_HELD;
   fakeActs({
+    // Note that the task list is laid as the page is first drawn, so a test's agents stand once it mounts.
+    requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
         changes.push(request.payload);
@@ -423,8 +452,7 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
-        const { words } = request.payload;
-        if (words === undefined ? agentListRefused : agentSearchRefused) {
+        if (agentSearchRefused) {
           return Promise.resolve({
             status: FAKE_ANSWER.DONE,
             value: { failure: AUTOMATION_CALL_FAILURE.UNANSWERED },
@@ -432,8 +460,13 @@ beforeEach(() => {
         }
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
-          value: { agents: words === undefined ? workspaceAgents : agentsFound(words) },
+          value: { agents: agentsFound(request.payload.words ?? "") },
         });
+      }
+      if (request.kind === ACT_KIND.TASKS_REFRESH) {
+        agentListRefused = false;
+        deliverTasks(tasksView());
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
@@ -441,6 +474,7 @@ beforeEach(() => {
   // Note that each list and history a page holds is laid on its document as the host lays it.
   const reads = handHostReads({});
   deliverIntegrations = reads.deliverIntegrations;
+  deliverTasks = reads.deliverTasks;
   host = holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => {
       if (listHeld) return undefined;
@@ -2101,7 +2135,7 @@ test("the agent a same-agent automation was saved with is not offered once its r
     [...document.querySelectorAll("[role=option] .ui-combobox-option-label")].map(
       (name) => name.textContent,
     ),
-    ["Started by its first run", "CI digest"],
+    ["Started by its first run"],
   );
 });
 
@@ -2111,7 +2145,6 @@ test("Same agent saves with none chosen, its first run starting one, or with one
 
   pick(page, "Runs land in", "Same agent");
   await settle();
-  assert.deepEqual(agentsAsked, [{ workspaceId: WORKSPACE.id, repository: "acme/ledger" }]);
   assert.ok(
     pickerDescription(page, "Agent").some((words) =>
       words?.includes("Every later run is sent to it"),
@@ -2177,7 +2210,7 @@ test("the Agent picker draws each agent as every agent menu does: its glyph, its
     title: "Nightly sweep",
     status: "failed",
   } as const;
-  workspaceAgents = [BROKEN, CI_DIGEST];
+  workspaceAgents = [onLedger(BROKEN), onLedger(CI_DIGEST)];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   pick(page, "Runs land in", "Same agent");
@@ -2201,6 +2234,28 @@ test("the Agent picker draws each agent as every agent menu does: its glyph, its
   act(() => row.click());
   assert.equal(picked(page, "Agent"), "CI digest");
   assert.equal(chipWearsGlyph(page, "Agent"), true, "the chip wears the chosen agent's glyph");
+});
+
+test("the Agent picker offers the workspace's unarchived agents on the automation's repository, newest first, its case aside", async () => {
+  const named = (id: string, title: string, createdAt: number) =>
+    onLedger({ ...CI_DIGEST, id: `8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3c${id}`, title, createdAt });
+  workspaceAgents = [
+    named("01", "Ledger cleanup", 2),
+    { ...named("02", "Shouting ledger", 3), repository: "Acme/Ledger" },
+    { ...named("03", "Archived digest", 4), archivedAt: 5 },
+    { ...named("04", "Web checks", 4), repository: "acme/web" },
+    { ...named("05", "Another workspace's", 4), workspaceId: "workspace-other" },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  pick(page, "Runs land in", "Same agent");
+  await settle();
+  act(() => picker(page, "Agent").click());
+
+  assert.deepEqual(
+    agentRows().map((row) => row.name),
+    ["Started by its first run", "Shouting ledger", "Ledger cleanup"],
+  );
 });
 
 test("the Agent picker's rows each hang their agent's card while the pointer rests on them", async () => {
@@ -2258,8 +2313,11 @@ test("a word typed in the Agent picker asks the service for the repository's age
 });
 
 test("a word typed in the Agent picker keeps the newest agents whose rows hold it, so one named by its model stays where the service matches no model", async () => {
-  const UNTITLED = { ...CI_DIGEST, title: null } as const;
-  workspaceAgents = [UNTITLED, { ...CI_DIGEST, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27" }];
+  const UNTITLED = { ...CI_DIGEST, title: null, createdAt: 2 } as const;
+  workspaceAgents = [
+    onLedger(UNTITLED),
+    onLedger({ ...CI_DIGEST, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b27" }),
+  ];
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
   pick(page, "Runs land in", "Same agent");
@@ -3552,7 +3610,7 @@ test("a model catalog that could not be read says so in the model menu, and Retr
   assert.ok(menu.querySelectorAll("[role=option]").length > 0, "the models are listed");
 });
 
-test("workspace agents that could not be read say so in the Agent row, and Retry reads them again", async () => {
+test("workspace agents the task list failed to carry say so in the Agent row, and Retry reads the list again", async () => {
   agentListRefused = true;
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   await settle();
@@ -3561,7 +3619,6 @@ test("workspace agents that could not be read say so in the Agent row, and Retry
 
   assert.match(page.textContent ?? "", /The workspace's agents could not be read\./u);
 
-  agentListRefused = false;
   act(() => button("Retry").click());
   await settle();
 

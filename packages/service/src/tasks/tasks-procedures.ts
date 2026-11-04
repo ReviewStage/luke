@@ -137,7 +137,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import { archiveAskedStatus } from "./archive-settle.js";
 import {
   PLAN_SAVE_REFUSAL,
@@ -759,7 +759,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * as its turn ends. A move off Done brings back the agents that Done
      * archived (`task-store.ts`'s `updateTaskCommitted`).
      */
-    update: plans.update.effect(function* ({ input, context }) {
+    update: plans.update.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId } = context;
       const taskId = yield* pathUuid(input.params.id);
       const changes = input.body;

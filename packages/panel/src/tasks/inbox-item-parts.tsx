@@ -22,7 +22,6 @@ import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
 import {
   AttentionMark,
-  Badge,
   cn,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -34,7 +33,6 @@ import {
   HoverCardSkeleton,
   INLINE_REF_LOOK,
   InlineRef,
-  STATUS_TONE,
   TaskStatusMark,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -271,12 +269,7 @@ export function InboxItemCard({
       <HoverCardHead
         glyph={inboxItemGlyph(item)}
         name={cardTitle(item.title)}
-        sub={
-          <>
-            {needsYou ? <AttentionMark /> : null}
-            <span>{standingWords(item, needsYou, starter)}</span>
-          </>
-        }
+        sub={<span>{standingWords(item, needsYou, starter)}</span>}
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
       <HolderDetail holder={holder} workspaceId={itemWorkspaceId(holder)} />
@@ -446,11 +439,7 @@ function CardAsk({
               <HoverCardRow
                 glyph={<CircleIcon aria-hidden="true" />}
                 label={option.label}
-                end={
-                  recommendedLabels(ask).includes(option.label) ? (
-                    <Badge tone={STATUS_TONE.ATTENTION}>{RECOMMENDED}</Badge>
-                  ) : undefined
-                }
+                end={recommendedLabels(ask).includes(option.label) ? RECOMMENDED : undefined}
               />
             </li>
           ))}

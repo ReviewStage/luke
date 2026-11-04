@@ -26,14 +26,13 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
  * marks the 401 of a secret no standing host holds `hostRemoved`
  * (`hostRemovedDataSchema`), and a second such answer at least `CONFIRM`
  * after the first, with nothing of the service's taken between, settles it.
- * A service from before that mark answers a bare 401, which settles it only
- * once register and beat have answered nothing else for `UNMARKED_CONFIRM`.
- * Any other 401 is said once, until every route it refused takes a call
- * again, and the daemon keeps asking at its own pace, its runners left
- * running, since a quiet spell shuts the follower's gate, which stops every
- * runner. A removal settled is heard by `secretRefused`, on which the daemon
- * stops every runner it started and ends. The service taking the box's calls
- * again after either refusal is said once too.
+ * Any other 401, a bare one to register or beat among them, settles
+ * nothing: it is said once, until the service next takes a call, and the
+ * daemon keeps asking at its own pace, its runners left running, since a
+ * quiet spell shuts the follower's gate, which stops every runner. A removal
+ * settled is heard by `secretRefused`, on which the daemon stops every
+ * runner it started and ends. The service taking the box's calls again
+ * after either refusal is said once too.
  */
 
 /** How long the daemon asks the service nothing after it was refused as below its floor, before it tries again. */
@@ -41,9 +40,6 @@ const QUIET = Duration.minutes(5);
 
 /** How long after the first answer saying the host was removed a register or beat must say it again to settle the removal: a few beats. */
 const CONFIRM = Duration.minutes(1);
-
-/** How long a service from before the `hostRemoved` mark must refuse every register and beat, taking nothing between, before the host is taken as removed. */
-const UNMARKED_CONFIRM = Duration.hours(1);
 
 /** What the daemon says once the service first took its register, which a person following its log reads as the box connected. */
 const HOST_CONNECTED_REPORT = `${PRODUCT_NAME} host: Connected to ${PRODUCT_NAME}.`;
@@ -70,7 +66,7 @@ const decodeHostRemoved = Schema.decodeUnknownOption(
   ),
 );
 
-/** What the daemon says once the service first refuses a call with a 401 that settles nothing, until every route it refused takes a call again. */
+/** What the daemon says once the service first refuses a call with a 401 that settles nothing, until the service next takes a call. */
 const CALLS_REFUSED_REPORT = `${PRODUCT_NAME} host: ${PRODUCT_NAME} refused this box's calls. It keeps asking and leaves its agents running until ${PRODUCT_NAME} takes them again or says the box was removed.`;
 
 /** What a person at the box reads for each refusal, said once as it starts: the command to run, on the service the box enrolled with. */
@@ -107,13 +103,10 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
     kind: HOST_STANDING.STANDING,
     until: 0,
   });
-  /** When register or beat first answered a 401 since the service last took a call, and first said the host was removed. */
-  const refusedSince = yield* Ref.make<{
-    readonly any?: number | undefined;
-    readonly removed?: number | undefined;
-  }>({});
-  /** The routes whose last answer was a 401 that settled nothing, by their address: the box's calls stand refused while any does. */
-  const refusedRoutes = yield* Ref.make<ReadonlySet<string>>(new Set());
+  /** When register or beat first said the host was removed since the service last took a call. */
+  const removedSince = yield* Ref.make<number | undefined>(undefined);
+  /** Whether a 401 that settled nothing was said since the service last took a call. */
+  const callsRefused = yield* Ref.make(false);
   const connected = yield* Ref.make(false);
   const refused = yield* Deferred.make<void>();
   const registerUrl = `${options.serviceOrigin}${HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES}`;
@@ -124,18 +117,12 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
   const ownCall = (request: HttpClientRequest.HttpClientRequest) =>
     request.method === HTTP_METHOD.POST && (request.url === registerUrl || request.url === beatUrl);
 
-  /** Whether a 401 settles the host as removed: its own register or beat said so again past `CONFIRM`, or refused unmarked past `UNMARKED_CONFIRM`. */
+  /** Whether a 401 settles the host as removed: its own register or beat said so, and said so first at least `CONFIRM` ago. */
   const removalSettled = (now: number, own: boolean, removedSaid: boolean) =>
     Effect.gen(function* () {
-      if (!own) return false;
-      const since = yield* Ref.updateAndGet(refusedSince, (before) => ({
-        any: before.any ?? now,
-        removed: removedSaid ? (before.removed ?? now) : before.removed,
-      }));
-      return (
-        (removedSaid && now - (since.removed ?? now) >= Duration.toMillis(CONFIRM)) ||
-        now - (since.any ?? now) >= Duration.toMillis(UNMARKED_CONFIRM)
-      );
+      if (!own || !removedSaid) return false;
+      const since = yield* Ref.updateAndGet(removedSince, (before) => before ?? now);
+      return now - (since ?? now) >= Duration.toMillis(CONFIRM);
     });
 
   /** One answer heard: a refusal said once as it starts, a 426 a quiet spell, a settled removal the end; a 2xx after a refusal says the service is reached again. */
@@ -165,21 +152,12 @@ export const hostServiceStanding = Effect.fnUntraced(function* (options: HostSta
           options.report(refusalReport(HOST_STANDING.SECRET_REFUSED, options.serviceOrigin));
           return;
         }
-        const routes = yield* Ref.getAndUpdate(
-          refusedRoutes,
-          (held) => new Set([...held, request.url]),
-        );
-        if (routes.size === 0) options.report(CALLS_REFUSED_REPORT);
+        if (!(yield* Ref.getAndSet(callsRefused, true))) options.report(CALLS_REFUSED_REPORT);
         return;
       }
       if (status < 200 || status >= 300) return;
-      yield* Ref.set(refusedSince, {});
-      const routes = yield* Ref.getAndUpdate(refusedRoutes, (held) => {
-        const left = new Set(held);
-        left.delete(request.url);
-        return left;
-      });
-      const callsTaken = routes.size === 1 && routes.has(request.url);
+      yield* Ref.set(removedSince, undefined);
+      const callsTaken = yield* Ref.getAndSet(callsRefused, false);
       if (before.kind !== HOST_STANDING.STANDING) {
         yield* Ref.set(standing, { kind: HOST_STANDING.STANDING, until: 0 });
       }

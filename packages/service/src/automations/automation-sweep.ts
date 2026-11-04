@@ -59,14 +59,17 @@ import {
  * sweep that would act on it, is settled as missed, so the history never
  * holds a run that will not come.
  *
- * Last, the agents runs started for automations that archive their
- * successful runs are archived once each finished well, read as its tab
- * reads it, holds nothing open in the inbox, and has no pull request open or
- * in draft, since an archived agent hears nothing of a review on it. Each is settled once: an
+ * Last, the agents of runs for automations that archive their successful
+ * runs, the run's own agent and the helpers it started with no task alike,
+ * are archived once each finished well, read as its tab reads it, holds
+ * nothing open in the inbox, and has no pull request open or in draft,
+ * since an archived agent hears nothing of a review on it. A run is
+ * archived as one, once all its agents are done with, and settled once: an
  * agent archived here, one that failed or was stopped, and one the
  * developer already put away are marked so and never read again, so one
- * brought back stays; one still at work, waiting on the inbox, or with its
- * pull request open is read again by a later sweep, for a week.
+ * brought back stays; a run with an agent still at work, waiting on the
+ * inbox, or with its pull request open is read again by a later sweep, for
+ * a week.
  */
 
 const AUTOMATION_SWEEP = {
@@ -149,6 +152,49 @@ export interface FinishedAgentArchive<A extends FinishedAgentRead> {
   readonly discarded: boolean;
 }
 
+/** Where each agent stands at `now`, read as its tab reads it, by agent id. */
+function finishedStatuses(agents: readonly FinishedAgentRead[], now: number) {
+  return Effect.gen(function* () {
+    const conversations = agents.map((agent) => agent.conversationId);
+    const turns = yield* latestTurnsOfReached(conversations);
+    const awaiting = yield* awaitingLinesOfReached(conversations);
+    return new Map(
+      agents.map((agent) => [
+        agent.agentId,
+        agentStatusOf(turns.get(agent.conversationId), {
+          createdAt: agent.createdAt,
+          now,
+          awaitingLineAt: awaiting.get(agent.conversationId),
+        }),
+      ]),
+    );
+  });
+}
+
+/** The agents archived as their statuses were read, each answered in order, as `archiveFinishedAgents` says. */
+function archiveAsRead<A extends FinishedAgentRead>(
+  agents: readonly A[],
+  statuses: ReadonlyMap<string, AgentStatus>,
+) {
+  return Effect.forEach(agents, (agent) =>
+    Effect.gen(function* () {
+      const status = statuses.get(agent.agentId) ?? AGENT_STATUS.RUNNING;
+      const finishedWell = agent.archivedAt === null && status === AGENT_STATUS.COMPLETED;
+      // Note that the archive takes only while the agent's lines stand where they were read, so
+      // one woken since, or whose starter left, stands and is read again later.
+      const archived =
+        finishedWell &&
+        (yield* archiveUnmovedAgent(agent.userId, agent.agentId, agent.conversationSeq));
+      // A local agent archived is let go of on its device, as an archive by hand lets it go.
+      const discarded =
+        archived || agent.archivedAt !== null
+          ? yield* discardedOrLogged({ id: agent.agentId, userId: agent.userId })
+          : true;
+      return { agent, status, archived, discarded } satisfies FinishedAgentArchive<A>;
+    }),
+  );
+}
+
 /**
  * The agents archived under "Archive finished runs"' rule, each answered in
  * order: one standing unarchived that finished well, read as its tab reads
@@ -162,51 +208,59 @@ export function archiveFinishedAgents<A extends FinishedAgentRead>(
   agents: readonly A[],
   now: number,
 ) {
-  return Effect.gen(function* () {
-    const conversations = agents.map((agent) => agent.conversationId);
-    const turns = yield* latestTurnsOfReached(conversations);
-    const awaiting = yield* awaitingLinesOfReached(conversations);
-    return yield* Effect.forEach(agents, (agent) =>
-      Effect.gen(function* () {
-        const status = agentStatusOf(turns.get(agent.conversationId), {
-          createdAt: agent.createdAt,
-          now,
-          awaitingLineAt: awaiting.get(agent.conversationId),
-        });
-        const finishedWell = agent.archivedAt === null && status === AGENT_STATUS.COMPLETED;
-        // Note that the archive takes only while the agent's lines stand where they were read, so
-        // one woken since, or whose starter left, stands and is read again later.
-        const archived =
-          finishedWell &&
-          (yield* archiveUnmovedAgent(agent.userId, agent.agentId, agent.conversationSeq));
-        // A local agent archived is let go of on its device, as an archive by hand lets it go.
-        const discarded =
-          archived || agent.archivedAt !== null
-            ? yield* discardedOrLogged({ id: agent.agentId, userId: agent.userId })
-            : true;
-        return { agent, status, archived, discarded } satisfies FinishedAgentArchive<A>;
-      }),
-    );
-  });
+  return Effect.flatMap(finishedStatuses(agents, now), (statuses) =>
+    archiveAsRead(agents, statuses),
+  );
 }
 
-/** The agents of runs that finished well archived for automations that ask it, as above, answering how many. */
+/** Whether the agent is done with, for its run: put away already, or ended well or not. */
+const doneWith = (agent: ArchivableRunAgent, status: AgentStatus) =>
+  agent.archivedAt !== null || status === AGENT_STATUS.COMPLETED || ENDED_UNWELL.has(status);
+
+/** The agents read grouped by their run, each group in the order read. */
+function byRun(agents: readonly ArchivableRunAgent[]): readonly (readonly ArchivableRunAgent[])[] {
+  const groups = new Map<string, ArchivableRunAgent[]>();
+  for (const agent of agents) {
+    const group = groups.get(agent.runId);
+    if (group === undefined) groups.set(agent.runId, [agent]);
+    else group.push(agent);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The agents of runs that finished well archived for automations that ask
+ * it, answering how many. Note that a run is archived as one, because its
+ * agents are kept together: only once every agent it has was read and is
+ * done with, so a helper still at work, or held back by its inbox item or
+ * pull request, keeps the whole run standing for a later sweep, and the run
+ * is settled only once each of its agents is, so none is left unread.
+ */
 const archiveFinishedRunAgents = Effect.fnUntraced(function* (now: number) {
-  const agents = yield* archivableRunAgents(
+  const read = yield* archivableRunAgents(
     new Date(now - AUTOMATION_SWEEP.ARCHIVE_WITHIN_MS),
     AUTOMATION_SWEEP.MAX_ARCHIVE_READS,
   );
-  const outcomes = yield* archiveFinishedAgents(agents, now);
-  // A run stays unsettled until its agent's discard is queued, so a later sweep asks again.
+  const statuses = yield* finishedStatuses(read, now);
+  const finishedRuns = byRun(read).filter(
+    (run) =>
+      run.length === run[0]?.runAgents &&
+      run.every((agent) => doneWith(agent, statuses.get(agent.agentId) ?? AGENT_STATUS.RUNNING)),
+  );
+  const outcomes = yield* Effect.forEach(finishedRuns, (run) => archiveAsRead(run, statuses));
+  // A run stays unsettled until every agent's discard is queued, so a later sweep asks again.
   yield* Effect.forEach(
     outcomes,
-    ({ agent, status, archived, discarded }) =>
-      discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status))
-        ? settleRunArchive(agent.runId)
+    (run) =>
+      run.every(
+        ({ agent, status, archived, discarded }) =>
+          discarded && (archived || agent.archivedAt !== null || ENDED_UNWELL.has(status)),
+      ) && run[0] !== undefined
+        ? settleRunArchive(run[0].agent.runId)
         : Effect.void,
     { discard: true },
   );
-  return outcomes.filter((outcome) => outcome.archived).length;
+  return outcomes.flat().filter((outcome) => outcome.archived).length;
 });
 
 /** The sweep's share at `now`: the schedules due claimed and queued, then the runs queued acted on, then the finished runs' agents archived where asked. */

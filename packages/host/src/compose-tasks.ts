@@ -46,12 +46,18 @@ import type {
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
 import {
+  type PlanRevisionsAnswer,
+  startRelationsOf,
   TASK_BLOCK_CHANGE,
+  TASK_CREATE_RELATION_KIND,
+  TASK_PRIORITY,
   TASK_RELATION_KIND,
   TASK_STATUS,
   type Task,
+  type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSkillsAnswer,
+  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
   HOST_LIVE,
@@ -88,6 +94,7 @@ import {
   type TasksSetStandingParams,
   type TasksSkillsAnswer,
   type TasksStartAnswer,
+  type TasksStartRequest,
   type TasksTreeAnswer,
   type TasksView,
   type TasksWorkspaceAnswer,
@@ -214,7 +221,7 @@ import {
 import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
 import type { RunMode } from "./run-mode.js";
-import { sidebarCollections } from "./sidebar-collections.js";
+import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
 import { followTaskList } from "./task-list-follow.js";
 import type { WindowFocus } from "./window-focus.js";
@@ -245,10 +252,13 @@ import {
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
  * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
- * task pinned. A
- * plan's history is read for the version history that asks and held nowhere
- * here; a revision restored is the one write this concern carries to the
- * service on the developer's word, and the view takes the task it answers.
+ * task pinned. Each
+ * task's plan history a version history shows is held for it per task and
+ * told on the app state (`LIVE_READ.HISTORY`): its newest page followed, and
+ * the older pages read past it laid after it. A revision's text is answered
+ * to the version history that asks and held nowhere here; a revision
+ * restored is the one write this concern carries to the service on the
+ * developer's word, and the view takes the task it answers.
  * The pages agents wrote for a task, or for an agent on no task, are held
  * for the windows that draw them, the open task's among them, by title and
  * newest version alone, and told on the app state (`LIVE_READ.PAGES`); a
@@ -402,6 +412,26 @@ function listedChannel({
 /** Opening or deleting a task names it and nothing else. */
 const tasksOpenParamsSchema = Schema.Struct({ taskId: Schema.NonEmptyString });
 
+/** The plan a task starts on, empty, as the service makes it. */
+const EMPTY_PLAN = { body: "", assumptions: [] } as const satisfies Task["document"];
+
+/** A start's request as the service is sent it, under the id the host minted for its task where the window named none. */
+type StartRequest = Omit<TasksStartRequest, "quiet"> & { readonly id: string };
+
+/** A start as the host carries it: its request, whether it opens its task, and the row it draws, none where it draws none. */
+interface Start {
+  readonly request: StartRequest;
+  readonly quiet: boolean;
+  readonly row: PlanRow | undefined;
+}
+
+/** Where a start opened its task: the ask of the screen it was, whether it drew the task open before the service answered, and the task the reader stood on before it. */
+interface StartOpened {
+  readonly asked: number;
+  readonly drawn: boolean;
+  readonly before: string | undefined;
+}
+
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
   HostedTaskClient,
@@ -485,7 +515,9 @@ export type TasksClient = Pick<
 };
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now" | "createId"> & {
+    runMode: Pick<RunMode, "sendsNetwork">;
+  };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
@@ -594,6 +626,39 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
     }
     return fields;
   };
+}
+
+/**
+ * A task's newest page of history laid over the history held: the page
+ * whole, then every older revision held past it, so a version history
+ * scrolled back keeps what it read as saves land, and the place the next
+ * older page is read from with them.
+ */
+function withNewestPage(
+  held: PlanRevisionsAnswer | undefined,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const oldest = page.revisions.at(-1)?.seq;
+  if (held === undefined || oldest === undefined || page.earlier === undefined) return page;
+  const older = held.revisions.filter((line) => line.seq < oldest);
+  if (older.length === 0) return page;
+  const revisions = [...page.revisions, ...older];
+  return held.earlier === undefined ? { revisions } : { revisions, earlier: held.earlier };
+}
+
+/**
+ * An older page of a task's history, read before the revision `before`
+ * names, laid past the history held: every revision held at or after
+ * `before`, then the page, and the place the next older page is read from as
+ * the page says.
+ */
+function withOlderPage(
+  held: PlanRevisionsAnswer,
+  before: number,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const revisions = [...held.revisions.filter((line) => line.seq >= before), ...page.revisions];
+  return page.earlier === undefined ? { revisions } : { revisions, earlier: page.earlier };
 }
 
 /**
@@ -727,16 +792,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The newest page of each task's history a window's version history follows, by the task. */
-  const historyFollows = yield* FiberMap.make<string>();
   const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
-  /** How to wait for a write's transaction on each task's followed history, while it is live. */
+  /** How to wait for a write's transaction on each task's held history, while its follow stands. */
   const historyTxWaits = new Map<string, TxWait>();
 
-  /** Follows `taskId`'s newest page of history live until let go, each change emitted as `TASKS_HISTORY_CHANGED`. */
-  function followHistory(taskId: string) {
+  /**
+   * Follows `taskId`'s newest page of history live until let go, each page
+   * laid over the older ones held (`withNewestPage`) and told through
+   * `answers`, and its wait for a write's transaction kept while it stands.
+   */
+  function followHistory(taskId: string, answers: HeldAnswers<PlanRevisionsAnswer>) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
+    /** The wait this follow handed last, so letting it go takes back its own alone. */
+    let handed: TxWait | undefined;
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
@@ -754,17 +823,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
         Effect.sync(() =>
-          kernel.emit(
-            GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-            carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
-          ),
+          page === undefined
+            ? answers.unanswered()
+            : answers.answered(withNewestPage(answers.rows(), page)),
         ),
+      // Note that a follow let go takes back only the wait it handed, since a retry's follow may have handed its own first.
       onTxWait: (wait) => {
-        if (wait === undefined) historyTxWaits.delete(taskId);
-        else historyTxWaits.set(taskId, wait);
+        if (wait !== undefined) {
+          handed = wait;
+          historyTxWaits.set(taskId, wait);
+        } else if (historyTxWaits.get(taskId) === handed) historyTxWaits.delete(taskId);
       },
     });
   }
+
+  /**
+   * Each task's plan history a window's version history shows, and the few
+   * shown latest, told whole on the app state every window draws
+   * (`LIVE_READ.HISTORY`): its newest page followed from the first window's
+   * hold (`heldSlice`), and the older pages read past it laid after it, so a
+   * version history opened again draws its versions in its first frame.
+   */
+  const heldHistories = yield* heldSlice<typeof LIVE_READ.HISTORY, string>({
+    empty: NO_KEYS_HELD,
+    path: (taskId) => [taskId],
+    gate,
+    follow: followHistory,
+    tell: (held) => kernel.emit(GATEWAY_EVENT.HISTORIES_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each task's history, one fiber standing until let go. */
+  const historyHolds = yield* FiberMap.make<string>();
 
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
@@ -1350,12 +1438,28 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const openSidebar = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
-      sidebarCollections({ draw: write, now: kernel.now, txWait: () => sidebarTxWait }),
+      sidebarCollections({
+        pool: dependencies.pool,
+        draw: write,
+        ownerId: dependencies.accountId,
+        txWait: () => sidebarTxWait,
+      }),
     );
     return { scope, collections };
   });
   let sidebar = yield* openSidebar;
   yield* Effect.addFinalizer(() => Scope.close(sidebar.scope, Exit.void));
+  /**
+   * The sidebar's writes, each service call under the serial lock and the
+   * transaction waited for outside it, so no task open, save, or read waits
+   * on the follow behind a pin or a drag.
+   */
+  const sidebarWritten = sidebarWrites({
+    gate,
+    pinRepository: (repository, pinned) => serial(served(client.pinRepository(repository, pinned))),
+    writeSection: (each) => serial(served(client.writeTaskSection(each))),
+    collections: () => sidebar.collections,
+  });
 
   /**
    * Follows the account's sidebar where nothing follows it yet
@@ -1501,6 +1605,121 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function blocksNow(taskId: string): boolean {
     const blocker = view.tasks.find((row) => row.id === taskId);
     return blocker?.status === undefined || !FINISHED.has(blocker.status);
+  }
+
+  /** A member's name as the list already knows it, from a task they made or are assigned; none where it names them nowhere. */
+  function listedName(userId: string): string | undefined {
+    for (const row of view.tasks) {
+      if (row.createdBy?.userId === userId) return row.createdBy.name;
+      if (row.assignee?.userId === userId) return row.assignee.name;
+    }
+    return undefined;
+  }
+
+  /**
+   * A started task's row of the list as its request draws it, under the id
+   * minted for it, before the service answers: what the request names, a
+   * new task's defaults as the service sets them where it names none, each
+   * member by the name the list already knows them by, and no number, which
+   * only the service gives. A task joining a tree takes the tree's
+   * repository, as the service gives it, where the list holds the task it
+   * joins by. None where the request names no workspace, since the service
+   * then starts it in the account's first, which only it knows, or where
+   * nobody is signed in.
+   */
+  function startedRow(request: StartRequest): PlanRow | undefined {
+    const ownerId = dependencies.accountId();
+    const { workspaceId } = request;
+    if (workspaceId === undefined || ownerId === undefined) return undefined;
+    const relations = startRelationsOf(request);
+    const related = (kind: TaskCreateRelationKind) =>
+      relations.flatMap((each) => (each.kind === kind ? [each.taskId] : []));
+    const listedTask = (taskId: string | undefined) =>
+      taskId === undefined ? undefined : view.tasks.find((row) => row.id === taskId);
+    const parentTaskId =
+      request.parentTaskId ?? related(TASK_CREATE_RELATION_KIND.SUB_TASK_OF).at(0);
+    const tree =
+      listedTask(parentTaskId) ?? listedTask(related(TASK_CREATE_RELATION_KIND.PARENT_OF).at(0));
+    const status = request.status ?? TASK_STATUS.TODO;
+    const now = kernel.now();
+    const name = request.name ?? "";
+    return {
+      id: request.id,
+      workspaceId,
+      name: name.length > 0 ? name : UNTITLED_TASK_NAME,
+      repository: tree === undefined ? (request.repository ?? null) : tree.repository,
+      ownerId,
+      ownerName: listedName(ownerId) ?? null,
+      assigneeId: request.assigneeId ?? null,
+      assigneeName:
+        request.assigneeId === undefined ? null : (listedName(request.assigneeId) ?? ""),
+      pinnedAt: null,
+      pinPosition: null,
+      completedAt: FINISHED.has(status) ? now : null,
+      createdAt: now,
+      updatedAt: now,
+      status,
+      priority: request.priority ?? TASK_PRIORITY.NONE,
+      parentTaskId: parentTaskId ?? null,
+      ...(request.mode === undefined ? undefined : { mode: request.mode }),
+      ...(related(TASK_CREATE_RELATION_KIND.BLOCKED_BY).some(blocksNow)
+        ? { blocked: true }
+        : undefined),
+    };
+  }
+
+  /**
+   * Opens a starting task at once under the id minted for it, as the list
+   * draws its row, on its empty plan laid as held (`documents.started`), so
+   * the window turns to it in the frame of the press, before the service has
+   * made it. Where the list draws no row of it, as for a start that names no
+   * workspace, it opens once the service answers.
+   */
+  function startOpened(taskId: string): Effect.Effect<StartOpened> {
+    return Effect.gen(function* () {
+      screenAsks += 1;
+      const opened = { asked: screenAsks, before: view.activeTaskId };
+      const listed = view.tasks.find((row) => row.id === taskId);
+      if (listed === undefined) return { ...opened, drawn: false };
+      const { agents: _agents, ...row } = listed;
+      // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
+      yield* documents.started({ ...row, document: EMPTY_PLAN });
+      write({ activeTaskId: taskId });
+      return { ...opened, drawn: true };
+    });
+  }
+
+  /**
+   * Puts the reader back on the task they stood on, or on none, where a
+   * start that opened its task at once was refused and nothing else was
+   * asked of the screen since; the plan it laid is let go either way.
+   */
+  function startedBack(opened: StartOpened, taskId: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (screenAsks === opened.asked && view.activeTaskId === taskId) {
+        const { activeTaskId: _started, ...rest } = view;
+        view = opened.before === undefined ? rest : { ...rest, activeTaskId: opened.before };
+        publish();
+      }
+      return opened.drawn ? documents.unfollow(taskId) : Effect.void;
+    });
+  }
+
+  /**
+   * The task a start opened, or opens now, laid as the service made it,
+   * where the start is still the newest ask of the screen or its task still
+   * stands open. A start the developer went on from, to another task or
+   * another start, opens nothing. Note that a task drawn open before the
+   * service made it has its record followed again, since a seal asked
+   * before then finds no task and ends.
+   */
+  function startedAs(opened: StartOpened, task: Task): Effect.Effect<void> {
+    return Effect.gen(function* () {
+      if (screenAsks !== opened.asked && view.activeTaskId !== task.id) return;
+      yield* documents.started(task);
+      if (opened.drawn) yield* documents.retry(task.id);
+      write({ activeTaskId: task.id });
+    });
   }
 
   /**
@@ -1739,6 +1958,58 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             }),
           )
         : Effect.succeed({ refused: { changed: false } }),
+  };
+
+  /**
+   * A task started, its row drawn the moment it is asked under the id the
+   * host minted for it, which the list adopts while it stands, and taken
+   * back where the service refused it; a start that is not quiet opens its
+   * task at once, and puts the reader back where they were if refused. The
+   * agent a start asks for waits on the service, as remote work does. Where
+   * the list hands no wait, or the service answers a start sent again with
+   * no transaction, the row as the service answered it is taken in the
+   * list's place.
+   */
+  const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
+    kind: PLAN,
+    keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
+    // Note that a start that draws no row names no key, so its change is never drawn.
+    change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
+    send: (start) =>
+      gate()
+        ? Effect.gen(function* () {
+            const opened = start.quiet ? undefined : yield* startOpened(start.request.id);
+            return yield* serial(
+              Effect.gen(function* () {
+                const created = yield* served(client.create(start.request));
+                if (!created.ok) {
+                  const { failure, localAgentRefusal } = created;
+                  if (opened !== undefined) yield* startedBack(opened, start.request.id);
+                  return {
+                    refused: carried<TasksStartAnswer>(
+                      localAgentRefusal === undefined
+                        ? { failure }
+                        : { failure, localAgentRefusal },
+                    ),
+                  };
+                }
+                const { task, agent, txid } = created.answer;
+                if (opened !== undefined) yield* startedAs(opened, task);
+                const row = planRowOf(task);
+                return {
+                  answer: carried<TasksStartAnswer>({
+                    planId: task.id,
+                    ...(agent === undefined ? undefined : { agentStart: agent }),
+                  }),
+                  txid,
+                  ...(row === undefined ? undefined : { taken: { made: row } }),
+                };
+              }),
+            );
+          })
+        : Effect.succeed({
+            refused: carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+          }),
   };
 
   /**
@@ -2114,9 +2385,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
         );
       }),
-    // A page of the history, and a revision beside the one before it, are
-    // answered to the version history that asked and held nowhere: it keeps
-    // what it read, and reads again as the task moves on.
+    // A page of the history is answered to the caller that asked, and an
+    // older page is laid on the task's held history too, past the revisions
+    // held from where it was read before, so a version history scrolled back
+    // keeps it as saves land. A revision beside the one before it is
+    // answered to the version history that asked and held nowhere.
     [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2129,6 +2402,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const { taskId, before } = read;
         const page = yield* served(client.readRevisions(taskId, before));
+        const held = heldHistories.rowsOf(taskId);
+        if (page !== undefined && before !== undefined && held !== undefined) {
+          heldHistories.lay(taskId, withOlderPage(held, before, page));
+        }
         return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
@@ -2176,9 +2453,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
-    // A plan's newest page of history is followed for its version history
-    // while it stands, and told only as `TASKS_HISTORY_CHANGED`; a follow of
-    // what is already followed does nothing.
+    // A task's plan history is held for a window while its version history
+    // shows, and told only on the app state (`HISTORIES_CHANGED`). Note that
+    // the windows' hold is one fiber standing until let go, so a window
+    // holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2186,9 +2464,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "following a task's history names the task",
         );
-        if (!gate()) return {};
         const { taskId } = read;
-        yield* FiberMap.run(historyFollows, taskId, followHistory(taskId), { onlyIfMissing: true });
+        yield* FiberMap.run(
+          historyHolds,
+          taskId,
+          Effect.scoped(Effect.andThen(heldHistories.hold(taskId), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
@@ -2198,7 +2480,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "letting a task's history go names the task",
         );
-        yield* FiberMap.remove(historyFollows, read.taskId);
+        yield* FiberMap.remove(historyHolds, read.taskId);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_HISTORY_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskHistoryFollowSchema,
+          params,
+          "reading a task's history again names the task",
+        );
+        if (gate()) yield* heldHistories.retry(read.taskId);
         return {};
       }),
     // An agent's or a task's agents' Browser tabs are held for a window's
@@ -2398,7 +2690,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // The service answers the task as restored, so the list's row and its
     // held plan take it in place and nothing is read again. It is confirmed
-    // once its transaction reached the history the window follows.
+    // once its transaction reached the history the windows hold, or held
+    // lately; at once where none is.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2435,62 +2728,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* serial(Effect.sync(closeActive));
         return {};
       }),
-    [GATEWAY_METHOD.TASKS_START]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
+    // A start draws its task's row the moment it is asked, under the id minted for it where the
+    // window named none, and stands until the list carries it (`started`). A quiet start, a
+    // group's quick add or New task set to stay, opens nothing, and answers with its agent's
+    // start where it asked for one; any other opens its task at once.
+    [GATEWAY_METHOD.TASKS_START]: declaredMethod(dependencies.pool, started, (params: WireRecord) =>
+      Effect.map(
+        readParams(
           tasksStartRequestSchema,
           params,
           "starting a task names it, and its repository where it has one",
-        );
-        if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { quiet, ...request } = read;
-        // A quiet start, a group's quick add or New task set to stay, opens nothing: its row is
-        // drawn from the service's answer at once and stands until the list carries the task,
-        // and it answers with its agent's start where it asked for one.
-        if (quiet === true) {
-          const started = yield* serial(served(client.create(request)));
-          if (!started.ok) {
-            const { failure, localAgentRefusal } = started;
-            return carried<TasksStartAnswer>(
-              localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
-            );
-          }
-          const { task, agent, txid } = started.answer;
-          const row = planRowOf(task);
-          yield* row === undefined ? listed(txid) : taskList.collections.made(row, txid);
-          return carried<TasksStartAnswer>({
-            planId: task.id,
-            ...(agent === undefined ? undefined : { agentStart: agent }),
-          });
-        }
-        // Note that a start answers once the task is drawn open rather than once the list carries
-        // it, because nothing draws its row from the answer, so a list from before the write only
-        // lacks a row it has not drawn yet, and the window opens the task's agent at once.
-        screenAsks += 1;
-        const asked = screenAsks;
-        return yield* serial(
-          Effect.gen(function* () {
-            const started = yield* served(client.create(request));
-            if (!started.ok) {
-              const { failure, localAgentRefusal } = started;
-              return carried<TasksStartAnswer>(
-                localAgentRefusal === undefined ? { failure } : { failure, localAgentRefusal },
-              );
-            }
-            const { task, agent } = started.answer;
-            const answer = carried<TasksStartAnswer>({
-              planId: task.id,
-              ...(agent === undefined ? undefined : { agentStart: agent }),
-            });
-            // A start the developer went on from, to another task or another start, opens nothing.
-            if (screenAsks !== asked) return answer;
-            // Note that the plan is laid before the task opens, so the window's first frame of it draws its plan.
-            yield* documents.started(task);
-            write({ activeTaskId: task.id });
-            return answer;
-          }),
-        );
-      }),
+        ),
+        ({ quiet, ...asked }): Start => {
+          const request = { ...asked, id: asked.id ?? kernel.createId() };
+          // Note that a start behind a closed gate draws nothing, since it never reaches the service.
+          return { request, quiet: quiet === true, row: gate() ? startedRow(request) : undefined };
+        },
+      ),
+    ),
     [GATEWAY_METHOD.TASKS_DELETE]: declaredMethod(
       dependencies.pool,
       deleted,
@@ -2516,41 +2771,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
       readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
     ),
-    // A pin is drawn at once and stands while the service writes it, kept
-    // once the followed sidebar has its transaction and taken back where the
-    // service refused it (`sidebar-collections.ts`). Note that the service is
-    // asked under the serial lock and the transaction waited for outside it,
-    // so no task open, save, or read waits on the follow behind a pin.
-    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPinRepositoryParamsSchema,
-          params,
-          "pinning a repository names it and whether it is pinned",
-        );
-        if (!gate()) return { changed: false };
-        const { repository, pinned } = read;
-        const changed = yield* sidebar.collections.pinRepository(
-          repository,
-          pinned,
-          serial(served(client.pinRepository(repository, pinned))),
-        );
-        return { changed };
-      }),
-    // A drag's or a menu's section writes are drawn and confirmed as a pin is, each written in turn.
-    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
-      Effect.gen(function* () {
-        const { writes } = yield* readParams(
-          tasksWriteSectionParamsSchema,
-          params,
-          "a change to the sections names what it changes",
-        );
-        if (!gate()) return { changed: false };
-        const changed = yield* sidebar.collections.writeSections(writes, (each) =>
-          serial(served(client.writeTaskSection(each))),
-        );
-        return { changed };
-      }),
+    // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
+    [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.pinned,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksPinRepositoryParamsSchema,
+            params,
+            "pinning a repository names it and whether it is pinned",
+          ),
+          (read) => ({ ...read, at: kernel.now() }),
+        ),
+    ),
+    [GATEWAY_METHOD.TASKS_WRITE_SECTION]: declaredMethod(
+      dependencies.pool,
+      sidebarWritten.sectionsWritten,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            tasksWriteSectionParamsSchema,
+            params,
+            "a change to the sections names what it changes",
+          ),
+          (read) => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() }),
+        ),
+    ),
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile
     // shows on the next opening.
@@ -3283,6 +3530,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
       yield* heldBrowserTabs.open;
+      yield* heldHistories.open;
       yield* comments.open;
       yield* membersReads.held.open;
       yield* integrations.open;
@@ -3298,16 +3546,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
+      yield* heldHistories.end;
       yield* comments.end;
       yield* membersReads.held.end;
       yield* integrations.end;
       yield* slackChannels.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
-      yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(listFollow);
       yield* Scope.close(taskList.scope, Exit.void);
       taskList = yield* openTaskList;

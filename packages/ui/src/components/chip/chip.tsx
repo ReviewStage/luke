@@ -284,7 +284,7 @@ function chipClasses(
         ? "p-0"
         : "px-chip-inset"
     : iconOnly
-      ? "px-chip-inset"
+      ? "p-0"
       : removable
         ? REMOVABLE_INSET[look]
         : LOOK_INSET[look];
@@ -300,8 +300,8 @@ function chipClasses(
       ? "h-chip-compact gap-chip-tight text-caption leading-caption"
       : `h-control text-label ${removable ? "gap-chip-tight" : "gap-icon-gap"}`,
     !compact ? "font-label" : look === CHIP_LOOK.PILL ? "font-tag" : "font-caption",
-    // Note that a compact mark alone is a square of its own height spelled as a width, because Safari 26 sizes an `aspect-ratio` box's track through its `max-w-full` to nothing.
-    compact && iconOnly ? "flex-none w-chip-compact" : "flex-initial",
+    // Note that a mark alone is a square of its own height spelled as a width, because Safari 26 sizes an `aspect-ratio` box's track through its `max-w-full` to nothing.
+    iconOnly ? `flex-none ${compact ? "w-chip-compact" : "w-control"}` : "flex-initial",
     busy ? "cursor-progress" : removable ? "cursor-default" : "cursor-press",
     "max-w-full",
   ]
