@@ -1,43 +1,22 @@
 import { it } from "@effect/vitest";
-import { fakeHttpClient } from "@repo/wire/testing";
-import { Effect, Layer } from "effect";
-import * as HttpClient from "effect/http/HttpClient";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { pageLeave } from "../src/app/page-leave";
 import { answerFailedChunk, type StaleBuildTab } from "../src/app/stale-build";
 
 /**
- * stale-build.test.ts -- a tab whose chunk failed to load because a deploy
- * moved the build on reloads onto the live build once, never loops when the
- * reload lands on the same build again, and asks first while it holds work
- * a reload would lose.
+ * stale-build.test.ts -- a tab whose chunk failed to load reloads once, never
+ * loops when the reloaded page fails the same way, and asks first while it
+ * holds work a reload would lose.
  */
 
-/** The entry scripts of the build the tab was loaded with, and of the one deployed since. */
-const OLD_BUILD = "/assets/app-Aold0001.js";
-const NEW_BUILD = "/assets/app-Bnew0002.js";
-
-/** Where the tab reads the panel's page as the origin serves it now. */
-const LIVE_PAGE = "https://app.test/app";
-
-/** The origin, serving the panel's page as a deployment of the build given writes it. */
-function originServing(build: string): Layer.Layer<HttpClient.HttpClient> {
-  const page = `<!doctype html><html><head><script src="/app-theme.js"></script><script type="module" crossorigin src="${build}"></script></head><body><div id="root"></div></body></html>`;
-  return Layer.succeed(
-    HttpClient.HttpClient,
-    fakeHttpClient((url) =>
-      url === LIVE_PAGE ? new Response(page) : new Response(null, { status: 404 }),
-    ),
-  );
-}
-
-/** A tab loaded with the build given in the session given, holding what no page's leave covers or not, its reloads and asks counted. */
-function tabOn(build: string, session: Map<string, string>, unkept = false) {
+/** A tab in the session given, online or not, holding what no page's leave covers or not, its reloads and asks counted. */
+function tabIn(session: Map<string, string>, options: { unkept?: boolean; online?: boolean } = {}) {
   const leave = pageLeave(new EventTarget());
   const seen = { reloads: 0, asks: [] as (() => void)[] };
   const tab: StaleBuildTab = {
-    build,
-    livePage: LIVE_PAGE,
+    online: () => options.online ?? true,
     session: {
       getItem: (key) => session.get(key) ?? null,
       setItem: (key, value) => {
@@ -45,7 +24,7 @@ function tabOn(build: string, session: Map<string, string>, unkept = false) {
       },
     },
     leave,
-    unkept: () => unkept,
+    unkept: () => options.unkept ?? false,
     reload: () => {
       seen.reloads += 1;
     },
@@ -57,51 +36,52 @@ function tabOn(build: string, session: Map<string, string>, unkept = false) {
 }
 
 it.effect(
-  "a chunk that fails once a newer build is live reloads the tab, and its stylesheet failing beside it does not again",
+  "a chunk that fails reloads the tab, and its stylesheet failing beside it does not again",
   () =>
     Effect.gen(function* () {
-      const tab = tabOn(OLD_BUILD, new Map());
+      const tab = tabIn(new Map());
 
       yield* answerFailedChunk(tab.tab);
       yield* answerFailedChunk(tab.tab);
 
       expect(tab.seen.reloads).toBe(1);
-    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+    }),
 );
 
 it.effect(
-  "a reload that lands on the same build again leaves the failure standing rather than looping",
+  "a reloaded page whose chunk fails again stands rather than looping, and reloads once more a minute on",
   () =>
     Effect.gen(function* () {
       const session = new Map<string, string>();
-      const first = tabOn(OLD_BUILD, session);
-      yield* answerFailedChunk(first.tab);
-      expect(first.seen.reloads).toBe(1);
+      yield* answerFailedChunk(tabIn(session).tab);
 
       // The page the reload read was the old build's still, as a cache may serve it.
-      const reloaded = tabOn(OLD_BUILD, session);
+      const reloaded = tabIn(session);
       yield* answerFailedChunk(reloaded.tab);
-
       expect(reloaded.seen.reloads).toBe(0);
       expect(reloaded.seen.asks).toEqual([]);
-    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+
+      yield* TestClock.adjust("1 minute");
+      yield* answerFailedChunk(reloaded.tab);
+      expect(reloaded.seen.reloads).toBe(1);
+    }),
 );
 
-it.effect("a chunk that fails while the build has not moved reloads nothing", () =>
+it.effect("a chunk that fails offline reloads nothing", () =>
   Effect.gen(function* () {
-    const tab = tabOn(OLD_BUILD, new Map());
+    const tab = tabIn(new Map(), { online: false });
 
     yield* answerFailedChunk(tab.tab);
 
     expect(tab.seen.reloads).toBe(0);
-  }).pipe(Effect.provide(originServing(OLD_BUILD))),
+  }),
 );
 
 it.effect(
   "a tab holding unsaved work asks first, and its Reload goes through the panel's own question",
   () =>
     Effect.gen(function* () {
-      const tab = tabOn(OLD_BUILD, new Map());
+      const tab = tabIn(new Map());
       const leaveAsked: (() => void)[] = [];
       tab.leave.unsavedWork((leave) => leaveAsked.push(leave));
 
@@ -113,27 +93,27 @@ it.effect(
       expect(tab.seen.reloads).toBe(0);
       leaveAsked[0]?.();
       expect(tab.seen.reloads).toBe(1);
-    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+    }),
 );
 
 it.effect(
   "a tab holding files attached to a draft, which storage keeps none of, asks rather than reloading",
   () =>
     Effect.gen(function* () {
-      const tab = tabOn(OLD_BUILD, new Map(), true);
+      const tab = tabIn(new Map(), { unkept: true });
 
       yield* answerFailedChunk(tab.tab);
 
       expect(tab.seen.reloads).toBe(0);
       expect(tab.seen.asks).toHaveLength(1);
-    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+    }),
 );
 
 it.effect(
   "a Reload the developer stayed from at the browser's question leaves the next failure asked about again",
   () =>
     Effect.gen(function* () {
-      const tab = tabOn(OLD_BUILD, new Map());
+      const tab = tabIn(new Map());
       tab.leave.unsavedPlanWords(true);
 
       yield* answerFailedChunk(tab.tab);
@@ -143,5 +123,5 @@ it.effect(
 
       yield* answerFailedChunk(tab.tab);
       expect(tab.seen.asks).toHaveLength(2);
-    }).pipe(Effect.provide(originServing(NEW_BUILD))),
+    }),
 );
