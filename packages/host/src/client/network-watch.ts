@@ -1,7 +1,7 @@
 /**
  * network-watch.ts -- whether this machine can reach the service, as the platform's probe and the service's calls answer it, kept in the document.
  */
-import { ServiceReach } from "@repo/features";
+import { ServiceReach, type ServiceReachState } from "@repo/features";
 import { Duration, Effect, Layer, Schedule, type Scope, Stream, SubscriptionRef } from "effect";
 import { type AppState, networkConnected } from "../app-state.js";
 import type { AppStateStore } from "./app-state-store.js";
@@ -24,7 +24,7 @@ type NetworkSignals = Pick<AppState["network"], "online" | "reachable">;
  */
 export const serviceReachLayer: Layer.Layer<ServiceReach> = Layer.effect(
   ServiceReach,
-  SubscriptionRef.make(true),
+  SubscriptionRef.make<ServiceReachState>({ reachable: true, answered: 0 }),
 );
 
 export interface NetworkWatchDependencies {
@@ -70,6 +70,6 @@ export const linkNetworkWatch = /* @__PURE__ */ Effect.fn("client/linkNetworkWat
   const probe = Effect.suspend(() => moved({ online: isOnline() }));
   yield* Effect.forkScoped(Effect.repeat(probe, Schedule.spaced(NETWORK_PROBE_INTERVAL)));
   yield* Effect.forkScoped(
-    Stream.runForEach(SubscriptionRef.changes(reach), (reachable) => moved({ reachable })),
+    Stream.runForEach(SubscriptionRef.changes(reach), ({ reachable }) => moved({ reachable })),
   );
 });

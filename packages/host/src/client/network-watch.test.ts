@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ServiceReach } from "@repo/features";
+import { ServiceReach, type ServiceReachState } from "@repo/features";
 import { Effect, Exit, Scope, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import { runModeFor } from "../run-mode.js";
@@ -28,7 +28,7 @@ function watched(scope: Scope.Closeable, online = true) {
   return Effect.gen(function* () {
     const machine = { online };
     const regained = { times: 0 };
-    const reach = yield* SubscriptionRef.make(true);
+    const reach = yield* SubscriptionRef.make<ServiceReachState>({ reachable: true, answered: 0 });
     const state = new AppStateStore(initialAppState(RUN, false, []), yield* Effect.context());
     yield* linkNetworkWatch({
       state,
@@ -83,7 +83,7 @@ it.effect(
       const scope = yield* Scope.make();
       const { machine, reach, state, regained } = yield* watched(scope);
 
-      yield* SubscriptionRef.set(reach, false);
+      yield* SubscriptionRef.set(reach, { reachable: false, answered: 0 });
       machine.online = false;
       yield* TestClock.adjust("2 seconds");
       assert.deepEqual(state.snapshot().network, { online: false, reachable: false });
@@ -92,7 +92,7 @@ it.effect(
       yield* TestClock.adjust("10 seconds");
       assert.equal(regained.times, 0, "the network back while the service still does not answer");
 
-      yield* SubscriptionRef.set(reach, true);
+      yield* SubscriptionRef.set(reach, { reachable: true, answered: 1 });
       yield* Effect.yieldNow;
       assert.deepEqual(state.snapshot().network, { online: true, reachable: true });
       assert.equal(regained.times, 1);
