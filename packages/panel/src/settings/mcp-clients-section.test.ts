@@ -15,7 +15,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
 /**
- * mcp-clients-section.test.ts -- Settings › Integrations' agents with
+ * mcp-clients-section.test.ts -- Settings › MCP's agents with
  * access: a revoke that did not finish leaves its row standing with its
  * Revoke and says so, never that it landed, and one that lands leaves the
  * row saying how long the access the agent already holds lasts. Synthetic
@@ -121,10 +121,7 @@ test("a revoke that did not finish leaves the agent standing with its Revoke and
 
   await press("Revoke");
   await press("Revoke", dialog());
-  assert.ok(
-    pageText().includes("Revoked. Access it already holds stops working within 15 minutes."),
-    pageText(),
-  );
+  assert.ok(pageText().includes("Revoked. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(
     [...container.querySelectorAll("button")].find((each) => each.textContent === "Revoke"),

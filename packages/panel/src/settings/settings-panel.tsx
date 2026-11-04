@@ -131,12 +131,16 @@ export function SettingsPanel({
       {view === SETTINGS_VIEW.HOSTS ? <HostsSection signedIn={signedIn} /> : null}
 
       {view === SETTINGS_VIEW.INTEGRATIONS ? (
-        <>
-          <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
-          {/* The outside agents the account allowed in, and how to connect one, under the integrations and apart from their search. */}
-          {signedIn ? <McpClientsSections /> : null}
-        </>
+        <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
       ) : null}
+
+      {view !== SETTINGS_VIEW.MCP ? null : signedIn ? (
+        <McpClientsSections />
+      ) : (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {SIGNED_OUT_WORDS}
+        </Text>
+      )}
 
       {view !== SETTINGS_VIEW.SKILLS ? null : signedIn ? (
         <SkillsPage control={workspace} readerId={account.id} />

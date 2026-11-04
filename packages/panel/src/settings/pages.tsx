@@ -31,6 +31,7 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.HOSTS]: { title: "Hosts", icon: <GLYPH.HOST /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
+  [SETTINGS_VIEW.MCP]: { title: "MCP", icon: <GLYPH.MCP_SERVER /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },

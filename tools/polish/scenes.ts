@@ -428,6 +428,7 @@ export const SCENES: readonly Scene[] = [
     title: "Integrations",
     profile: "settings-integrations",
   },
+  { id: "settings-mcp", place: PLACE.SETTINGS, title: "MCP", profile: "settings-mcp" },
   { id: "settings-skills", place: PLACE.SETTINGS, title: "Skills", profile: "settings-skills" },
   { id: "settings-memory", place: PLACE.SETTINGS, title: "Memory", profile: "settings-memory" },
   // Admin.
