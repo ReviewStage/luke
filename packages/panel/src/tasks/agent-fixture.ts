@@ -66,7 +66,12 @@ import {
 } from "@repo/features/terminal-acts";
 import { SANDBOX_STATE, type SandboxState } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppPages, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import {
+  type AppChapters,
+  type AppPages,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
@@ -999,7 +1004,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
     files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
   }),
-  [ACT_KIND.CHAPTERS_READ]: () => CHAPTERS,
   [ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw }) => {
     const lines = FILES.get(path);
     if (lines === undefined) return { refusal: TASK_FILE_REFUSAL.MISSING };
@@ -1103,11 +1107,15 @@ export function agentColumnTab(profile: string): MainTab | undefined {
 /** Main's held pages with the open task's holding the page its agent showed, one object for each of main's. */
 const STAGED_PAGES = new WeakMap<AppPages, AppPages>();
 
+/** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
+const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
+
 /**
  * Main's document as an agent profile draws it: the open task's pages held
  * with the page its agent showed, as the window's read of them holds them
- * (`LIVE_READ.PAGES`). The same document, the very object, under any other
- * profile.
+ * (`LIVE_READ.PAGES`), and the agent's pull request's chapters held as its
+ * Pull request tab's read of them holds them (`LIVE_READ.PULL_REQUEST_CHAPTERS`).
+ * The same document, the very object, under any other profile.
  */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
   if (!AGENT_STAGES.has(state.run.profile)) return state;
@@ -1121,7 +1129,16 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     };
     STAGED_PAGES.set(held, staged);
   }
-  return { ...state, [LIVE_READ.PAGES]: staged };
+  const heldChapters = state[LIVE_READ.PULL_REQUEST_CHAPTERS];
+  let chapters = STAGED_CHAPTERS.get(heldChapters);
+  if (chapters === undefined) {
+    chapters = {
+      ...heldChapters,
+      [FIXTURE_AGENT_ID]: { [String(PULL_REQUEST.number)]: { rows: CHAPTERS } },
+    };
+    STAGED_CHAPTERS.set(heldChapters, chapters);
+  }
+  return { ...state, [LIVE_READ.PAGES]: staged, [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters };
 }
 
 /**

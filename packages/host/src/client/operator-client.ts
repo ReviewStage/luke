@@ -93,6 +93,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onPagesChanged((held) => {
         state.update({ [LIVE_READ.PAGES]: held });
       }),
+      gateway.host.onChaptersChanged((held) => {
+        state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });
+      }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
       gateway.host.onSessionReplayChanged((replay) => {

@@ -244,6 +244,7 @@ export const APP_SLICE = {
   INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
   HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
   PAGES: sliceAtom(LIVE_READ.PAGES),
+  PULL_REQUEST_CHAPTERS: sliceAtom(LIVE_READ.PULL_REQUEST_CHAPTERS),
   MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),

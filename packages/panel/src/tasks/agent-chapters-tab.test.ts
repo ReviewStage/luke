@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MOTION_DELAY_MS, MOTION_DURATION_MS } from "@repo/brand";
+import { MOTION_DURATION_MS } from "@repo/brand";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
@@ -38,6 +38,7 @@ import {
 } from "@repo/features/pull-request-write-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppChapters } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -50,6 +51,7 @@ import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { handHostReads } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -324,9 +326,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** How a test's control answers: the chapters' read and Generate, and the member's viewed marks. */
+/** How a test's control answers: the chapters the host holds and their Generate, and the member's viewed marks. */
 interface Answers {
-  readonly readChapters?: AgentsControl["readChapters"];
+  /** The chapters as the host holds them, a failure as a read that never answered; none yet, with Generate offered, where none are named. */
+  readonly chapters?: PullRequestChaptersAnswerView;
   readonly generateChapters?: AgentsControl["generateChapters"];
   /** The files marked viewed on GitHub; the marks are unread where none are named. */
   readonly viewed?: readonly string[];
@@ -336,8 +339,26 @@ interface Answers {
   readonly filesHeadless?: boolean;
 }
 
-/** The agent's control, its overview, files, and chapters answering as given. */
+/** How the chapters the host holds move, as its live read of them answers; nothing before a test's control lays them. */
+let moveChapters: (next: PullRequestChaptersAnswerView) => void = () => undefined;
+
+/** The agent's pull request's chapters as the host holds them, a failure as a read that never answered. */
+function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
+  return {
+    [AGENT.id]: {
+      [String(PULL_REQUEST.number)]: "failure" in answer ? { failed: true } : { rows: answer },
+    },
+  };
+}
+
+/** The agent's control, its overview, files, and Generate answering as given, and its chapters laid on the window's document as the host holds them. */
 function controlAnswering(answers: Answers): AgentsControl {
+  const { deliverChapters } = handHostReads({
+    chapters: chaptersHeld(
+      answers.chapters ?? answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
+    ),
+  });
+  moveChapters = (next) => deliverChapters(chaptersHeld(next));
   return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -400,9 +421,6 @@ function controlAnswering(answers: Answers): AgentsControl {
               files: answers.viewed.map((path) => ({ path, state: FILE_VIEWED_STATE.VIEWED })),
             },
       ),
-    readChapters:
-      answers.readChapters ??
-      (() => Promise.resolve(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }))),
     generateChapters: answers.generateChapters ?? (() => Promise.resolve(answering(ready()))),
   });
 }
@@ -543,20 +561,7 @@ function press(tab: HTMLElement, init: KeyboardEventInit): void {
 
 test("Chapters stands after Checks; with none yet it offers Generate chapters, which stands as generating until it answers, then the chapters, counted on the tab, Other changes last", async () => {
   const generated = Promise.withResolvers<PullRequestChaptersAnswerView>();
-  let reads = 0;
-  const tab = await draw(
-    controlAnswering({
-      readChapters: () => {
-        reads += 1;
-        return Promise.resolve(
-          reads === 1
-            ? answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE })
-            : answering(ready()),
-        );
-      },
-      generateChapters: () => generated.promise,
-    }),
-  );
+  const tab = await draw(controlAnswering({ generateChapters: () => generated.promise }));
 
   assert.deepEqual(
     tabNames(tab)
@@ -570,7 +575,6 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
 
   generated.resolve(answering(ready()));
   await settle();
-  assert.equal(reads, 2, "the chapters are read again once the Generate lands");
   assert.deepEqual(railRows(tab), [
     "1. Read the expiry, High risk",
     "2. Sweep what expired, Low risk",
@@ -583,9 +587,7 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
-  const tab = await draw(
-    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
-  );
+  const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
 
   assert.equal(heading(tab), "Read the expiry");
   const bars = tab.querySelectorAll(".chapters-view .ui-pane-bar");
@@ -616,9 +618,7 @@ test("a chapter's diff is Files changed's list handed only its hunks, and its ra
 });
 
 test("← and → step through the chapters, held at either end, and a key change's lines bring its file into view", async () => {
-  const tab = await draw(
-    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
-  );
+  const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
 
   press(tab, { key: "ArrowLeft" });
   assert.equal(heading(tab), "Read the expiry");
@@ -661,7 +661,7 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
   };
   const tab = await draw(
     controlAnswering({
-      readChapters: () => Promise.resolve(answering(ready(HEAD, [READ_STORE, pointed]))),
+      chapters: answering(ready(HEAD, [READ_STORE, pointed])),
     }),
   );
   press(tab, { key: "ArrowRight" });
@@ -678,7 +678,7 @@ test("a key change's press scrolls to its first lines in the chapter's file orde
 test("a chapter is viewed once every file it holds is; Mark chapter viewed and ⇧V mark the rest, and unmark them all once all are", async () => {
   const tab = await draw(
     controlAnswering({
-      readChapters: () => Promise.resolve(answering(ready())),
+      chapters: answering(ready()),
       viewed: [STORE.path],
     }),
   );
@@ -719,7 +719,7 @@ test("the Chapters tab says where the chapters stand before their view is opened
   const tab = await draw(
     controlAnswering({
       head: () => HEAD,
-      readChapters: () => Promise.resolve(answering(ready(OLDER))),
+      chapters: answering(ready(OLDER)),
     }),
     PULL_REQUEST_VIEW.CONVERSATION,
   );
@@ -733,7 +733,7 @@ test("the Chapters tab counts none viewed where the files' read names no head, s
     controlAnswering({
       head: () => HEAD,
       filesHeadless: true,
-      readChapters: () => Promise.resolve(answering(ready())),
+      chapters: answering(ready()),
       viewed: [STORE.path],
     }),
   );
@@ -750,7 +750,7 @@ function readyChapters(headSha: string): Extract<PullRequestChaptersState, { mod
 
 function madeBy(model: string, headSha = HEAD): AgentsControl {
   return controlAnswering({
-    readChapters: () => Promise.resolve(answering({ ...readyChapters(headSha), model })),
+    chapters: answering({ ...readyChapters(headSha), model }),
   });
 }
 
@@ -771,7 +771,7 @@ test("chapters made for an older head stand under a line saying new commits came
   let generates = 0;
   const tab = await draw(
     controlAnswering({
-      readChapters: () => Promise.resolve(answering(ready(OLDER))),
+      chapters: answering(ready(OLDER)),
       generateChapters: () => {
         generates += 1;
         return Promise.resolve(answering(ready()));
@@ -807,18 +807,12 @@ test("chapters made for an older head stand under a line saying new commits came
 
 test("chapters a Generate made for a head pushed since the tab read the pull request draw their diff once the tab has read that head again", async () => {
   let head = OLDER;
-  let generated = false;
   const tab = await draw(
     controlAnswering({
       head: () => head,
-      readChapters: () =>
-        Promise.resolve(
-          answering(generated ? ready() : { status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
-        ),
       generateChapters: () => {
         // A push the tab has not read yet, which the Generate tells the chapters for.
         head = HEAD;
-        generated = true;
         return Promise.resolve(answering(ready()));
       },
     }),
@@ -831,19 +825,16 @@ test("chapters a Generate made for a head pushed since the tab read the pull req
   assert.notDeepEqual(listed(), [], "the chapter's diff is drawn from the files of its head");
 });
 
-test("a generation that failed says why with Retry, chapters someone else is making offer Refresh, and a deployment that cannot make them says so", async () => {
+test("a generation that failed says why with Retry, chapters someone else is making draw once the host's read of them moves, and a deployment that cannot make them says so", async () => {
   let generates = 0;
   const tooLarge = await draw(
     controlAnswering({
-      readChapters: () =>
-        Promise.resolve(
-          answering({
-            status: PULL_REQUEST_CHAPTERS_STATE.FAILED,
-            headSha: HEAD,
-            baseSha: BASE,
-            failureKind: PULL_REQUEST_CHAPTERS_FAILURE_KIND.TOO_LARGE,
-          }),
-        ),
+      chapters: answering({
+        status: PULL_REQUEST_CHAPTERS_STATE.FAILED,
+        headSha: HEAD,
+        baseSha: BASE,
+        failureKind: PULL_REQUEST_CHAPTERS_FAILURE_KIND.TOO_LARGE,
+      }),
       generateChapters: () => {
         generates += 1;
         return Promise.resolve(answering(ready()));
@@ -856,32 +847,30 @@ test("a generation that failed says why with Retry, chapters someone else is mak
   assert.equal(generates, 1);
   act(() => root?.unmount());
 
-  let reads = 0;
   const elsewhere = await draw(
     controlAnswering({
-      readChapters: () => {
-        reads += 1;
-        return Promise.resolve(
-          answering({
-            status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
-            headSha: HEAD,
-            baseSha: BASE,
-            startedAt: 1_000,
-          }),
-        );
-      },
+      chapters: answering({
+        status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
+        headSha: HEAD,
+        baseSha: BASE,
+        startedAt: 1_000,
+      }),
     }),
   );
   assert.match(elsewhere.textContent ?? "", /Generating chapters/u);
-  act(() => button(elsewhere, "Refresh").click());
+  // Another member's generation lands: the host's live read of the chapters moves, with no press here.
+  act(() => moveChapters(answering(ready())));
   await settle();
-  assert.equal(reads, 2);
+  assert.deepEqual(railRows(elsewhere), [
+    "1. Read the expiry, High risk",
+    "2. Sweep what expired, Low risk",
+    "3. Other changes",
+  ]);
   act(() => root?.unmount());
 
   const unavailable = await draw(
     controlAnswering({
-      readChapters: () =>
-        Promise.resolve(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false)),
+      chapters: answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false),
     }),
   );
   assert.match(
@@ -894,52 +883,6 @@ test("a generation that failed says why with Retry, chapters someone else is mak
     ),
     false,
   );
-});
-
-test("Refresh on chapters someone else is making shows busy once the read has waited the settle delay, and stops when the read answers", async () => {
-  const making = answering({
-    status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
-    headSha: HEAD,
-    baseSha: BASE,
-    startedAt: 1_000,
-  });
-  const held: Array<(answer: PullRequestChaptersAnswerView) => void> = [];
-  let reads = 0;
-  const elsewhere = await draw(
-    controlAnswering({
-      readChapters: () => {
-        reads += 1;
-        if (reads === 1) return Promise.resolve(making);
-        return new Promise((answered) => held.push(answered));
-      },
-    }),
-  );
-  const refresh = () => button(elsewhere, "Refresh");
-  const busy = () =>
-    elsewhere.querySelector<HTMLButtonElement>('button[aria-busy="true"]') ?? undefined;
-  const ring = () => busy()?.querySelector(".ui-spinner-ring") != null;
-  assert.equal(busy(), undefined);
-
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  try {
-    act(() => refresh().click());
-    assert.equal(busy()?.getAttribute("aria-label") ?? busy()?.textContent, "Refreshing");
-    assert.equal(ring(), false);
-    act(() => vi.advanceTimersByTime(MOTION_DELAY_MS.SETTLE - 1));
-    assert.equal(ring(), false);
-    act(() => vi.advanceTimersByTime(1));
-    assert.equal(ring(), true);
-
-    // A press while it is out asks nothing more.
-    act(() => busy()?.click());
-    assert.equal(reads, 2);
-
-    for (const answered of held) answered(making);
-    await settle();
-    assert.equal(busy(), undefined);
-  } finally {
-    vi.useRealTimers();
-  }
 });
 
 /** The rail floated over the chapter, as it stands where the panel has no room for it beside. */
@@ -960,9 +903,7 @@ async function narrowChapters(): Promise<HTMLElement> {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   document.body.style.setProperty("--ui-duration-pane", `${MOTION_DURATION_MS.PANE}ms`);
   layContainersAt({ "side-panel": 500 });
-  const tab = await draw(
-    controlAnswering({ readChapters: () => Promise.resolve(answering(ready())) }),
-  );
+  const tab = await draw(controlAnswering({ chapters: answering(ready()) }));
   assert.equal(floatedRail(tab), null, "the rail is away until its toggle is pressed");
   return tab;
 }

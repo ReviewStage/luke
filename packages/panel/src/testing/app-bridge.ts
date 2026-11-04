@@ -2,6 +2,7 @@
  * app-bridge.ts -- the bridge and act port a test's window reaches main through: fakes answering only the calls its test gives them.
  */
 
+import { ORPCError } from "@orpc/client";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { AppBridge } from "@repo/host/bridge";
 import {
@@ -10,13 +11,13 @@ import {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   actContract,
+  CHAPTERS_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
   TASKS_ACT_KIND,
 } from "@repo/host/contract";
 import type { WireBoundaryInput } from "@repo/wire";
-import { ORPCError } from "@orpc/client";
 import { installActPortClient, installAppBridge } from "../app-bridge.js";
 
 let answering: Partial<AppBridge> = {};
@@ -89,10 +90,11 @@ function followedFromReads(
     );
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, and its pages. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, and a pull request's chapters. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
-  | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW;
+  | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
+  | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW;
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
@@ -117,9 +119,9 @@ export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>>
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A follow of the automations it does
  * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold on a task's or an agent's inbox or pages it does not
- * answer is held quietly, since what the hold reads reaches the window on
- * app state.
+ * that, and a hold on a task's or an agent's inbox or pages, or a pull
+ * request's chapters, it does not answer is held quietly, since what the
+ * hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
@@ -128,6 +130,7 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const held: Partial<FakeActPort> = {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
+    [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
     ...procedures,
   };
   const answered: Partial<FakeActPort> =

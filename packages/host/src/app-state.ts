@@ -4,6 +4,7 @@ import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
+import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { TasksView } from "@repo/features/tasks-view";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
@@ -312,11 +313,28 @@ export type AppPages = {
 /** No pages held, as the host stands before any window chooses a task or an agent and after the session ends. */
 export const NO_PAGES: AppPages = { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} };
 
+/** One agent's pull request's newest chapters, as the host's read of them stands: with whether the reader can generate them, once it answered. */
+export type AppPullRequestChapters = AppHostRead<PullRequestChaptersAnswer>;
+
+/**
+ * Each agent's pull request's chapters the host holds for the windows
+ * (`compose-agents.ts`): those a window's Pull request tab chose, and the
+ * few let go lately, by the agent's id and then the pull request's number,
+ * each as its own read stands. One absent is held by nobody.
+ */
+export type AppChapters = Readonly<
+  Record<string, Readonly<Record<string, AppPullRequestChapters>>>
+>;
+
+/** No chapters held, as the host stands before any window shows a pull request's and after the session ends. */
+export const NO_CHAPTERS: AppChapters = {};
+
 /** The rows of each read the host holds for the panel, by its name: a keyed read's are one key's rows. */
 export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.PAGES]: readonly PageLine[];
+  [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
 }
 
 /**
@@ -409,6 +427,8 @@ export interface AppState {
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
+  /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
+  [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -521,6 +541,7 @@ export const HOST_READ_SLICE = {
     rowId: "id" satisfies keyof InboxItem,
   },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   tasks: {
     keys: READ_KEYS.PARTS,
     on: KEYS_ON.SLICE,
