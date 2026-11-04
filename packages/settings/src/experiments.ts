@@ -18,8 +18,6 @@ export const EXPERIMENT = {
   SKILLS: "skills",
   /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in our cloud. */
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
-  /** Chat on the right: a task's page shows its side panel's tab (the plan, a page, a file) in the middle and the agent's chat at the right, at the panel's width. */
-  CHAT_ON_THE_RIGHT: "chat-on-the-right",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -43,15 +41,6 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
-  {
-    key: EXPERIMENT.CHAT_ON_THE_RIGHT,
-    name: "Chat on the right",
-    detail:
-      "Show a task's plan, pages, and files in the middle of the window, " +
-      "with the agent's chat beside them at the right.",
-    owner: "Charles",
-    since: "2026-11-03",
-  },
   {
     key: EXPERIMENT.BRING_YOUR_OWN_HOST,
     name: "Bring your own host",
