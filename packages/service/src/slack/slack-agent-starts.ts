@@ -272,7 +272,7 @@ interface SlackAddressed {
   readonly threadTs: string | undefined;
   /** The member's words, the bot's mention taken out; empty where the message shared images alone. */
   readonly text: string;
-  /** The images the message shared, of any type Slack names an image, as many as a message may carry; none where it shared none. */
+  /** The images the message shared, of any type Slack names an image; none where it shared none. */
   readonly images: readonly SharedFile[];
 }
 
@@ -338,8 +338,7 @@ function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
   }
   const text = withoutBotMention(event.text ?? "", botUserId);
   const images = (event.files ?? [])
-    .filter((file) => file.mimetype?.startsWith(IMAGE_TYPE_PREFIX) === true)
-    .slice(0, AGENT_BOUNDS.MAX_ATTACHMENTS);
+    .filter((file) => file.mimetype?.startsWith(IMAGE_TYPE_PREFIX) === true);
   if (text === "" && images.length === 0) return SLACK_DROP.EMPTY;
   return {
     teamId: callback.team_id,
@@ -364,8 +363,9 @@ function sharedImageName(file: SharedFile): string {
 
 /**
  * Where a shared image is read from: the file itself where it is of a type
- * a model reads and Slack says it is within one image's bound, else the
- * largest thumbnail Slack made of it; nothing where Slack made none.
+ * a model reads, Slack says it is within one image's bound, and names its
+ * address, else the largest thumbnail Slack made of it; nothing where Slack
+ * made none.
  */
 function sharedImageUrl(file: SharedFile): string | undefined {
   const whole =
@@ -373,7 +373,7 @@ function sharedImageUrl(file: SharedFile): string | undefined {
     SHARED_IMAGE_TYPES.has(file.mimetype) &&
     file.size !== undefined &&
     file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES;
-  if (whole) return file.url_private_download;
+  if (whole && file.url_private_download !== undefined) return file.url_private_download;
   return (
     file.thumb_1024 ??
     file.thumb_960 ??
@@ -387,8 +387,9 @@ function sharedImageUrl(file: SharedFile): string | undefined {
 /**
  * The images the message shared, read from Slack and made the files a
  * message carries, in the order shared, each from where `sharedImageUrl`
- * says and sniffed by its bytes; one that failed, is no PNG, JPEG, or WebP,
- * or would take the files past their bytes together is left out.
+ * says and sniffed by its bytes, as many as a message may carry; one that
+ * failed, is no PNG, JPEG, or WebP, or would take the files past their bytes
+ * together is left out, and so takes none of those places.
  */
 const sharedImages = Effect.fnUntraced(function* (
   bot: SlackBotService,
@@ -397,6 +398,7 @@ const sharedImages = Effect.fnUntraced(function* (
   const attachments: AgentAttachment[] = [];
   let bytesTogether = 0;
   for (const file of images) {
+    if (attachments.length === AGENT_BOUNDS.MAX_ATTACHMENTS) break;
     const url = sharedImageUrl(file);
     if (url === undefined) continue;
     const read = yield* bot.download(url, AGENT_BOUNDS.MAX_IMAGE_BYTES);
