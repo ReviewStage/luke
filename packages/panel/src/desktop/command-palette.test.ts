@@ -2260,18 +2260,18 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
 
   assert.deepEqual(rows(), [
     "Rate limits",
-    "Triage overnight issues · acme/relay",
+    "Triage overnight issues · relay",
     "Retry budget",
-    "Remove stale copy · acme/relay · Archived",
+    "Remove stale copy · relay · Archived",
   ]);
-  press("Triage overnight issues · acme/relay");
+  press("Triage overnight issues · relay");
   assert.deepEqual(opened, ["a-1"]);
   // An archived one-off agent is listed nowhere in the sidebar, so ⌘K is its way to its page, whose Unarchive brings it back.
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K is offered");
   });
   chooseFilter("Tasks");
-  press("Remove stale copy · acme/relay · Archived");
+  press("Remove stale copy · relay · Archived");
   assert.deepEqual(opened, ["a-1", "a-2"]);
 });
 

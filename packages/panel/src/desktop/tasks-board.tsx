@@ -54,6 +54,7 @@ import {
   PAGE_WIDTH,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
+  RepositoryPicture,
   reachedKey,
   SCROLL_FADE,
   SCROLL_GUTTER,
@@ -111,7 +112,7 @@ import {
   type VirtualRowsHandle,
   type VirtualRuns,
 } from "@repo/ui/virtual-rows";
-import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
+import { SquareKanbanIcon } from "lucide-react";
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -120,7 +121,6 @@ import { unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
@@ -251,11 +251,6 @@ function boardState(tasks: TasksControl, empty: boolean): CollectionState {
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** A repository's own name, without its owner, as a card has room for. */
-function repositoryName(repository: string): string {
-  return repository.slice(repository.indexOf("/") + 1);
-}
-
 /** What a press must land on to carry a card: the press that opens it, which reaches every edge of the card but its foot's controls. */
 const CARD_HANDLE = CARD_PRESS_SELECTOR;
 
@@ -317,16 +312,20 @@ const BOARD_CARD_PILLS =
   "tasks-board-card-pills flex min-w-0 flex-auto flex-wrap items-center gap-ui-6 [&>:not(.task-agents-mark,.ui-progress-count)]:pointer-events-auto";
 
 /**
- * A card's repository as a pill: its owner's picture and its own name, its
+ * A card's repository as a pill: its owner's picture and its name, owner and
+ * all where another column's repository shares it (`repositoryLabel`), its
  * whole name in its hint, and a press that opens it on GitHub, as its
  * sidebar header's menu does.
  */
 function TaskBoardRepository({
   repository,
+  label,
   openGitHub,
   pictures,
 }: {
   repository: string;
+  /** What the pill says for it: its name, or `owner/name` where the board names another of that name. */
+  label: string;
   openGitHub: (url: string) => void;
   /** Whether it is drawn by its owner's picture. */
   pictures: boolean;
@@ -340,13 +339,8 @@ function TaskBoardRepository({
         href={repositoryPageUrl(repository)}
         onClick={linkPressOf(openGitHub, repositoryPageUrl(repository))}
       >
-        <RepositoryPicture
-          repository={repository}
-          pictures={pictures}
-          fallback={<FolderGitIcon />}
-          size={AVATAR_SIZE.GLYPH}
-        />
-        <ChipName>{repositoryName(repository)}</ChipName>
+        <RepositoryPicture repository={repository} pictures={pictures} size={AVATAR_SIZE.GLYPH} />
+        <ChipName>{label}</ChipName>
       </Chip>
     </Tooltip>
   );
@@ -379,6 +373,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
   opened,
   workspaceName,
   properties,
+  repositoryName,
   waiting,
   subTasksFinished,
   subTasksTotal,
@@ -389,6 +384,8 @@ const TaskBoardCard = memo(function TaskBoardCard({
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
+  /** What its repository's pill says (`repositoryLabel`), none where it has no repository. */
+  repositoryName: string | undefined;
   /** The task the window has open, where it is this one (`openedTaskOf`). */
   opened: OpenedTask | undefined;
   workspaceName: string;
@@ -537,9 +534,12 @@ const TaskBoardCard = memo(function TaskBoardCard({
           {drawn(TASK_PROPERTY.ASSIGNEE) ? (
             <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={setStanding} />
           ) : null}
-          {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
+          {task.repository === null ||
+          repositoryName === undefined ||
+          !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
             <TaskBoardRepository
               repository={task.repository}
+              label={repositoryName}
               openGitHub={tasks.onOpenGitHub}
               pictures={tasks.pictures}
             />
@@ -746,6 +746,10 @@ function TaskBoardColumnView({
       ? unassigned
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  // Every repository the board stands a card for, which a card's pill tells its own apart from.
+  const repositories = columns.flatMap((each) =>
+    each.tasks.map((task) => ({ repository: task.repository })),
+  );
   const keys = useMemo(() => cards.map(({ key }) => key), [cards]);
   const run = useRef<VirtualRowsHandle>(null);
   useLayoutEffect(() => holdRun(run), [holdRun]);
@@ -858,6 +862,11 @@ function TaskBoardColumnView({
                         task={task}
                         opened={opened?.task.id === task.id ? opened : undefined}
                         workspaceName={workspaceName}
+                        repositoryName={
+                          task.repository === null
+                            ? undefined
+                            : repositoryLabel(task.repository, repositories)
+                        }
                         properties={drawn(task)}
                         waiting={waitingOn.get(task.id) ?? 0}
                         subTasksFinished={subTasksOf.get(task.id)?.finished ?? 0}

@@ -41,8 +41,10 @@ import {
   ListMotion,
   motionKey,
   motionRows,
+  NoRepositoryGlyph,
   PAGE_FRAME,
   PAGE_WIDTH,
+  RepositoryPicture,
   reachedKey,
   SelectionBar,
   SelectionRegion,
@@ -61,8 +63,8 @@ import {
   useRovingKeys,
 } from "@repo/ui";
 import { actorName, creatorActor } from "@repo/ui/actor-model";
-import { FolderXIcon, GLYPH, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
-import { childTaskCounts, repositoryLabel } from "@repo/ui/task-list-model";
+import { GLYPH, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
+import { childTaskCounts, NO_REPOSITORY, repositoryLabel } from "@repo/ui/task-list-model";
 import {
   placeWrites,
   restoreWrites,
@@ -111,7 +113,6 @@ import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { newTaskAction } from "../tasks/inbox-list.js";
@@ -137,7 +138,6 @@ import {
   assigneeWords,
   creatorWords,
   NO_CREATOR,
-  NO_REPOSITORY,
   OlderCompleted,
   type TasksViewFrame,
 } from "./tasks-page-options.js";
@@ -155,7 +155,7 @@ import { useTaskDrag } from "./use-row-drag.js";
  * one grid, as Linear's list stands its rows: the task's priority, key, and
  * status before its name, and after it how many Inbox threads of it wait on
  * the reader, its repository led by its owner's picture, as the sidebar
- * draws one (`repository-picture.tsx`), its assignee's face, or the dashed
+ * draws one (`RepositoryPicture`), its assignee's face, or the dashed
  * unassigned mark, its creator's face, the one icon of how its agents
  * stand (`TaskAgentsMark`), when it last moved, and its ⋯, each
  * where the view draws it, so each column lines up down the whole page
@@ -384,10 +384,11 @@ function listSections(tasks: TasksControl): readonly TasksSection[] {
   }));
 }
 
-/** What heads a group of the List: its glyph and its name. */
+/** What heads a group of the List: its glyph, its name, and its hint where the name does not say the whole of it. */
 interface GroupHead {
   readonly icon: ReactNode;
   readonly name: string;
+  readonly hint?: string | undefined;
 }
 
 /** How the List names and draws the people its groups stand for: by account id, null for no one. */
@@ -428,7 +429,7 @@ function groupHead(
       };
     case TASKS_GROUP.REPOSITORY:
       return head.repository === null
-        ? { icon: <FolderXIcon />, name: NO_REPOSITORY }
+        ? { icon: <NoRepositoryGlyph />, name: NO_REPOSITORY }
         : {
             icon: (
               <RepositoryPicture
@@ -438,6 +439,7 @@ function groupHead(
               />
             ),
             name: repositoryLabel(head.repository, repositories),
+            hint: head.repository,
           };
     case TASKS_GROUP.ASSIGNEE:
       return head.assigneeId === null
@@ -878,6 +880,7 @@ function TasksListGroup({
         <GroupHeader
           label={head.name}
           glyph={head.icon}
+          tooltip={head.hint === head.name ? undefined : head.hint}
           fold={sidebarFold(folded, onToggle)}
           count={groupCount(group.tasks.length)}
           surface={GROUP_SURFACE.WIDE}
