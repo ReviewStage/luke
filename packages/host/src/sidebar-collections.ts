@@ -37,16 +37,10 @@ import type {
 } from "@repo/features/task-section-wire";
 import { applySectionWrite } from "@repo/features/task-section-writes";
 import type { RepositoryPin, RepositoryPinsWritten } from "@repo/features/task-wire";
+import { KEPT_BY_SCOPE, scopedCollection } from "@repo/sync";
 import { createLiveQueryCollection } from "@tanstack/db";
 import { Data, Deferred, Effect, type Scope } from "effect";
-import {
-  answeredCollection,
-  drawRows,
-  KEPT_BY_SCOPE,
-  optimistically,
-  rowsOf,
-  scopedCollection,
-} from "./live-collection.js";
+import { answeredCollection, drawRows, optimistically, rowsOf } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** How an id breaks a tie between two rows of one instant: by code unit, as the held reads compared them. */

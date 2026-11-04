@@ -15,6 +15,7 @@ import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -96,7 +97,7 @@ function composed(
         : { opened: true, connection: answer.connection };
     });
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.INTEGRATIONS_STATUS]: () =>
       Effect.map(asked(client.statuses()), (answer) => carried<IntegrationStatusesView>(answer)),
     [GATEWAY_METHOD.INTEGRATIONS_CONNECT]: (params) =>

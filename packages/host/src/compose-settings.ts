@@ -7,13 +7,7 @@ import {
   type RecordProductEvent,
 } from "@repo/features/analytics";
 import { ProductEventSender } from "@repo/features/analytics/sender";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-} from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, invalid } from "@repo/gateway";
 import { catchAllButInterrupt } from "@repo/runtime/effect";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -44,6 +38,7 @@ import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource, AppIdentity, SettingsChangedElsewhere } from "./effect/seams.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { SettingsStore } from "./settings-store.js";
@@ -499,7 +494,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       );
     }
 
-    const methods: GatewayMethodTable = {
+    const methods: HostMethodTable = {
       [GATEWAY_METHOD.SETTINGS_SNAPSHOT]: () =>
         Effect.map(Effect.orDie(store.snapshot()), (snapshot) => ({
           settings: carried(snapshot),

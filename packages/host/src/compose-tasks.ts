@@ -130,13 +130,8 @@ import {
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
 import type { Workspace } from "@repo/features/workspace-wire";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  readParams,
-} from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
+import { ROW_GONE } from "@repo/sync";
 import { keepIdentity } from "@repo/wire";
 import {
   Cache,
@@ -163,6 +158,7 @@ import { NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   FileAtCommitKey,
@@ -171,7 +167,7 @@ import {
   PageVersionKey,
   PlanPictureKey,
 } from "./kept-content.js";
-import { type HeldAnswers, heldSlice, ROW_GONE, type RowWrite } from "./live-collection.js";
+import { type HeldAnswers, heldSlice, type RowWrite } from "./live-collection.js";
 import {
   confirmWrite,
   LIVE_GONE,
@@ -1680,7 +1676,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     // The list's Try again: what is followed already stands (`open`), so it
     // starts only a follow that is not running, and reads the open task and,
     // where the last read is stale, GitHub's connection again.
