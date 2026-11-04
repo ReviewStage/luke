@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, openWorkspace } from "@repo/database/testing";
+import { IDEMPOTENCY_KEY } from "@repo/features";
 import {
   TASK_SECTION_WRITE,
   type TaskSections,
@@ -72,13 +73,16 @@ const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
 
 function request(
   userId: string | undefined,
-  init: { method?: string; body?: WireBoundaryInput } = {},
+  init: { method?: string; body?: WireBoundaryInput; idempotencyKey?: string } = {},
 ) {
   return new Request(new URL(SECTIONS, ORIGIN), {
     method: init.method ?? "GET",
     headers: {
       "content-type": "application/json",
       ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+      ...(init.idempotencyKey === undefined
+        ? undefined
+        : { [IDEMPOTENCY_KEY.HEADER]: init.idempotencyKey }),
     },
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
@@ -147,6 +151,42 @@ it.layer(getTestDB())("the task sections route", (it) => {
         agentEntries: [],
       });
     }),
+  );
+
+  it.effect(
+    "an edit sent again under the key it was taken under is answered as written, and a later edit stands",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const workspaceId = yield* openWorkspace(owner);
+        const id = randomUUID();
+        const key = randomUUID();
+        const write = (body: WireBoundaryInput, idempotencyKey?: string) =>
+          ask(
+            request(owner, {
+              method: "PUT",
+              body,
+              ...(idempotencyKey === undefined ? undefined : { idempotencyKey }),
+            }),
+          );
+        const edit = (title: string) => ({ kind: TASK_SECTION_WRITE.EDIT, id, title, icon: null });
+        readAnswer(
+          yield* write({ kind: TASK_SECTION_WRITE.CREATE, id, workspaceId, title: "Draft" }),
+        );
+
+        readAnswer(yield* write(edit("Offline"), key));
+        readAnswer(yield* write(edit("Later")));
+        const replayed = yield* write(edit("Offline"), key);
+
+        assert.deepEqual(
+          replayed,
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.ALREADY_WRITTEN),
+        );
+        assert.deepEqual(
+          sectionsOf(yield* ask(request(owner))).sections.map((section) => section.title),
+          ["Later"],
+        );
+      }),
   );
 
   it.effect(

@@ -92,7 +92,7 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import {
@@ -149,9 +149,6 @@ export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
   summaryModel?: SummaryModelOf;
 }
-
-/** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
-const WORKSPACE_AGENTS_LIMIT = 50;
 
 /**
  * How long a developer's resume holds the sandbox it wakes: the Terminal
@@ -407,7 +404,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
-          limit: WORKSPACE_AGENTS_LIMIT,
+          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS,
         }),
       );
       return yield* listedSummaries(context.userId, agents);
@@ -541,7 +538,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * as invalid otherwise, and a runner of it that runs is handed the change
      * as a `model` line at once (`runnerChoiceApplied`).
      */
-    change: signedIn.change.effect(function* ({ input, context }) {
+    change: signedIn.change.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
       const { body } = input;
       if ("title" in body) {

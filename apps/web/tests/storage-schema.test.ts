@@ -119,6 +119,7 @@ const DECLARED_TABLES = [
   "verification",
   "workspace_former_slug",
   "workspace_token_repository",
+  "write_receipt",
 ].sort();
 
 async function publicTableNames(): Promise<readonly string[]> {
