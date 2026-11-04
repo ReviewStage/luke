@@ -7,13 +7,16 @@ import {
   type ShownFailureSentry,
   sendShownFailure,
 } from "@repo/features/shown-failure";
+import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
 import { Duration } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import type { ActHandle } from "./act.js";
 import { installShownFailureReporter } from "./failure-report.js";
+import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import {
@@ -24,6 +27,7 @@ import {
   useToast,
   useWorkingToast,
 } from "./toast.js";
+import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -31,7 +35,8 @@ import {
  * there is room again; one whose hold runs down with an action draws that
  * hold as its countdown; work under way settles into its own card in
  * place; an act's Undo toast takes the act back and stands for the Undo
- * hold; and a failure toast reports what failed to Sentry, which a recording
+ * hold, a row write's taken back once, as ⌘Z's entry, which the key then
+ * finds gone; and a failure toast reports what failed to Sentry, which a recording
  * SDK stands in for, and copies the details of that report. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
@@ -52,6 +57,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   registry?.dispose();
+  // The window's one registry holds ⌘Z's lists, so the next test's window starts with none.
+  rendererRegistry.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
@@ -490,6 +497,40 @@ test("an Undo toast says the act in the success tone, and its Undo takes the act
 
   assert.deepEqual(undone, ["Task archived"]);
   assert.deepEqual(standing(), []);
+});
+
+test("an Undo toast's Undo takes a row write back once, leaving ⌘Z nothing to take back again", async () => {
+  mount(WINDOW.TALL);
+  const taskId = "3f2c8a51-6d0e-4b7a-9c14-2e5f7a9b0d36";
+  const task = {
+    id: taskId,
+    workspaceId: "workspace-personal",
+    name: "Teammate invitations",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: null,
+  };
+  let drawn: TasksView = { ...IDLE_TASKS_VIEW, tasks: [task] };
+  const sent: TasksPinParams[] = [];
+  // SAFETY: the toast's Undo sends this act nothing but the task's pin, which it answers as kept.
+  const pinAct = ((_kind: string, payload: TasksPinParams) => {
+    sent.push(payload);
+    return Promise.resolve(true);
+  }) as ActHandle["act"];
+  const pressed = pressRows(ROW_WRITE.TASK_PIN, { rows: () => drawn, act: pinAct }, [
+    { id: taskId, after: { pinned: true, position: null } },
+  ]);
+  // The pin is kept and drawn, as the host draws it.
+  drawn = { ...IDLE_TASKS_VIEW, tasks: [{ ...task, pinnedAt: 3 }] };
+  const undo = pressed.keep("Task pinned") ?? assert.fail("the pin's entry");
+  act(() => show?.(undoToast("Task pinned", undo)));
+
+  act(() => toastButton("Undo").click());
+  await vi.waitFor(() => assert.equal(sent.length, 1));
+  const again = await undoLast();
+
+  assert.equal(again, undefined);
+  assert.deepEqual(sent, [{ taskId, pinned: false }]);
 });
 
 test("an Undo toast nobody points at stands for the Undo hold, then leaves without taking the act back", () => {
