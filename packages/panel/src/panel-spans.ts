@@ -61,9 +61,9 @@ export type KeystrokeSpanName =
 export const PANEL_SPAN_ATTRIBUTE = {
   /** How many messages the transcript held as the span ended. */
   MESSAGE_COUNT: "transcript.message_count",
-  /** The size of the page that ended the span, as its JSON. */
-  PAGE_BYTES: "transcript.page_bytes",
-  /** Whether the follow's first page was the window the host held from the last time it was followed, 1, or read from the service, 0. */
+  /** The size of the transcript held as the span ended, as its JSON. */
+  HELD_BYTES: "transcript.held_bytes",
+  /** Whether the transcript already stood on app state as its tab held it, 1, or was read from the service first, 0. */
   CACHE_HIT: "transcript.cache_hit",
   /** The size of the plan the task opened on, in characters. */
   PLAN_CHARS: "task.plan_chars",

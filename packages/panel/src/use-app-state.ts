@@ -73,7 +73,9 @@ const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
  * Every reading the bridge has for this window, the subscription installed
  * before anything is asked for: a delivery landing while the read is in
  * flight is then kept rather than lost, which is what makes that read a
- * bootstrap and not a race.
+ * bootstrap and not a race. A fixture run's stage moving on its own is a
+ * reading too, heard from the stage rather than the bridge
+ * (`fixture-moves.ts`), which hands the document held on to be staged anew.
  */
 const readings = (source: AppStateSource): Stream.Stream<AppStateReading, AppStateUnread> =>
   Stream.callback<AppStateReading, AppStateUnread>((queue) =>
@@ -192,8 +194,9 @@ const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppState
 /**
  * The document as main holds it, read before anything is drawn over it: the
  * first reading the atom answers with, which is the read the subscription was
- * installed for. Every later reading arrives on that subscription. Run at
- * the window root (`window-root.tsx`) and nowhere else.
+ * installed for. Every later reading arrives on that subscription, or, in a
+ * fixture run, from its stage moving. Run at the window root
+ * (`window-root.tsx`) and nowhere else.
  */
 export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavailable> =
   AtomRegistry.getResult(rendererRegistry, appStateAtom);

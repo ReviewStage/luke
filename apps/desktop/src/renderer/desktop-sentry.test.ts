@@ -166,7 +166,7 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
     endedAt: startedAt + 1_200,
     attributes: () => ({
       [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 42,
-      [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: 81_920,
+      [PANEL_SPAN_ATTRIBUTE.HELD_BYTES]: 81_920,
     }),
   });
   sentry.load();
@@ -182,7 +182,7 @@ test("a span the panel timed before the SDK loads is sent once it has, with what
   assert.deepEqual(
     [
       span?.attributes?.[PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]?.value,
-      span?.attributes?.[PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]?.value,
+      span?.attributes?.[PANEL_SPAN_ATTRIBUTE.HELD_BYTES]?.value,
     ],
     [42, 81_920],
   );

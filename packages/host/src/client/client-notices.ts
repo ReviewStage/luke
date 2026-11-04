@@ -12,7 +12,7 @@ import {
   createAgentNotices,
   NOTICE_KIND,
 } from "../agent-notices.js";
-import { type AppTranscripts, type AppTranscriptWord, OWN_TRANSCRIPT } from "../app-state.js";
+import { type AppTranscripts, OWN_TRANSCRIPT } from "../app-state.js";
 import type { HostOperator } from "../host-operator.js";
 import type { AppStateStore } from "./app-state-store.js";
 
@@ -75,24 +75,26 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswer
 }
 
 /**
- * Each agent's status its own held transcript says, noted for each page told
- * since `noted` last held its word, as the notices take every page's, and
- * each agent no longer held let go of. Note that a page that said nothing
- * new is the very word held (`keepIdentity`), so it is noted once.
+ * Each agent's status its own held transcript says, noted for each page read
+ * since `noted` last counted its pages, as the notices take every page's,
+ * and each agent no longer held let go of. Note that a transcript laid anew
+ * with no page read, as one held again lays what it held, says nothing of
+ * the agent now: its status is the last page's, which may be a turn's the
+ * agent has since moved past, and a status names no turn.
  */
 function observeTranscripts(
   held: AppTranscripts,
-  noted: Map<string, AppTranscriptWord>,
+  noted: Map<string, number>,
   notices: Pick<AgentNotices, "observeStatus">,
 ): void {
   for (const agentId of noted.keys()) {
     if (!Object.hasOwn(held, agentId)) noted.delete(agentId);
   }
   for (const [agentId, transcripts] of Object.entries(held)) {
-    const word = transcripts[OWN_TRANSCRIPT]?.rows?.word;
-    if (word === undefined || noted.get(agentId) === word) continue;
-    noted.set(agentId, word);
-    notices.observeStatus(agentId, word.status);
+    const rows = transcripts[OWN_TRANSCRIPT]?.rows;
+    if (rows?.word === undefined || noted.get(agentId) === rows.pages) continue;
+    noted.set(agentId, rows.pages);
+    notices.observeStatus(agentId, rows.word.status);
   }
 }
 
@@ -190,7 +192,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
   // each page is read, which the notices hold so an end the panel is not
   // looking at is still announced; a worker's says where the worker stands,
   // which is no word on the agent.
-  const noted = new Map<string, AppTranscriptWord>();
+  const noted = new Map<string, number>();
   yield* Effect.forkScoped(
     Stream.runForEach(
       Stream.changes(Stream.map(state.changes, (document) => document[LIVE_READ.TRANSCRIPT])),
