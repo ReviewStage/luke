@@ -466,12 +466,15 @@ function holdsAnswer(draft: Draft): boolean {
 /**
  * What a box holds once a reply carrying an answer is refused: the words and
  * files that went, then any written on the thread while the answer stood
- * settled, and the picks that went unless others were made meanwhile.
+ * settled, and the picks that went unless others were made meanwhile, or a
+ * resolve was staged meanwhile on a revision since, which the picks that went
+ * no longer stand on.
  */
 function withRefused(now: Draft, went: Draft): Draft {
   if (holdsNothing(now)) return went;
+  const keeps = holdsAnswer(now) || (now.resolving === true && now.revision !== went.revision);
   return {
-    ...(holdsAnswer(now) ? now : went),
+    ...(keeps ? now : went),
     resolving: now.resolving ?? went.resolving,
     text: [went.text, now.text].filter((words) => words !== "").join("\n"),
     attachments: [...went.attachments, ...now.attachments],

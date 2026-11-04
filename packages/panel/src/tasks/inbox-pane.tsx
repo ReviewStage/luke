@@ -1561,14 +1561,17 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
   const resolving = open && draft.resolving === true && doors.onClose !== undefined;
-  // Which of the × and Undo was pressed last here, so the one that takes its place takes its focus.
-  const [pressed, setPressed] = useState<"close" | "undo" | undefined>(undefined);
+  // Which of the × and Undo was pressed last, and on which item, so the one that takes its place takes its focus, and never on another item the pane goes on to show.
+  const [pressed, setPressed] = useState<
+    { readonly itemId: string; readonly which: "close" | "undo" } | undefined
+  >(undefined);
+  const pressedHere = pressed?.itemId === item.id ? pressed.which : undefined;
   const question =
     openAsk === undefined || wordsAlone ? undefined : resolving ? (
       <DraftResolving
-        takesFocus={pressed === "close"}
+        takesFocus={pressedHere === "close"}
         onUndo={() => {
-          setPressed("undo");
+          setPressed({ itemId: item.id, which: "undo" });
           onDraft({ ...draft, resolving: undefined });
         }}
       />
@@ -1580,9 +1583,9 @@ export function InboxPane({
             key={item.id}
             item={item}
             closer={doors.onClose}
-            takesFocus={pressed === "undo"}
+            takesFocus={pressedHere === "undo"}
             onStage={() => {
-              setPressed("close");
+              setPressed({ itemId: item.id, which: "close" });
               onDraft({ ...draft, resolving: true });
             }}
           />
