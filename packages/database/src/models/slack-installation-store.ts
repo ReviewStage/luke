@@ -2,7 +2,8 @@ import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { and, asc, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, queryBuilder } from "../core/query.js";
 import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { agentTable } from "../schemas/agent.js";
 import { member, user } from "../schemas/auth.js";
@@ -15,6 +16,7 @@ import {
   slackMember,
 } from "../schemas/slack-installation.js";
 import type { TaskStoreEffect } from "./task-store.js";
+import { workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * slack-installation-store.ts -- the Slack team a workspace's bot is connected to, and its members' Slack user ids.
@@ -45,7 +47,24 @@ import type { TaskStoreEffect } from "./task-store.js";
  * An owner or admin names the repository Slack starts default to, for the
  * workspace and for each channel (`slackStartRepositories`); a channel's is
  * forgotten when the bot leaves it.
+ *
+ * Settings holds the installation and the channels' repositories as a live
+ * read (`slackInstallationLiveStatement`,
+ * `slackChannelRepositoriesLiveStatement`), so each write Settings makes
+ * answers the transaction it committed in, which a reader holding them
+ * waits for before it confirms the write.
  */
+
+/** The id of the transaction a write committed in, read in its own `RETURNING`. */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+/** What a write that answers its transaction returns. */
+const TxidSchema = Schema.Struct({ txid: Schema.String });
+
+/** The transaction the first row a write returned committed in; none where it wrote none. */
+function txidOf(rows: readonly { readonly txid: string }[]): Option.Option<string> {
+  return Option.map(Option.fromNullishOr(rows[0]), (row) => row.txid);
+}
 
 /** What linking names: the workspace, the Slack team the bot answers for, and the member connecting it. */
 export interface SlackInstallationToLink {
@@ -113,7 +132,7 @@ const deleteOtherTeam = SqlSchema.void({
     ),
 });
 
-const upsertInstallation = SqlSchema.void({
+const upsertInstallation = SqlSchema.findOne({
   Request: Schema.Struct({
     organizationId: Schema.String,
     teamId: Schema.String,
@@ -121,6 +140,7 @@ const upsertInstallation = SqlSchema.void({
     userId: Schema.String,
     now: Schema.Date,
   }),
+  Result: TxidSchema,
   execute: (row) =>
     Database.use((db) =>
       db
@@ -140,7 +160,8 @@ const upsertInstallation = SqlSchema.void({
             linkedByUserId: sql`excluded.linked_by_user_id`,
             updatedAt: sql`excluded.updated_at`,
           },
-        }),
+        })
+        .returning(TXID),
     ),
 });
 
@@ -158,13 +179,13 @@ const findInstallation = SqlSchema.findOneOption({
 
 const deleteInstallation = SqlSchema.findAll({
   Request: Schema.String,
-  Result: Schema.Struct({ teamId: Schema.String }),
+  Result: TxidSchema,
   execute: (organizationId) =>
     Database.use((db) =>
       db
         .delete(slackInstallation)
         .where(eq(slackInstallation.organizationId, organizationId))
-        .returning({ teamId: slackInstallation.teamId }),
+        .returning(TXID),
     ),
 });
 
@@ -426,14 +447,14 @@ const updateDefaultRepository = SqlSchema.findAll({
     repository: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ organizationId: Schema.String }),
+  Result: TxidSchema,
   execute: ({ organizationId, repository, now }) =>
     Database.use((db) =>
       db
         .update(slackInstallation)
         .set({ defaultRepository: repository, updatedAt: now })
         .where(eq(slackInstallation.organizationId, organizationId))
-        .returning({ organizationId: slackInstallation.organizationId }),
+        .returning(TXID),
     ),
 });
 
@@ -461,13 +482,14 @@ const findChannelRepositories = SqlSchema.findAll({
     ),
 });
 
-const upsertChannelRepository = SqlSchema.void({
+const upsertChannelRepository = SqlSchema.findAll({
   Request: Schema.Struct({
     organizationId: Schema.String,
     channelId: Schema.String,
     repository: Schema.String,
     now: Schema.Date,
   }),
+  Result: TxidSchema,
   execute: (row) =>
     Database.use((db) =>
       db
@@ -484,12 +506,14 @@ const upsertChannelRepository = SqlSchema.void({
             repository: sql`excluded.repository`,
             updatedAt: sql`excluded.updated_at`,
           },
-        }),
+        })
+        .returning(TXID),
     ),
 });
 
-const deleteChannelRepository = SqlSchema.void({
+const deleteChannelRepository = SqlSchema.findAll({
   Request: Schema.Struct({ organizationId: Schema.String, channelId: Schema.String }),
+  Result: TxidSchema,
   execute: ({ organizationId, channelId }) =>
     Database.use((db) =>
       db
@@ -499,7 +523,8 @@ const deleteChannelRepository = SqlSchema.void({
             eq(slackChannelRepository.organizationId, organizationId),
             eq(slackChannelRepository.channelId, channelId),
           ),
-        ),
+        )
+        .returning(TXID),
     ),
 });
 
@@ -531,12 +556,20 @@ const upsertMember = SqlSchema.void({
     ),
 });
 
-/** Connects the workspace's bot to the Slack team; a different team's installation, and its members' ids, are replaced. */
-export function linkSlackInstallation(link: SlackInstallationToLink): TaskStoreEffect<void> {
+/**
+ * Connects the workspace's bot to the Slack team, answering the transaction
+ * the installation was written in; a different team's installation, and its
+ * members' ids, are replaced first.
+ */
+export function linkSlackInstallation(link: SlackInstallationToLink): TaskStoreEffect<string> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     yield* deleteOtherTeam({ organizationId: link.organizationId, teamId: link.teamId });
-    yield* upsertInstallation({ ...link, now });
+    const written = yield* upsertInstallation({ ...link, now }).pipe(
+      // Note that an upsert writes its row whatever stood, so it always returns one.
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return written.txid;
   });
 }
 
@@ -547,9 +580,11 @@ export function workspaceSlackInstallation(
   return findInstallation(organizationId);
 }
 
-/** Disconnects the workspace's bot, forgetting every member's Slack id; false where none was connected. */
-export function deleteSlackInstallation(organizationId: string): TaskStoreEffect<boolean> {
-  return Effect.map(deleteInstallation(organizationId), (rows) => rows.length > 0);
+/** Disconnects the workspace's bot, forgetting every member's Slack id, answering the transaction it was deleted in; none where none was connected. */
+export function deleteSlackInstallation(
+  organizationId: string,
+): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(deleteInstallation(organizationId), txidOf);
 }
 
 /** The member's Slack id as last looked up in the workspace's team, a miss included; nothing where it was never looked up. */
@@ -696,27 +731,94 @@ export function slackStartRepositories(organizationId: string): TaskStoreEffect<
   });
 }
 
-/** Names the workspace's default repository for Slack starts, or clears it with null; false where the bot is not connected. */
+/** Names the workspace's default repository for Slack starts, or clears it with null, answering the transaction it was written in; none where the bot is not connected. */
 export function writeSlackDefaultRepository(
   organizationId: string,
   repository: string | null,
-): TaskStoreEffect<boolean> {
+): TaskStoreEffect<Option.Option<string>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    Effect.map(
-      updateDefaultRepository({ organizationId, repository, now }),
-      (rows) => rows.length > 0,
-    ),
+    Effect.map(updateDefaultRepository({ organizationId, repository, now }), txidOf),
   );
 }
 
-/** Names a channel's default repository for Slack starts, or forgets it with null; fails where the bot is not connected, since the row is keyed under its installation. */
+/**
+ * Names a channel's default repository for Slack starts, or forgets it with
+ * null, answering the transaction it was written in; none where a forget
+ * found none named. Fails where the bot is not connected, since the row is
+ * keyed under its installation.
+ */
 export function writeSlackChannelRepository(
   organizationId: string,
   channelId: string,
   repository: string | null,
-): TaskStoreEffect<void> {
-  if (repository === null) return deleteChannelRepository({ organizationId, channelId });
+): TaskStoreEffect<Option.Option<string>> {
+  if (repository === null) {
+    return Effect.map(deleteChannelRepository({ organizationId, channelId }), txidOf);
+  }
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
-    upsertChannelRepository({ organizationId, channelId, repository, now }),
+    Effect.map(upsertChannelRepository({ organizationId, channelId, repository, now }), txidOf),
+  );
+}
+
+/**
+ * The workspace's Slack bot as one member's held read answers it: the
+ * workspace it stands in, the team it is connected to, and the default
+ * repository for Slack starts, null where none is named; no row while it is
+ * not connected, and none at all once the reader is no member of the
+ * workspace, so a subscription stays bound to the rule its endpoint
+ * checked. Every column is under the key the wire reads it by
+ * (`@repo/features/workspace-integrations-live`). None where a statement
+ * names a value Realtime cannot carry.
+ */
+export function slackInstallationLiveStatement(
+  readerId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          workspaceId: slackInstallation.organizationId,
+          teamId: slackInstallation.teamId,
+          teamName: slackInstallation.teamName,
+          defaultRepository: slackInstallation.defaultRepository,
+        }),
+      )
+      .from(slackInstallation)
+      .where(
+        and(
+          eq(slackInstallation.organizationId, organizationId),
+          workspaceReachableBy(readerId, organizationId),
+        ),
+      ),
+  );
+}
+
+/**
+ * Each Slack channel's default repository the workspace names, as one
+ * member's held read answers them: Slack's id for the channel and the
+ * repository, while the reader is a member of the workspace. Every column
+ * is under the key the wire reads it by, and the order is the reader's to
+ * keep. None where a statement names a value Realtime cannot carry.
+ */
+export function slackChannelRepositoriesLiveStatement(
+  readerId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          channelId: slackChannelRepository.channelId,
+          repository: slackChannelRepository.repository,
+        }),
+      )
+      .from(slackChannelRepository)
+      .where(
+        and(
+          eq(slackChannelRepository.organizationId, organizationId),
+          workspaceReachableBy(readerId, organizationId),
+        ),
+      ),
   );
 }

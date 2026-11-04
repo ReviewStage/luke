@@ -10,11 +10,20 @@ import {
   type InstalledSkillOwner,
   installSkill,
 } from "@repo/database/models/installed-skill-store";
+import {
+  linkIntegrationInstallation,
+  markIntegrationInstallationDeleted,
+} from "@repo/database/models/integration-installation-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
 import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
+import {
+  linkSlackInstallation,
+  writeSlackChannelRepository,
+  writeSlackDefaultRepository,
+} from "@repo/database/models/slack-installation-store";
 import { createTaskCommitted, deleteTask } from "@repo/database/models/task-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
@@ -92,6 +101,12 @@ import {
 } from "@repo/features/pull-request-chapters-live";
 import { sidebarLiveAnswerSchema } from "@repo/features/sidebar-live";
 import { taskListLiveAnswerSchema, taskListLiveRowsSchema } from "@repo/features/task-list-live";
+import { TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
+import {
+  workspaceIntegrationsLiveAnswerSchema,
+  workspaceIntegrationsLiveRowsSchema,
+  workspaceIntegrationsOfLive,
+} from "@repo/features/workspace-integrations-live";
 import {
   workspaceInvitationsLiveAnswerSchema,
   workspaceMembersLiveAnswerSchema,
@@ -101,7 +116,7 @@ import {
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
-import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Redacted, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
@@ -117,6 +132,7 @@ import {
   beginIntegrationSignIn,
   completeIntegrationSignIn,
 } from "../integrations/integration-store.js";
+import { SlackBot, slackBotOver } from "../slack/slack-bot.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -130,6 +146,7 @@ import {
   firstIntegrationAccount,
   integrationConnectOf,
 } from "../testing/integration-connect.js";
+import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
 
@@ -164,7 +181,23 @@ const INTEGRATION_CONNECT = integrationConnectOf((provider) => ({
   multipleAccounts: provider === INTEGRATION_PROVIDER.NOTION,
 }));
 
-/** The procedures answering one request as `bearer`, over the test's database and `INTEGRATION_CONNECT`. */
+/** A deployment that holds our Sentry integration, under synthetic settings, and no Slack bot. */
+const SENTRY_HELD_SLACK_NOT = Layer.mergeAll(
+  Layer.succeed(
+    SentryApp,
+    sentryAppService(
+      {
+        slug: "vespin-fixture",
+        clientId: "client-fixture",
+        clientSecret: Redacted.make("secret-fixture"),
+      },
+      [],
+    ),
+  ),
+  Layer.succeed(SlackBot, slackBotOver(undefined)),
+);
+
+/** The procedures answering one request as `bearer`, over the test's database, `INTEGRATION_CONNECT`, and `SENTRY_HELD_SLACK_NOT`. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
@@ -178,6 +211,7 @@ const ask = (options: {
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       INTEGRATION_CONNECT,
+      SENTRY_HELD_SLACK_NOT,
     );
     const procedures = liveProcedures({
       resolveUserId: (incoming) => {
@@ -1279,6 +1313,98 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
           status: HOSTED_HTTP_STATUS.FORBIDDEN,
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
         });
+        assert.deepEqual(yield* ask({ bearer: outsider, path }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path })).status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("a workspace's integrations live read", (it) => {
+  it.effect(
+    "a member is answered their workspace's active Sentry installations, its Slack bot's team, default repository, and channels' repositories, and whether the deployment holds each integration; another workspace's never appear, an outsider is not found, and a read named for another account is signed out",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, teammate, outsider] = [
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+        ];
+        for (const id of [owner, teammate, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openWorkspace(outsider);
+        const sentry = (externalId: string, organizationId: string, userId: string) =>
+          linkIntegrationInstallation({
+            provider: TRIGGER_PROVIDER.SENTRY,
+            externalId,
+            organizationId,
+            userId,
+            accountLabel: "acme",
+          });
+        const [active, uninstalled, theirs] = [randomUUID(), randomUUID(), randomUUID()];
+        yield* sentry(active, workspaceId, owner);
+        yield* sentry(uninstalled, workspaceId, owner);
+        yield* markIntegrationInstallationDeleted(TRIGGER_PROVIDER.SENTRY, uninstalled);
+        yield* sentry(theirs, elsewhere, outsider);
+        yield* linkSlackInstallation({
+          organizationId: workspaceId,
+          teamId: "T0001",
+          teamName: "Acme",
+          userId: owner,
+        });
+        yield* writeSlackDefaultRepository(workspaceId, "acme/relay");
+        yield* writeSlackChannelRepository(workspaceId, "C0001", "acme/api");
+        yield* linkSlackInstallation({
+          organizationId: elsewhere,
+          teamId: "T0001",
+          teamName: "Acme",
+          userId: outsider,
+        });
+        yield* writeSlackChannelRepository(elsewhere, "C0001", "globex/web");
+        const path = `/api/live/workspace-integrations?workspaceId=${workspaceId}`;
+        const read = (bearer: string) =>
+          Effect.gen(function* () {
+            const polled = yield* ask({ bearer, path });
+            assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+            const answer = Schema.decodeUnknownSync(workspaceIntegrationsLiveAnswerSchema)(
+              polled.body,
+            );
+            assert.equal(answer.url, LIVE_POLL_URL);
+            const rows = Schema.decodeUnknownSync(workspaceIntegrationsLiveRowsSchema)({
+              sentryInstallations: answer.queries.sentryInstallations.rows,
+              slackInstallation: answer.queries.slackInstallation.rows,
+              slackChannelRepositories: answer.queries.slackChannelRepositories.rows,
+            });
+            return workspaceIntegrationsOfLive(answer, rows);
+          });
+        const expected = {
+          sentry: {
+            configured: true,
+            installations: [{ installationId: active, account: "acme" }],
+          },
+          slack: {
+            configured: false,
+            team: { id: "T0001", name: "Acme" },
+            defaultRepository: "acme/relay",
+            channelRepositories: { C0001: "acme/api" },
+          },
+        };
+
+        assert.deepEqual(yield* read(owner), expected);
+        assert.deepEqual(
+          yield* read(teammate),
+          expected,
+          "any member reads them, not only a manager",
+        );
         assert.deepEqual(yield* ask({ bearer: outsider, path }), {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },

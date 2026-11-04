@@ -48,11 +48,12 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words. A
- * workspace's people, its token repositories, and its invitations, are each
- * held while a panel holds their stream open: the host holds them on the
- * first stream and lets them go with the last, and what they hold reaches
- * every panel on app state, never down the stream, which carries nothing.
- * How many streams stand open of each is all else held here.
+ * workspace's people, its token repositories, its invitations, its own
+ * integrations, and its Slack channels are each held while a panel holds
+ * their stream open: the host holds them on the first stream and lets them
+ * go with the last, and what they hold reaches every panel on app state,
+ * never down the stream, which carries nothing. How many streams stand open
+ * of each is all else held here.
  */
 export interface WorkspaceProceduresDependencies {
   host: {
@@ -64,7 +65,6 @@ export interface WorkspaceProceduresDependencies {
       params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
     workspaceGitHubDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
-    workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
     workspaceSentryInstall(
       params: TasksWorkspaceParams,
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
@@ -92,6 +92,16 @@ export interface WorkspaceProceduresDependencies {
     workspaceMembersUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     /** A held workspace's people read again at once, as Try again asks. */
     workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+    /** A workspace's own integrations held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    workspaceIntegrationsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+    workspaceIntegrationsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+    /** A held workspace's integrations read again at once, as Try again asks. */
+    workspaceIntegrationsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
+    /** A workspace's Slack channels held at the host while any stream of them stands; what Slack lists reaches the panel on app state. */
+    workspaceSlackChannelsFollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+    workspaceSlackChannelsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
+    /** A held workspace's Slack channels asked again at once, as Try again asks; done once the ask has landed. */
+    workspaceSlackChannelsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
     /** A workspace's pending invitations held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
@@ -207,6 +217,10 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
   /** Every workspace whose people, token repositories, or invitations a window holds a stream open of, each so the host lets them go only with the last. */
   const openPeople: OpenFollows<never> = MutableHashMap.empty();
   const openTokenRepositories: OpenFollows<never> = MutableHashMap.empty();
+  /** Every workspace whose integrations a window holds a stream open of, as its people are. */
+  const openIntegrations: OpenFollows<never> = MutableHashMap.empty();
+  /** Every workspace whose Slack channels a window holds a stream open of, as its people are. */
+  const openChannels: OpenFollows<never> = MutableHashMap.empty();
   const openInvitations: OpenFollows<never> = MutableHashMap.empty();
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
@@ -274,14 +288,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceGitHubDisconnect(input);
       if ("failure" in answer) return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
-    [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceSentry(input);
-      if ("sentry" in answer) return answer.sentry;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     // Note that the address the service answered opens only where it is
     // Sentry's own, because it is the one address here the panel did not name.
@@ -366,6 +372,54 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.workspaceMembersRetry(input);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held integrations reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (held: TasksWorkspaceParams) => held.workspaceId,
+          follow: host.workspaceIntegrationsFollow,
+          unfollow: host.workspaceIntegrationsUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openIntegrations,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceIntegrationsRetry(input);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held channels reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (held: TasksWorkspaceParams) => held.workspaceId,
+          follow: host.workspaceSlackChannelsFollow,
+          unfollow: host.workspaceSlackChannelsUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openChannels,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceSlackChannelsRetry(input);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW

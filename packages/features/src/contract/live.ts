@@ -27,8 +27,10 @@
  * each with its keeper's name and whether the reader may forget it; and the
  * skills the account sees there, named the same way, each with whether it
  * may manage it; and the account's hosts, with the install script's address
- * on the service's own origin; and the account's preferences row, its
- * default agent, chapters model, and Slack notifications as stored. Each
+ * on the service's own origin; and one workspace's Sentry installations and
+ * Slack bot, named by `?workspaceId=`, with whether this deployment holds
+ * each integration; and the account's preferences row, its default agent,
+ * chapters model, and Slack notifications as stored. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -73,6 +75,7 @@ import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-li
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
+import { workspaceIntegrationsLiveAnswerSchema } from "../workspace-integrations-live.js";
 import {
   workspaceInvitationsLiveAnswerSchema,
   workspaceMembersLiveAnswerSchema,
@@ -312,6 +315,12 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INSTALLED_SKILLS }))
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(installedSkillsLiveAnswerSchema)),
+  workspaceIntegrations: hostedProcedure
+    .meta(
+      openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),
+    )
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(workspaceIntegrationsLiveAnswerSchema)),
   pullRequestChapters: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),

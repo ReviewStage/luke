@@ -147,6 +147,12 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onWorkspaceMembersChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
       }),
+      gateway.host.onWorkspaceIntegrationsChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: held });
+      }),
+      gateway.host.onSlackChannelsChanged((held) => {
+        state.update({ [LIVE_READ.SLACK_CHANNELS]: held });
+      }),
       gateway.host.onTokenRepositoriesChanged((held) => {
         state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
       }),

@@ -5,23 +5,30 @@ import {
   integrationLiveRowsOf,
   integrationStatusesOfLive,
 } from "@repo/features/integration-live";
-import type { IntegrationStatusView } from "@repo/features/integration-view";
+import type {
+  IntegrationAccountView,
+  IntegrationRenameParams,
+  IntegrationStatusView,
+} from "@repo/features/integration-view";
 import { INTEGRATION_STATUS, type IntegrationStatus } from "@repo/features/integration-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import { carried } from "@repo/gateway";
+import {
+  type EntityPool,
+  type FieldChange,
+  fieldKind,
+  type HeldRows,
+  type WriteDeclaration,
+} from "@repo/sync";
+import type { WireValue } from "@repo/wire";
 import { Duration, Effect, Queue, Schedule, Schema, type Scope, Stream } from "effect";
 import { type AppIntegrations, NO_KEYS_HELD } from "./app-state.js";
-import {
-  answeredCollection,
-  type HeldAnswers,
-  type HeldSlice,
-  heldSlice,
-  rowsOf,
-} from "./live-collection.js";
+import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
 import { confirmWrite, followTakingRows, restarting, type TxWait } from "./live-follow.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
- * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into a collection by their ids, GitHub's standing asked beside them, a sign-in that stands pending settled while it does, and a write confirmed once the rows carry it.
+ * integrations-follow.ts -- where every one of the account's integrations stands, held for the windows that draw one: its rows followed over the service's held poll into the sync engine's pool by their ids, GitHub's standing asked beside them, a sign-in that stands pending settled while it does, a write confirmed once the rows carry it, and a rename drawn over its account the moment it is asked.
  *
  * The host follows the account's integration rows while any window holds
  * them and a while after (`heldSlice`), so a sign-in the developer finishes
@@ -42,10 +49,16 @@ import type { WindowFocus } from "./window-focus.js";
  * also labels a connected account that carries no label, from its grant or
  * its provider, so one is asked once for each such row a follow meets.
  *
- * The rows are taken the moment each poll answers, before the follow
- * carries the answer's txids on, so a write confirmed on the read
- * (`confirmed`) finds the rows that carry it already drawn.
+ * Each account is one row of the pool (`@repo/sync`), by its id, taken the
+ * moment each poll answers, before the follow carries the answer's txids
+ * on, so a write confirmed on the read (`confirmed`) finds the rows that
+ * carry it already drawn. A rename is a write the pool draws over its
+ * account at once (`integrationRename`), standing until the read carries
+ * its transaction, and taken back where the service refused it.
  */
+
+/** An integration account as the pool holds it, by its row's id, every write to it a change of its fields. */
+const INTEGRATION = fieldKind((row: IntegrationLiveRow) => row.id);
 
 /**
  * How often a sign-in that stands pending is settled. Note that each settle
@@ -75,6 +88,8 @@ export interface IntegrationsFollowDependencies {
   readonly gate: () => boolean;
   /** The windows coming forward, on each of which GitHub's standing is asked again. */
   readonly focus: WindowFocus;
+  /** The sync engine's pool, which the held integrations stand in while they are followed. */
+  readonly pool: EntityPool;
   readonly tell: (held: AppIntegrations) => void;
 }
 
@@ -94,11 +109,14 @@ export interface HeldIntegrations extends HeldSlice<string> {
     txid: string | undefined,
     moves: (row: IntegrationLiveRow | undefined) => boolean,
   ) => Effect.Effect<void>;
+  /** `userId`'s account `connection` as the service last answered it, before any write drawn over it; none where no window holds the rows or they carry no such account. */
+  readonly synced: (userId: string, connection: string) => IntegrationLiveRow | undefined;
 }
 
-/** One follow as a write to it is confirmed: the rows it holds, its wait for a write's transaction where it hands one, and its ask of GitHub's standing. */
+/** One follow as a write to it is confirmed: the rows it holds, as drawn and as answered, its wait for a write's transaction where it hands one, and its ask of GitHub's standing. */
 interface Followed {
   readonly rows: () => readonly IntegrationLiveRow[];
+  readonly synced: () => readonly IntegrationLiveRow[];
   readonly txWait: () => TxWait | undefined;
   readonly github: Effect.Effect<void>;
 }
@@ -138,9 +156,6 @@ function followIntegrations(
   followed: (follow: Followed) => void,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const connections = yield* answeredCollection<IntegrationLiveRow, string>({
-      getKey: (row) => row.id,
-    });
     const pending = yield* Queue.sliding<boolean>(1);
     const unlabeled = yield* Queue.sliding<void>(1);
     /** The connected rows with no label a settle was asked for, by their ids, so each is asked once. */
@@ -151,7 +166,7 @@ function followIntegrations(
     let txWait: TxWait | undefined;
     const draw = () => {
       if (!taken || beside === undefined || github === undefined) return;
-      const rows = rowsOf(connections.collection);
+      const rows = connections.rows();
       answers.answered(integrationStatusesOfLive(rows, beside.offered, beside.multiple, github));
       Queue.offerUnsafe(
         pending,
@@ -166,6 +181,13 @@ function followIntegrations(
       for (const row of unnamed) labelAsked.add(row.id);
       if (unnamed.length > 0) Queue.offerUnsafe(unlabeled, undefined);
     };
+    const connections: HeldRows<IntegrationLiveRow> = yield* dependencies.pool.stand(INTEGRATION, {
+      redraw: () => Effect.sync(draw),
+      confirmation: () => {
+        const handed = txWait;
+        return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
+      },
+    });
     const askGithub = Effect.map(dependencies.github, (answer) => {
       if ("status" in answer) {
         github = answer.status;
@@ -173,7 +195,8 @@ function followIntegrations(
       } else if (github === undefined) answers.unanswered();
     });
     followed({
-      rows: () => rowsOf(connections.collection),
+      rows: () => connections.rows(),
+      synced: () => connections.synced(),
       txWait: () => txWait,
       github: askGithub,
     });
@@ -216,11 +239,13 @@ function followIntegrations(
             return { ...LIVE_SIGNED_OUT, gone };
           });
     const take = (parts: typeof LiveRowsSchema.Type) =>
-      Effect.sync(() => {
-        connections.answer(integrationLiveRowsOf(parts.connections));
-        taken = true;
-        draw();
-      });
+      Effect.andThen(
+        connections.answer(integrationLiveRowsOf(parts.connections)),
+        Effect.sync(() => {
+          taken = true;
+          draw();
+        }),
+      );
     yield* restarting(
       Effect.gen(function* () {
         const first = yield* sealed(false);
@@ -296,6 +321,50 @@ export function heldIntegrations(
           // Note that a write that moves nothing the rows show is never carried by an answer that moved, so it is not waited on.
           return moves(row) ? confirmWrite(follow.txWait(), txid) : Effect.void;
         }),
+      synced: (userId, connection) =>
+        follows
+          .get(userId)
+          ?.synced()
+          .find((each) => each.connection === connection),
     };
   });
+}
+
+/** A rename as the pool draws it: the account and its label, and the id of the row the windows hold for it, where they hold one. */
+export interface IntegrationRename extends IntegrationRenameParams {
+  readonly id: string | undefined;
+}
+
+/**
+ * An account renamed, its label drawn at once over every held read of it,
+ * sent as `send` asks, and standing from the answer on as the label the
+ * service kept, which trims it. Note that a rename the rows already carry
+ * (`carries`) is never answered by a read that moved, so it settles on its
+ * own answer rather than waiting on its transaction; a refusal puts the
+ * label back.
+ */
+export function integrationRename(
+  send: (rename: IntegrationRename) => Effect.Effect<IntegrationAccountView>,
+  carries: (rename: IntegrationRename, label: string | undefined) => boolean,
+): WriteDeclaration<
+  IntegrationLiveRow,
+  FieldChange<IntegrationLiveRow>,
+  IntegrationRename,
+  WireValue
+> {
+  return {
+    kind: INTEGRATION,
+    keys: (rename) => (rename.id === undefined ? [] : [rename.id]),
+    change: (rename) => () => ({ label: rename.label }),
+    send: (rename) =>
+      Effect.map(send(rename), (answer) => {
+        if ("failure" in answer) return { refused: carried<IntegrationAccountView>(answer) };
+        const kept = answer.account.label;
+        return {
+          answer: carried<IntegrationAccountView>(answer),
+          txid: carries(rename, kept) ? undefined : answer.txid,
+          ...(kept === undefined ? undefined : { standsAs: () => ({ label: kept }) }),
+        };
+      }),
+  };
 }

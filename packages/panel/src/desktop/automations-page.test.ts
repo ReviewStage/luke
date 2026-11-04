@@ -35,6 +35,7 @@ import {
 } from "@repo/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { type AppWorkspaceIntegrations, NO_KEYS_HELD } from "@repo/host/app-state";
 import type { Experiment } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { PROFILE } from "@repo/ui";
@@ -54,6 +55,7 @@ import {
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
+  type HostReadsHanded,
   handHostReads,
   holdAutomations,
   holdIntegrations,
@@ -256,8 +258,25 @@ let sentryRead: WorkspaceSentry = {
   configured: true,
   installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
 };
-/** How many reads of the workspace's Sentry are refused before one answers. */
+/** How many of the host's reads of a workspace's integrations fail before one answers. */
 let sentryRefusals = 0;
+/** The workspaces whose integrations the host follows, laid once as the first hold of each is taken. */
+let integrationsFollowed = new Set<string>();
+/** Each workspace's integrations the host holds for the window, as last laid. */
+let workspaceIntegrations: AppWorkspaceIntegrations = NO_KEYS_HELD;
+/** Lays each workspace's integrations on the window's document, as the host does once the editor holds them. */
+let deliverIntegrations: HostReadsHanded["deliverIntegrations"] = () => undefined;
+
+/** Lays a workspace's integrations as the host's read of them now stands: failed while refused, its Sentry as `sentryRead` says and no Slack bot otherwise. */
+function layIntegrations(workspaceId: string): void {
+  const read =
+    sentryRefusals > 0
+      ? { failed: true as const }
+      : { rows: { sentry: sentryRead, slack: { configured: true, channelRepositories: {} } } };
+  if (sentryRefusals > 0) sentryRefusals -= 1;
+  workspaceIntegrations = { ...workspaceIntegrations, [workspaceId]: read };
+  deliverIntegrations(workspaceIntegrations);
+}
 /** Every workspace a Sentry install was asked for. */
 let sentryInstalls: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
@@ -316,6 +335,8 @@ beforeEach(() => {
   };
   sentryInstalls = [];
   sentryRefusals = 0;
+  integrationsFollowed = new Set();
+  workspaceIntegrations = NO_KEYS_HELD;
   fakeActs({
     // Note that the task list is laid as the page is first drawn, so a test's agents stand once it mounts.
     requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
@@ -389,12 +410,18 @@ beforeEach(() => {
             : { automation, webhookSecret: ROTATED_SECRET };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_SENTRY_READ) {
-        if (sentryRefusals > 0) {
-          sentryRefusals -= 1;
-          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
+      // Note that the host follows a workspace's integrations once however many surfaces hold them, and lays what it read once the hold is taken.
+      if (request.kind === ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW) {
+        const { workspaceId } = request.payload;
+        if (!integrationsFollowed.has(workspaceId)) {
+          integrationsFollowed.add(workspaceId);
+          void Promise.resolve().then(() => layIntegrations(workspaceId));
         }
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: sentryRead });
+        return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY) {
+        layIntegrations(request.payload.workspaceId);
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL) {
         sentryInstalls.push(request.payload.workspaceId);
@@ -446,6 +473,7 @@ beforeEach(() => {
   });
   // Note that each list and history a page holds is laid on its document as the host lays it.
   const reads = handHostReads({});
+  deliverIntegrations = reads.deliverIntegrations;
   deliverTasks = reads.deliverTasks;
   host = holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => {

@@ -904,6 +904,10 @@ export const LIVE_READ = {
   THIS_MAC_HOST: "thisMacHost",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
+  /** One workspace's Sentry installations and Slack bot, by the workspace: the service's `workspaceIntegrations` query, held for the windows that draw Settings › Workspace's integrations or an automation's editor, and a few they drew lately. */
+  WORKSPACE_INTEGRATIONS: "workspaceIntegrations",
+  /** The channels of one workspace's Slack team, by the workspace: Slack's own list, fetched by the host while an owner's or an admin's window holds it. */
+  SLACK_CHANNELS: "slackChannels",
   /** The repositories members added to one workspace on their own GitHub tokens, those its App reaches left out, by the workspace: fetched by the host while a window holds it, and laid from each addition's and removal's own answer. */
   TOKEN_REPOSITORIES: "tokenRepositories",
   /** Each listed workspace's photo as a `data:` URL under the version the workspaces carry, by the workspace: fetched by the host once per version as the version it lists moves, held for the session. */

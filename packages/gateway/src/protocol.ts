@@ -171,24 +171,46 @@ export const GATEWAY_METHOD = {
   WORKSPACES_GITHUB_CONNECT: "workspaces.githubConnect",
   /** A workspace's GitHub organization disconnected on the service; the view's workspaces are read again. */
   WORKSPACES_GITHUB_DISCONNECT: "workspaces.githubDisconnect",
-  /** Whether the deployment holds our Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_SENTRY: "workspaces.sentry",
   /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
   WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
-  /** One of a workspace's Sentry installations disconnected on the service, answered with the workspace's Sentry as it then stands. */
+  /** One of a workspace's Sentry installations disconnected on the service, drawn gone at once over the workspace's held integrations; the workspace's Sentry as it then stands. */
   WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
-  /** Whether the deployment holds our Slack bot, and the Slack team a workspace's bot is connected to, read from the service now; answered to the caller, never held in the view. */
+  /** Whether the deployment holds our Slack bot, and the reader's own Slack notifications, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_SLACK_BOT: "workspaces.slackBot",
-  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands. */
+  /** A workspace's Slack bot connected on the service by an owner or admin, answered with the bot as it then stands once the workspace's held integrations carry it. */
   WORKSPACES_SLACK_BOT_CONNECT: "workspaces.slackBotConnect",
-  /** A workspace's Slack bot disconnected on the service by an owner or admin, answered with the bot as it then stands. */
+  /** A workspace's Slack bot disconnected on the service by an owner or admin, drawn gone at once over the workspace's held integrations; the bot as it then stands. */
   WORKSPACES_SLACK_BOT_DISCONNECT: "workspaces.slackBotDisconnect",
   /** The reader's own Slack notifications turned on or off on the service, answered with the bot as it then stands. */
   WORKSPACES_SLACK_BOT_NOTIFICATIONS: "workspaces.slackBotNotifications",
-  /** A workspace's default repository for Slack starts named or cleared on the service by an owner or admin, answered with the bot as it then stands. */
+  /** A workspace's default repository for Slack starts named or cleared on the service by an owner or admin, drawn at once over the workspace's held integrations; the bot as it then stands. */
   WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
-  /** One channel's bot membership or default repository changed on the service by an owner or admin, answered with the bot as it then stands. */
+  /** One channel's bot membership or default repository changed on the service by an owner or admin, its repository drawn at once over the workspace's held integrations and its membership laid on the held channels as answered; the bot as it then stands. */
   WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
+  /**
+   * One workspace's own integrations, its Sentry installations and its Slack
+   * bot, held followed for a window from now until it is let go, over Neon
+   * Realtime, and a while after among those let go lately. What they hold is
+   * heard as `WORKSPACE_INTEGRATIONS_CHANGED` events, on the app state every
+   * window draws, never answered.
+   */
+  WORKSPACES_INTEGRATIONS_FOLLOW: "workspaces.integrationsFollow",
+  /** One workspace's integrations let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  WORKSPACES_INTEGRATIONS_UNFOLLOW: "workspaces.integrationsUnfollow",
+  /** One workspace's held integrations read again at once, as Try again asks; never answered. */
+  WORKSPACES_INTEGRATIONS_RETRY: "workspaces.integrationsRetry",
+  /**
+   * The channels of one workspace's Slack team, as Slack lists them, held
+   * for an owner's or an admin's window from now until it is let go: asked
+   * as it is held, as a window comes forward, as the workspace's bot is
+   * connected or disconnected, and as Try again asks. What they hold is heard
+   * as `SLACK_CHANNELS_CHANGED` events, on the app state, never answered.
+   */
+  WORKSPACES_SLACK_CHANNELS_FOLLOW: "workspaces.slackChannelsFollow",
+  /** One workspace's Slack channels let go by the window that held them. */
+  WORKSPACES_SLACK_CHANNELS_UNFOLLOW: "workspaces.slackChannelsUnfollow",
+  /** One workspace's held Slack channels asked again at once, as Try again asks; answered once the ask has landed. */
+  WORKSPACES_SLACK_CHANNELS_RETRY: "workspaces.slackChannelsRetry",
   /**
    * One workspace's people, its members and who its work names but left,
    * held followed for a window from now until it is let go, over Neon
@@ -740,6 +762,10 @@ export const GATEWAY_EVENT = {
   AUTOMATIONS_CHANGED: "automations.changed",
   /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
+  /** Every workspace's own integrations the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_INTEGRATIONS_CHANGED: "workspaceIntegrations.changed",
+  /** Every workspace's Slack channels the host holds for the windows, whole, as its asks of them stand, each time any of them moves. */
+  SLACK_CHANNELS_CHANGED: "slackChannels.changed",
   /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
   WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
   /** Every workspace's pending invitations the host holds for the windows, whole, as its reads of them stand, each time any of them moves or expires. */

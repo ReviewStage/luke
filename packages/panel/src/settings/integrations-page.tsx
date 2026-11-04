@@ -617,8 +617,6 @@ function IntegrationRow({
   // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
   const [canceling, setCanceling] = useState(false);
   const [editing, setEditing] = useState(false);
-  // The name a rename asked for, drawn in the account's place until the host's read carries it, so the old name never stands between.
-  const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider are each renamed, and each disconnected leaving the others.
   const several = row.accounts > 1 && account !== undefined;
@@ -657,26 +655,16 @@ function IntegrationRow({
     });
   }, [cancelSignIn, connection, name]);
 
-  /** A rename ended: a new label asked of the service, drawn until the host's read carries the label the service kept, which every surface then draws. */
+  /** A rename ended: a new label asked of the service, which the host draws over its read on the press, so every surface draws it at once; a refusal puts the old one back and is said under the row. */
   const renamed = ({ value: label }: InlineEditEnd) => {
     setEditing(false);
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
-    setRenaming(label);
-    const refused = () => {
-      setRenaming(undefined);
-      setRejection(`${name} could not be renamed. Try again.`);
-    };
+    const refused = () => setRejection(`${name} could not be renamed. Try again.`);
     void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then((answer) => {
-      if ("failure" in answer) return refused();
-      setRenaming(answer.account.label ?? label);
+      if ("failure" in answer) refused();
     }, refused);
   };
-
-  // The read carries the label the rename kept: the account's own is drawn from here on.
-  useEffect(() => {
-    if (renaming !== undefined && account?.label === renaming) setRenaming(undefined);
-  }, [renaming, account?.label]);
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
@@ -748,18 +736,15 @@ function IntegrationRow({
           adornment:
             accountName === undefined ? undefined : (
               <InlineEdit
-                value={
-                  renaming ??
-                  (account === undefined ? accountName : integrationAccountLabel(account))
-                }
+                value={account === undefined ? accountName : integrationAccountLabel(account)}
                 label={`${name} account name`}
                 editing={editing && account !== undefined}
                 maxLength={INTEGRATION_LABEL_MAX}
                 look={INLINE_EDIT_LOOK.INPUT}
                 onEnd={renamed}
               >
-                <AccountWords words={renaming ?? accountName}>
-                  <Highlighted text={renaming ?? accountName} tokens={tools.tokens} />
+                <AccountWords words={accountName}>
+                  <Highlighted text={accountName} tokens={tools.tokens} />
                 </AccountWords>
               </InlineEdit>
             ),

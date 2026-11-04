@@ -67,8 +67,10 @@ import {
   type AppMemories,
   type AppProviderKeys,
   type AppRepositoryLists,
+  type AppSlackChannels,
   type AppStateSnapshot,
   type AppTokenRepositories,
+  type AppWorkspaceIntegrations,
   type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   EVERY_WORKSPACE,
@@ -638,11 +640,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     ip: "203.0.113.24",
     expiresAt: NOW + 15 * MINUTE,
   }),
-  [ACT_KIND.WORKSPACE_SENTRY_READ]: ({ workspaceId }) => ({
-    configured: true,
-    installations:
-      workspaceId === WORKSPACE.ACME ? [{ installationId: "sentry-acme", account: "acme" }] : [],
-  }),
   [ACT_KIND.WORKSPACE_SLACK_BOT_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME ? acmeSlackBot : { configured: true },
   [ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: ({ notifications }) => {
@@ -812,6 +809,48 @@ const STAGED_MEMORIES: AppMemories = { [WORKSPACE.ACME]: { rows: MEMORIES } };
 /** The staged workspace's skills and the account's own, as the host holds them for Settings › Skills; one object across deliveries. */
 const STAGED_SKILLS: AppInstalledSkills = { [WORKSPACE.ACME]: { rows: skills(WORKSPACE.ACME) } };
 
+/**
+ * The staged workspaces' own integrations, as the host holds them for
+ * Settings › Workspace and an automation's editor: Acme's Sentry installed
+ * and its Slack bot connected as the staged page first draws it, and the
+ * personal workspace's offered with neither; one object across deliveries.
+ */
+const STAGED_WORKSPACE_INTEGRATIONS: AppWorkspaceIntegrations = {
+  [WORKSPACE.ACME]: {
+    rows: {
+      sentry: {
+        configured: true,
+        installations: [{ installationId: "sentry-acme", account: "acme" }],
+      },
+      slack: {
+        configured: acmeSlackBot.configured,
+        ...(acmeSlackBot.team === undefined ? undefined : { team: acmeSlackBot.team }),
+        ...(acmeSlackBot.defaultRepository === undefined
+          ? undefined
+          : { defaultRepository: acmeSlackBot.defaultRepository }),
+        channelRepositories: Object.fromEntries(
+          (acmeSlackBot.channels ?? []).flatMap((channel) =>
+            channel.repository === undefined ? [] : [[channel.id, channel.repository]],
+          ),
+        ),
+      },
+    },
+  },
+  [WORKSPACE.PERSONAL]: {
+    rows: {
+      sentry: { configured: true, installations: [] },
+      slack: { configured: true, channelRepositories: {} },
+    },
+  },
+};
+
+/** Acme's Slack channels, as the host holds Slack's list of them for an owner's Settings › Workspace; one object across deliveries. */
+const STAGED_SLACK_CHANNELS: AppSlackChannels = {
+  [WORKSPACE.ACME]: {
+    rows: (acmeSlackBot.channels ?? []).map(({ repository: _repository, ...channel }) => channel),
+  },
+};
+
 /** The staged hosts' beats, every one but the one staged offline beating as the window first stages them, so they read online; one object across deliveries. */
 let stagedBeats: AppDevicePresences | undefined;
 
@@ -843,13 +882,14 @@ const STAGED_INTEGRATIONS: AppIntegrations = {
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
  * staged hosts beating, and its integrations, credentials, GitHub token,
- * servers' tools, the staged workspaces' token repositories and invitations,
- * and the staged workspace's memories and skills held. The members are held
- * under every profile rather than only the signed-in ones, because ⌘K's
- * People, a task's assignee and creator faces, and the person page read them
- * wherever the window stands. Each slice laid over is one object across
- * deliveries, but the settings, which carry main's own, so a delivery that
- * moves nothing of them draws nothing again.
+ * servers' tools, the staged workspaces' token repositories, invitations,
+ * own integrations, and Acme's Slack channels, and the staged workspace's
+ * memories and skills held. The members are held under every profile rather
+ * than only the signed-in ones, because ⌘K's People, a task's assignee and
+ * creator faces, and the person page read them wherever the window stands.
+ * Each slice laid over is one object across deliveries, but the settings,
+ * which carry main's own, so a delivery that moves nothing of them draws
+ * nothing again.
  */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
   const held = { ...state, [LIVE_READ.WORKSPACE_MEMBERS]: HELD_MEMBERS };
@@ -865,6 +905,8 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.WORKSPACE_INVITATIONS]: HELD_INVITATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,
+    [LIVE_READ.WORKSPACE_INTEGRATIONS]: STAGED_WORKSPACE_INTEGRATIONS,
+    [LIVE_READ.SLACK_CHANNELS]: STAGED_SLACK_CHANNELS,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
     [LIVE_READ.GITHUB_TOKEN]: STAGED_GITHUB_TOKEN,
     [LIVE_READ.TOKEN_REPOSITORIES]: STAGED_TOKEN_REPOSITORIES,

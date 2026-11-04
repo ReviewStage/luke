@@ -9,9 +9,10 @@ import type {
 } from "@repo/features/sentry-install-wire";
 import type { FailureSurface } from "@repo/features/shown-failure";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
-import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
+import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
 import { readingWords } from "@repo/features/words";
+import type { WorkspaceSlack } from "@repo/features/workspace-integrations-live";
 import {
   INVITATION_ROLE,
   isInvitableEmail,
@@ -92,7 +93,7 @@ import {
 import { inputProblem } from "@repo/ui/reported-failure";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -111,7 +112,6 @@ import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
 import { AddSlackChannel, SlackBotChannelRows } from "./slack-bot-channels.js";
 import { SwitchRow } from "./switch-row.js";
-import { useWorkspaceRead } from "./use-workspace-read.js";
 import {
   AddTokenRepository,
   TokenRepositoryRows,
@@ -1382,11 +1382,9 @@ function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode 
 function ManagedSentry({
   workspace,
   sentry,
-  onChanged,
 }: {
   workspace: Workspace;
   sentry: WorkspaceSentry;
-  onChanged: (sentry: WorkspaceSentry) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1418,10 +1416,7 @@ function ManagedSentry({
         : act(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, {
             workspaceId,
             installationId: leaving.installationId,
-          }).then((now) => {
-            onChanged(now);
-            return ACCEPTED;
-          }, refusedWith),
+          }).then(() => ACCEPTED, refusedWith),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SENTRY_DISCONNECT),
   );
   const actions = [
@@ -1481,23 +1476,25 @@ function ManagedSentry({
  * The workspace's Sentry: drawn only where the deployment holds our
  * Sentry integration, an owner's or an admin's to install for everyone,
  * and for a member, read only, where it is installed or the ask to have it;
- * a read that did not land says so in the row's place, with Retry.
+ * a read that did not land says so in the row's place, with Retry. It is
+ * drawn as the host holds the workspace's integrations, followed live on
+ * the service, so an install finished in the browser draws as it lands.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, retry, changed } = useWorkspaceRead(ACT_KIND.WORKSPACE_SENTRY_READ, workspace.id);
-  if (read === undefined) return null;
-  if ("failed" in read)
-    return (
+  const read = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspace.id);
+  if (read.rows === undefined) {
+    return read.status === HOST_READ_STATUS.FAILED ? (
       <ReadFailed
         line={READ_FAILED.SENTRY}
         surface={FAILURE_SURFACE.WORKSPACE_SENTRY_READ}
-        onRetry={retry}
+        onRetry={read.retry}
       />
-    );
-  const sentry = read.answer;
+    ) : null;
+  }
+  const { sentry } = read.rows;
   if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
-    return <ManagedSentry workspace={workspace} sentry={sentry} onChanged={changed} />;
+    return <ManagedSentry workspace={workspace} sentry={sentry} />;
   }
   return (
     <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(sentry, false)}>
@@ -1507,11 +1504,11 @@ function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.
 }
 
 /** The Slack bot row's line: the team it is connected to, or the ask to connect it. */
-function slackBotLine(slackBot: WorkspaceSlackBot, manages: boolean): React.ReactNode {
-  if (slackBot.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
+function slackBotLine(slack: WorkspaceSlack, manages: boolean): React.ReactNode {
+  if (slack.team === undefined) return manages ? SLACK_BOT_LINE.MANAGES : SLACK_BOT_LINE.MEMBER;
   return (
     <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-      {SLACK_BOT_LINE.CONNECTED(slackBot.team.name)}
+      {SLACK_BOT_LINE.CONNECTED(slack.team.name)}
     </SettingsRowStateLine>
   );
 }
@@ -1523,16 +1520,17 @@ function slackBotLine(slackBot: WorkspaceSlackBot, manages: boolean): React.Reac
  * once it is, a ⋯ whose menu disconnects it, which asks first, as the
  * page's other rows hold their acts. A disconnect stops the bot writing to
  * the workspace's members; the bot stays installed in Slack, which the
- * dialog says.
+ * dialog says. Add channel stands beside the ⋯ once Slack has listed the
+ * team's channels (`channels`).
  */
 function ManagedSlackBot({
   workspace,
-  slackBot,
-  onChanged,
+  slack,
+  channels,
 }: {
   workspace: Workspace;
-  slackBot: WorkspaceSlackBot;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  slack: WorkspaceSlack;
+  channels: readonly SlackListedChannel[] | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1546,23 +1544,23 @@ function ManagedSlackBot({
     setConnecting(true);
     setRefusal(undefined);
     act(ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT, { workspaceId })
-      .then(onChanged, (refused: Error) => setRefusal(refused.message))
+      .catch((refused: Error) => setRefusal(refused.message))
       .finally(() => {
         underWay.current = false;
         setConnecting(false);
       });
   };
   const disconnect = useConfirmDialog(
-    { subject: slackBot.team !== undefined, surfaceOpen: true },
+    { subject: slack.team !== undefined, surfaceOpen: true },
     () =>
-      act(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT, { workspaceId }).then((now) => {
-        onChanged(now);
-        return ACCEPTED;
-      }, refusedWith),
+      act(ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT, { workspaceId }).then(
+        () => ACCEPTED,
+        refusedWith,
+      ),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_SLACK_BOT_DISCONNECT),
   );
   const actions =
-    slackBot.team === undefined
+    slack.team === undefined
       ? []
       : [
           [
@@ -1582,17 +1580,16 @@ function ManagedSlackBot({
         row={{
           leading: SLACK_MARK,
           label: "Slack bot",
-          description: slackBotLine(slackBot, true),
+          description: slackBotLine(slack, true),
           error:
             refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT) ??
             refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
           control:
-            slackBot.team !== undefined ? (
-              slackBot.channels === undefined ? null : (
+            slack.team !== undefined ? (
+              channels === undefined ? null : (
                 <AddSlackChannel
                   workspaceId={workspaceId}
-                  channels={slackBot.channels}
-                  onChanged={onChanged}
+                  channels={channels}
                   onRefused={setAddRefusal}
                 />
               )
@@ -1626,19 +1623,29 @@ function ManagedSlackBot({
 /**
  * The reader's own Slack notifications, under the bot's row once it is
  * connected: one switch, on until they turn it off, which holds in every
- * workspace whose bot is connected. The switch flips at once and the
- * answer is the bot as it then stands.
+ * workspace whose bot is connected. It is their account's preference, which
+ * no row of the workspace carries, so it is read from the service as the
+ * row opens rather than from the workspace's held integrations, and drawn
+ * only once that read lands; the switch flips at once and stands as its
+ * answer says.
  */
-function SlackNotificationsRow({
-  workspaceId,
-  on,
-  onChanged,
-}: {
-  workspaceId: string;
-  on: boolean;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
-}): React.JSX.Element {
+function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.JSX.Element | null {
   const { act } = useAct();
+  const [on, setOn] = useState<boolean>();
+  useEffect(() => {
+    let live = true;
+    setOn(undefined);
+    act(ACT_KIND.WORKSPACE_SLACK_BOT_READ, { workspaceId }).then(
+      (answer) => {
+        if (live) setOn(answer.notifications);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [act, workspaceId]);
+  if (on === undefined) return null;
   return (
     <SwitchRow
       label="Slack notifications"
@@ -1648,7 +1655,7 @@ function SlackNotificationsRow({
       onChange={(notifications) =>
         act(ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS, { workspaceId, notifications }).then(
           (now) => {
-            onChanged(now);
+            setOn(now.notifications);
             return ACCEPTED;
           },
           refusedWith,
@@ -1658,36 +1665,52 @@ function SlackNotificationsRow({
   );
 }
 
-/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels (`slack-bot-channels.tsx`) and the reader's own switch. */
-function SlackBotRows({
+/**
+ * An owner's or an admin's bot row, and under it, where the bot is
+ * connected, its repositories and channels (`slack-bot-channels.tsx`): the
+ * channels are Slack's own list, which the host holds while the row shows.
+ */
+function ManagedSlackBotRows({
   workspace,
-  slackBot,
-  onChanged,
+  slack,
 }: {
   workspace: Workspace;
-  slackBot: WorkspaceSlackBot;
-  onChanged: (slackBot: WorkspaceSlackBot) => void;
+  slack: WorkspaceSlack;
 }): React.JSX.Element {
-  const row = managesWorkspace(workspace) ? (
-    <ManagedSlackBot workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
-  ) : (
-    <SettingsRow leading={SLACK_MARK} label="Slack bot" description={slackBotLine(slackBot, false)}>
-      {() => null}
-    </SettingsRow>
+  const channels = useHostRead(LIVE_READ.SLACK_CHANNELS, workspace.id);
+  return (
+    <>
+      <ManagedSlackBot workspace={workspace} slack={slack} channels={channels.rows} />
+      {slack.team === undefined ? null : (
+        <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+      )}
+    </>
   );
-  if (slackBot.team === undefined || slackBot.notifications === undefined) return row;
+}
+
+/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels and the reader's own switch. */
+function SlackBotRows({
+  workspace,
+  slack,
+}: {
+  workspace: Workspace;
+  slack: WorkspaceSlack;
+}): React.JSX.Element {
   // Note that the rows stand side by side as the card's own, as GitHub's do, so the card rules a line between each.
   return (
     <>
-      {row}
       {managesWorkspace(workspace) ? (
-        <SlackBotChannelRows workspace={workspace} slackBot={slackBot} onChanged={onChanged} />
-      ) : null}
-      <SlackNotificationsRow
-        workspaceId={workspace.id}
-        on={slackBot.notifications}
-        onChanged={onChanged}
-      />
+        <ManagedSlackBotRows workspace={workspace} slack={slack} />
+      ) : (
+        <SettingsRow
+          leading={SLACK_MARK}
+          label="Slack bot"
+          description={slackBotLine(slack, false)}
+        >
+          {() => null}
+        </SettingsRow>
+      )}
+      {slack.team === undefined ? null : <SlackNotificationsRow workspaceId={workspace.id} />}
     </>
   );
 }
@@ -1697,25 +1720,23 @@ function SlackBotRows({
  * our bot, an owner's or an admin's to connect for everyone, and for a
  * member, read only, where it is connected or the ask to have it, with
  * the reader's own Slack notifications under it once it is connected; a
- * read that did not land says so in the row's place, with Retry.
+ * read that did not land says so in the row's place, with Retry. It is
+ * drawn as the host holds the workspace's integrations, as Sentry's is.
  */
 function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const { read, retry, changed } = useWorkspaceRead(
-    ACT_KIND.WORKSPACE_SLACK_BOT_READ,
-    workspace.id,
-  );
-  if (read === undefined) return null;
-  if ("failed" in read)
-    return (
+  const read = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspace.id);
+  if (read.rows === undefined) {
+    return read.status === HOST_READ_STATUS.FAILED ? (
       <ReadFailed
         line={READ_FAILED.SLACK_BOT}
         surface={FAILURE_SURFACE.WORKSPACE_SLACK_BOT_READ}
-        onRetry={retry}
+        onRetry={read.retry}
       />
-    );
-  const slackBot = read.answer;
-  if (!slackBot.configured) return null;
-  return <SlackBotRows workspace={workspace} slackBot={slackBot} onChanged={changed} />;
+    ) : null;
+  }
+  const { slack } = read.rows;
+  if (!slack.configured) return null;
+  return <SlackBotRows workspace={workspace} slack={slack} />;
 }
 
 /** What Settings' Workspace page is handed: the workspaces, the one the sidebar lists, and the fall back after a leave. */

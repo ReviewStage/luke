@@ -250,9 +250,13 @@ function pullRequestPartRead(part: PullRequestPart) {
  * left, which every surface naming them holds; one workspace's token
  * repositories, which Settings › Workspace and onboarding's GitHub step
  * hold; one workspace's pending invitations, which an owner's or an
- * admin's Settings › Workspace holds; each listed workspace's photo, which the host fetches as its
- * version moves and holds for the session; and one task's plan, which
- * the window's open task holds. Pages and Browser tabs offer no Try again,
+ * admin's Settings › Workspace holds; one workspace's own integrations, its
+ * Sentry installations and its Slack bot, which Settings › Workspace and an
+ * automation's editor hold; the channels of one workspace's Slack team,
+ * which an owner's or an admin's Settings › Workspace holds; each listed
+ * workspace's photo, which the host fetches as its version moves and holds
+ * for the session; and one task's plan, which the window's open task holds.
+ * Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
  * stand failed until every surface lets them go and one holds them anew
@@ -416,6 +420,18 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.WORKSPACE_INTEGRATIONS]: hostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, {
+    slice: APP_SLICE.WORKSPACE_INTEGRATIONS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_INTEGRATIONS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_INTEGRATIONS_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.SLACK_CHANNELS]: hostRead(LIVE_READ.SLACK_CHANNELS, {
+    slice: APP_SLICE.SLACK_CHANNELS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_SLACK_CHANNELS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY, { workspaceId }),
   }),
   [LIVE_READ.TOKEN_REPOSITORIES]: hostRead(LIVE_READ.TOKEN_REPOSITORIES, {
     slice: APP_SLICE.TOKEN_REPOSITORIES,

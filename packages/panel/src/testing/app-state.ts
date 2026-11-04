@@ -40,9 +40,11 @@ import {
   type AppProviderKeyList,
   type AppPullRequestParts,
   type AppRepositoryLists,
+  type AppSlackChannels,
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTokenRepositories,
+  type AppWorkspaceIntegrations,
   type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
@@ -144,6 +146,8 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.WORKSPACE_INVITATIONS]: NO_KEYS_HELD,
     [LIVE_READ.THIS_MAC_HOST]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_INTEGRATIONS]: NO_KEYS_HELD,
+    [LIVE_READ.SLACK_CHANNELS]: NO_KEYS_HELD,
     [LIVE_READ.TOKEN_REPOSITORIES]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_PHOTOS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
@@ -257,6 +261,8 @@ export interface HostReadsHanded {
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  readonly deliverIntegrations: (next: AppWorkspaceIntegrations) => void;
+  readonly deliverSlackChannels: (next: AppSlackChannels) => void;
   readonly deliverInvitations: (next: AppWorkspaceInvitations) => void;
   readonly deliverTokenRepositories: (next: AppTokenRepositories) => void;
   /** The account's task list, as the host lays it whole. */
@@ -359,6 +365,8 @@ export function handHostReads(first: {
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverRepositoryLists: (next) => deliver({ [LIVE_READ.REPOSITORY_LISTS]: next }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverIntegrations: (next) => deliver({ [LIVE_READ.WORKSPACE_INTEGRATIONS]: next }),
+    deliverSlackChannels: (next) => deliver({ [LIVE_READ.SLACK_CHANNELS]: next }),
     deliverInvitations: (next) => deliver({ [LIVE_READ.WORKSPACE_INVITATIONS]: next }),
     deliverTokenRepositories: (next) => deliver({ [LIVE_READ.TOKEN_REPOSITORIES]: next }),
     deliverTasks: (next) => deliver({ tasks: next }),
