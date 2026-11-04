@@ -3,6 +3,23 @@ import { formatCount } from "@repo/features/number-format";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TEXT_TONE, Text } from "@repo/ui";
 
+/**
+ * Why the hosted tier's figures stand under a retired heading: the voice
+ * service that made most of its calls left on Oct 28, 2026 (#5712), and every
+ * model call runs on the account's own key, so dictation alone still meters.
+ */
+const HOSTED_TIER_RETIRED =
+  "The hosted tier is retired: since Oct 28, 2026, only dictation writes its rows, so an account working through tasks and agents can read as idle here.";
+
+/**
+ * A section's title marked retired, for what measures a feature the product
+ * no longer has. Such a section stands at the bottom of its page, under every
+ * live one.
+ */
+export function retiredTitle(title: string): string {
+  return `${title} · retired`;
+}
+
 /** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <Text tone={TEXT_TONE.MUTED}>{children}</Text>;
@@ -31,7 +48,7 @@ export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.E
       that many weeks after signup. Wk 0 is the signup week, and dashed cells are still accruing.
       {basis === RETENTION_BASIS.MEANINGFUL
         ? " A deleted task takes its agents and revisions with it, so a cohort's past weeks can shrink."
-        : " Local use of the desktop app writes no row here, so a cohort that never touched the hosted tier reads the same as one that left."}
+        : ` Local use of the desktop app writes no row here, so a cohort that never touched the hosted tier reads the same as one that left. ${HOSTED_TIER_RETIRED}`}
     </SectionNote>
   );
 }
@@ -39,7 +56,7 @@ export function RetentionNote({ basis }: { basis: RetentionBasis }): React.JSX.E
 export function TopAccountsNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day the account created a task, wrote a plan revision, or started a
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
       agent. PRs merged count its agents' pull requests merged in the window. Last seen is the
       account's latest sign-in session.
     </SectionNote>
@@ -51,9 +68,10 @@ export function ActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
       An active developer created a task, wrote a plan revision, or started an agent in the last 7
-      UTC days. Plan revisions count the developer's own and {PRODUCT_NAME}'s notes; automation runs
-      leave out the ones a guard held back. A deleted task leaves no row, and takes its agents and
-      revisions with it, so past counts can shrink.
+      UTC days. Plan revisions count the developer's own, and the notes {PRODUCT_NAME}'s retired
+      notetaker took before agents wrote plans; automation runs leave out the ones a guard held
+      back. A deleted task leaves no row, and takes its agents and revisions with it, so past counts
+      can shrink.
     </SectionNote>
   );
 }
@@ -61,8 +79,9 @@ export function ActivityNote(): React.JSX.Element {
 export function AccountActivityNote(): React.JSX.Element {
   return (
     <SectionNote>
-      An active day is a UTC day this account made a hosted-tier call. Local use of the desktop app
-      writes no row here. Launch activity is in product analytics, not this database.
+      {HOSTED_TIER_RETIRED} An active day is a UTC day this account made a hosted-tier call. Local
+      use of the desktop app writes no row here. Launch activity is in product analytics, not this
+      database.
     </SectionNote>
   );
 }
@@ -76,8 +95,9 @@ export function RosterNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      Active days count the window's UTC days with a hosted-tier call. Last seen is the account's
-      latest sign-in session, which a sign-in moves without any hosted use.
+      Active days, Last active, and Calls count the retired hosted tier's calls, and the roster is
+      ranked by them; only dictation still makes one. Last seen is the account's latest sign-in
+      session, which a sign-in moves without any hosted use.
       {truncatedTo !== undefined
         ? searched
           ? ` Only the ${formatCount(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
@@ -96,10 +116,20 @@ export function DayNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      Calls count the hosted-tier calls each account made on this UTC day.
+      Calls count the hosted-tier calls each account made on this UTC day. {HOSTED_TIER_RETIRED}
       {truncatedTo !== undefined
         ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. The totals count all ${formatCount(totalAccounts)}.`
         : ""}
+    </SectionNote>
+  );
+}
+
+/** Why the app's own turns stand under a retired heading on Reliability. */
+export function AppTurnsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      Every conversation the service starts now is an agent's, so only {PRODUCT_NAME}'s own turns
+      from before that still count here, and the rate falls silent as they leave the window.
     </SectionNote>
   );
 }

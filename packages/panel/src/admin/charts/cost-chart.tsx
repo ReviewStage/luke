@@ -8,17 +8,26 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ChartConfig } from "@repo/ui/chart";
 import { DailyBars } from "@repo/ui/daily-bars";
 import { seriesHasNoData } from "@repo/ui/daily-series";
+import { retiredTitle } from "../chrome/notes.js";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
 
-/** Each source's name and its series color, in the order the bars stack them from the axis up. */
+/** Each source's name and its series color. */
 const COST_CHART = {
   [COST_SOURCE.AGENTS]: { label: "Agents", color: "var(--ui-color-chart-1)" },
-  [COST_SOURCE.APP]: { label: `${PRODUCT_NAME}'s own turns`, color: "var(--ui-color-chart-2)" },
+  [COST_SOURCE.APP]: {
+    label: retiredTitle(`${PRODUCT_NAME}'s own turns`),
+    color: "var(--ui-color-chart-2)",
+  },
   [COST_SOURCE.DICTATION]: { label: "Dictation", color: "var(--ui-color-chart-3)" },
 } as const satisfies ChartConfig;
 
-const SOURCES: readonly CostSource[] = Object.values(COST_SOURCE);
+/**
+ * The sources in the order the bars stack them from the axis up and the
+ * legend names them: the live ones first, and the app's own turns last,
+ * retired since every conversation the service starts is an agent's.
+ */
+const SOURCES: readonly CostSource[] = [COST_SOURCE.AGENTS, COST_SOURCE.DICTATION, COST_SOURCE.APP];
 
 const COST_TITLE = "Daily list-price equivalent by source, USD";
 
