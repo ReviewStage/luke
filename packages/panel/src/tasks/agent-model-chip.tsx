@@ -1,12 +1,13 @@
 import { runtimeModelRule, runtimeModels } from "@repo/features/agent-runtime-models";
 import { AGENT_PAYER, type AgentPayer, type AgentUsage } from "@repo/features/agent-wire";
-import type { CatalogModel } from "@repo/features/models-wire";
+import type { CatalogModel, ModelProvider } from "@repo/features/models-wire";
 import {
   CHIP_LOOK,
   Chip,
   type ChipLook,
   ChipName,
   type ChipWidth,
+  type MenuLastLine,
   POPOVER_ALIGN,
   TEXT_LINK_LOOK,
   TextLink,
@@ -15,7 +16,7 @@ import {
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
-import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
+import { agentPayerLine, choiceLabel, planPayerOf, providerOf } from "./agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";
 import type { AgentModelControl } from "./use-agent-model.js";
@@ -39,9 +40,9 @@ import { useOpenLink } from "./use-open-link.js";
  * same whatever the agent is doing, since a change mid-turn applies from
  * the next step and an idle agent's next turn takes it. The models are
  * read as the chip mounts and again as the menu opens, so the menu shows
- * the catalog as it stands. Under the menu's pinned rows one muted line
- * says what the agent has cost so far, tokens and dollars, once a turn has
- * settled. The menu closes on a pick, on Escape, and on
+ * the catalog as it stands. Under the menu's pinned rows, behind a hairline
+ * of its own, one muted line says who pays for the agent (`agentPayerLine`):
+ * its plan, or its key and what the run has cost on it so far. The menu closes on a pick, on Escape, and on
  * focus leaving it; Escape stops there, so it closes the menu and not the
  * panel behind it. A composer too narrow for the words has the chip draw
  * its harness's mark in their place (`iconOnly`), so the choice is named by
@@ -49,40 +50,49 @@ import { useOpenLink } from "./use-open-link.js";
  * provider's own harness is offered only what that harness runs, the rule
  * `list_models` and `update_agent` read too (`agent-runtime-models.ts`): on
  * Claude Code, Claude models alone, with no Fast switch and no Context row.
- * An agent its starter's ChatGPT plan pays for says so on the menu's last
- * line, "Using ChatGPT plan · Manage usage", as OpenAI's UI guidelines ask
- * (developers.openai.com/siwc/ui-ux-guidelines), Manage usage opening
- * ChatGPT's usage settings.
+ * An agent its starter's ChatGPT plan pays for says "Using ChatGPT plan" on
+ * that line, with Manage usage at its end, as OpenAI's UI guidelines ask
+ * (developers.openai.com/siwc/ui-ux-guidelines), opening ChatGPT's usage
+ * settings. Who pays is read once, the page's payer before the settled
+ * turns', and the plan the agent's harness runs on only where neither
+ * names one, so a Codex agent says its plan before its first turn settles.
  */
 
 /** Where OpenAI's guidelines send Manage usage: ChatGPT's own usage settings. */
 const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 
-const CHATGPT_PLAN_WORDS = {
-  USING: "Using ChatGPT subscription",
-  MANAGE: "Manage usage",
-} as const;
+/** The link at the last line's end on an agent a ChatGPT plan pays for. */
+const MANAGE_USAGE = "Manage usage";
 
-/** The menu's last line on an agent a ChatGPT plan pays for. */
-function ChatGptPlanNote(): React.JSX.Element {
+/** Manage usage, opening ChatGPT's usage settings. */
+function ManageUsageLink(): React.JSX.Element {
   const openLink = useOpenLink();
   return (
-    <>
-      {CHATGPT_PLAN_WORDS.USING}
-      {" · "}
-      <TextLink
-        href={CHATGPT_USAGE_URL}
-        look={TEXT_LINK_LOOK.UNDERLINED}
-        external
-        onClick={(event) => {
-          event.preventDefault();
-          openLink(CHATGPT_USAGE_URL);
-        }}
-      >
-        {CHATGPT_PLAN_WORDS.MANAGE}
-      </TextLink>
-    </>
+    <TextLink
+      href={CHATGPT_USAGE_URL}
+      look={TEXT_LINK_LOOK.UNDERLINED}
+      external
+      onClick={(event) => {
+        event.preventDefault();
+        openLink(CHATGPT_USAGE_URL);
+      }}
+    >
+      {MANAGE_USAGE}
+    </TextLink>
   );
+}
+
+/** The menu's last line: who pays, with Manage usage at its end where a ChatGPT plan does; nothing where no payer is named. */
+function payerLastLine(
+  payer: AgentPayer | undefined,
+  provider: ModelProvider | undefined,
+  usage: AgentUsage | undefined,
+): MenuLastLine | undefined {
+  const words = agentPayerLine(payer, provider, usage?.costUsd);
+  if (words === undefined) return undefined;
+  return payer === AGENT_PAYER.CHATGPT_SUBSCRIPTION
+    ? { words, end: <ManageUsageLink /> }
+    : { words };
 }
 
 export function AgentModelChip({
@@ -142,6 +152,8 @@ export function AgentModelChip({
   const label = choiceLabel(model.choice, models ?? []).trim();
   // Note that who pays decides Fast on Codex, which runs a fast version on an OpenAI API key alone.
   const paidBy = payer ?? usage?.payer;
+  // Note that the harness's plan says who pays only where neither the page nor the turns name a payer.
+  const paying = paidBy ?? planPayerOf(model.runtime);
   const offered = models === undefined ? undefined : runtimeModels(models, model.runtime, paidBy);
 
   return (
@@ -178,13 +190,7 @@ export function AgentModelChip({
           startsNew={startsNew}
           offersFast={runtimeModelRule(model.runtime, paidBy).fast}
           onChoose={model.choose}
-          footNote={agentUsageLine(usage)}
-          planNote={
-            planPayerOf(model.runtime) === AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
-            paidBy !== AGENT_PAYER.API_KEY ? (
-              <ChatGptPlanNote />
-            ) : undefined
-          }
+          lastLine={payerLastLine(paying, provider, usage)}
           onClose={close}
           onLeave={(left) => {
             if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);

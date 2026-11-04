@@ -16,7 +16,10 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
  * (`data-focus-ring`) rather than around a caption under it.
  *
  * It hugs its picture, at most its container's width, unless it fills the
- * room its container gives it (`fill`), as a set's tile does. Words under
+ * room its container gives it (`fill`), as a set's tile does. Its face, and
+ * so its ring and the corner a viewer grows from, rounds as a frame's
+ * corner, or whole where the picture is a person's disc
+ * (`PICTURE_TILE_FACE.ROUND`), as an account's photo is. Words under
  * the picture that a press takes with it (`caption`) stand inside the
  * press, under the face, and do not sink with it. What a press does is the
  * place's (`onOpen`), handed the click so it can keep the press from the
@@ -35,6 +38,14 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
  * face being the picture its place frames.
  */
 
+/** How the face rounds: as a framed picture's corner, or whole, as a person's disc does. */
+export const PICTURE_TILE_FACE = {
+  FRAMED: "framed",
+  ROUND: "round",
+} as const;
+
+export type PictureTileFace = (typeof PICTURE_TILE_FACE)[keyof typeof PICTURE_TILE_FACE];
+
 /** What a press is named for, the picture's words after it. */
 const ENLARGE_LABEL = "Enlarge";
 
@@ -49,7 +60,7 @@ const TILE =
  * button's share reads as a jump.
  */
 const FACE =
-  "ui-picture-tile-face relative block min-w-0 max-w-full rounded-control transition-transform duration-(--ui-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
+  "ui-picture-tile-face relative block min-w-0 max-w-full rounded-control data-[face=round]:rounded-full transition-transform duration-(--ui-duration-fast) ease-spring-fast group-active/picture-tile:[transform:scale(0.98)] group-data-[pointer-opens=false]/picture-tile:group-active/picture-tile:[transform:none]";
 
 /** What an app's hint hands the tile it wraps: when to show and go, and the chord it names. */
 type HintProps = Pick<
@@ -70,6 +81,7 @@ export function PictureTile({
   name,
   onOpen,
   fill = false,
+  face = PICTURE_TILE_FACE.FRAMED,
   pointerOpens = true,
   caption,
   children,
@@ -82,6 +94,8 @@ export function PictureTile({
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Whether it fills the room its container gives it rather than hugging its picture. */
   fill?: boolean | undefined;
+  /** How the face rounds, as the picture's own frame does. */
+  face?: PictureTileFace | undefined;
   /** Whether a pointer's press opens it, so it wears the zooming pointer and sinks; a key's press always does. */
   pointerOpens?: boolean | undefined;
   /** Words under the picture that the press takes with it. */
@@ -102,16 +116,16 @@ export function PictureTile({
         // Note that a key's press is a click the pointer counts none of, so a click count says a pointer pressed it.
         if (!pointerOpens && event.detail > 0) return;
         // Note that the face is what a press sinks, so it is what gives as the press lands.
-        const face = event.currentTarget.querySelector<HTMLElement>(".ui-picture-tile-face");
-        if (face !== null) {
-          pulsePress(face, PRESS_PULSE.QUIET);
+        const pressed = event.currentTarget.querySelector<HTMLElement>(".ui-picture-tile-face");
+        if (pressed !== null) {
+          pulsePress(pressed, PRESS_PULSE.QUIET);
           // The picture opened grows from this one (`picture-expand.ts`).
-          notePictureOrigin(face);
+          notePictureOrigin(pressed);
         }
         onOpen(event);
       }}
     >
-      <span className={FACE} data-focus-ring="">
+      <span className={FACE} data-face={face} data-focus-ring="">
         {children}
       </span>
       {caption}

@@ -1,0 +1,84 @@
+/* attachment-viewer.css -- the window's file viewer (`../tasks/attachment-viewer.tsx`): a
+   file on a message opened over the window, its picture or video fitted to
+   the room under its header. Its own sheet, so a surface that opens the
+   viewer without the rest of the panel, as the web's standalone `/admin`
+   page does an account's photo (`../admin/sources.css`), takes it alone. */
+
+/* What the place opening the viewer says of the file shown, after its size
+   in the same quiet ink, a plan's picture saying who last edited it: the
+   size gives it the room the size kept before the header's buttons, and it
+   is cut before it reaches them. */
+.attachment-viewer-size:has(+ .attachment-viewer-note) {
+  margin-right: 0;
+}
+
+/* A picture or a video fits the room under the viewer's header edge to
+   edge at its own shape (`@repo/ui`'s ZoomImage and VideoPlayer say their
+   pixels once they are read). A video grows past its own pixels to fill it
+   at most twice over; a picture never does, as a browser's own tab, Preview,
+   and Slack draw one, because a picture blown up past its pixels is blurred,
+   and a small one stands at its size in the room, a press zooming it. Where the card hugs it (`DialogCard`), as a video's does
+   off a phone, the room is the room between the arrows, less the card's edge
+   and its header, so the card takes its shape, and it waits at a
+   screenshot's shape until its pixels are read. Where the card fills its
+   room, as a picture's always does and a phone's video's does, the room is
+   the body under the header, one track its own size; a picture opened at its
+   own pixels says none. */
+.attachment-viewer-room {
+  container-type: size;
+}
+
+/* A finger swiping the viewer sideways (`@repo/ui`'s `use-page-swipe.ts`)
+   holds the file shown where the finger has taken it, with its transition
+   off, so it stays under the finger; let go short of the next file, the
+   mark comes off and it travels back on its transition, and the file walked
+   to stands in its place at once. */
+.attachment-viewer-body {
+  transition: translate var(--ui-duration-pane) var(--ui-motion-pane);
+}
+
+.attachment-viewer[data-ui-page-swipe] .attachment-viewer-body {
+  translate: var(--ui-page-swipe-offset, 0) 0;
+  transition: none;
+}
+
+.attachment-viewer[data-hug="true"] .attachment-viewer-body > .ui-video-player {
+  width: min(
+    100cqw -
+    2px,
+    (100cqh - var(--ui-control-height) - 2 * var(--ui-space-4) - 3px) *
+    var(--ui-video-natural-width, 16) /
+    var(--ui-video-natural-height, 10),
+    var(--ui-video-natural-width, 1600) *
+    2px
+  );
+}
+
+.attachment-viewer[data-hug="false"]
+  .attachment-viewer-body:has(> :is(.ui-zoom-image, .ui-video-player)) {
+  container-type: size;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+
+.attachment-viewer[data-hug="false"] .attachment-viewer-body > .ui-zoom-image {
+  width: min(
+    100cqw,
+    100cqh *
+    var(--ui-zoom-natural-width) /
+    var(--ui-zoom-natural-height),
+    var(--ui-zoom-natural-width) *
+    1px
+  );
+  max-height: 100%;
+}
+
+.attachment-viewer[data-hug="false"] .attachment-viewer-body > .ui-video-player {
+  width: min(
+    100cqw,
+    100cqh *
+    var(--ui-video-natural-width) /
+    var(--ui-video-natural-height),
+    var(--ui-video-natural-width) *
+    2px
+  );
+}

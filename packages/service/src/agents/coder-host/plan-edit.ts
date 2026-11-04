@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@repo/database/models/plan-attachments";
+import type { PlanWriter } from "@repo/database/models/plan-revisions";
 import { readTaskHeader } from "@repo/database/models/task-store";
 import { workspaceOf } from "@repo/database/models/workspace-store";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
@@ -66,6 +67,10 @@ import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
  * line at the end of its section, an added point like any other, so the
  * save is the agent's and its byline names it. Every file is read before any
  * picture is kept, and a call with a picture to mend saves nothing.
+ *
+ * A member's own notes, which an outside agent takes for them through the
+ * member MCP server, go through the same save, written as the developer's
+ * and with no picture (`recordMemberPlanNotes`).
  */
 const PLAN_EDIT = {
   /** The most notes one turn may take on the plan, across its calls, each picture one of them. */
@@ -319,6 +324,9 @@ interface PicturesRead {
   readonly files: readonly PictureRead[];
 }
 
+/** A call that adds no picture: nothing read, and no address to write. */
+const NO_PICTURES: PicturesRead = { slug: "", files: [] };
+
 /** Why a call's save was refused inside its transaction, so the pictures kept before it are rolled back with it. */
 class EditRefused extends Data.TaggedError("EditRefused")<{
   readonly refusal: Extract<PlanEditResult, { status: typeof ACTION_RESULT_STATUS.REJECTED }>;
@@ -336,7 +344,7 @@ function picturesInSandbox(
   pictures: readonly TaskPicture[],
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<Result.Result<PicturesRead, string>, StoreFailure, DatabaseServices> {
-  if (pictures.length === 0) return Effect.succeed(Result.succeed({ slug: "", files: [] }));
+  if (pictures.length === 0) return Effect.succeed(Result.succeed(NO_PICTURES));
   return Effect.gen(function* () {
     const stored = yield* readTaskHeader(binding.userId, binding.taskId);
     if (Option.isNone(stored)) return Result.fail(PLAN_SAVE_REFUSAL.NO_TASK);
@@ -388,15 +396,49 @@ function keptAsNotes(
 }
 
 /**
+ * The call's notes, and the pictures read for it kept and added after them,
+ * saved in one transaction under the writer given, or the refusal the save
+ * answered: the plan's bound of pictures, a plan gone, or a note that missed,
+ * with the plan as it stands. Note that a refusal anywhere keeps no picture,
+ * so none holds a place in the plan's bound.
+ */
+function savedEdit(
+  binding: PlanDocumentBinding,
+  writer: PlanWriter,
+  notes: readonly PlanNote[],
+  read: PicturesRead,
+): Effect.Effect<PlanEditResult, never, DatabaseServices> {
+  const saved = Effect.gen(function* () {
+    const all = [...notes, ...(yield* keptAsNotes(binding, read))];
+    const save = yield* saveNotes(binding, all, writer);
+    if (save.status === PLAN_SAVE_STATUS.CONFLICT) {
+      const refusal = {
+        ...refused(PLAN_EDIT_REFUSAL.CONFLICT),
+        missed: missedNote(save.missed),
+        current: save.current,
+      };
+      return yield* new EditRefused({ refusal });
+    }
+    if (save.status !== PLAN_SAVE_STATUS.SAVED) {
+      return yield* new EditRefused({ refusal: refused(save.reason) });
+    }
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, taken: all.length } satisfies PlanEditResult;
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(saved)).pipe(
+    Effect.catchTag("EditRefused", ({ refusal }) => Effect.succeed(refusal)),
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+  );
+}
+
+/**
  * Runs one call: the notes taken into the plan the binding names, its
  * pictures read from the sandbox, kept, and added after them, or the refusal
  * for notes or pictures that do not read, a turn past its cap, a picture to
  * mend, or a plan the save refused. Every file is read before the store is
- * written, and the pictures are kept and the notes saved in one transaction,
- * so a call refused anywhere keeps no picture to hold a place in the plan's
- * bound. Note that `takenInTurn` is the caller's count of this turn's notes,
- * because the count lives in eve's session state, which only the authored
- * file can read.
+ * written (`savedEdit`). Note that `takenInTurn` is the caller's count of
+ * this turn's notes, because the count lives in eve's session state, which
+ * only the authored file can read.
  */
 export function recordPlanEdit(
   binding: PlanDocumentBinding,
@@ -414,31 +456,29 @@ export function recordPlanEdit(
     return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY));
   }
   const writer = { actor: PLAN_ACTOR.AGENT, agentId: author.agentId } as const;
-  const saved = (read: PicturesRead) =>
-    Effect.gen(function* () {
-      const all = [...notes, ...(yield* keptAsNotes(binding, read))];
-      const save = yield* saveNotes(binding, all, writer);
-      if (save.status === PLAN_SAVE_STATUS.CONFLICT) {
-        const refusal = {
-          ...refused(PLAN_EDIT_REFUSAL.CONFLICT),
-          missed: missedNote(save.missed),
-          current: save.current,
-        };
-        return yield* new EditRefused({ refusal });
-      }
-      if (save.status !== PLAN_SAVE_STATUS.SAVED) {
-        return yield* new EditRefused({ refusal: refused(save.reason) });
-      }
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, taken: all.length } satisfies PlanEditResult;
-    });
   return Effect.gen(function* () {
     const read = yield* picturesInSandbox(binding, pictures, sandbox);
     if (Result.isFailure(read)) return planEditRejected(read.failure);
-    const client = yield* SqlClient.SqlClient;
-    return yield* client.withTransaction(saved(read.success));
+    return yield* savedEdit(binding, writer, notes, read.success);
   }).pipe(
-    Effect.catchTag("EditRefused", ({ refusal }) => Effect.succeed(refusal)),
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
   );
+}
+
+/**
+ * A member's own notes, as an outside agent takes them for the member
+ * through the member MCP server (`../../member-mcp/`): the same save as a
+ * coding agent's, written as the developer's, as the member's own edit in the
+ * window is, and with no picture, since no sandbox stands behind a member.
+ * Note that no turn's count caps them, since a member takes no turn: the
+ * notes' schema bounds one call's, which the server checks before it runs.
+ */
+export function recordMemberPlanNotes(
+  binding: PlanDocumentBinding,
+  input: UnparsedWireValue,
+): Effect.Effect<PlanEditResult, never, DatabaseServices> {
+  const notes = notesOf(input);
+  if (notes === undefined) return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNREADABLE));
+  return savedEdit(binding, { actor: PLAN_ACTOR.DEVELOPER }, notes, NO_PICTURES);
 }

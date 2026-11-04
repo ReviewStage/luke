@@ -265,11 +265,7 @@ test("a Codex or Claude Code agent's box says nothing under it of the plan that 
   for (const runtime of [AGENT_RUNTIME.CODEX, AGENT_RUNTIME.CLAUDE_CODE]) {
     const tab = await drawnTab([], { ...AGENT_SUMMARY, runtime });
     const box = composerEditor(tab.container).closest(".agent-composer") ?? tab.container;
-    for (const words of [
-      "Using ChatGPT subscription",
-      "Using your Claude subscription",
-      "Manage usage",
-    ]) {
+    for (const words of ["Using ChatGPT plan", "Using Claude plan", "Manage usage"]) {
       assert.ok(!box.textContent?.includes(words), `${runtime} draws no "${words}"`);
     }
   }

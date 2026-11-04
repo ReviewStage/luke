@@ -82,6 +82,7 @@ import {
 } from "@repo/features/agent-view";
 import { AGENT_ARCHIVER, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@repo/features/failure-facts";
+import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
 import {
   type HostPairingApproveView,
   type HostPairingDenyView,
@@ -104,6 +105,7 @@ import {
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
 } from "@repo/features/pull-request-chapters-view";
+import { commitShaSchema } from "@repo/features/task-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -112,7 +114,7 @@ import {
   invalid,
   readParams,
 } from "@repo/gateway";
-import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, type Scope } from "effect";
+import { Effect, Equal, FiberHandle, FiberMap, Option, RcMap, Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
@@ -133,6 +135,15 @@ import {
   type InboxWritten,
   inboxReads,
 } from "./inbox-collections.js";
+import {
+  AgentPictureKey,
+  GitHubImageKey,
+  InboxAttachmentKey,
+  type KeptAnswer,
+  type KeptContent,
+  type KeptKey,
+  keptOfAgent,
+} from "./kept-content.js";
 import {
   type AccountReads,
   accountReads,
@@ -177,7 +188,11 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
  * on one read of its own (`account-items-follow.ts`) for the signed-in
  * session (`accountReads`), from the gate opening (`open`) until a
  * sign-out, told as `INBOX_ITEMS_CHANGED` events to the app state every
- * window draws. Behind a
+ * window draws. A picture a tool answered an agent, an inbox item's
+ * attachment, and an image of a pull request that never changes under its
+ * address are answered to the window that asked and kept in this process's
+ * memory for the account (`kept-content.ts`), never in app state, so one
+ * shown again asks the service nothing. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -261,6 +276,8 @@ export interface AgentsDependencies {
   client: AgentClient;
   /** The account signed in now, by its id, which every live read names; none where nobody is. */
   accountId: () => string | undefined;
+  /** The content this host keeps under keys it never changes under, which a picture's, an attachment's, and an image's reads answer from (`kept-content.ts`). */
+  kept: KeptContent;
   /** The member signed in now, as an answer or a close drawn before the service says how it stands names them; none where nobody is. */
   reader?: () => InboxReader | undefined;
   /**
@@ -304,6 +321,22 @@ function gateClosed(by: string): GateClosed {
     failure: AGENT_CALL_FAILURE.UNANSWERED,
     cause: { _tag: FAILURE_FACT.GATE_CLOSED, code: by },
   };
+}
+
+/** Whether a commit names a read, by the rule a File tab's read at a commit is held to. */
+const isCommitSha = Schema.is(commitShaSchema);
+
+/**
+ * Whether an image of a pull request never changes under its address: an
+ * upload, by its asset's id, or a file at a commit. A file on a branch, or a
+ * public image, may. Note that the ref is checked here, because
+ * `githubImageOf` leaves it as written, and a branch kept as if it were a
+ * commit would answer what it held once.
+ */
+function isKeptImage(src: string): boolean {
+  const image = githubImageOf(src);
+  if (image?.source === GITHUB_IMAGE_SOURCE.ASSET) return true;
+  return image?.source === GITHUB_IMAGE_SOURCE.FILE && isCommitSha(image.ref);
 }
 
 /** Whether the service may be asked now: a run that sends, behind an open account gate. */
@@ -454,11 +487,17 @@ function composed(
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
 ): AgentsComposer {
-  const { client, kernel } = dependencies;
+  const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
   /** What a follow the gate keeps from the service is told; no account where the gate stands open but names none. */
   const gateKept = () => gateClosed(closedBy(dependencies) ?? GATE_CLOSED_BY.NO_ACCOUNT);
   const asked = askedOf(dependencies, http);
+  /** Content the service answers under a key it never changes under: asked behind the gate, as every ask is, and kept once it carries some. */
+  const keptAsked = <Key extends KeptKey, Answer>(
+    key: Key,
+    call: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+    carries: (answer: Answer | GateClosed) => KeptAnswer<Key> | undefined,
+  ) => (gate() ? kept.answer(key, dependencies.accountId, asked(call), carries) : asked(call));
   const listed = dependencies.listed ?? (() => Effect.void);
   const writeAgent: RowWrite<AgentRow> =
     dependencies.writeAgent ??
@@ -808,9 +847,14 @@ function composed(
           params,
           "archiving an agent names the agent and whether it is archived",
         );
-        // Note that an agent archived lets go of what this host held of its transcript and its workers'.
+        // Note that an agent archived lets go of what this host held of its transcript and its workers', and of their content kept.
         const written = Effect.tap(asked(client.archive(agentId, request)), (answer) =>
-          "agent" in answer ? held.forget((key) => key.agentId === agentId) : Effect.void,
+          "agent" in answer
+            ? Effect.andThen(
+                held.forget((key) => key.agentId === agentId),
+                kept.forget(keptOfAgent(agentId)),
+              )
+            : Effect.void,
         );
         // An archive is drawn on the agent's row at once, stamped now by the member, unless a dialog
         // that asked waits on the answer, which then comes once the list carries it.
@@ -887,6 +931,8 @@ function composed(
           "deleting an agent names one agent",
         );
         const answer = yield* asked(client.delete(agentId));
+        // Note that an agent deleted lets go of its content kept, and its workers'.
+        if ("deleted" in answer) yield* kept.forget(keptOfAgent(agentId));
         if ("txid" in answer) yield* listed(answer.txid);
         return carried<AgentDeleteAnswerView>(answer);
       }),
@@ -1063,7 +1109,12 @@ function composed(
           params,
           "reading an image of an agent's pull request names the agent and the image's address",
         );
-        const answer = yield* asked(client.githubImage(agentId, src));
+        const call = client.githubImage(agentId, src);
+        const answer = yield* isKeptImage(src)
+          ? keptAsked(new GitHubImageKey({ agentId, src }), call, (image) =>
+              "base64" in image ? image : undefined,
+            )
+          : asked(call);
         return carried<AgentGitHubImageView>(answer);
       }),
     // Note that the windows' hold on a scope is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -1110,7 +1161,11 @@ function composed(
           params,
           "reading an inbox item's image names the item and the attachment",
         );
-        const answer = yield* asked(client.inboxAttachment(itemId, attachmentId));
+        const answer = yield* keptAsked(
+          new InboxAttachmentKey({ itemId, attachmentId }),
+          client.inboxAttachment(itemId, attachmentId),
+          (attachment) => ("base64" in attachment ? attachment : undefined),
+        );
         return carried<AgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_PICTURE]: (params) =>
@@ -1120,7 +1175,11 @@ function composed(
           params,
           "reading an agent's picture names the agent and the picture",
         );
-        const answer = yield* asked(client.agentPicture(agentId, pictureId, callId));
+        const answer = yield* keptAsked(
+          new AgentPictureKey({ agentId, pictureId, callId }),
+          client.agentPicture(agentId, pictureId, callId),
+          (picture) => ("base64" in picture ? picture : undefined),
+        );
         return carried<AgentInboxAttachmentView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_PART]: (params) =>
@@ -1263,6 +1322,7 @@ function composed(
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
+    yield* kept.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
     yield* sessionReads.end;

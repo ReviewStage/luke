@@ -19,6 +19,7 @@
    app's Tailwind entry layers last, so a reset never undoes a shared control. */
 @import "@repo/ui/styles.css";
 @import "./tasks.css";
+@import "./attachment-viewer.css";
 /* The shell and its sidebar, which an app drawing the app's sidebar outside
    the panel imports alone, just ahead of the window's own layout. */
 @import "./shell.css";

@@ -26,7 +26,7 @@ import {
   type StoreWriter,
 } from "@repo/database/models/writer";
 import { type ConversationRuntime, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
-import { AGENT_STATUS, type AgentAttachment } from "@repo/features/agent-wire";
+import { AGENT_MACHINE, AGENT_STATUS, type AgentAttachment } from "@repo/features/agent-wire";
 import { MENTION_KIND, withoutMemberLinks } from "@repo/features/mention-link";
 import { agentName } from "@repo/features/model-label";
 import { causeKind } from "@repo/runtime/effect";
@@ -34,6 +34,7 @@ import { sentLineId } from "@repo/wire/host-ids";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { MESSAGE_CHANNEL } from "../../core.js";
+import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import {
   agentMember,
@@ -62,7 +63,7 @@ import { readMentioned } from "../mentioned-reads.js";
 import { workspaceStepOf, writtenMention } from "../written-mentions.js";
 import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { harnessOf } from "./native-runtime.js";
-import { failedCallRefusal } from "./runtime-sessions.js";
+import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import { agentStatusOf } from "./status.js";
 
 /**
@@ -526,4 +527,39 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   return txid === undefined
     ? { outcome: STEER_OUTCOME.SENT, ...sent }
     : { outcome: STEER_OUTCOME.SENT, txid, ...sent };
+});
+
+/**
+ * A member's own words to an agent they reach, as their message box sends
+ * them: handed over on the sessions the deployment reaches acting for them,
+ * written under their name (`MESSAGE_SENDER.MEMBER`), so a teammate's carry
+ * their label, and counted under them once the line is written; a repeat
+ * under its key is not counted again. The member MCP server's
+ * `message_agent` sends the same way.
+ */
+export const steerMemberWords = /* @__PURE__ */ Effect.fn("web/steerMemberWords")(function* (
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  agent: Agent,
+  line: Omit<SteerLine, "sender">,
+) {
+  const eve = yield* routedSessions<EveTypedTurn>(userId);
+  const written = yield* steerAgentWritten(eve, writer, userId, agent, {
+    ...line,
+    sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+  });
+  if (written.sent !== undefined) {
+    yield* recordServerEvent(
+      SERVER_EVENT.MESSAGE_SEND,
+      { userId, workspaceId: agent.organizationId },
+      {
+        runtime: written.sent.runtime,
+        machine: agent.machine ?? AGENT_MACHINE.VERCEL,
+        agent_kind: agent.kind,
+        turn_running: written.sent.turnRunning,
+        queued: false,
+      },
+    );
+  }
+  return written;
 });

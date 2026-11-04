@@ -27,7 +27,7 @@ const IDENTIFIER_BYTES = 63;
 export const LOG = {
   /** Every insert, delete, and update of a watched column. */
   EVERY: "every",
-  /** Inserts and deletes alone: a row's arrival and removal, for a table rewritten in place more often than any delta read reads it. */
+  /** Inserts and deletes alone, and updates of the columns `logUpdatesOf` names: a row's arrival and removal, for a table rewritten in place more often than any delta read reads it. */
   ROWS: "rows",
 } as const;
 
@@ -61,6 +61,8 @@ export interface SyncTableOptions<T extends PgTable> {
   readonly ignore?: readonly ColumnOf<T>[];
   /** Which writes are logged; none, for a table no delta read reads. */
   readonly log?: SyncLogWrites;
+  /** For a table logging its rows (`LOG.ROWS`), the columns whose change logs an update too. */
+  readonly logUpdatesOf?: readonly ColumnOf<T>[];
 }
 
 /** A topic as the trigger reads it: its kind, and the SQL name of the column holding its id. */
@@ -82,6 +84,8 @@ export interface SyncTableLog {
   readonly writes: SyncLogWrites;
   /** The primary-key columns a log row names the row written by. */
   readonly key: readonly string[];
+  /** For `LOG.ROWS`, the columns whose change logs an update too. */
+  readonly updatesOf: readonly string[];
 }
 
 /** A declaration, resolved to the SQL names its capture is rendered from. */
@@ -134,11 +138,13 @@ function primaryKeyOf(table: PgTable): readonly string[] {
  * the row before and after, and an update notifies only where a column
  * outside `ignore` changed. A column a topic is read from can't be ignored,
  * since a row moving between tasks must notify both. A table given `log`
- * logs the writes it names too.
+ * logs the writes it names too, and one logging its rows an update of a
+ * column `logUpdatesOf` names, which must be watched, since an update of
+ * none fires no trigger.
  */
 export function defineSyncTable<T extends PgTable>(
   table: T,
-  { topics, ignore = [], log }: SyncTableOptions<T>,
+  { topics, ignore = [], log, logUpdatesOf = [] }: SyncTableOptions<T>,
 ): SyncTable {
   const config = getTableConfig(table);
   if (config.schema !== undefined) throw new Error(`${config.name} is synced outside public`);
@@ -159,12 +165,28 @@ export function defineSyncTable<T extends PgTable>(
       throw new Error(`${config.name} ignores ${column}, which it reads topics from`);
     }
   }
+  if (logUpdatesOf.length > 0 && log !== LOG.ROWS) {
+    throw new Error(`${config.name} names updates to log but does not log its rows alone`);
+  }
+  for (const column of logUpdatesOf) {
+    assertColumnOf(table, column, "a logged update's column");
+    if (ignored.has(column.name)) {
+      throw new Error(`${config.name} ignores ${column.name}, whose updates it logs`);
+    }
+  }
   return {
     name: config.name,
     watched: config.columns.flatMap((column) => (ignored.has(column.name) ? [] : [column.name])),
     ignored: [...ignored],
     topics: own.map((topic) => ({ kind: topic.kind, column: topic.column.name })),
     lookups,
-    log: log === undefined ? undefined : { writes: log, key: primaryKeyOf(table) },
+    log:
+      log === undefined
+        ? undefined
+        : {
+            writes: log,
+            key: primaryKeyOf(table),
+            updatesOf: logUpdatesOf.map((column) => column.name),
+          },
   };
 }
