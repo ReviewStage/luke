@@ -218,7 +218,17 @@ import type { RunMode } from "./run-mode.js";
  * folder the platform's check finds work in, or cannot say of, or on a
  * platform that names no check, is kept, and recorded so with when, so no
  * work is deleted before `KEPT_FOR` has passed, and then let go of whole.
- * A read that was not answered lets go of no agent whole. This is what
+ * A read that was not answered lets go of no agent whole, and neither
+ * does one that leaves out most of the agents with a folder here
+ * (`MASS_LEFT_OUT`), which is said once: an empty or partial list from a
+ * service's bug or a lagging replica would otherwise clear every folder
+ * within two passes. Kubernetes' node lifecycle controller stops evicting
+ * on the same sign, a large share of nodes gone at once. The reads still
+ * count, so once such reads have stood for `MASS_LEFT_OUT.HOLD_FOR`, as
+ * after a real mass archive or a device whose id changed, whose agents can
+ * no longer run here, the passes let go of what they leave out, still at
+ * most `ORPHANS_PER_PASS` a pass; a read in between that leaves out fewer
+ * starts the hold anew. A discard line is never held back. This is what
  * catches every agent a discard line
  * never reached: archived while the device was away, whose line expired,
  * discarded by a run that crashed, or deleted with its task. One that ran
@@ -287,6 +297,11 @@ const KEPT_FOR = Duration.days(7);
 const ORPHAN_AFTER = 2;
 /** How many agents one pass lets go of at most, so a backlog clears over a few passes rather than in one long one. */
 const ORPHANS_PER_PASS = 5;
+/**
+ * When an answered read of the live agents is taken for a wrong one rather than for a mass archive: it leaves out more than half of this machine's agents with a folder, and at least `AT_LEAST` of them, since archiving one task lets go of its few agents together.
+ * While reads stand so, a pass lets go of no agent, until they have stood so for `HOLD_FOR`, by when a service's bug or a lagging replica has been seen to, and what still stands so is taken as true.
+ */
+const MASS_LEFT_OUT = { AT_LEAST: 4, HOLD_FOR: Duration.days(1) } as const;
 /** How long an agent goes unused before a pass clears its folder, where it stands idle with all its work on GitHub, so a box that runs agents for weeks does not fill its disk with folders nobody messages again. */
 const FOLDER_UNUSED_FOR = Duration.days(7);
 /** How many unused folders one pass checks at most before it clears them, so a backlog clears over a few passes rather than in one long one. */
@@ -1586,6 +1601,8 @@ export function composeLocalAgents(
         /** The pass each agent left out was last tried on, so the agents never tried go first and the rest take turns, and a few that always fail never take every place. */
         const lastTried = new Map<string, number>();
         let passes = 0;
+        /** When answered reads began to leave out most of this machine's agents with a folder (`MASS_LEFT_OUT`), and whether the passes have let go of them since the hold ran out; none while the last read did not. */
+        let massLeftOut: { readonly since: number; released: boolean } | undefined;
 
         /**
          * The work given done on the agent under its delivery lock, only
@@ -1694,6 +1711,45 @@ export function composeLocalAgents(
           });
 
         /**
+         * Whether the read that answered `standing` holds this pass back from
+         * letting go of any agent: it leaves out most of the agents given,
+         * this machine's, among those with a folder (`MASS_LEFT_OUT`), and
+         * reads have done so for less than `MASS_LEFT_OUT.HOLD_FOR`. Its
+         * start and its end are each reported once.
+         */
+        const massHeld = (owned: readonly string[], standing: ReadonlySet<string>, now: number) =>
+          Effect.gen(function* () {
+            let held = 0;
+            let leftOut = 0;
+            for (const id of owned) {
+              const layout = deviceAgentLayout(folder, id);
+              if (!(yield* Effect.orElseSucceed(fileSystem.exists(layout.folder), () => false))) {
+                continue;
+              }
+              held += 1;
+              if (!standing.has(id)) leftOut += 1;
+            }
+            if (leftOut < MASS_LEFT_OUT.AT_LEAST || leftOut * 2 <= held) {
+              massLeftOut = undefined;
+              return false;
+            }
+            if (massLeftOut === undefined) {
+              massLeftOut = { since: now, released: false };
+              report(
+                `the service's list of this device's agents leaves out ${leftOut} of the ${held} with a folder here, so none is let go of while its reads stand so, for ${Duration.format(MASS_LEFT_OUT.HOLD_FOR)} at most`,
+              );
+            }
+            if (now - massLeftOut.since < Duration.toMillis(MASS_LEFT_OUT.HOLD_FOR)) return true;
+            if (!massLeftOut.released) {
+              massLeftOut.released = true;
+              report(
+                `the service's list of this device's agents has left out most of them for ${Duration.format(MASS_LEFT_OUT.HOLD_FOR)}, so those it leaves out are let go of`,
+              );
+            }
+            return false;
+          });
+
+        /**
          * One pass over the agents this machine made (`ownedAgents`), never
          * another install's, each left be while it is not idle
          * (`whileIdle`). Their ids are read first, then the live agents, so
@@ -1701,9 +1757,10 @@ export function composeLocalAgents(
          * out of `ORPHAN_AFTER` answered reads in a row, and not kept for work
          * it holds, is let go of whole as a discard lets go of it, as is one
          * kept `KEPT_FOR` since, up to `ORPHANS_PER_PASS`, those tried longest
-         * ago first; a read that was not answered lets go of no agent whole.
-         * Then the folders of idle agents unused for `FOLDER_UNUSED_FOR` are
-         * cleared (`unusedCleared`).
+         * ago first; a read that was not answered lets go of no agent whole,
+         * nor does one held as a wrong one (`massHeld`). Then the folders of
+         * idle agents unused for `FOLDER_UNUSED_FOR` are cleared
+         * (`unusedCleared`).
          */
         const swept = Effect.gen(function* () {
           passes += 1;
@@ -1737,10 +1794,12 @@ export function composeLocalAgents(
           const keptAt = (yield* Ref.get(state)).kept ?? {};
           const keptPast = (id: string) =>
             keptAt[id] !== undefined && now - keptAt[id] >= Duration.toMillis(KEPT_FOR);
+          // Note that a read that leaves out most of them lets go of none, though its misses still count.
+          const held = yield* massHeld(owned, standing, now);
           const unlisted = [...missedReads]
             .filter(
               ([id, missed]) =>
-                missed >= ORPHAN_AFTER && (keptAt[id] === undefined || keptPast(id)),
+                !held && missed >= ORPHAN_AFTER && (keptAt[id] === undefined || keptPast(id)),
             )
             .map(([id]) => id)
             .sort((one, other) => (lastTried.get(one) ?? 0) - (lastTried.get(other) ?? 0));
