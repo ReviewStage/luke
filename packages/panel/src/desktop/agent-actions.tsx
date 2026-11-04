@@ -14,6 +14,7 @@ import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
+import { useThisMac } from "../machine-name.js";
 import { useSteadyDoor } from "../steady-door.js";
 import type { AgentFork } from "../tasks/fork-model.js";
 import { markReadItem, type ReadMark } from "../tasks/task-menu-items.js";
@@ -312,6 +313,7 @@ export function useAgentActions(
     | "archivedAt"
     | "brief"
     | "machine"
+    | "mac"
     | "startedBy"
     | "source"
   >,
@@ -340,12 +342,13 @@ export function useAgentActions(
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const macTerminal = useCapability(HOST_CAPABILITY.MAC_TERMINAL);
+  const thisMac = useThisMac();
   const local = agent.machine === AGENT_MACHINE.DEVICE;
-  // Note that a local agent runs in a worktree on its starter's Mac, which no relayed tab reaches, so
-  // its Terminal opens the Mac's own Terminal there, offered to its starter alone, whose Mac it is.
-  const starter = agent.startedBy !== undefined && agent.startedBy.userId === agents.me;
+  // Note that a local agent runs in a worktree on its device, which no relayed tab reaches, so its
+  // Terminal opens the Mac's own Terminal there, offered only where that device is This Mac.
+  const onThisMac = thisMac?.deviceId !== undefined && agent.mac?.deviceId === thisMac.deviceId;
   const terminal = local
-    ? macTerminal && starter
+    ? macTerminal && onThisMac
       ? () => void pressAct(ACT_KIND.MAC_TERMINAL_LOCAL_AGENT, { agentId: agent.id })
       : undefined
     : onOpenTerminal === undefined

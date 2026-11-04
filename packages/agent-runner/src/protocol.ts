@@ -313,8 +313,7 @@ export const CodexConfigSchema = Schema.Struct({
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
    * one token. Not asked where the launch's environment holds
-   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it;
-   * nor where it runs on the Mac's own sign-in (`ownLogin`).
+   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
    */
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
@@ -325,15 +324,6 @@ export const CodexConfigSchema = Schema.Struct({
    * its Mac; none in a sandbox, whose checkout is all it writes.
    */
   writableRoots: Schema.optionalKey(Schema.Array(Schema.String)),
-  /**
-   * Whether app-server runs on the Mac's own Codex sign-in, the managed
-   * ChatGPT login or API key `codex login` keeps under the user's default
-   * `CODEX_HOME`, which Codex refreshes itself
-   * (https://learn.chatgpt.com/docs/auth): no provider of ours, no token
-   * command, and no key in the environment. A launch whose Mac turns out
-   * signed out fails rather than turning to another payer.
-   */
-  ownLogin: Schema.optionalKey(Schema.Boolean),
   /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
 });

@@ -18,16 +18,16 @@ import { user } from "./auth.js";
  * device.ts -- one of an account's devices that can run its local agents, and when it last said it was there.
  *
  * A device is a member's machine running the host program, a Mac or a
- * Linux box alike, and says which platform and architecture it runs on, whether it runs each
- * agent in a VM of its own, straight on the machine on our own sign-ins, or on
- * the developer's own logins (`DEVICE_ISOLATION`),
+ * Linux box alike, and says which platform and architecture it runs on, how it
+ * runs its agents (`DEVICE_ISOLATION`), straight on the machine on our own
+ * sign-ins for every host,
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
- * The desktop mints the id once and keeps it, and registers it under the account it is signed in to;
- * an id another account registered first is never moved onto this one. While the desktop runs local agents it beats
- * the row, so `last_seen_at` is what the service reads as the Mac being
+ * The host keeps the id it enrolled under, and registers it under the account it enrolled for;
+ * an id another account registered first is never moved onto this one. While the host runs local agents it beats
+ * the row, so `last_seen_at` is what the service reads as the device being
  * there to take a new agent. It registers again on every start, so `home`,
- * `claude_executable`, and `codex_executable` follow the account's home
- * folder and the harnesses the app runs, which move with every update. A
+ * `claude_executable`, and `codex_executable` follow its home folder and
+ * the harnesses it keeps, which move with every update. A
  * local agent is pinned to one of these
  * (`agent.device_id`), and every line and request for it names the
  * same Mac (`./device-agent.ts`). The row belongs to the account and leaves
@@ -47,12 +47,12 @@ import { user } from "./auth.js";
 export const device = pgTable(
   "device",
   {
-    /** Minted by the desktop, once per install. */
+    /** Minted once per install, as the host enrolls. */
     id: uuid("id").primaryKey(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The Mac's own name, as the desktop read it from the system, for the agent's label. */
+    /** The device's own name, as its host read it from the system, for the agent's label. */
     name: text("name").notNull(),
     /** What program the device ran local agents through when it was written (`DEVICE_KIND`), kept for old rows; nothing reads it, since every device runs the host program. */
     kind: text("kind").$type<DeviceKind>().notNull(),
@@ -72,35 +72,29 @@ export const device = pgTable(
     model: text("model"),
     /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
     isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
-    /** The Mac's home folder, absolute, as the desktop read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
+    /** The device's home folder, absolute, as its host read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
     /** The folder the device's own layout puts its local agents under, absolute, as it last registered (`deviceAgentsFolder`); null for a device whose host names none, whose agents are laid out under `home`. */
     agentsFolder: text("agents_folder"),
-    /** The Claude Code CLI the desktop bundles, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
+    /** The Claude Code CLI the host keeps, by its absolute path, which a local agent's launch names; null for a host that has not registered yet. */
     claudeExecutable: text("claude_executable"),
     /**
-     * The Codex binary the desktop runs local agents' Codex with, by its
-     * absolute path, once it checked that build against the pin, bundled or
-     * fetched; null for a Mac that has none checked yet, which runs no Codex
-     * agent.
+     * The Codex binary the host runs local agents' Codex with, by its
+     * absolute path, once it checked that build against the pin; null for a
+     * device that has none checked yet, which runs no Codex agent.
      */
     codexExecutable: text("codex_executable"),
-    /**
-     * Which harnesses the Mac is signed in to by itself, as its register and
-     * beats last said, never the credential: a local agent on one launches on
-     * the Mac's own login rather than the account's saved credential.
-     */
+    /** Which harnesses the device says it is signed in to by itself, as its register and beats last said: none from every host, and nothing reads it. */
     signedIn: jsonb("signed_in").$type<DeviceSignedIn>().notNull().default({}),
     /**
      * What the device's follower takes beyond the first lines, as it last
      * registered (`DEVICE_CAPABILITY`): a line that needs one is queued only
-     * for a device that has it. Empty for a row from before the column, as
-     * every desktop then took none.
+     * for a device that has it. Empty for a row from before the column.
      */
     capabilities: text("capabilities").$type<DeviceCapability>().array().notNull().default([]),
     /**
      * Where the device stands in setting itself up, as it last registered
-     * (`DEVICE_SETUP`): still fetching what its VMs run on, or failed. Null
+     * (`DEVICE_SETUP`): still fetching what its agents run on, or failed. Null
      * for a device ready to take an agent, as every row from before the
      * column is, and only such a device takes one.
      */
@@ -123,7 +117,7 @@ export const device = pgTable(
     /** When the account removed the host; null while it stands. */
     removedAt: timestamptz("removed_at"),
     createdAt: createdAt(),
-    /** When the desktop last beat, or registered, the Mac. */
+    /** When the device last beat, or registered. */
     lastSeenAt: timestamptz("last_seen_at").notNull(),
   },
   (table) => [

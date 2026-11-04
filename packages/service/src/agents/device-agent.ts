@@ -32,19 +32,15 @@ import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   DEVICE_AGENT_LINE_KIND,
-  DEVICE_LAUNCH_REFUSAL,
   type DeviceAgentLaunchSecrets,
-  type DeviceLaunchRefusal,
-  deviceAgentLaunchPayloadSchema,
   deviceAgentLaunchSecretsSchema,
 } from "@repo/features/device-agent-wire";
-import { TURN_FAILURE } from "@repo/features/turn-run";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { TURN_ORIGIN } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { heldUntil } from "../http/held-read.js";
 import type { StoreFailure } from "../http/store-failure.js";
-import { launchStoppedDetail, RAN_DIRECTLY_DETAIL } from "./coder-host/status.js";
+import { launchStoppedDetail } from "./coder-host/status.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 
 export const DEVICE_AGENT_SERVICE = {
@@ -168,31 +164,6 @@ export function claimedDeviceAgentLine(
   });
 }
 
-/** Where an agent's newest launch put its checkout, as its line's payload names it; nothing where it names none this service reads. */
-const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
-
-/**
- * How a launch its device refused to start fails its turn: the words kept
- * on it, with the folder the agent's work is still in where it ran
- * directly on its Mac, and that it is a session that ended, which only a
- * new agent goes on from.
- */
-function refusedTurn(
-  refusal: DeviceLaunchRefusal,
-  checkoutPath: string | undefined,
-): {
-  readonly detail: string;
-  readonly failure: typeof TURN_FAILURE.SESSION_ENDED;
-} {
-  switch (refusal) {
-    case DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY:
-      return {
-        detail: `${RAN_DIRECTLY_DETAIL}${checkoutPath ?? ""}`,
-        failure: TURN_FAILURE.SESSION_ENDED,
-      };
-  }
-}
-
 /**
  * The turn a launch's message waits on, queued where its runner never
  * opened one, for the settle after it to end, whether its Mac settled the
@@ -236,10 +207,7 @@ export const queuedUnopenedTurn = (
  * failed before its runner is (`coder-host/runner-sessions.ts`'s
  * `launchFailed`), so that turn is settled the same way, whatever the Mac
  * said of why, and in words naming the step its host last reported where
- * it reported one (`launchStoppedDetail`). A launch the Mac settled
- * unstarted with why (`refusal`) settles its turn in the refusal's words,
- * as a session that ended, since the agent can never run there again, so
- * the agent reads as one only a new agent goes on from. A turn the runner ended itself
+ * it reported one (`launchStoppedDetail`). A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
  *
@@ -254,7 +222,6 @@ export function settledDeviceAgentLine(
   deviceId: string,
   id: string,
   exitCode?: number,
-  refusal?: DeviceLaunchRefusal,
 ) {
   return Effect.gen(function* () {
     const fresh = yield* settleDeviceAgentLine(userId, deviceId, id, exitCode);
@@ -278,26 +245,13 @@ export function settledDeviceAgentLine(
       agent.value.conversationId,
       newest.value,
     );
-    const now = yield* Clock.currentTimeMillis;
-    if (refusal === undefined) {
-      // Note that a launch whose turn opened is a runner gone however it ended, and one that never opened its turn is worded by the step it stopped at.
-      const detail = unopened ? launchStoppedDetail(newest.value.step) : undefined;
-      yield* settleRunnerLostTurns(writer, agent.value.conversationId, now, detail);
-      return true;
-    }
-    const { detail, failure } = refusedTurn(
-      refusal,
-      Option.getOrUndefined(
-        Option.map(decodeLaunchPayload(newest.value.payload), (each) => each.checkoutPath),
-      ),
-    );
+    // Note that a launch whose turn opened is a runner gone however it ended, and one that never opened its turn is worded by the step it stopped at.
+    const detail = unopened ? launchStoppedDetail(newest.value.step) : undefined;
     yield* settleRunnerLostTurns(
       writer,
       agent.value.conversationId,
-      now,
+      yield* Clock.currentTimeMillis,
       detail,
-      undefined,
-      failure,
     );
     return true;
   });

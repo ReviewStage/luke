@@ -26,7 +26,7 @@ export const APP_SETTING_ID = {
   MAC_COMMANDS: "mac_commands",
   /** Offered by no build: Run agents on this Mac, removed since Runs on chooses where each agent runs. */
   LOCAL_AGENTS: "local_agents",
-  /** Offered by no build: This Mac's sandbox switch, which never drew a row and runs every agent sandboxed now. */
+  /** Offered by no build: a switch of This Mac's that never drew a row. */
   LOCAL_AGENTS_SANDBOX: "local_agents_sandbox",
   DEFAULT_WORKSPACE_PROVIDER: "default_workspace_provider",
   WORKSPACE_AGENT_MODEL: "workspace_agent_model",

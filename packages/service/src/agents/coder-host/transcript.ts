@@ -82,7 +82,6 @@ import {
   agentStatusOf,
   hostLostOf,
   launchStoppedOf,
-  ranDirectlyFolderOf,
   statusClockEdge,
 } from "./status.js";
 import { usageOfTurns } from "./usage.js";
@@ -169,8 +168,6 @@ export interface TranscriptPage {
   /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
   readonly runStartedAt?: number;
   readonly failureReason?: AgentFailure;
-  /** Where a failed agent that ran directly on its Mac left its work, which its Mac refused to start; absent for every other failure. */
-  readonly ranDirectly?: { readonly folder: string };
   /** The host a failed agent's run was lost with, by its name, where it stopped beating while the turn ran; absent for every other failure. */
   readonly hostLost?: { readonly host: string };
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
@@ -229,11 +226,9 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const runStartedAt = agentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failed = status === AGENT_STATUS.FAILED;
     const failureReason = failed ? agentFailureOf(turn) : undefined;
-    const folder = failed ? ranDirectlyFolderOf(turn) : undefined;
-    const ranDirectly = folder === undefined ? undefined : { folder };
     const hostLost = failed ? hostLostOf(turn) : undefined;
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
-    return { status, runStartedAt, failureReason, ranDirectly, hostLost, turn, graceEdge };
+    return { status, runStartedAt, failureReason, hostLost, turn, graceEdge };
   });
 
 /**
@@ -608,8 +603,7 @@ function pagePast(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { read, cursor } = past;
-    const { status, runStartedAt, failureReason, ranDirectly, hostLost, turn, graceEdge } =
-      standing;
+    const { status, runStartedAt, failureReason, hostLost, turn, graceEdge } = standing;
     return {
       page: {
         messages: yield* transcriptMessagesOf(target, read.ok ? read.value : []),
@@ -617,7 +611,6 @@ function pagePast(
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
         ...(failureReason === undefined ? undefined : { failureReason }),
-        ...(ranDirectly === undefined ? undefined : { ranDirectly }),
         ...(hostLost === undefined ? undefined : { hostLost }),
       },
       turn,
@@ -954,14 +947,13 @@ export function transcriptNewest(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { messages, before } = yield* olderPageOf(target, read);
-    const { status, runStartedAt, failureReason, ranDirectly, hostLost, turn } = standing;
+    const { status, runStartedAt, failureReason, hostLost, turn } = standing;
     const page: TranscriptPage = {
       messages,
       cursor,
       status,
       ...(runStartedAt === undefined ? undefined : { runStartedAt }),
       ...(failureReason === undefined ? undefined : { failureReason }),
-      ...(ranDirectly === undefined ? undefined : { ranDirectly }),
       ...(hostLost === undefined ? undefined : { hostLost }),
     };
     return {

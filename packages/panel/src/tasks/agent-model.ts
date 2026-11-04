@@ -3,7 +3,6 @@ import {
   hostLostWords,
   launchStoppedWords,
   mendedByNewAgent,
-  ranDirectlyWords,
 } from "@repo/features/agent-failure-words";
 import { recordedVideosOf } from "@repo/features/agent-pictures-model";
 import { harnessNameOf } from "@repo/features/agent-runtime-models";
@@ -413,13 +412,11 @@ export interface LaunchStopped {
  * for an agent still writing or one that completed. A teammate's agent
  * names its starter's key, since it runs on theirs and not the reader's.
  * An agent whose tab offers Continue, or that another already continued
- * (`continuable`), is not told to start a new one. One that ran directly on
- * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
- * where its work still is, in place of its failure's words, and one whose
- * host stopped beating while its turn ran (`hostLost`) names the host and
- * that a message carries it on once the host is back. One whose host
- * settled its launch unstarted (`launchStopped`) names the step the launch
- * stopped at and that a message tries again.
+ * (`continuable`), is not told to start a new one. One whose host stopped
+ * beating while its turn ran (`hostLost`) names the host and that a message
+ * carries it on once the host is back, in place of its failure's words. One
+ * whose host settled its launch unstarted (`launchStopped`) names the step
+ * the launch stopped at and that a message tries again.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's last line says (`agentPayerLine`).
  */
@@ -428,7 +425,6 @@ export function endLineParts(
   failure: AgentFailure | undefined,
   starter?: string,
   continuable = false,
-  ranDirectly?: { readonly folder: string },
   hostLost?: { readonly host: string },
   launchStopped?: LaunchStopped,
 ): EndLineParts | undefined {
@@ -436,8 +432,6 @@ export function endLineParts(
     case AGENT_STATUS.CANCELED:
       return { words: "Stopped", failed: false };
     case AGENT_STATUS.FAILED: {
-      if (ranDirectly !== undefined)
-        return { words: ranDirectlyWords(ranDirectly.folder, starter), failed: true, failure };
       if (hostLost !== undefined)
         return { words: hostLostWords(hostLost.host), failed: true, failure };
       if (launchStopped !== undefined) {
@@ -613,8 +607,7 @@ function endLineContinues(status: AgentStatus, endReason: FailureReason): boolea
  * and once another agent continued it as Continue again, in the same place,
  * since the continued note that takes the box offers none. Before then, it
  * offers the press only where a new agent is the one way on: a failure only
- * one mends (`mendedByNewAgent`), or an agent that ran directly on its Mac,
- * whose words say to continue it. Every other failure leaves the box open
+ * one mends (`mendedByNewAgent`). Every other failure leaves the box open
  * and the agent taking messages, so a message carries it on, as a coding
  * CLI's error leaves its session for the next prompt. A box closed on an
  * ended agent offers the press itself, carrying its words, so the line
@@ -624,13 +617,12 @@ export function endLineOffersContinue(input: {
   readonly status: AgentStatus;
   readonly endReason: FailureReason;
   readonly failure: AgentFailure | undefined;
-  readonly ranDirectly: boolean;
   readonly continued: boolean;
   readonly boxClosed: boolean;
 }): boolean {
   if (!endLineContinues(input.status, input.endReason)) return false;
   if (input.continued) return true;
-  return !input.boxClosed && (input.ranDirectly || mendedByNewAgent(input.failure));
+  return !input.boxClosed && mendedByNewAgent(input.failure);
 }
 
 /**

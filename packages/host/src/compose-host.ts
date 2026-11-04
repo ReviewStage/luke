@@ -83,7 +83,7 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.INSTALLED_SKILLS,
   HOST_CONCERN.MAC_COMMANDS,
-  HOST_CONCERN.LOCAL_AGENTS,
+  HOST_CONCERN.THIS_MAC_HOST,
 ];
 
 /** What every assembly asks for, whichever platform concerns it was built with. */
@@ -102,7 +102,7 @@ type HostAssemblyRequirements =
 /** What each platform concern adds to the assembly's requirements when it is chosen. */
 interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
+  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: ChildProcessSpawner.ChildProcessSpawner | ThisMacHost;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
@@ -340,7 +340,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           }),
         )
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
-    const localAgents = platform.has(HOST_PLATFORM_CONCERN.LOCAL_AGENTS)
+    const thisMacHost = platform.has(HOST_PLATFORM_CONCERN.THIS_MAC_HOST)
       ? yield* served(
           composeThisMacHost({
             kernel,
@@ -365,7 +365,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.LOCAL_AGENTS);
+      : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
     const terminals: TerminalsComposer =
       openSocket !== undefined
         ? yield* served(
@@ -484,7 +484,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.INSTALLED_SKILLS]: installedSkills,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
-      [HOST_CONCERN.LOCAL_AGENTS]: localAgents,
+      [HOST_CONCERN.THIS_MAC_HOST]: thisMacHost,
       [HOST_CONCERN.TERMINALS]: terminals,
       [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;

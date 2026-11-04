@@ -266,7 +266,7 @@ export function composeThisMacHost(
       ),
     );
 
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {};
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.THIS_MAC_HOST> = {};
     return { methods, lifetime: Effect.asVoid(lifetime) } satisfies Composer;
   });
 }

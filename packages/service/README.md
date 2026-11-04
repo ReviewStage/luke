@@ -1342,8 +1342,7 @@ launch and again ahead of every message, so a change to them is the next
 model call's. The credential is settled at the Start as its payer
 (`AGENT_PAYER`): the developer's Claude or ChatGPT plan where Settings has
 it on for agents, otherwise the account's own API key for the model's
-provider, and a Start with neither is refused; an agent on the developer's
-Mac runs on the Mac's own sign-in. Each is opened from its sealed row under
+provider, and a Start with neither is refused. Each is opened from its sealed row under
 `PROVIDER_KEY_ENCRYPTION_KEYS` into the runner's environment alone, and a
 Codex agent on a ChatGPT plan asks the service for its token as it needs one
 (`src/agents/native-events/runner-token-app.ts`). The deployment holds no

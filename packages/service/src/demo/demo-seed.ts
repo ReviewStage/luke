@@ -54,10 +54,7 @@ import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { type Cause, Clock, Data, Effect, Option, type Redacted, Result } from "effect";
-import {
-  agentRuntimeChoice,
-  localAgentRuntimeChoice,
-} from "../agents/coder-host/agent-runtime-choice.js";
+import { agentRuntimeChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { agentLineSender } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
@@ -672,20 +669,15 @@ function seedTurn(
 }
 
 /**
- * The runtime and payer a Start of the model by the member on `runsOn`
- * records (`start.ts`'s `startRuntimeOf`): on a host, its own Claude Code
- * login where it said it has one, else the member's saved credential, as
- * in the cloud. Note that one with no credential to pay, which a Start
+ * The runtime and payer a Start of the model by the member records
+ * (`start.ts`'s `startRuntimeOf`): the member's saved credential, on a host
+ * as in the cloud. Note that one with no credential to pay, which a Start
  * refuses, records Claude Code with no payer, as an agent from before
  * payers does, because a seeded agent finished and stands; its next turn
  * is paid for by what pays as it launches (`claude-code-sessions.ts`).
  */
-function seededRuntime(userId: string, model: string, runsOn: TaskRunsOnWrite) {
-  const chosen =
-    runsOn.machine === AGENT_MACHINE.DEVICE && runsOn.deviceId !== null
-      ? localAgentRuntimeChoice(userId, model, runsOn.deviceId)
-      : agentRuntimeChoice(userId, model);
-  return Effect.catchTag(chosen, "AgentCredentialMissing", () =>
+function seededRuntime(userId: string, model: string) {
+  return Effect.catchTag(agentRuntimeChoice(userId, model), "AgentCredentialMissing", () =>
     Effect.succeed({ runtime: CONVERSATION_RUNTIME.CLAUDE_CODE, payer: undefined }),
   );
 }
@@ -705,7 +697,7 @@ function seedAgent(
 ) {
   return Effect.gen(function* () {
     const [first] = agent.turns;
-    const { runtime, payer } = yield* seededRuntime(first.from.id, agent.model, runsOn);
+    const { runtime, payer } = yield* seededRuntime(first.from.id, agent.model);
     const started = yield* clock.ago(
       first.startedAgo,
       createAgent(first.from.id, {

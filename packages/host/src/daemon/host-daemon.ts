@@ -19,10 +19,8 @@ import { type HostReleases, hostTargetOf, hostUpdate } from "./host-update.js";
 /**
  * host-daemon.ts -- a host's daemon: the shared follower (`compose-local-agents.ts`) run on the device the box enrolled as, on its device secret, with its OS's platform, for as long as its scope stands.
  *
- * The follower is the desktop's own, handed what a box with nobody signed
- * in at it has in place of an account: its device id for the account and
- * the device both, its device secret as the bearer of every call in place
- * of the desktop's OAuth sign-in, and a gate that stands open but while
+ * The follower is handed the device id the box enrolled under, its device
+ * secret as the bearer of every call, and a gate that stands open but while
  * the service has refused its version (`host-standing.ts`), so a daemon below the
  * service's floor rests rather than asks the service every few seconds. Once
  * the service settles the box's secret as refused, the host was removed, so the
@@ -84,14 +82,7 @@ export const hostDaemon = Effect.fnUntraced(function* (options: HostDaemonOption
           ? undefined
           : yield* hostUpdate({ releases, version: options.version, target });
       const composer = yield* composeLocalAgents({
-        kernel: {
-          stateRoot: options.stateRoot,
-          createId: randomUUID,
-          runMode: { sendsNetwork: true },
-        },
-        account: { capabilitiesActive: () => true },
-        // Note that the device id stands for the account too, since a host holds no account of its own and acts for its device alone.
-        accountId: () => deviceId,
+        kernel: { stateRoot: options.stateRoot, createId: randomUUID },
         deviceId,
         switchedOn: standing.asking,
         client: new HostedDeviceAgentClient({

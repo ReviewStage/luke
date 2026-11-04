@@ -12,10 +12,7 @@ import {
   checkoutIdentityEnv,
 } from "@repo/features/checkout-identity";
 import {
-  DEVICE_AGENT_FOLDER,
   DEVICE_AGENT_LINE_KIND,
-  DEVICE_ISOLATION,
-  DEVICE_LAUNCH_REFUSAL,
   DEVICE_LAUNCH_STEP,
   DEVICE_SETUP,
   type DeviceAgentLaunchSecrets,
@@ -23,8 +20,6 @@ import {
   type DeviceAgentLine,
   type DeviceAgentRelease,
   type DeviceAgentRequest,
-  type DeviceIsolation,
-  type DeviceLaunchRefusal,
   type DeviceLaunchStep,
   type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
@@ -59,7 +54,6 @@ import {
 import * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { Environment, LocalAgentPlatform, Reporter } from "./effect/seams.js";
 import { releaseFollowerLock, renewFollowerLock, takeFollowerLock } from "./follower-lock.js";
@@ -79,22 +73,19 @@ import {
   forgetOwnedAgent,
   keepOwnedAgent,
   type LocalAgentState,
-  localAgentDeviceOf,
   ownedAgents,
   readLocalAgentState,
   writeLocalAgentState,
 } from "./local-agent-state.js";
-import type { RunMode } from "./run-mode.js";
 
 /**
  * compose-local-agents.ts -- runs on this device the coding agents the account starts on it, each straight on the box in a folder of its own: their runners started, fed, and stopped as the service's lines say, and their tools' reads and commands answered, for as long as its gate stands (`LocalAgentsDependencies.switchedOn`: open but while the service refuses the device, `daemon/host-standing.ts`).
  *
  * The service writes a local agent's work as rows under this device's id
  * (`@repo/features/device-agent-wire`, `contract/device-agents.ts`): lines
- * for its runner and requests from its tools. A Mac's id is minted once per
- * account and kept in the host's state; a host is handed the one it enrolled
- * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, an
- * app start among them, the device first has its agents' CLIs
+ * for its runner and requests from its tools, under the id the host enrolled
+ * under (`LocalAgentsDependencies.deviceId`). Every time the gate opens, a
+ * start among them, the device first has its agents' CLIs
  * (`LocalAgentClis.ready`: Claude Code, Codex, and GitHub's CLI, each
  * fetched and checked). A first fetch takes minutes, so while
  * it runs the device registers as preparing (`DEVICE_SETUP`) and beats, and
@@ -145,13 +136,7 @@ import type { RunMode } from "./run-mode.js";
  * starts. A launch or files line keeps the agent as one whose folder this
  * machine made (`keepOwnedAgent`), and a discard that removes the folder
  * forgets it, so an uninstall removes this machine's agents and no other
- * install's beside it. Every time the gate opens, every agent the
- * host's own state names, in how each ran or a launch it kept, is kept so
- * too, and, on a device whose agents' folders are its own alone
- * (`LocalAgentPlatformSeam.storesOwned`, a Linux host's), every agent with
- * a folder there (`adopted`), so one it last ran before it kept that record
- * is cleaned up as the rest are; never one from a Mac's folders, which are
- * shared.
+ * install's beside it.
  *
  * Every host runs its agents straight on the box
  * (`DEVICE_ISOLATION.DIRECT`): the runner is a child of the host's own
@@ -179,26 +164,16 @@ import type { RunMode } from "./run-mode.js";
  * turn already running. The check of its folder for unsaved work runs on
  * the box.
  *
- * Agents on This Mac ran on the developer's own logins on it before we
- * gave each agent a folder of its own
- * (`LocalAgentPlatformSeam.formerlyDirect`), so there the host keeps how
- * each agent ran, beside its launches, and takes an agent from before that
- * record with a checkout as one that ran so (`DEVICE_ISOLATION.BARE`): its
- * Git folder is in the shared clone and its harness's sessions in the
- * developer's own home, so its launch is settled unstarted with the refusal
- * that says so (`DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY`).
- *
  * Every launch this device claimed is kept in the host's state by its
  * line's id and its agent's, no secret beside it, until the service takes
  * its settle. A launch still kept as the gate opens had its runner end with
- * the app, or with the gate, so its turn is let go of as any turn's end is,
+ * the host, or with the gate, so its turn is let go of as any turn's end is,
  * and it is settled with no exit code, which the service reads as a runner
  * gone: the agent's turn in flight is settled lost, and its next message
  * relaunches the runner on the harness's session. No runner runs as the
  * gate opens, so every agent this machine made (`ownedAgents`) has its turn
  * let go of too, whatever a run that died left in its folder. An agent this
- * machine did not make is never touched, since This Mac and a Mac's own
- * `vespin-host` share the user's `~/.vespin/agents`.
+ * machine did not make is never touched.
  *
  * The service's list of the device's open launches is what the device
  * runs: every beat answers it (`DeviceAgentBeat`), and the device converges
@@ -214,7 +189,7 @@ import type { RunMode } from "./run-mode.js";
  * list names none, and the device only settles what it kept.
  *
  * The device passes over the agents this machine made (`ownedAgents`),
- * never another install's beside it, after the first beat the service
+ * never another's, after the first beat the service
  * answers and every `PASS_EVERY` after. A pass leaves an agent be while a
  * line of its is delivered or waits to be, its runner runs, or a launch of
  * its is kept. And the service's list of the device's live agents, those
@@ -239,8 +214,7 @@ import type { RunMode } from "./run-mode.js";
  * starts the hold anew. A discard line is never held back. This is what
  * catches every agent a discard line
  * never reached: archived while the device was away, whose line expired,
- * discarded by a run that crashed, or deleted with its task. One that ran
- * on the developer's own logins is checked on the device as the rest are.
+ * discarded by a run that crashed, or deleted with its task.
  * A pass then clears the folders of idle agents unused for
  * `FOLDER_UNUSED_FOR`, longest unused first, where the platform's check
  * finds no change in them not committed, since their branches stand in the
@@ -261,9 +235,9 @@ import type { RunMode } from "./run-mode.js";
  * for the daemon started on the new release.
  *
  * Requests are each answered on a fiber of their own, inside the agent's
- * folder alone (`local-agent-requests.ts`). Turning the experiment off,
- * signing out, or a run that sends nothing shuts the gate:
- * the reads end, and every runner is stopped, as the quit stops them.
+ * folder alone (`local-agent-requests.ts`). The service refusing the
+ * host's version shuts the gate: the reads end, and every runner is
+ * stopped, as the quit stops them.
  */
 
 /** How long the follow rests while the gate is shut, and how often an open gate is read again. */
@@ -349,7 +323,7 @@ const VARIABLE = {
   PATH: "PATH",
 } as const;
 
-/** The variables of the developer's own a runner and a command are started with, read from the app's environment; nothing else of the app's is handed on. */
+/** The variables of the host's user a runner and a command are started with, read from the host's environment; nothing else of the host's is handed on. */
 const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAME, VARIABLE.LANG];
 
 /** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
@@ -395,23 +369,19 @@ export interface LocalAgentsUpdate {
 }
 
 export interface LocalAgentsDependencies {
-  kernel: Pick<HostKernel, "stateRoot" | "createId"> & { runMode: Pick<RunMode, "sendsNetwork"> };
-  account: Pick<AccountComposer, "capabilitiesActive">;
-  /** The account signed in now, by its id; none where nobody is. */
-  accountId: () => string | undefined;
-  /** The device id this device enrolled under, where it enrolled one, as a host does; minted once per account and kept otherwise. */
-  deviceId?: string | undefined;
+  kernel: Pick<HostKernel, "stateRoot" | "createId">;
+  /** The device id the host enrolled under. */
+  deviceId: string;
   /** Whether the device may ask the service now, shut while the service refuses it, read every `IDLE` while the gate is open. */
   switchedOn: Effect.Effect<boolean>;
   client: LocalAgentClient;
-  /** The host's update of itself, where it updates itself; none on This Mac and wherever else the device does not. */
+  /** The host's update of itself, where it runs from an account install's releases; none where it takes no notice of a newer release. */
   update?: LocalAgentsUpdate | undefined;
 }
 
-/** How a launch ended, which its settle carries until the service takes it: its runner's exit code where it exited with one, and why it never started where the device says. */
+/** How a launch ended, which its settle carries until the service takes it: its runner's exit code where it exited with one. */
 interface LaunchEnding {
   readonly exitCode?: number | undefined;
-  readonly refusal?: DeviceLaunchRefusal | undefined;
 }
 
 /** A runner this Mac started: the launch line it settles, its stdin, and the process it is. */
@@ -465,7 +435,7 @@ export function composeLocalAgents(
       const value = yield* Effect.orDie(Config.option(Config.String(name)).parse(environment));
       if (Option.isSome(value)) handedOn[name] = value.value;
     }
-    const { kernel, account, switchedOn, client } = dependencies;
+    const { kernel, deviceId, switchedOn, client } = dependencies;
 
     // -- the host's state ----------------------------------------------------
 
@@ -496,47 +466,10 @@ export function composeLocalAgents(
         ),
       );
 
-    /** The device id this account registers under on this device: the one it enrolled under, or the one kept for it, minted the first time. */
-    const deviceOf = (userId: string) =>
-      dependencies.deviceId !== undefined
-        ? Effect.succeed(dependencies.deviceId)
-        : writing.withPermit(
-            Effect.tap(localAgentDeviceOf(kernel.stateRoot, userId, kernel.createId), () =>
-              Effect.flatMap(readState, (read) => Ref.set(state, read)),
-            ),
-          );
-
-    const keepLaunch = (userId: string, id: string, agentId: string) =>
+    const keepLaunch = (id: string, agentId: string) =>
       updateState((current) => ({
         ...current,
-        launches: [...current.launches, { userId, id, agentId }],
-      }));
-
-    /**
-     * How the agent has run on this device: as kept, or, for one launched
-     * before the record on a device whose agents may have run directly on it
-     * (`formerlyDirect`), directly, where its checkout stands, since every
-     * such agent did. None for an agent never launched here, and on a device
-     * whose agents never ran so.
-     */
-    const ranAs = (agentId: string, checkoutPath: string) =>
-      Effect.gen(function* () {
-        if (!platform.formerlyDirect) return Option.none<DeviceIsolation>();
-        const kept = (yield* Ref.get(state)).modes?.[agentId];
-        if (kept !== undefined) return Option.some(kept);
-        const stands = yield* Effect.orElseSucceed(fileSystem.exists(checkoutPath), () => false);
-        return stands ? Option.some<DeviceIsolation>(DEVICE_ISOLATION.BARE) : Option.none();
-      });
-
-    const keepMode = (agentId: string, mode: DeviceIsolation) =>
-      updateState((current) => ({ ...current, modes: { ...current.modes, [agentId]: mode } }));
-
-    const forgetMode = (agentId: string) =>
-      updateState((current) => ({
-        ...current,
-        modes: Object.fromEntries(
-          Object.entries(current.modes ?? {}).filter(([kept]) => kept !== agentId),
-        ),
+        launches: [...current.launches, { id, agentId }],
       }));
 
     const forgetLaunch = (id: string) =>
@@ -591,60 +524,6 @@ export function composeLocalAgents(
         return Option.some(stamped);
       });
 
-    /**
-     * Every agent this machine made whose folder under the home folder given
-     * stands with no stamp of its use, from before the stamp, stamped as
-     * used as the gate opens, so a pass clears none of theirs until
-     * `FOLDER_UNUSED_FOR` after the first start that stamps.
-     */
-    const unstampedStamped = (folder: string) =>
-      Effect.gen(function* () {
-        const now = Math.floor(yield* Clock.currentTimeMillis);
-        const found: Record<string, number> = {};
-        for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
-          if (!AGENT_UUID.test(agentId)) continue;
-          if ((yield* Ref.get(state)).lastUsed?.[agentId] !== undefined) continue;
-          if (yield* folderStands(folder, agentId)) found[agentId] = now;
-        }
-        if (Object.keys(found).length === 0) return;
-        yield* updateState((current) => ({
-          ...current,
-          lastUsed: { ...found, ...current.lastUsed },
-        }));
-      });
-
-    /**
-     * Every agent this install's own state names kept as one whose folder
-     * it made (`keepOwnedAgent`), under the home folder given, so an agent
-     * it last ran before it kept that record is let go of as the rest are:
-     * each its `modes` names, which This Mac and a Mac's own `vespin-host`
-     * each keep in their own state, and each of a launch it kept; and, on a
-     * device whose agents' folders are its own alone (`storesOwned`), each
-     * with a folder there.
-     * Note that a Mac's are shared with another install, so nothing
-     * there is taken as this one's. Keeping one kept already changes
-     * nothing.
-     */
-    const adopted = (folder: string) =>
-      Effect.gen(function* () {
-        const { modes, launches } = yield* Ref.get(state);
-        const named = [
-          ...Object.keys(modes ?? {}),
-          ...launches.flatMap((launch) => launch.agentId ?? []),
-        ];
-        const stored = platform.storesOwned ? yield* storedAgents(folder) : [];
-        for (const agentId of new Set([...named, ...stored])) {
-          if (AGENT_UUID.test(agentId)) yield* keepOwnedAgent(kernel.stateRoot, agentId);
-        }
-      });
-
-    /** The agents with a folder under the home folder given, by id; none where they could not be listed. */
-    const storedAgents = (folder: string) =>
-      Effect.orElseSucceed(
-        fileSystem.readDirectory(path.join(folder, DEVICE_AGENT_FOLDER.ROOT)),
-        (): readonly string[] => [],
-      );
-
     // -- a turn's end ------------------------------------------------------------
 
     /**
@@ -662,7 +541,7 @@ export function composeLocalAgents(
 
     /**
      * The end of one of the agent's turns, whatever ended it, a run that
-     * died with the app or the gate among it: its GitHub token let go of,
+     * died with the host or the gate among it: its GitHub token let go of,
      * since no turn reads it any more, and its `tmp` emptied; the rest of
      * its folder, its repository, home and caches, stays for its next turn.
      */
@@ -677,18 +556,14 @@ export function composeLocalAgents(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideContext(call, services);
 
-    /** Whether this device runs local agents now: an account signed in, a run that sends, a home folder, and its switch on. */
-    const gateOpen = Effect.map(
-      switchedOn,
-      (on) =>
-        on && Option.isSome(home) && kernel.runMode.sendsNetwork && account.capabilitiesActive(),
-    );
+    /** Whether this device runs local agents now: a home folder, and its switch on. */
+    const gateOpen = Effect.map(switchedOn, (on) => on && Option.isSome(home));
 
     /** A beat, saying where the host's update stands while one is under way. */
-    const beatOf = (deviceId: string) =>
-      Effect.flatMap(dependencies.update?.beating ?? Effect.succeed(undefined), (updating) =>
-        asked(client.beat(deviceId, NOT_SIGNED_IN, updating)),
-      );
+    const beat = Effect.flatMap(
+      dependencies.update?.beating ?? Effect.succeed(undefined),
+      (updating) => asked(client.beat(deviceId, NOT_SIGNED_IN, updating)),
+    );
 
     /**
      * One beat given `BEAT_DEADLINE` to be answered, and sent again as
@@ -708,28 +583,19 @@ export function composeLocalAgents(
 
     /**
      * The beats, each `beaten` (a beat alone, or a follow's beat with its
-     * answer handed on), for as long as the gate stands and the account
-     * signed in is the one `userId` names; it returns once either changes.
-     * Note that they run every `BEAT_EVERY` on a fiber of their own, because
-     * the window reads a device as away from how long ago it beat, and
-     * nothing a beat's answer sets off may hold up the next.
+     * answer handed on), for as long as the gate stands; it returns once it
+     * shuts. Note that they run every `BEAT_EVERY` on a fiber of their own,
+     * because the window reads a device as away from how long ago it beat,
+     * and nothing a beat's answer sets off may hold up the next.
      */
-    const presence = (
-      userId: string,
-      deviceId: string,
-      beaten: Effect.Effect<unknown> = retriedBeat(beatOf(deviceId)),
-    ) =>
+    const presence = (beaten: Effect.Effect<unknown> = retriedBeat(beat)) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const standing = Effect.map(
-            gateOpen,
-            (open) => open && dependencies.accountId() === userId,
-          );
-          if (!(yield* standing)) return;
+          if (!(yield* gateOpen)) return;
           yield* Effect.forkScoped(Effect.repeat(beaten, Schedule.fixed(BEAT_EVERY)));
           for (;;) {
             yield* Effect.sleep(IDLE);
-            if (!(yield* standing)) return;
+            if (!(yield* gateOpen)) return;
           }
         }),
       );
@@ -751,8 +617,8 @@ export function composeLocalAgents(
      * Whether the device has its agents' CLIs (`LocalAgentClis.ready`),
      * asked each time the gate opens, and after a try that failed asked
      * again once `setupRetryAfter` has passed, one try at a time, for as
-     * long as the gate stands and the account is the one `userId` names; it
-     * answers false only once either changes. As the first fetch begins
+     * long as the gate stands; it answers false only once it shuts. As the
+     * first fetch begins
      * (`preparing`) the device registers as preparing and beats, so
      * the menus list it as getting ready rather than not at all; a try that
      * failed registers why and beats while it waits for the next, so it is
@@ -763,8 +629,6 @@ export function composeLocalAgents(
      * registered before, and that service would take an agent on it.
      */
     const readyForOpening = (
-      userId: string,
-      deviceId: string,
       registered: (
         setup: DeviceSetupRegister,
       ) => Effect.Effect<boolean, never, HttpClient.HttpClient>,
@@ -777,7 +641,7 @@ export function composeLocalAgents(
               // Note that it beats only once the service took the setup, since a beat after a refused register keeps an earlier ready row fresh.
               const preparing = Effect.gen(function* () {
                 if (yield* asked(registered({ setup: DEVICE_SETUP.PREPARING }))) {
-                  yield* Effect.forkIn(presence(userId, deviceId), scope);
+                  yield* Effect.forkIn(presence(), scope);
                 }
               });
               return yield* Effect.result(platform.clis.ready(preparing));
@@ -790,16 +654,16 @@ export function composeLocalAgents(
           );
           // Note that the device stays listed with why while it waits, beating only where the service took that, and the wait ends early as the gate shuts.
           const waited = yield* Effect.race(
-            Effect.as(presence(userId, deviceId, listed ? undefined : Effect.void), false),
+            Effect.as(presence(listed ? undefined : Effect.void), false),
             Effect.as(Effect.sleep(yield* setupRetryAfter(failed)), true),
           );
           if (!waited) return false;
         }
       });
 
-    // -- the developer's own environment ---------------------------------------------
+    // -- the host user's own environment ---------------------------------------------
 
-    /** The login shell's PATH, which a runner started from the Dock would otherwise go without. */
+    /** The login shell's PATH, which a runner started by the host's service manager would otherwise go without. */
     const loginPath = Effect.scoped(
       Effect.gen(function* () {
         const handle = yield* ChildProcess.make(shell, ["-l", "-c", 'printf %s "$PATH"'], {
@@ -817,10 +681,10 @@ export function composeLocalAgents(
 
     /**
      * What a runner and a command are started with of the device's own: the
-     * developer's identity and shell, and their login shell's PATH, which
+     * host user's identity and shell, and their login shell's PATH, which
      * the agent's commands and the repository's script find git on, read once
-     * each time the gate opens; never the rest of the app's environment,
-     * which is the app's and none of the agent's.
+     * each time the gate opens; never the rest of the host's environment,
+     * which is the host's and none of the agent's.
      */
     const shellEnvironment = Effect.map(
       loginPath,
@@ -833,15 +697,10 @@ export function composeLocalAgents(
       }),
     );
 
-    // -- one account's follow --------------------------------------------------
+    // -- the follow --------------------------------------------------
 
-    /** Everything one open gate runs for the account `userId` names, on the device it registered, from its home folder. */
-    const follow = (
-      userId: string,
-      deviceId: string,
-      folder: string,
-      shellVariables: Readonly<Record<string, string>>,
-    ) =>
+    /** Everything one open gate runs, on the device it registered, from its home folder. */
+    const follow = (folder: string, shellVariables: Readonly<Record<string, string>>) =>
       Effect.gen(function* () {
         const workers = yield* FiberMap.make<string>();
         const mailboxes = new Map<string, Queue.Queue<DeviceAgentClaimedLine>>();
@@ -865,8 +724,8 @@ export function composeLocalAgents(
 
         const answering = yield* FiberSet.make();
 
-        const settle = (id: string, exitCode?: number, refusal?: DeviceLaunchRefusal) =>
-          asked(client.settleLine(deviceId, id, exitCode, refusal));
+        const settle = (id: string, exitCode?: number) =>
+          asked(client.settleLine(deviceId, id, exitCode));
 
         /**
          * The step a launch line's launch has reached, reported on a fiber of
@@ -887,16 +746,16 @@ export function composeLocalAgents(
         const settledLaunch = (id: string, ending: LaunchEnding) =>
           Effect.gen(function* () {
             endings.set(id, ending);
-            if (!(yield* settle(id, ending.exitCode, ending.refusal))) return;
+            if (!(yield* settle(id, ending.exitCode))) return;
             endings.delete(id);
             yield* forgetLaunch(id);
           });
 
-        /** A launch whose runner never started, kept and settled as not started, naming why where the device says. */
-        const notStarted = (agentId: string, id: string, refusal?: DeviceLaunchRefusal) =>
+        /** A launch whose runner never started, kept and settled as not started. */
+        const notStarted = (agentId: string, id: string) =>
           Effect.gen(function* () {
-            yield* keepLaunch(userId, id, agentId);
-            yield* settledLaunch(id, { exitCode: NOT_STARTED, refusal });
+            yield* keepLaunch(id, agentId);
+            yield* settledLaunch(id, { exitCode: NOT_STARTED });
           });
 
         /**
@@ -1083,17 +942,6 @@ export function composeLocalAgents(
               return yield* notStarted(agentId, line.id);
             }
             const withRepository = payload.value.repository !== null;
-            // Note that an agent that ran on the developer's own logins on the Mac keeps its Git folder in the shared clone and its harness's sessions in the developer's own home, so it never starts again.
-            const ran = yield* ranAs(agentId, layout.checkoutPath);
-            if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) {
-              report(
-                "a local agent that ran on the developer's own logins on this Mac was not started, since its work is outside a folder of its own",
-              );
-              return yield* notStarted(agentId, line.id, DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY);
-            }
-            if (platform.formerlyDirect && Option.isNone(ran)) {
-              yield* keepMode(agentId, platform.deviceIsolation);
-            }
             // Note that the agent is kept as this machine's before its folder is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
             yield* usedNow(agentId);
@@ -1178,7 +1026,7 @@ export function composeLocalAgents(
             const handle = started.value;
             if (withRepository)
               yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
-            yield* keepLaunch(userId, line.id, agentId);
+            yield* keepLaunch(line.id, agentId);
             yield* Queue.offer(
               stdin,
               notedFirstLines(secrets.stdin, cleared ? [LAUNCH_NOTE.CLEARED] : [], cleared),
@@ -1335,8 +1183,6 @@ export function composeLocalAgents(
             yield* folderRemoved(layout);
             yield* usedForgotten(agentId);
             yield* forgetOwnedAgent(kernel.stateRoot, agentId);
-            // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
-            if ((yield* Ref.get(state)).modes?.[agentId] !== undefined) yield* forgetMode(agentId);
             if ((yield* Ref.get(state)).kept?.[agentId] !== undefined) {
               yield* updateState(({ kept, ...current }) => ({
                 ...current,
@@ -1579,17 +1425,11 @@ export function composeLocalAgents(
         /** The launch lines of the runners running now. */
         const runningLaunches = () => new Set([...runners.values()].map((runner) => runner.lineId));
 
-        /**
-         * Every kept launch of the account's whose runner ended, settled
-         * again with how it ended; let go of where the service took it, or
-         * where its answer (`open`) no longer holds the device to it, since a
-         * line long settled may be gone and refuse every settle.
-         */
         /** The beats in a row each kept launch the service no longer listed had its settle refused on, by line id. */
         const refusedUnlisted = new Map<string, number>();
 
         /**
-         * Every kept launch of the account's whose runner ended, settled
+         * Every kept launch whose runner ended, settled
          * again with how it ended; let go of where the service took it, or where its answer
          * (`open`) no longer listed it and its settle was refused on
          * `GONE_AFTER_REFUSALS` beats in a row, since a line long settled
@@ -1600,12 +1440,11 @@ export function composeLocalAgents(
           Effect.gen(function* () {
             const running = runningLaunches();
             const pending = (yield* Ref.get(state)).launches.filter(
-              (launch) =>
-                launch.userId === userId && !running.has(launch.id) && !starting.has(launch.id),
+              (launch) => !running.has(launch.id) && !starting.has(launch.id),
             );
             for (const launch of pending) {
               const ending = endings.get(launch.id);
-              if (!(yield* settle(launch.id, ending?.exitCode, ending?.refusal))) {
+              if (!(yield* settle(launch.id, ending?.exitCode))) {
                 const unlisted = open !== undefined && !open.has(launch.id);
                 const refusals = unlisted ? (refusedUnlisted.get(launch.id) ?? 0) + 1 : 0;
                 refusedUnlisted.set(launch.id, refusals);
@@ -1630,8 +1469,10 @@ export function composeLocalAgents(
             ...runningLaunches(),
             ...(yield* Ref.get(state)).launches.map((launch) => launch.id),
           ]);
-          const beat = yield* beatOf(deviceId);
-          return beat === undefined ? undefined : ({ beat, ran, knew } satisfies HeardBeat);
+          const answer = yield* beat;
+          return answer === undefined
+            ? undefined
+            : ({ beat: answer, ran, knew } satisfies HeardBeat);
         });
 
         /**
@@ -1701,7 +1542,7 @@ export function composeLocalAgents(
               }),
             );
             if (!stopped) return;
-            if (!(yield* update.switched(beatOf(deviceId)))) paused = false;
+            if (!(yield* update.switched(beat))) paused = false;
           });
 
         /** A beat's answer converged to (`reconciledBeat`), its release handed to the host's update, and the switch to one it holds where the device is idle. */
@@ -1755,7 +1596,7 @@ export function composeLocalAgents(
          * platform's check finds no change in it not committed
          * (`unsavedWork`), so its next launch starts afresh from its branch
          * (`LAUNCH_NOTE.CLEARED`); its stamp goes with it, but the agent
-         * stays this machine's, and its mode stays, since it is not archived.
+         * stays this machine's, since it is not archived.
          * One whose check finds work, or cannot say, is recorded so
          * (`holdingWork`) and kept.
          */
@@ -1796,8 +1637,7 @@ export function composeLocalAgents(
          * (`usedAt`), cleared longest unused first (`folderCleared`), each
          * only while its agent stands idle (`whileIdle`), so never a running
          * one's. Never one kept for work since its agent was left out
-         * (`kept`), one that ran on the developer's own logins, whose launch
-         * is refused for good, or one whose check found work, or could not
+         * (`kept`), or one whose check found work, or could not
          * say, at the use it stands at (`holdingWork`); and at most
          * `FOLDER_CHECKS_PER_PASS` checks run a pass. It runs last in a pass
          * (`swept`), so a read that was not answered clears no folder either.
@@ -1821,8 +1661,6 @@ export function composeLocalAgents(
             for (const { id, at } of unused.sort((one, other) => one.at - other.at)) {
               if (checks >= FOLDER_CHECKS_PER_PASS) return;
               if (keptAt[id] !== undefined || holdingWork.get(id) === at) continue;
-              const ran = yield* ranAs(id, deviceAgentLayout(folder, id).checkoutPath);
-              if (Option.exists(ran, (mode) => mode === DEVICE_ISOLATION.BARE)) continue;
               const ended = yield* whileIdle(id, folderCleared(id, at));
               if (Option.exists(ended, (end) => end !== CLEAR_END.PASSED_OVER)) checks += 1;
             }
@@ -1968,10 +1806,7 @@ export function composeLocalAgents(
         );
         const reconciling = Effect.forever(Effect.flatMap(Queue.take(latest), followedBeat));
         // Note that a reconcile that died ends the follow, as it did while it ran on the beat's own path, so the turn reports it and starts again.
-        yield* Effect.raceFirst(
-          presence(userId, deviceId, told),
-          Effect.provideContext(reconciling, services),
-        );
+        yield* Effect.raceFirst(presence(told), Effect.provideContext(reconciling, services));
       });
 
     /** The id this follower holds the machine's lease under (`follower-lock.ts`), minted once. */
@@ -2010,35 +1845,32 @@ export function composeLocalAgents(
 
     /**
      * One turn of the loop: with the gate shut, a rest; with it open, the
-     * machine's lease taken, the device registered, every agent its own
-     * state names kept as its own (`adopted`), every launch it kept
-     * from a runner that ended with the app or the gate settled as gone, its
+     * machine's lease taken, the device registered, every launch it kept
+     * from a runner that ended with the host or the gate settled as gone, its
      * turn let go of first, as is every other agent's this machine made, and
-     * the account's agents followed until the gate shuts or the account
-     * changes, when the follow's scope closes, every runner it started is
-     * stopped with its group, and the lease is given back.
+     * its agents followed until the gate shuts, when the follow's scope
+     * closes, every runner it started is stopped with its group, and the
+     * lease is given back.
      */
     const turn = Effect.gen(function* () {
-      const userId = dependencies.accountId();
-      if (!(yield* gateOpen) || userId === undefined || Option.isNone(home)) {
+      if (!(yield* gateOpen) || Option.isNone(home)) {
         return yield* Effect.sleep(IDLE);
       }
-      yield* Effect.scoped(openTurn(userId, home.value));
+      yield* Effect.scoped(openTurn(home.value));
     });
 
-    /** An open gate's turn for the account `userId` names, from its home folder, under the machine's lease. */
-    const openTurn = (userId: string, folder: string) =>
+    /** An open gate's turn, from its home folder, under the machine's lease. */
+    const openTurn = (folder: string) =>
       Effect.gen(function* () {
         const lost = yield* leased;
         if (Option.isNone(lost)) return yield* Effect.sleep(IDLE);
         // Note that a lease lost to another follower ends the turn wherever it stands, its setup's retries and the kept launches' recovery among it, so nothing of this follower's registers or settles a launch once another holds the machine, and the follow ends with every runner it started.
-        yield* Effect.race(underLease(userId, folder), lost.value);
+        yield* Effect.race(underLease(folder), lost.value);
       });
 
     /** What an open gate's turn does once it holds the machine's lease: the device readied and registered, the launches it kept settled, and its agents followed. */
-    const underLease = (userId: string, folder: string) =>
+    const underLease = (folder: string) =>
       Effect.gen(function* () {
-        const deviceId = yield* deviceOf(userId);
         const { tools } = platform;
         const registered = (setup: DeviceSetupRegister) =>
           client.register(deviceId, {
@@ -2056,7 +1888,7 @@ export function composeLocalAgents(
             ...setup,
           });
         // Note that the device registers as ready only once it has what its agents run on, so Start never takes one that cannot run an agent.
-        if (!(yield* readyForOpening(userId, deviceId, registered))) {
+        if (!(yield* readyForOpening(registered))) {
           return yield* Effect.sleep(IDLE);
         }
         const shellVariables = yield* shellEnvironment;
@@ -2064,15 +1896,10 @@ export function composeLocalAgents(
         // Note that the device beats from its register on while it recovers what the run before left, so a restart on a busy box never reads as away; the follow's own beats take over as it starts.
         yield* Effect.scoped(
           Effect.gen(function* () {
-            yield* Effect.forkScoped(presence(userId, deviceId));
-            // Note that the agents this install ran are kept as its own before its kept launches are settled and forgotten, and before its first pass runs.
-            yield* adopted(folder);
-            yield* unstampedStamped(folder);
-            const left = (yield* Ref.get(state)).launches.filter(
-              (launch) => launch.userId === userId,
-            );
+            yield* Effect.forkScoped(presence());
+            const left = (yield* Ref.get(state)).launches;
             for (const launch of left) {
-              // Note that a runner that ended with the app left its turn standing, so its turn is let go of before its launch is settled.
+              // Note that a runner that ended with the host left its turn standing, so its turn is let go of before its launch is settled.
               if (launch.agentId !== undefined) {
                 yield* turnLetGo(deviceAgentLayout(folder, launch.agentId));
               }
@@ -2080,14 +1907,14 @@ export function composeLocalAgents(
                 yield* forgetLaunch(launch.id);
               }
             }
-            // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; the agents of another install sharing `~/.vespin/agents` are never named here.
+            // Note that no runner runs yet, so whatever a run cut off left in the folder of any agent this machine made is let go of too; an agent this machine did not make is never named here.
             const kept = new Set(left.flatMap((launch) => launch.agentId ?? []));
             for (const agentId of yield* ownedAgents(kernel.stateRoot)) {
               if (!kept.has(agentId)) yield* turnLetGo(deviceAgentLayout(folder, agentId));
             }
           }),
         );
-        yield* Effect.scoped(follow(userId, deviceId, folder, shellVariables));
+        yield* Effect.scoped(follow(folder, shellVariables));
       });
 
     const lifetime = Effect.gen(function* () {

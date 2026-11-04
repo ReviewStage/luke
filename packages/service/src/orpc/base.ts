@@ -24,14 +24,14 @@
  */
 
 import "@orpc/experimental-effect/extensions/effect";
+import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
+import { implement } from "@orpc/server";
+import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { type KeyRing, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { keepWriteReceipt, writeReceiptStands } from "@repo/database/models/write-receipts";
 import { IDEMPOTENCY_KEY } from "@repo/features";
 import { hostedContract } from "@repo/features/contract";
-import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
-import { implement } from "@orpc/server";
-import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
 import { Context, Effect, Option, References, Result, Tracer } from "effect";
 import { Headers, HttpTraceContext } from "effect/http";
 import {
@@ -170,24 +170,17 @@ export interface DeviceCaller extends HostedCaller {
 /**
  * The caller as a device: an enrolled machine by its device secret, of any
  * platform (`auth/device-secret.ts`'s `hostCallerOf`, which refuses a
- * secret no standing machine holds and a host program below the floor).
- * A desktop's own sign-in, which released desktop builds followed the
- * queue on before every machine ran the host program, is refused as
- * needing an upgrade, so such a build says to update the app rather than
- * failing unexplained; any other bearer is refused as unauthenticated. The
- * one read of a device's caller, which the device-agents procedures and
- * the runner token route both take.
+ * secret no standing machine holds and a host program below the floor);
+ * any other bearer is refused as unauthenticated. The one read of a
+ * device's caller, which the device-agents procedures and the runner token
+ * route both take.
  */
 export const deviceCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  resolveUserId: UserIdResolver,
   request: Request,
 ): Effect.fn.Return<DeviceCaller, HostedRefusal, DatabaseServices> {
   const host = yield* hostCallerOf(request);
   if (Option.isSome(host)) return host.value;
-  const account = yield* resolvedAccount(resolveUserId, request);
-  return yield* Effect.fail(
-    Option.isSome(account) ? HOSTED_REFUSAL.HOST_UPGRADE_NEEDED : HOSTED_REFUSAL.INVALID_TOKEN,
-  );
+  return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
 });
 
 /** Whether a device's caller may act for the device named: an enrolled machine for itself alone, every route alike. */
@@ -196,11 +189,11 @@ export function actsForDevice(caller: DeviceCaller, deviceId: string): boolean {
 }
 
 /** The caller as a device (`deviceCallerOf`), by its bearer alone, on `bearerOnlyMiddleware`'s terms. */
-export function deviceMiddleware(resolveUserId: UserIdResolver) {
+export function deviceMiddleware() {
   return middlewareGen<HostedContext, AccountContext<DeviceCaller>>(function* ({ context, next }) {
     if (!hostedCarriesBearer(context.request))
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    const caller = yield* deviceCallerOf(resolveUserId, context.request);
+    const caller = yield* deviceCallerOf(context.request);
     return yield* next({ context: { ...caller, ...forAccount(context, caller.userId) } });
   });
 }

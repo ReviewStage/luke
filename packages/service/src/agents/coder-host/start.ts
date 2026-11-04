@@ -124,7 +124,6 @@ import {
   agentMachineChoice,
   agentRuntimeChoice,
   LocalAgentRefused,
-  localAgentRuntimeChoice,
   markedUnconnected,
 } from "./agent-runtime-choice.js";
 import { contextWindowOf } from "./context.js";
@@ -907,26 +906,13 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
- * chose, or for a local agent its Mac's own login where it has one
- * (`localAgentRuntimeChoice`), a blank Start, a continue and a fork alike.
+ * chose, a blank Start, a continue and a fork alike.
  * Where no credential of
  * the account's pays, the Start is refused by name, the provider beside
  * it, and nothing is written.
  */
-function startRuntimeOf(
-  userId: string,
-  model: string,
-  keys: AccountKeyRows,
-  asked: {
-    readonly machine?: AgentMachineKind | undefined;
-    readonly deviceId?: string | undefined;
-  },
-) {
-  const chosen =
-    asked.machine === AGENT_MACHINE.DEVICE
-      ? localAgentRuntimeChoice(userId, model, asked.deviceId, keys)
-      : agentRuntimeChoice(userId, model, keys);
-  return Effect.catch(chosen, (failure) =>
+function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
+  return Effect.catch(agentRuntimeChoice(userId, model, keys), (failure) =>
     failure instanceof AgentCredentialMissing
       ? Effect.fail(credentialMissing(failure.provider))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1242,7 +1228,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   if (!repositorylessOnHost(ask, landing, where)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
-  const runtime = yield* startRuntimeOf(userId, choice.model, keys, where.asked);
+  const runtime = yield* startRuntimeOf(userId, choice.model, keys);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
   const started = yield* hostedStoreOrUnavailable(
     createAgent(userId, {

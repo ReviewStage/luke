@@ -28,7 +28,7 @@ import {
   updateAgentChoice,
 } from "@repo/database/models/agent-store";
 import { readNativeRewind, rewindConversation } from "@repo/database/models/conversation-rewind";
-import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { registerDevice } from "@repo/database/models/device-store";
 import { installSkill } from "@repo/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@repo/database/models/provider-key-seal";
 import {
@@ -791,7 +791,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a local agent on a Mac signed in to Claude Code launches with no credential of the account's; once the Mac signs out, on the plan's refusal with none saved in Vespin, and on the account's key where Settings keeps the plan from agents",
+    "a local agent recorded on its Mac's sign-in launches on the plan's refusal with none saved in Vespin, and on the account's key where Settings keeps the plan from agents",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -800,12 +800,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` }),
         );
         const deviceId = randomUUID();
-        yield* registerDevice(userId, {
-          id: deviceId,
-          name: "Studio",
-          ...DEVICE_LAYOUT,
-          signedIn: { claudeCode: true },
-        });
+        yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
         const task = yield* startTask(userId, { name: "Teammate invitations" });
         const started = yield* createAgent(userId, {
           taskId: task.id,
@@ -823,18 +818,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(Option.isSome(started));
         const agent = started.value.agent;
 
-        const api = runnerSandboxApi();
-        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
-          Effect.provide(services(api)),
-        );
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        const [command] = api.commands;
-        assert.ok(command !== undefined);
-        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
-        assert.equal(command.env[RUNNER_ENV.API_KEY], undefined);
-
-        yield* beatDevice(userId, deviceId, { claudeCode: false });
         const signedOut = runnerSandboxApi();
         const without = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(signedOut)),

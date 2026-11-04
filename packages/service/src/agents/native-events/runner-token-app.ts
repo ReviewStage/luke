@@ -22,12 +22,12 @@
  *
  * A device asks here too, for a GitHub token for one of its agents
  * (`@repo/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
- * agents' VMs never reach a developer's git login: an enrolled machine on
+ * agents never reach a git login of the box's: an enrolled machine on
  * its device secret, a Linux box and a Mac alike, read as a device caller
- * (`../../orpc/base.ts`'s `deviceCallerOf`, which refuses a released
- * desktop build on its own sign-in's bearer as needing an upgrade) and held
+ * (`../../orpc/base.ts`'s `deviceCallerOf`) and held
  * to one rule (`deviceGithubToken`): the agent the member's own and pinned
- * to the caller's own device, and that device running its agents in a VM. It is
+ * to the caller's own device, and that device running its agents straight on
+ * the box. It is
  * answered only an installation token the App mints for the agent's
  * repository, on the terms the cloud's checkout mints its sandbox's
  * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
@@ -46,17 +46,12 @@ import {
   readAgentHeaderOfConversation,
   readAgentRouting,
 } from "@repo/database/models/agent-store";
-import { latestDeviceAgentLaunch } from "@repo/database/models/device-agent-store";
 import { deviceLayout } from "@repo/database/models/device-store";
 import { parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
-import {
-  DEVICE_ISOLATION,
-  type DeviceIsolation,
-  deviceAgentLaunchPayloadSchema,
-} from "@repo/features/device-agent-wire";
+import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@repo/features/host-wire";
 import { HTTP_METHOD } from "@repo/wire";
@@ -80,7 +75,6 @@ import {
   hostedStoreOrUnavailable,
   parseJsonBytes,
   readBodyBytesEffect,
-  type UserIdResolver,
 } from "../../http/http-effect.js";
 import { makeRateBrake, type RateBrake } from "../../http/rate-brake.js";
 import { actsForDevice, type DeviceCaller, deviceCallerOf } from "../../orpc/base.js";
@@ -89,12 +83,6 @@ import { CODER_REFUSAL } from "../coder-host/bounds.js";
 import { agentRepositoryToken } from "../coder-host/checkout.js";
 import { CODEX_TOKEN_MARGIN } from "../coder-host/codex-sessions.js";
 import { admitRunnerBearer, presentedBearer } from "../workspace-mcp/bearer.js";
-
-/** What the route is handed of the deployment's. */
-export interface RunnerTokenSeams {
-  /** The account a desktop's own sign-in names, read from its bearer alone, never a browser's session, so a released desktop build is refused as needing an upgrade. */
-  readonly resolveUserId: UserIdResolver;
-}
 
 /** The path a runner's token command, and a host asking for its agent's GitHub token, post to. */
 export const RUNNER_TOKEN_PATH = HOSTED_SERVICE_PATH.RUNNER_TOKEN;
@@ -123,27 +111,7 @@ const REFUSAL_OF_ACCESS = {
   [CHATGPT_ACCESS.INELIGIBLE]: HOSTED_REFUSAL.AGENT_PLAN_INELIGIBLE,
 } as const satisfies Record<Exclude<ChatGptAccess["outcome"], "ready">, HostedRefusal>;
 
-const decodeLaunchPayload = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 const decodeGithubTokenRequest = Schema.decodeUnknownOption(hostGithubTokenRequestSchema);
-
-/**
- * Whether the agent's newest launch runs on its Mac's own sign-in, as its
- * launch line recorded it (`RunnerMark.ownLogin`), whatever the Mac says of
- * its sign-in since; one with no launch, or none the store can read, reads
- * as so, and is handed nothing.
- */
-const launchedOnMacLogin = (userId: string, agentId: string) =>
-  hostedStoreOrUnavailable(
-    Effect.map(latestDeviceAgentLaunch(userId, agentId), (launch) =>
-      Option.match(
-        Option.flatMap(launch, (line) => decodeLaunchPayload(line.payload)),
-        {
-          onNone: () => true,
-          onSome: (payload) => payload.ownLogin === true,
-        },
-      ),
-    ),
-  );
 
 /** The agent the body names, as the member's store reads it; refused where the body names none. */
 const askedAgent = /* @__PURE__ */ Effect.fn("web/askedAgent")(function* (userId: string) {
@@ -186,22 +154,14 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** How a device runs agents that we hand a GitHub token: on our sign-ins, in a VM or straight on the device. */
-const ON_OUR_SIGN_INS: ReadonlySet<DeviceIsolation> = new Set([
-  DEVICE_ISOLATION.SANDBOX,
-  DEVICE_ISOLATION.DIRECT,
-]);
-
 /**
  * A GitHub token for a device's own agent named in the body, the one rule
  * every device caller is held to: an installation token for the agent's
  * repository, where the agent is the member's own and pinned to the caller's own device
- * (`actsForDevice`), that device runs its agents on our sign-ins, in a VM
- * of their own (`DEVICE_ISOLATION.SANDBOX`) or straight on the device
- * (`DEVICE_ISOLATION.DIRECT`), never on its developer's own logins
- * (`DEVICE_ISOLATION.BARE`), whose agents push on those, and the agent works in a
- * repository the installation of its task's workspace reaches; refused
- * otherwise.
+ * (`actsForDevice`), that device last registered as running its agents on
+ * our sign-ins straight on the box (`DEVICE_ISOLATION.DIRECT`), and the agent
+ * works in a repository the installation of its task's workspace reaches;
+ * refused otherwise.
  */
 const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(function* (
   caller: DeviceCaller,
@@ -226,7 +186,7 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   }
   // Note that the device is read under the member, so another member's device reads as none.
   const standing = yield* hostedStoreOrUnavailable(deviceLayout(userId, deviceId));
-  if (!Option.exists(standing, (each) => ON_OUR_SIGN_INS.has(each.isolation))) {
+  if (!Option.exists(standing, (each) => each.isolation === DEVICE_ISOLATION.DIRECT)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
   return yield* repositoryTokenFor(userId, agent.value, brake);
@@ -235,7 +195,6 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
 /** POST: the plan's access token, for the Codex agent on the plan the bearer stands for; or, on a host's device secret, its agent's GitHub token. */
 const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")(function* (
   brake: RateBrake,
-  seams: RunnerTokenSeams,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -255,7 +214,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
   // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
   if (Option.isNone(admitted)) {
-    return yield* deviceGithubToken(yield* deviceCallerOf(seams.resolveUserId, request), brake);
+    return yield* deviceGithubToken(yield* deviceCallerOf(request), brake);
   }
   const { target } = admitted.value;
   const agent = yield* hostedStoreOrUnavailable(
@@ -264,19 +223,15 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const routing = yield* hostedStoreOrUnavailable(readAgentRouting(target.userId, agent.value.id));
   // Note that only an agent its starter's plan pays for, on Codex, is handed the plan's token: one
-  // started on the plan, or a local one started on its Mac's own sign-in whose running launch
-  // turned to the plan as that Mac was signed out of Codex (`codex-sessions.ts`'s `savedPayer`),
-  // which its launch line records, so a sign-in on the Mac since cuts no plan-backed turn short.
+  // started on the plan, or one recorded with an older payer whose launch turns to the plan
+  // (`codex-sessions.ts`'s `savedPayer`).
   const payer = Option.getOrUndefined(
     Option.flatMap(
       Option.filter(routing, (row) => row.runtime === CONVERSATION_RUNTIME.CODEX),
       (row) => Option.fromNullishOr(row.payer),
     ),
   );
-  const onPlan =
-    payer === AGENT_PAYER.CHATGPT_SUBSCRIPTION ||
-    (payer === AGENT_PAYER.MAC_SIGN_IN &&
-      !(yield* launchedOnMacLogin(target.userId, agent.value.id)));
+  const onPlan = payer === AGENT_PAYER.CHATGPT_SUBSCRIPTION || payer === AGENT_PAYER.MAC_SIGN_IN;
   if (!onPlan) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (!(yield* brake.check(agent.value.id))) {
     return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
@@ -298,10 +253,10 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
 });
 
 /** The group: the one token path, braked per agent, and the hosted vocabulary's own refusal for any other. */
-export function runnerTokenApp(
-  seams: RunnerTokenSeams,
-): WebRoutes<DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp> {
-  const endpoint = runnerTokenEndpoint(makeRateBrake(RUNNER_TOKEN_BRAKE), seams);
+export function runnerTokenApp(): WebRoutes<
+  DatabaseServices | HostedEnvironment | HttpClient.HttpClient | GitHubApp
+> {
+  const endpoint = runnerTokenEndpoint(makeRateBrake(RUNNER_TOKEN_BRAKE));
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, RUNNER_TOKEN_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,

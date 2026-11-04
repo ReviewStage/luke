@@ -513,9 +513,7 @@ host off stops it and keeps it from starting at the next login, with its files
 left in place; `vespin-host uninstall` removes it, with the folders of the
 agents it ran. To run them, `vespin-host` downloads Claude Code, Codex, and
 GitHub's CLI from their publishers once, and keeps each in its own folder on
-your Mac only once it matches the checksum Vespin pins. An agent that ran on
-your Mac before Vespin gave each agent a folder of its own is not started
-again; continue it into a new agent.
+your Mac only once it matches the checksum Vespin pins.
 
 **A local agent on a host.** A host is a Linux machine or Mac of your own
 that you add to Vespin to run your agents, as This Mac does. Each agent on

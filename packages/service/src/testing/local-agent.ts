@@ -16,9 +16,10 @@ import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/s
 import { DEVICE_LAYOUT, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
+import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
-import { DateTime, Effect, Layer, Option, Redacted } from "effect";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { AgentSandboxImage } from "../agents/agent-sandbox-image.js";
 import { claudeCodeSessions } from "../agents/coder-host/claude-code-sessions.js";
 import { RunnerBundle } from "../agents/coder-host/runner-bundle.js";
@@ -28,16 +29,17 @@ import { AgentMachine } from "../agents/machine/agent-machine.js";
 import { deviceMachine } from "../agents/machine/device-machine.js";
 import { HostedEnvironment } from "../environment.js";
 import { LINK_OUTCOME } from "../github/github-installations.js";
+import { AGENT_KEY_RING, connectAgentApiKeys } from "./agent-credentials.js";
 import { connectWorkspaceGitHub, type InstallationFixture, NO_GITHUB } from "./github-app-fake.js";
 
-/** How a local agent is opened: in the repository the installation given reaches, on the harness given, and on its Mac's own Claude Code login where asked. */
+/** How a local agent is opened: in the repository the installation given reaches, on the harness given, and on its starter's own Anthropic API key where asked. */
 export interface LocalAgentOptions {
   /** The installation reaching the repository it works in, connected to its task's workspace; none for an agent in no repository. */
   readonly installation?: InstallationFixture;
   /** The harness its conversation runs on, as Start records it; the store's own where none is named. */
   readonly runtime?: ConversationRuntime;
-  /** Whether its Mac is signed in to Claude Code itself, and the agent started to run on that login, as Start chooses it there. */
-  readonly onMacLogin?: boolean;
+  /** Whether its starter saved an Anthropic API key, and the agent started to run on it, as Start chooses it then. */
+  readonly onApiKey?: boolean;
 }
 
 /**
@@ -51,12 +53,10 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const deviceId = randomUUID();
-    yield* registerDevice(userId, {
-      id: deviceId,
-      name: "Studio",
-      ...DEVICE_LAYOUT,
-      ...(options.onMacLogin === true ? { signedIn: { claudeCode: true } } : undefined),
-    });
+    yield* registerDevice(userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+    if (options.onApiKey === true) {
+      yield* connectAgentApiKeys(userId, { providers: [PROVIDER_KEY_PROVIDER.ANTHROPIC] });
+    }
     const { installation } = options;
     const reached = installation?.repositories[0];
     const repository = reached === undefined ? null : `${reached.owner}/${reached.name}`;
@@ -78,7 +78,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       machine: AGENT_MACHINE.DEVICE,
       deviceId,
       runtime: options.runtime ?? CONVERSATION_RUNTIME.CLAUDE_CODE,
-      ...(options.onMacLogin === true ? { payer: AGENT_PAYER.MAC_SIGN_IN } : undefined),
+      ...(options.onApiKey === true ? { payer: AGENT_PAYER.API_KEY } : undefined),
     });
     const { agent } = Option.getOrThrow(started);
     const session = `cc-${randomUUID()}`;
@@ -121,7 +121,7 @@ export const localAgentSessions = (userId: string) =>
     DatabaseServices | HostedEnvironment
   >;
 
-/** The deployment's environment a local agent's launch is sealed under: a key ring, and nothing else. */
+/** The deployment's environment a local agent's launch is sealed under, and its saved keys opened with: a key ring, and nothing else. */
 export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
@@ -130,7 +130,7 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   posthogIngestHost: undefined,
   cronSecret: undefined,
   githubWebhookSecret: undefined,
-  providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 5).toString("base64")}`),
+  providerKeyEncryptionKeys: AGENT_KEY_RING,
 });
 
 /** The developer's message as the store hands it to the agent's sessions. */
@@ -141,7 +141,7 @@ export const typedMessage = (agent: Agent, text: string) => ({
 });
 
 /**
- * A local agent on its Mac's own login whose Start launched its runner,
+ * A local agent on its starter's API key whose Start launched its runner,
  * which its Mac took, and whose first turn then settled, as its IDLE's
  * batch writes it: the agent, its sessions, the session its Start claimed,
  * and the turn that settled.
@@ -150,7 +150,7 @@ export const warmLocalAgent = Effect.gen(function* () {
   const db = yield* Database;
   const opened = yield* openLocalAgent({
     runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-    onMacLogin: true,
+    onApiKey: true,
   });
   const { userId, deviceId, agent } = opened;
   const sessions = yield* localAgentSessions(userId);

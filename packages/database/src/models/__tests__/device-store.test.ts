@@ -174,14 +174,14 @@ it.layer(getTestDB())("the device store", (it) => {
         id,
         name: "Studio",
         ...DEVICE_LAYOUT,
-        isolation: DEVICE_ISOLATION.SANDBOX,
+        isolation: DEVICE_ISOLATION.DIRECT,
       });
-      const sandboxed = yield* isolationNow;
+      const direct = yield* isolationNow;
       // A desktop from before the field names none.
       yield* registerDevice(owner, { id, name: "Studio", ...DEVICE_LAYOUT });
       const unnamed = yield* isolationNow;
 
-      assert.deepEqual(sandboxed, Option.some(DEVICE_ISOLATION.SANDBOX));
+      assert.deepEqual(direct, Option.some(DEVICE_ISOLATION.DIRECT));
       assert.deepEqual(unnamed, Option.some(DEVICE_ISOLATION.BARE), "a register again moves it");
     }),
   );

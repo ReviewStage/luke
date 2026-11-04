@@ -623,12 +623,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         const { owner, other, task, eve, ask } = yield* openTask();
         yield* joinWorkspace(task.workspaceId, other);
         const studio = randomUUID();
-        yield* registerDevice(owner, {
-          id: studio,
-          name: "Studio",
-          ...DEVICE_LAYOUT,
-          signedIn: { claudeCode: true },
-        });
+        yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
         const onStudio = yield* createTask(owner, {
           organizationId: task.workspaceId,
           name: "On the Studio",

@@ -7,7 +7,7 @@ import { ChildProcess } from "effect/process";
 import { app } from "electron";
 
 /**
- * host-login-item.ts -- This Mac's host as the host asks it (`@repo/host/effect`'s `ThisMacHost`): the account install the install command puts on a Mac, its LaunchAgent started or stopped through launchd, and the install script run.
+ * this-mac-host.ts -- This Mac's host as the host asks it (`@repo/host/effect`'s `ThisMacHost`): the account install the install command puts on a Mac, its LaunchAgent started or stopped through launchd, and the install script run.
  *
  * The install lives under the member's own home, by the names the install
  * script gives it (`apps/web/install/install.sh`): its state, holding the

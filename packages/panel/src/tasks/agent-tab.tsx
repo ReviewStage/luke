@@ -2888,7 +2888,6 @@ function AgentTabView({
                             transcript.failure,
                             starter,
                             continuable,
-                            transcript.ranDirectly,
                             transcript.hostLost,
                             transcript.launchStopped === undefined
                               ? undefined
@@ -3215,7 +3214,6 @@ function AgentTabBody({
     status: agent.status,
     endReason: endLineReason(transcript.failure, starter),
     failure: transcript.failure,
-    ranDirectly: transcript.ranDirectly !== undefined,
     continued: continued.length > 0,
     boxClosed: composer.closed !== undefined,
   });

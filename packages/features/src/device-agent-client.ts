@@ -12,7 +12,6 @@ import {
   type DeviceArch,
   type DeviceCapability,
   type DeviceIsolation,
-  type DeviceLaunchRefusal,
   type DeviceLaunchStep,
   type DeviceMachine,
   type DevicePlatform,
@@ -418,32 +417,17 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /**
-   * One line settled, a launch line with its runner's exit code where it
-   * exited with one, and why it never started where the device says;
-   * whether the service took it. Note that a settle naming why is asked
-   * again without it where the service refuses it, since a service from
-   * before the field refuses a request naming any key it does not know.
-   */
+  /** One line settled, a launch line with its runner's exit code where it exited with one; whether the service took it. */
   settleLine(
     deviceId: string,
     id: string,
     exitCode?: number,
-    refusal?: DeviceLaunchRefusal,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    const settled = (named: DeviceLaunchRefusal | undefined) =>
-      askHosted(this.#hosted.deviceAgents.settleLine, {
-        deviceId,
-        id,
-        ...(exitCode === undefined ? {} : { exitCode }),
-        ...(named === undefined ? {} : { refusal: named }),
-      });
-    return settled(refusal).pipe(
-      Effect.catch((failed) =>
-        refusal !== undefined && failed._tag === "HostedRefused"
-          ? settled(undefined)
-          : Effect.fail(failed),
-      ),
+    return askHosted(this.#hosted.deviceAgents.settleLine, {
+      deviceId,
+      id,
+      ...(exitCode === undefined ? {} : { exitCode }),
+    }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

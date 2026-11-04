@@ -34,12 +34,7 @@
  * (`macOffers`) each that beat within `THIS_MAC.FRESH`, and the agent is
  * pinned to the one the Start named, once it is checked to be among them. A local agent runs
  * Claude Code, or Codex on a Mac that registered a Codex it checked; one on
- * Codex on a Mac with none, or on no harness at all, is refused by name. A
- * local agent whose Mac is signed in to the model's harness itself, Claude
- * Code for a Claude model or Codex for a GPT model, runs on that login
- * (`localAgentRuntimeChoice`), whatever the account saved in the app, and that
- * Mac offers the harness's models whether or not the account could pay for
- * them.
+ * Codex on a Mac with none, or on no harness at all, is refused by name.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -125,18 +120,6 @@ const ON_CLAUDE_CODE_API_KEY: AgentRuntimeChoice = {
 const ON_CODEX_API_KEY: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CODEX,
   payer: AGENT_PAYER.API_KEY,
-};
-
-/** Codex on a local agent's own Mac, by Codex's own sign-in there, which needs no credential of the account's. */
-const ON_MAC_CODEX: AgentRuntimeChoice = {
-  runtime: CONVERSATION_RUNTIME.CODEX,
-  payer: AGENT_PAYER.MAC_SIGN_IN,
-};
-
-/** Claude Code on a local agent's own Mac, by Claude Code's login there, which needs no credential of the account's. */
-const ON_MAC_CLAUDE_CODE: AgentRuntimeChoice = {
-  runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
-  payer: AGENT_PAYER.MAC_SIGN_IN,
 };
 
 const ON_CODEX: AgentRuntimeChoice = {
@@ -259,17 +242,15 @@ const runsCodex = (device: Device): boolean => device.codexExecutable !== null;
 /**
  * Whether the Mac runs a Start of the provider's models: Claude Code's
  * anywhere, Codex's where it checked a Codex; where the account pays for the
- * harness in the app (`paid`), or the Mac is signed in to it itself.
+ * harness in the app (`paid`).
  */
 function macRunsProvider(
   device: Device,
   provider: ModelProvider,
   paid: readonly ModelProvider[],
 ): boolean {
-  if (provider === MODEL_PROVIDER.ANTHROPIC) {
-    return paid.includes(provider) || device.signedIn.claudeCode === true;
-  }
-  return runsCodex(device) && (paid.includes(provider) || device.signedIn.codex === true);
+  if (!paid.includes(provider)) return false;
+  return provider === MODEL_PROVIDER.ANTHROPIC || runsCodex(device);
 }
 
 /** The provider whose models a native runtime runs, which the Mac a Start names must list. */
@@ -295,55 +276,12 @@ const paidMacProviders = Effect.fnUntraced(function* (
   return paid;
 });
 
-/** The account's Macs that beat within `THIS_MAC.FRESH`, the latest first. */
-const freshMacs = (userId: string) =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    return yield* devicesSeenSince(userId, new Date(now - Duration.toMillis(THIS_MAC.FRESH)));
-  });
-
-/**
- * The runtime and payer of a new local agent of the account's on the model
- * given, on the Mac its Start named: the model's harness on that Mac's own
- * login, the Mac's first for a local agent, where the Mac, one of the
- * account's that beat within `THIS_MAC.FRESH`, said it is signed in to it,
- * Claude Code for a Claude model, Codex for a GPT model on a Mac that
- * checked a Codex; otherwise as any agent's (`agentRuntimeChoice`), on the
- * account's saved credential. So an account that saved no credential of the
- * provider's in the app still starts one on a Mac signed in to its harness.
- * Note that the Mac read here is the one the Start pins (`agentMachineChoice`),
- * by its id, so the payer and the pin are of the same Mac.
- */
-export const localAgentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  model: string,
-  deviceId: string | undefined,
-  rows?: AccountKeyRows,
-): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
-  const provider = yield* providerOfModel(model);
-  if (deviceId !== undefined) {
-    const named = (yield* freshMacs(userId)).find((device) => device.id === deviceId);
-    if (provider === MODEL_PROVIDER.ANTHROPIC && named?.signedIn.claudeCode === true) {
-      return ON_MAC_CLAUDE_CODE;
-    }
-    if (
-      provider === MODEL_PROVIDER.OPENAI &&
-      named !== undefined &&
-      runsCodex(named) &&
-      named.signedIn.codex === true
-    ) {
-      return ON_MAC_CODEX;
-    }
-  }
-  return yield* agentRuntimeChoice(userId, model, rows);
-});
-
 /**
  * The devices a task of the account's may run its agents on, as the menus
  * offer them: each device it registered, the latest beat first, with its
  * kind and last beat, so a device away now is offered but drawn away, and
  * the providers an agent on it runs that the account can pay for
- * (`paidMacProviders`), or that its own harness login pays for. Only one
+ * (`paidMacProviders`). Only one
  * that beat within `THIS_MAC.FRESH` takes a task's Runs on or an agent
  * (`freshOffer`).
  * Note that every one is offered by name rather than one as This Mac,

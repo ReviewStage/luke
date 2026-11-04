@@ -13,7 +13,7 @@
  * (`vespin-host.sh`), and a systemd user unit or a LaunchAgent running `run`
  * through `current`, and again a minute after any exit. This Mac's host is
  * that same install, which the desktop app starts and stops through launchd
- * (`apps/desktop/src/main/native/host-login-item.ts`).
+ * (`apps/desktop/src/main/native/this-mac-host.ts`).
  *
  * `run` is the command the service runs. A box that never connected says
  * so and reads its record again every `UNENROLLED_REST`, rather than

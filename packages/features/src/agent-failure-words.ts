@@ -5,7 +5,6 @@ import {
   type NativeAgentRuntime,
 } from "./agent-wire.js";
 import { DEVICE_LAUNCH_STEP, type DeviceLaunchStep } from "./device-agent-wire.js";
-import { PRODUCT_NAME } from "./product-name.js";
 
 /**
  * agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
@@ -53,18 +52,6 @@ const MENDED_BY_NEW_AGENT: ReadonlySet<AgentFailure> = new Set([
   AGENT_FAILURE.SESSION_ENDED,
   AGENT_FAILURE.CONTEXT_OVERFLOW,
 ]);
-
-/**
- * Why an agent that ran on its Mac before we gave each agent a folder of
- * its own failed there, and where its work still is, said whole in place of
- * a failure's words: on the reader's own Mac where no one is named, else on
- * the named starter's, whose Mac holds it.
- */
-export function ranDirectlyWords(folder: string, starter: string | undefined): string {
-  const mac = starter === undefined ? "your Mac" : `${starter}'s Mac`;
-  const there = starter === undefined ? "" : " there";
-  return `This agent ran on ${mac} before ${PRODUCT_NAME} gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in ${folder}${there}. Continue in a new agent to carry on.`;
-}
 
 /**
  * Why an agent whose host stopped beating while its turn ran failed, said
