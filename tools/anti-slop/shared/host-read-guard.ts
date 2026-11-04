@@ -1,25 +1,23 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { Schema } from "effect";
-
 import { ACT_USE, PORT_ACT_USE } from "../../../packages/host/src/contract/kinds.ts";
 import { TYPESCRIPT_SOURCE } from "./effect-edges.ts";
 import { isTestFile } from "./kept-guard.ts";
 
 /**
  * host-read-guard.ts -- what the `no-follow-outside-host-read` rule reads:
- * the one module a surface reads server data through, the kinds that read
- * it, as `@repo/host`'s `PORT_ACT_USE` declares them, and the files not yet
- * moved, each with the child that moves it.
+ * the one module a surface reads server data through, the door it holds its
+ * reads open by, and the kinds that read, as `@repo/host`'s `PORT_ACT_USE`
+ * declares them.
  */
 export const HOST_READ_GUARD_RULE = "anti-slop/no-follow-outside-host-read";
 
-const PLUGIN_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
 /** The hook every surface reads server data through, the one module that may open a read. */
 const HOOK_FILE = "packages/panel/src/use-host-read.ts";
+
+/** The hook's door: it opens and polls the streams the hook holds, and only the hook imports it. */
+const DOOR_FILE = "packages/panel/src/act-stream.ts";
+
+/** The door's module, by its name however the path to it is spelled, with or without an extension. */
+const DOOR_MODULE = /(?:^|\/)act-stream(?:\.[cm]?[jt]s)?$/u;
 
 /** The panel's and the design system's own code, which the rule watches; a test, and what tests share, stand in for the host and are left be. */
 export function isWatchedSource(file: string): boolean {
@@ -29,6 +27,16 @@ export function isWatchedSource(file: string): boolean {
     !isTestFile(file) &&
     file !== HOOK_FILE
   );
+}
+
+/** Whether a file is the hook's door, which opens and polls what the hook holds and so reads nothing of its own. */
+export function isHoldDoor(file: string): boolean {
+  return file === DOOR_FILE;
+}
+
+/** Whether an import's specifier names the hook's door, from whatever folder it is spelled. */
+export function namesHoldDoor(specifier: string): boolean {
+  return DOOR_MODULE.test(specifier);
 }
 
 /** The helpers that hold a follow open on the window's act port. */
@@ -45,18 +53,3 @@ const READ_KINDS: ReadonlySet<string> = new Set(
 export function isReadKind(name: string): boolean {
   return READ_KINDS.has(name);
 }
-
-const StepsSchema = Schema.Record(
-  Schema.NonEmptyString,
-  Schema.String.check(Schema.isPattern(/^P\d+(?:, P\d+)*: \S/u)),
-);
-
-/**
- * The files that still read outside `useHostRead`, each with the children
- * of the rollout that move it, as `P5: plan comments`. A file here may read;
- * a file that reads nothing fails, so the list only shrinks: each child
- * takes its number out of a row, and the last child a row names deletes it.
- */
-export const UNMIGRATED_READS: Readonly<Record<string, string>> = Schema.decodeUnknownSync(
-  Schema.fromJsonString(StepsSchema),
-)(readFileSync(path.join(PLUGIN_DIRECTORY, "reads-unmigrated.json"), "utf8"));

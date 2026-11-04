@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, it } from "vitest";
 
-import { UNMIGRATED_READS } from "../shared/host-read-guard.ts";
 import { noFollowOutsideHostReadRule } from "./no-follow-outside-host-read.ts";
 
 const REPOSITORY_ROOT = path.resolve(
@@ -14,9 +13,9 @@ const REPOSITORY_ROOT = path.resolve(
   "..",
 );
 const HOOK_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/use-host-read.ts");
+const DOOR_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/act-stream.ts");
 const NEW_FILE = path.join(REPOSITORY_ROOT, "packages/panel/src/tasks/not-on-the-list.ts");
 const NEW_UI_FILE = path.join(REPOSITORY_ROOT, "packages/ui/src/not-on-the-list.ts");
-const LISTED_FILE = path.join(REPOSITORY_ROOT, Object.keys(UNMIGRATED_READS)[0] ?? "");
 const STREAM = "streamFrom(() => askAct(ACT_KIND.AUTOMATIONS_FOLLOW, { workspaceId }), take);\n";
 
 RuleTester.describe = describe;
@@ -28,8 +27,15 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
   valid: [
     // The hook's own module opens what it reads.
     { code: STREAM, filename: HOOK_FILE },
-    // A file on the list, until its step moves it.
-    { code: STREAM, filename: LISTED_FILE },
+    // The hook's door opens and polls what the hook holds.
+    {
+      code: [
+        "const next = Effect.tryPromise({ try: () => stream.next(), catch: unheard });",
+        "Effect.forever(next);",
+        "rendererFork(followStream(open, take));",
+      ].join("\n"),
+      filename: DOOR_FILE,
+    },
     // A write and a fetch read nothing a surface shows.
     { code: "act(ACT_KIND.TASKS_RENAME, { taskId, name });", filename: NEW_FILE },
     { code: "act(ACT_KIND.TASKS_FILE, { taskId, path });", filename: NEW_FILE },
@@ -94,11 +100,21 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       filename: NEW_UI_FILE,
       errors: [{ messageId: "newPoll" }],
     },
-    // A file on the list that reads nothing any more.
+    // The hook's door reached from anywhere else: under an alias, re-exported, imported late, or required.
     {
-      code: "export const nothing = 1;",
-      filename: LISTED_FILE,
-      errors: [{ messageId: "staleListed" }],
+      code: [
+        'import { streamFrom as hold } from "../act-stream.js";',
+        'export { followStream } from "../act-stream.js";',
+        'const door = import("../act-stream.js");',
+        'const required = require("../act-stream.js");',
+      ].join("\n"),
+      filename: NEW_FILE,
+      errors: [
+        { messageId: "doorImport" },
+        { messageId: "doorImport" },
+        { messageId: "doorImport" },
+        { messageId: "doorImport" },
+      ],
     },
   ],
 });
