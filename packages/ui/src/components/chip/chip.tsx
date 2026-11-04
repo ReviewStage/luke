@@ -192,31 +192,31 @@ const CHIP_BASE =
 
 /**
  * Each look's face at rest and under the pointer, while its menu is open,
- * and pressed. Note that hover is a plain `:hover`, as it always was, rather
- * than Tailwind's hover-capable one, and that a press outranks the hover it
- * lands on by its longer selector.
+ * and pressed. Note that a press outranks the hover it lands on by coming
+ * after it, and that hover is Tailwind's, which only a pointer that hovers
+ * reaches, so a tap leaves no hover lit.
  */
 const LOOK_FACE = {
   [CHIP_LOOK.TOOLBAR]:
-    "border-transparent bg-transparent text-body-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-fill-selected [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground active:not-disabled:not-aria-disabled:bg-fill-pressed",
+    "border-transparent bg-transparent text-body-foreground hover:not-disabled:not-aria-disabled:bg-fill-selected hover:not-disabled:not-aria-disabled:text-foreground aria-expanded:bg-fill-selected aria-expanded:text-foreground active:not-disabled:not-aria-disabled:bg-fill-pressed",
   [CHIP_LOOK.FIELD]:
-    "border-border bg-transparent text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-fill-selected aria-expanded:bg-fill-selected active:not-disabled:not-aria-disabled:bg-fill-pressed",
+    "border-border bg-transparent text-foreground hover:not-disabled:not-aria-disabled:bg-fill-selected aria-expanded:bg-fill-selected active:not-disabled:not-aria-disabled:bg-fill-pressed",
   [CHIP_LOOK.PILL]:
-    "border-chip-edge bg-chip text-muted-foreground in-data-[ui-profile=web]:text-foreground [&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true])]:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
+    "border-chip-edge bg-chip text-muted-foreground in-data-[ui-profile=web]:text-foreground hover:not-disabled:not-aria-disabled:bg-chip-hover hover:not-disabled:not-aria-disabled:text-foreground aria-expanded:bg-chip-hover aria-expanded:text-foreground",
   [CHIP_LOOK.FILTER]:
-    "border-chip-edge bg-chip text-muted-foreground [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:bg-chip-hover [&:hover:not(:disabled,[aria-disabled=true],[aria-pressed=true])]:text-foreground aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-ink-foreground",
+    "border-chip-edge bg-chip text-muted-foreground hover:not-disabled:not-aria-disabled:not-aria-pressed:bg-chip-hover hover:not-disabled:not-aria-disabled:not-aria-pressed:text-foreground aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-ink-foreground",
 } as const satisfies Record<ChipLook, string>;
 
 /** A removable filter's face: chosen, inside the strong hairline, lighting under the pointer as any filter does. */
 const REMOVABLE_FILTER_FACE =
-  "border-chip-edge-strong bg-chip-selected text-foreground [&:hover]:bg-chip-hover";
+  "border-chip-edge-strong bg-chip-selected text-foreground hover:bg-chip-hover";
 
 /** A toned chip's face, whatever its look: the chip's own inside its hairline, its words in the text's ink, lighting as a pill does. */
 const TONED_FACE = "border-chip-edge bg-chip text-foreground";
 
 /** A toned chip lighting under the pointer, and while its menu is open. */
 const TONED_HOVER =
-  "[&:hover:not(:disabled,[aria-disabled=true])]:bg-chip-hover aria-expanded:bg-chip-hover";
+  "hover:not-disabled:not-aria-disabled:bg-chip-hover aria-expanded:bg-chip-hover";
 
 /** A toned chip lighting while its menu is open alone, a removable one but a filter taking no hover. */
 const TONED_OPEN = "aria-expanded:bg-chip-hover";
@@ -346,7 +346,7 @@ function faceAttributes({
 
 /** The × ending a removable chip: a round press inside its capsule, lighting under the pointer. */
 const REMOVE =
-  "ui-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [&:hover]:bg-secondary [&:hover]:text-foreground [&>svg]:size-chip-remove-glyph";
+  "ui-chip-remove m-0 grid size-chip-remove flex-none place-items-center rounded-full border-0 bg-transparent p-0 text-muted-foreground cursor-[inherit] transition-[background-color,color] duration-(--ui-duration-hover) ease-plain hover:bg-secondary hover:text-foreground [&>svg]:size-chip-remove-glyph";
 
 /** A removable chip's words as a press of their own, which opens what it names: no box of their own, so the chip's face is the one drawn. */
 const OPEN_FACE = "m-0 border-0 bg-transparent p-0 text-inherit font-[inherit] cursor-press";

@@ -98,8 +98,8 @@ const UNDERLINE_ON_HOVER = "no-underline decoration-1 underline-offset-[0.24em]"
  * `font: inherit`.
  */
 const TEXT_TONE = {
-  quiet: `${UNDERLINE_ON_HOVER} [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline`,
-  accent: `${UNDERLINE_ON_HOVER} text-accent-ink data-[tone=accent]:font-label [&:is(:hover,:focus-visible)]:underline`,
+  quiet: `${UNDERLINE_ON_HOVER} hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline`,
+  accent: `${UNDERLINE_ON_HOVER} text-accent-ink data-[tone=accent]:font-label hover:underline focus-visible:underline`,
 } as const satisfies Record<TextButtonTone, string>;
 
 /** A pointer's press that leaves the focus where it is. */

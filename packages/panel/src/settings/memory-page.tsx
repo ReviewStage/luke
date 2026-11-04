@@ -165,7 +165,7 @@ const MEMORIES_SKELETON: readonly {
  * link, and the ⋯, lifted over the press so a press on one is its own.
  */
 const MEMORY_ROW =
-  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-ui-8 [&:hover]:bg-muted";
+  "memory-row relative list-none rounded-control px-row-inset ps-select-gutter py-ui-8 hover:bg-muted";
 const MEMORY_NOTE = "memory-note pointer-events-none";
 const LIFTED = "pointer-events-auto relative z-1";
 const MEMORY_WORDS = "memory-words [&_a]:pointer-events-auto [&_a]:relative [&_a]:z-1";

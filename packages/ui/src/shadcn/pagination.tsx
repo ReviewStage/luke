@@ -31,15 +31,15 @@ import { cn } from "../cn.js";
  *   it draws one, so the held page's ruled box takes no more room than a
  *   link; lit under the pointer (a link's alone), the current page held in a
  *   ruled box, and an item with nowhere to go dimmed. Its hover is
- *   `[a&:hover]` rather than `hover:`, because Tailwind's `hover:` asks for
- *   a pointer that hovers, and a link lights under a tap too, as it always
- *   has. It never goes through `cn`, because no caller's class settles
+ *   `[a&:hover]` inside a hover-capable media query rather than `hover:`,
+ *   because only a link lights, and a tap lights it through `[a&:active]`
+ *   instead, since a touch screen leaves the last tap hovered. It never goes through `cn`, because no caller's class settles
  *   against it.
  */
 
 /** Every item's box: a step, a page's number, the current page, or an elision. */
 export const PAGINATION_ITEM =
-  "ui-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [a&:hover]:bg-muted [a&:hover]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-disabled";
+  "ui-pagination-item box-border inline-flex h-pagination-item min-w-pagination-item items-center justify-center rounded-control border border-transparent px-pagination-item-inset font-mono text-caption text-muted-foreground no-underline whitespace-nowrap transition-[background-color,color] duration-(--ui-duration-hover) ease-plain [@media(hover:hover)]:[a&:hover]:bg-muted [@media(hover:hover)]:[a&:hover]:text-foreground [a&:active]:bg-muted [a&:active]:text-foreground aria-[current=page]:border-border aria-[current=page]:bg-muted aria-[current=page]:font-emphasis aria-[current=page]:text-foreground data-[idle=true]:opacity-disabled";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
