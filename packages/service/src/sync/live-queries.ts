@@ -613,7 +613,7 @@ export const agentOriginLive = defineLiveQuery({
  * worth a rename: one shows at the hold's end.
  */
 export const taskHistoryLive = defineLiveQuery({
-  name: "taskHistory",
+  name: LIVE_READ.HISTORY,
   params: ["userId", "taskId"],
   reads: [
     planRevisionSync,

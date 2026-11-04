@@ -41,6 +41,7 @@ import {
   type PagePlace,
 } from "@repo/features/page-wire";
 import {
+  type PlanRevisionsAnswer,
   TASK_BLOCK_CHANGE,
   TASK_RELATION_KIND,
   TASK_STATUS,
@@ -177,7 +178,7 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { NO_BROWSER_TABS, NO_PAGES } from "./app-state.js";
+import { NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
@@ -231,10 +232,13 @@ import {
  * account gate opening until a sign-out (`task-list-follow.ts`), and is read
  * by none of those asks. The repositories the account reaches, and a task's repository
  * given or taken away, are the service's too, asked through here, as is a
- * task pinned. A
- * plan's history is read for the version history that asks and held nowhere
- * here; a revision restored is the one write this concern carries to the
- * service on the developer's word, and the view takes the task it answers.
+ * task pinned. Each
+ * task's plan history a version history shows is held for it per task and
+ * told on the app state (`LIVE_READ.HISTORY`): its newest page followed, and
+ * the older pages read past it laid after it. A revision's text is answered
+ * to the version history that asks and held nowhere here; a revision
+ * restored is the one write this concern carries to the service on the
+ * developer's word, and the view takes the task it answers.
  * The pages agents wrote for a task, or for an agent on no task, are held
  * for the windows that draw them, the open task's among them, by title and
  * newest version alone, and told on the app state (`LIVE_READ.PAGES`); a
@@ -575,6 +579,39 @@ function relationDrawn(change: RelationChange): (row: PlanRow) => Partial<PlanRo
 }
 
 /**
+ * A task's newest page of history laid over the history held: the page
+ * whole, then every older revision held past it, so a version history
+ * scrolled back keeps what it read as saves land, and the place the next
+ * older page is read from with them.
+ */
+function withNewestPage(
+  held: PlanRevisionsAnswer | undefined,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const oldest = page.revisions.at(-1)?.seq;
+  if (held === undefined || oldest === undefined || page.earlier === undefined) return page;
+  const older = held.revisions.filter((line) => line.seq < oldest);
+  if (older.length === 0) return page;
+  const revisions = [...page.revisions, ...older];
+  return held.earlier === undefined ? { revisions } : { revisions, earlier: held.earlier };
+}
+
+/**
+ * An older page of a task's history, read before the revision `before`
+ * names, laid past the history held: every revision held at or after
+ * `before`, then the page, and the place the next older page is read from as
+ * the page says.
+ */
+function withOlderPage(
+  held: PlanRevisionsAnswer,
+  before: number,
+  page: PlanRevisionsAnswer,
+): PlanRevisionsAnswer {
+  const revisions = [...held.revisions.filter((line) => line.seq >= before), ...page.revisions];
+  return page.earlier === undefined ? { revisions } : { revisions, earlier: page.earlier };
+}
+
+/**
  * How long after a resync another is let pass, so a wake that lands as
  * several events at once (resume, then unlock) seals the list again once.
  */
@@ -705,16 +742,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     publish();
   }
 
-  /** The newest page of each task's history a window's version history follows, by the task. */
-  const historyFollows = yield* FiberMap.make<string>();
   const decodeHistory = Schema.decodeUnknownOption(taskHistoryLiveRowsSchema);
-  /** How to wait for a write's transaction on each task's followed history, while it is live. */
+  /** How to wait for a write's transaction on each task's held history, while its follow stands. */
   const historyTxWaits = new Map<string, TxWait>();
 
-  /** Follows `taskId`'s newest page of history live until let go, each change emitted as `TASKS_HISTORY_CHANGED`. */
-  function followHistory(taskId: string) {
+  /**
+   * Follows `taskId`'s newest page of history live until let go, each page
+   * laid over the older ones held (`withNewestPage`) and told through
+   * `answers`, and its wait for a write's transaction kept while it stands.
+   */
+  function followHistory(taskId: string, answers: HeldAnswers<PlanRevisionsAnswer>) {
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
+    /** The wait this follow handed last, so letting it go takes back its own alone. */
+    let handed: TxWait | undefined;
     return pushLive({
       seal: (poll, after) =>
         gate() && userId !== undefined
@@ -732,17 +773,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       decode: (rows) => Option.map(decodeHistory(rows), revisionsOfLiveRows),
       publish: (page) =>
         Effect.sync(() =>
-          kernel.emit(
-            GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-            carried({ taskId, view: page ?? { failure: TASK_CALL_FAILURE.UNANSWERED } }),
-          ),
+          page === undefined
+            ? answers.unanswered()
+            : answers.answered(withNewestPage(answers.rows(), page)),
         ),
+      // Note that a follow let go takes back only the wait it handed, since a retry's follow may have handed its own first.
       onTxWait: (wait) => {
-        if (wait === undefined) historyTxWaits.delete(taskId);
-        else historyTxWaits.set(taskId, wait);
+        if (wait !== undefined) {
+          handed = wait;
+          historyTxWaits.set(taskId, wait);
+        } else if (historyTxWaits.get(taskId) === handed) historyTxWaits.delete(taskId);
       },
     });
   }
+
+  /**
+   * Each task's plan history a window's version history shows, and the few
+   * shown latest, told whole on the app state every window draws
+   * (`LIVE_READ.HISTORY`): its newest page followed from the first window's
+   * hold (`heldSlice`), and the older pages read past it laid after it, so a
+   * version history opened again draws its versions in its first frame.
+   */
+  const heldHistories = yield* heldSlice<typeof LIVE_READ.HISTORY, string>({
+    empty: NO_KEYS_HELD,
+    path: (taskId) => [taskId],
+    gate,
+    follow: followHistory,
+    tell: (held) => kernel.emit(GATEWAY_EVENT.HISTORIES_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each task's history, one fiber standing until let go. */
+  const historyHolds = yield* FiberMap.make<string>();
 
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
@@ -2021,9 +2081,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           taskId === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { taskId },
         );
       }),
-    // A page of the history, and a revision beside the one before it, are
-    // answered to the version history that asked and held nowhere: it keeps
-    // what it read, and reads again as the task moves on.
+    // A page of the history is answered to the caller that asked, and an
+    // older page is laid on the task's held history too, past the revisions
+    // held from where it was read before, so a version history scrolled back
+    // keeps it as saves land. A revision beside the one before it is
+    // answered to the version history that asked and held nowhere.
     [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2036,6 +2098,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         const { taskId, before } = read;
         const page = yield* served(client.readRevisions(taskId, before));
+        const held = heldHistories.rowsOf(taskId);
+        if (page !== undefined && before !== undefined && held !== undefined) {
+          heldHistories.lay(taskId, withOlderPage(held, before, page));
+        }
         return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
@@ -2083,9 +2149,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A plan's pages are answered to the Inbox that asked and held nowhere,
     // since the view holds the active plan's alone.
-    // A plan's newest page of history is followed for its version history
-    // while it stands, and told only as `TASKS_HISTORY_CHANGED`; a follow of
-    // what is already followed does nothing.
+    // A task's plan history is held for a window while its version history
+    // shows, and told only on the app state (`HISTORIES_CHANGED`). Note that
+    // the windows' hold is one fiber standing until let go, so a window
+    // holding it again holds nothing anew.
     [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -2093,9 +2160,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "following a task's history names the task",
         );
-        if (!gate()) return {};
         const { taskId } = read;
-        yield* FiberMap.run(historyFollows, taskId, followHistory(taskId), { onlyIfMissing: true });
+        yield* FiberMap.run(
+          historyHolds,
+          taskId,
+          Effect.scoped(Effect.andThen(heldHistories.hold(taskId), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
@@ -2105,7 +2176,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "letting a task's history go names the task",
         );
-        yield* FiberMap.remove(historyFollows, read.taskId);
+        yield* FiberMap.remove(historyHolds, read.taskId);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_HISTORY_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          taskHistoryFollowSchema,
+          params,
+          "reading a task's history again names the task",
+        );
+        if (gate()) yield* heldHistories.retry(read.taskId);
         return {};
       }),
     // An agent's or a task's agents' Browser tabs are held for a window's
@@ -2305,7 +2386,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // The service answers the task as restored, so the list's row and its
     // held plan take it in place and nothing is read again. It is confirmed
-    // once its transaction reached the history the window follows.
+    // once its transaction reached the history the windows hold, or held
+    // lately; at once where none is.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3113,6 +3195,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
       yield* heldBrowserTabs.open;
+      yield* heldHistories.open;
       yield* comments.open;
       yield* membersReads.held.open;
       yield* documents.open;
@@ -3126,14 +3209,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
-      // Note that the windows' holds on pages, tabs, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, histories, comments, people, and plans stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
+      yield* heldHistories.end;
       yield* comments.end;
       yield* membersReads.held.end;
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
-      yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(listFollow);
       yield* Scope.close(taskList.scope, Exit.void);
       taskList = yield* openTaskList;
