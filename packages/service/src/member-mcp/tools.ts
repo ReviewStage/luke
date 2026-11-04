@@ -39,6 +39,7 @@
 import { randomUUID } from "node:crypto";
 import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { DatabaseServices } from "@repo/database/core/query";
+import { readAutomation } from "@repo/database/models/automation-store";
 import {
   actOnPlanCommentThread,
   PLAN_COMMENT_OUTCOME,
@@ -58,8 +59,10 @@ import {
   AGENT_STATUS,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
+  disabledServersSchema,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { automationCreateRequestSchema } from "@repo/features/automation-wire";
 import {
   githubPullRequestNumberSchema,
   githubRepositoryFullNameSchema,
@@ -134,6 +137,18 @@ import {
   UPDATE_TASK_TOOL,
   workspaceAgentOf,
 } from "../agents/agent-tools.js";
+import {
+  AUTOMATION_TOOL_REFUSAL,
+  CREATE_AUTOMATION_TOOL,
+  DELETE_AUTOMATION_TOOL,
+  RUN_AUTOMATION_TOOL,
+  runCreateAutomation,
+  runDeleteAutomation,
+  runListAutomations,
+  runRunAutomation,
+  runUpdateAutomation,
+  UPDATE_AUTOMATION_TOOL,
+} from "../agents/automation-tools.js";
 import { MESSAGE_AGENT_REFUSAL, messageRefusalWords } from "../agents/coder-host/agent-message.js";
 import { PLAN_EDIT_REFUSAL, recordMemberPlanNotes } from "../agents/coder-host/plan-edit.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
@@ -188,6 +203,7 @@ import {
   UPDATE_COMMENT_TOOL,
 } from "../tasks/comment-tools.js";
 import { type MentioningComment, memberCommentAnswer } from "../tasks/plan-comments-procedures.js";
+import type { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
 import {
   answerAskAsMember,
@@ -197,13 +213,14 @@ import {
   replyAsMember,
 } from "./inbox.js";
 
-/** What a tool's effect runs against: the store, GitHub through the App, the model catalog, the deployment's environment a start's summary model reads, and the member the call acts for. */
+/** What a tool's effect runs against: the store, GitHub through the App, the model catalog, the deployment's environment a start's summary model reads, our Sentry integration an automation's trigger is checked against, and the member the call acts for. */
 export type MemberMcpServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
   | HostedEnvironment
+  | SentryApp
   | AdmittedMember;
 
 /** A tool's input declaration: a wire schema the emitter can show and the reader can read. */
@@ -256,6 +273,11 @@ export const MEMBER_MCP_TOOL = {
   SEARCH_MEMORY: AGENT_TOOL.SEARCH_MEMORY,
   SAVE_MEMORY: AGENT_TOOL.SAVE_MEMORY,
   FORGET_MEMORY: "forget_memory",
+  LIST_AUTOMATIONS: AGENT_TOOL.LIST_AUTOMATIONS,
+  CREATE_AUTOMATION: AGENT_TOOL.CREATE_AUTOMATION,
+  UPDATE_AUTOMATION: AGENT_TOOL.UPDATE_AUTOMATION,
+  RUN_AUTOMATION: AGENT_TOOL.RUN_AUTOMATION,
+  DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
 } as const;
 
 /** A read's annotations: it changes nothing of the member's. */
@@ -1677,6 +1699,189 @@ const MEMBER_FORGET_MEMORY_TOOL = memberMcpTool({
     memoryAsMember(workspace, (memory) => memberForget(memory, memoryId)),
 });
 
+/*
+ * The automations. Each runs the agents' own door for it
+ * (`../agents/automation-tools.ts`) with the member as the caller, on the
+ * member's write call: an automation is made in the workspace its slug
+ * names, in the repositories named or none, since the member works in none,
+ * as the member's own, and one named by its id is about the workspace that
+ * holds it, as the member reads it. A webhook trigger is never made or set
+ * here, so no answer carries a webhook secret: its secret is shown once, in
+ * the window that minted it (`AGENTS.md`).
+ */
+
+/** The workspace of an automation the member may read, by its id. */
+const automationWorkspace = (userId: string, automationId: string) =>
+  Effect.map(
+    readAutomation(userId, automationId),
+    Option.map((automation) => automation.organizationId),
+  );
+
+/** How an automation tool tells the agent the trigger it never makes. */
+const WEBHOOK_WORDS =
+  `A webhook trigger is made only on the automations page in ${PRODUCT_NAME}, which shows ` +
+  "its secret once, so no answer here carries one.";
+
+/** The fields whose agents' words name the coding agent's own world, in the member's: no repository is theirs by default, and their connections are named by what they connect. */
+const MEMBER_AUTOMATION_FIELDS = {
+  repositories: Schema.optionalKey(
+    describeWire(
+      automationCreateRequestSchema.fields.repositories.schema,
+      "owner/name, reached by the workspace's GitHub installation; runs start in the first. [] " +
+        "for none, which a GitHub trigger cannot take. Create defaults to none.",
+    ),
+  ),
+  disabledServers: Schema.optionalKey(
+    describeWire(
+      disabledServersSchema,
+      "The member's connections each run's agent is not handed, by what they connect, such as " +
+        "neon, sentry, or notion-2 for a second Notion account; the whole list.",
+    ),
+  ),
+  slackDelivery: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      `Send each run's result to the member on Slack from ${PRODUCT_NAME}'s bot, so the run's ` +
+        "agent needs no Slack of its own; the workspace must have the bot connected.",
+    ),
+  ),
+};
+
+/** A list of automations names the workspace it lists, or one automation to read whole. */
+const ListAutomationsInputSchema = Schema.Struct({
+  workspace: WORKSPACE_INPUT,
+  automationId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      "One automation to read whole, its prompt in full and its newest runs, by the id this " +
+        "tool answered; leave it out to list them all.",
+    ),
+  ),
+});
+
+const MEMBER_LIST_AUTOMATIONS_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.LIST_AUTOMATIONS,
+  description:
+    "List the automations of a workspace the member belongs to that the member may read, " +
+    "newest first: each with its id, name, whether it is on, its trigger, the start of its " +
+    "prompt, the model and effort its runs take, its repositories, where its runs land, its " +
+    "guards, scope, when it is next due, its newest run, and whether the member made it " +
+    "(madeByYourDeveloper). Name an automationId to read that one whole, in whichever of the " +
+    "member's workspaces it stands, its prompt in full and its newest runs, each with why it " +
+    "was skipped or failed and the agent it started. An automation fires on a schedule, a " +
+    "GitHub event, a webhook, or a Sentry event, and starts an agent on its prompt, as its " +
+    `creator. ${WORKSPACE_WORDS} Answers \`accepted\` with them, or \`rejected\` and why.`,
+  input: ListAutomationsInputSchema,
+  annotations: READ_ONLY,
+  run: ({ workspace, ...asked }) => {
+    const { automationId } = asked;
+    const list = (call: AgentReadCall) => runListAutomations(call, asked);
+    return automationId === undefined
+      ? listAsMember(workspace, list)
+      : readAsMember(
+          (userId) => automationWorkspace(userId, automationId),
+          AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION,
+          list,
+        );
+  },
+});
+
+/** An automation the member makes names the workspace it is made in, and what the agents' own make names, in the member's words. */
+const CreateAutomationInputSchema = Schema.Struct({
+  workspace: WORKSPACE_INPUT,
+  ...CREATE_AUTOMATION_TOOL.inputSchema.fields,
+  ...MEMBER_AUTOMATION_FIELDS,
+});
+
+const MEMBER_CREATE_AUTOMATION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.CREATE_AUTOMATION,
+  description:
+    "Make an automation in a workspace the member belongs to, as their own automations page " +
+    `would: each time its trigger fires, ${PRODUCT_NAME} starts an agent on its prompt, in its ` +
+    "repositories or in none, on the member's keys and connections, with no task and no one " +
+    "watching, or hands the run to the one agent named. It is on as it is made, runs as the " +
+    "member, and the desktop shows it as one they made. It works in the repositories named, " +
+    `or in none where you name none. One fired by Sentry needs ${PRODUCT_NAME}'s Sentry ` +
+    `integration installed on the workspace first. ${WEBHOOK_WORDS} ${WORKSPACE_WORDS} Make ` +
+    `one when the member asks for it, and read ${MEMBER_MCP_TOOL.LIST_AUTOMATIONS} first so ` +
+    "you make none they already have. Each call makes an automation of its own, so call it " +
+    "once for each. Answers `accepted` with the automation as it stands, or `rejected` and why.",
+  input: CreateAutomationInputSchema,
+  annotations: ADDITIVE,
+  run: ({ workspace, ...asked }) =>
+    listWriteAsMember(workspace, (call) => runCreateAutomation(call, asked)),
+});
+
+/** A change to an automation names what the agents' own does, in the member's words. */
+const UpdateAutomationInputSchema = Schema.Struct({
+  ...UPDATE_AUTOMATION_TOOL.inputSchema.fields,
+  ...MEMBER_AUTOMATION_FIELDS,
+});
+
+const MEMBER_UPDATE_AUTOMATION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.UPDATE_AUTOMATION,
+  description:
+    "Change an automation the member may change, by its id as " +
+    `${MEMBER_MCP_TOOL.LIST_AUTOMATIONS} answered it, in whichever of the member's workspaces ` +
+    "it stands, as its editor on the automations page would: what you leave out stands, and a " +
+    "trigger given replaces the one standing whole, a switch to Sentry needing " +
+    `${PRODUCT_NAME}'s Sentry integration installed on the workspace. A personal automation ` +
+    "is its creator's alone to change, and a workspace's its creator's, owners', and admins'; " +
+    "enabled alone, which pauses or resumes it, is open to more of the workspace. " +
+    `${WEBHOOK_WORDS} Change one only where the member asked for it. Answers \`accepted\` ` +
+    "with the automation as it now stands, or `rejected` and why.",
+  input: UpdateAutomationInputSchema,
+  annotations: IDEMPOTENT_CHANGE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => automationWorkspace(userId, asked.automationId),
+      AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION,
+      (call) => runUpdateAutomation(call, asked),
+    ),
+});
+
+const MEMBER_RUN_AUTOMATION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.RUN_AUTOMATION,
+  description:
+    `Run an automation the member may run now, by its id as ${MEMBER_MCP_TOOL.LIST_AUTOMATIONS} ` +
+    "answered it, in whichever of the member's workspaces it stands, as its Run now on the " +
+    "automations page would: one run, whatever its trigger, through the same guards a firing " +
+    "takes, starting its agent on its prompt as its creator, as a scheduled run would, or " +
+    "handing it to the one agent it names. A personal automation is its creator's to run, and " +
+    "a workspace's every member's. Run one when the member asks for it, such as to try an " +
+    "automation just made. Each call is a run of its own, so call it once for each. Answers " +
+    "`accepted` with the run, started with its agent or skipped or failed and why, or " +
+    `\`rejected\` and why. ${FOLLOW_WORDS}`,
+  input: RUN_AUTOMATION_TOOL.inputSchema,
+  annotations: ADDITIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => automationWorkspace(userId, asked.automationId),
+      AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION,
+      (call) => runRunAutomation(call, asked),
+    ),
+});
+
+const MEMBER_DELETE_AUTOMATION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.DELETE_AUTOMATION,
+  description:
+    "Delete an automation the member may delete, with its history of runs, by its id as " +
+    `${MEMBER_MCP_TOOL.LIST_AUTOMATIONS} answered it, in whichever of the member's workspaces ` +
+    "it stands, as its Delete on the automations page would; the agents its runs started " +
+    "stay. A personal automation is its creator's alone, and a workspace's its creator's, " +
+    "owners', and admins'. Delete one only when the member asks for it, and pause one with " +
+    `${MEMBER_MCP_TOOL.UPDATE_AUTOMATION}'s enabled false where they only want it to stop. ` +
+    "Answers `accepted` with the automation's id and name, or `rejected` and why.",
+  input: DELETE_AUTOMATION_TOOL.inputSchema,
+  annotations: DESTRUCTIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => automationWorkspace(userId, asked.automationId),
+      AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION,
+      (call) => runDeleteAutomation(call, asked),
+    ),
+});
+
 /** Every tool the server offers, listed in the order an agent reads them. */
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
@@ -1708,4 +1913,9 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   MEMBER_SEARCH_MEMORY_TOOL,
   MEMBER_SAVE_MEMORY_TOOL,
   MEMBER_FORGET_MEMORY_TOOL,
+  MEMBER_LIST_AUTOMATIONS_TOOL,
+  MEMBER_CREATE_AUTOMATION_TOOL,
+  MEMBER_UPDATE_AUTOMATION_TOOL,
+  MEMBER_RUN_AUTOMATION_TOOL,
+  MEMBER_DELETE_AUTOMATION_TOOL,
 ];

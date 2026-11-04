@@ -1,0 +1,283 @@
+{
+  "type": "object",
+  "properties": {
+    "automationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The automation's id, as list_automations or create_automation answered it."
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "false pauses it, true resumes it; missed firings are not run late."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12000,
+      "description": "Each run's first message; make it stand alone, since no one watches a run."
+    },
+    "trigger": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "schedule"
+              ]
+            },
+            "cron": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "kind",
+            "cron",
+            "timezone"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "github"
+              ]
+            },
+            "event": {
+              "type": "string",
+              "enum": [
+                "pull-request-opened",
+                "pull-request-labeled",
+                "pull-request-updated",
+                "issue-opened",
+                "issue-labeled",
+                "check-failed",
+                "push"
+              ]
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "maxItems": 10
+            },
+            "branches": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "maxItems": 10
+            },
+            "senders": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "people",
+                  "app-agents",
+                  "other-bots"
+                ]
+              }
+            },
+            "moments": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "opened",
+                  "ready",
+                  "pushed"
+                ]
+              }
+            },
+            "drafts": {
+              "type": "boolean"
+            },
+            "forks": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "event"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "integration"
+              ]
+            },
+            "provider": {
+              "type": "string",
+              "enum": [
+                "sentry"
+              ]
+            },
+            "event": {
+              "type": "string",
+              "enum": [
+                "alert-triggered",
+                "issue-created"
+              ]
+            },
+            "filters": {
+              "type": "object",
+              "properties": {
+                "project": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "maxItems": 10
+                },
+                "environment": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "maxItems": 10
+                },
+                "level": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "debug",
+                      "info",
+                      "warning",
+                      "error",
+                      "fatal"
+                    ]
+                  },
+                  "maxItems": 10
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "provider",
+            "event"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "cron: five fields in an IANA timezone, at most every fifteen minutes. GitHub senders default to people, moments (pull-request-updated only) to all, drafts and forks to false. Sentry: prefer alert-triggered, fired by an alert rule whose action is \"Send a notification via Vespin\"; issue-created fires on every new issue. A filter matches any of its values, and every filter given must. Webhooks are made only on the automations page."
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 140
+      },
+      "maxItems": 10,
+      "description": "owner/name, reached by the workspace's GitHub installation; runs start in the first. [] for none, which a GitHub trigger cannot take. Create defaults to none."
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Catalog id from list_models, given with effort; neither for the creator's default."
+    },
+    "effort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "disabledServers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "maxItems": 32,
+      "description": "The member's connections each run's agent is not handed, by what they connect, such as neon, sentry, or notion-2 for a second Notion account; the whole list."
+    },
+    "agentId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Hand every run to this agent, by its list_agents id, so runs share its memory; null for a new agent each run, the default."
+    },
+    "guards": {
+      "type": "object",
+      "properties": {
+        "maxConcurrentRuns": {
+          "type": "integer"
+        },
+        "dailyRunCap": {
+          "type": "integer"
+        },
+        "subjectCooldownHours": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "maxConcurrentRuns",
+        "dailyRunCap"
+      ],
+      "additionalProperties": false,
+      "description": "maxConcurrentRuns 1 to 5, default 1; dailyRunCap 1 to 50, default 10; subjectCooldownHours, per Sentry issue, 1 to 168, default 24."
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "personal",
+        "workspace"
+      ],
+      "description": "personal, the default, is its creator's; workspace is every member's."
+    },
+    "archiveSuccessful": {
+      "type": "boolean",
+      "description": "Archive each run's agent once it succeeds and leaves no thread open."
+    },
+    "slackDelivery": {
+      "type": "boolean",
+      "description": "Send each run's result to the member on Slack from Vespin's bot, so the run's agent needs no Slack of its own; the workspace must have the bot connected."
+    }
+  },
+  "required": [
+    "automationId"
+  ],
+  "additionalProperties": false
+}
