@@ -87,9 +87,11 @@ import {
 } from "../../testing/github-app-fake.js";
 import {
   fixtureToken,
+  launchBearer,
   launchLines,
   runnerSandboxApi,
   runnerTook,
+  swappedBearer,
 } from "../../testing/runner-sandbox-fake.js";
 import {
   AgentSandboxImage,
@@ -141,6 +143,8 @@ const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://app.test/api/agents/runner/events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
 const MCP_URL = "https://app.test/api/agents/mcp";
+/** The host every address above names, which the firewall swaps the runner's bearer in on. */
+const SERVICE_HOST = "app.test";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
@@ -576,8 +580,6 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.match(script, /install -D -o root -g root -m 0444 \/tmp\/agent-runner\.mjs/u);
 
-        const bearer = command.env[RUNNER_ENV.BEARER];
-        assert.ok(bearer !== undefined && bearer.length > 20);
         // The CLI reads a placeholder where the plan's token would stand, which the firewall swaps for the token on Anthropic's API.
         const placeholder = command.env[RUNNER_ENV.CLAUDE_TOKEN];
         assert.ok(
@@ -586,6 +588,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(anthropicSwaps(api, sandbox.currentSessionId), [
           { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
         ]);
+        // The runner holds a placeholder for its bearer too, which the firewall standing as it
+        // started swaps on our host for the bearer whose digest the agent's row records.
+        const bearerPlaceholder = command.env[RUNNER_ENV.BEARER];
+        const bearer = launchBearer(api, command, SERVICE_HOST);
+        assert.ok(bearerPlaceholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
@@ -610,18 +617,21 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
         assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
-        // No secret in argv, the config, a tag, or anything uploaded, and the plan's token in no command's environment either.
+        // No secret in argv, the config, a tag, or anything uploaded, and neither the plan's token nor the bearer in any command's environment.
         const visible = JSON.stringify([
           command.args,
           yield* launchLines(command),
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
-        for (const secret of [PLAN_TOKEN, bearer]) assert.equal(visible.includes(secret), false);
+        for (const secret of [PLAN_TOKEN, placeholder, bearerPlaceholder, bearer]) {
+          assert.equal(visible.includes(secret), false);
+        }
         const environments = JSON.stringify(
           [api.commands, api.runs].flat().map((each) => each.env),
         );
-        assert.equal(environments.includes(PLAN_TOKEN), false);
+        for (const secret of [PLAN_TOKEN, bearer])
+          assert.equal(environments.includes(secret), false);
       }),
   );
 
@@ -1273,7 +1283,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const target = { userId, conversationId: agent.conversationId };
         // The events route records the CLI's session from the runner's init, and the run ends.
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, CLI_SESSION), true);
-        const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
+        const firstBearer = launchBearer(api, api.commands[0], SERVICE_HOST);
         sequence.next = 42;
 
         yield* runnerTook(agent.id);
@@ -1302,8 +1312,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(config.firstSequence, 42);
         assert.ok(line.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
-        // A fresh bearer for the new launch, recorded in place of the last.
-        const bearer = relaunch?.env[RUNNER_ENV.BEARER];
+        // A fresh bearer for the new launch at the resumed session's firewall, recorded in place of the last.
+        const bearer = launchBearer(api, relaunch, SERVICE_HOST);
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
@@ -1395,6 +1405,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
         const first = api.commands[0];
         assert.ok(first !== undefined);
+        // The ended runner's bearer is off the firewall until the launch that hands the line on sets its own.
+        const firstBearer = launchBearer(api, first, SERVICE_HOST);
+        assert.ok(firstBearer !== undefined);
+        const standing = api.policies.findLast((each) => each.session === first.sandboxSessionId);
+        assert.equal(
+          swappedBearer(standing?.policy, SERVICE_HOST, first.env[RUNNER_ENV.BEARER]),
+          undefined,
+        );
         first.exitCode = 0;
         const handed = yield* sessions.deliverWaiting(opened.sessionId, agent.conversationId);
 
@@ -1404,6 +1422,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), [
           { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
         ]);
+        const handOn = launchBearer(api, api.commands[1], SERVICE_HOST);
+        assert.ok(handOn !== undefined && handOn !== firstBearer);
         const [config] = (yield* launchLines(api.commands[1])) as [ClaudeCodeConfig];
         assert.equal(config.resume, CLI_SESSION);
         assert.equal(config.firstSequence, 9);
@@ -2380,7 +2400,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a launch's end leaves the sandbox up while a developer's Terminal holds it, less the swap only its runner sent",
+    "a launch's end leaves the sandbox up while a developer's Terminal holds it, less the swaps only its runner sent",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -2392,6 +2412,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
+        const [command] = api.commands;
+        assert.ok(launchBearer(api, command, SERVICE_HOST) !== undefined);
 
         yield* runnerTook(agent.id);
         const ended = yield* runnerEnded({
@@ -2406,6 +2428,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(ended, RUNNER_ENDED.HELD);
         assert.equal(api.sandboxes[0]?.status, "running");
         assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
+        const standing = api.policies.findLast(
+          (each) => each.session === command?.sandboxSessionId,
+        );
+        assert.equal(
+          swappedBearer(standing?.policy, SERVICE_HOST, command?.env[RUNNER_ENV.BEARER]),
+          undefined,
+        );
       }),
   );
 

@@ -56,6 +56,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../../environme
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import {
   fixtureToken,
+  launchBearer,
   launchLines,
   linesOf,
   runnerSandboxApi,
@@ -94,6 +95,8 @@ const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://app.test/api/agents/runner-events";
 const LINES_URL = "https://app.test/api/agents/runner-lines";
 const MCP_URL = "https://app.test/api/agents/mcp";
+/** The host every address the runner reaches us at names, which the firewall swaps its bearer in on. */
+const SERVICE_HOST = "app.test";
 
 /** The one integration the agent is handed, a server of its own. */
 const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
@@ -349,6 +352,9 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(plan.config.tokenUrl, TOKEN_URL);
         assert.deepEqual(plan.config.writableRoots, [`${folder}${onPlan.id}`]);
         const bearer = plan.secrets.env[RUNNER_ENV.BEARER] ?? "";
+        // A Mac has no firewall of ours, so its runner is handed the bearer itself.
+        const routing = Option.getOrThrow(yield* readAgentRouting(userId, onPlan.id));
+        assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
         // The bearer is sealed in the row, and no token of the plan's is in the row or the launch at all.
         for (const secret of ["access-0", "refresh-0", "id-token-0", bearer]) {
           assert.equal(plan.stored.includes(secret), false, "a secret in the row in the clear");
@@ -358,7 +364,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "open launches the runner in its Codex mode on the account's plan, naming the token route, with the bearer in its environment alone",
+    "open launches the runner in its Codex mode on the account's plan, naming the token route, with the bearer's placeholder in its environment alone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -384,8 +390,11 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.match(command.args[1] ?? "", /exec setpriv --reuid=agent --regid=agent/u);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
-        const bearer = command.env[RUNNER_ENV.BEARER];
-        assert.ok(bearer !== undefined && bearer.length > 20);
+        // App-server and its token command hold the placeholder, which the firewall standing as the
+        // runner started swaps on our host for the bearer whose digest the agent's row records.
+        const placeholder = command.env[RUNNER_ENV.BEARER];
+        const bearer = launchBearer(api, command, SERVICE_HOST);
+        assert.ok(placeholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
@@ -409,7 +418,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
         assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
-        // No token anywhere in the command, and the bearer only in its environment.
+        // No token anywhere in the command, the placeholder only in its environment, and the bearer nowhere in the sandbox.
         assert.equal(JSON.stringify(command).includes("access-0"), false);
         const visible = JSON.stringify([
           command.args,
@@ -417,9 +426,10 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
-        for (const secret of ["access-0", "refresh-0", "id-token-0", bearer]) {
+        for (const secret of ["access-0", "refresh-0", "id-token-0", placeholder, bearer]) {
           assert.equal(visible.includes(secret), false, "a secret outside the environment");
         }
+        assert.equal(JSON.stringify(command.env).includes(bearer), false);
       }),
   );
 
@@ -579,7 +589,8 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         // The events route records Codex's thread as the runner reports it, and the run ends.
         assert.equal(yield* recordAgentNativeSession(userId, agent.id, THREAD), true);
         yield* runnerTook(agent.id);
-        const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
+        const [first] = api.commands;
+        const firstBearer = launchBearer(api, first, SERVICE_HOST);
         sequence.next = 17;
         const ended = yield* runnerEnded({
           target: { userId, conversationId: agent.conversationId },
@@ -599,13 +610,14 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
         assert.equal(openai.state.renewals, 1);
-        const [config, first] = (yield* launchLines(relaunch)) as [CodexConfig, InputLine];
+        const [config, line] = (yield* launchLines(relaunch)) as [CodexConfig, InputLine];
         assert.equal(config.harness, RUNNER_HARNESS.CODEX);
         assert.equal(config.threadId, THREAD);
         assert.equal(config.firstSequence, 17);
-        assert.ok(first.type === INPUT_LINE.MESSAGE);
-        assert.deepEqual(developerContent(first), [{ type: "text", text: "Now the emails." }]);
-        const bearer = relaunch?.env[RUNNER_ENV.BEARER];
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(developerContent(line), [{ type: "text", text: "Now the emails." }]);
+        // A fresh bearer for the new launch at the resumed session's firewall, recorded in place of the last.
+        const bearer = launchBearer(api, relaunch, SERVICE_HOST);
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));

@@ -14,13 +14,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { gunzipSync } from "node:zlib";
-import type { RunnerConfig } from "@repo/agent-runner/protocol";
+import { RUNNER_ENV, type RunnerConfig } from "@repo/agent-runner/protocol";
 import { Database } from "@repo/database/core/query";
 import { runnerLine } from "@repo/database/schemas/runner-line";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 import { runnerTag } from "../agents/machine/vercel-machine.js";
+import type { NetworkPolicy } from "../agents/vercel-sandbox-api.js";
 import {
   sandboxListRefusal,
   sandboxStopRefusal,
@@ -69,6 +70,8 @@ export interface FakeCommand {
   readonly cwd: string | undefined;
   readonly env: Readonly<Record<string, string>>;
   readonly sudo: boolean;
+  /** How many network policies the API had taken as it started, which `policyAtStart` reads its session's from. */
+  readonly policiesBefore: number;
   stdin: string;
   exitCode: number | null;
   /** What the command printed on stderr, which its logs answer. */
@@ -373,6 +376,7 @@ export function runnerSandboxApi() {
         cwd: asked.cwd,
         env: asked.env,
         sudo: asked.sudo,
+        policiesBefore: policies.length,
         stdin: "",
         exitCode: null,
       };
@@ -427,9 +431,17 @@ export function runnerSandboxApi() {
     }
     return commandRead(command, parsed, init, waits.hold);
   };
+  /** The network policy a command's session stood at as it started: the last one set for that session by then, none where none was. */
+  const policyAtStart = (command: FakeCommand | undefined) =>
+    command === undefined
+      ? undefined
+      : policies
+          .slice(0, command.policiesBefore)
+          .findLast((each) => each.session === command.sandboxSessionId)?.policy;
   return {
     layer: fakeHttpClientLayer(respond),
     respond,
+    policyAtStart,
     sandboxes,
     commands,
     goneSnapshots,
@@ -485,3 +497,35 @@ export const runnerTook = (agentId: string) =>
       .set({ acceptedAt: new Date(0) })
       .where(and(eq(runnerLine.agentId, agentId), isNull(runnerLine.acceptedAt))),
   );
+
+/**
+ * The bearer a network policy swaps in on the host given for a request that
+ * presents the placeholder as its bearer, as the firewall would set it on
+ * the way out; none where the policy carries no such swap.
+ */
+export function swappedBearer(
+  policy: unknown,
+  host: string,
+  placeholder: string | undefined,
+): string | undefined {
+  // SAFETY: the policy is the body the API was sent, a `NetworkPolicy` as `updateNetworkPolicy` spells it.
+  const sent = policy as NetworkPolicy | undefined;
+  if (sent === undefined || !("allow" in sent) || placeholder === undefined) return undefined;
+  const swap = (sent.allow[host] ?? []).find((rule) =>
+    (rule.match?.headers ?? []).some(
+      (header) =>
+        header.key.exact === "authorization" && header.value.exact === `Bearer ${placeholder}`,
+    ),
+  );
+  const set = swap?.transform[0]?.headers.authorization;
+  return set?.startsWith("Bearer ") ? set.slice("Bearer ".length) : undefined;
+}
+
+/** The bearer a launch's runner reaches the host given with: what the policy standing as its command started swaps in for the placeholder its environment holds. */
+export function launchBearer(
+  api: ReturnType<typeof runnerSandboxApi>,
+  command: FakeCommand | undefined,
+  host: string,
+): string | undefined {
+  return swappedBearer(api.policyAtStart(command), host, command?.env[RUNNER_ENV.BEARER]);
+}

@@ -51,6 +51,7 @@ import { KEY_REFUSAL, PLAN_REFUSAL } from "../eve-host/eve-sessions.js";
 import { LaunchRefused, type MachineLayout } from "../machine/agent-machine.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { FIREWALL_SLOT, newPlaceholder, placeholderSwap } from "../sandbox-firewall.js";
+import { BEARER_PREFIX } from "../workspace-mcp/bearer.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
   type HarnessLaunch,
@@ -83,7 +84,7 @@ const ANTHROPIC_API = "api.anthropic.com";
  * whatever its shape, so a placeholder keeps the CLI in its mode.
  */
 const CLI_CREDENTIAL = {
-  PLAN: { variable: RUNNER_ENV.CLAUDE_TOKEN, header: "authorization", scheme: "Bearer " },
+  PLAN: { variable: RUNNER_ENV.CLAUDE_TOKEN, header: "authorization", scheme: BEARER_PREFIX },
   API_KEY: { variable: RUNNER_ENV.API_KEY, header: "x-api-key", scheme: "" },
 } as const;
 
