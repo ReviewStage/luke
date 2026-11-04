@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { unreachedWorkspaceSeams } from "@repo/database/testing";
 import { authApp, type WebRequestHandler } from "@repo/service/auth/auth-app";
 import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -118,7 +119,9 @@ test("the group answers what the handler answered, as the handler answered it", 
   for (const exchange of EXCHANGES) {
     const stub = stubbedHandler(exchange.answer);
     const request = exchange.request();
-    const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(request);
+    const answered = await routeFromHttpRouter(authApp(stub.handle, unreachedWorkspaceSeams)).fetch(
+      request,
+    );
     const carried = await recordedResponse(answered);
     const direct = await recordedResponse(await stub.handle(exchange.request()));
 

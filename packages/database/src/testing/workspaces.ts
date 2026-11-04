@@ -134,6 +134,15 @@ export const fakeWorkspaceSeams = Effect.gen(function* () {
   return seams;
 });
 
+/**
+ * The plugin's create for a test that signs no account up, as a route that
+ * takes it is handed one: reached, it fails as the plugin's outage would.
+ */
+export const unreachedWorkspaceSeams: WorkspaceSeams = {
+  createOrganization: () =>
+    Effect.fail(new Cause.UnknownError(undefined, "No workspace is made in this test")),
+};
+
 /** The workspace the account owns that its test tasks start in, made the first time it is asked for. */
 const workspaceOf = (userId: string) =>
   Effect.gen(function* () {

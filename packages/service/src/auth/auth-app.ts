@@ -1,8 +1,13 @@
+import type { DatabaseServices } from "@repo/database/core/query";
+import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
+import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
+import { catchAllButInterrupt, causeKind } from "@repo/runtime/effect";
 import { Effect, Layer } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { SERVER_EVENT } from "../events/server-events.js";
 import { hostedNotFoundRoute } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { recordAuthCount, withAuthCounts } from "./auth-counts.js";
+import { type AuthCount, recordAuthCount, withAuthCounts } from "./auth-counts.js";
 import { AUTH_BASE_PATH } from "./auth-policy.js";
 
 /**
@@ -81,6 +86,25 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
 }
 
 /**
+ * The personal workspace of the account a sign-up count names, made through
+ * the plugin before the answer leaves, so a new account lands with a
+ * workspace to start its first agent in. Note that a failure leaves the
+ * sign-up standing and is logged by its kind alone, because what the plugin
+ * threw may quote what it was asked to write; the live `workspaces` read
+ * ensures the workspace again the next time the account opens the app.
+ */
+function workspaceOfSignUp(
+  count: AuthCount,
+  workspaces: WorkspaceSeams,
+): Effect.Effect<void, never, DatabaseServices> {
+  if (count.name !== SERVER_EVENT.ACCOUNT_SIGN_UP) return Effect.void;
+  return catchAllButInterrupt(
+    Effect.asVoid(ensurePersonalWorkspace(count.actor.userId, workspaces)),
+    (cause) => Effect.logWarning(`Workspace not made at sign-up: ${causeKind(cause)}`),
+  );
+}
+
+/**
  * The handler's own `Response`, answered unchanged.
  *
  * The request handed over is the very `Request` this edge was invoked with,
@@ -92,19 +116,25 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * writes an accompanying header record onto the answer's own `Headers`, and a
  * redirect's are immutable, so mirroring would refuse the very answers the
  * OAuth callbacks are made of. A HEAD is the exception the helper above
- * covers, since there the record is all the web handler reads.
+ * covers, since there the record is all the web handler reads. An account
+ * the request signed up has its personal workspace made before it is
+ * answered (`workspaceOfSignUp`).
  */
 const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(function* (
   handle: WebRequestHandler,
+  workspaces: WorkspaceSeams,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
-  HttpServerRequest.HttpServerRequest
+  HttpServerRequest.HttpServerRequest | DatabaseServices
 > {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { answer, counts } = yield* Effect.promise(() => withAuthCounts(() => handle(request)));
   // Note that the counts run once Better Auth has answered, which is once what they count has committed.
+  yield* Effect.forEach(counts, (count) => workspaceOfSignUp(count, workspaces), {
+    discard: true,
+  });
   yield* Effect.forEach(counts, recordAuthCount, { discard: true });
   return incoming.method === BODYLESS_METHOD.HEAD
     ? bodylessAnswer(answer)
@@ -115,11 +145,15 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
  * The group, which is the passthrough on the auth path set and the hosted
  * vocabulary's own refusal anywhere else. Nothing routes another path to this
  * function, so the refusal says what the group declares rather than what a
- * caller can reach.
+ * caller can reach. The workspace seams are the plugin's create, which a
+ * sign-up's personal workspace is made through.
  */
-export function authApp(handle: WebRequestHandler): WebRoutes<never> {
+export function authApp(
+  handle: WebRequestHandler,
+  workspaces: WorkspaceSeams,
+): WebRoutes<DatabaseServices> {
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, AUTH_PATH_SET, authPassthrough(handle)),
+    HttpRouter.add(ANY_METHOD, AUTH_PATH_SET, authPassthrough(handle, workspaces)),
     hostedNotFoundRoute,
   );
 }
