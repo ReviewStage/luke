@@ -22,6 +22,7 @@ import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
+import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
@@ -472,6 +473,14 @@ export type AppMemories = AppHeldById<readonly MemorySummary[]>;
  */
 export type AppPlanDocuments = AppHeldById<HeldPlanDocument>;
 
+/**
+ * Each task's plan history the host holds for the windows
+ * (`compose-tasks.ts`): the tasks whose version history a window showed, and
+ * the few it showed lately, by the task's id, each its newest page as its
+ * read stands and the older pages read past it laid after it.
+ */
+export type AppHistories = AppHeldById<PlanRevisionsAnswer>;
+
 /** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
 export type AppAutomationReads = Pick<
   AppState,
@@ -524,6 +533,7 @@ export interface AppHostReads {
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
   [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
+  [LIVE_READ.HISTORY]: PlanRevisionsAnswer;
   [LIVE_READ.PLAN_DOCUMENT]: HeldPlanDocument;
 }
 
@@ -649,6 +659,8 @@ export interface AppState {
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
   /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
   [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
+  /** Each task's plan history the windows showed, held while a version history shows it and a while after: what the version history lists. */
+  [LIVE_READ.HISTORY]: AppHistories;
   /** Each task's plan the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
   [LIVE_READ.PLAN_DOCUMENT]: AppPlanDocuments;
   macCommands: AppMacCommandsSlice;
@@ -784,6 +796,8 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof PlanCommentThread,
   },
+  // Note that a history crosses whole, since each save lands a newest page that replaces its head.
+  [LIVE_READ.HISTORY]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   tasks: {
     keys: READ_KEYS.PARTS,
     on: KEYS_ON.SLICE,

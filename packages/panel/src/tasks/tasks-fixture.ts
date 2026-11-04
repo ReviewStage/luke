@@ -12,6 +12,7 @@ import {
   PLAN_ACTOR,
   type PlanDocument,
   type PlanRevisionLine,
+  type PlanRevisionsAnswer,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
@@ -22,12 +23,13 @@ import {
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksRepositoriesAnswer,
-  type TasksRevisionsAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
+  type AppHeldById,
+  type AppHistories,
   type AppPlanComments,
   type AppPlanDocuments,
   type AppStateSnapshot,
@@ -270,7 +272,7 @@ const FIXTURE_HISTORY: readonly {
 ];
 
 /** A page of the fixture task's history, newest first, before the revision `before` names where it names one. */
-function historyPage(before: number | undefined): TasksRevisionsAnswer {
+function historyPage(before: number | undefined): PlanRevisionsAnswer {
   return {
     revisions: FIXTURE_HISTORY.filter(({ line }) => before === undefined || line.seq < before).map(
       ({ line }) => line,
@@ -278,16 +280,12 @@ function historyPage(before: number | undefined): TasksRevisionsAnswer {
   };
 }
 
-/** A follow of the fixture task's history, which pushes its newest page once, as the host's does on opening, and nothing after. */
-async function* historyPushedOnce(): AsyncGenerator<TasksRevisionsAnswer> {
-  yield historyPage(undefined);
-}
-
 /**
  * What the fixture task's version history reads, answered here in place of
- * main under every profile: a page of its history, its newest page followed,
- * and one revision beside the one before it. Any other task's reads go to
- * main, as do a restore and every other act.
+ * main under every profile: a page of its history, and one revision beside
+ * the one before it. Its history as the version history holds it is staged
+ * on main's document instead (`fixtureAppState`). Any other task's reads go
+ * to main, as do a restore and every other act.
  */
 function historyActAnswer(
   kind: PortActKind,
@@ -297,11 +295,6 @@ function historyActAnswer(
     const page = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISIONS>;
     if (page.taskId !== FIXTURE_TASK_ID) return undefined;
     return { answer: historyPage(page.before) as PortActResult<PortActKind> };
-  }
-  if (kind === ACT_KIND.TASKS_HISTORY_FOLLOW) {
-    const follow = payload as PortActPayload<typeof ACT_KIND.TASKS_HISTORY_FOLLOW>;
-    if (follow.taskId !== FIXTURE_TASK_ID) return undefined;
-    return { answer: historyPushedOnce() as PortActResult<PortActKind> };
   }
   if (kind !== ACT_KIND.TASKS_REVISION) return undefined;
   const { taskId, seq } = payload as PortActPayload<typeof ACT_KIND.TASKS_REVISION>;
@@ -657,29 +650,49 @@ export function fixtureActAnswer(
 
 /** Main's held plans with the fixture's task's plan held, one object for each of main's. */
 const STAGED_PLANS = new WeakMap<AppPlanDocuments, AppPlanDocuments>();
+/** Main's held histories with the fixture's task's history held, one object for each of main's. */
+const STAGED_HISTORIES = new WeakMap<AppHistories, AppHistories>();
+
+/** `held` with the fixture's task's read laid as `rows`, one object for each of main's, kept in `staged`. */
+function stagedOn<Rows>(
+  staged: WeakMap<AppHeldById<Rows>, AppHeldById<Rows>>,
+  held: AppHeldById<Rows>,
+  rows: Rows,
+): AppHeldById<Rows> {
+  const kept = staged.get(held);
+  if (kept !== undefined) return kept;
+  const laid = { ...held, [FIXTURE_TASK_ID]: { rows } };
+  staged.set(held, laid);
+  return laid;
+}
 
 /**
- * Main's document with the fixture's task's plan held as the window's read
- * of it holds one (`LIVE_READ.PLAN_DOCUMENT`), under the profiles that open
- * the task (`fixtureTasksView`), so it opens on its plan; the very document
- * under any other.
+ * Main's document with the fixture's task's plan and its history held as the
+ * window's reads of them hold them (`LIVE_READ.PLAN_DOCUMENT`,
+ * `LIVE_READ.HISTORY`), under the profiles that open the task
+ * (`fixtureTasksView`), so it opens on its plan and its version history on
+ * its versions; the very document under any other.
  */
 function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
   if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
-  const held = state[LIVE_READ.PLAN_DOCUMENT];
-  let staged = STAGED_PLANS.get(held);
-  if (staged === undefined) {
-    staged = { ...held, [FIXTURE_TASK_ID]: { rows: { task: FIXTURE_TASK } } };
-    STAGED_PLANS.set(held, staged);
-  }
-  return { ...state, [LIVE_READ.PLAN_DOCUMENT]: staged };
+  return {
+    ...state,
+    [LIVE_READ.PLAN_DOCUMENT]: stagedOn(STAGED_PLANS, state[LIVE_READ.PLAN_DOCUMENT], {
+      task: FIXTURE_TASK,
+    }),
+    [LIVE_READ.HISTORY]: stagedOn(
+      STAGED_HISTORIES,
+      state[LIVE_READ.HISTORY],
+      historyPage(undefined),
+    ),
+  };
 }
 
 /**
  * Main's document as a fixture run draws it (`use-app-state.ts`): the
- * fixture's task's plan held under the profiles that open it, with the
- * fixture workspaces' members held under every profile, and the synthetic
- * account signed in under the profiles that stage one
+ * fixture's task's plan and history held under the profiles that open it,
+ * with the fixture workspaces' members held under every profile, and the
+ * synthetic account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles

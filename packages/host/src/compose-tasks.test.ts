@@ -230,6 +230,8 @@ interface FakeService extends TasksClient {
   sectionWrites: TaskSectionWrite[];
   /** The kind of section change the service refuses, where a test names one. */
   sectionRefused: TaskSectionWrite["kind"] | undefined;
+  /** What a section change's answer waits on once the service has it, so a test can ask another meanwhile. */
+  sectionAnswered: Effect.Effect<void>;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** Our GitHub App's install address a connection answers. */
@@ -615,6 +617,7 @@ function fakeService(tasks: Task[]): FakeService {
     sections: undefined,
     sectionWrites: [],
     sectionRefused: undefined,
+    sectionAnswered: Effect.void,
     get memberships() {
       return memberships;
     },
@@ -903,7 +906,7 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => {
         service.sectionWrites.push(write);
         return write.kind === service.sectionRefused ? undefined : service.sections;
-      }),
+      }).pipe(Effect.tap(() => service.sectionAnswered)),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
       Effect.sync((): TaskCallResult<PlanEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
@@ -1973,6 +1976,55 @@ it.effect(
         changed: false,
       });
       assert.deepEqual(last()?.taskSections, service.sections);
+    }),
+);
+
+it.effect(
+  "two quick drags draw at once, the later over the earlier, and reach the service in the order they were asked, each whole",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, settled } = yield* subject(service);
+      service.sections = { sections: [], entries: [], agentEntries: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const create = {
+        kind: TASK_SECTION_WRITE.CREATE,
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+      };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const rename = {
+        kind: TASK_SECTION_WRITE.EDIT,
+        id: SECTION_ID,
+        title: "Launch week",
+        icon: null,
+      };
+      const answered = yield* Deferred.make<void>();
+      service.sectionAnswered = Deferred.await(answered);
+
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [create, place] }),
+      );
+      yield* settled;
+      const second = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [rename] }),
+      );
+      yield* settled;
+      const drawn = last()?.taskSections;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+
+      assert.deepEqual(
+        [
+          drawn?.sections.map((section) => section.title),
+          drawn?.entries.map((each) => each.taskId),
+        ],
+        [["Launch week"], [INVITES]],
+      );
+      assert.deepEqual(service.sectionWrites, [create, place, rename]);
     }),
 );
 
@@ -4288,77 +4340,154 @@ it.effect(
     }),
 );
 
+/** One revision as the history's live read delivers its row: saved by Dean by hand at `at`. */
+function historyRow(seq: number, at: number) {
+  return {
+    seq,
+    actor: PLAN_ACTOR.DEVELOPER,
+    editorId: "user-dean",
+    editorName: "Dean",
+    liveSessionId: null,
+    agentId: null,
+    agentModel: null,
+    agentTitle: null,
+    callId: null,
+    changes: 1,
+    restoredFrom: null,
+    at,
+    startedAt: at,
+    restoredAt: null,
+  };
+}
+
+/** One revision as the version history lists it, from the row `historyRow` delivers. */
+function historyLine(seq: number, at: number) {
+  return {
+    seq,
+    lastEdit: {
+      actor: PLAN_ACTOR.DEVELOPER,
+      by: { userId: "user-dean", name: "Dean" },
+      at,
+      duringCall: false,
+    },
+    startedAt: at,
+    changes: 1,
+  };
+}
+
+/** The revisions `newest` down to `oldest`, newest first. */
+function revisionsFrom(newest: number, oldest: number): readonly number[] {
+  return Array.from({ length: newest - oldest + 1 }, (_, back) => newest - back);
+}
+
 it.effect(
-  "a plan's newest page of history followed for its version history is told as saves land, never in the view",
+  "a plan's newest page of history held for a window is laid on the app state as saves land, never in the view, kept followed once let go, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
       const history = polledLive<"revisions">(["revisions"]);
       service.historyLives[INVITES] = history;
-      const { call, told, pushed } = yield* subject(service);
-      const row = (seq: number, at: number) => ({
-        seq,
-        actor: PLAN_ACTOR.DEVELOPER,
-        editorId: "user-dean",
-        editorName: "Dean",
-        liveSessionId: null,
-        agentId: null,
-        agentModel: null,
-        agentTitle: null,
-        callId: null,
-        changes: 1,
-        restoredFrom: null,
-        at,
-        startedAt: at,
-        restoredAt: null,
-      });
-      const line = (seq: number, at: number) => ({
-        seq,
-        lastEdit: {
-          actor: PLAN_ACTOR.DEVELOPER,
-          by: { userId: "user-dean", name: "Dean" },
-          at,
-          duringCall: false,
-        },
-        startedAt: at,
-        changes: 1,
-      });
+      const { tasks, call, told, pushed } = yield* subject(service);
+      const held = (read: WireValue) => [GATEWAY_EVENT.HISTORIES_CHANGED, { [INVITES]: read }];
 
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      yield* answered(() => history.set({ revisions: [row(1, 1_000)] }));
-      yield* answered(() => history.set({ revisions: [row(2, 2_000), row(1, 1_000)] }));
+      yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }));
+      yield* answered(() =>
+        history.set({ revisions: [historyRow(2, 2_000), historyRow(1, 1_000)] }),
+      );
       assert.deepEqual(pushed, [
-        [
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          { taskId: INVITES, view: { revisions: [line(1, 1_000)] } },
-        ],
-        [
-          GATEWAY_EVENT.TASKS_HISTORY_CHANGED,
-          { taskId: INVITES, view: { revisions: [line(2, 2_000), line(1, 1_000)] } },
-        ],
+        held({ rows: { revisions: [historyLine(1, 1_000)] } }),
+        held({ rows: { revisions: [historyLine(2, 2_000), historyLine(1, 1_000)] } }),
       ]);
       assert.equal(told.length, 0, "a plan's history is never told in the view");
+
+      // Let go, the history stays followed among those let go lately, so its version history opened again reads nothing anew.
       yield* call(GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
+      assert.equal(history.held(), 1);
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      assert.equal(pushed.length, 2, "a history held again is drawn from where it stands");
+
+      yield* tasks.reset;
+      yield* followSettled;
       assert.equal(history.held(), 0);
+      assert.deepEqual(
+        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED),
+        [GATEWAY_EVENT.HISTORIES_CHANGED, {}],
+      );
     }),
 );
 
-it.effect("a restore puts the revision back and is answered once the service restored it", () =>
+it.effect("an older page laid into a held history stays when a save lands a new newest page", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-    service.revisions[1] = {
-      seq: 1,
-      document: { body: "# Invites", assumptions: [] },
-      previous: null,
-    };
-    const { call } = yield* subject(service);
+    const history = polledLive<"revisions">(["revisions"]);
+    service.historyLives[INVITES] = history;
+    // The service delivers one revision past a page of fifty, so the page reads that an older one stands, here before 3.
+    const rows = (newest: number, oldest: number) =>
+      revisionsFrom(newest, oldest).map((seq) => historyRow(seq, seq * 1_000));
+    const lines = (newest: number, oldest: number) =>
+      revisionsFrom(newest, oldest).map((seq) => historyLine(seq, seq * 1_000));
+    service.olderHistory[3] = { revisions: lines(2, 1) };
+    const { call, pushed } = yield* subject(service);
+    const heldNow = () => pushed.findLast(([kind]) => kind === GATEWAY_EVENT.HISTORIES_CHANGED);
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }), {
-      restored: true,
+    yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+    yield* followSettled;
+    yield* answered(() => history.set({ revisions: rows(52, 2) }));
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(52, 3), earlier: 3 } } },
+    ]);
+
+    // The reader scrolls back: the older page is answered, and laid after the newest.
+    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_REVISIONS, { taskId: INVITES, before: 3 }), {
+      revisions: lines(2, 1),
     });
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(52, 1) } } },
+    ]);
+
+    // A save lands a newest page that reaches back only to 4, and the versions read past it stay.
+    yield* answered(() => history.set({ revisions: rows(53, 3) }));
+    assert.deepEqual(heldNow(), [
+      GATEWAY_EVENT.HISTORIES_CHANGED,
+      { [INVITES]: { rows: { revisions: lines(53, 1) } } },
+    ]);
   }),
+);
+
+it.effect(
+  "a restore puts the revision back and is answered once the history held for its version history carries its transaction",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Invites", assumptions: [] },
+        previous: null,
+      };
+      const history = polledLive<"revisions">(["revisions"]);
+      service.historyLives[INVITES] = history;
+      const { call } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, { taskId: INVITES });
+      yield* followSettled;
+      // An answer Sync woke hands the held history its wait for a write's transaction.
+      yield* answered(() => history.set({ revisions: [historyRow(1, 1_000)] }, ["tx-earlier"]));
+
+      const restoring = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: INVITES, seq: 1 }),
+      );
+      yield* followSettled;
+      assert.equal(restoring.pollUnsafe(), undefined, "no answer before the history carries it");
+      yield* answered(() =>
+        history.set({ revisions: [historyRow(2, 2_000), historyRow(1, 1_000)] }, ["txid-1"]),
+      );
+      assert.deepEqual(yield* Fiber.join(restoring), { restored: true });
+    }),
 );
 
 /** The instant the live list is read at, which the test's clock is set to. */

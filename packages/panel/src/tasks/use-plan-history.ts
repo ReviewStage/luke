@@ -1,21 +1,22 @@
-import type { PlanDocument, PlanRevisionLine } from "@repo/features/task-wire";
+import type { PlanDocument, PlanRevisionLine, PlanRevisionsAnswer } from "@repo/features/task-wire";
 import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/tasks-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActedResult, askKept, type Kept } from "../act.js";
+import { HOST_READ_STATUS, type HostRead } from "../use-host-read.js";
 import { revisionOfSave } from "./plan-history-model.js";
 
 /**
  * use-plan-history.ts -- the open plan's history as its version history holds it: the revisions read, the version chosen, and its restore.
  *
- * The history is read through the service while the plan's version history
- * stands, the newest page first and each older page as the list asks, and
- * the newest page is followed while it stands: main streams it each time a
- * save lands (over Neon Realtime), so a save the app makes on a call lands at
- * the head of the list as it lands in the document, and nothing is read
- * again here. A history its source does not follow reads its newest page
- * once. The newest revision, the plan as it stands, is chosen until the
- * developer chooses another, and a save landing meanwhile moves the view on
+ * The history is the one main holds for the plan's version history while it
+ * stands, and a while after (`LIVE_READ.HISTORY`): its newest page, which
+ * main follows as each save lands, then each older page the list asked for,
+ * which main lays after it, so a save lands at the head of the list as it
+ * lands in the document, a version history opened again lists its versions
+ * in its first frame, and nothing is read again here. The newest revision,
+ * the plan as it stands, is chosen until the developer chooses another, and
+ * a save landing meanwhile moves the view on
  * to the new newest; choosing one reads its content and the content before
  * it, and the version history draws what that revision changed until it is
  * left or another task opens, and opens again on the newest. Opened from a
@@ -64,11 +65,10 @@ export interface ViewedVersion {
   readonly read: VersionRead;
 }
 
-/** Where the history is read from and written to: main's acts, or a test's own. */
+/** Where the history's older pages and its versions are read from, and a version is restored: main's acts, or a test's own. */
 export interface PlanHistorySource {
-  readPage: (taskId: string, before: number | undefined) => Promise<TasksRevisionsAnswer>;
-  /** Follows the newest page, each change handed to `take`, until the answer is called to let it go. */
-  followNewest?: (taskId: string, take: (answer: TasksRevisionsAnswer) => void) => () => void;
+  /** Reads the page before `before`, which main lays after the history it holds. */
+  readPage: (taskId: string, before: number) => Promise<TasksRevisionsAnswer>;
   readRevision: (taskId: string, seq: number) => Promise<TasksRevisionAnswer>;
   restore: (taskId: string, seq: number) => Promise<boolean>;
 }
@@ -138,12 +138,6 @@ const RESTORE_REFUSED: ActionResult = {
   reason: "The version could not be restored. Try again.",
 };
 
-/** A list read for one task. */
-interface HeldList {
-  readonly taskId: string;
-  readonly list: HistoryList;
-}
-
 /**
  * A version chosen on one task: its revision, none while the newest is
  * followed, so a save landing moves the view onto it; the moment of the save
@@ -204,25 +198,12 @@ function stoodAt(held: HeldVersion, spot: HistorySpot): HeldVersion {
   };
 }
 
-/**
- * The newest page laid over what was read before: the page whole, then
- * every older revision already read past it, so a list scrolled back keeps
- * what it read, and the place the next older page is read from with them.
- */
-function withNewestPage(held: HistoryList | undefined, page: HistoryList): HistoryList {
-  if (page.kind !== HISTORY_READ.READY || held?.kind !== HISTORY_READ.READY) return page;
-  const oldest = page.revisions.at(-1)?.seq;
-  if (oldest === undefined || page.earlier === undefined) return page;
-  const older = held.revisions.filter((line) => line.seq < oldest);
-  if (older.length === 0) return page;
-  return { ...page, revisions: [...page.revisions, ...older], earlier: held.earlier };
-}
-
-/** A page as the list holds it, or the failure it stands for. */
-function listOf(answer: TasksRevisionsAnswer): HistoryList {
-  return "failure" in answer
-    ? { kind: HISTORY_READ.FAILED }
-    : { kind: HISTORY_READ.READY, revisions: answer.revisions, earlier: answer.earlier };
+/** The history main holds as the list draws it: its pages once read, failed where it never answered, and none while it reads. */
+function listOf(rows: PlanRevisionsAnswer | undefined, failed: boolean): HistoryList | undefined {
+  if (rows !== undefined) {
+    return { kind: HISTORY_READ.READY, revisions: rows.revisions, earlier: rows.earlier };
+  }
+  return failed ? { kind: HISTORY_READ.FAILED } : undefined;
 }
 
 /** A version's content as the view holds it, or the failure it stands for. */
@@ -238,10 +219,11 @@ function versionOf(answer: TasksRevisionAnswer): VersionRead {
 
 /**
  * The open plan's history. `planId` is the open task, none while no task is
- * drawn; `editedAt` its last edit, which reads the version drawn again and
- * which a list must be as new as to be sought in; `name`
- * its name, under which a version is formatted, so a rename reads the
- * version drawn again; `shown` whether the plan's version history is on
+ * drawn; `history` its history as main holds it, which the caller holds
+ * while the version history is shown; `editedAt` its last edit, which reads
+ * the version drawn again and which a list must be as new as to be sought
+ * in; `name` its name, under which a version is formatted, so a rename reads
+ * the version drawn again; `shown` whether the plan's version history is on
  * screen, which is what reads it and what a version chosen stands on; and
  * `seek` the moment of the save whose revision it opens on, read as it
  * opens, none to open on the plan as it stands or, given `returnTo`, where
@@ -250,6 +232,7 @@ function versionOf(answer: TasksRevisionAnswer): VersionRead {
 export function usePlanHistory(input: {
   source: PlanHistorySource;
   taskId: string | undefined;
+  history: HostRead<PlanRevisionsAnswer>;
   editedAt: number | undefined;
   name: string | undefined;
   shown: boolean;
@@ -261,13 +244,10 @@ export function usePlanHistory(input: {
    */
   onRestored: (undo: (() => Promise<Kept>) | undefined) => void;
 }): PlanHistoryControl {
-  const { source, taskId, editedAt, name, shown, seek, returnTo, onRestored } = input;
-  const [list, setList] = useState<HeldList | undefined>(undefined);
+  const { source, taskId, history, editedAt, name, shown, seek, returnTo, onRestored } = input;
   const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
-  const [retries, setRetries] = useState(0);
   // Note that every read counts itself, because an answer landing after a
-  // newer read was made, or after another task opened, is not the list's.
-  const listReads = useRef(0);
+  // newer read was made, or after another task opened, is not the version's.
   const versionReads = useRef(0);
   // Note that the source is read where it is called rather than named by the
   // reads below, because a caller's acts are a new object on each of its
@@ -279,7 +259,9 @@ export function usePlanHistory(input: {
   // A version stands while the version history does, on its own task.
   const chosen = reading && version?.taskId === taskId ? version : undefined;
   if (version !== undefined && chosen === undefined) setVersion(undefined);
-  const held = list !== undefined && list.taskId === taskId ? list.list : undefined;
+  const heldRows = reading ? history.rows : undefined;
+  const heldFailed = reading && history.status === HOST_READ_STATUS.FAILED;
+  const held = useMemo(() => listOf(heldRows, heldFailed), [heldRows, heldFailed]);
   const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
   // Until one is chosen, the plan as it stands is, whichever revision that is now.
   const newest = revisions[0]?.seq;
@@ -315,44 +297,6 @@ export function usePlanHistory(input: {
         ? held.earlier
         : undefined
       : undefined;
-
-  useEffect(() => {
-    if (!reading || taskId === undefined) return;
-    listReads.current += 1;
-    const read = listReads.current;
-    setList((held) =>
-      held?.taskId === taskId ? held : { taskId, list: { kind: HISTORY_READ.READING } },
-    );
-    /** A newest page taken over the list held; one that failed keeps a list already drawn. */
-    const take = (answer: TasksRevisionsAnswer) =>
-      setList((held) => {
-        const was = held?.taskId === taskId ? held.list : undefined;
-        const page = listOf(answer);
-        if (page.kind === HISTORY_READ.FAILED && was?.kind === HISTORY_READ.READY) return held;
-        return { taskId, list: withNewestPage(was, page) };
-      });
-    // Note that a change heard is the newest word of the page, so the read still out is let go once one is.
-    let followed = false;
-    latest.current.readPage(taskId, undefined).then(
-      (answer) => {
-        if (read === listReads.current && !followed) take(answer);
-      },
-      // A read main refused is one that failed, which keeps a list already drawn too.
-      () => {
-        if (read !== listReads.current || followed) return;
-        setList((held) =>
-          held?.taskId === taskId && held.list.kind === HISTORY_READ.READY
-            ? held
-            : { taskId, list: { kind: HISTORY_READ.FAILED } },
-        );
-      },
-    );
-    return latest.current.followNewest?.(taskId, (answer) => {
-      if (read !== listReads.current) return;
-      followed = true;
-      take(answer);
-    });
-  }, [reading, taskId, retries]);
 
   const seq =
     chosen === undefined
@@ -404,7 +348,7 @@ export function usePlanHistory(input: {
     },
     [taskId, newest],
   );
-  const onRetry = useCallback(() => setRetries((was) => was + 1), []);
+  const onRetry = history.retry;
   // Note that the sections stay open, since they are drawn from the very version this reads again.
   const onRetryVersion = useCallback(
     () =>
@@ -434,26 +378,13 @@ export function usePlanHistory(input: {
   const onList = () => setVersion((held) => held && { ...held, listed: true });
   const onStand = (spot: HistorySpot) => setVersion((held) => held && stoodAt(held, spot));
 
+  // Note that the page is drawn from what main holds, which lays it after the history held.
   const onLoadEarlier = async (): Promise<boolean> => {
     if (taskId === undefined || held?.kind !== HISTORY_READ.READY || held.earlier === undefined) {
       return false;
     }
-    const before = held.earlier;
-    const answer = await source.readPage(taskId, before).catch(() => undefined);
-    if (answer === undefined || "failure" in answer) return false;
-    setList((was) => {
-      if (was?.taskId !== taskId || was.list.kind !== HISTORY_READ.READY) return was;
-      const kept = was.list.revisions.filter((line) => line.seq >= before);
-      return {
-        taskId,
-        list: {
-          kind: HISTORY_READ.READY,
-          revisions: [...kept, ...answer.revisions],
-          earlier: answer.earlier,
-        },
-      };
-    });
-    return true;
+    const answer = await source.readPage(taskId, held.earlier).catch(() => undefined);
+    return answer !== undefined && !("failure" in answer);
   };
 
   // A save or a version gone back to that no page read so far shows is

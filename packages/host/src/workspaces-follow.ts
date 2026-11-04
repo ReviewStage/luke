@@ -98,19 +98,23 @@ function sidebarRowsOf(read: SealedRead<SidebarPart>): Option.Option<SidebarRows
 export function followSidebarRows(
   dependencies: LiveReadDependencies<SealedRead<SidebarPart>>,
   first: SealedRead<SidebarPart>,
-  take: (rows: SidebarRows) => void,
+  take: (rows: SidebarRows) => Effect.Effect<void>,
 ): Effect.Effect<void, LiveBroken> {
-  const taken = (read: SealedRead<SidebarPart>) => {
-    const rows = sidebarRowsOf(read);
-    if (rows === "undecoded") return false;
-    if (Option.isSome(rows)) take(rows.value);
-    return true;
-  };
+  const taken = (read: SealedRead<SidebarPart>) =>
+    Effect.suspend(() => {
+      const rows = sidebarRowsOf(read);
+      if (rows === "undecoded") return Effect.succeed(false);
+      return Option.isSome(rows) ? Effect.as(take(rows.value), true) : Effect.succeed(true);
+    });
   return Effect.gen(function* () {
-    if (!taken(first)) return yield* new LiveBroken({ reason: "a row did not decode" });
+    if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
     const poll = (after: string | undefined) =>
-      Effect.map(dependencies.poll(after), (read) =>
-        "failure" in read || taken(read) ? read : { failure: "a row did not decode" },
+      Effect.flatMap(dependencies.poll(after), (read) =>
+        "failure" in read
+          ? Effect.succeed(read)
+          : Effect.map(taken(read), (decoded) =>
+              decoded ? read : { failure: "a row did not decode" },
+            ),
       );
     const { onTxWait } = dependencies;
     yield* Stream.runDrain(
