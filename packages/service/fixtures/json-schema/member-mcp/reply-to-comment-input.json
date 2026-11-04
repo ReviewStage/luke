@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task whose plan's comments to act on, by the id list_tasks answered."
+    },
+    "thread": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The thread's id, as read_comments lists it."
+    },
+    "words": {
+      "type": "string",
+      "maxLength": 8000,
+      "description": "The comment, in plain words, as the member's own: every member of the workspace reads it under the member's name."
+    }
+  },
+  "required": [
+    "taskId",
+    "thread",
+    "words"
+  ],
+  "additionalProperties": false
+}

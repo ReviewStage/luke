@@ -39,9 +39,17 @@
 import { randomUUID } from "node:crypto";
 import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { DatabaseServices } from "@repo/database/core/query";
+import {
+  actOnPlanCommentThread,
+  PLAN_COMMENT_OUTCOME,
+  type PlanCommentOutcome,
+  type PlanCommentWriterRef,
+  readPlanCommentThread,
+  startPlanCommentThread,
+} from "@repo/database/models/plan-comments";
 import { readPageById } from "@repo/database/models/plan-pages";
 import { listTaskSections } from "@repo/database/models/task-section-store";
-import { readTaskWorkspace } from "@repo/database/models/task-store";
+import { readTask, readTaskWorkspace } from "@repo/database/models/task-store";
 import { listWorkspaces } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
@@ -63,9 +71,18 @@ import {
   INBOX_STATUS,
   inboxAnswersSchema,
 } from "@repo/features/inbox-wire";
+import { MEMORY_BOUNDS, memoryIdSchema } from "@repo/features/memory-wire";
 import { agentName } from "@repo/features/model-label";
 import { PAGE_OWNER } from "@repo/features/page-wire";
-import { planNotesSchema } from "@repo/features/plan-template";
+import {
+  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_BOUNDS,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  planCommentWordsSchema,
+} from "@repo/features/plan-comment-wire";
+import { locatedPhrase, planNotesSchema } from "@repo/features/plan-template";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PULL_REQUEST_ACTION,
@@ -78,6 +95,7 @@ import { WORKSPACE_BOUNDS, workspaceOfSlug } from "@repo/features/workspace-wire
 import { describeWire, type StandardSchemaWithJson, standardSchemaOf } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { forgetWorkspaceMemory, WORKSPACE_MEMORY } from "../accounts/workspace-memories.js";
 import {
   READ_AGENT_CHANGES,
   READ_AGENT_CHANGES_INPUT,
@@ -124,6 +142,14 @@ import { sessionsRouter } from "../agents/coder-host/runtime-sessions.js";
 import { steerMemberWords } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
+  type MemoryCall,
+  memoryOnFor,
+  runRecall,
+  runRemember,
+  SAVE_MEMORY_TOOL,
+  SEARCH_MEMORY_TOOL,
+} from "../agents/memory-tools.js";
+import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
   runCreateSection,
@@ -146,11 +172,22 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
+import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { agentWorkspace } from "../github/workspace-repository.js";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import {
+  COMMENT_TOOL_REFUSAL,
+  commentAnswerRead,
+  commentToolRejected,
+  READ_COMMENTS_TOOL,
+  REPLY_TO_COMMENT_TOOL,
+  runCommentTool,
+  UPDATE_COMMENT_TOOL,
+} from "../tasks/comment-tools.js";
+import { type MentioningComment, memberCommentAnswer } from "../tasks/plan-comments-procedures.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
 import {
   answerAskAsMember,
@@ -212,6 +249,13 @@ export const MEMBER_MCP_TOOL = {
   REPLY_TO_THREAD: MEMBER_INBOX_TOOL.REPLY,
   CLOSE_THREAD: MEMBER_INBOX_TOOL.CLOSE,
   AGENT_PULL_REQUEST_ACTION: "agent_pull_request_action",
+  READ_COMMENTS: AGENT_TOOL.READ_COMMENTS,
+  COMMENT_ON_PLAN: "comment_on_plan",
+  REPLY_TO_COMMENT: AGENT_TOOL.REPLY_TO_COMMENT,
+  UPDATE_COMMENT: AGENT_TOOL.UPDATE_COMMENT,
+  SEARCH_MEMORY: AGENT_TOOL.SEARCH_MEMORY,
+  SAVE_MEMORY: AGENT_TOOL.SAVE_MEMORY,
+  FORGET_MEMORY: "forget_memory",
 } as const;
 
 /** A read's annotations: it changes nothing of the member's. */
@@ -1262,6 +1306,377 @@ const AGENT_PULL_REQUEST_ACTION_TOOL = memberMcpTool({
     ),
 });
 
+/*
+ * The comments and the memory. A plan's comment threads, and its task's
+ * pages', are read, answered, resolved, and reopened as the member, on a task
+ * they can open, as their window's own threads are: a read and a settle run
+ * the agents' own door (`../tasks/comment-tools.ts`), written under the
+ * member rather than an agent, and a comment, a reply or a thread started on
+ * the plan's words, is answered as the desktop answers one
+ * (`memberCommentAnswer`), so it hands its thread to the agents in it, and to
+ * each one its words mention, as one typed in the window does. The
+ * workspace's shared memory is searched, kept, and forgotten as the member,
+ * in the workspace a slug names or their only one, only while they have
+ * Memory on (`memoryOnFor`), as Settings › Memory stands only then, and is
+ * held to what the desktop holds the member to: the workspace's bound of
+ * memories, and a forget of another member's words only for one who owns or
+ * administers the workspace.
+ */
+
+/** Why a comment or a memory call took nothing, in words for one acting for the member. */
+const MEMBER_NOTE_REFUSAL = {
+  NO_WORDS:
+    "Not posted: the plan does not hold those words exactly once; copy them, or more of them, " +
+    `from the plan as ${MEMBER_MCP_TOOL.READ_TASK} reads it.`,
+  MEMORY_OFF:
+    "Not run: the member you act for has Memory off; they turn it on in Settings › " +
+    "Experimental. Carry on without it.",
+  NOT_MEMBER: "Not forgotten: the member no longer belongs to that workspace.",
+  NOT_FORGETTABLE:
+    "Not forgotten: the member may forget a memory in their own words alone, unless they own " +
+    "or administer the workspace.",
+} as const;
+
+/** Who writes a member's comment: the member, never an agent. */
+type MemberCommentWriter = Extract<
+  PlanCommentWriterRef,
+  { readonly actor: typeof PLAN_COMMENT_ACTOR.MEMBER }
+>;
+
+/** A comment call run as the member, on the task it names as the member reaches it; refused where they reach none. */
+const commentAsMember = <R>(
+  taskId: string,
+  act: (writer: MemberCommentWriter) => Effect.Effect<WireRecord, never, R>,
+) =>
+  readAsMember(
+    (userId) => readTaskWorkspace(userId, taskId),
+    COMMENT_TOOL_REFUSAL.NO_TASK,
+    ({ caller }) => act({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: callerUserId(caller) }),
+  );
+
+/** A member's comment as the store came to it, answered as the window's own is, its thread handed to the agents it reaches; a task or thread not reached refused. */
+const memberCommented = (outcome: PlanCommentOutcome, comment: MentioningComment) => {
+  if (outcome.status === PLAN_COMMENT_OUTCOME.DONE) {
+    return Effect.map(memberCommentAnswer(outcome, comment), commentAnswerRead);
+  }
+  return Effect.succeed(
+    commentToolRejected(
+      outcome.status === PLAN_COMMENT_OUTCOME.NO_TASK
+        ? COMMENT_TOOL_REFUSAL.NO_TASK
+        : COMMENT_TOOL_REFUSAL.NO_THREAD,
+    ),
+  );
+};
+
+/** The task a comment tool acts on, by its id. */
+const COMMENTED_TASK_INPUT = describeWire(
+  wireUuidSchema,
+  `The task whose plan's comments to act on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
+);
+
+/** A comment's words, as the member's own. */
+const COMMENT_WORDS_INPUT = describeWire(
+  planCommentWordsSchema,
+  "The comment, in plain words, as the member's own: every member of the workspace reads it " +
+    "under the member's name.",
+);
+
+/** A read of comments names the task, and the page to read in the plan's place, and which threads. */
+const ReadCommentsInputSchema = Schema.Struct({
+  taskId: COMMENTED_TASK_INPUT,
+  page: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      "One of the task's pages, by the id a mention of it or a link to it names, to read its " +
+        "threads instead of the plan's.",
+    ),
+  ),
+  status: READ_COMMENTS_TOOL.inputSchema.fields.status,
+});
+
+const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.READ_COMMENTS,
+  description:
+    "Read the comment threads on the plan of a task the member can open, by its taskId, a " +
+    "teammate's included, in whichever of the member's workspaces it stands, or on one of its " +
+    "pages where you name the page: each thread's id, the words of the plan it is on and their " +
+    "section, whether those words were since deleted, every comment with who wrote it, when, " +
+    "and the names of the files it carries, and the agents it was sent to. A page's thread " +
+    "names the version it was left on and the element it is on, by its words and its path, or " +
+    "none for the whole page. Open threads unless you ask for resolved ones. It only reads: " +
+    "nobody is told.",
+  input: ReadCommentsInputSchema,
+  annotations: READ_ONLY,
+  run: (asked) =>
+    commentAsMember(asked.taskId, (writer) =>
+      runCommentTool(READ_COMMENTS_TOOL.name, { taskId: asked.taskId, writer }, asked),
+    ),
+});
+
+/** A thread started on the plan names the task, the words it stands on, and its first comment. */
+const CommentOnPlanInputSchema = Schema.Struct({
+  taskId: COMMENTED_TASK_INPUT,
+  quote: describeWire(
+    Schema.String.check(
+      Schema.isNonEmpty(),
+      Schema.isMaxLength(PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS),
+    ),
+    "The words of the plan the thread stands on, copied exactly from the plan as " +
+      `${MEMBER_MCP_TOOL.READ_TASK} reads it, as much as stands there exactly once.`,
+  ),
+  words: COMMENT_WORDS_INPUT,
+});
+
+type CommentOnPlanInput = typeof CommentOnPlanInputSchema.Type;
+
+/**
+ * A thread started on the words of the plan as saved, the one place they
+ * stand there, found as a note's replacement finds its words, with the
+ * member's first comment, handed to the agents its words mention.
+ */
+const memberPlanComment = (writer: MemberCommentWriter, asked: CommentOnPlanInput) =>
+  orStoreRefusal(
+    Effect.gen(function* () {
+      const task = yield* readTask(writer.userId, asked.taskId);
+      if (Option.isNone(task)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
+      const { text } = task.value;
+      const anchor = locatedPhrase(text, asked.quote);
+      if (anchor === undefined) return commentToolRejected(MEMBER_NOTE_REFUSAL.NO_WORDS);
+      const clientKey = randomUUID();
+      const outcome = yield* startPlanCommentThread(writer, asked.taskId, {
+        clientKey,
+        scope: PLAN_COMMENT_SCOPE.WORDS,
+        quote: text.slice(anchor.from, anchor.to),
+        anchor,
+        text,
+        words: asked.words,
+      });
+      return yield* memberCommented(outcome, {
+        userId: writer.userId,
+        taskId: asked.taskId,
+        words: asked.words,
+        clientKey,
+        isReply: false,
+      });
+    }),
+  );
+
+/** How a comment tool tells the outside agent whom a comment reaches. */
+const MENTION_WORDS =
+  "Each agent of the task the words mention by its mention link, the `[@title](link)` " +
+  `${MEMBER_MCP_TOOL.LIST_AGENTS} answers, joins the thread and is sent it, as a mention typed ` +
+  "in the window does.";
+
+const MEMBER_COMMENT_ON_PLAN_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.COMMENT_ON_PLAN,
+  description:
+    "Start a comment thread on words of the plan of a task the member can open, by its taskId, " +
+    "as the member's own comment in the plan's margin: name the words by copying them from " +
+    `the plan as ${MEMBER_MCP_TOOL.READ_TASK} reads it, as much as stands there exactly once, ` +
+    "and give the first comment. Every member of the workspace sees it beside those words. " +
+    `${MENTION_WORDS} Each call starts a thread of its own, so call it once for each. Answers ` +
+    "`accepted` with the thread as it stands, or `rejected` and why nothing was posted.",
+  input: CommentOnPlanInputSchema,
+  annotations: ADDITIVE,
+  run: (asked) => commentAsMember(asked.taskId, (writer) => memberPlanComment(writer, asked)),
+});
+
+/** A reply names the task, the thread, and the member's words. */
+const ReplyToCommentInputSchema = Schema.Struct({
+  taskId: COMMENTED_TASK_INPUT,
+  thread: REPLY_TO_COMMENT_TOOL.inputSchema.fields.thread,
+  words: COMMENT_WORDS_INPUT,
+});
+
+type ReplyToCommentInput = typeof ReplyToCommentInputSchema.Type;
+
+/**
+ * A reply in the thread as the member's own words, refused on a resolved
+ * thread, which the window offers no reply on, and handed to every agent in
+ * the thread and each one its words mention.
+ */
+const memberReply = (writer: MemberCommentWriter, asked: ReplyToCommentInput) =>
+  orStoreRefusal(
+    Effect.gen(function* () {
+      const standing = yield* readPlanCommentThread(writer.userId, asked.taskId, asked.thread);
+      if (Option.getOrUndefined(standing)?.status === PLAN_COMMENT_STATUS.RESOLVED) {
+        return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
+      }
+      const clientKey = randomUUID();
+      const outcome = yield* actOnPlanCommentThread(writer, asked.taskId, asked.thread, {
+        action: PLAN_COMMENT_ACTION.REPLY,
+        clientKey,
+        words: asked.words,
+      });
+      return yield* memberCommented(outcome, {
+        userId: writer.userId,
+        taskId: asked.taskId,
+        words: asked.words,
+        clientKey,
+        isReply: true,
+      });
+    }),
+  );
+
+const MEMBER_REPLY_TO_COMMENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.REPLY_TO_COMMENT,
+  description:
+    "Reply in one comment thread on the plan of a task the member can open, or on one of its " +
+    "pages, by the thread's id, as the member's own reply in the window would: every member " +
+    "of the workspace sees it, and the thread is sent to every agent in it, each one sent it " +
+    "before or that answered in it, and, on a page, the agent that showed the page; each reads " +
+    `it as a message from the member and answers in the thread. ${MENTION_WORDS} A resolved ` +
+    `thread takes no reply until ${MEMBER_MCP_TOOL.UPDATE_COMMENT} reopens it. Each call posts ` +
+    "a reply of its own, so call it once for each. Answers `accepted` with the thread as it " +
+    "now stands and, in unsent, the agents in it it could not reach, an archived one say, the " +
+    "reply posted all the same; or `rejected` and why nothing was posted.",
+  input: ReplyToCommentInputSchema,
+  annotations: ADDITIVE,
+  run: (asked) => commentAsMember(asked.taskId, (writer) => memberReply(writer, asked)),
+});
+
+/** A thread settled or brought back names the task, the thread, and which. */
+const UpdateCommentInputSchema = Schema.Struct({
+  taskId: COMMENTED_TASK_INPUT,
+  thread: UPDATE_COMMENT_TOOL.inputSchema.fields.thread,
+  resolved: UPDATE_COMMENT_TOOL.inputSchema.fields.resolved,
+});
+
+const MEMBER_UPDATE_COMMENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.UPDATE_COMMENT,
+  description:
+    "Resolve or reopen one comment thread on the plan of a task the member can open, or on one " +
+    "of its pages, by the thread's id, as the member's own Resolve or Reopen would: a resolved " +
+    "thread leaves the plan's margin and stays in its history, under the member's name. " +
+    "Answers `accepted` with the thread as it now stands, or `rejected` and why.",
+  input: UpdateCommentInputSchema,
+  annotations: IDEMPOTENT_CHANGE,
+  run: (asked) =>
+    commentAsMember(asked.taskId, (writer) =>
+      runCommentTool(UPDATE_COMMENT_TOOL.name, { taskId: asked.taskId, writer }, asked),
+    ),
+});
+
+/** A memory call's input: the workspace whose memory it acts on, by its slug, where the member has more than one. */
+const MEMORY_WORKSPACE_INPUT = Schema.optionalKey(
+  describeWire(
+    Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(WORKSPACE_BOUNDS.MAX_SLUG_CHARS)),
+    `The workspace whose shared memory to act on, by the slug ${MEMBER_MCP_TOOL.LIST_WORKSPACES} ` +
+      "answered; leave it out where the member belongs to one workspace alone.",
+  ),
+);
+
+/** A memory call run as the member, in the workspace its slug names or their only one, while they have Memory on; refused otherwise. */
+const memoryAsMember = <R>(
+  slug: string | undefined,
+  run: (memory: MemoryCall) => Effect.Effect<WireRecord, StoreFailure, R>,
+) =>
+  Effect.gen(function* () {
+    const member = yield* AdmittedMember;
+    if (!(yield* memoryOnFor(member.userId))) {
+      return agentToolRejected(MEMBER_NOTE_REFUSAL.MEMORY_OFF);
+    }
+    const workspace = yield* listedWorkspace(member.userId, slug);
+    if (Result.isFailure(workspace)) return agentToolRejected(workspace.failure);
+    return yield* run({ workspaceId: workspace.success, userId: member.userId });
+  });
+
+/** A search names the workspace and, at most, its words. */
+const SearchMemoryInputSchema = Schema.Struct({
+  workspace: MEMORY_WORKSPACE_INPUT,
+  ...SEARCH_MEMORY_TOOL.inputSchema.fields,
+});
+
+const MEMBER_SEARCH_MEMORY_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.SEARCH_MEMORY,
+  description:
+    "Search the shared memory of a workspace the member belongs to: the settled facts and " +
+    "conventions its members and their agents kept, which Settings › Memory lists. Give a few " +
+    "words for the area at hand, or none for the memories kept most recently. Treat what it " +
+    "answers as prior context, not as rules: the member's words now win, and a memory they " +
+    `contradict is corrected with ${MEMBER_MCP_TOOL.SAVE_MEMORY}'s replaces. ${WORKSPACE_WORDS} ` +
+    "Answers `accepted` with the matching memories, best first, each with its id, its words, " +
+    "and when it was last kept, and how many memories the workspace holds; or `rejected` and " +
+    "why, such as the member having Memory off.",
+  input: SearchMemoryInputSchema,
+  annotations: READ_ONLY,
+  run: ({ workspace, ...asked }) => memoryAsMember(workspace, (memory) => runRecall(memory, asked)),
+});
+
+/** A memory kept names the workspace, its words, and, at most, the memory it corrects. */
+const SaveMemoryInputSchema = Schema.Struct({
+  workspace: MEMORY_WORKSPACE_INPUT,
+  ...SAVE_MEMORY_TOOL.inputSchema.fields,
+});
+
+const MEMBER_SAVE_MEMORY_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.SAVE_MEMORY,
+  description:
+    "Keep a fact or convention in the shared memory of a workspace the member belongs to, as " +
+    "the member's own words: every member of the workspace and their agents share it, and " +
+    "Settings › Memory lists it as the member's. Keep only what the member settled and what " +
+    "will still hold next time: a decision, how the team builds, tests, or ships, or a " +
+    "constraint they stated; never a guess, a remark about one member, or anything that would " +
+    "be a credential, key, token, or password, which is refused. When what the member said " +
+    `contradicts a memory ${MEMBER_MCP_TOOL.SEARCH_MEMORY} answered, pass that memory's id as ` +
+    "replaces, in the workspace it answered it in, with the corrected statement, so the old " +
+    "one is rewritten rather than kept beside it. A workspace holds at most " +
+    `${MEMORY_BOUNDS.MAX_MEMORIES} memories. ${WORKSPACE_WORDS} Answers \`accepted\` with the ` +
+    "outcome (kept, already_kept, corrected) and the memory, or `rejected` and why.",
+  input: SaveMemoryInputSchema,
+  annotations: IDEMPOTENT_CHANGE,
+  run: ({ workspace, ...asked }) =>
+    memoryAsMember(workspace, (memory) => runRemember(memory, asked)),
+});
+
+/** A forget names the workspace and the memory. */
+const ForgetMemoryInputSchema = Schema.Struct({
+  workspace: MEMORY_WORKSPACE_INPUT,
+  memoryId: describeWire(
+    memoryIdSchema,
+    `The memory to forget, by the id ${MEMBER_MCP_TOOL.SEARCH_MEMORY} answered it.`,
+  ),
+});
+
+/**
+ * One of the workspace's memories forgotten as the member, as their Forget
+ * in Settings › Memory does: refused where its words are another member's
+ * and the member does not manage the workspace, and counted as theirs.
+ */
+const memberForget = (memory: MemoryCall, memoryId: string) =>
+  Effect.gen(function* () {
+    const { userId, workspaceId } = memory;
+    const answer = yield* forgetWorkspaceMemory(userId, workspaceId, memoryId);
+    switch (answer.kind) {
+      case WORKSPACE_MEMORY.NOT_MEMBER:
+        return agentToolRejected(MEMBER_NOTE_REFUSAL.NOT_MEMBER);
+      case WORKSPACE_MEMORY.NOT_PERMITTED:
+        return agentToolRejected(MEMBER_NOTE_REFUSAL.NOT_FORGETTABLE);
+      case WORKSPACE_MEMORY.READ:
+        yield* recordServerEvent(SERVER_EVENT.MEMORY_FORGET, { userId, workspaceId }, {});
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          forgotten: memoryId,
+          total: answer.memories.length,
+        };
+    }
+  });
+
+const MEMBER_FORGET_MEMORY_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.FORGET_MEMORY,
+  description:
+    "Forget one memory of a workspace the member belongs to, by its id, as their Forget in " +
+    "Settings › Memory would: it is deleted for good, and no later search finds it. The member " +
+    "may forget a memory in their own words, and one in any member's where they own or " +
+    `administer the workspace. ${WORKSPACE_WORDS} Answers \`accepted\` with the memory's id and ` +
+    "how many memories the workspace then holds, a memory already gone among it, or " +
+    "`rejected` and why.",
+  input: ForgetMemoryInputSchema,
+  annotations: DESTRUCTIVE,
+  run: ({ workspace, memoryId }) =>
+    memoryAsMember(workspace, (memory) => memberForget(memory, memoryId)),
+});
+
 /** Every tool the server offers, listed in the order an agent reads them. */
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
@@ -1286,4 +1701,11 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   REPLY_TO_THREAD_TOOL,
   CLOSE_THREAD_TOOL,
   AGENT_PULL_REQUEST_ACTION_TOOL,
+  MEMBER_READ_COMMENTS_TOOL,
+  MEMBER_COMMENT_ON_PLAN_TOOL,
+  MEMBER_REPLY_TO_COMMENT_TOOL,
+  MEMBER_UPDATE_COMMENT_TOOL,
+  MEMBER_SEARCH_MEMORY_TOOL,
+  MEMBER_SAVE_MEMORY_TOOL,
+  MEMBER_FORGET_MEMORY_TOOL,
 ];

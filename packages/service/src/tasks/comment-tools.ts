@@ -13,8 +13,10 @@ import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_STATUS,
+  type PlanCommentAsked,
   type PlanCommentEntry,
   type PlanCommentThread,
+  type PlanCommentThreadAnswer,
   planCommentWordsSchema,
 } from "@repo/features/plan-comment-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -168,6 +170,11 @@ function writerOf(entry: PlanCommentEntry): string {
   }
 }
 
+/** Whom a thread was sent to, as an agent reads it. */
+function askedName(asked: PlanCommentAsked | undefined): string {
+  return asked?.actor === PLAN_COMMENT_ACTOR.APP ? PRODUCT_NAME : `agent ${asked?.agentId ?? ""}`;
+}
+
 /** A thread as an agent reads it: what it is on, its comments, and who was asked to answer it. */
 function threadRead(thread: PlanCommentThread): WireRecord {
   const comments = thread.entries
@@ -182,13 +189,7 @@ function threadRead(thread: PlanCommentThread): WireRecord {
     }));
   const asked = thread.entries
     .filter((entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.asked !== undefined)
-    .map((entry) => ({
-      by: writerOf(entry),
-      to:
-        entry.asked?.actor === PLAN_COMMENT_ACTOR.APP
-          ? PRODUCT_NAME
-          : `agent ${entry.asked?.agentId ?? ""}`,
-    }));
+    .map((entry) => ({ by: writerOf(entry), to: askedName(entry.asked) }));
   // Note that a page's thread stands on no words of the plan, so it names its page in their place.
   const where =
     thread.page !== undefined
@@ -207,6 +208,21 @@ function threadRead(thread: PlanCommentThread): WireRecord {
   };
 }
 
+/**
+ * A write's answer as the result the model reads: the thread as it now
+ * stands, with the ones a member's comment could not reach where it says
+ * any, or why nothing was taken.
+ */
+export function commentAnswerRead(answer: PlanCommentThreadAnswer): WireRecord {
+  if ("refused" in answer) return commentToolRejected(answer.refused);
+  if ("deleted" in answer) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    ...threadRead(answer.thread),
+    ...(answer.unsent === undefined ? undefined : { unsent: answer.unsent.map(askedName) }),
+  };
+}
+
 /** A write's outcome as the result the model reads. */
 function written(outcome: PlanCommentOutcome): WireRecord {
   if (outcome.status === PLAN_COMMENT_OUTCOME.NO_TASK)
@@ -214,10 +230,7 @@ function written(outcome: PlanCommentOutcome): WireRecord {
   // Note that no tool starts a thread, so no write of one finds no page; a thread it names is the task's or none.
   if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE)
     return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
-  const { answer } = outcome;
-  if ("refused" in answer) return commentToolRejected(answer.refused);
-  if ("deleted" in answer) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_THREAD);
-  return { status: ACTION_RESULT_STATUS.ACCEPTED, ...threadRead(answer.thread) };
+  return commentAnswerRead(outcome.answer);
 }
 
 /** One call of a comment tool on the plan the door bound, answered as the result the model reads. */

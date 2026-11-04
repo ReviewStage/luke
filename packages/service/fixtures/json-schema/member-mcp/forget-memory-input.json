@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace whose shared memory to act on, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "memoryId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The memory to forget, by the id search_memory answered it."
+    }
+  },
+  "required": [
+    "memoryId"
+  ],
+  "additionalProperties": false
+}
