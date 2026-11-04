@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
 import { organization, user } from "@repo/database/schemas/auth";
+import { inboxMessage } from "@repo/database/schemas/inbox-message";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
@@ -33,15 +34,20 @@ interface SlackCall {
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at a timestamp of its own. */
-function fakeSlack(calls: SlackCall[]): SlackWebApi {
+/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at a timestamp of its own; with `refuseFirstReply`, it refuses the first reply in a thread. */
+function fakeSlack(calls: SlackCall[], refuseFirstReply = false): SlackWebApi {
   let posted = 0;
+  let refused = !refuseFirstReply;
   return (method, args) => {
     calls.push({ method, args });
     switch (method) {
       case "users.lookupByEmail":
         return Effect.succeed({ ok: true, user: { id: `U-${args.email}` } });
       case "chat.postMessage":
+        if (args.thread_ts !== undefined && !refused) {
+          refused = true;
+          return Effect.succeed({ ok: false, error: "ratelimited" });
+        }
         posted += 1;
         return Effect.succeed({ ok: true, channel: "D0001", ts: `1700000000.00010${posted}` });
       case "files.getUploadURLExternal":
@@ -193,4 +199,75 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
       }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles(sent))));
     },
   );
+
+  it.effect(
+    "a post whose reply Slack refused leaves its title DM the thread's, so the next ask replies under it",
+    () => {
+      const calls: SlackCall[] = [];
+      return Effect.gen(function* () {
+        const { agent, organizationId } = yield* openConnectedAgent;
+        const ask = {
+          key: "invite-expiry",
+          title: "How long should an invitation last?",
+          body: "A week?",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "A week" }, { label: "A month" }] },
+          needsReply: true,
+        };
+        const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+        yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
+        yield* TestClock.adjust("1 second");
+        const again = Result.getOrThrow(
+          yield* postInboxThread(agent, { ...ask, body: "Or a month?" }),
+        );
+        yield* dmThreadPost({ organizationId, item: again, asked: true, wasOpen: true });
+
+        const posted = calls.filter((call) => call.method === "chat.postMessage");
+        assert.deepEqual(
+          posted.map((call) => call.args.thread_ts),
+          [undefined, "1700000000.000101", "1700000000.000101"],
+        );
+        assert.deepEqual(blocksOf(posted[2])[0], { type: "markdown", text: "Or a month?" });
+        assert.deepEqual(
+          calls.filter((call) => call.method === "chat.update"),
+          [],
+          "the title DM is never rewritten",
+        );
+      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls, true), fakeFiles([]))));
+    },
+  );
+
+  it.effect("a DM from before the title stood alone keeps its title once its ask settles", () => {
+    const calls: SlackCall[] = [];
+    return Effect.gen(function* () {
+      const { agent } = yield* openConnectedAgent;
+      const ask = {
+        key: "branch-protection",
+        title: "Require a review on main",
+        body: "Turn it on.",
+        ask: { type: INBOX_ASK.DO, steps: [] },
+        needsReply: true,
+      };
+      const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+      const askId =
+        item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
+      // The DM as it was kept before, the post's words in the thread's first message.
+      yield* (yield* Database)
+        .update(inboxMessage)
+        .set({ slackDm: { channel: "D0001", ts: "1700000000.000050", to: agent.userId } })
+        .where(eq(inboxMessage.id, askId));
+      yield* answerInboxAsk(agent.userId, item.id, {
+        answers: { ask: askId, reply: INBOX_REPLY.DONE },
+        text: "",
+        clientKey: randomUUID(),
+      });
+      yield* settleThreadDms(item.id);
+
+      const [updated] = calls.filter((call) => call.method === "chat.update");
+      assert.equal(updated?.args.ts, "1700000000.000050");
+      assert.deepEqual(blocksOf(updated).slice(0, 2), [
+        { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+        { type: "markdown", text: "Turn it on." },
+      ]);
+    }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles([]))));
+  });
 });

@@ -162,11 +162,12 @@ const SETTLED_STATUSES = [
   INBOX_ASK_STATUS.REPLACED,
 ] as const satisfies readonly SettledAskStatus[];
 
-/** What a reply about a thread is drawn from: its title, which Slack's notification says, the agent's words in Markdown, and the thread's link. */
+/** What a reply about a thread is drawn from: its title, which Slack's notification says, the agent's words in Markdown, the thread's link, and whether it stands alone, a DM from before the title did, so says the title as its header. */
 interface ThreadDmView {
   readonly title: string;
   readonly text: string;
   readonly link: string;
+  readonly titled?: boolean;
 }
 
 /** A post as `dmThreadPost` reads it: the agent's workspace, the item as the post wrote it, whether the post asked, and whether its thread stood open before it (`threadStandsOpen`). */
@@ -294,7 +295,8 @@ function titleDmContent(title: string): SlackMessageContent {
  * button after any other button of its ask; a settled one says where its ask
  * stands, in the line given, above the button. Note that the title is left
  * out of the blocks, since the DM above says it, and kept in the text Slack
- * notifies with, which says no thread of its own.
+ * notifies with, which says no thread of its own; a DM that stands alone
+ * keeps it as its header.
  */
 function threadDmContent(
   view: ThreadDmView,
@@ -303,6 +305,7 @@ function threadDmContent(
 ): SlackMessageContent {
   const words = view.text.trim();
   const blocks: SlackBlock[] = [
+    ...(view.titled === true ? titleDmContent(view.title).blocks : []),
     ...(words === "" ? [] : [slackMarkdownBlock(words)]),
     ...(line === undefined
       ? []
@@ -374,6 +377,19 @@ const SlackDmSchema = Schema.Struct({
   to: Schema.optionalKey(Schema.String),
   thread: Schema.optionalKey(Schema.String),
   settled: Schema.optionalKey(Schema.Boolean),
+});
+
+/** The DM kept on a message, by the message's id; nothing where none was written. */
+const findMessageDm = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ dm: SlackDmSchema }),
+  execute: (messageId) =>
+    Database.use((db) =>
+      db
+        .select({ dm: inboxMessage.slackDm })
+        .from(inboxMessage)
+        .where(and(eq(inboxMessage.id, messageId), isNotNull(inboxMessage.slackDm))),
+    ),
 });
 
 const recordDm = SqlSchema.void({
@@ -551,12 +567,17 @@ export function threadDmAt(
 /**
  * Rewrites one DM the bot wrote about the item's message to say the line
  * given in its buttons' place, as a press on an ask already settled is
- * told; nothing where the runtime holds no bot or the item is gone.
+ * told, keeping the title of one that stands alone; nothing where the
+ * runtime holds no bot or the item is gone.
  */
 export function rewriteThreadDm(
   dm: SlackMessage,
   itemId: string,
-  message: { readonly text: string; readonly ask?: InboxReadAsk | undefined },
+  message: {
+    readonly id: string;
+    readonly text: string;
+    readonly ask?: InboxReadAsk | undefined;
+  },
   line: string,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
@@ -564,10 +585,12 @@ export function rewriteThreadDm(
     if (Option.isNone(bot) || !bot.value.configured) return;
     const place = yield* findItemPlace(itemId);
     if (Option.isNone(place)) return;
+    const kept = yield* findMessageDm(message.id);
     const view = {
       title: place.value.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
       link: threadLink(itemId, place.value),
+      titled: Option.isSome(kept) && kept.value.dm.thread === undefined,
     };
     yield* bot.value.update(dm.channel, dm.ts, threadDmContent(view, line));
   });
@@ -608,7 +631,12 @@ export function settleThreadDms(
           dm.channel,
           dm.ts,
           threadDmContent(
-            { title, text: wordsWithSteps(text, steps ?? []), link },
+            {
+              title,
+              text: wordsWithSteps(text, steps ?? []),
+              link,
+              titled: dm.thread === undefined,
+            },
             id === chosen?.messageId ? chosen.line : SETTLED_LINE[status],
           ),
         ),
@@ -654,6 +682,10 @@ export function dmThreadPost(
         : Option.some(kept);
     if (Option.isNone(opened)) return;
     const thread = { channel: opened.value.channel, ts: opened.value.ts };
+    // Note that a new title DM is kept settled until its reply takes its place, so a failed reply leaves it the thread's, never rewritten.
+    if (kept === undefined) {
+      yield* recordDm({ messageId: message.id, dm: { ...thread, to: recipient, settled: true } });
+    }
     const view = {
       title: item.title,
       text: wordsWithSteps(message.text, askSteps(message.ask)),
