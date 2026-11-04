@@ -809,7 +809,9 @@ export const LIST_AGENTS_TOOL = {
     `${WORKSPACE_AGENTS_LIST_LIMIT} a page, with nextOffset where more stand, which offset ` +
     "reads the next page by. Pass words to search the whole workspace by words of an agent's " +
     "title or its task's name, thisTask for only your task's agents, or a taskId for another " +
-    "task's. Call it to find the agent you " +
+    "task's; narrow it by archived, by mine or startedBy for whose agents, by automation or " +
+    "automationId for an automation's runs, and by taskStatus, such as done, for where their " +
+    "task stands. Call it to find the agent you " +
     "or the developer mean. Failed covers a session that ended for good, which no message " +
     "reaches again: tell the developer, or start a new agent to go on from its work. An agent " +
     "still running long after its last activity may have lost its session; a message to it " +

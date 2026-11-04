@@ -27,10 +27,14 @@ const TASK_ASSIGNEE_WORDS =
   `\`[@Name](${LINK_ORIGIN}/<workspace>/person/<id>)\`, or its ` +
   "address alone; a member of the task's workspace. null for no one.";
 
-/** An assignee as a call writes one: a person's mention link, or null for no one. */
-export const taskAssigneeWrittenSchema = Schema.NullOr(
-  Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(MAX_ASSIGNEE_CHARS)),
+/** A member as a call writes one: their person mention link, whole or as its bare address. */
+export const memberLinkWrittenSchema = Schema.Trim.check(
+  Schema.isNonEmpty(),
+  Schema.isMaxLength(MAX_ASSIGNEE_CHARS),
 );
+
+/** An assignee as a call writes one: a person's mention link, or null for no one. */
+export const taskAssigneeWrittenSchema = Schema.NullOr(memberLinkWrittenSchema);
 
 /** An assignee as a change or a make names one, described for the model. */
 export const TASK_ASSIGNEE_INPUT = describeWire(taskAssigneeWrittenSchema, TASK_ASSIGNEE_WORDS);
