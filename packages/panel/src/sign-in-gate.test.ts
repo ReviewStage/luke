@@ -7,9 +7,12 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@repo/credentials/snapshot";
+import { type ShownFailureSentry, sendShownFailure } from "@repo/features/shown-failure";
+import { SIGN_IN_FAILURE } from "@repo/features/words";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { installShownFailureReporter } from "./failure-report.js";
 import { SignInGate } from "./sign-in-gate.js";
 import { announcedPolitely, mountAnnouncer } from "./testing/announcer.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
@@ -138,4 +141,30 @@ test("the wait on the browser is announced politely, and taken back once the wai
 
   act(() => root.render(gate()));
   assert.equal(announcedPolitely(), "");
+});
+
+test("a sign-in that ended without landing is reported once, under why it ended", () => {
+  const codes: unknown[] = [];
+  const recording: ShownFailureSentry = {
+    captureException: () => "",
+    logger: {
+      warn: (_message, attributes) => codes.push(attributes["failure.code"]),
+      error: (_message, attributes) => codes.push(attributes["failure.code"]),
+    },
+    getActiveSpan: () => undefined,
+    getCurrentScope: () => ({
+      getPropagationContext: () => ({ traceId: "0af7651916cd43dd8448eb211c80319c" }),
+    }),
+  };
+  const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
+  try {
+    const { root } = mountRoot(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT }));
+    // A draw for any other reason, with the same failure still shown, reports nothing more.
+    act(() =>
+      root.render(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT, lastUsed: ACCOUNT_PROVIDER.GITHUB })),
+    );
+  } finally {
+    uninstall();
+  }
+  assert.deepEqual(codes, [SIGN_IN_FAILURE.TIMED_OUT]);
 });

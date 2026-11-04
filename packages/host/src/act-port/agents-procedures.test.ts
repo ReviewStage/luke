@@ -10,14 +10,10 @@
  */
 
 import assert from "node:assert/strict";
-import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import {
   AGENT_CALL_FAILURE,
   type AgentAgentAnswer,
-  type AgentTranscriptChanged,
-  type AgentTranscriptKey,
-  type AgentTranscriptPage,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import { AGENT_STATUS } from "@repo/features/agent-wire";
@@ -457,63 +453,4 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
   });
   assert.deepEqual(asked, []);
   assert.deepEqual(noted, []);
-});
-
-/** Turns the event loop until `ready` holds, as a page waits on its port. */
-async function until(ready: () => boolean): Promise<void> {
-  for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
-}
-
-it("a panel's transcript stream follows the transcript at the host, hears each page told of it alone, and lets it go once its last stream closes", async () => {
-  const asked: string[] = [];
-  const listeners = new Set<(changed: AgentTranscriptChanged) => void>();
-  const transcripts: Pick<
-    HostAsk,
-    "transcriptFollow" | "transcriptUnfollow" | "onTranscriptChanged"
-  > = {
-    transcriptFollow: () => Effect.sync(() => void asked.push("follow")),
-    transcriptUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
-    onTranscriptChanged: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-  // SAFETY: the stream reaches the transcript asks alone.
-  const host = transcripts as HostAsk;
-  const noted: string[] = [];
-  // SAFETY: the stream notes an agent's status alone.
-  const notices = {
-    observeStatus: (_agentId: string, status: string) => noted.push(`status:${status}`),
-  } as unknown as AgentProceduresDependencies["notices"];
-  const port = testActPort(agentProcedures({ host, notices }));
-  ports.push(port);
-  const client = port.as(PANEL);
-  const transcript: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
-  const page: AgentTranscriptPage = {
-    messages: [],
-    cursor: "1:0",
-    status: AGENT_STATUS.RUNNING,
-    title: "Invites",
-    caughtUp: false,
-  };
-
-  const one = await client[AGENT_ACT_KIND.AGENTS_TRANSCRIPT](transcript);
-  const two = await client[AGENT_ACT_KIND.AGENTS_TRANSCRIPT](transcript);
-  const first = one.next();
-  const second = two.next();
-  await until(() => asked.length === 2);
-  for (const listener of [...listeners]) {
-    listener({ transcript: { ...transcript, callId: "call-7" }, page: { ...page, title: null } });
-    listener({ transcript, page });
-  }
-  assert.deepEqual((await first).value, page);
-  assert.deepEqual((await second).value, page);
-  assert.deepEqual(noted, ["status:running", "status:running"]);
-
-  await one.return(undefined);
-  await until(() => listeners.size === 1);
-  assert.deepEqual(asked, ["follow", "follow"]);
-  await two.return(undefined);
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, ["follow", "follow", "unfollow"]);
 });

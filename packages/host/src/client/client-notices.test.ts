@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { AGENT_STATUS, type AgentStatus, type TasklessAgent } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { Deferred, Effect, Exit, Layer, Scope } from "effect";
 import { type AgentNotice, AgentNoticeDoors, NOTICE_KIND } from "../agent-notices.js";
+import { type AppHostRead, type AppTranscript, OWN_TRANSCRIPT } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";
 import { recordingReporter } from "../testing/recording-reporter.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
@@ -15,7 +18,8 @@ import { linkClientNotices } from "./client-notices.js";
  * defect rather than losing it; and a command an agent asked to run on this
  * Mac is announced once while the panel is behind, its click bringing the
  * window forward, and never while the panel is in front, where the prompt
- * itself stands.
+ * itself stands; and an agent's own transcript, as a window holds it, notes
+ * the agent's end, where no worker's transcript says anything of the agent.
  */
 
 const RUN = {
@@ -164,3 +168,62 @@ it.effect("a workspaces read that dies is reported, to Sentry as well, rather th
     yield* Scope.close(scope, Exit.void);
   }).pipe(Effect.provide(sentry.layer));
 });
+
+/** An agent with no task, as the task list carries it beside the tasks. */
+const TASKLESS: TasklessAgent = {
+  id: "a1b2c3d4-0000-4000-8000-0000000000aa",
+  planId: null,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: null,
+  createdAt: 1,
+  status: AGENT_STATUS.RUNNING,
+  turnId: "turn-1",
+  automationId: null,
+  workspaceId: "workspace-personal",
+  repository: null,
+  activityAt: 1,
+};
+
+/** A transcript as the host holds it once a page said the agent, or the worker, stands at `status`. */
+function transcriptAt(status: AgentStatus): AppHostRead<AppTranscript> {
+  return {
+    rows: { messages: [], cursor: "1:0", word: { status, title: null, caughtUp: true }, pages: 1 },
+  };
+}
+
+it.effect(
+  "an agent's own transcript a window holds notes the agent's end as its read moves, and a worker's transcript settling says nothing of the agent",
+  () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const { state } = yield* linked(scope, () => Effect.void, []);
+      const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+      state.update({ tasks: { ...state.snapshot().tasks, tasklessAgents: [TASKLESS] } });
+      yield* settled;
+      const held = (...[worker, own]: readonly AgentStatus[]) => ({
+        [TASKLESS.id]: {
+          "call-7": transcriptAt(worker ?? AGENT_STATUS.RUNNING),
+          ...(own === undefined ? undefined : { [OWN_TRANSCRIPT]: transcriptAt(own) }),
+        },
+      });
+
+      state.update({ [LIVE_READ.TRANSCRIPT]: held(AGENT_STATUS.COMPLETED) });
+      yield* settled;
+      assert.deepEqual(
+        state.snapshot().agents.unseen,
+        [],
+        "a worker's end is no word on the agent",
+      );
+
+      state.update({ [LIVE_READ.TRANSCRIPT]: held(AGENT_STATUS.COMPLETED, AGENT_STATUS.RUNNING) });
+      yield* settled;
+      state.update({
+        [LIVE_READ.TRANSCRIPT]: held(AGENT_STATUS.COMPLETED, AGENT_STATUS.COMPLETED),
+      });
+      yield* settled;
+      assert.deepEqual(state.snapshot().agents.unseen, [TASKLESS.id]);
+
+      yield* Scope.close(scope, Exit.void);
+    }),
+);

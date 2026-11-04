@@ -215,16 +215,16 @@ function agentTab(
   messages: readonly AgentTranscriptMessage[],
   agent: AgentSummary,
 ): Promise<HTMLElement> {
+  pushedTranscripts(() => [
+    {
+      messages: [...messages],
+      cursor: "9:0",
+      status: agent.status,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents: [agent],
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [...messages],
-        cursor: "9:0",
-        status: agent.status,
-        title: null,
-      },
-    ]),
     onMessage: () => new Promise<AgentAgentAnswer>(ignore),
   });
   return drawn(

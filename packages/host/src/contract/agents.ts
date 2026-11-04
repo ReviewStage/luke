@@ -13,7 +13,6 @@
 
 import { eventIterator, type } from "@orpc/contract";
 import {
-  type AgentTranscriptPage,
   agentAgentAnswerSchema,
   agentArchiveParamsSchema,
   agentChangesAnswerViewSchema,
@@ -143,11 +142,17 @@ export const agentActsContract = {
   )
     .input(exactInput(agentMessagesParamsSchema))
     .output(EffectSchema.flip(agentMessagesAnswerViewSchema)),
+  // Note that the hold's stream carries nothing: the held transcript reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actProcedure(
     "Could not follow the agent's transcript on this system.",
   )
     .input(exactInput(agentTranscriptKeySchema))
-    .output(eventIterator(type<AgentTranscriptPage>())),
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY]: actProcedure(
+    "Could not read the agent's transcript again on this system.",
+  )
+    .input(exactInput(agentTranscriptKeySchema))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_PART]: actProcedure("Could not read the agent's output on this system.")
     .input(exactInput(agentPartParamsSchema))
     .output(EffectSchema.flip(agentPartViewSchema)),

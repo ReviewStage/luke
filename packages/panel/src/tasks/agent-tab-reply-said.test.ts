@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
+import {
+  type AgentMessagesAnswerView,
+  type AgentTranscriptKey,
+  TRANSCRIPT_KIND,
+} from "@repo/features/agent-view";
 import {
   AGENT_FAILURE,
   AGENT_STATUS,
@@ -19,9 +23,8 @@ import { installShownFailureReporter } from "../failure-report.js";
 import { announcedPolitely, mountAnnouncer } from "../testing/announcer.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { agentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab, AgentTab } from "./agent-tab.js";
-import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
  * agent-tab-reply-said.test.ts -- an agent's reply is read once it is
@@ -102,15 +105,14 @@ const WORKER_TASK = "Check the CSV writers";
 async function runningTab(first: AgentMessagesAnswerView, worker = false, opened = AGENT) {
   fakeAppBridge({});
   mountAnnouncer();
-  let hear: ((page: AgentTranscriptPage) => void) | undefined;
-  const transcripts: TranscriptFollower = (_transcript, heard) => {
-    hear = heard;
-    heard(pushedPage(first));
-    return () => {
-      hear = undefined;
-    };
+  const transcript: AgentTranscriptKey = {
+    kind: TRANSCRIPT_KIND.AGENT,
+    agentId: AGENT.id,
+    ...(worker ? { callId: "delegation-call" } : undefined),
   };
-  const control = agentsControl({ agents: [AGENT], transcripts });
+  const telling = tellingTranscripts();
+  telling.tell(transcript, first);
+  const control = agentsControl({ agents: [AGENT] });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const registry = AtomRegistry.make();
@@ -157,7 +159,7 @@ async function runningTab(first: AgentMessagesAnswerView, worker = false, opened
     },
     async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
-        hear?.(pushedPage(next));
+        telling.tell(transcript, next);
         await settle();
       });
     },

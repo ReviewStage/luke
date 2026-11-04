@@ -325,15 +325,18 @@ export const GATEWAY_METHOD = {
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   AGENTS_MESSAGES: "agents.messages",
   /**
-   * One agent's transcript, or one of its workers', followed from now until
-   * it is let go or the account signs out. Its pages are heard as
-   * `TRANSCRIPT_CHANGED` events, never answered: the first from the start,
-   * then each one past the last; following again starts over.
+   * One agent's transcript, or one of its workers', held followed for a
+   * window from now until it is let go, over the service's held poll, and
+   * kept a while after among those let go lately, following no longer. What
+   * it holds is heard as `TRANSCRIPTS_CHANGED` events, on the app state
+   * every window draws, never answered.
    */
   AGENTS_TRANSCRIPT_FOLLOW: "agents.transcriptFollow",
-  /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
+  /** One agent's or worker's transcript let go by the window that held it: it stops following, and its messages stay among those let go lately until later ones push them out. */
   AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
-  /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
+  /** One held transcript read again at once, as Try again asks; never answered. */
+  AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
+  /** The page of a held transcript below the oldest message it holds, read at once and laid before them while they still begin where it was asked: whether it landed, or why it was not read. */
   AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   AGENTS_MESSAGE: "agents.message",
@@ -756,8 +759,6 @@ export const GATEWAY_EVENT = {
   BROWSER_LIVE_MESSAGE: "browserLive.message",
   /** A cloud Browser tab's live view closed, with its close code, named by its connection. */
   BROWSER_LIVE_CLOSED: "browserLive.closed",
-  /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
-  TRANSCRIPT_CHANGED: "transcript.changed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
   /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
@@ -780,6 +781,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
+  /** Every agent's or worker's transcript the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  TRANSCRIPTS_CHANGED: "transcripts.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
   /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

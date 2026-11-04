@@ -108,6 +108,14 @@ async function settle(): Promise<void> {
 async function drawnTab(holdSends = false) {
   fakeAppBridge({});
   const calls: string[] = [];
+  pushedTranscripts(() => [
+    {
+      messages: [...MESSAGES],
+      cursor: "5:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents: [AGENT_SUMMARY],
     onRewind: (_agentId, messageId) => {
@@ -119,14 +127,6 @@ async function drawnTab(holdSends = false) {
       // A send held never answers, so its line stays sent and not yet read back.
       return holdSends ? new Promise(() => undefined) : Promise.resolve(REWOUND);
     },
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [...MESSAGES],
-        cursor: "5:0",
-        status: AGENT_STATUS.COMPLETED,
-        title: null,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

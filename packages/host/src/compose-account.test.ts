@@ -22,6 +22,7 @@ import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { jsonResponse } from "@repo/wire/testing";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { vi } from "vitest";
 import { composeAccount } from "./compose-account.js";
 import { composeSettings } from "./compose-settings.js";
 import { type CookieSessionDoor, cookieAccountSourceLayer } from "./cookie-account-source.js";
@@ -94,6 +95,11 @@ const desktopAccount = (input: {
   readonly machine: Layer.Layer<AppIdentity>;
   readonly consent: OpenConsent;
   readonly signedIn: boolean;
+  /** The host's capability gate, as `compose-host.ts` links it; none moves nothing. */
+  readonly capabilities?: {
+    readonly startCapabilities: Effect.Effect<void>;
+    readonly stopCapabilities: Effect.Effect<void>;
+  };
 }) =>
   Effect.gen(function* () {
     const machine = Layer.mergeAll(
@@ -130,10 +136,75 @@ const desktopAccount = (input: {
       );
     }
     const account = yield* Effect.provide(composeAccount({ settings }), machine);
-    yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
+    yield* account.link(
+      input.capabilities ?? { startCapabilities: Effect.void, stopCapabilities: Effect.void },
+    );
     yield* account.lifetime;
     return account;
   });
+
+it.effect(
+  "a session that stays signed in as another person, as a renewal whose identity read names someone else, stops the last person's capabilities before starting the next's, and a new address for the same person stops nothing",
+  () => {
+    /** Who the account service's identity read names. */
+    let named = { sub: "user-1", email: "dana@example.com" };
+    const identity: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url === `${ACCOUNT_BASE_URL}/oauth2/userinfo`) return jsonResponse(named);
+      return accountService(input, init);
+    };
+    return Effect.gen(function* () {
+      // Note that the identity read runs on a flight of its own, outside this test's services, so it reaches the platform's fetch.
+      vi.spyOn(globalThis, "fetch").mockImplementation(identity);
+      const stateRoot = yield* temporaryDirectoryScoped("account-switch-");
+      const gate: string[] = [];
+      const kernel = hostKernelOver({
+        stateRoot,
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: ACCOUNT_BASE_URL,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: () => undefined,
+      });
+      const account = yield* desktopAccount({
+        kernel,
+        machine: Layer.succeed(AppIdentity, {
+          appVersion: "0.0.0-test",
+          packaged: false,
+          platform: PRODUCT_PLATFORM.DESKTOP,
+        }),
+        consent: grantingConsent,
+        signedIn: true,
+        capabilities: {
+          startCapabilities: Effect.sync(() => void gate.push("start")),
+          stopCapabilities: Effect.sync(() => void gate.push("stop")),
+        },
+      });
+      const emailNow = () => {
+        const now = account.session.snapshot();
+        return now.status === ACCOUNT_STATUS.SIGNED_IN ? now.email : undefined;
+      };
+
+      // The identity read names the stored person at a new address, then at another.
+      yield* account.session.refreshOnce();
+      named = { sub: "user-1", email: "dana@new.example.com" };
+      yield* account.session.refreshOnce();
+      yield* until(() => emailNow() === "dana@new.example.com");
+      assert.equal(emailNow(), "dana@new.example.com");
+      assert.deepEqual(gate, []);
+
+      named = { sub: "user-2", email: "eli@example.com" };
+      yield* account.session.refreshOnce();
+      yield* until(() => gate.length === 2);
+      assert.deepEqual(gate, ["stop", "start"]);
+    }).pipe(
+      Effect.ensuring(Effect.sync(() => vi.restoreAllMocks())),
+      Effect.provideService(FetchHttpClient.Fetch, identity),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    );
+  },
+);
 
 it.effect("a sign-in after a deletion in the same run lets session replay record again", () =>
   Effect.gen(function* () {

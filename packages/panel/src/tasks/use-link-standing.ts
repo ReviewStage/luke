@@ -177,15 +177,19 @@ interface Asked {
   readonly number: number;
 }
 
-/** What a mention asks GitHub for, where it is a link to a pull request or a GitHub issue. */
-function askedOf(mention: Mention): Asked | undefined {
+/** What an address asks GitHub for, where it is a pull request's or a GitHub issue's page. */
+function askedOf(address: string): Asked | undefined {
+  const pullRequest = pullRequestAddressOf(address);
+  if (pullRequest !== undefined) return { page: GITHUB_PAGE.PULL_REQUEST, ...pullRequest };
+  const issue = issueAddressOf(address);
+  return issue === undefined ? undefined : { page: GITHUB_PAGE.ISSUE, ...issue };
+}
+
+/** The address a mention asks GitHub about, where it is a link to GitHub. */
+function githubAddressOf(mention: Mention): string | undefined {
   // Note that a well-known site's page names no provider to ask.
   if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
-  if (mention.provider !== INTEGRATION_PROVIDER.GITHUB) return undefined;
-  const pullRequest = pullRequestAddressOf(mention.url);
-  if (pullRequest !== undefined) return { page: GITHUB_PAGE.PULL_REQUEST, ...pullRequest };
-  const issue = issueAddressOf(mention.url);
-  return issue === undefined ? undefined : { page: GITHUB_PAGE.ISSUE, ...issue };
+  return mention.provider === INTEGRATION_PROVIDER.GITHUB ? mention.url : undefined;
 }
 
 /** The key a chip names an asked page by: the repository's name and the pull request's or the issue's number. */
@@ -223,7 +227,7 @@ function standingOf(asked: Asked, held: AppLinkStanding): LinkStanding | undefin
 }
 
 /** Whether the workspace has the connection an ask is read through: an active GitHub installation. */
-function connectedFor(workspace: Workspace | undefined): boolean {
+function connectedFor(workspace: Workspace | undefined): workspace is Workspace {
   return workspace?.github?.active === true;
 }
 
@@ -242,22 +246,32 @@ const workspacePlacesAtom: Atom.Atom<WorkspacePlaces | undefined> = Atom.withEqu
   (held, next) => held?.workspaces === next?.workspaces && held?.tasks === next?.tasks,
 );
 
-/** The workspace the words a chip stands in are of: the plan's, else the one the place drawing them names, else the one their mentions are written under; none where they name none. */
-function wordsWorkspace(
+/** The workspace of the task given, else the one named by its id; none where neither is listed. */
+function workspaceOf(
   planning: WorkspacePlaces | undefined,
-  where: ChipWhere,
+  taskId: string | undefined,
   namedId: string | undefined,
 ): Workspace | undefined {
   const workspaces = planning?.workspaces ?? [];
-  const { taskId } = where;
   const taskWorkspaceId =
     taskId === undefined
       ? undefined
       : planning?.tasks.find((task) => task.id === taskId)?.workspaceId;
   return (
     workspaces.find((each) => each.id === taskWorkspaceId) ??
-    workspaces.find((each) => each.id === namedId) ??
-    workspaceOfSlug(workspaces, where.workspace)
+    workspaces.find((each) => each.id === namedId)
+  );
+}
+
+/** The workspace the words a chip stands in are of: the plan's, else the one the place drawing them names, else the one their mentions are written under; none where they name none. */
+function wordsWorkspace(
+  planning: WorkspacePlaces | undefined,
+  where: ChipWhere,
+  namedId: string | undefined,
+): Workspace | undefined {
+  return (
+    workspaceOf(planning, where.taskId, namedId) ??
+    workspaceOfSlug(planning?.workspaces ?? [], where.workspace)
   );
 }
 
@@ -337,23 +351,21 @@ export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
 }
 
 /**
- * What the provider answers for the page a link mention names, through the
- * workspace `where` stands in; none for any other mention, while unread or
+ * What GitHub holds of the pull request or issue `address` names, read
+ * through `workspace`; none for any other address, while unread or
  * unconnected, or where GitHub holds no such page. The host holds it while
- * the chip draws it (`LIVE_READ.LINK_STANDINGS`), by the workspace and the
- * link's own address, so a chip drawn again draws it at once.
+ * it is drawn (`LIVE_READ.LINK_STANDINGS`), by the workspace and the
+ * address, so it is drawn again at once.
  */
-export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
-  const asked = askedOf(mention);
-  const workspace = wordsWorkspace(
-    useAppSlice(workspacePlacesAtom),
-    where,
-    useContext(WordsWorkspaceContext),
-  );
+function useStandingAt(
+  workspace: Workspace | undefined,
+  address: string | undefined,
+): LinkStanding | undefined {
+  const asked = address === undefined ? undefined : askedOf(address);
   // Note that a standing stands only for the workspace and the connection it was read through, so a disconnect or another workspace holds none.
   const link =
-    asked !== undefined && workspace !== undefined && connectedFor(workspace) && "url" in mention
-      ? { workspaceId: workspace.id, address: mention.url }
+    asked !== undefined && address !== undefined && connectedFor(workspace)
+      ? { workspaceId: workspace.id, address }
       : undefined;
   const { rows } = useHostRead(LIVE_READ.LINK_STANDINGS, link);
   const page = asked?.page;
@@ -366,4 +378,27 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
         : standingOf({ page, repository, number }, rows),
     [page, repository, number, rows],
   );
+}
+
+/** What GitHub holds of the page a link mention names, through the workspace `where` stands in (`useStandingAt`). */
+export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
+  const workspace = wordsWorkspace(
+    useAppSlice(workspacePlacesAtom),
+    where,
+    useContext(WordsWorkspaceContext),
+  );
+  return useStandingAt(workspace, githubAddressOf(mention));
+}
+
+/** What GitHub holds of the page `address` names, read through the workspace of the task given, or else the workspace named where the place names none (`useStandingAt`). */
+export function usePlaceStanding(
+  place: { readonly taskId: string | null; readonly workspaceId?: string | undefined },
+  address: string | undefined,
+): LinkStanding | undefined {
+  const workspace = workspaceOf(
+    useAppSlice(workspacePlacesAtom),
+    place.taskId ?? undefined,
+    place.workspaceId,
+  );
+  return useStandingAt(workspace, address);
 }

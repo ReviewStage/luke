@@ -86,10 +86,10 @@ async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
     rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
   }));
   const messages = [TASK, turn(status !== AGENT_STATUS.RUNNING)];
+  pushedTranscripts(() => [{ messages, cursor: "2:0", status, title: null }]);
   const control = agentsControl({
     agents: [agentOf(status)],
     me: DEAN.userId,
-    transcripts: pushedTranscripts(() => [{ messages, cursor: "2:0", status, title: null }]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

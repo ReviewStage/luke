@@ -125,12 +125,10 @@ async function drawnTab(
   handMembers(() => ({
     rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
   }));
+  pushedTranscripts(() => [{ messages: [...messages], cursor: "9:0", status, title: null }]);
   const control = agentsControl({
     agents: [agentOf(status)],
     me: DEAN.userId,
-    transcripts: pushedTranscripts(() => [
-      { messages: [...messages], cursor: "9:0", status, title: null },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

@@ -131,19 +131,19 @@ async function drawnTab(
     status,
     title: null,
   });
+  pushedTranscripts(
+    () => [page(MESSAGES, statuses[0]), page([...MESSAGES, ...later], statuses[1])],
+    {
+      page: 1,
+      release: released,
+    },
+  );
   const control = agentsControl({
     agents: [agent],
     onMessage: (_agentId, text, clientKey) => {
       sent.push({ text, clientKey });
       return new Promise((resolve) => answers.push(resolve));
     },
-    transcripts: pushedTranscripts(
-      () => [page(MESSAGES, statuses[0]), page([...MESSAGES, ...later], statuses[1])],
-      {
-        page: 1,
-        release: released,
-      },
-    ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

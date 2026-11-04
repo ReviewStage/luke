@@ -1282,8 +1282,6 @@ function subject(
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
     }[] = [];
-    /** Every followed transcript's page the host told, in order. */
-    const pages: WireValue[] = [];
     const focus = yield* windowFocus;
     const tasks = yield* composeTasks({
       kernel: {
@@ -1292,7 +1290,6 @@ function subject(
         // Note that the id the host mints for a task it starts is the one the service answers it under.
         createId: () => INVITES,
         emit: (kind, payload) => {
-          if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
             pushed.push([kind, payload]);
             events.push({ kind, payload });
@@ -1375,7 +1372,6 @@ function subject(
       tasks,
       call,
       told,
-      pages,
       pushed,
       events,
       last,
@@ -2755,6 +2751,53 @@ it.effect(
 
       service.workspacesFail = false;
       yield* TestClock.adjust(Duration.seconds(5));
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+    }),
+);
+
+it.effect("a workspace list of none kept on disk is not drawn as ready at launch", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("tasks-entities-");
+    const earlier = yield* Scope.make();
+    const kept = yield* Scope.provide(earlier)(
+      openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
+    );
+    yield* kept.keep(KEPT_READ.WORKSPACES, []);
+    yield* Scope.close(earlier, Exit.void);
+    const entities = yield* openEntityStore({
+      directory,
+      cipher: testCipher(),
+      accountId: "user-dana",
+    });
+    const service = fakeService([]);
+    service.workspacesFail = true;
+    const { tasks, last, settled } = yield* subject(service, { entities });
+
+    yield* tasks.open;
+    yield* settled;
+
+    assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "a workspace list of none says failed and leaves the last list drawn, and its Retry reads it again at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+
+      service.memberships = [];
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+
+      service.memberships = [PERSONAL];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* settled;
       assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
       assert.deepEqual(last()?.workspaces, [PERSONAL]);

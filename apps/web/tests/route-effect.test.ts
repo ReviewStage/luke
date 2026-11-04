@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { unreachedWorkspaceSeams } from "@repo/database/testing";
 import { authApp } from "@repo/service/auth/auth-app";
 import { HostedEnvironment } from "@repo/service/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@repo/service/http/http";
@@ -201,7 +202,10 @@ test("a dispatch that names Better Auth's path on another route reaches none of 
 test("Better Auth's own route takes a cookie POST a foreign page sent, and answers it itself", async () => {
   stubProduction();
   const route = routeFromHttpRouter(
-    authApp(async () => Response.json({ handled: true }, { status: HOSTED_HTTP_STATUS.OK })),
+    authApp(
+      async () => Response.json({ handled: true }, { status: HOSTED_HTTP_STATUS.OK }),
+      unreachedWorkspaceSeams,
+    ),
   );
 
   const answered = await route.fetch(

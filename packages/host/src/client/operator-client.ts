@@ -150,6 +150,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onThisMacHostChanged((held) => {
         state.update({ [LIVE_READ.THIS_MAC_HOST]: held });
       }),
+      gateway.host.onTranscriptsChanged((held) => {
+        state.update({ [LIVE_READ.TRANSCRIPT]: held });
+      }),
       gateway.host.onWorkspaceMembersChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
       }),
