@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, but kept, for a week, where the box's check finds work in its folder, and kept again a week at a time while it still does; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work not checked again within the week, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the folders it shares, a Linux host's by its folders.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, its worktree's entry pruned from the shared clone it links to, but kept, for a week, where the box's check finds work in its folder, and kept again a week at a time while it still does; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work not checked again within the week, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the folders it shares, a Linux host's by its folders.
  *
  * The follower runs on a real temporary folder, against a fake service
  * whose live-agents read answers what each test lists, read by read, and
@@ -100,7 +100,9 @@ const agentNumbered = (index: number) =>
  * live-agents read answering `reads` one after another, the first dying
  * before them where `firstReadDies` says. `launches` hands launch lines
  * whose runners run until the test ends, and `keptLaunches` are kept from
- * a run that ended, whose settles the service refuses.
+ * a run that ended, whose settles the service refuses. Each agent
+ * `worktrees` names has a worktree of the box's shared clone in its folder,
+ * linked to the clone by its `.git` file.
  */
 const following = (input: {
   readonly held: readonly string[];
@@ -115,6 +117,7 @@ const following = (input: {
   readonly unsavedWork?: Readonly<Record<string, string>>;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
   readonly keptLaunches?: readonly { readonly id: string; readonly agentId: string }[];
+  readonly worktrees?: readonly string[];
   /** The first read of the live agents dies, as a bug would. */
   readonly firstReadDies?: boolean;
 }) =>
@@ -122,8 +125,15 @@ const following = (input: {
     const root = yield* temporaryDirectoryScoped("agent-orphans-");
     const home = `${root}/home`;
     const stateRoot = `${root}/state`;
+    const sharedClone = `${root}/clones/acme/app/.git`;
     for (const agentId of input.held) {
       mkdirSync(deviceAgentLayout(home, agentId).checkoutPath, { recursive: true });
+    }
+    for (const agentId of input.worktrees ?? []) {
+      writeFileSync(
+        `${deviceAgentLayout(home, agentId).checkoutPath}/.git`,
+        `gitdir: ${sharedClone}/worktrees/${agentId}\n`,
+      );
     }
     for (const [agentId, at] of Object.entries(input.changedAt ?? {})) {
       utimesSync(deviceAgentLayout(home, agentId).folder, new Date(at), new Date(at));
@@ -163,7 +173,7 @@ const following = (input: {
           exitCode: 0,
         };
       }
-      if (program === "/bin/bash") return { exitCode: 0 };
+      if (program === "/bin/bash" || program === "git") return { exitCode: 0 };
       // Note that a runner runs until its process group is killed, as the test's scope closes.
       if (program === RUNNER) {
         return {
@@ -271,6 +281,11 @@ const following = (input: {
     const keptRecorded = () =>
       Object.keys(JSON.parse(readFileSync(`${stateRoot}/local-agents.json`, "utf8")).kept ?? {});
     const ownedRecorded = () => readdirSync(`${stateRoot}/owned-agents`).sort();
+    /** The Git folders `git worktree prune` ran in, in order. */
+    const prunedIn = () =>
+      spawner.spawned
+        .filter((each) => each.program === "git" && each.args.join(" ") === "worktree prune")
+        .map((each) => each.cwd);
 
     return {
       home,
@@ -281,25 +296,31 @@ const following = (input: {
       checksRun,
       keptRecorded,
       ownedRecorded,
+      sharedClone,
+      prunedIn,
     };
   });
 
 it.effect(
-  "an agent left out of two reads in a row is removed whole, but not after one, while a listed agent stays and one whose check finds work keeps its folder",
+  "an agent left out of two reads in a row is removed whole, its worktree's entry pruned from the shared clone, but not after one, while a listed agent stays and one whose check finds work keeps its folder",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const device = yield* following({
           held: [AGENT.ORPHAN, AGENT.LIVE, AGENT.UNSAVED],
+          worktrees: [AGENT.ORPHAN, AGENT.LIVE, AGENT.UNSAVED],
           unsavedWork: { [AGENT.UNSAVED]: "it has changes not committed\n" },
           reads: [[AGENT.LIVE], [AGENT.LIVE]],
         });
         yield* device.passed(1);
 
         assert.equal(device.folderStands(AGENT.ORPHAN), true);
+        assert.deepEqual(device.prunedIn(), []);
         yield* device.passed(2);
 
         assert.equal(device.folderStands(AGENT.ORPHAN), false);
+        // Note that the clone is pruned once the folder is gone, so the entry its worktree held goes with it.
+        assert.deepEqual(device.prunedIn(), [device.sharedClone]);
         assert.equal(device.folderStands(AGENT.LIVE), true);
         assert.equal(device.folderStands(AGENT.UNSAVED), true);
         assert.deepEqual(device.keptRecorded(), [AGENT.UNSAVED]);

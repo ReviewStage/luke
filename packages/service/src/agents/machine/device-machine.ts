@@ -370,8 +370,8 @@ function deviceMachineOver(
 
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
 
-    // The worktree is the Mac's to make as it takes the launch line, under the developer's own git
-    // credentials, so the open asks the Mac nothing and leaves nothing to finish.
+    // The worktree is the device's to make of its shared clone as it takes the launch line, on the
+    // agent's own GitHub token, so the open asks the device nothing and leaves nothing to finish.
     open: (ask, use) =>
       Effect.gen(function* () {
         const [layout, beside] = yield* Effect.all(
@@ -445,7 +445,8 @@ function deviceMachineOver(
 
     stop: () => Effect.void,
 
-    // The worktree is the developer's own, so nothing is thrown away; a retired bearer shuts its runner out.
+    // The device removes the agent's folder on its own discard line (`device-discard.ts`), so
+    // nothing is thrown away here; a retired bearer shuts its runner out.
     discard: () => Effect.void,
 
     // Note that files go to an away Mac no more than the message naming them does, so a message

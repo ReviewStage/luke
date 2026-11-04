@@ -454,9 +454,10 @@ function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspac
  * Note that workspace-write keeps `.git` read-only under every writable root
  * (openai/codex#15505), and with `never` nothing escalates, so without its
  * own writable root an agent could not commit. Granting the Git directory
- * itself, a Mac worktree's shared one among them, keeps
- * the sandbox on: commands still never see the token, and app-server's own
- * git calls run with hooks and fsmonitor disabled.
+ * itself keeps the sandbox on: commands still never see the token, and
+ * app-server's own git calls run with hooks and fsmonitor disabled. A host
+ * runs no sandbox (`sandboxPolicy`), so its worktree's Git directory, in the
+ * box's shared clone, needs no root of its own.
  */
 function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;

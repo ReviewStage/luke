@@ -1,14 +1,15 @@
 import path from "node:path";
 
 /**
- * open-on-mac.ts -- the scripts a local agent's repository is made and read with on this Mac, from the app's own clone of the repository.
+ * open-on-mac.ts -- the scripts a local agent's worktree is made and read with on its box, from the box's own clone of the repository.
  *
- * The app keeps one clone of each repository under `~/.vespin`, shared by
- * every install, made the first time an agent of it starts, under a lock.
- * The scripts run in the developer's login shell with their own Git login,
- * so their credentials and tools are the ones used: the clone is made over
- * HTTPS, and over SSH where that fails, without checking anything out. Every
- * value in a script is quoted for the shell, never spliced in bare.
+ * The box keeps one clone of each repository under `~/.vespin`, made the
+ * first time an agent of it starts, under a lock, and every agent of it
+ * works in a worktree of that clone, so the repository's files are had
+ * once per box rather than once per agent, and its branches stand in the
+ * clone. The clone is made over HTTPS, reading the agent's GitHub token
+ * through gh's helper, without checking anything out. Every value in a
+ * script is quoted for the shell, never spliced in bare.
  */
 
 /**
@@ -46,7 +47,7 @@ const WORKTREE_TIMING = {
   /** Seconds a transfer may move under `LOW_SPEED_BYTES` a second before Git, over HTTPS, fails it. */
   STALL_SECONDS: 60,
   LOW_SPEED_BYTES: 1000,
-  /** Seconds a connection over SSH may take to open. */
+  /** Seconds a connection over SSH, which a clone made over it before still fetches by, may take to open. */
   CONNECT_SECONDS: 20,
   LOCK_WAIT_SECONDS: 25 * 60,
 } as const;
@@ -85,11 +86,10 @@ function nonInteractiveGit(stallSeconds: number): string[] {
 /**
  * `opened`, which takes the shared clone's lock, runs `brought_in` under it,
  * and lets go however it ends, and `cloned`, which makes the clone the first
- * time, over HTTPS and over SSH where that fails, checking nothing out. Every
- * install shares the clone, so the whole of bringing a branch in, its
- * clone, fetch, worktree and config, is done under the lock. A script defines
- * `brought_in`, and sets `clone`, `https`, `ssh`, and `lock_wait`, before it calls
- * `opened`.
+ * time, over HTTPS, checking nothing out. Every agent of the repository
+ * shares the clone, so the whole of bringing a branch in, its clone, fetch,
+ * and worktree, is done under the lock. A script defines `brought_in`, and
+ * sets `clone`, `https`, and `lock_wait`, before it calls `opened`.
  */
 const SHARED_CLONE = [
   "opened() {",
@@ -129,48 +129,36 @@ const SHARED_CLONE = [
   "cloned() {",
   '  [ -e "$clone/.git" ] && return 0',
   '  echo "▸ Cloning ${https%.git}"',
-  '  rm -rf "$clone"',
-  '  git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
-  '    { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; }',
+  '  cloning="$clone.cloning"',
+  '  rm -rf "$clone" "$cloning" || return 1',
+  // Note that the clone is made beside its place and moved in whole, so one cut off midway never stands where the next launch would trust it.
+  '  git clone --no-checkout --filter=blob:none "$https" "$cloning" || { rm -rf "$cloning"; return 1; }',
+  '  mv "$cloning" "$clone"',
   "}",
 ];
 
 /**
- * An agent's own repository, made from the shared clone at `$head`: the
- * shared clone is its first origin, which a partial fetch of commits and
- * trees alone is had from (the shared clone serving the filter it was
- * cloned with), and GitHub its origin after, which `checkout` has the head's
- * blobs from as a partial clone's promisor.
+ * `unmade`, which takes away a worktree whose making failed, its folder and
+ * its entry in the shared clone alike, so the next launch starts clean. A
+ * script runs it in the shared clone, with `making` set.
  */
-const OWN_REPOSITORY = [
-  "made_own() {",
-  '  git init --quiet "$worktree" || return 1',
-  '  cd "$worktree" || return 1',
-  '  git remote add origin "$clone" || return 1',
-  "  git config core.repositoryformatversion 1 || return 1",
-  "  git config extensions.partialClone origin || return 1",
-  "  git config remote.origin.promisor true || return 1",
-  "  git config remote.origin.partialCloneFilter blob:none || return 1",
-  '  git fetch --quiet --no-tags --filter=blob:none --upload-pack="git -c uploadpack.allowFilter=true upload-pack" origin "+$fetched:$fetched" || return 1',
-  '  git remote set-url origin "$https" || return 1',
-  '  git checkout --quiet --detach "$head"',
-  "}",
-];
+const UNMADE = ["unmade() {", '  rm -rf "$making"', "  git worktree prune", "}"];
 
 /**
- * The script, its values quoted, that makes a local agent's own repository
- * (`@repo/host`'s `compose-local-agents.ts`), at the head of the branch the
- * agent starts from, or of GitHub's default branch where it names none,
- * read in our own clone of the repository, under its lock. The agent's work stays in its own folder,
- * and a worktree's Git folder would stand in the shared clone, so the agent
- * gets a repository of its own: fetched from the shared clone at that head,
- * its commits and trees only, then pointed at GitHub, which every blob it
- * lacks is had from as it is needed, through the agent's own GitHub
- * credential. Nothing of the shared clone, nor of another agent's work in it, is
- * copied in beyond that head's history. A repository already made is left
- * as it stands, since it holds the agent's work, and one left half made is
- * taken away, so the next launch makes it again. It ends with its failure
- * where a step fails, having said which.
+ * The script, its values quoted, that makes a local agent's worktree
+ * (`@repo/host`'s `compose-local-agents.ts`) of the box's shared clone,
+ * detached at the head of the branch the agent starts from, or of GitHub's
+ * default branch where it names none, fetched into the clone under its
+ * lock. The worktree's files are had from GitHub as its checkout needs
+ * them, through the agent's own GitHub credential, and the branches the
+ * agent makes stand in the shared clone. A folder that already holds a
+ * repository is left as it stands, since it holds the agent's work, a
+ * folder made before worktrees among them. The worktree is made beside its
+ * place and moved in by Git, which keeps its links, so one a launch cut off
+ * left half made never stands where the next launch would trust it; the
+ * next takes it away, entry and all. A step that fails takes away what it
+ * made too (`UNMADE`), and the script ends with its failure, having said
+ * which.
  */
 export function agentWorktreeScript(input: {
   /** The repository as `owner/name`, cloned from GitHub the first time. */
@@ -179,18 +167,14 @@ export function agentWorktreeScript(input: {
   readonly worktree: string;
   /** The branch the agent starts from; none for GitHub's default branch. */
   readonly branch: string | null;
-  /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
-  readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
+  /** Where the repository is cloned from; GitHub's over HTTPS unless a test names its own. */
+  readonly remote?: string | undefined;
   /** The seconds a stalled transfer and a wait on a live holder of the clone's lock last; `WORKTREE_TIMING`'s unless a test names its own. */
   readonly seconds?: { readonly stall: number; readonly lockWait: number } | undefined;
 }): string {
   const seconds = input.seconds ?? {
     stall: WORKTREE_TIMING.STALL_SECONDS,
     lockWait: WORKTREE_TIMING.LOCK_WAIT_SECONDS,
-  };
-  const remotes = input.remotes ?? {
-    https: `https://github.com/${input.repository}.git`,
-    ssh: `git@github.com:${input.repository}.git`,
   };
   return [
     // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
@@ -201,8 +185,7 @@ export function agentWorktreeScript(input: {
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch ?? "")}`,
-    `https=${shellQuoted(remotes.https)}`,
-    `ssh=${shellQuoted(remotes.ssh)}`,
+    `https=${shellQuoted(input.remote ?? `https://github.com/${input.repository}.git`)}`,
     ...SHARED_CLONE,
     "brought_in() {",
     "  cloned || return 1",
@@ -219,12 +202,12 @@ export function agentWorktreeScript(input: {
     '  mkdir -p "$(dirname "$worktree")" || return 1',
     '  making="$worktree.making"',
     '  rm -rf "$making" || return 1',
-    // Note that the repository is made beside its place and moved in whole, so one left half made never stands where the next launch would make it again.
-    '  ( worktree="$making"; made_own ) || { rm -rf "$making"; return 1; }',
-    '  if [ -e "$worktree" ]; then rmdir "$worktree" || { rm -rf "$making"; return 1; }; fi',
-    '  mv "$making" "$worktree"',
+    // Note that forcing twice takes over the entry a launch cut off left for the same place, locked or not, which Git would otherwise refuse.
+    '  git worktree add --quiet --force --force --detach "$making" "$head" || { unmade; return 1; }',
+    '  if [ -e "$worktree" ]; then rmdir "$worktree" || { unmade; return 1; }; fi',
+    '  git worktree move "$making" "$worktree" || { unmade; return 1; }',
     "}",
-    ...OWN_REPOSITORY,
+    ...UNMADE,
     '[ -e "$worktree/.git" ] && exit 0',
     "( opened )",
     "status=$?",
@@ -237,18 +220,15 @@ export function agentWorktreeScript(input: {
 }
 
 /**
- * The script, its path quoted, that says what a discard would lose from a
- * local agent's worktree (`@repo/host`'s `compose-local-agents.ts`): it
- * prints one line, and exits 0, when the worktree holds work that is nowhere
- * else, changes `git status --porcelain` shows, commits its upstream does
- * not hold, or, with no upstream, commits on no remote branch of our
- * shared clone nor a head it fetched, a local branch, checked out or not,
- * with commits on no such branch or head, a stash, or files in a folder with no
- * repository. It prints nothing and exits 0 for a worktree with nothing to
- * lose, or none at all, and exits 1 where Git could
- * not say, which the caller takes as work to keep. Note that it fetches
- * nothing, so a remote branch is read as the worktree last knew it, which
- * at worst keeps work GitHub already has.
+ * The script, its path quoted, that says what removing a local agent's
+ * folder would lose (`@repo/host`'s `compose-local-agents.ts`): it prints
+ * one line, and exits 0, where its worktree has changes not committed,
+ * tracked or untracked but never ignored, commits on its head that no
+ * branch, remote branch, or head we fetched holds, or the folder has files
+ * and no repository. Commits on a branch need no check, since the branches
+ * are the shared clone's, which outlives the folder. It prints nothing and
+ * exits 0 where there is nothing to lose, or no folder at all, and exits 1
+ * where Git could not say, which the caller takes as work to keep.
  */
 export function agentUnsavedWorkScript(input: { readonly worktree: string }): string {
   return [
@@ -266,34 +246,10 @@ export function agentUnsavedWorkScript(input: { readonly worktree: string }): st
     "fi",
     // Note that untracked files are asked for by name, since the developer's own `status.showUntrackedFiles` would hide them.
     'changes="$(git status --porcelain --untracked-files=all)" || exit 1',
-    'if [ -n "$changes" ]; then',
-    '  echo "it has changes not committed"',
-    "  exit 0",
-    "fi",
-    // Note that the upstream is asked for quietly, since a branch with none is the common case and no failure.
-    "if git rev-parse --verify --quiet '@{upstream}' >/dev/null; then",
-    `  ahead="$(git rev-list --max-count=1 HEAD --not '@{upstream}')" || exit 1`,
-    '  if [ -n "$ahead" ]; then',
-    '    echo "it has commits its upstream does not"',
-    "    exit 0",
-    "  fi",
-    "else",
-    // Note that the heads we fetched into refs/agent are GitHub's too, which the agent's own commits are not.
-    `  ahead="$(git rev-list --max-count=1 HEAD --not --remotes --glob='refs/agent/*')" || exit 1`,
-    '  if [ -n "$ahead" ]; then',
-    '    echo "it has commits on no remote branch"',
-    "    exit 0",
-    "  fi",
-    "fi",
-    // Note that a branch the agent left for another holds its commits as surely as the one checked out.
-    `ahead="$(git rev-list --max-count=1 --branches --not --remotes --glob='refs/agent/*')" || exit 1`,
-    'if [ -n "$ahead" ]; then',
-    '  echo "it has a branch with commits on no remote branch"',
-    "  exit 0",
-    "fi",
-    "if git rev-parse --verify --quiet refs/stash >/dev/null; then",
-    '  echo "it has changes stashed"',
-    "fi",
+    '[ -z "$changes" ] || echo "it has changes not committed"',
+    // Note that a commit made on a detached head stands on no branch, so the folder's removal would lose it; another agent's branch only ever counts it saved, and the heads we fetched into refs/agent are GitHub's.
+    `ahead="$(git rev-list --max-count=1 HEAD --not --branches --remotes --glob='refs/agent/*')" || exit 1`,
+    '[ -z "$ahead" ] || echo "it has commits on no branch"',
     "exit 0",
     "",
   ].join("\n");

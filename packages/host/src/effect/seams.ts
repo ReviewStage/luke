@@ -191,7 +191,7 @@ export class LocalAgentClisUnavailable extends Data.TaggedError("LocalAgentClisU
  * straight on the box as a host's are, on what (`tools`), the runner's
  * bundle, and what the start adds to its environment; the name, platform,
  * and architecture the device is offered under at Start; and the scripts that make an
- * agent's own repository and check it for unsaved work
+ * agent's worktree and check it for unsaved work
  * (`node/open-on-mac.ts`'s `agentWorktreeScript` and `agentUnsavedWorkScript`).
  * It arrives rather than being built here, because each is the shell's own,
  * a path into its bundle or a script `node:path` builds, and a host that

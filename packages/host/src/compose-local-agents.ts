@@ -116,18 +116,18 @@ import type { RunMode } from "./run-mode.js";
  * Lines are claimed in the order the service lists them, its id order, and
  * handed to the agent they name, whose worker takes them one at a time, so
  * an agent's lines are delivered strictly in order while agents go on side
- * by side. Each claim carries a token minted for its line and kept until
- * the claim is answered, so a claim whose answer was lost is asked again as
- * the same claim, before the next read, and the line is delivered once; a
- * launch whose claim was asked again had its secrets taken by the answer
- * lost, so it is settled as a runner gone. A launch makes the agent's own
- * repository under its folder (`deviceAgentLayout`) where it has none,
- * through the platform's script, sets in it who the agent's commits are by
- * where the line says, as a cloud checkout sets it
+ * by side. Each claim carries a token minted for its line and kept until the
+ * claim is answered, so a claim whose answer was lost is asked again as the
+ * same claim, before the next read, and the line is delivered once; a launch
+ * whose claim was asked again had its secrets taken by the answer lost, so
+ * it is settled as a runner gone. A launch makes the agent's worktree of the
+ * box's shared clone under its folder (`deviceAgentLayout`) where it has
+ * none, through the platform's script, sets in the clone's config who the
+ * agent's commits are by where the line says, as a cloud checkout sets it
  * (`@repo/features/checkout-identity`), and gh's credential helper, and
  * starts the runner (`LocalAgentPlatformSeam.launch`), with the claim's
- * secrets in its environment and nowhere else, never a file, an argument,
- * or a log, and its first lines on its stdin; its line is settled with the
+ * secrets in its environment and nowhere else, never a file, an argument, or
+ * a log, and its first lines on its stdin; its line is settled with the
  * runner's exit code once it exits. As it goes, it reports on its line the
  * step it has reached (`DEVICE_LAUNCH_STEP`), which the agent's transcript
  * words until the harness's first event: preparing once it is taken,
@@ -241,10 +241,10 @@ import type { RunMode } from "./run-mode.js";
  * on the developer's own logins is checked on the device as the rest are.
  * A pass then clears the folders of idle agents unused for
  * `FOLDER_UNUSED_FOR`, longest unused first, where the platform's check
- * finds all their work on GitHub, a local branch and a stash among it,
- * checking at most `FOLDER_CHECKS_PER_PASS` a pass and never again one it
- * found work in until its agent is used since; the agent stays this
- * machine's, and its next launch starts afresh.
+ * finds no change in them not committed, since their branches stand in the
+ * shared clone, checking at most `FOLDER_CHECKS_PER_PASS` a pass and never
+ * again one it found work in until its agent is used since; the agent stays
+ * this machine's, and its next launch starts afresh.
  *
  * A host that updates itself (`LocalAgentsDependencies.update`,
  * `daemon/host-update.ts`) says on every beat where its update stands, and
@@ -316,7 +316,7 @@ const ORPHANS_PER_PASS = 5;
  * While reads stand so, a pass lets go of no agent, until they have stood so for `HOLD_FOR`, by when a service's bug or a lagging replica has been seen to, and what still stands so is taken as true.
  */
 const MASS_LEFT_OUT = { AT_LEAST: 4, HOLD_FOR: Duration.days(1) } as const;
-/** How long an agent goes unused before a pass clears its folder, where it stands idle with all its work on GitHub, so a box that runs agents for weeks does not fill its disk with folders nobody messages again. */
+/** How long an agent goes unused before a pass clears its folder, where it stands idle with no change in it not committed, so a box that runs agents for weeks does not fill its disk with folders nobody messages again. */
 const FOLDER_UNUSED_FOR = Duration.days(7);
 /** How many unused folders one pass checks at most before it clears them, so a backlog clears over a few passes rather than in one long one. */
 const FOLDER_CHECKS_PER_PASS = 5;
@@ -898,7 +898,7 @@ export function composeLocalAgents(
           });
 
         /**
-         * The agent's own repository made where it has none, reading the
+         * The agent's worktree made where it has none, reading the
          * agent's GitHub token where it has one through gh's helper, never
          * the token itself, and `fetching` run just before its script: a
          * folder for an agent with no repository.
@@ -953,15 +953,19 @@ export function composeLocalAgents(
           }).pipe(Effect.orElseSucceed(() => false));
 
         /**
-         * Who the agent's commits are by, as the service settled it, set in
-         * its own repository's config by the step a cloud checkout sets it
-         * with (`CHECKOUT_IDENTITY_SCRIPT`), where the line names one, and
-         * gh's credential helper beside it (`AGENT_GIT_HELPER_SCRIPT`), so
-         * the repository's every `git` reads the token gh's config holds;
-         * whether both were. Note that it runs as the agent, in its
-         * repository with its home and caches in its folder, never as the
+         * Who the agent's commits are by, as the service settled it, set by
+         * the step a cloud checkout sets it with (`CHECKOUT_IDENTITY_SCRIPT`),
+         * where the line names one, and gh's credential helper beside it
+         * (`AGENT_GIT_HELPER_SCRIPT`), so the worktree's every `git` reads the
+         * token gh's config holds; whether both were. Both are set in the
+         * shared clone's config, which every worktree of it reads, and which
+         * holds the same for every agent of the box: its owner's identity,
+         * and a helper that reads gh's config in whichever agent's home runs
+         * it. A folder made before worktrees has them set in its own
+         * repository's config. Note that it runs as the agent, in its
+         * worktree with its home and caches in its folder, never as the
          * device's own git, which a repository the agent rigged could steer;
-         * and on every launch, since a repository made before the launch line
+         * and on every launch, since a clone made before the launch line
          * carried an identity holds none.
          */
         const checkoutSet = (layout: DeviceAgentLayout, identity: CheckoutIdentity | undefined) => {
@@ -1246,11 +1250,50 @@ export function composeLocalAgents(
           });
 
         /**
+         * The agent's folder removed with everything in it, then the entry its
+         * worktree held in the shared clone pruned (`git worktree prune`), so
+         * the clone lists no worktree that stands no more. The clone is read
+         * from the link the worktree's `.git` file holds, before the folder
+         * goes; a folder made before worktrees holds a repository of its own,
+         * which links to none. Note that a prune that fails is let be, since
+         * the next removal's prune takes every entry of the clone whose
+         * worktree is gone.
+         */
+        const folderRemoved = (layout: DeviceAgentLayout) =>
+          Effect.gen(function* () {
+            const link = yield* Effect.option(
+              fileSystem.readFileString(path.join(layout.checkoutPath, ".git")),
+            );
+            yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            const linked = Option.flatMap(link, (text) =>
+              Option.fromNullishOr(/^gitdir: (.+)$/mu.exec(text)?.[1]),
+            );
+            if (Option.isNone(linked)) return;
+            // Note that a worktree's own Git folder stands under `worktrees/` in the shared clone's.
+            const shared = path.resolve(layout.checkoutPath, linked.value, "..", "..");
+            yield* Effect.ignore(
+              Effect.scoped(
+                Effect.flatMap(
+                  ChildProcess.make("git", ["worktree", "prune"], {
+                    cwd: shared,
+                    env: shellVariables,
+                    extendEnv: false,
+                    stdin: "ignore",
+                    stdout: "ignore",
+                    stderr: "ignore",
+                    forceKillAfter: KILL_GRACE,
+                  }),
+                  (handle) => handle.exitCode,
+                ),
+              ),
+            );
+          });
+
+        /**
          * The agent let go of: its runner stopped and its exit settled, and
          * its folder removed with everything in it, its worktree and what its
-         * runner and commands
-         * wrote there; the shared clone the worktree was made from stays, and
-         * the next worktree made of it prunes this one's record. A folder
+         * runner and commands wrote there, and its worktree's entry pruned
+         * from the shared clone, which stays (`folderRemoved`). A folder
          * that stands no more holds nothing to lose and goes at once.
          * Otherwise a device whose platform names a check of the worktree
          * keeps the folder, and says why, where the check finds work in it
@@ -1286,7 +1329,7 @@ export function composeLocalAgents(
               }));
               return DISCARD_END.KEPT;
             }
-            yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            yield* folderRemoved(layout);
             yield* usedForgotten(agentId);
             yield* forgetOwnedAgent(kernel.stateRoot, agentId);
             // Note that a folder kept keeps its record too, so the agent, launched again, runs the way it ran.
@@ -1706,8 +1749,8 @@ export function composeLocalAgents(
         /**
          * The agent's folder, unused for `FOLDER_UNUSED_FOR`, removed whole
          * where it still stands at the use `at` the pass read it at and the
-         * platform's check finds all its work on GitHub (`unsavedWork`), so
-         * its next launch starts afresh from its branch
+         * platform's check finds no change in it not committed
+         * (`unsavedWork`), so its next launch starts afresh from its branch
          * (`LAUNCH_NOTE.CLEARED`); its stamp goes with it, but the agent
          * stays this machine's, and its mode stays, since it is not archived.
          * One whose check finds work, or cannot say, is recorded so
@@ -1728,11 +1771,11 @@ export function composeLocalAgents(
               );
               return CLEAR_END.KEPT;
             }
-            yield* fileSystem.remove(layout.folder, { recursive: true, force: true });
+            yield* folderRemoved(layout);
             yield* usedForgotten(agentId);
             holdingWork.delete(agentId);
             report(
-              `a local agent's folder unused for ${Duration.format(FOLDER_UNUSED_FOR)} was removed, its work all on GitHub: ${agentId}`,
+              `a local agent's folder unused for ${Duration.format(FOLDER_UNUSED_FOR)} was removed, with no change in it not committed: ${agentId}`,
             );
             return CLEAR_END.REMOVED;
           }).pipe(

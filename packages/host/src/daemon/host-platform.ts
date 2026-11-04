@@ -16,9 +16,9 @@ import type { HostOs } from "./host-os.js";
  * A host runs every agent directly (`DEVICE_ISOLATION.DIRECT`), as This Mac
  * and a Linux box alike: the runner starts in the agent's folder with its
  * home and caches there (`local-agent-box.ts`'s `agentOnBox`), with full
- * access to whatever the host's user reaches. Each agent gets a repository
- * of its own in its folder (`agentWorktreeScript`), made from the box's
- * shared clone. Its harnesses run no sandbox of their own and ask no
+ * access to whatever the host's user reaches. Each agent gets a worktree of
+ * the box's shared clone in its folder (`agentWorktreeScript`). Its
+ * harnesses run no sandbox of their own and ask no
  * approval (`RUNNER_PLACE.HOST`), and no login left on the box reaches
  * them, so they run on the sign-ins saved in the account; its GitHub token comes
  * from the service, in gh's config in its home. Claude Code refuses to skip its

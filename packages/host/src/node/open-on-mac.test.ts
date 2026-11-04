@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import path from "node:path";
 import { temporaryDirectory } from "@repo/runtime/testing";
@@ -14,15 +14,17 @@ import {
 
 /**
  * A local agent's scripts over real Git and bash, an origin on disk standing
- * in for GitHub: an agent gets a repository of its own at its branch's head,
- * made from the app's shared clone, which a clone over HTTPS that fails makes
- * over SSH; two launches at once before the clone is made each bring in their
- * own branch, none taking the lock from one that took it after the holder it
- * read let go; one waits on a clone another holds while it lives, takes the
- * lock over once it is gone, and gives up, leaving a live holder's lock, once
- * it has waited its bound; a transfer from a remote that never answers fails
- * rather than hangs; and a discard finds work in an agent's
- * repository only where something of it is nowhere else.
+ * in for GitHub: an agent gets a worktree of the box's shared clone,
+ * detached at its branch's head, which the clone lists; a first clone cut
+ * off midway leaves nothing at the clone's place; two launches at once
+ * before the clone is made each bring in their own branch, and two agents
+ * fetch into the clone at once, none taking the lock from one that took it
+ * after the holder it read let go; one waits on a clone another holds while
+ * it lives, takes the lock over once it is gone, and gives up, leaving a live
+ * holder's lock, once it has waited its bound; a transfer from a remote that
+ * never answers fails rather than hangs; a make that fails or was cut off
+ * leaves nothing that blocks the next; and a removal finds work in an agent's
+ * folder only where it has changes not committed or commits on no branch.
  */
 
 const GIT_ENVIRONMENT = {
@@ -83,26 +85,66 @@ function run(scratch: string, shell: string, script: string): string {
   return runEnded(scratch, shell, script).printed;
 }
 
+/** The folders given, each as its real path, sorted, as `worktreesListed` answers them. */
+function realPaths(folders: readonly string[]): string[] {
+  return folders.map((folder) => realpathSync(folder)).sort();
+}
+
+/** The worktrees the shared clone lists, its own among them, each as its real path, sorted. */
+function worktreesListed(clone: string): string[] {
+  const listed = git(clone, ["worktree", "list", "--porcelain"])
+    .split("\n")
+    .filter((line) => line.startsWith("worktree "))
+    .map((line) => line.slice("worktree ".length));
+  return realPaths(listed);
+}
+
 test(
-  "a clone over HTTPS that fails is made over SSH",
+  "a first clone cut off midway leaves nothing at the clone's place, and the next launch makes it",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
+    // A server that takes every connection and says nothing, so the clone stands midway until it is cut off.
+    const sockets = new Set<Socket>();
+    const silent = createServer((socket) => sockets.add(socket));
+    t.onTestFinished(() => {
+      for (const socket of sockets) socket.destroy();
+      silent.close();
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const address = silent.address();
+    assert.ok(address !== null && typeof address === "object");
     const clone = cloneFolder(state, "acme/app");
-
-    run(
-      scratch,
-      shell,
+    const own = path.join(scratch, "agents", "agent", "repository");
+    const script = (remote: string) =>
       agentWorktreeScript({
         repository: "acme/app",
         clone,
-        worktree: path.join(scratch, "agents", "agent", "repository"),
+        worktree: own,
         branch: "agent/fix-relay",
-        remotes: { https: path.join(scratch, "nowhere"), ssh: origin },
-      }),
-    );
+        remote,
+      });
+    const file = path.join(scratch, "open.sh");
+    writeFileSync(file, script(`http://127.0.0.1:${address.port}/acme/app.git`), { mode: 0o700 });
+    const child = spawn("/bin/bash", [file], {
+      env: { ...GIT_ENVIRONMENT, HOME: scratch, SHELL: shell },
+      stdio: "ignore",
+      detached: true,
+    });
+    const ended = new Promise<void>((resolve) => child.on("exit", () => resolve()));
 
-    assert.equal(git(clone, ["rev-parse", "refs/remotes/origin/agent/fix-relay"]), head);
+    // Note that the launch is killed whole once its clone has begun, as a restart kills it, so nothing of it has a say in what it leaves.
+    for (let waited = 0; sockets.size === 0 && waited < 20_000; waited += 100) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.ok(sockets.size > 0, "the clone never began");
+    assert.ok(child.pid !== undefined);
+    process.kill(-child.pid, "SIGKILL");
+    await ended;
+
+    assert.equal(existsSync(clone), false);
+    run(scratch, shell, script(origin));
+    assert.equal(git(own, ["rev-parse", "HEAD"]), head);
   },
   GIT_DEADLINE,
 );
@@ -127,7 +169,7 @@ test(
           clone,
           worktree: own(name),
           branch,
-          remotes: { https: origin, ssh: origin },
+          remote: origin,
         }),
         { mode: 0o700 },
       );
@@ -151,12 +193,29 @@ test(
     for (const branch of more) git(origin, ["branch", branch, "main"]);
     const then = await Promise.all(more.map((branch, index) => launching(branch, `more-${index}`)));
     const said = [...first, ...then].join("\n");
-    for (const index of more.keys()) {
-      assert.ok(existsSync(path.join(own(`more-${index}`), ".git")), said);
+    for (const name of ["one", "two", ...more.map((_, index) => `more-${index}`)]) {
+      assert.ok(existsSync(path.join(own(name), ".git")), said);
     }
+    // Note that two agents then fetch into the one clone at once, under no lock of ours.
+    const fetching = (worktree: string) =>
+      new Promise<string>((resolve) =>
+        execFile(
+          "git",
+          ["fetch", "--quiet", "origin"],
+          { cwd: worktree, env: GIT_ENVIRONMENT },
+          (error, _stdout, stderr) => resolve(error === null ? "" : `${worktree}: ${stderr}`),
+        ),
+      );
+    const fetched = await Promise.all([fetching(own("one")), fetching(own("two"))]);
 
     assert.equal(git(own("one"), ["rev-parse", "HEAD"]), relay, first.join("\n"));
     assert.equal(git(own("two"), ["rev-parse", "HEAD"]), other, first.join("\n"));
+    assert.deepEqual(
+      worktreesListed(clone),
+      realPaths([clone, own("one"), own("two"), ...more.map((_, index) => own(`more-${index}`))]),
+      said,
+    );
+    assert.deepEqual(fetched, ["", ""]);
   },
   GIT_DEADLINE,
 );
@@ -179,7 +238,7 @@ test(
         clone,
         worktree: own,
         branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
+        remote: origin,
       }),
       { mode: 0o700 },
     );
@@ -223,7 +282,7 @@ test(
         clone,
         worktree: path.join(scratch, "agents", "agent", "repository"),
         branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
+        remote: origin,
         seconds: { stall: 60, lockWait: 1 },
       }),
     );
@@ -257,10 +316,7 @@ test(
         clone,
         worktree: path.join(scratch, "agents", "agent", "repository"),
         branch: "agent/fix-relay",
-        remotes: {
-          https: `http://127.0.0.1:${address.port}/acme/app.git`,
-          ssh: path.join(scratch, "nowhere"),
-        },
+        remote: `http://127.0.0.1:${address.port}/acme/app.git`,
         seconds: { stall: 1, lockWait: 60 },
       }),
       { mode: 0o700 },
@@ -324,7 +380,7 @@ test(
         clone,
         worktree: own,
         branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
+        remote: origin,
       }),
       { mode: 0o700 },
     );
@@ -366,7 +422,7 @@ test(
 );
 
 test(
-  "two local agents starting from one branch each get a repository of their own at its head, and one already made keeps the agent's work",
+  "two local agents starting from one branch each get a worktree of their own at its head, and one already made keeps the agent's work",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     const head = push("first\n");
@@ -378,7 +434,7 @@ test(
         clone,
         worktree,
         branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
+        remote: origin,
       });
 
     run(scratch, shell, script(agent("first")));
@@ -398,7 +454,7 @@ test(
 );
 
 test(
-  "an agent gets a repository of its own at the branch's head, which works with the shared clone out of reach and has the rest from GitHub",
+  "an agent's worktree is the shared clone's, which lists it, detached at the branch's head with its files checked out and its history",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
@@ -414,86 +470,158 @@ test(
         clone,
         worktree: own,
         branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
+        remote: origin,
       }),
     );
-    // Note that the agent's repository stands on its own, so the shared clone is moved out of reach.
-    rmSync(clone, { recursive: true, force: true });
 
+    assert.deepEqual(worktreesListed(clone), realPaths([clone, own]));
     assert.equal(git(own, ["rev-parse", "HEAD"]), head);
+    assert.equal(git(own, ["rev-parse", "--abbrev-ref", "HEAD"]), "HEAD", "its head is detached");
     assert.equal(readFileSync(path.join(own, "README.md"), "utf8"), "second\n");
     assert.equal(git(own, ["status", "--porcelain"]), "");
-    assert.equal(git(own, ["remote", "get-url", "origin"]), origin);
     assert.equal(git(own, ["show", "HEAD~1:README.md"]), "first");
   },
   GIT_DEADLINE,
 );
 
 test(
-  "a discard finds work in an agent's worktree only where it is changed, ahead of its upstream, on no remote branch, on a branch left checked out or not, stashed, or has files and no repository",
+  "a make that fails after its worktree is added takes the worktree and its entry away, so the next launch starts clean",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const own = path.join(scratch, "agents", "agent", "repository");
+    const script = agentWorktreeScript({
+      repository: "acme/app",
+      clone,
+      worktree: own,
+      branch: "agent/fix-relay",
+      remote: origin,
+    });
+    // A folder in the worktree's place holding files and no repository, which the make never takes away, so its last step fails.
+    mkdirSync(own, { recursive: true });
+    writeFileSync(path.join(own, "notes.md"), "kept\n");
+
+    const ended = runEnded(scratch, shell, script);
+
+    assert.equal(ended.code, 1);
+    assert.deepEqual(worktreesListed(clone), realPaths([clone]));
+    assert.equal(existsSync(`${own}.making`), false);
+    assert.equal(readFileSync(path.join(own, "notes.md"), "utf8"), "kept\n");
+    rmSync(own, { recursive: true });
+    run(scratch, shell, script);
+    assert.equal(git(own, ["rev-parse", "HEAD"]), head);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a make cut off midway leaves nothing the next launch trusts or is blocked by, its half-made worktree and locked entry taken over",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const agent = (name: string) => path.join(scratch, "agents", name, "repository");
+    const script = (name: string) =>
+      agentWorktreeScript({
+        repository: "acme/app",
+        clone,
+        worktree: agent(name),
+        branch: "agent/fix-relay",
+        remote: origin,
+      });
+    run(scratch, shell, script("other"));
+    // What a launch killed while Git checked its worktree out leaves: the worktree half made beside its place, its entry still locked.
+    mkdirSync(path.dirname(agent("agent")), { recursive: true });
+    git(clone, [
+      "worktree",
+      "add",
+      "--quiet",
+      "--lock",
+      "--detach",
+      `${agent("agent")}.making`,
+      head,
+    ]);
+    rmSync(path.join(`${agent("agent")}.making`, "README.md"));
+
+    run(scratch, shell, script("agent"));
+
+    assert.equal(git(agent("agent"), ["rev-parse", "HEAD"]), head);
+    assert.equal(git(agent("agent"), ["status", "--porcelain"]), "");
+    assert.equal(existsSync(`${agent("agent")}.making`), false);
+    assert.deepEqual(worktreesListed(clone), realPaths([clone, agent("other"), agent("agent")]));
+    assert.doesNotMatch(git(clone, ["worktree", "list", "--porcelain"]), /^locked/mu);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a removal finds work in an agent's worktree only where it has changes not committed, tracked or untracked, or commits on its head alone, and never in a branch, a stash, an ignored file, a head fetched from GitHub, or another agent's worktree; and in a folder with no repository only where it has files",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
     push("first\n");
-    const worktree = path.join(scratch, "agents", "one", "repository");
-    run(
-      scratch,
-      shell,
-      agentWorktreeScript({
-        repository: "acme/app",
-        clone: cloneFolder(state, "acme/app"),
-        worktree,
-        branch: "agent/fix-relay",
-        remotes: { https: origin, ssh: origin },
-      }),
-    );
-    const found = () =>
-      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree })).printed.trim();
-    const commit = (name: string) => {
-      writeFileSync(path.join(worktree, name), `${name}\n`);
+    const clone = cloneFolder(state, "acme/app");
+    const agent = (name: string) => path.join(scratch, "agents", name, "repository");
+    const launched = (name: string, branch: string | null) =>
+      run(
+        scratch,
+        shell,
+        agentWorktreeScript({
+          repository: "acme/app",
+          clone,
+          worktree: agent(name),
+          branch,
+          remote: origin,
+        }),
+      );
+    launched("one", "agent/fix-relay");
+    // Note that the other starts from GitHub's default branch, moved since, which only the head fetched into refs/agent holds.
+    push("second\n");
+    launched("other", null);
+    const worktree = agent("one");
+    const found = (folder: string) =>
+      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: folder })).printed.trim();
+    const committed = (name: string, text: string) => {
+      writeFileSync(path.join(worktree, name), text);
       git(worktree, ["add", "--all"]);
       git(worktree, ["commit", "--quiet", "-m", name]);
     };
 
-    assert.equal(found(), "", "a clean worktree on GitHub's head holds nothing");
+    assert.equal(found(worktree), "", "a clean worktree holds nothing");
+    assert.equal(
+      found(agent("other")),
+      "",
+      "a head fetched from GitHub's default branch holds nothing",
+    );
 
     // Note that the developer's own Git setting that hides untracked files must not hide them here.
     git(worktree, ["config", "status.showUntrackedFiles", "no"]);
-
     writeFileSync(path.join(worktree, "notes.md"), "unsaved\n");
-    assert.match(found(), /changes not committed/u);
-    git(worktree, ["add", "--all"]);
-    git(worktree, ["commit", "--quiet", "-m", "notes"]);
-    assert.match(found(), /no remote branch/u, "a commit on a detached head, on no upstream");
+    assert.match(found(worktree), /changes not committed/u, "an untracked file");
+    rmSync(path.join(worktree, "notes.md"));
+    writeFileSync(path.join(worktree, "README.md"), "edited\n");
+    assert.match(found(worktree), /changes not committed/u, "a tracked edit");
+    assert.equal(found(agent("other")), "", "another agent's changes keep no folder but theirs");
 
-    git(worktree, ["checkout", "--quiet", "--track", "-b", "mine", "origin/agent/fix-relay"]);
-    assert.equal(found(), "", "a branch level with its upstream holds nothing");
-    commit("ahead.md");
-    assert.match(found(), /its upstream does not/u);
-
-    git(worktree, ["checkout", "--quiet", "-b", "unpublished", "origin/agent/fix-relay"]);
-    git(worktree, ["branch", "--unset-upstream"]);
-    assert.match(found(), /a branch with commits/u, "a branch left for another keeps its commits");
-    git(worktree, ["branch", "--quiet", "-D", "mine"]);
-    assert.equal(found(), "", "a branch with no upstream and no commits of its own holds nothing");
-    writeFileSync(path.join(worktree, "README.md"), "stashed\n");
     git(worktree, ["stash", "--quiet"]);
-    assert.match(found(), /stashed/u);
-    git(worktree, ["stash", "drop", "--quiet"]);
-    commit("local.md");
-    assert.match(found(), /no remote branch/u);
+    committed(".gitignore", "build/\n");
+    assert.match(found(worktree), /commits on no branch/u, "a commit on the detached head alone");
+
+    // Note that branches and stashes stand in the shared clone, which outlives the folder.
+    git(worktree, ["switch", "--quiet", "-c", "unpushed"]);
+    mkdirSync(path.join(worktree, "build"));
+    writeFileSync(path.join(worktree, "build", "out.js"), "built\n");
+    assert.equal(
+      found(worktree),
+      "",
+      "an unpushed branch, a stash, and an ignored file keep nothing",
+    );
 
     const plain = path.join(scratch, "agents", "plain", "repository");
     mkdirSync(plain, { recursive: true });
-    assert.equal(
-      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: plain })).printed,
-      "",
-      "an empty folder holds nothing",
-    );
+    assert.equal(found(plain), "", "an empty folder holds nothing");
     writeFileSync(path.join(plain, "report.md"), "written by an agent with no repository\n");
-    assert.match(
-      runEnded(scratch, shell, agentUnsavedWorkScript({ worktree: plain })).printed,
-      /no repository/u,
-    );
+    assert.match(found(plain), /no repository/u);
 
     const missing = path.join(scratch, "agents", "none", "repository");
     assert.deepEqual(

@@ -162,15 +162,21 @@ test.each([
     isolation: DEVICE_ISOLATION.SANDBOX,
     told: ["Linux virtual machine of your own", "out of your reach"],
     untold: ["their installed tools"],
+    toldWithRepository: [],
   },
   {
     isolation: DEVICE_ISOLATION.DIRECT,
     told: ["straight on one of the developer's own machines", "full access"],
     untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
+    // Note that its worktree shares the machine's one clone, whose branches another agent's worktree may hold.
+    toldWithRepository: [
+      "`git switch --detach origin/<branch>`",
+      "`git push origin HEAD:<branch>`",
+    ],
   },
 ])(
   "a local agent run on Vespin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
-  ({ isolation, told, untold }) => {
+  ({ isolation, told, untold, toldWithRepository }) => {
     const VM = {
       local: true,
       isolation,
@@ -198,6 +204,9 @@ test.each([
       assert.ok(!words.includes("the developer's own git credentials"), label);
       assert.ok(!words.includes("## Your browser"), label);
       if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
+      for (const each of toldWithRepository) {
+        assert.equal(words.includes(each), repository !== null, `${label}: ${each}`);
+      }
       // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
       assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
       assert.ok(!words.includes(SHARED_FILES_DIRECTORY), label);
