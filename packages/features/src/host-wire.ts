@@ -384,8 +384,16 @@ export type DevicePresenceAnswer = typeof devicePresenceAnswerSchema.Type;
 /** A host removed, by its id. */
 export const hostIdRequestSchema = EffectSchema.Struct({ id: wireUuidSchema });
 
-/** What a remove or a deny answers. */
-export const hostDoneAnswerSchema = EffectSchema.Struct({ done: EffectSchema.Literal(true) });
+/**
+ * What a remove or a deny answers: done, and for a remove the transaction
+ * the host was removed in, which a reader following the hosts waits for
+ * before it confirms the remove; absent from a deny, and from a service
+ * older than it.
+ */
+export const hostDoneAnswerSchema = EffectSchema.Struct({
+  done: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
 
 /** The command that installs the host program on a box and pairs it, which prints the link and the code a member approves: public, with no secret in it. */
 export function hostInstallCommand(installScriptUrl: string): string {

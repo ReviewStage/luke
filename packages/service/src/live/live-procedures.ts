@@ -67,6 +67,10 @@
  * after the account is read as a member of it, so a workspace it is not in
  * is not found; woken by a memory kept, corrected, or forgotten, and by the
  * reader's own membership moving (`workspaceMemoriesLive`).
+ * `GET /api/live/hosts` answers the account's hosts as one, with the install
+ * script's address on the origin the request reached; woken by a host
+ * enrolled, approved, renamed, removed, or moving through an update
+ * (`hostsLive`).
  * `GET /api/live/installed-skills?workspaceId=` answers the skills the
  * account sees there, the workspace's and its own, each with whether it may
  * manage it, on the same membership check; woken by one of them installed,
@@ -165,6 +169,7 @@ import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
+import { installScriptUrlOf } from "../agents/hosts-procedures.js";
 import { agentChaptersAdmission } from "../chapters/pull-request-chapters-procedures.js";
 import { unparsedWire } from "../core.js";
 import { heldUntil } from "../http/held-read.js";
@@ -187,6 +192,7 @@ import {
   automationRunsLive,
   automationsLive,
   automationWorkspaceRunsLive,
+  hostsLive,
   inboxItemsLive,
   inboxLive,
   installedSkillsLive,
@@ -942,6 +948,11 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
       return { ...sealed, origin: new URL(context.request.url).origin };
+    }),
+    hosts: signedIn.hosts.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const sealed = yield* liveQueryParts(hostsLive, { userId: context.userId }, input);
+      return { ...sealed, installScriptUrl: installScriptUrlOf(context.request) };
     }),
     workspaceMemories: signedIn.workspaceMemories.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

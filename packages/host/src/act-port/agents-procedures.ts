@@ -57,7 +57,6 @@ import {
   type AgentTranscriptPage,
   type AgentWorkspaceListParams,
   type HostDoneAnswerView,
-  type HostsAnswerView,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import type {
@@ -78,7 +77,11 @@ export interface AgentProceduresDependencies {
     agentModels(): Effect.Effect<AgentModelsAnswer>;
     agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
     agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
-    hostsList(): Effect.Effect<HostsAnswerView>;
+    /** The account's hosts held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    hostsFollow(): Effect.Effect<void>;
+    hostsUnfollow(): Effect.Effect<void>;
+    /** The account's held hosts read again at once, as Try again asks. */
+    hostsRetry(): Effect.Effect<void>;
     /** The account's devices' beats held at the host while any stream of them stands; what it holds reaches the panel on app state. */
     hostsPresenceFollow(): Effect.Effect<void>;
     hostsPresenceUnfollow(): Effect.Effect<void>;
@@ -232,6 +235,8 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const openOrigins: OpenFollows<never> = MutableHashMap.empty();
   /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
   const openPresence: OpenFollows<never> = MutableHashMap.empty();
+  /** The account's hosts while a window holds a stream open of them, so the host lets them go only with the last. */
+  const openHosts: OpenFollows<never> = MutableHashMap.empty();
   /** Every agent's tools a window holds a stream open of, so the host lets them go only with the last. */
   const openTools: OpenFollows<never> = MutableHashMap.empty();
   const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
@@ -258,12 +263,32 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.agentDefaultWrite(input);
       },
     ),
-    [AGENT_ACT_KIND.HOSTS_LIST]: actPort[AGENT_ACT_KIND.HOSTS_LIST].effect(function* ({
+    [AGENT_ACT_KIND.HOSTS_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_FOLLOW].effect(function* ({
+      input,
       context,
       errors,
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.hostsList();
+      // Note that nothing is heard down the hold, since the held hosts reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: () => "hosts",
+          follow: () => host.hostsFollow(),
+          unfollow: () => host.hostsUnfollow(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openHosts,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [AGENT_ACT_KIND.HOSTS_RETRY]: actPort[AGENT_ACT_KIND.HOSTS_RETRY].effect(function* ({
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.hostsRetry();
     }),
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actPort[AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW].effect(
       function* ({ input, context, errors }) {

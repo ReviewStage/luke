@@ -1590,7 +1590,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             version: "0.1.0",
             secretHash: `secret-${randomUUID()}`,
           });
-          assert.equal(yield* removeHost(owner, deviceId), true);
+          assert.notEqual(yield* removeHost(owner, deviceId), undefined);
           const fromRemoved = {
             taskId: task.id,
             prompt: undefined,

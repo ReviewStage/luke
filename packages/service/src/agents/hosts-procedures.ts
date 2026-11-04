@@ -67,7 +67,7 @@ export interface HostsProcedureSeams {
 const DONE = { done: true } as const;
 
 /** The install script's address on the origin the request reached, so a Preview's command names its own. */
-function installScriptUrlOf(request: Request): string {
+export function installScriptUrlOf(request: Request): string {
   return new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, new URL(request.url).origin).href;
 }
 
@@ -97,9 +97,9 @@ const endedHostAgents = (userId: string, deviceId: string) =>
     ),
   );
 
-/** Kept, or not found where the account holds no such row. */
-const keptOrNotFound = (kept: boolean) =>
-  kept ? Effect.succeed(DONE) : Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+/** A remove answered with the transaction it removed in, or refused as not found where none was removed. */
+const removedOrNotFound = (txid: string | undefined) =>
+  txid === undefined ? Effect.fail(HOSTED_REFUSAL.NOT_FOUND) : Effect.succeed({ ...DONE, txid });
 
 /** A code's eight letters, or the request refused as invalid where it is none, which its schema already refused. */
 const codeOf = (typed: string) => {
@@ -158,7 +158,7 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {
       const removed = yield* hostedStoreOrUnavailable(removeHost(context.userId, input.id));
-      if (removed) {
+      if (removed !== undefined) {
         yield* endedHostAgents(context.userId, input.id);
         yield* recordServerEvent(
           SERVER_EVENT.HOST_PAIRING_CHANGE,
@@ -166,7 +166,7 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
           { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
         );
       }
-      return yield* keptOrNotFound(removed);
+      return yield* removedOrNotFound(removed);
     }),
     readPairing: hosts.readPairing.effect(function* ({ context, input }) {
       const code = yield* codeOf(input.code);

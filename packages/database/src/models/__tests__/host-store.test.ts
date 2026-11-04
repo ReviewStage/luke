@@ -150,7 +150,7 @@ it.layer(getTestDB())("the host store", (it) => {
         const removed = yield* removeHost(owner, id);
 
         assert.ok(Option.isNone(byOther), "another account's session enrolls nothing");
-        assert.equal(removedByOther, false, "another account removes nothing");
+        assert.equal(removedByOther, undefined, "another account removes nothing");
         assert.ok(Option.isNone(layoutForOther), "another account starts nothing on it");
         assert.ok(Option.isNone(yield* hostBySecret(otherHash)));
         assert.deepEqual(yield* hostsOf(other), []);
@@ -161,7 +161,7 @@ it.layer(getTestDB())("the host store", (it) => {
           "the desktop is listed under its own id and name",
         );
         assert.ok(Option.isNone(firstAfterRotate), "enrolling again refuses the old secret");
-        assert.equal(removed, true);
+        assert.notEqual(removed, undefined, "the remove answers its transaction");
         assert.ok(
           Option.isNone(yield* hostBySecret(rotatedHash)),
           "a removed Mac's secret is refused",

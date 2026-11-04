@@ -126,6 +126,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),
+      gateway.host.onHostsChanged((held) => {
+        state.update({ [LIVE_READ.HOSTS]: held });
+      }),
       gateway.host.onThisMacHostChanged((held) => {
         state.update({ [LIVE_READ.THIS_MAC_HOST]: held });
       }),

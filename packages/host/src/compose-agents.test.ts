@@ -4,6 +4,7 @@ import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
   type DevicePresenceAnswerView,
+  type HostDoneAnswerView,
   INBOX_SCOPE_KIND,
   type MemoriesAnswerView,
   TRANSCRIPT_KIND,
@@ -22,6 +23,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
 import { GITHUB_TOKEN_REJECTION } from "@repo/features/github-token-wire";
@@ -260,6 +262,7 @@ function fakeService() {
     items: polledLive(ITEMS_PARTS),
     memories: polledLive(MEMORIES_PARTS),
     origin: polledLive(["origin"]),
+    hosts: polledLive(["hosts"]),
   };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
@@ -280,6 +283,8 @@ function fakeService() {
   let forgetAnswer: MemoriesAnswerView = { memories: [] };
   /** What a forget waits on before the service answers it; nothing from the start. */
   let forgetGate: Effect.Effect<void> = Effect.void;
+  /** What a host's removal answers; unanswered from the start. */
+  let removeAnswer: HostDoneAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWERED };
   /** How long ago the account's devices beat, as the service answers it; unanswered until a test says, and never where it hangs. */
   let presence: Effect.Effect<DevicePresenceAnswerView> = Effect.succeed({
     failure: AGENT_CALL_FAILURE.UNANSWERED,
@@ -307,13 +312,21 @@ function fakeService() {
         asked.push(`default:${choice.model}:${choice.effort}`);
         return { choice };
       }),
-    hosts: () => Effect.succeed({ failure: "unanswered" }),
+    hostsLive: (_userId, poll, after) =>
+      Effect.map(
+        poll === true ? live.hosts.poll(after) : Effect.succeed(live.hosts.first()),
+        (answer) => ({ ...answer, installScriptUrl: INSTALL_SCRIPT }),
+      ),
     devicePresence: () =>
       Effect.suspend(() => {
         asked.push("presence");
         return presence;
       }),
-    removeHost: () => Effect.succeed({ failure: "unanswered" }),
+    removeHost: (id) =>
+      Effect.sync(() => {
+        asked.push(`remove-host:${id}`);
+        return removeAnswer;
+      }),
     readHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     approveHostPairing: () => Effect.succeed({ failure: "unanswered" }),
     denyHostPairing: () => Effect.succeed({ failure: "unanswered" }),
@@ -759,6 +772,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** What each host's removal answers from now on. */
+    answerRemoves: (answer: HostDoneAnswerView) => {
+      removeAnswer = answer;
+    },
     /** What each forget answers from now on, and what it waits on before it does. */
     answerForgets: (answer: MemoriesAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       forgetAnswer = answer;
@@ -806,6 +823,9 @@ const SCOPE_PARTS = ["items", "messages", "files"] as const;
 const ACCOUNT_PARTS = ["items", "planless", "plans", "automations", "failedRuns"] as const;
 const ITEMS_PARTS = ["stamps", "items", "messages", "files"] as const;
 const MEMORIES_PARTS = ["memories"] as const;
+
+/** The install script's address the hosts' read answers beside them. */
+const INSTALL_SCRIPT = "https://app.test/install.sh";
 
 /** The account's items' read as the service answers it, before it is read by sync id. */
 type ItemsAnswer = Exclude<
@@ -954,6 +974,7 @@ function subject(
       askedAsTold,
       asked: service.asked,
       startCommits: service.startCommits,
+      answerRemoves: service.answerRemoves,
       answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
       hangPresence: service.hangPresence,
@@ -984,6 +1005,11 @@ function subject(
       providerKeys: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the hosts the host holds for the windows, whole, in order. */
+      hosts: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.HOSTS_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the memories the host holds for the windows, whole, in order. */
       memories: () =>
@@ -3299,6 +3325,54 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(refused), { failure: AGENT_CALL_FAILURE.NOT_PERMITTED });
       yield* settled;
       assert.deepEqual(shown(), [OTHER_MEMORY.id], "put back once the service refused it");
+    }),
+);
+
+/** The account's hosts the remove case lists: one kept, and one removed. */
+const KEPT_HOST = "4b1c2d3e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
+const GONE_HOST = "5c2d3e4f-6a7b-4c8d-9e0f-1a2b3c4d5e6f";
+
+/** A host as the account's live read delivers it. */
+function hostRow(id: string, name: string) {
+  return { id, name, platform: DEVICE_PLATFORM.LINUX, machineId: null, model: null, update: null };
+}
+
+/** The ids of the account's hosts as the host last told them; none where it told none. */
+function hostIdsOf(told: WireValue | undefined): readonly string[] | undefined {
+  const read = isRecord(told) ? told["user-dana"] : undefined;
+  const held = isRecord(read) ? read.rows : undefined;
+  const rows = isRecord(held) ? held.hosts : undefined;
+  return Array.isArray(rows)
+    ? rows.flatMap((row) => (isRecord(row) && typeof row.id === "string" ? [row.id] : []))
+    : undefined;
+}
+
+it.effect(
+  "a removed host is drawn gone at once and stays gone through an answer from before its removal until the read carries its transaction",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, live, answerRemoves } = harness;
+      const shown = () => hostIdsOf(harness.hosts().at(-1));
+      const both = { hosts: [hostRow(KEPT_HOST, "ams-01"), hostRow(GONE_HOST, "fra-03")] };
+      yield* call(GATEWAY_METHOD.HOSTS_FOLLOW);
+      yield* settled;
+      // The read is woken by a write once, so it hands a wait for the next.
+      live.hosts.set(both, ["9300"]);
+      yield* nextPoll;
+      assert.deepEqual(shown(), [KEPT_HOST, GONE_HOST]);
+
+      answerRemoves({ done: true, txid: "9400" });
+      const removed = yield* call(GATEWAY_METHOD.HOSTS_REMOVE, { id: GONE_HOST });
+      assert.deepEqual(removed, { done: true, txid: "9400" });
+      assert.deepEqual(shown(), [KEPT_HOST]);
+      // The read answers once more from before the removal, which still stands over it.
+      live.hosts.set(both);
+      yield* nextPoll;
+      assert.deepEqual(shown(), [KEPT_HOST]);
+      live.hosts.set({ hosts: [hostRow(KEPT_HOST, "ams-01")] }, ["9400"]);
+      yield* nextPoll;
+      assert.deepEqual(shown(), [KEPT_HOST]);
     }),
 );
 

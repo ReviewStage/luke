@@ -17,6 +17,7 @@ import type {
   GitHubRepositoryIssueAnswer,
   GitHubRepositoryPullRequestAnswer,
 } from "@repo/features/github-repositories-wire";
+import type { HostLine } from "@repo/features/host-live";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
@@ -410,6 +411,15 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/** The account's hosts as Settings › Hosts draws them, by name, with each removal still out drawn gone, and the install script's address its commands name. */
+export interface AppHostsHeld {
+  hosts: readonly HostLine[];
+  installScriptUrl: string;
+}
+
+/** The account's hosts the windows hold, by the account, as the host's read of them stands. */
+export type AppHosts = Readonly<Record<string, AppHostRead<AppHostsHeld>>>;
+
 /**
  * This Mac as its host reads it (`compose-this-mac-host.ts`): the machine's
  * id in the keyed hash every host reports (`@repo/host/node`'s
@@ -554,6 +564,7 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.HOSTS]: AppHostsHeld;
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
@@ -678,6 +689,8 @@ export interface AppState {
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** The account's hosts, held while Settings › Hosts draws them and a while after: what that page lists. */
+  [LIVE_READ.HOSTS]: AppHosts;
   /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
@@ -853,6 +866,7 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.HOSTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
