@@ -101,8 +101,18 @@ export const GATEWAY_METHOD = {
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
-  /** One task's plan's comment threads past a cursor, held open by the service while nothing changed. */
-  TASKS_COMMENTS: "tasks.comments",
+  /**
+   * One task's comments, its plan's own threads or one page's, held followed
+   * for a window from now until it is let go, over Neon Realtime, and a
+   * while after among those let go lately: the open task's plan's, or a page
+   * tab's. What they hold is heard as `PLAN_COMMENTS_CHANGED` events, on the
+   * app state every window draws, never answered.
+   */
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  /** One task's plan's or page's comments let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  TASKS_COMMENTS_UNFOLLOW: "tasks.commentsUnfollow",
+  /** One held plan's or page's comments read again at once, as Try again asks, where a window holds them or let them go lately. */
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   /** A comment thread started on one task's plan, answered with the thread as it stands. */
   TASKS_COMMENT_START: "tasks.commentStart",
   /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
@@ -567,6 +577,8 @@ export const GATEWAY_EVENT = {
   TRANSCRIPT_CHANGED: "transcript.changed",
   /** Every plan's or agent's pages the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PAGES_CHANGED: "pages.changed",
+  /** Every plan's or page's comments the host holds for the windows, whole, as its reads of them stand with the windows' writes laid over them, each time any of them moves. */
+  PLAN_COMMENTS_CHANGED: "planComments.changed",
   /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */

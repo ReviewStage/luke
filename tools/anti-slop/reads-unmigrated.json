@@ -1,8 +1,6 @@
 {
   "packages/panel/src/act-stream.ts": "P22: the hold's door",
   "packages/panel/src/desktop/automations-page.tsx": "P14: Sentry and Slack bot settings",
-  "packages/panel/src/desktop/desktop-tasks.tsx": "P5: plan comments",
-  "packages/panel/src/desktop/side-panel.tsx": "P5: a page's comments",
   "packages/panel/src/desktop/use-run-choices.ts": "P18, P28: a workspace's agents, the default agent and models",
   "packages/panel/src/desktop/workspace-tile.tsx": "P18: workspace photo",
   "packages/panel/src/integration-statuses.ts": "P15: integration statuses",
@@ -27,6 +25,5 @@
   "packages/panel/src/tasks/use-agents.ts": "P6, P8, P19, P28: transcript, agent page, pull request tab, models and default",
   "packages/panel/src/tasks/use-link-standing.ts": "P19: a link chip's standing",
   "packages/panel/src/tasks/use-tasks-tab.ts": "P11, P19: version history, repositories",
-  "packages/panel/src/tasks/use-workspace-members.ts": "P7: member directory",
-  "packages/ui/src/plan-comments.ts": "P5: plan comments"
+  "packages/panel/src/tasks/use-workspace-members.ts": "P7: member directory"
 }

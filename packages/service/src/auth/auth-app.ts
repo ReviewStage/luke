@@ -22,6 +22,37 @@ export const AUTH_PATH_PREFIX = `${AUTH_BASE_PATH}/`;
 /** The path set that entry sends to this function. */
 const AUTH_PATH_SET = `${AUTH_PATH_PREFIX}*`;
 
+/** The well-known names of the authorization server's metadata documents: RFC 8414's, and OpenID Connect Discovery's. */
+const WELL_KNOWN_METADATA = {
+  AUTHORIZATION_SERVER: "oauth-authorization-server",
+  OPENID_CONFIGURATION: "openid-configuration",
+} as const;
+
+/** A public path of the authorization server's metadata, and the path under the auth base path the function is handed in its place. */
+export interface AuthMetadataPath {
+  readonly path: string;
+  readonly carried: string;
+}
+
+/**
+ * The authorization server's metadata, which an MCP client reads to find
+ * the endpoints and what the server supports, at the two paths RFC 8414 §3
+ * derives from the issuer, `${baseURL}/api/auth`: the well-known name ahead
+ * of the issuer's path, and the issuer's path ahead of the well-known name.
+ * The provider plugin answers the issuer-path form itself, on any request
+ * that reaches Better Auth's handler, ahead of its endpoints, so the root
+ * form is rewritten by `apps/web/server/function-rewrites.ts` onto this
+ * function carrying the issuer-path form (`carried`), which the dispatcher
+ * restores, and the issuer-path form is the auth path set's own. A document
+ * says the same at either path.
+ */
+export const AUTH_SERVER_METADATA_PATHS: readonly AuthMetadataPath[] = Object.values(
+  WELL_KNOWN_METADATA,
+).map((name) => ({
+  path: `/.well-known/${name}${AUTH_BASE_PATH}`,
+  carried: `${AUTH_BASE_PATH}/.well-known/${name}`,
+}));
+
 /**
  * The method the web handler answers with no body, taking the status and the
  * headers from the `HttpServerResponse` rather than from the answer beneath it.

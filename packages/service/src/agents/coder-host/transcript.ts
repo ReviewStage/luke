@@ -80,6 +80,7 @@ import {
   agentFailureOf,
   agentRunStartedAt,
   agentStatusOf,
+  hostLostOf,
   ranDirectlyFolderOf,
   statusClockEdge,
 } from "./status.js";
@@ -172,6 +173,8 @@ export interface TranscriptPage {
   readonly failureReason?: AgentFailure;
   /** Where a failed agent that ran directly on its Mac left its work, which its Mac refused to start; absent for every other failure. */
   readonly ranDirectly?: { readonly folder: string };
+  /** The host a failed agent's run was lost with, by its name, where it stopped beating while the turn ran; absent for every other failure. */
+  readonly hostLost?: { readonly host: string };
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: AgentUsage;
   /** Who pays for the agent, on its own transcript where its row records one; absent on a worker's. */
@@ -230,8 +233,9 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const failureReason = failed ? agentFailureOf(turn) : undefined;
     const folder = failed ? ranDirectlyFolderOf(turn) : undefined;
     const ranDirectly = folder === undefined ? undefined : { folder };
+    const hostLost = failed ? hostLostOf(turn) : undefined;
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
-    return { status, runStartedAt, failureReason, ranDirectly, turn, graceEdge };
+    return { status, runStartedAt, failureReason, ranDirectly, hostLost, turn, graceEdge };
   });
 
 /**
@@ -603,7 +607,8 @@ function pagePast(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { read, cursor } = past;
-    const { status, runStartedAt, failureReason, ranDirectly, turn, graceEdge } = standing;
+    const { status, runStartedAt, failureReason, ranDirectly, hostLost, turn, graceEdge } =
+      standing;
     return {
       page: {
         messages: yield* transcriptMessagesOf(target, read.ok ? read.value : []),
@@ -612,6 +617,7 @@ function pagePast(
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
         ...(failureReason === undefined ? undefined : { failureReason }),
         ...(ranDirectly === undefined ? undefined : { ranDirectly }),
+        ...(hostLost === undefined ? undefined : { hostLost }),
       },
       turn,
       graceEdge,
@@ -951,7 +957,7 @@ export function transcriptNewest(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { messages, before } = yield* olderPageOf(target, read);
-    const { status, runStartedAt, failureReason, ranDirectly, turn } = standing;
+    const { status, runStartedAt, failureReason, ranDirectly, hostLost, turn } = standing;
     const page: TranscriptPage = {
       messages,
       cursor,
@@ -959,6 +965,7 @@ export function transcriptNewest(
       ...(runStartedAt === undefined ? undefined : { runStartedAt }),
       ...(failureReason === undefined ? undefined : { failureReason }),
       ...(ranDirectly === undefined ? undefined : { ranDirectly }),
+      ...(hostLost === undefined ? undefined : { hostLost }),
     };
     return {
       page: yield* withUsage(target, tools, page, turn, own),

@@ -131,13 +131,14 @@ test("the Reliability page's skeleton states the notes the loaded page states", 
   );
 });
 
-test("an account's skeleton stands every section the account page states, the retired hosted tier last", async () => {
+test("an account's skeleton stands every section the account page states, its activity first and the retired hosted tier last", async () => {
   const region = loadingRegion(
     await draw(
       createElement(AccountScreen, { ...QUIET, id: "account-ada", onBack: () => undefined }),
     ),
   );
   expect(sectionHeadings(region)).toEqual([
+    "Activity",
     "Work",
     "Recent agents",
     "Workspaces",
@@ -146,5 +147,6 @@ test("an account's skeleton stands every section the account page states, the re
     "Recent failures · 30 days",
     "Hosted tier · retired",
   ]);
-  expect(region.textContent).toContain("Each cell is one UTC day, whatever the window.");
+  expect(region.textContent).toContain("An active day is a UTC day the account created a task");
+  expect(region.textContent).toContain("A deeper fill is more meaningful actions");
 });

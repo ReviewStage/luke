@@ -130,6 +130,14 @@ export class TaskParentRepositoryDiffers extends Data.TaggedError("TaskParentRep
 /** The parent named is the task itself or one of its descendants, under which the task would descend from itself; nothing was written. */
 export class TaskParentCycle extends Data.TaggedError("TaskParentCycle") {}
 
+/**
+ * A start named an id a task the account does not reach stands under:
+ * another account's, or one the account made and reaches no more. Nothing
+ * was written, and it carries nothing of that task, so a caller refuses the
+ * start as it refuses any other.
+ */
+export class TaskIdTaken extends Data.TaggedError("TaskIdTaken") {}
+
 /** A coding agent stands at work that a delete was not told was stopped: one started on the task, or handed a message, while it or the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
 
@@ -787,17 +795,17 @@ const insertTask = SqlSchema.findOne({
     ),
 });
 
-/** A task inserted under its id where none stands under it yet; nothing where one does, written by nothing. */
+/** A task inserted under its id where none stands under it yet, and the transaction it was written in; nothing where one does, written by nothing. */
 const insertTaskOnce = SqlSchema.findOneOption({
   Request: TaskInsertSchema,
-  Result: TaskRowSchema,
+  Result: Schema.Struct({ ...TaskRowSchema.fields, txid: Schema.String }),
   execute: (write) =>
     Database.use((db) =>
       db
         .insert(task)
         .values(taskValues(write))
         .onConflictDoNothing({ target: task.id })
-        .returning(TASK_COLUMNS),
+        .returning({ ...TASK_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -1197,15 +1205,33 @@ export function createTask(
 }
 
 /**
+ * The row a start writes, as `insertOf` makes it, once its assignee is
+ * admitted and the other tasks `holding` names are held for update in id
+ * order. Note that they are held once the task's number is taken and before
+ * its row is written, because every start takes the workspace's number
+ * before its row's reference to a parent locks that parent, and a relation
+ * change locks its two tasks in id order, so a start holding them any other
+ * way would hold a lock one of those waits on while it waits on theirs.
+ */
+function startedValues(
+  userId: string,
+  started: NewTask & { readonly id?: string },
+  holding: readonly string[],
+) {
+  return Effect.gen(function* () {
+    yield* assigneeAdmitted(started.assigneeId, started.organizationId);
+    const values = yield* insertOf(userId, started);
+    if (holding.length > 0) yield* lockTasksForBlocks(userId, holding);
+    return values;
+  });
+}
+
+/**
  * A task started, as `createTask` starts one, as the service holds it, so a
  * Start on it in the same request need not read it again, and the
  * transaction its row was written in. `holding` names the other tasks the
- * caller's transaction goes on to change, held for update in id order once
- * the task's number is taken and before its row is written. Note that they
- * are held there, because every start takes the workspace's number before
- * its row's reference to a parent locks that parent, and a relation change
- * locks its two tasks in id order, so a start holding them any other way
- * would hold a lock one of those waits on while it waits on theirs.
+ * caller's transaction goes on to change, held as `startedValues` holds
+ * them.
  */
 export function createTaskCommitted(
   userId: string,
@@ -1219,14 +1245,58 @@ export function createTaskCommitted(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        yield* assigneeAdmitted(started.assigneeId, started.organizationId);
-        const values = yield* insertOf(userId, started);
-        if (holding.length > 0) yield* lockTasksForBlocks(userId, holding);
+        const values = yield* startedValues(userId, started, holding);
         const { txid, ...row } = yield* insertTask(values).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
         return { task: yield* storedTaskOf(userId, row), txid };
+      }),
+    ),
+  );
+}
+
+/** A task as a start answers it: whether this start made it, and the transaction it was written in where it did. */
+export interface TaskStartCommitted extends TaskCommitted<StoredTask> {
+  readonly made: boolean;
+}
+
+/**
+ * A task started as `createTaskCommitted` starts one, under the id its
+ * maker chose, as a client that draws the task before the service answers
+ * mints one. Where a task stands under that id already, nothing is
+ * written: one the account reaches, as the same start sent again finds the
+ * one it made, is answered as its read shows it, with no transaction, since
+ * no write of this start's made it; any other, another account's or one
+ * the account reaches no more, refuses the start with `TaskIdTaken`, which
+ * carries nothing of it. The task is read before its number is taken, so a
+ * start sent again skips none.
+ */
+export function createTaskCommittedOnce(
+  userId: string,
+  started: NewTask & { readonly id: string },
+  holding: readonly string[] = [],
+): Effect.Effect<
+  TaskStartCommitted,
+  TaskStoreFailure | TaskAssigneeNotMember | TaskIdTaken,
+  DatabaseServices
+> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const before = yield* readTask(userId, started.id);
+        if (Option.isSome(before)) return { task: before.value, made: false };
+        const values = yield* startedValues(userId, started, holding);
+        const inserted = yield* insertTaskOnce(values);
+        if (Option.isSome(inserted)) {
+          const { txid, ...row } = inserted.value;
+          return { task: yield* storedTaskOf(userId, row), txid, made: true };
+        }
+        // Note that a start under the same id that committed meanwhile reads as made, because the insert
+        // waited on it, and a task the account does not reach reads as none, which the start is refused as.
+        const raced = yield* readTask(userId, started.id);
+        if (Option.isNone(raced)) return yield* new TaskIdTaken();
+        return { task: raced.value, made: false };
       }),
     ),
   );

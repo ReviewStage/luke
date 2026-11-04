@@ -163,11 +163,14 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
  * A development build's chip over the account's row: its color, the one its
  * Dock band wears, and where it was cut, which a press copies, so builds run
  * side by side are told apart without opening Settings. A release, the web,
- * and a fixture run, whose captures are the product's pictures, draw none.
+ * and a fixture run, whose captures are the product's pictures, draw none,
+ * nor does a build whose label the menu bar hid for a demo.
  */
 function SidebarBuild(): React.JSX.Element | null {
   const run = useAppSlice(APP_SLICE.RUN);
+  const facts = useAppSlice(APP_SLICE.WINDOW);
   if (run === undefined || run.packaged || run.fixtureMode) return null;
+  if (facts?.buildLabelHidden === true) return null;
   const badge = devBuildBadge({ instance: run.instance, commit: run.commit });
   return (
     <div className="flex min-w-0 pb-ui-4">

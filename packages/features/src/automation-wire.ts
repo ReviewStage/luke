@@ -3,7 +3,7 @@ import { Schema as EffectSchema } from "effect";
 import { AGENT_FAILURE, AGENT_STATUS, disabledServersSchema } from "./agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelChoiceSchema } from "./models-wire.js";
-import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { chosenIdSchema, countedNumber, wireUuidSchema } from "./service-wire.js";
 import { SENTRY_LEVEL, SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
 
 /**
@@ -592,9 +592,11 @@ const automationRepositoriesSchema = EffectSchema.Array(githubRepositoryFullName
  * repositories its runs work in, none for runs that work in no repository,
  * which is how an automation is made with no task; a request naming both,
  * or neither, is refused, and so is a GitHub trigger with no repository
- * whose events could fire it.
+ * whose events could fire it. An `id` makes it under the id its maker chose
+ * (`chosenIdSchema`).
  */
 export const automationCreateRequestSchema = EffectSchema.Struct({
+  id: EffectSchema.optionalKey(chosenIdSchema),
   planId: EffectSchema.optionalKey(wireUuidSchema),
   workspaceId: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   repositories: EffectSchema.optionalKey(automationRepositoriesSchema),

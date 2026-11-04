@@ -982,7 +982,7 @@ test("a message refused because the agent's host was removed closes the box on t
 
   assert.ok(
     box.container.textContent?.includes(
-      "This host was removed. Continue in the cloud or add it again.",
+      "This host was removed. Start a new task in the cloud or add it again.",
     ),
     "the host's removal is named",
   );

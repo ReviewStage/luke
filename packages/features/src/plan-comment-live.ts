@@ -39,6 +39,8 @@ export const taskCommentsLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type TaskCommentsLiveAnswer = typeof taskCommentsLiveAnswerSchema.Type;
+
 /** One thread as its row delivers it: its anchor null once its words were deleted and on a page, and its page, version, and element null on the plan. */
 const threadLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,

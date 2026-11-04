@@ -2890,6 +2890,7 @@ function AgentTabView({
                             starter,
                             continuable,
                             transcript.ranDirectly,
+                            transcript.hostLost,
                           )
                     }
                     endReason={endLineReason(transcript.failure, starter)}

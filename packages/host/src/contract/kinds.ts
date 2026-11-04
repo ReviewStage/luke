@@ -397,11 +397,14 @@ export const TASKS_ACT_KIND = {
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
-   * The open plan's comment threads: read past a cursor (held open by the
-   * service while nothing changed), one started on words of the plan, and
-   * one thing done to one thread. The window holds what it draws.
+   * A task's comment threads, its plan's own or one page's: held followed
+   * while a window shows them, what they hold reaching the panel on app
+   * state (`LIVE_READ.PLAN_COMMENTS`), and read again at once on Try again;
+   * one started on words of the plan or on a page, and one thing done to
+   * one thread, each answered with the thread as it stands.
    */
-  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENTS_FOLLOW: "tasks.commentsFollow",
+  TASKS_COMMENTS_RETRY: "tasks.commentsRetry",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
 } as const;
@@ -786,7 +789,8 @@ export const PORT_ACT_USE = {
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,
-  TASKS_COMMENTS: ACT_USE.READ,
+  TASKS_COMMENTS_FOLLOW: ACT_USE.READ,
+  TASKS_COMMENTS_RETRY: ACT_USE.READ,
   TASKS_COMMENT_START: ACT_USE.WRITE,
   TASKS_COMMENT_ACT: ACT_USE.WRITE,
 

@@ -2471,6 +2471,14 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * from a service older than it.
    */
   ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
+  /**
+   * The host a failed agent's run was lost with, by its name, where the
+   * host stopped beating while its turn ran and the run was taken from it.
+   * Its `failureReason` is `other`, which a panel older than this key words
+   * as a run that ended without saying why; absent for every other failure,
+   * and from a service older than it.
+   */
+  hostLost: EffectSchema.optionalKey(EffectSchema.Struct({ host: EffectSchema.String })),
   usage: EffectSchema.optionalKey(agentUsageSchema),
   /**
    * Who pays for the agent (`AGENT_PAYER`), as its row recorded it at
