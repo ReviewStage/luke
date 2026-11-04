@@ -25,9 +25,10 @@ import { followedStream, type OpenFollows, streamed } from "./followed-stream.js
  * other window, in its own sentence. A save's key and a dictated
  * clip each pass through to the host once and are noted nowhere, and what
  * the service answers comes back as the panel's own answer, or why there is
- * none. The account's provider keys, and each workspace's memories, are held
- * at the host while a panel holds their stream open, and reach every panel on
- * app state; how many streams stand open is all that is held here.
+ * none. The account's provider keys and GitHub token, and each workspace's
+ * memories, are held at the host while a panel holds their stream open, and
+ * reach every panel on app state; how many streams stand open is all that is
+ * held here.
  */
 export interface AccountAskProceduresDependencies {
   host: {
@@ -41,7 +42,11 @@ export interface AccountAskProceduresDependencies {
     providerKeyForAgents(params: ProviderKeyForAgentsParams): Effect.Effect<ProviderKeysAnswerView>;
     chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
     chatGptSignInCancel(): Effect.Effect<void>;
-    githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+    /** The account's GitHub token held at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    githubTokenFollow(): Effect.Effect<void>;
+    githubTokenUnfollow(): Effect.Effect<void>;
+    /** The account's held GitHub token asked again at once, as Try again asks; done once the ask has landed. */
+    githubTokenRetry(): Effect.Effect<void>;
     githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
     githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
     /** A workspace's memories held at the host while any stream of them stands; what it holds reaches the panel on app state. */
@@ -65,6 +70,8 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
   const { host } = dependencies;
   /** The account's keys while a window holds a stream open of them, so the host lets them go only with the last. */
   const openKeys: OpenFollows<never> = MutableHashMap.empty();
+  /** The account's GitHub token while a window holds a stream open of it, so the host lets it go only with the last. */
+  const openToken: OpenFollows<never> = MutableHashMap.empty();
   /** Each workspace's memories while a window holds a stream open of them, by the workspace. */
   const openMemories: OpenFollows<never> = MutableHashMap.empty();
   return {
@@ -122,11 +129,29 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.chatGptSignInCancel();
     }),
-    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actPort[
-      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held token reaches the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: () => "token",
+          follow: () => host.githubTokenFollow(),
+          unfollow: () => host.githubTokenUnfollow(),
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openToken,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_RETRY]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_RETRY
     ].effect(function* ({ context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.githubTokenRead();
+      yield* host.githubTokenRetry();
     }),
     [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actPort[
       ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE

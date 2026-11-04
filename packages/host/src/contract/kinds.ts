@@ -50,12 +50,16 @@ export const ACCOUNT_ASK_ACT_KIND = {
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /**
    * Settings › Integrations › GitHub: the member's own classic GitHub
-   * personal access token read as its login, hint, and status, saved, and
-   * removed. The save's payload carries the token from the renderer once,
-   * on its way to the service; no answer carries one back, and nothing on
-   * the way keeps it.
+   * personal access token held for the window while it holds the stream
+   * open, asked again at once, saved, and removed. The hold's stream carries
+   * nothing: its login, hint, and status reach the panel on app state
+   * (`LIVE_READ.GITHUB_TOKEN`), where a save's and a removal's own answer
+   * is laid too. The save's payload carries the token from the renderer
+   * once, on its way to the service; no answer carries one back, and
+   * nothing on the way keeps it.
    */
-  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_FOLLOW: "githubToken.follow",
+  GITHUB_TOKEN_RETRY: "githubToken.retry",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
@@ -594,7 +598,15 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   WORKSPACE_SLUG_SET: "workspace.slugSet",
-  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  /**
+   * A workspace's token repositories held for the window while it holds the
+   * stream open, and asked again at once, as Try again asks. The hold's
+   * stream carries nothing: they reach the panel on app state
+   * (`LIVE_READ.TOKEN_REPOSITORIES`), where an addition's or a removal's
+   * own answer is laid too.
+   */
+  WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: "workspace.tokenRepositoriesFollow",
+  WORKSPACE_TOKEN_REPOSITORIES_RETRY: "workspace.tokenRepositoriesRetry",
   WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
 
@@ -703,7 +715,8 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
   CHATGPT_SIGN_IN: ACT_USE.WRITE,
   CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
-  GITHUB_TOKEN_READ: ACT_USE.READ,
+  GITHUB_TOKEN_FOLLOW: ACT_USE.READ,
+  GITHUB_TOKEN_RETRY: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
   GITHUB_TOKEN_REMOVE: ACT_USE.WRITE,
   MEMORIES_FOLLOW: ACT_USE.READ,
@@ -920,7 +933,8 @@ export const PORT_ACT_USE = {
   WORKSPACE_PHOTO_READ: ACT_USE.READ,
   WORKSPACE_PHOTO_SET: ACT_USE.WRITE,
   WORKSPACE_SLUG_SET: ACT_USE.WRITE,
-  WORKSPACE_TOKEN_REPOSITORIES_READ: ACT_USE.READ,
+  WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,
+  WORKSPACE_TOKEN_REPOSITORIES_RETRY: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORY_SET: ACT_USE.WRITE,
 } as const satisfies Record<keyof typeof PORT_ACT_KIND, ActUse>;
 

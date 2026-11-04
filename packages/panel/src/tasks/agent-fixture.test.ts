@@ -187,8 +187,8 @@ it.effect(
           sent.push(ACT_KIND.AGENTS_LIST);
           return Promise.resolve({ agents: [] });
         },
-        [ACT_KIND.GITHUB_TOKEN_READ]: () => {
-          sent.push(ACT_KIND.GITHUB_TOKEN_READ);
+        [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => {
+          sent.push(ACT_KIND.GITHUB_TOKEN_REMOVE);
           return Promise.resolve({ token: null });
         },
       });
@@ -196,7 +196,7 @@ it.effect(
       const listed = yield* Effect.promise(() =>
         askAct(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
       );
-      const token = yield* Effect.promise(() => askAct(ACT_KIND.GITHUB_TOKEN_READ));
+      const token = yield* Effect.promise(() => askAct(ACT_KIND.GITHUB_TOKEN_REMOVE));
 
       assert.ok("agents" in listed);
       assert.deepEqual(
@@ -204,6 +204,6 @@ it.effect(
         ["Add teammate invitations"],
       );
       assert.deepEqual(token, { token: null });
-      assert.deepEqual(sent, [ACT_KIND.GITHUB_TOKEN_READ]);
+      assert.deepEqual(sent, [ACT_KIND.GITHUB_TOKEN_REMOVE]);
     }),
 );

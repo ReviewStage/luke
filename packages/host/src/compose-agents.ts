@@ -152,6 +152,8 @@ import {
   type AppChapters,
   type AppDevicePresence,
   type AppDevicePresences,
+  type AppGitHubToken,
+  type AppGitHubTokens,
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
@@ -573,6 +575,10 @@ interface FetchedReads {
   readonly keys: HeldFetch<string, AppProviderKeyList>;
   /** The windows' hold on the keys, under the account signed in. */
   readonly keysHold: AccountHeld;
+  /** The account's own GitHub token, by the account. */
+  readonly token: HeldFetch<string, AppGitHubToken>;
+  /** The windows' hold on the token, under the account signed in. */
+  readonly tokenHold: AccountHeld;
 }
 
 /** The keys and plans an answer of the service's says the account holds, without what it says of the one write. */
@@ -592,11 +598,12 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats and the keys are asked for the account signed in now
- * alone, since the service answers that account's, and that an ask of the
- * beats which fails, or runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one
- * answered keeps the beats it answered, marked stale, under the new instant,
- * so a window says it cannot check rather than that a device left.
+ * that the beats, the keys, and the GitHub token are asked for the account
+ * signed in now alone, since the service answers that account's, and that
+ * an ask of the beats which fails, or runs past
+ * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
+ * answered, marked stale, under the new instant, so a window says it cannot
+ * check rather than that a device left.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
@@ -656,6 +663,20 @@ function fetchedReads(
       tell: (held: AppProviderKeys) =>
         kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
     });
+    const token = yield* heldFetch<typeof LIVE_READ.GITHUB_TOKEN, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      fetch: (userId) =>
+        userId === accountId()
+          ? Effect.map(asked(client.readGitHubToken()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some({ token: answer.token }),
+            )
+          : Effect.succeed(Option.none()),
+      tell: (held: AppGitHubTokens) =>
+        kernel.emit(GATEWAY_EVENT.GITHUB_TOKEN_CHANGED, carried(held)),
+    });
     return {
       presence,
       presenceHold: yield* accountHeld(presence, accountId),
@@ -663,6 +684,8 @@ function fetchedReads(
       toolsHolds: yield* FiberMap.make<string>(),
       keys,
       keysHold: yield* accountHeld(keys, accountId),
+      token,
+      tokenHold: yield* accountHeld(token, accountId),
     };
   });
 }
@@ -683,7 +706,7 @@ function composed(
   { memories, holds: memoryHolds }: MemoryFollows,
   /** The agents' origins the windows hold. */
   { origins, holds: originHolds }: OriginFollows,
-  { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
+  { presence, presenceHold, tools, toolsHolds, keys, keysHold, token, tokenHold }: FetchedReads,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -917,6 +940,17 @@ function composed(
     });
 
   /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
+  /** A token save's or removal's answer, laid on the held token for the account signed in where it carries the token, and answered as it came. */
+  const tokenWritten = (answer: GitHubTokenAnswerView) =>
+    Effect.as(
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return userId === undefined || "failure" in answer
+          ? Effect.void
+          : token.answered(userId, { token: answer.token });
+      }),
+      carried<GitHubTokenAnswerView>(answer),
+    );
   const keysWritten = (answer: ProviderKeysAnswerView) =>
     Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
   /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them. */
@@ -1071,21 +1105,22 @@ function composed(
         );
         return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
       }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
-      Effect.map(asked(client.readGitHubToken()), (answer) =>
-        carried<GitHubTokenAnswerView>(answer),
-      ),
+    // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
+    [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
+    [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
+    [GATEWAY_METHOD.GITHUB_TOKEN_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : token.retry(userId), {});
+      }),
     [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a token.
         const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
-        const answer = yield* asked(client.saveGitHubToken(save));
-        return carried<GitHubTokenAnswerView>(answer);
+        return yield* tokenWritten(yield* asked(client.saveGitHubToken(save)));
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
-      Effect.map(asked(client.removeGitHubToken()), (answer) =>
-        carried<GitHubTokenAnswerView>(answer),
-      ),
+      Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
     [GATEWAY_METHOD.AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(
@@ -1691,9 +1726,10 @@ function composed(
     yield* presence.end;
     yield* tools.end;
     yield* keys.end;
+    yield* token.end;
   });
 
-  // Note that the beats and the keys are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
+  // Note that the beats, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
@@ -1702,6 +1738,7 @@ function composed(
     yield* origins.open;
     yield* presenceHold.open;
     yield* keysHold.open;
+    yield* tokenHold.open;
     yield* tools.open;
   });
 

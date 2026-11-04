@@ -48,7 +48,9 @@ function openActPort(actor: ActSender): void {
         providerKeyForAgents: noKeys,
         chatGptSignIn: noKeys,
         chatGptSignInCancel: () => Effect.void,
-        githubTokenRead: noToken,
+        githubTokenFollow: () => Effect.void,
+        githubTokenUnfollow: () => Effect.void,
+        githubTokenRetry: () => Effect.void,
         githubTokenSave: noToken,
         githubTokenRemove: noToken,
         memoriesFollow: () => Effect.void,
@@ -85,16 +87,16 @@ it("a kind the port answers resolves the caller with the host's answer", async (
 it("a kind the port answers that carries nothing is asked with nothing and resolves the caller with the host's answer", async () => {
   openActPort(PANEL);
 
-  assert.deepEqual(await askAct(ACT_KIND.GITHUB_TOKEN_READ), { token: null });
+  assert.deepEqual(await askAct(ACT_KIND.GITHUB_TOKEN_REMOVE), { token: null });
 });
 
 it("a kind whose port fails with no refusal rejects the caller with the fixed sentence, its own error kept as the cause", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const transport = new Error("fetch failed: connect ECONNREFUSED 127.0.0.1:4318");
-  fakeActPort({ [ACT_KIND.GITHUB_TOKEN_READ]: () => Promise.reject(transport) });
+  fakeActPort({ [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => Promise.reject(transport) });
 
   await assert.rejects(
-    askAct(ACT_KIND.GITHUB_TOKEN_READ),
+    askAct(ACT_KIND.GITHUB_TOKEN_REMOVE),
     (error) =>
       error instanceof Error && error.message === ACT_UNREACHED_WORDS && error.cause === transport,
   );
@@ -112,9 +114,9 @@ it("a row reading an act's answer is told the fixed sentence for a transport fai
     return undefined;
   });
   const reasonFor = async (failure: Error) => {
-    fakeActPort({ [ACT_KIND.GITHUB_TOKEN_READ]: () => Promise.reject(failure) });
+    fakeActPort({ [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => Promise.reject(failure) });
     const answer = await askActResult(
-      askAct(ACT_KIND.GITHUB_TOKEN_READ).then(() => ({ status: ACTION_RESULT_STATUS.ACCEPTED })),
+      askAct(ACT_KIND.GITHUB_TOKEN_REMOVE).then(() => ({ status: ACTION_RESULT_STATUS.ACCEPTED })),
     );
     reportShownFailure({ surface: FAILURE_SURFACE.SETTING_WRITE, cause: answer }, 0);
     return "reason" in answer ? answer.reason : undefined;

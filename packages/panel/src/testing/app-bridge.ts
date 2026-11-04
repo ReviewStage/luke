@@ -38,7 +38,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, integrations, and provider keys, an agent's or a server's tools, the outside MCP clients, a workspace's memories, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people and token repositories, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -51,11 +51,13 @@ type HoldKind =
   | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
   | typeof INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
   | typeof ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
+  | typeof ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW
   | typeof ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW;
 
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
@@ -71,11 +73,13 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW,
   INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW,
   ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW,
+  ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW,
   ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW,
   AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
   TASKS_ACT_KIND.TASKS_HISTORY_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
+  WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW,
   TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
 ]);
 
@@ -112,11 +116,12 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
- * account's beats, integrations, or provider keys, an agent's or a
- * server's tools, the outside MCP clients, a workspace's memories, the
- * automations' lists and histories, a plan's or a page's comments, a task's
- * plan history, the run that started an agent, a workspace's people, or a
- * task's plan, is held quietly, and an automations', the integrations', or
+ * account's beats, integrations, provider keys, or GitHub token, an
+ * agent's or a server's tools, the outside MCP clients, a workspace's
+ * memories, the automations' lists and histories, a plan's or a page's
+ * comments, a task's plan history, the run that started an agent, a
+ * workspace's people or token repositories, or a task's plan, is held
+ * quietly, and an automations', the integrations', or
  * the memories' Try again taken, since what the hold reads reaches the
  * window on app state.
  */

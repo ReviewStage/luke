@@ -197,7 +197,9 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
- * Settings › Agents draws; the outside MCP clients the account allowed, by
+ * Settings › Agents draws; the account's own GitHub token, by the account,
+ * which Settings › Account, a workspace's Add repository, and onboarding's
+ * GitHub step hold; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
  * memories, which Settings › Memory holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
@@ -205,7 +207,9 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * page's tab each hold; one task's plan history, which its version history
  * holds while it shows; the run that started one agent, which its page
  * holds; one workspace's people, its members and who its work names but
- * left, which every surface naming them holds; and one task's plan, which
+ * left, which every surface naming them holds; one workspace's token
+ * repositories, which Settings › Workspace and onboarding's GitHub step
+ * hold; and one task's plan, which
  * the window's open task holds. Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
@@ -271,6 +275,13 @@ const HOST_READS = {
     hold: () => askAct(ACT_KIND.PROVIDER_KEYS_FOLLOW),
     retry: () => tellAct(ACT_KIND.PROVIDER_KEYS_RETRY),
   }),
+  [LIVE_READ.GITHUB_TOKEN]: hostRead(LIVE_READ.GITHUB_TOKEN, {
+    slice: APP_SLICE.GITHUB_TOKEN,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the token of whoever is signed in, so neither act names an account.
+    hold: () => askAct(ACT_KIND.GITHUB_TOKEN_FOLLOW),
+    retry: () => tellAct(ACT_KIND.GITHUB_TOKEN_RETRY),
+  }),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
     slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
@@ -299,6 +310,12 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.TOKEN_REPOSITORIES]: hostRead(LIVE_READ.TOKEN_REPOSITORIES, {
+    slice: APP_SLICE.TOKEN_REPOSITORIES,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY, { workspaceId }),
   }),
   [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
     slice: APP_SLICE.WORKSPACE_TOOLS,

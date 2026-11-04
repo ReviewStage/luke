@@ -12,6 +12,8 @@ import type {
   AutomationSummary,
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
+import type { WorkspaceTokenRepository } from "@repo/features/github-repositories-wire";
+import type { GitHubTokenSummary } from "@repo/features/github-token-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
@@ -441,6 +443,25 @@ export type AppProviderKeyList = Pick<ProviderKeysAnswer, "keys" | "subscription
 /** The account's provider keys the windows hold, by the account, as the host's read of them stands. */
 export type AppProviderKeys = Readonly<Record<string, AppHostRead<AppProviderKeyList>>>;
 
+/**
+ * The account's own GitHub token as the service last answered it, a read's
+ * or a save's or a removal's: its login, its hint, a label of the token's
+ * first and last characters, its status, and its times; none where no token
+ * is kept. Never the token, which the service never answers, and never a
+ * write's own outcome.
+ */
+export interface AppGitHubToken {
+  token: GitHubTokenSummary | null;
+}
+
+/** The account's GitHub token the windows hold, by the account, as the host's read of it stands. */
+export type AppGitHubTokens = Readonly<Record<string, AppHostRead<AppGitHubToken>>>;
+
+/** Each workspace's token repositories the windows hold, by the workspace, as the host's read of them stands. */
+export type AppTokenRepositories = Readonly<
+  Record<string, AppHostRead<readonly WorkspaceTokenRepository[]>>
+>;
+
 /** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
 export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
 
@@ -510,10 +531,12 @@ export interface AppHostReads {
   [LIVE_READ.MEMORIES]: readonly MemorySummary[];
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
+  [LIVE_READ.GITHUB_TOKEN]: AppGitHubToken;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
+  [LIVE_READ.TOKEN_REPOSITORIES]: readonly WorkspaceTokenRepository[];
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
@@ -624,6 +647,8 @@ export interface AppState {
   [LIVE_READ.PAGES]: AppPages;
   /** The account's own provider keys, held while a window draws them: what Settings › Agents and Call and Dictate read. */
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeys;
+  /** The account's own GitHub token, held while a window draws it and a while after: what Settings › Account, a workspace's Add repository, and onboarding's GitHub step read. Never written to disk. */
+  [LIVE_READ.GITHUB_TOKEN]: AppGitHubTokens;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   /** Each task's or agent's cloud Browser tabs the windows' side panels list, held while one lists them and a while after: what the side panel's Browser tabs draw. Never written to disk. */
@@ -632,6 +657,8 @@ export interface AppState {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
+  /** Each workspace's token repositories the windows draw, held while a window draws them and a while after: what Settings › Workspace and onboarding's GitHub step list. */
+  [LIVE_READ.TOKEN_REPOSITORIES]: AppTokenRepositories;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
   /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
@@ -775,6 +802,7 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.GITHUB_TOKEN]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PLAN_COMMENTS]: {
     keys: READ_KEYS.TWO,
@@ -797,6 +825,7 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.TOKEN_REPOSITORIES]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {
