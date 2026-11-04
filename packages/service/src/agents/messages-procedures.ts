@@ -55,11 +55,9 @@ import { readRewoundRevision } from "@repo/database/models/conversation-rewind";
 import { childConversationId } from "@repo/database/models/ids";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
-import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import {
   AGENT_BOUNDS,
   AGENT_CURSOR_START,
-  AGENT_MACHINE,
   AGENT_STATUS,
   type AgentMessagesAnswer,
   type AgentNewestAnswer,
@@ -78,7 +76,6 @@ import { isRecord } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { unparsedWire } from "../core.js";
-import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
@@ -98,7 +95,7 @@ import {
 import { cutMessage, wholePartOf } from "./coder-host/part-cut.js";
 import { routedSessions } from "./coder-host/runtime-sessions.js";
 import { startedBlank } from "./coder-host/status.js";
-import { steerAgentWritten } from "./coder-host/steer.js";
+import { steerMemberWords } from "./coder-host/steer.js";
 import { summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -120,7 +117,6 @@ import {
   transcriptNow,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import type { EveTypedTurn } from "./eve-host/eve-sessions.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -398,25 +394,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const eve = yield* routedSessions<EveTypedTurn>(context.userId);
-        const { txid, sent } = yield* steerAgentWritten(eve, writer, context.userId, agent, {
-          ...input.body,
-          sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
-        });
-        // A member's own message, counted under them once the line is written; a repeat under its key is not.
-        if (sent !== undefined) {
-          yield* recordServerEvent(
-            SERVER_EVENT.MESSAGE_SEND,
-            { userId: context.userId, workspaceId: agent.organizationId },
-            {
-              runtime: sent.runtime,
-              machine: agent.machine ?? AGENT_MACHINE.VERCEL,
-              agent_kind: agent.kind,
-              turn_running: sent.turnRunning,
-              queued: false,
-            },
-          );
-        }
+        const { txid } = yield* steerMemberWords(writer, context.userId, agent, input.body);
         const summary = yield* summaryOf(context.userId, agent);
         // The transaction that wrote the line, which the host waits to see live before it confirms the send.
         return txid === undefined ? { agent: summary } : { agent: summary, txid };

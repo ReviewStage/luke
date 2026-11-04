@@ -31,19 +31,26 @@
  * `MEMBER_MCP_TOOLS`; its golden is settled by `app.test.ts`.
  */
 
+import { randomUUID } from "node:crypto";
 import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readPageById } from "@repo/database/models/plan-pages";
+import { listTaskSections } from "@repo/database/models/task-section-store";
 import { readTaskWorkspace } from "@repo/database/models/task-store";
 import { listWorkspaces } from "@repo/database/models/workspace-store";
+import { storeWriter } from "@repo/database/models/writer";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
+  AGENT_BOUNDS,
   AGENT_STATUS,
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
+import { agentName } from "@repo/features/model-label";
 import { PAGE_OWNER } from "@repo/features/page-wire";
+import { planNotesSchema } from "@repo/features/plan-template";
 import { TASK_STATUS } from "@repo/features/task-wire";
 import { WORKSPACE_BOUNDS, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { describeWire, type StandardSchemaWithJson, standardSchemaOf } from "@repo/wire/effect";
@@ -58,12 +65,14 @@ import {
   AGENT_CALLER,
   AGENT_TOOL_BOUNDS,
   AGENT_TOOL_REFUSAL,
+  type AgentCall,
   type AgentReadCall,
-  type AgentToolServices,
   agentToolRejected,
   CODER_READ_AGENT_TOOL,
+  callerUserId,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
+  orStoreRefusal,
   READ_PAGE_CHARS,
   READ_PAGE_REFUSAL,
   READ_PAGE_TOOL,
@@ -72,28 +81,55 @@ import {
   runListTasks,
   runReadAgent,
   runReadPage,
+  runStartAgent,
+  runStopAgent,
+  runUpdateAgent,
+  runUpdateTask,
+  START_AGENT_REFUSAL,
+  START_AGENT_TOOL,
   TASKS_LIST_LIMIT,
+  UPDATE_AGENT_TOOL,
+  UPDATE_TASK_REFUSAL,
+  UPDATE_TASK_TOOL,
+  workspaceAgentOf,
 } from "../agents/agent-tools.js";
+import { MESSAGE_AGENT_REFUSAL, messageRefusalWords } from "../agents/coder-host/agent-message.js";
+import { PLAN_EDIT_REFUSAL, recordMemberPlanNotes } from "../agents/coder-host/plan-edit.js";
+import { productionSummaryModel } from "../agents/coder-host/replay-summary.js";
+import { sessionsRouter } from "../agents/coder-host/runtime-sessions.js";
+import { steerMemberWords } from "../agents/coder-host/steer.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
+  CREATE_SECTION_TOOL,
+  DELETE_SECTION_TOOL,
+  runCreateSection,
+  runDeleteSection,
+  TASK_SECTION_TOOL_REFUSAL,
+} from "../agents/task-section-tools.js";
+import {
+  CREATE_TASK_TOOL,
   PLAN_TEXT_READ_CHARS,
   READ_TASK_REFUSAL,
   READ_TASK_TOOL,
+  runCreateTask,
   runReadTask,
 } from "../agents/task-tools.js";
 import { WORKSPACE_AGENTS_LIST_LIMIT } from "../agents/workspace-agents.js";
-import { type WireRecord, wireUuidSchema } from "../core.js";
+import { ACTION_RESULT_STATUS, type WireRecord, wireUuidSchema } from "../core.js";
+import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { agentWorkspace } from "../github/workspace-repository.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { AdmittedMember, type AdmittedMemberValues } from "./admission.js";
 
-/** What a tool's effect runs against: the store, GitHub through the App, the model catalog, and the member the call acts for. */
+/** What a tool's effect runs against: the store, GitHub through the App, the model catalog, the deployment's environment a start's summary model reads, and the member the call acts for. */
 export type MemberMcpServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
+  | HostedEnvironment
   | AdmittedMember;
 
 /** A tool's input declaration: a wire schema the emitter can show and the reader can read. */
@@ -125,6 +161,15 @@ export const MEMBER_MCP_TOOL = {
   READ_AGENT_CHANGES,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
+  CREATE_TASK: AGENT_TOOL.CREATE_TASK,
+  UPDATE_TASK: AGENT_TOOL.UPDATE_TASK,
+  EDIT_PLAN: AGENT_TOOL.EDIT_PLAN,
+  CREATE_SECTION: AGENT_TOOL.CREATE_SECTION,
+  DELETE_SECTION: AGENT_TOOL.DELETE_SECTION,
+  START_AGENT: AGENT_TOOL.START_AGENT,
+  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
+  STOP_AGENT: AGENT_TOOL.STOP_AGENT,
+  UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
 } as const;
 
 /** A read's annotations: it changes nothing of the member's. */
@@ -192,10 +237,10 @@ const listAsMember = <R>(
   });
 
 /** A read by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the read's own words where they reach none. */
-const readAsMember = <R>(
+const readAsMember = <R, RRead>(
   workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
   refusal: string,
-  read: (call: AgentReadCall) => Effect.Effect<WireRecord, never, AgentToolServices>,
+  read: (call: AgentReadCall) => Effect.Effect<WireRecord, never, RRead>,
 ) =>
   Effect.gen(function* () {
     const member = yield* AdmittedMember;
@@ -414,6 +459,470 @@ const MEMBER_READ_PAGE_TOOL = memberMcpTool({
     ),
 });
 
+/*
+ * The writes. Each runs the agents' own door for it (`../agents/agent-tools.ts`,
+ * `task-tools.ts`, `task-section-tools.ts`) with the member as the caller, on
+ * a full call of the agent tools built once here (`memberWriteCall`), or,
+ * where a member's act is not an agent's, the desktop's own operation for
+ * it: a plan's notes are the member's own edit (`recordMemberPlanNotes`),
+ * and a message is the member's own words (`steerMemberWords`), as their
+ * message box sends them. A write is about the workspace that holds what it
+ * names, as a read by id is, or the one its slug names, as a list is.
+ */
+
+/** A write that adds to the member's world and takes nothing away. */
+const ADDITIVE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false };
+
+/** A change the same call made again leaves as it stood. */
+const IDEMPOTENT_CHANGE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+};
+
+/** A write that may take something away, such as a turn under way, an archived agent's place, or a section, which the same call made again leaves as it stood. */
+const DESTRUCTIVE: ToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: true,
+};
+
+/** The writer the member's writes go through, over the coding agent's tool set, as the desktop's own writes are made. */
+const MEMBER_WRITER = storeWriter({ tools: CODER_TOOL_SET });
+
+/**
+ * The member as the agent tools' writing caller, about the workspace a read
+ * of it resolved: the sessions the deployment reaches acting for the member,
+ * each agent's answered by the runtime its conversation runs on
+ * (`sessionsRouter`), the writer over the coding agent's tool set, a key
+ * minted fresh for this one call, so a start or a message the client sends
+ * again is a second one, and the summary model a start from another agent
+ * replays with, as the Start route's.
+ */
+const memberWriteCall = (read: AgentReadCall) =>
+  Effect.gen(function* () {
+    const eveAs = yield* sessionsRouter;
+    const environment = yield* HostedEnvironment;
+    const call: AgentCall = {
+      ...read,
+      eve: eveAs(callerUserId(read.caller)),
+      eveAs,
+      writer: MEMBER_WRITER,
+      clientKey: randomUUID(),
+      summaryModel: (owner, chosen, effort) =>
+        productionSummaryModel(owner, chosen, effort).pipe(
+          Effect.provideService(HostedEnvironment, environment),
+        ),
+    };
+    return call;
+  });
+
+/** A write run as the member, about the workspace its slug names or their only one; refused, naming theirs, where that names none. */
+const listWriteAsMember = <R>(
+  slug: string | undefined,
+  write: (call: AgentCall) => Effect.Effect<WireRecord, never, R>,
+) => listAsMember(slug, (read) => Effect.flatMap(memberWriteCall(read), write));
+
+/** A write by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the door's own words where they reach none. */
+const writeAsMember = <R, RWrite>(
+  workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
+  refusal: string,
+  write: (call: AgentCall) => Effect.Effect<WireRecord, never, RWrite>,
+) => readAsMember(workspaceOf, refusal, (read) => Effect.flatMap(memberWriteCall(read), write));
+
+/** The workspace of one of the member's sidebar sections, by its id. */
+const sectionWorkspace = (userId: string, sectionId: string) =>
+  Effect.map(listTaskSections(userId), ({ sections }) =>
+    Option.map(
+      Option.fromNullishOr(sections.find((section) => section.id === sectionId)),
+      (section) => section.workspaceId,
+    ),
+  );
+
+/** How a tool that sets an agent to work tells the outside agent to follow it, since nothing reports back to it. */
+const FOLLOW_WORDS =
+  "Nothing reports back to you, since an agent the member reaches from here has no starting " +
+  `agent: follow it with ${MEMBER_MCP_TOOL.READ_AGENT}, which reads what it last said and did.`;
+
+/** A task the member makes names the workspace it is made in, and what the agents' own make names, bar a pilot's mode, which only a pilot asks for. */
+const CreateTaskInputSchema = Schema.Struct({
+  workspace: WORKSPACE_INPUT,
+  name: CREATE_TASK_TOOL.inputSchema.fields.name,
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub " +
+        "installation must reach; null or left out for none, or the parent's where you give a " +
+        "parent.",
+    ),
+  ),
+  brief: CREATE_TASK_TOOL.inputSchema.fields.brief,
+  plan: CREATE_TASK_TOOL.inputSchema.fields.plan,
+  status: CREATE_TASK_TOOL.inputSchema.fields.status,
+  priority: CREATE_TASK_TOOL.inputSchema.fields.priority,
+  assignee: CREATE_TASK_TOOL.inputSchema.fields.assignee,
+  parentTaskId: CREATE_TASK_TOOL.inputSchema.fields.parentTaskId,
+  relation: CREATE_TASK_TOOL.inputSchema.fields.relation,
+});
+
+const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.CREATE_TASK,
+  description:
+    "Make a task in a workspace the member belongs to, as the member's own sidebar New task " +
+    "would: owned by them, on the repository named or none, with their brief and a plan to " +
+    "start from where given, and no agent on it; the desktop shows it as one they made. Give " +
+    "it a status, a priority, and an assignee where the member said them. Give it a " +
+    "parentTaskId to make it a child task of another, to any depth: a child always works in " +
+    "its parent's repository and on its machine, so leave repository out for one. Give it a " +
+    "relation instead to make it blocked by, blocking, a sub-task of, or the parent of another " +
+    `task of the workspace in the same call. ${WORKSPACE_WORDS} Then start an agent on it ` +
+    `with ${MEMBER_MCP_TOOL.START_AGENT}'s taskId. Each call makes a task of its own, so call ` +
+    "it once for each. Answers `accepted` with the task's id, key, name, status, priority, " +
+    "assignee, repository, and mention, or `rejected` and why.",
+  input: CreateTaskInputSchema,
+  annotations: ADDITIVE,
+  run: ({ workspace, ...asked }) =>
+    listWriteAsMember(workspace, (call) => runCreateTask(call, asked)),
+});
+
+/** A task's change names what the agents' own does, the sidebar's words the member's own. */
+const UpdateTaskInputSchema = Schema.Struct({
+  ...UPDATE_TASK_TOOL.inputSchema.fields,
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to pin it in the member's sidebar, false to unpin it; their pin alone, no other " +
+        "member's.",
+    ),
+  ),
+  sectionId: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(wireUuidSchema),
+      "The sidebar section the member keeps it in, by the id " +
+        `${MEMBER_MCP_TOOL.LIST_TASKS} or ${MEMBER_MCP_TOOL.CREATE_SECTION} answered; it leaves ` +
+        "the section it stood in and lands at the top of this one. null takes it out of its " +
+        "section, back under Tasks.",
+    ),
+  ),
+});
+
+const MEMBER_UPDATE_TASK_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.UPDATE_TASK,
+  description:
+    "Change a task the member can open, by its id, a teammate's included, as the member's own " +
+    "task menu would: rename it, set or clear its repository, set where it stands (its status) " +
+    "or how much it matters (its priority), assign it to a member of its workspace or to no " +
+    "one, pin or unpin it in the member's sidebar, move it into one of their sidebar sections " +
+    "or back out of it (sectionId), put it under a parent task or take it out from under one, " +
+    "or add and take away the tasks it is blocked by and the tasks it blocks; name at least " +
+    "one change, and several go in one call. Mark a task whose work is done Done, with status " +
+    "done, as the menu's Mark done does; that withdraws every ask still open on its threads. " +
+    "A block is Linear's: the blocker's work comes first and the task it blocks waits on it. " +
+    "Both tasks must be in one workspace, a task never blocks itself, and a block that would " +
+    "close a cycle is refused. A child task works in its parent's repository, so a parent " +
+    "working in another is refused, as is one under which the task would descend from " +
+    "itself. Answers `accepted` with the task as it now stands, its parentTaskId, blockedBy, " +
+    "and blocks among it where the call changed them, `already` true where every change " +
+    "named already stood, or `rejected` and why.",
+  input: UpdateTaskInputSchema,
+  annotations: IDEMPOTENT_CHANGE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => readTaskWorkspace(userId, asked.taskId),
+      UPDATE_TASK_REFUSAL.NO_TASK,
+      (call) => runUpdateTask(call, asked),
+    ),
+});
+
+/** A plan's notes name the task and the notetaker's own notes. */
+const EditPlanInputSchema = Schema.Struct({
+  taskId: describeWire(
+    wireUuidSchema,
+    `The task whose plan to edit, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered.`,
+  ),
+  ...planNotesSchema.fields,
+});
+
+const MEMBER_EDIT_PLAN_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.EDIT_PLAN,
+  description:
+    "Take notes on the plan of a task the member can open, by its taskId, as the member's own " +
+    `edit, which ${MEMBER_MCP_TOOL.READ_TASK} reads first: add a point under one of its ` +
+    "headings, or replace text copied exactly from the saved plan, as much as names one place, " +
+    "headings and whole sections included, with what it becomes, or with nothing to delete " +
+    "it. A note's text may open headings of its own, so you can rename, split, merge, move, and " +
+    "drop sections. Write a file, a pull request, or an issue a note names as a mention, a " +
+    "Markdown link to its page whose words start with @, such as " +
+    "[@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so the plan draws it as " +
+    "a chip. Every save is kept in the plan's history as the member's own. A call's notes land " +
+    "together or not at all: where one names text or a heading the plan does not hold exactly " +
+    "once, nothing is saved and the call answers the plan as it stands, to retry from. Answers " +
+    "`accepted` with how many notes it took, or `rejected` and why.",
+  input: EditPlanInputSchema,
+  annotations: { readOnlyHint: false, destructiveHint: false },
+  run: (asked) =>
+    readAsMember(
+      (userId) => readTaskWorkspace(userId, asked.taskId),
+      PLAN_EDIT_REFUSAL.NO_TASK,
+      ({ caller }) =>
+        recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
+    ),
+});
+
+/** A section the member makes names the workspace it is made in, its title, and its emoji. */
+const CreateSectionInputSchema = Schema.Struct({
+  workspace: WORKSPACE_INPUT,
+  ...CREATE_SECTION_TOOL.inputSchema.fields,
+});
+
+const MEMBER_CREATE_SECTION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.CREATE_SECTION,
+  description:
+    "Make a section in the member's sidebar of a workspace they belong to, to keep tasks in: " +
+    "it stands in their sidebar alone, as one they made from the sidebar would, with the " +
+    `title and the emoji given, and holds no task until ${MEMBER_MCP_TOOL.UPDATE_TASK}'s ` +
+    `sectionId moves one in. ${WORKSPACE_WORDS} Answers \`accepted\` with the section's ` +
+    "id and title, or `rejected` and why.",
+  input: CreateSectionInputSchema,
+  annotations: ADDITIVE,
+  run: ({ workspace, ...asked }) =>
+    listWriteAsMember(workspace, (call) => runCreateSection(call, asked)),
+});
+
+const MEMBER_DELETE_SECTION_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.DELETE_SECTION,
+  description:
+    "Delete one of the member's sidebar sections, by its id as " +
+    `${MEMBER_MCP_TOOL.LIST_TASKS} answered it, as their Delete section would: the tasks in it ` +
+    "go back under Tasks, and none of them is deleted. Answers `accepted` with the section's " +
+    "id and title and how many tasks went back under Tasks, or `rejected` and why.",
+  input: DELETE_SECTION_TOOL.inputSchema,
+  annotations: DESTRUCTIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => sectionWorkspace(userId, asked.sectionId),
+      TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+      (call) => runDeleteSection(call, asked),
+    ),
+});
+
+/** A start names the task or the agent it starts from, or else the workspace it starts in on no task, and what the agents' own start names, bar pictures, since the member keeps no conversation here to hand them from. */
+const StartAgentInputSchema = Schema.Struct({
+  workspace: Schema.optionalKey(
+    describeWire(
+      Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(WORKSPACE_BOUNDS.MAX_SLUG_CHARS)),
+      "Where you name no taskId and no from, the workspace to start the agent in on no task, by " +
+        `the slug ${MEMBER_MCP_TOOL.LIST_WORKSPACES} answered; leave it out where the member ` +
+        "belongs to one workspace alone.",
+    ),
+  ),
+  taskId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `The task to start the agent on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered; leave ` +
+        "it out to start it on no task.",
+    ),
+  ),
+  repository: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(githubRepositoryFullNameSchema),
+      "Where the agent starts on no task, the GitHub repository it works in, as owner/name, " +
+        "which the workspace's GitHub installation must reach; null or left out for none. A " +
+        "task's agent works in the task's own.",
+    ),
+  ),
+  prompt: START_AGENT_TOOL.inputSchema.fields.prompt,
+  note: START_AGENT_TOOL.inputSchema.fields.note,
+  title: START_AGENT_TOOL.inputSchema.fields.title,
+  branch: START_AGENT_TOOL.inputSchema.fields.branch,
+  model: START_AGENT_TOOL.inputSchema.fields.model,
+  effort: START_AGENT_TOOL.inputSchema.fields.effort,
+  from: START_AGENT_TOOL.inputSchema.fields.from,
+});
+
+type StartAgentInput = typeof StartAgentInputSchema.Type;
+
+/** The workspace a start is about: its task's, the agent's it starts from, or else the one its slug names or the member's only one. */
+const startedAsMember = ({ workspace, ...asked }: StartAgentInput) => {
+  const start = (call: AgentCall) => runStartAgent(call, asked);
+  if (asked.taskId !== undefined) {
+    const { taskId } = asked;
+    return writeAsMember(
+      (userId) => readTaskWorkspace(userId, taskId),
+      START_AGENT_REFUSAL.NO_SUCH_TASK,
+      start,
+    );
+  }
+  if (asked.from !== undefined) {
+    const { agentId } = asked.from;
+    return writeAsMember(
+      (userId) => agentWorkspace(userId, { id: agentId }),
+      START_AGENT_REFUSAL.NO_SOURCE,
+      start,
+    );
+  }
+  return listWriteAsMember(workspace, start);
+};
+
+const MEMBER_START_AGENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.START_AGENT,
+  description:
+    "Start a new coding agent as the member, exactly as their own Start would: on a task " +
+    "they can open by its taskId, on the task's plan itself with no prompt, or on the prompt " +
+    "given in the plan's place, with the note after either; or on no task, in the workspace " +
+    "named, in the repository named or none, where it needs a prompt, since there is no plan " +
+    "to hand it. This one call carries everything the agent is told as it starts, and the " +
+    "agent sets to work on it at once. Its checkout is the repository's default branch, or " +
+    "the branch named, which must already be on GitHub. It runs on the model and effort " +
+    "named, as the member is offered them, or on the member's default with neither; " +
+    `${MEMBER_MCP_TOOL.LIST_MODELS} lists them. With from, it starts from another agent ` +
+    "instead: continue an agent that failed, ended, or ran out of context, which is handed " +
+    "over and stopped, or fork one at a messageId to try another direction while it goes on. " +
+    "Each call starts an agent of its own, so call it once for each. Answers `accepted` with " +
+    "the agent's id, model, the model's name to say it by, effort, status, and mention once " +
+    "its session is open, which may take a minute or two, or `rejected` and why nothing was " +
+    `started; a rejected model or effort lists the choices. ${FOLLOW_WORDS}`,
+  input: StartAgentInputSchema,
+  annotations: ADDITIVE,
+  run: startedAsMember,
+});
+
+/** A stop names the agent alone. */
+const AgentIdInputSchema = Schema.Struct({ agentId: ReadAgentInputSchema.fields.agentId });
+
+/** A message names the agent and the member's words. */
+const MessageAgentInputSchema = Schema.Struct({
+  agentId: AgentIdInputSchema.fields.agentId,
+  text: describeWire(
+    Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
+    "What to tell the agent, as the member's own words: it reads them as a message the member " +
+      "typed in its composer.",
+  ),
+});
+
+type MessageAgentInput = typeof MessageAgentInputSchema.Type;
+
+/**
+ * One message as the member, to an agent of the workspace the call is about:
+ * refused for an agent that is none of it or is archived, and otherwise the
+ * member's own send, which refuses an agent it may not write to, in the words
+ * the agents' own message is refused in.
+ */
+const memberMessage = (call: AgentCall, { agentId, text }: MessageAgentInput) =>
+  orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(call.caller, agentId);
+      if (Option.isNone(found)) return agentToolRejected(MESSAGE_AGENT_REFUSAL.NO_AGENT);
+      const { agent } = found.value;
+      if (agent.archivedAt !== null) return agentToolRejected(MESSAGE_AGENT_REFUSAL.ARCHIVED);
+      const userId = callerUserId(call.caller);
+      const sent = yield* Effect.result(
+        steerMemberWords(call.writer, userId, agent, { text, clientKey: call.clientKey }),
+      );
+      if (Result.isFailure(sent)) return agentToolRejected(messageRefusalWords(sent.failure));
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        delivery: sent.success.outcome,
+        agent: { id: agent.id, title: agentName(agent), model: agent.model },
+      };
+    }),
+  );
+
+const MEMBER_MESSAGE_AGENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.MESSAGE_AGENT,
+  description:
+    "Send a coding agent the member can see a message, by its id, as the member's own words, " +
+    "as their composer would: it lands in the agent's conversation under the member's name, " +
+    "and a teammate's agent reads it under the member's label. A running agent reads it at " +
+    "its next step, and an idle one starts a turn on it; an archived agent takes nothing. Each " +
+    "call sends a message of its own, so call it once for each. Answers `accepted` once the " +
+    "agent's session has taken it, without waiting for it to act or reply, or `rejected` and " +
+    `why nothing was sent. ${FOLLOW_WORDS}`,
+  input: MessageAgentInputSchema,
+  annotations: ADDITIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => agentWorkspace(userId, { id: asked.agentId }),
+      MESSAGE_AGENT_REFUSAL.NO_AGENT,
+      (call) => memberMessage(call, asked),
+    ),
+});
+
+const MEMBER_STOP_AGENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.STOP_AGENT,
+  description:
+    "Stop a coding agent the member can see, by its id, as their Stop button would: its turn " +
+    "under way is canceled and its status reads canceled, while the agent stays available, its " +
+    "transcript and branch kept, and a later message starts a new turn. An archived one is " +
+    "refused. Answers `accepted` with the agent's status now and whether it was stopped, " +
+    "`stopped` false for an agent already idle, which changes nothing, or `rejected` and why. " +
+    `${MEMBER_MCP_TOOL.READ_AGENT} reads where it stopped.`,
+  input: AgentIdInputSchema,
+  annotations: DESTRUCTIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => agentWorkspace(userId, { id: asked.agentId }),
+      AGENT_TOOL_REFUSAL.NO_AGENT,
+      (call) => runStopAgent(call, asked),
+    ),
+});
+
+/** A change to an agent names what the agents' own does, the sidebar's and the archive's words the member's own. */
+const UpdateAgentInputSchema = Schema.Struct({
+  ...UPDATE_AGENT_TOOL.inputSchema.fields,
+  agentId: AgentIdInputSchema.fields.agentId,
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "Whether the member keeps it pinned in their sidebar, the pin theirs alone; an agent on " +
+        "a task or on none alike.",
+    ),
+  ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to archive it, as the member's Archive agent would: it leaves the sidebar, its " +
+        "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
+        "its transcript, branch, and pull request kept; only an idle agent is archived. false to " +
+        "bring an archived one back.",
+    ),
+  ),
+  reason: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
+      ),
+      "Why it is archived, in a short sentence its archived banner shows beside the member's " +
+        "name, such as its pull request having merged; only with archived true.",
+    ),
+  ),
+});
+
+const MEMBER_UPDATE_AGENT_TOOL = memberMcpTool({
+  name: MEMBER_MCP_TOOL.UPDATE_AGENT,
+  description:
+    "Change a coding agent the member can see, by its id, as the member's own menu, model " +
+    "chip, and composer would: rename it (empty clears the title), move it to another model " +
+    `and effort, and context window, from its next step, as ${MEMBER_MCP_TOOL.LIST_MODELS} ` +
+    "lists them, pin or unpin it in the member's sidebar, replace the list of MCP servers " +
+    "switched off for it, or archive it or bring it back, the archive recorded as the " +
+    "member's own. Name at least one change, a model only with its effort, a contextWindow " +
+    "only with them, and a reason only with archived true; an archive is checked first, and " +
+    "the rest land together or not at all. One still starting or working is not archived: " +
+    `stop it with ${MEMBER_MCP_TOOL.STOP_AGENT} first. Answers \`accepted\` with the agent ` +
+    "as it then stands, whether archived among it, or `rejected` and why; a rejected model " +
+    "or effort lists the choices.",
+  input: UpdateAgentInputSchema,
+  annotations: DESTRUCTIVE,
+  run: (asked) =>
+    writeAsMember(
+      (userId) => agentWorkspace(userId, { id: asked.agentId }),
+      AGENT_TOOL_REFUSAL.NO_AGENT,
+      (call) => runUpdateAgent(call, asked),
+    ),
+});
+
 /** Every tool the server offers, listed in the order an agent reads them. */
 export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   LIST_WORKSPACES_TOOL,
@@ -424,4 +933,13 @@ export const MEMBER_MCP_TOOLS: readonly MemberMcpTool[] = [
   READ_AGENT_CHANGES_TOOL,
   MEMBER_READ_PAGE_TOOL,
   MEMBER_LIST_MODELS_TOOL,
+  MEMBER_CREATE_TASK_TOOL,
+  MEMBER_UPDATE_TASK_TOOL,
+  MEMBER_EDIT_PLAN_TOOL,
+  MEMBER_CREATE_SECTION_TOOL,
+  MEMBER_DELETE_SECTION_TOOL,
+  MEMBER_START_AGENT_TOOL,
+  MEMBER_MESSAGE_AGENT_TOOL,
+  MEMBER_STOP_AGENT_TOOL,
+  MEMBER_UPDATE_AGENT_TOOL,
 ];
