@@ -1885,7 +1885,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* sidebar.collections.answer(sidebarRows);
     }
     const workspaces = entities.stored(KEPT_READ.WORKSPACES);
-    if (workspaces !== undefined && view.workspacesStatus !== TASKS_READ.READY) {
+    // Note that a list of none, as a build before #6753 could keep, is no list: the follow's first answer draws one.
+    if (
+      workspaces !== undefined &&
+      workspaces.length > 0 &&
+      view.workspacesStatus !== TASKS_READ.READY
+    ) {
       yield* workspaceList.rows.answer(workspaces);
       write({ workspacesStatus: TASKS_READ.READY });
     }

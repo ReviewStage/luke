@@ -2761,6 +2761,31 @@ it.effect(
     }),
 );
 
+it.effect("a workspace list of none kept on disk is not drawn as ready at launch", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("tasks-entities-");
+    const earlier = yield* Scope.make();
+    const kept = yield* Scope.provide(earlier)(
+      openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
+    );
+    yield* kept.keep(KEPT_READ.WORKSPACES, []);
+    yield* Scope.close(earlier, Exit.void);
+    const entities = yield* openEntityStore({
+      directory,
+      cipher: testCipher(),
+      accountId: "user-dana",
+    });
+    const service = fakeService([]);
+    service.workspacesFail = true;
+    const { tasks, last, settled } = yield* subject(service, { entities });
+
+    yield* tasks.open;
+    yield* settled;
+
+    assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
 it.effect(
   "a workspace list of none says failed and leaves the last list drawn, and its Retry reads it again at once",
   () =>
