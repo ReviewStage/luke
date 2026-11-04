@@ -149,7 +149,7 @@ import {
   type TabActionGroups,
   useHandedTabActions,
 } from "../desktop/strip-tabs.js";
-import { pictureUnread, unreadShown } from "../failure-report.js";
+import { failureShown, pictureUnread } from "../failure-report.js";
 import { lazyRoute } from "../lazy-route.js";
 import { scrollerOf } from "../scroll-within.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -435,7 +435,7 @@ const PART = {
 
 type Part<A> =
   | { readonly kind: typeof PART.PENDING }
-  | { readonly kind: typeof PART.FAILED }
+  | { readonly kind: typeof PART.FAILED; readonly failed: { readonly failure: AgentCallFailure } }
   | { readonly kind: typeof PART.NONE }
   | { readonly kind: typeof PART.LANDED; readonly value: A };
 
@@ -470,7 +470,7 @@ function usePartRead<Answer>(held: HostRead<Answer>) {
 function partOf<A>(read: PartRead<A>): Part<A> {
   const { answer, out } = read;
   if (answer === undefined || (out && "failure" in answer)) return { kind: PART.PENDING };
-  if ("failure" in answer) return { kind: PART.FAILED };
+  if ("failure" in answer) return { kind: PART.FAILED, failed: answer };
   return answer.pullRequest === null
     ? { kind: PART.NONE }
     : { kind: PART.LANDED, value: answer.pullRequest };
@@ -994,16 +994,25 @@ function TitleSkeleton(): React.JSX.Element {
 function PartFailure({
   line,
   surface,
+  part,
   onRetry,
 }: {
   line: string;
   /** Where the read failed, which its report names. */
   surface: FailureSurface;
+  /** The part as it stands: its failed answer, which its report carries with what failed beneath it, or no pull request where one was asked about. */
+  part: Extract<Part<unknown>, { readonly kind: typeof PART.FAILED | typeof PART.NONE }>;
   onRetry: () => void;
 }): React.JSX.Element {
   return (
     <div className="pull-request-failure px-row-inset">
-      <ErrorState failure={unreadShown(surface)} onRetry={onRetry}>
+      <ErrorState
+        failure={failureShown({
+          surface,
+          cause: part.kind === PART.FAILED ? part.failed : FAILURE_CONDITION.GONE,
+        })}
+        onRetry={onRetry}
+      >
         {line}
       </ErrorState>
     </div>
@@ -1683,6 +1692,7 @@ function PullRequestHead({
       <PartFailure
         line={PULL_REQUEST_WORDS.FAILED}
         surface={FAILURE_SURFACE.PULL_REQUEST_READ}
+        part={part}
         onRetry={parts.ask.pullRequest}
       />
     );
@@ -1961,6 +1971,7 @@ function ChecksPart({
         <PartFailure
           line={PULL_REQUEST_WORDS.CHECKS_FAILED}
           surface={FAILURE_SURFACE.PULL_REQUEST_CHECKS_READ}
+          part={part}
           onRetry={parts.ask.checks}
         />
       )}
@@ -2060,6 +2071,7 @@ function ConversationPart({
         ) : (
           <PartFailure
             surface={FAILURE_SURFACE.PULL_REQUEST_CONVERSATION_READ}
+            part={part}
             line={PULL_REQUEST_WORDS.CONVERSATION_FAILED}
             onRetry={parts.ask.conversation}
           />
