@@ -241,6 +241,7 @@ export const APP_SLICE = {
   TASKS: sliceAtom("tasks"),
   AGENTS: sliceAtom("agents"),
   INBOX: sliceAtom("inbox"),
+  AGENT_ORIGINS: sliceAtom(LIVE_READ.AGENT_ORIGINS),
   INBOX_ITEMS: sliceAtom(LIVE_READ.INBOX_ITEMS),
   HOLDER_INBOX: sliceAtom(LIVE_READ.HOLDER_INBOX),
   INTEGRATION_TOOLS: sliceAtom(LIVE_READ.INTEGRATION_TOOLS),

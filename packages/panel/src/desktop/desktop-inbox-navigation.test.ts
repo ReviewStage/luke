@@ -714,7 +714,7 @@ test("an item a link names that no read holds, of a task the reader cannot read,
 test("a link to a settled item of an agent with no plan, none of whose items waits any more, lists the agent by its own read and shows the item", async () => {
   const settled = { ...BUMP, status: INBOX_STATUS.ANSWERED };
   world.agentInboxes = new Map([[STRAY_AGENT, [settled]]]);
-  world.pageAgents = new Map([
+  world.tasklessAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
   ]);
   const { page } = mount();
@@ -783,7 +783,7 @@ test("an item a link names under an agent that is not there, deleted or another'
 
 test("an item a link names under an agent with no task that its own read does not hold is not found, though the account's task list is not read yet", async () => {
   world.agentInboxes = new Map([[STRAY_AGENT, []]]);
-  world.pageAgents = new Map([
+  world.tasklessAgents = new Map([
     [STRAY_AGENT, { ...AGENT, id: STRAY_AGENT, planId: null, title: "Bump" }],
   ]);
   const { page } = mount([], { listUnread: true });
@@ -896,7 +896,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
 
 test("a link to an agent's item newer than the agent's last read waits for the read of it, saying no Not found, and then shows it", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
-  world.pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  world.tasklessAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
   const { page } = mount([SECOND_ASK].map(waitingTaskless));
   await settle();
   const held: (() => void)[] = [];
@@ -921,7 +921,7 @@ test("a link to an agent's item newer than the agent's last read waits for the r
 
 test("an item a link names under an agent nothing waits on any more, read before, is not found by that read though the agent's own read fails", async () => {
   world.agentInboxes = new Map([[SECOND_AGENT, [SECOND_ASK]]]);
-  world.pageAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
+  world.tasklessAgents = new Map([[SECOND_AGENT, { ...AGENT, id: SECOND_AGENT, planId: null }]]);
   const { page } = mount([SECOND_ASK].map(waitingTaskless));
   await settle();
   world.agentReadFails = true;
@@ -1274,7 +1274,7 @@ test("words written in the box while its new thread starts stay in it once the t
 test("an item opened whose agent's inbox could not be read says so in the pane, and Retry reads it there", async () => {
   world.listedWorkspace = ACME;
   // Note that no holding names the billing task, nor the feed its agent, so its item is opened by its agent, whose own read fails.
-  world.pageAgents = new Map([[AGENT.id, AGENT]]);
+  world.tasklessAgents = new Map([[AGENT.id, AGENT]]);
   world.agentInboxes = new Map([[AGENT.id, [THRESHOLD]]]);
   world.feedLeavesOut = new Set([AGENT.id]);
   world.agentReadFails = true;

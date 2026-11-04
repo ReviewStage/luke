@@ -253,6 +253,7 @@ function fakeService() {
     scope: polledLive(SCOPE_PARTS),
     account: polledLive(ACCOUNT_PARTS),
     items: polledLive(ITEMS_PARTS),
+    origin: polledLive(["origin"]),
   };
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
@@ -445,6 +446,10 @@ function fakeService() {
         return CHANGES;
       }),
     pullRequestChaptersLive: () => Effect.succeed({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    agentOriginLive: (agentId, _userId, poll, after) => {
+      if (poll !== true) asked.push(`agent-origin-live:${agentId}`);
+      return poll === true ? live.origin.poll(after) : Effect.succeed(live.origin.first());
+    },
     generateChapters: (agentId, number) =>
       Effect.sync(() => {
         asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
@@ -880,6 +885,11 @@ function subject(
       told: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.HOLDER_INBOXES_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the agents' origins the host holds for the windows, whole, in order. */
+      origins: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.AGENT_ORIGINS_CHANGED ? [event.payload] : [],
         ),
       open: composer.open,
       reset: composer.reset,
@@ -2374,6 +2384,39 @@ it.effect(
       yield* settled;
       assert.deepEqual(signedOut.told(), []);
       assert.deepEqual(signedOut.asked, []);
+    }),
+);
+
+it.effect(
+  "an agent's origin is read once however many holds stand on it, held again after a let go reads nothing, and a sign-out tells none held",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, live, origins, reset } = yield* subject();
+      const agent = { agentId: AGENT_ID };
+      live.origin.set({
+        origin: [
+          {
+            origin: { firing: { kind: "webhook", bytes: 11 }, prompt: "Triage it.", body: "{}" },
+            runnerName: null,
+          },
+        ],
+      });
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* settled;
+      assert.deepEqual(origins().at(-1), {
+        [AGENT_ID]: { rows: { prompt: "Triage it.", body: "{}" } },
+      });
+
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW, agent);
+      yield* settled;
+      yield* call(GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW, agent);
+      yield* settled;
+      assert.deepEqual(asked, [`agent-origin-live:${AGENT_ID}`]);
+
+      yield* reset;
+      yield* settled;
+      assert.deepEqual(origins().at(-1), {});
     }),
 );
 

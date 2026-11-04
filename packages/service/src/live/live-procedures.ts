@@ -83,6 +83,10 @@
  * the newest messages (`cursor`) is answered only those written or amended
  * past it (`liveCursorParts`). Its answers are measured
  * (`transcript-metrics.ts`).
+ * `GET /api/live/agent-origin?id=` answers the run of an automation that
+ * started one coding agent as one statement (`agent-origin-live.ts`), after
+ * the agent is read as the account, so one it does not reach is not found,
+ * woken by the agent's own row (`agentOriginLive`).
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
@@ -154,6 +158,7 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentBrowserTabsLive,
   agentInboxLive,
+  agentOriginLive,
   agentPagesLive,
   agentTranscriptLive,
   automationRunsLive,
@@ -767,6 +772,13 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
+    }),
+    agentOrigin: signedIn.agentOrigin.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const agentId = yield* pathUuid(input.id);
+      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
+      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(agentOriginLive, { userId: context.userId, agentId }, input);
     }),
     taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
