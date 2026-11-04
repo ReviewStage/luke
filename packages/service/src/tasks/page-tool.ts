@@ -109,7 +109,10 @@ const PAGE_LAYOUT_WORDS =
   "It is drawn in your transcript at its whole height, on the transcript's own ground, and the " +
   "developer can open it full screen or in the side panel: leave `html`, `body`, and the " +
   "outermost element with no background color, and add no outer card, border, banner title, or " +
-  "side padding of your own; a box that needs a ground of its own gets one inside. Draw with " +
+  "side padding of your own; a box that needs a ground of its own gets one inside. Keep its " +
+  `content at reading width, centered at \`max-width: var(${PAGE_THEME_VARIABLE.READING_WIDTH})\` with ` +
+  "`margin-inline: auto`, and widen only what needs the room, such as a board of many columns, " +
+  "a wide chart, or a long timeline. Draw with " +
   "the app's theme, which every page is handed as CSS variables in the app's light or dark, " +
   `its \`color-scheme\` set to match: ${THEME_VARIABLES_SAID}. ` +
   "Let the content set the height: no `vh` units or `height: 100%` on `html` or `body`, and a " +

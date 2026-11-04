@@ -22,9 +22,9 @@ import { type RefObject, useEffect } from "react";
  *
  * A page is told to keep no side room of its own, since in words it stands
  * at the words' edges. In a room of its own, its tab or full screen, the
- * window keeps that room for it instead: the inset a page under a toolbar
- * keeps (`toolbar.css`'s page inset), a column's and a row's, so its words
- * start where the bar's title does.
+ * window keeps that room for it instead: the inset the window's own pages
+ * keep, and their narrow inset in a frame under 480px, so a page reads in
+ * its tab, full screen, or on a phone as the window's pages do.
  */
 
 /** Where a page is drawn: in the words that tell of it, or in a room of its own, its tab or full screen. */
@@ -59,16 +59,21 @@ const ROLE_OF: Readonly<Record<PageThemeVariable, string>> = {
   [PAGE_THEME_VARIABLE.TEXT_SIZE]: "--ui-type-body-size",
   [PAGE_THEME_VARIABLE.TEXT_LEADING]: "--ui-type-body-leading",
   [PAGE_THEME_VARIABLE.RADIUS]: "--ui-card-radius",
+  [PAGE_THEME_VARIABLE.READING_WIDTH]: "--ui-page-measure",
 };
 
 const isAsk = Schema.is(pageThemeAskSchema);
 
-/** The room kept around a page drawn in `room`, as the window's root draws it now. */
-function insetIn(room: PageRoom, drawn: CSSStyleDeclaration): string {
-  if (room === PAGE_ROOM.WORDS) return "";
-  const column = drawn.getPropertyValue("--ui-space-12").trim();
-  const row = drawn.getPropertyValue("--ui-row-inset").trim();
-  return `calc(${column} + ${row})`;
+/** The room kept around a page drawn in `room`, wide and narrow, as the window's root draws it now. */
+function insetIn(
+  room: PageRoom,
+  drawn: CSSStyleDeclaration,
+): Pick<PageTheme, "inset" | "narrowInset"> {
+  if (room === PAGE_ROOM.WORDS) return { inset: "", narrowInset: "" };
+  return {
+    inset: drawn.getPropertyValue("--ui-page-inset").trim(),
+    narrowInset: drawn.getPropertyValue("--ui-page-inset-narrow").trim(),
+  };
 }
 
 /** The theme as the window's root draws it now, for a page drawn in `room`. */
@@ -83,7 +88,7 @@ function themeNow(room: PageRoom): PageTheme {
   return {
     scheme: drawnDark() ? PAGE_THEME_SCHEME.DARK : PAGE_THEME_SCHEME.LIGHT,
     variables,
-    inset: insetIn(room, drawn),
+    ...insetIn(room, drawn),
   };
 }
 

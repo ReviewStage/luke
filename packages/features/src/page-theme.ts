@@ -21,7 +21,8 @@ import { Schema as EffectSchema } from "effect";
 the words' own edges, so it is told to keep no side room of its own; drawn
 in a room of its own, its tab or full screen, the window hands it an inset
 as well, which the script keeps around the page as its root's padding, so
-its words stand off the room's edges as the window's own pages do. What the
+its words stand off the room's edges as the window's own pages do: the
+window's page inset, and its narrow inset in a frame under 480px wide. What the
 window sends is the window's word and carries no
  * credential, only colors, fonts, and sizes; the script takes it only from
  * the window that framed the page and only in the shape below.
@@ -68,6 +69,7 @@ export const PAGE_THEME_VARIABLE = {
   TEXT_SIZE: "--vespin-text-size",
   TEXT_LEADING: "--vespin-text-leading",
   RADIUS: "--vespin-radius",
+  READING_WIDTH: "--vespin-reading-width",
 } as const;
 
 export type PageThemeVariable = (typeof PAGE_THEME_VARIABLE)[keyof typeof PAGE_THEME_VARIABLE];
@@ -78,6 +80,8 @@ export interface PageTheme {
   readonly variables: Readonly<Record<PageThemeVariable, string>>;
   /** The padding kept around the page's root, a CSS length; empty where the page stands at its room's edges. */
   readonly inset: string;
+  /** The padding kept instead in a frame under 480px wide. */
+  readonly narrowInset: string;
 }
 
 /** A message the frame posts to the window: the page asking for the theme. */
@@ -91,12 +95,14 @@ export function pageThemeMessage(theme: PageTheme): {
   readonly scheme: PageThemeScheme;
   readonly variables: Readonly<Record<string, string>>;
   readonly inset: string;
+  readonly narrowInset: string;
 } {
   return {
     type: PAGE_THEME_TYPE,
     scheme: theme.scheme,
     variables: theme.variables,
     inset: theme.inset,
+    narrowInset: theme.narrowInset,
   };
 }
 
@@ -118,7 +124,8 @@ export const PAGE_THEME_SCRIPT = `(() => {
   const VALUE = /^[^;{}<>\\\\]*$/;
   let sheet = null;
 
-  const wear = (scheme, variables, inset) => {
+  const length = (value) => typeof value === "string" && value !== "" && VALUE.test(value);
+  const wear = (scheme, variables, inset, narrowInset) => {
     let rules = "color-scheme:" + (scheme === "dark" ? "dark" : "light") + ";";
     for (const name of Object.keys(variables)) {
       const value = variables[name];
@@ -129,7 +136,8 @@ export const PAGE_THEME_SCRIPT = `(() => {
       const head = document.head || document.documentElement;
       head.insertBefore(sheet, head.firstChild);
     }
-    const room = typeof inset === "string" && inset !== "" && VALUE.test(inset) ? "html{padding:" + inset + "}" : "";
+    let room = length(inset) ? "html{padding:" + inset + "}" : "";
+    if (room !== "" && length(narrowInset)) room += "@media (max-width:479.98px){html{padding:" + narrowInset + "}}";
     sheet.textContent = ":root{" + rules + "}" + room;
   };
 
@@ -138,7 +146,7 @@ export const PAGE_THEME_SCRIPT = `(() => {
     const data = event.data;
     if (data === null || typeof data !== "object" || data.type !== TYPE) return;
     if (data.variables === null || typeof data.variables !== "object") return;
-    wear(data.scheme, data.variables, data.inset);
+    wear(data.scheme, data.variables, data.inset, data.narrowInset);
   });
   parent.postMessage({ type: ASK }, "*");
 })();`;
