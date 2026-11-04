@@ -177,7 +177,7 @@ beforeEach(() => {
   addable = [];
   reopenedDuringCancel = false;
   fakeAppBridge({});
-  // What the service answers an act the page sends on the act port; a Connect and a Cancel each reach the host's read just after they answer.
+  // What the service answers an act the page sends on the act port; a Connect and a Cancel each answer once the host's read carries them.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload });
@@ -185,7 +185,7 @@ beforeEach(() => {
         return Promise.resolve({ opened: true, connection: addedConnection });
       }
       touched.set(payload.provider, INTEGRATION_STATUS.PENDING);
-      void Promise.resolve().then(integrations.lay);
+      integrations.lay();
       return Promise.resolve({ opened: true });
     },
     // A Cancel ends a sign-in still pending; one that finished first stays connected.
@@ -193,12 +193,13 @@ beforeEach(() => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CANCEL, payload });
       const { provider } = payload;
       const account = canceled.get(payload.connection ?? provider);
-      void Promise.resolve().then(integrations.lay);
-      if (account !== undefined) return Promise.resolve({ status: account });
-      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
-        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+      if (account === undefined) {
+        if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
+          touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+        }
       }
-      return Promise.resolve({ status: serviceStatuses()[provider] });
+      integrations.lay();
+      return Promise.resolve({ status: account ?? serviceStatuses()[provider] });
     },
     // A rename names the account anew, which the host's read says once the test lays it again.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
@@ -259,9 +260,11 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
             githubConnects += 1;
             return Promise.resolve(true);
           },
+          // A disconnect answers once the host has asked GitHub's standing again, which its read then holds.
           disconnect: () => {
             githubDisconnects += 1;
             if (!refuseGitHubDisconnect) githubConnected = false;
+            integrations.lay();
             return Promise.resolve(!refuseGitHubDisconnect);
           },
         },

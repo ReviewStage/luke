@@ -219,8 +219,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         );
         const row = yield* readIntegrationConnection(userId, "notion-2");
         assert.deepEqual(
-          [first, second, row?.connectSubject, row?.state],
-          [true, false, "subject-a", `state-race-a-${userId}`],
+          [first !== undefined, second, row?.connectSubject, row?.state],
+          [true, undefined, "subject-a", `state-race-a-${userId}`],
         );
       }),
   );
@@ -271,7 +271,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         yield* deleteIntegrationConnection(userId, "notion-2");
         yield* under("subject-replacing", `state-replacing-${userId}`);
 
-        assert.equal(yield* deleteIntegrationAccount(read), false);
+        assert.equal(yield* deleteIntegrationAccount(read), undefined);
         assert.equal(
           (yield* readIntegrationConnection(userId, "notion-2"))?.connectSubject,
           "subject-replacing",

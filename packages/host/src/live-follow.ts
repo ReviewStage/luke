@@ -149,7 +149,9 @@ export interface SyncStanding {
 }
 
 /** Where an answer stands by sync id; none for an answer of a read not followed by one, or asked whole without one. */
-function syncStandingOf<Part extends string>(read: SealedRead<Part>): SyncStanding | undefined {
+export function syncStandingOf<Part extends string>(
+  read: SealedRead<Part>,
+): SyncStanding | undefined {
   const parts = Object.values<SealedLiveQueryWire>(read.queries);
   const answered = parts.find((query) => query.sync !== undefined)?.sync;
   if (answered === undefined) return undefined;
@@ -158,6 +160,11 @@ function syncStandingOf<Part extends string>(read: SealedRead<Part>): SyncStandi
     next: answered.next,
     gone: [...new Set(parts.flatMap((query) => query.gone ?? []))],
   };
+}
+
+/** The sync id an answer was read at, as the host compares one, from the decimal it spells; none where it spells none. */
+export function syncIdOf(standing: SyncStanding | undefined): bigint | undefined {
+  return standing !== undefined && /^\d+$/.test(standing.next) ? BigInt(standing.next) : undefined;
 }
 
 /** A read answered for following: the address it was answered at, and each part's answer. */

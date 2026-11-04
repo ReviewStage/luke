@@ -47,7 +47,6 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Couldn't continue with ChatGPT on this system.",
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
     "Couldn't stop waiting for ChatGPT on this system.",
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: "Could not read the workspace's memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: "Could not forget that memory on this system.",
   [ACCOUNT_ASK_ACT_KIND.DICTATION_TRANSCRIBE]: "Could not transcribe the recording on this system.",
 } as const;
@@ -79,11 +78,6 @@ const ACTS = [
     ask: "providerKeyForAgents",
   },
   { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
-  {
-    kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_READ,
-    payload: { workspaceId: "workspace-1" },
-    ask: "memoriesRead",
-  },
   {
     kind: ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET,
     payload: { workspaceId: "workspace-1", id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d" },
@@ -213,9 +207,13 @@ it("a host that dies, or answers what the kind cannot carry, is refused in the k
 it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
   // SAFETY: the stray key is the point; a window's payload crosses as a structured-clone value.
-  const strayed = { workspaceId: "workspace-1", stray: true } as PortActPayload<PortActKind>;
-  assert.deepEqual(await settled(client, ACCOUNT_ASK_ACT_KIND.MEMORIES_READ, strayed), {
-    refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.MEMORIES_READ],
+  const strayed = {
+    workspaceId: "workspace-1",
+    id: "8a1f2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+    stray: true,
+  } as PortActPayload<PortActKind>;
+  assert.deepEqual(await settled(client, ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET, strayed), {
+    refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET],
   });
   assert.deepEqual(asked, []);
 });

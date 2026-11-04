@@ -67,7 +67,6 @@ const READS: readonly Read[] = [
     skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001",
   }),
   read(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001" }),
-  read(ACT_KIND.MEMORIES_READ, ACME),
   read(ACT_KIND.ADMIN_READ, { procedure: ADMIN_READ.METRICS, query: {} }),
 ];
 
@@ -204,7 +203,10 @@ test("a signed-in profile lays the synthetic account, an admin, over main's sign
 
 test("a profile that stages no account answers none of its pages' reads itself", () => {
   assert.equal(
-    fixtureActAnswer({ profile: RUN_PROFILE.TASKS }, ACT_KIND.MEMORIES_READ, ACME),
+    fixtureActAnswer({ profile: RUN_PROFILE.TASKS }, ACT_KIND.ADMIN_READ, {
+      procedure: ADMIN_READ.METRICS,
+      query: {},
+    }),
     undefined,
   );
 });

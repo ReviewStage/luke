@@ -18,6 +18,7 @@ import { member } from "../schemas/auth.js";
 import { installedSkill, installedSkillFile } from "../schemas/installed-skill.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
+import { roleAmong } from "./workspace-store.js";
 
 /**
  * installed-skill-store.ts -- the skills members install: installed, listed, read with their files, replaced, toggled, shared with a workspace, and removed, each by its own rule.
@@ -135,14 +136,6 @@ export type InstalledSkillAccess =
 
 /** The roles that manage a workspace's skills. */
 const MANAGING_ROLES: readonly WorkspaceRole[] = [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN];
-
-/** The condition that the plugin's role text, which may name several comma-separated, names one of `roles`. */
-function roleAmong(roles: readonly WorkspaceRole[]): SQL {
-  return sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
-    roles.map((role) => sql`${role}`),
-    sql`, `,
-  )}]::text[]`;
-}
 
 /** The condition that the account is a current member of the workspace named, in one of `roles` where it names any. */
 function memberOf(

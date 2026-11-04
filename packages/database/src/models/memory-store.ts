@@ -1,12 +1,15 @@
 import { isWireUuid } from "@repo/features";
 import { MEMORY_BOUNDS } from "@repo/features/memory-wire";
-import { and, desc, eq } from "drizzle-orm";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { and, desc, eq, exists, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { organization } from "../schemas/auth.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { member, organization, user } from "../schemas/auth.js";
 import { memory } from "../schemas/memory.js";
 import { InstantColumnSchema } from "./columns.js";
+import { roleAmong, workspaceReachableBy } from "./workspace-store.js";
 
 /**
  * memory-store.ts -- a workspace's memories, shared by its members, kept and corrected by its coding agents and read and forgotten from Settings.
@@ -26,7 +29,8 @@ import { InstantColumnSchema } from "./columns.js";
  * the workspace. A memory outlives the account whose words it holds, as a
  * workspace's git history outlives its committers: its member is then null.
  * The workspace's bound counts every memory, so a recall's read of one
- * workspace's rows stays bounded.
+ * workspace's rows stays bounded, and so does the live read Settings holds
+ * (`workspaceMemoriesLiveStatement`), which answers every one of them.
  */
 
 /** What a memory store operation answers: an effect over the ambient client. */
@@ -59,6 +63,12 @@ export const MEMORY_FORGET = {
 } as const;
 
 export type MemoryForget = (typeof MEMORY_FORGET)[keyof typeof MEMORY_FORGET];
+
+/** What a forget came to, and the transaction its delete committed in where it deleted a row; none where nothing was deleted. */
+export interface MemoryForgot {
+  readonly outcome: MemoryForget;
+  readonly txid?: string;
+}
 
 type MemoryWritten =
   | typeof MEMORY_OUTCOME.KEPT
@@ -184,13 +194,23 @@ const updateMemory = SqlSchema.findOneOption({
     ),
 });
 
-const deleteMemory = SqlSchema.void({
+/**
+ * The id of the transaction a delete committed in, read in its own
+ * `RETURNING`, so a reader following the memories waits for that
+ * transaction to arrive before it confirms the forget.
+ */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+/** A memory deleted, answering the transaction it was deleted in; none where no row was. */
+const deleteMemory = SqlSchema.findAll({
   Request: MemoryKeySchema,
+  Result: Schema.Struct({ txid: Schema.String }),
   execute: (key) =>
     Database.use((db) =>
       db
         .delete(memory)
-        .where(and(eq(memory.organizationId, key.organizationId), eq(memory.id, key.id))),
+        .where(and(eq(memory.organizationId, key.organizationId), eq(memory.id, key.id)))
+        .returning(TXID),
     ),
 });
 
@@ -288,20 +308,79 @@ export function rememberMemory(
  * its words are theirs, or they manage the workspace, the only ones who may
  * forget a memory whose member's account is gone. An id that names none of
  * the workspace's memories, another workspace's included, forgets nothing
- * and answers forgotten, so a forget retried after it landed answers the same.
+ * and answers forgotten with no transaction, so a forget retried after it
+ * landed answers the same. One that deleted the row answers the transaction
+ * it was deleted in beside it.
  */
 export function forgetMemory(
   organizationId: string,
   id: string,
   by: MemoryForgetter,
-): MemoryStoreEffect<MemoryForget> {
+): MemoryStoreEffect<MemoryForgot> {
   return Effect.gen(function* () {
     // Note that an id that is no UUID is never bound, because Postgres refuses any other text against a `uuid` column.
-    if (!isWireUuid(id)) return MEMORY_FORGET.FORGOTTEN;
+    if (!isWireUuid(id)) return { outcome: MEMORY_FORGET.FORGOTTEN };
     const found = yield* findMemory({ organizationId, id });
-    if (Option.isNone(found)) return MEMORY_FORGET.FORGOTTEN;
-    if (found.value.userId !== by.userId && !by.manages) return MEMORY_FORGET.NOT_PERMITTED;
-    yield* deleteMemory({ organizationId, id });
-    return MEMORY_FORGET.FORGOTTEN;
+    if (Option.isNone(found)) return { outcome: MEMORY_FORGET.FORGOTTEN };
+    if (found.value.userId !== by.userId && !by.manages) {
+      return { outcome: MEMORY_FORGET.NOT_PERMITTED };
+    }
+    const [deleted] = yield* deleteMemory({ organizationId, id });
+    return deleted === undefined
+      ? { outcome: MEMORY_FORGET.FORGOTTEN }
+      : { outcome: MEMORY_FORGET.FORGOTTEN, txid: deleted.txid };
   });
+}
+
+/**
+ * The workspace's memories as one member's held read answers them: every
+ * row of the workspace, while the reader is a member of it, each with the
+ * name of the member whose words it holds, null once that account is gone,
+ * and whether the reader may forget it: its words are theirs, or they own or
+ * administer the workspace, as `forgetMemory`'s caller settles it. Every
+ * column is under the key the wire reads it by (`@repo/features/memory-live`),
+ * each instant as epoch milliseconds, and the order is the reader's to keep.
+ * None where a statement names a value Realtime cannot carry.
+ */
+export function workspaceMemoriesLiveStatement(
+  readerId: string,
+  organizationId: string,
+): Option.Option<LiveStatement> {
+  const manages = exists(
+    queryBuilder
+      .select({ one: member.id })
+      .from(member)
+      .where(
+        and(
+          eq(member.organizationId, organizationId),
+          eq(member.userId, readerId),
+          roleAmong([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]),
+        ),
+      ),
+  );
+  // Note that a memory whose account is gone compares as unknown, so it reads forgettable only by those who manage it, as `forgetMemory` allows.
+  const forgettable = sql<boolean>`coalesce(${or(eq(memory.userId, readerId), manages)}, false)`;
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: memory.id,
+            text: memory.text,
+            keeperId: memory.userId,
+            keeperName: user.name,
+            forgettable,
+          },
+          { createdAt: memory.createdAt, updatedAt: memory.updatedAt },
+        ),
+      )
+      .from(memory)
+      .leftJoin(user, eq(user.id, memory.userId))
+      .where(
+        and(
+          eq(memory.organizationId, organizationId),
+          workspaceReachableBy(readerId, organizationId),
+        ),
+      ),
+  );
 }

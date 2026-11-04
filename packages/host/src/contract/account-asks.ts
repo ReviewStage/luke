@@ -6,7 +6,7 @@ import {
   githubTokenAnswerViewSchema,
   githubTokenSaveParamsSchema,
   memoriesAnswerViewSchema,
-  memoriesReadParamsSchema,
+  memoriesFollowParamsSchema,
   memoryForgetParamsSchema,
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
@@ -77,11 +77,17 @@ export const accountAskActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.MEMORIES_READ]: actProcedure(
-    "Could not read the workspace's memory on this system.",
+  // Note that the hold's stream carries nothing: the held memories reach the panel on app state, and the stream is the window's hold on them.
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW]: actProcedure(
+    "Could not follow the workspace's memory on this system.",
   )
-    .input(exactInput(memoriesReadParamsSchema))
-    .output(EffectSchema.flip(memoriesAnswerViewSchema)),
+    .input(exactInput(memoriesFollowParamsSchema))
+    .output(eventIterator(type<never>())),
+  [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: actProcedure(
+    "Could not read the workspace's memory again on this system.",
+  )
+    .input(exactInput(memoriesFollowParamsSchema))
+    .output(EffectSchema.Void),
   [ACCOUNT_ASK_ACT_KIND.MEMORIES_FORGET]: actProcedure(
     "Could not forget that memory on this system.",
   )

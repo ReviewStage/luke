@@ -424,9 +424,19 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_SAVE: "githubToken.save",
   /** The member's GitHub token removed on the service; none then stands. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
-  /** The memories our agents kept in a workspace, read from the service now. */
-  MEMORIES_READ: "memories.read",
-  /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
+  /**
+   * The memories our agents kept in one workspace, held for a window from
+   * now until it is let go, followed on the service's live read, and a while
+   * after among the reads let go lately. What it holds is heard as
+   * `MEMORIES_CHANGED` events, on the app state every window draws, never
+   * answered.
+   */
+  MEMORIES_FOLLOW: "memories.follow",
+  /** One workspace's memories let go by the window that held them. */
+  MEMORIES_UNFOLLOW: "memories.unfollow",
+  /** One workspace's held memories read again at once, as Try again asks; answered once the ask has landed. */
+  MEMORIES_RETRY: "memories.retry",
+  /** One memory forgotten on the service for good, drawn gone at once over the workspace's held memories; the workspace's memories as they then stand. */
   MEMORIES_FORGET: "memories.forget",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
@@ -702,6 +712,8 @@ export const GATEWAY_EVENT = {
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
+  /** Every workspace's memories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  MEMORIES_CHANGED: "memories.changed",
   /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */

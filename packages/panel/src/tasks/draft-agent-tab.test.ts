@@ -104,18 +104,18 @@ beforeEach(() => {
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
-  // A Connect stands Slack pending at the service, and a Cancel disconnects it, each reaching the host's read just after it answers.
+  // A Connect stands Slack pending at the service, and a Cancel disconnects it, each answering once the host's read carries it.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       connects.push(payload);
       if (refuseConnect) return Promise.reject(new Error("Not now."));
       if (payload.provider === INTEGRATION_PROVIDER.SLACK) slack = INTEGRATION_STATUS.PENDING;
-      void Promise.resolve().then(integrations.lay);
+      integrations.lay();
       return Promise.resolve({ opened: true });
     },
     [ACT_KIND.INTEGRATIONS_CANCEL]: () => {
       slack = INTEGRATION_STATUS.DISCONNECTED;
-      void Promise.resolve().then(integrations.lay);
+      integrations.lay();
       return Promise.resolve({ status: INTEGRATION_STATUS.DISCONNECTED });
     },
   });
