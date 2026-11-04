@@ -158,6 +158,14 @@ test("a workspace's row hangs its card while the pointer rests on it: its name a
   assert.match(card?.textContent ?? "", /5 members/);
 });
 
+test("two workspaces named alike are two items of the menu", () => {
+  const twin: Workspace = { ...ACME, id: "workspace-twin", slug: "acme-2" };
+  const page = mount({ workspaces: [PERSONAL, ACME, twin], workspace: PERSONAL });
+  open(page.switcher());
+
+  assert.deepEqual(menuItems().map(labelOf).slice(0, 3), ["Personal", "acme", "acme"]);
+});
+
 test("a member of a team is offered the same three kinds of item as its admin", () => {
   const member = mount({ workspaces: [PERSONAL, ACME], workspace: ACME });
   open(member.switcher());

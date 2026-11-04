@@ -27,6 +27,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     setupFiles: [
       "../../packages/wire/src/testing/file-time-cap.ts",
+      "../../packages/wire/src/testing/duplicate-keys.ts",
       "../../packages/panel/src/testing/resize-observer.ts",
       "../../packages/panel/src/testing/match-media.ts",
     ],

@@ -181,7 +181,7 @@ test("Back held opens its list and its release takes no step, while a quick pres
   assert.deepEqual(window.pressed, ["back"], "and its release took no step");
 });
 
-test("steps named nothing as the window stood on them are each listed all the same, a page returned to after another its own group again", () => {
+test("repeated steps named nothing are listed in separate page groups, one for each time the window returned to the page", () => {
   const home = { kind: "home", of: undefined } as const;
   const window = mount([
     { at: 3, title: undefined, page: home },

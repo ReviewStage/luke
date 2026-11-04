@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     name: "catalog",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["../../packages/wire/src/testing/file-time-cap.ts"],
+    setupFiles: [
+      "../../packages/wire/src/testing/file-time-cap.ts",
+      "../../packages/wire/src/testing/duplicate-keys.ts",
+    ],
   },
 });

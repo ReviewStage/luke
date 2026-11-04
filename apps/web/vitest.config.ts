@@ -27,6 +27,7 @@ export default defineConfig({
     // Every file's sockets refused at once, so a signed-in tab's live reads go over its fake service's HTTP and no test dials a port.
     setupFiles: [
       "../../packages/wire/src/testing/file-time-cap.ts",
+      "../../packages/wire/src/testing/duplicate-keys.ts",
       "./tests/support/refused-socket.ts",
     ],
     // One migrated PGlite per run, which every file's opening loads.
