@@ -95,8 +95,6 @@ export const CLAUDE_CODE_PIN = {
   DIRECTORY: `${SANDBOX_TOOLS_DIRECTORY}/claude-agent-sdk`,
   /** The binary, under `DIRECTORY`. */
   BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
-  /** The Linux arm64 build's binary, under `DIRECTORY`, which the image's setup links as `claude` instead where it runs on arm64. */
-  ARM64_BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/claude",
   /** Where the image links the binary as `claude`. */
   LINK: "/usr/local/bin/claude",
 } as const;
