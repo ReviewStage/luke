@@ -77,13 +77,17 @@ leave that workspace. Its tasks and agents remain until our service sends
 the next task list. Beside these it
 keeps the changes you made while our service could
 not be reached (a task's name, standing, or pin, a pinned repository, a
-section, or an agent's name or pin), each with a random key it is sent
+section, an agent's name or pin, or an inbox item marked read or unread,
+snoozed, acknowledged, or closed, by its id), each with a random key it is sent
 again under, until our service takes it. Our service keeps that key for 30
 days, so a change sent twice lands once. The copy is one file,
 `entities.sealed`, beside the settings, sealed under a key held in the
 macOS Keychain, and deleted when you sign out. It holds no transcript, inbox item, plan, page, comment,
 browser tab, command or its output, picture, or credential, and it is sent
-nowhere. Vespin in a browser keeps none of it.
+nowhere. Vespin in a browser keeps none of it on disk: it holds the
+changes you made while our service could not be reached in the tab's
+memory alone, sent under their keys in the same way, and loses them when
+the tab is closed or reloaded.
 
 **Commands agents run on your Mac.** Every agent can run any shell
 command on your Mac, as many at a time as you allow; the workers a Claude Code

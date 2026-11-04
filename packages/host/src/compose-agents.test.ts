@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CALL_FAULT } from "@repo/features";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
@@ -279,6 +280,9 @@ function fakeService() {
   const itemsBySync: ItemsBySync = { rows: new Map(), at: new Map() };
   /** The sync id the account's items stand still at, as behind a long transaction; none while it moves. */
   let itemsStalledAt: string | undefined;
+  /** Each key a read mark was sent under, in order, and whether the service answers marks at all. */
+  const markKeys: (string | undefined)[] = [];
+  let marksAnswered = true;
   // Each live read's rows, polled; every followed scope's inbox reads the one script.
   const live = {
     transcript: polledLive(TRANSCRIPT_PARTS),
@@ -646,9 +650,16 @@ function fakeService() {
         asked.push(`part:${agentId}:${messageId}:${index}:${callId ?? ""}`);
         return { part: { type: "reasoning", text: "Whole." } };
       }),
-    markInboxItemRead: (itemId) =>
+    markInboxItemRead: (itemId, key) =>
       Effect.sync(() => {
         asked.push(`inbox-read:${itemId}`);
+        markKeys.push(key);
+        if (!marksAnswered) {
+          return {
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+            cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
+          };
+        }
         return { id: itemId, unread: false, ...committedIn };
       }),
     inboxItemHome: (itemId) =>
@@ -786,6 +797,11 @@ function fakeService() {
     /** The transaction the service answers a sent message with. */
     sendTxid: (txid: string | undefined) => {
       sentTxid = txid;
+    },
+    markKeys,
+    /** Whether the service answers a read mark, or no answer comes back, as offline. */
+    answerMarks: (answers: boolean) => {
+      marksAnswered = answers;
     },
     /** What a change to an agent waits on before the service answers it. */
     holdChanges: (gate: Effect.Effect<void>) => {
@@ -1049,6 +1065,8 @@ function subject(
       answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
       answerKeys: service.answerKeys,
+      markKeys: service.markKeys,
+      answerMarks: service.answerMarks,
       hangPresence: service.hangPresence,
       sealTranscript: service.sealTranscript,
       pageNow: service.pageNow,
@@ -3140,6 +3158,37 @@ it.effect(
         bothHold(harness, (item) => item.status === INBOX_STATUS.OPEN && item.revision === 3),
         [true, true],
       );
+    }),
+);
+
+it.effect(
+  "a read mark the service gives no answer stays drawn and answers as kept, and is sent again under its key once the service answers",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "mark-key", replayRefused: Effect.void });
+      const { call, sealScope, live, told, answerMarks, markKeys } = yield* subject({ pool });
+      sealScope(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* settled;
+      live.scope.set({ items: [{ ...ITEM_ROW, unread: true }], messages: [], files: [] }, ["9100"]);
+      yield* toldTimes(told, 1);
+
+      answerMarks(false);
+      const marked = yield* call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
+        itemId: ITEM.id,
+        unread: false,
+      });
+      yield* settled;
+      const drawn = planInboxOf(told().at(-1)).get(ITEM.id)?.unread;
+
+      answerMarks(true);
+      yield* pool.resend;
+      yield* settled;
+
+      assert.deepEqual(marked, { id: ITEM.id, unread: false });
+      assert.equal(drawn, false);
+      assert.deepEqual(markKeys, ["mark-key", "mark-key"]);
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 

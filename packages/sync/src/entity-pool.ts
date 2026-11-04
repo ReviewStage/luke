@@ -283,6 +283,11 @@ export interface EntityPool {
     declaration: WriteDeclaration<Row, Change, Input, Answer>,
     input: Input,
   ) => Effect.Effect<Answer>;
+  /** The row `key` names of `kind`, as the reads show it with every write standing drawn over it; none where no read holds it. */
+  readonly row: <Row extends object, Change>(
+    kind: EntityKind<Row, Change>,
+    key: string,
+  ) => Row | undefined;
   /** The writes waiting for the service, oldest first, as they are kept. */
   readonly queued: () => readonly QueuedEntry[];
   /**
@@ -849,6 +854,11 @@ export function entityPool(options?: PoolOptions): Effect.Effect<EntityPool, nev
         Effect.flatMap(rowsOf(declaration.kind), (rows) =>
           written(rows, queue, declaration, input),
         ),
+      row: <Row extends object, Change>(kind: EntityKind<Row, Change>, key: string) => {
+        // SAFETY: the map is keyed by the kind itself, so what it holds for `kind` is of `kind`'s row and change.
+        const rows = kinds.get(kind) as KindRows<Row, Change> | undefined;
+        return rows === undefined ? undefined : drawnRow(rows, key);
+      },
       queued: () => queue.waiting.map((each) => each.entry),
       requeue: (entries, writes) =>
         requeued(entries, writes, (declaration, input, key) =>

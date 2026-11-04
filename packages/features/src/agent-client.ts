@@ -1516,18 +1516,24 @@ export class HostedAgentClient {
   /**
    * Acknowledges one notice of the inbox, Got it, against the revision the
    * window drew, under the key the window made for the nod, which a retry
-   * carries again, and answers the item as it then stands with whether the
-   * nod was taken; a nod the service would refuse by shape is refused here
+   * carries again, and the idempotency key given where one is, and answers
+   * the item as it then stands with whether the nod was taken; a nod the service would refuse by shape is refused here
    * without traveling.
    */
   answerInbox(
     itemId: string,
     request: InboxAcknowledgeRequest,
+    key?: string,
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxAcknowledgeRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.answer, { params: { id: itemId }, body }, HOSTED_DEADLINE.STEER),
+      askHosted(
+        this.#hosted.inbox.answer,
+        { params: { id: itemId }, body },
+        HOSTED_DEADLINE.STEER,
+        key,
+      ),
       INBOX_ANSWER_REFUSALS,
     );
   }
@@ -1535,17 +1541,24 @@ export class HostedAgentClient {
   /**
    * Closes one open item of the inbox without an answer, against the
    * revision the window drew, under the key the window made for the close,
-   * which a retry carries again, and answers the item as it then stands with
-   * whether the close was taken, as an answer does.
+   * which a retry carries again, and the idempotency key given where one
+   * is, and answers the item as it then stands with whether the close was
+   * taken, as an answer does.
    */
   closeInbox(
     itemId: string,
     request: InboxCloseRequest,
+    key?: string,
   ): Effect.Effect<AgentInboxAnsweredView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxCloseRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.close, { params: { id: itemId }, body }, HOSTED_DEADLINE.STEER),
+      askHosted(
+        this.#hosted.inbox.close,
+        { params: { id: itemId }, body },
+        HOSTED_DEADLINE.STEER,
+        key,
+      ),
       INBOX_ANSWER_REFUSALS,
     );
   }
@@ -1600,28 +1613,43 @@ export class HostedAgentClient {
    * One item marked read for the account, as opening it does: its id and
    * its read state; not found where the item is not one the account
    * reaches. Marking an item read that is read already changes nothing, so
-   * the window may ask on every open.
+   * the window may ask on every open. Sent under the idempotency key given
+   * where one is.
    */
   markInboxItemRead(
     itemId: string,
+    key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.inbox.markItemRead, { id: itemId }), ROW_REFUSALS);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.markItemRead, { id: itemId }, HOSTED_DEADLINE.USUAL, key),
+      ROW_REFUSALS,
+    );
   }
 
-  /** One item marked unread for the account until it reads the item again: its id and its read state; not found where the item is not one the account reaches. */
+  /** One item marked unread for the account until it reads the item again, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
   markInboxItemUnread(
     itemId: string,
+    key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
-    return hostedAnswer(askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }), ROW_REFUSALS);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }, HOSTED_DEADLINE.USUAL, key),
+      ROW_REFUSALS,
+    );
   }
 
-  /** One item snoozed for the account until `until`, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null: its id and its read state; not found where the item is not one the account reaches. */
+  /** One item snoozed for the account until `until`, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
   snoozeInboxItem(
     itemId: string,
     until: number | null,
+    key?: string,
   ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
     return hostedAnswer(
-      askHosted(this.#hosted.inbox.snoozeItem, { params: { id: itemId }, body: { until } }),
+      askHosted(
+        this.#hosted.inbox.snoozeItem,
+        { params: { id: itemId }, body: { until } },
+        HOSTED_DEADLINE.USUAL,
+        key,
+      ),
       ROW_REFUSALS,
     );
   }
@@ -1629,14 +1657,19 @@ export class HostedAgentClient {
   /**
    * Every item the account's Inbox lists marked read for it, open or
    * settled, in the one workspace the request names or in all of its
-   * workspaces: how many were unread. It clears the unread dots alone; an
-   * item still waiting on an answer still waits.
+   * workspaces, under the idempotency key given where one is: how many were
+   * unread. It clears the unread dots alone; an item still waiting on an
+   * answer still waits.
    */
   markInboxRead(
     request: InboxReadAllRequest = {},
+    key?: string,
   ): Effect.Effect<AgentInboxReadAllView, never, HttpClient.HttpClient> {
     const body = wireRequestOf(inboxReadAllRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(askHosted(this.#hosted.inbox.markAllRead, body), {});
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.markAllRead, body, HOSTED_DEADLINE.USUAL, key),
+      {},
+    );
   }
 }

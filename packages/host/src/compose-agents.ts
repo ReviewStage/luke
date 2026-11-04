@@ -1005,7 +1005,7 @@ function composed(
   /** What the service answered of a write on items: its transaction, the item it names, and whether it was kept, as a nod or a close is only where taken. */
   const writtenOf = (
     answer:
-      | { readonly failure: unknown }
+      | { readonly failure: unknown; readonly cause?: Parameters<typeof writeUntakenOf>[0] }
       | { readonly txid?: string; readonly item?: InboxItem; readonly taken?: boolean },
   ): InboxWritten =>
     "failure" in answer
@@ -1016,19 +1016,45 @@ function composed(
    * A member's write on inbox items, as the inbox's writes declare it: its
    * change drawn at once over every read holding its items
    * (`inbox-collections.ts`), sent as `send` asks, and kept, refused, or
-   * landed on the service's item as its answer says.
+   * landed on the service's item as its answer says. One that may wait
+   * (`queue`) is sent under its idempotency key and, where the service did
+   * not answer it, goes on standing and is sent again once it answers, its
+   * caller answered at once what `queue.queued` says, as if it were kept.
    */
   const inboxWrite = <Input, Answer extends Parameters<typeof writtenOf>[0]>(
     keys: (input: Input) => readonly string[],
     change: (input: Input) => InboxChange,
-    send: (input: Input) => Effect.Effect<Answer>,
-  ): WriteDeclaration<InboxItem, InboxChange, Input, WireValue> => ({
-    kind: INBOX_ITEM,
-    keys,
-    change,
-    send: (input) =>
-      Effect.map(send(input), (answer) => inboxSent(carried<Answer>(answer), writtenOf(answer))),
-  });
+    send: (input: Input, key: string | undefined) => Effect.Effect<Answer>,
+    queue?: {
+      readonly name: string;
+      readonly input: Schema.Codec<Input, unknown>;
+      readonly queued: (input: Input) => Answer;
+    },
+  ): WriteDeclaration<InboxItem, InboxChange, Input, WireValue> => {
+    const keptAs =
+      queue === undefined ? undefined : (input: Input) => carried<Answer>(queue.queued(input));
+    return {
+      kind: INBOX_ITEM,
+      keys,
+      change,
+      send: (input, { key }) =>
+        Effect.map(send(input, key), (answer) => {
+          const answered = carried<Answer>(answer);
+          if (keptAs === undefined || !("failure" in answer)) {
+            return inboxSent(answered, writtenOf(answer));
+          }
+          return untaken(writeUntakenOf(answer.cause), { kept: keptAs(input), refused: answered });
+        }),
+      ...(queue === undefined || keptAs === undefined
+        ? undefined
+        : { queue: { name: queue.name, input: queue.input, queued: keptAs } }),
+    };
+  };
+  /** A nod or a close that waits, answered as taken over the item as the reads now draw it, or unanswered where none holds it. */
+  const settledAs = ({ itemId }: { readonly itemId: string }): AgentInboxAnsweredView => {
+    const item = dependencies.pool.row(INBOX_ITEM, itemId);
+    return item === undefined ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { item, taken: true };
+  };
   // Note that who and when are read once a write is asked, since its change is drawn again over each answer a read takes while it stands.
   /** A nod to an item, settling it. */
   const nodded = inboxWrite<AgentInboxAnswerParams, AgentInboxAnsweredView>(
@@ -1037,7 +1063,12 @@ function composed(
       const [by, at] = [reader(), kernel.now()];
       return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) };
     },
-    ({ itemId, ...request }) => asked(client.answerInbox(itemId, request)),
+    ({ itemId, ...request }, key) => asked(client.answerInbox(itemId, request, key)),
+    {
+      name: GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
+      input: agentInboxAnswerParamsSchema,
+      queued: settledAs,
+    },
   );
   /** An open item closed without an answer, settling it. */
   const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
@@ -1046,7 +1077,12 @@ function composed(
       const [by, at] = [reader(), kernel.now()];
       return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) };
     },
-    ({ itemId, ...request }) => asked(client.closeInbox(itemId, request)),
+    ({ itemId, ...request }, key) => asked(client.closeInbox(itemId, request, key)),
+    {
+      name: GATEWAY_METHOD.AGENTS_INBOX_CLOSE,
+      input: agentInboxCloseParamsSchema,
+      queued: settledAs,
+    },
   );
   /**
    * A message on an item's thread. Note that a reply carrying an answer
@@ -1072,20 +1108,37 @@ function composed(
   const marked = inboxWrite<AgentInboxReadStateParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
     ({ itemId, unread }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread }),
-    ({ itemId, unread }) =>
-      asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
+    ({ itemId, unread }, key) =>
+      asked(
+        unread ? client.markInboxItemUnread(itemId, key) : client.markInboxItemRead(itemId, key),
+      ),
+    {
+      name: GATEWAY_METHOD.AGENTS_INBOX_READ_STATE,
+      input: agentInboxReadStateParamsSchema,
+      queued: ({ itemId, unread }) => ({ id: itemId, unread }),
+    },
   );
   /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
   const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
     ({ itemId }) => [itemId],
     ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
-    ({ itemId, until }) => asked(client.snoozeInboxItem(itemId, until)),
+    ({ itemId, until }, key) => asked(client.snoozeInboxItem(itemId, until, key)),
+    {
+      name: GATEWAY_METHOD.AGENTS_INBOX_SNOOZE,
+      input: agentInboxSnoozeParamsSchema,
+      queued: ({ itemId }) => ({ id: itemId, unread: false }),
+    },
   );
   /** Every item the inbox lists marked read. */
   const markedAll = inboxWrite<AgentInboxReadAllParams, AgentInboxReadAllView>(
     ({ itemIds }) => itemIds,
     ({ itemIds }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false }),
-    ({ itemIds: _listed, ...request }) => asked(client.markInboxRead(request)),
+    ({ itemIds: _listed, ...request }, key) => asked(client.markInboxRead(request, key)),
+    {
+      name: GATEWAY_METHOD.AGENTS_INBOX_READ_ALL,
+      input: agentInboxReadAllParamsSchema,
+      queued: ({ itemIds }) => ({ marked: itemIds.length }),
+    },
   );
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
@@ -1935,6 +1988,14 @@ function composed(
     open,
     reset,
     keysAnswered,
-    queueable: [anyWrite(renamed), anyWrite(pinned)],
+    queueable: [
+      anyWrite(renamed),
+      anyWrite(pinned),
+      anyWrite(nodded),
+      anyWrite(closed),
+      anyWrite(marked),
+      anyWrite(snoozed),
+      anyWrite(markedAll),
+    ],
   };
 }
