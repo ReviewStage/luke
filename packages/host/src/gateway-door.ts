@@ -62,7 +62,6 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: ACT.ROW_WRITE,
   [GATEWAY_METHOD.INTEGRATIONS_RENAME]: ACT.ROW_WRITE,
-  [GATEWAY_METHOD.EXPERIMENTS_SET]: ACT.ROW_WRITE,
 
   [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: ACT.REMOTE_WORK,
@@ -107,6 +106,8 @@ const GATEWAY_ACT = {
   [GATEWAY_METHOD.INTEGRATIONS_CANCEL]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.INTEGRATIONS_DISCONNECT]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.MCP_CLIENTS_REVOKE]: ACT.REMOTE_WORK,
+  // Note that no held read carries the account's experiments, which ride the settings snapshot, so its switch draws at once in the panel as every settings switch does; it becomes a field change on the account preferences kind once the settings snapshot is fed from that read.
+  [GATEWAY_METHOD.EXPERIMENTS_SET]: ACT.REMOTE_WORK,
   // Note that a terminal is the sandbox's state, never a row the service holds.
   [GATEWAY_METHOD.TERMINALS_CREATE]: ACT.REMOTE_WORK,
   [GATEWAY_METHOD.TERMINALS_RENAME]: ACT.REMOTE_WORK,
@@ -270,8 +271,6 @@ const UNDECLARED_ROW_WRITES = [
   GATEWAY_METHOD.AGENTS_DEFAULT_WRITE,
   GATEWAY_METHOD.CHAPTERS_MODEL_WRITE,
   GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS,
-  GATEWAY_METHOD.INTEGRATIONS_RENAME,
-  GATEWAY_METHOD.EXPERIMENTS_SET,
   // The agent queue's writes, declared by W7 once its rows ride a held read.
   GATEWAY_METHOD.AGENTS_QUEUE,
 ] as const satisfies readonly RowWriteOf<typeof GATEWAY_ACT>[];

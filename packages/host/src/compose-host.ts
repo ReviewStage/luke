@@ -208,6 +208,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         account,
         accountId,
         focus,
+        pool,
         client: new HostedIntegrationsClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
