@@ -50,12 +50,16 @@ export const ACCOUNT_ASK_ACT_KIND = {
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /**
    * Settings › Integrations › GitHub: the member's own classic GitHub
-   * personal access token read as its login, hint, and status, saved, and
-   * removed. The save's payload carries the token from the renderer once,
-   * on its way to the service; no answer carries one back, and nothing on
-   * the way keeps it.
+   * personal access token held for the window while it holds the stream
+   * open, asked again at once, saved, and removed. The hold's stream carries
+   * nothing: its login, hint, and status reach the panel on app state
+   * (`LIVE_READ.GITHUB_TOKEN`), where a save's and a removal's own answer
+   * is laid too. The save's payload carries the token from the renderer
+   * once, on its way to the service; no answer carries one back, and
+   * nothing on the way keeps it.
    */
-  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_FOLLOW: "githubToken.follow",
+  GITHUB_TOKEN_RETRY: "githubToken.retry",
   GITHUB_TOKEN_SAVE: "githubToken.save",
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
@@ -183,10 +187,20 @@ export const AGENT_ACT_KIND = {
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
+  /**
+   * One part of one agent's pull request, which its Pull request tab draws:
+   * the pull request itself, its checks, its conversation, or what the agent
+   * published, held for the window while it holds the stream open and a
+   * while after among those let go lately, and asked again as a window comes
+   * forward, as the agent ends, and as its listed pull request moves. What
+   * it holds reaches the panel on app state (`PULL_REQUEST_PART_READ`), so
+   * the stream carries nothing.
+   */
+  AGENTS_PULL_REQUEST_PART_FOLLOW: "agents.pullRequestPartFollow",
+  /** One pull request's held part, which the panel reads on app state, asked again at once, as Try again and Refresh ask. */
+  AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   AGENTS_CHANGES: "agents.changes",
-  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
@@ -198,10 +212,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
   /** One agent's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
@@ -362,6 +372,7 @@ export const TASKS_ACT_KIND = {
   TASKS_REFRESH: "tasks.refresh",
   TASKS_SELECT: "tasks.select",
   TASKS_CLOSE: "tasks.close",
+  TASKS_OFFLINE_REFUSED_CLEAR: "tasks.offlineRefusedClear",
   TASKS_START: "tasks.start",
   TASKS_DELETE: "tasks.delete",
   TASKS_RENAME: "tasks.rename",
@@ -605,7 +616,15 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   WORKSPACE_SLUG_SET: "workspace.slugSet",
-  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  /**
+   * A workspace's token repositories held for the window while it holds the
+   * stream open, and asked again at once, as Try again asks. The hold's
+   * stream carries nothing: they reach the panel on app state
+   * (`LIVE_READ.TOKEN_REPOSITORIES`), where an addition's or a removal's
+   * own answer is laid too.
+   */
+  WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: "workspace.tokenRepositoriesFollow",
+  WORKSPACE_TOKEN_REPOSITORIES_RETRY: "workspace.tokenRepositoriesRetry",
   WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
 } as const;
 
@@ -720,7 +739,8 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
   CHATGPT_SIGN_IN: ACT_USE.WRITE,
   CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
-  GITHUB_TOKEN_READ: ACT_USE.READ,
+  GITHUB_TOKEN_FOLLOW: ACT_USE.READ,
+  GITHUB_TOKEN_RETRY: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
   GITHUB_TOKEN_REMOVE: ACT_USE.WRITE,
   MEMORIES_FOLLOW: ACT_USE.READ,
@@ -762,13 +782,12 @@ export const PORT_ACT_USE = {
   AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
   AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
-  AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
   AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
-  AGENTS_OVERVIEW_CHECKS: ACT_USE.READ,
-  AGENTS_OVERVIEW_CONVERSATION: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
   AGENTS_PULL_REQUEST_ACTION: ACT_USE.WRITE,
   AGENTS_PULL_REQUEST_VIEWED: ACT_USE.READ,
@@ -838,6 +857,7 @@ export const PORT_ACT_USE = {
   TASKS_REFRESH: ACT_USE.WRITE,
   TASKS_SELECT: ACT_USE.WRITE,
   TASKS_CLOSE: ACT_USE.WRITE,
+  TASKS_OFFLINE_REFUSED_CLEAR: ACT_USE.WRITE,
   TASKS_START: ACT_USE.WRITE,
   TASKS_DELETE: ACT_USE.WRITE,
   TASKS_RENAME: ACT_USE.WRITE,
@@ -938,7 +958,8 @@ export const PORT_ACT_USE = {
   WORKSPACE_PHOTO_READ: ACT_USE.READ,
   WORKSPACE_PHOTO_SET: ACT_USE.WRITE,
   WORKSPACE_SLUG_SET: ACT_USE.WRITE,
-  WORKSPACE_TOKEN_REPOSITORIES_READ: ACT_USE.READ,
+  WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,
+  WORKSPACE_TOKEN_REPOSITORIES_RETRY: ACT_USE.READ,
   WORKSPACE_TOKEN_REPOSITORY_SET: ACT_USE.WRITE,
 } as const satisfies Record<keyof typeof PORT_ACT_KIND, ActUse>;
 

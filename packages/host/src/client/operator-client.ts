@@ -84,6 +84,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onMacCommandAsksChanged((asks) => {
         state.update({ macCommands: { asks } });
       }),
+      gateway.host.onOfflineRefusedChanged((offlineRefused) => {
+        state.update({ network: { ...state.snapshot().network, offlineRefused } });
+      }),
       gateway.host.onAgentOriginsChanged((held) => {
         state.update({ [LIVE_READ.AGENT_ORIGINS]: held });
       }),
@@ -117,11 +120,17 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onRepositoryListsChanged((held) => {
         state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
       }),
+      gateway.host.onGitHubTokenChanged((held) => {
+        state.update({ [LIVE_READ.GITHUB_TOKEN]: held });
+      }),
       gateway.host.onChaptersChanged((held) => {
         state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });
       }),
       gateway.host.onBrowserTabsChanged((held) => {
         state.update({ [LIVE_READ.BROWSER_TABS]: held });
+      }),
+      gateway.host.onPullRequestPartsChanged((held) => {
+        state.update(held);
       }),
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
@@ -134,6 +143,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onWorkspaceMembersChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
+      }),
+      gateway.host.onTokenRepositoriesChanged((held) => {
+        state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
       }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });

@@ -1,17 +1,31 @@
-import { type KeyboardEvent, type ReactNode, type RefObject, useId, useRef } from "react";
+import {
+  type ComponentPropsWithRef,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useId,
+  useRef,
+} from "react";
 import { cssCustomProperties } from "../../css.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
 import { LIST_COLUMN, TASK_PROPERTY } from "../../tasks-page-model.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
 import { CardPress, SELECT_BOX_PLACE } from "../card-press/card-press.js";
-import { motionKey } from "../list-motion/list-motion.js";
-import { type ListRowFold, type ListRowNest, nestedItem } from "../list-row/list-row.js";
+import { motionKey, motionRows } from "../list-motion/list-motion.js";
+import {
+  type ListRowFold,
+  type ListRowHint,
+  type ListRowNest,
+  nestedItem,
+} from "../list-row/list-row.js";
 import { OneLine } from "../one-line/one-line.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import type { ListSelection } from "../selection/list-selection.js";
 import { SelectionRegion } from "../selection/selection-region.js";
+import { Skeleton } from "../skeleton/skeleton.js";
 import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
 
 /**
@@ -62,7 +76,11 @@ import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
  * it (`note`).
  *
  * A row in a list drawing only the rows near the view (`VirtualRows`) wears
- * its place there (`place`), as a `ListRow` does.
+ * its place there (`place`), as a `ListRow` does. A row its list counts
+ * unread names its task in the heavier weight until it is read (`unread`),
+ * as a `ListRow` does, and a row may hang its owner's hint from its press
+ * (`hint`), the task's card beside the row while the pointer rests on it,
+ * as Home's Recent hangs it.
  *
  * A row may stand nested under another (`depth`), its name in by a nest
  * for each level, its other columns still lined up with every row's; and a
@@ -73,7 +91,8 @@ import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
  *
  * A group's quick add draws its draft as a row of the same cells, raised
  * as a card off the list (`TaskRowDraft`), so it reads as the row it is
- * about to be.
+ * about to be, and a list still being read stands rows of the same cells
+ * holding its owner's blocks (`TaskRowSkeleton`).
  */
 
 /** The cells a task's row draws, each in a column of its own, in the order a row draws them. */
@@ -100,12 +119,15 @@ export type TaskRowCell = (typeof TASK_ROW_CELL)[keyof typeof TASK_ROW_CELL];
 
 /**
  * What room a row keeps at its edges: a list's, a gutter at its start for
- * the box that chooses it and its ⋯ at its end, or none, for a list whose
- * rows are neither chosen nor carry a ⋯, as a composer's dock draws them, its
- * first cell standing at the row's inset and its last at its end.
+ * the box that chooses it and its ⋯ at its end; its ⋯ alone, for a list
+ * whose rows are never chosen, as Home's Recent stands them, its first cell
+ * at the row's inset; or none, for a list whose rows are neither chosen nor
+ * carry a ⋯, as a composer's dock draws them, its first cell standing at the
+ * row's inset and its last at its end.
  */
 export const TASK_ROW_EDGES = {
   LIST: "list",
+  UNCHOSEN: "unchosen",
   BARE: "bare",
 } as const;
 
@@ -231,6 +253,7 @@ const ROW_FRAME =
 /** A task's row by the room it keeps at its edges: its gutter at its start for its box, or its first cell at its inset. */
 const ROW = {
   [TASK_ROW_EDGES.LIST]: `${ROW_FRAME} px-row-inset ps-select-gutter`,
+  [TASK_ROW_EDGES.UNCHOSEN]: `${ROW_FRAME} px-row-inset`,
   [TASK_ROW_EDGES.BARE]: `${ROW_FRAME} px-row-inset`,
 } as const satisfies Record<TaskRowEdges, string>;
 
@@ -247,8 +270,11 @@ const NAME_INK = { REST: "text-foreground", SETTLED: "text-muted-foreground" } a
 /** A nested row's name, in by a nest for each level it stands at. */
 const NESTED = "ps-list-row-nest";
 
-/** What a row's press shows: its name on one line, in the label's weight. */
-const PRESS = "ui-task-row-press flex min-w-0 items-center font-ui-medium";
+/** What a row's press shows: its name on one line. */
+const PRESS = "ui-task-row-press flex min-w-0 items-center";
+
+/** The name's weight: the label's, or the heavier one while its list counts it unread. */
+const NAME_WEIGHT = { REST: "font-ui-medium", UNREAD: "font-emphasis" } as const;
 
 /** A mark beside the name, a gap from its last letter. */
 const BESIDE = "ui-task-row-beside ms-icon-gap inline-flex flex-none items-center";
@@ -285,20 +311,75 @@ function cellUnderMore(cells: readonly TaskRowCell[]): TaskRowCell | undefined {
 }
 
 /** A cell of a row, in its column, holding what its owner stands there; empty where it holds nothing. */
-function cellOf(
-  cell: TaskRowCell,
-  content: ReactNode,
-  underMore: TaskRowCell | undefined,
-): React.JSX.Element {
+function RowCell({
+  cell,
+  underMore,
+  children,
+}: {
+  cell: TaskRowCell;
+  underMore: TaskRowCell | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
   const after = LEADING.includes(cell) ? "" : ` ${AFTER}`;
   return (
     <span
-      key={cell}
       className={`${CELL} ${cell === underMore ? CELL_LEAST.UNDER_MORE : CELL_LEAST.REST} ${CELL_PLACE[cell]}${after}`}
       data-cell={cell}
       data-under-more={cell === underMore ? "true" : undefined}
     >
-      {content}
+      {children}
+    </span>
+  );
+}
+
+/** A row's cells, in their columns in the list's order, each holding what its owner stands there. */
+function RowCells({
+  cells,
+  content,
+  underMore,
+}: {
+  cells: readonly TaskRowCell[];
+  content: Partial<Record<TaskRowCell, ReactNode>>;
+  underMore: TaskRowCell | undefined;
+}): React.JSX.Element {
+  return (
+    <>
+      {inOrder(cells).map((cell) => (
+        <RowCell key={cell} cell={cell} underMore={underMore}>
+          {content[cell]}
+        </RowCell>
+      ))}
+    </>
+  );
+}
+
+/** A row's item: one line of its list's grid, keeping the room its edges ask for. */
+function RowItem({
+  edges,
+  ...item
+}: Omit<ComponentPropsWithRef<"li">, "className"> & { edges: TaskRowEdges }): React.JSX.Element {
+  return <li {...item} className={ROW[edges]} />;
+}
+
+/** The name's cell, the one the row's press stands in, in by a nest for each level the row stands at. */
+function NameCell({
+  settled = false,
+  depth = 0,
+  children,
+}: {
+  settled?: boolean | undefined;
+  depth?: number | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <span
+      className={[NAME_CELL, settled ? NAME_INK.SETTLED : NAME_INK.REST, depth === 0 ? "" : NESTED]
+        .join(" ")
+        .trim()}
+      data-cell="name"
+      style={depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth })}
+    >
+      {children}
     </span>
   );
 }
@@ -340,6 +421,8 @@ export function TaskRow({
   nest,
   fold,
   settled = false,
+  unread = false,
+  hint,
   place,
   children,
 }: {
@@ -378,6 +461,10 @@ export function TaskRow({
   fold?: ListRowFold | undefined;
   /** Whether it stands settled beside the rows still open, its name in the muted ink: a blocker that is done. */
   settled?: boolean | undefined;
+  /** Whether its list counts it unread, its name standing in the heavier weight until it is read. */
+  unread?: boolean | undefined;
+  /** The owner's hint hung from the row's press and the words it raises, as a `ListRow`'s: its card, beside the row. */
+  hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
   place?: VirtualRowPlace | undefined;
   /** What stands beside its cells and draws nothing in the grid: a dialog its menu opens. */
@@ -386,6 +473,16 @@ export function TaskRow({
   const own = useRef<HTMLButtonElement | null>(null);
   const press = pressRef ?? own;
   const nameId = useId();
+  // Note that the row a hint hangs its card beside is the item, which a run measures through its place too.
+  const item = useRef<HTMLLIElement | null>(null);
+  const { ref: placeRef, ...placed } = place ?? {};
+  const itemRef = useCallback(
+    (element: HTMLLIElement | null) => {
+      item.current = element;
+      placeRef?.(element);
+    },
+    [placeRef],
+  );
   // Note that a row being renamed keeps its ⋯, because its press, which the menu would hand focus back to, is its field.
   const bare = edges === TASK_ROW_EDGES.BARE;
   const drawsMore = (more && !bare) || editor !== undefined;
@@ -399,39 +496,45 @@ export function TaskRow({
     event.preventDefault();
     fold.onOpenChange(asked);
   };
+  const pressed = (
+    <CardPress
+      ref={press}
+      disabled={disabled}
+      selectKey={taskId}
+      selectBox={edges === TASK_ROW_EDGES.LIST ? SELECT_BOX_PLACE.GUTTER : undefined}
+      roving
+      onKeyDown={fold === undefined ? undefined : foldKeys}
+      onPress={() => {
+        rowMenu.close(false);
+        onOpen();
+      }}
+    >
+      <span id={nameId} className={`${PRESS} ${unread ? NAME_WEIGHT.UNREAD : NAME_WEIGHT.REST}`}>
+        <OneLine>{name}</OneLine>
+        {beside === undefined ? null : <span className={BESIDE}>{beside}</span>}
+        {said}
+      </span>
+    </CardPress>
+  );
   const named = (
     <>
-      {editor === undefined ? (
-        <CardPress
-          ref={press}
-          disabled={disabled}
-          selectKey={taskId}
-          selectBox={bare ? undefined : SELECT_BOX_PLACE.GUTTER}
-          roving
-          onKeyDown={fold === undefined ? undefined : foldKeys}
-          onPress={() => {
-            rowMenu.close(false);
-            onOpen();
-          }}
-        >
-          <span id={nameId} className={PRESS}>
-            <OneLine>{name}</OneLine>
-            {beside === undefined ? null : <span className={BESIDE}>{beside}</span>}
-            {said}
-          </span>
-        </CardPress>
-      ) : (
+      {editor !== undefined ? (
         <span className={EDITOR}>{editor}</span>
+      ) : hint === undefined ? (
+        pressed
+      ) : (
+        <hint.Hint label={hint.label} row={item}>
+          {pressed}
+        </hint.Hint>
       )}
       {note === undefined ? null : <span className={NOTE}>{note}</span>}
     </>
   );
-  const { ref: placeRef, ...placed } = place ?? {};
   return (
-    <li
-      ref={placeRef}
+    <RowItem
+      ref={itemRef}
       {...placed}
-      className={ROW[edges]}
+      edges={edges}
       data-task-id={taskId}
       {...motionKey(taskId)}
       {...rowMenu.props}
@@ -439,16 +542,9 @@ export function TaskRow({
       data-depth={depth === 0 ? undefined : depth}
       {...nestedItem(depth, nest)}
       data-settled={settled ? "true" : undefined}
+      data-unread={unread ? "true" : undefined}
     >
-      <span
-        className={[
-          NAME_CELL,
-          settled ? NAME_INK.SETTLED : NAME_INK.REST,
-          depth === 0 ? "" : NESTED,
-        ].join(" ")}
-        data-cell="name"
-        style={depth === 0 ? undefined : cssCustomProperties({ "--ui-list-row-depth": depth })}
-      >
+      <NameCell settled={settled} depth={depth}>
         {fold === undefined ? (
           named
         ) : (
@@ -468,14 +564,45 @@ export function TaskRow({
             <span className="flex min-w-0 flex-1 flex-col items-stretch">{named}</span>
           </span>
         )}
-      </span>
-      {inOrder(cells).map((cell) => cellOf(cell, content[cell], underMore))}
+      </NameCell>
+      <RowCells cells={cells} content={content} underMore={underMore} />
       <span className={MORE} data-cell="more">
         {rowMenu.more({ size: BUTTON_SIZE.COMPACT, describedBy: nameId })}
       </span>
       {rowMenu.popup}
       {children}
-    </li>
+    </RowItem>
+  );
+}
+
+/**
+ * A row standing in a list still being read: the row's own item and cells,
+ * a block where its name will stand and its owner's blocks in the cells
+ * that will hold something, so it is the row's shape rather than a copy of
+ * it.
+ */
+export function TaskRowSkeleton({
+  cells,
+  name,
+  content,
+  edges = TASK_ROW_EDGES.LIST,
+}: {
+  /** The cells its list draws, the same as its rows'. */
+  cells: readonly TaskRowCell[];
+  /** How wide the block where its name will stand is. */
+  name: string;
+  /** The block in each cell that will hold something. */
+  content: Partial<Record<TaskRowCell, ReactNode>>;
+  /** What room it keeps at its edges, its list's. */
+  edges?: TaskRowEdges | undefined;
+}): React.JSX.Element {
+  return (
+    <RowItem edges={edges}>
+      <NameCell>
+        <Skeleton width={name} />
+      </NameCell>
+      <RowCells cells={cells} content={content} underMore={undefined} />
+    </RowItem>
   );
 }
 
@@ -517,14 +644,14 @@ export function TaskRowDraft({
       data-quick-add={drafting ? "" : undefined}
       data-pending={pending ? "true" : undefined}
     >
-      <span className={`${NAME_CELL} ${NAME_INK.REST}`} data-cell="name">
+      <NameCell>
         {note === undefined ? (
-          <span className={PRESS}>{name}</span>
+          <span className={`${PRESS} ${NAME_WEIGHT.REST}`}>{name}</span>
         ) : (
           <span className={NOTE}>{note}</span>
         )}
-      </span>
-      {inOrder(cells).map((cell) => cellOf(cell, content[cell], undefined))}
+      </NameCell>
+      <RowCells cells={cells} content={content} underMore={undefined} />
     </Card>
   );
 }
@@ -535,10 +662,14 @@ export function TaskRowDraft({
  * `label`, keeping its rows' ⋯ a column where they draw it (`more`), and
  * each row's gutter for its box and its ⋯ unless its rows are bare
  * (`edges`), as a composer's dock stands them under nothing but their own
- * cells. Its rows are one Tab stop that ↑↓ walk (`useRovingKeys`), and,
- * where it is asked to (`selection`), chosen together as a Mac's list
- * chooses them, by the box in a row's gutter, ⌘-click, ⇧-click, ⇧↑↓, ⌘A,
- * and Esc (`SelectionRegion`), a plain press still opening the task.
+ * cells. Its rows are one Tab stop that ↑↓ walk (`useRovingKeys`), or,
+ * standing among other lists, join the walk of a box around them all
+ * (`joinsWalk`), as a `List`'s may; and, where it is asked to
+ * (`selection`), chosen together as a Mac's list chooses them, by the box
+ * in a row's gutter, ⌘-click, ⇧-click, ⇧↑↓, ⌘A, and Esc
+ * (`SelectionRegion`), a plain press still opening the task. Under a
+ * `ListMotion` its rows may move as they arrive, leave, and change places
+ * (`moves`), as a `List`'s do.
  */
 export function TaskRows({
   id,
@@ -547,6 +678,8 @@ export function TaskRows({
   more = true,
   edges = TASK_ROW_EDGES.LIST,
   selection,
+  joinsWalk = false,
+  moves = false,
   children,
 }: {
   /** The id a `SelectionBar` over it names; one is made where none is given. */
@@ -556,10 +689,14 @@ export function TaskRows({
   cells?: readonly TaskRowCell[] | undefined;
   /** Whether its rows draw their ⋯, which they are each handed too; where they leave it out, it keeps no column for it. */
   more?: boolean | undefined;
-  /** What room its rows keep at their edges, which they are each handed too: a bare list keeps its rows' ⋯ no column, and chooses none. */
+  /** What room its rows keep at their edges, which they are each handed too: a bare list keeps its rows' ⋯ no column, and only a list's chooses any. */
   edges?: TaskRowEdges | undefined;
-  /** Which rows are chosen and what hears the next set, where the list chooses rows at all; a bare list chooses none. */
+  /** Which rows are chosen and what hears the next set, where the list chooses rows at all; only a list's edges choose any. */
   selection?: ListSelection | undefined;
+  /** Whether its rows join the walk of a `useRovingKeys` box around it, with the rows of the lists beside it, rather than walk alone. */
+  joinsWalk?: boolean | undefined;
+  /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion`. */
+  moves?: boolean | undefined;
   /** Its `TaskRow`s. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -567,17 +704,18 @@ export function TaskRows({
   const roving = useRovingKeys<HTMLUListElement>();
   const rows = (
     <ul
-      {...roving}
+      {...(joinsWalk ? {} : roving)}
       className={ROWS}
       aria-label={label}
       style={cssCustomProperties({
-        "--tasks-list-columns": taskRowColumns(cells, more && edges === TASK_ROW_EDGES.LIST),
+        "--tasks-list-columns": taskRowColumns(cells, more && edges !== TASK_ROW_EDGES.BARE),
       })}
+      {...(moves ? motionRows() : {})}
     >
       {children}
     </ul>
   );
-  return selection === undefined || edges === TASK_ROW_EDGES.BARE ? (
+  return selection === undefined || edges !== TASK_ROW_EDGES.LIST ? (
     rows
   ) : (
     <SelectionRegion id={id ?? made} selection={selection}>

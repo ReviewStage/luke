@@ -29,9 +29,6 @@ import {
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
   agentModelsAnswerSchema,
-  agentOverviewChecksAnswerViewSchema,
-  agentOverviewConversationAnswerViewSchema,
-  agentOverviewPullRequestAnswerViewSchema,
   agentPageAnswerViewSchema,
   agentPageParamsSchema,
   agentPartParamsSchema,
@@ -57,6 +54,7 @@ import {
   agentWorkspaceListParamsSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
+  pullRequestPartParamsSchema,
 } from "@repo/features/agent-view";
 import {
   hostPairingApproveViewSchema,
@@ -214,16 +212,22 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestReadParamsSchema))
     .output(EffectSchema.flip(agentPullRequestAnswerViewSchema)),
+  // Note that the hold's stream carries nothing: the held part reaches the panel on app state, and the stream is the window's hold on it.
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actProcedure(
+    "Could not follow the agent's pull request on this system.",
+  )
+    .input(exactInput(pullRequestPartParamsSchema))
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_RETRY]: actProcedure(
+    "Could not read the agent's pull request again on this system.",
+  )
+    .input(exactInput(pullRequestPartParamsSchema))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_CHANGES]: actProcedure(
     "Could not read the agent's changes on this system.",
   )
     .input(exactInput(agentPullRequestReadParamsSchema))
     .output(EffectSchema.flip(agentChangesAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]: actProcedure(
-    "Could not read the agent's pull request on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentOverviewPullRequestAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actProcedure(
     "Could not read the repository's reviewers and labels on this system.",
   )
@@ -240,16 +244,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestParamsSchema))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]: actProcedure(
-    "Could not read the pull request's checks on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentOverviewChecksAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]: actProcedure(
-    "Could not read the pull request's conversation on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentOverviewConversationAnswerViewSchema)),
   [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: actProcedure(
     "Could not read the pull request's image on this system.",
   )

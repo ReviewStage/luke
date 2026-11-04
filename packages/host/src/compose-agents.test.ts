@@ -26,7 +26,7 @@ import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { FAILURE_FACT, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_TYPE } from "@repo/features/github-image";
-import { GITHUB_TOKEN_REJECTION } from "@repo/features/github-token-wire";
+import { GITHUB_TOKEN_STATUS, type GitHubTokenSummary } from "@repo/features/github-token-wire";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
@@ -182,6 +182,16 @@ const OVERVIEW = {
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
 const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
+
+/** What the service answers of a saved token: never the token, and a made-up hint. */
+const SAVED_TOKEN: GitHubTokenSummary = {
+  login: "octo-dev",
+  hint: "fake…hint",
+  status: GITHUB_TOKEN_STATUS.VERIFIED,
+  statusAt: 1_000,
+  addedAt: 1_000,
+  expiresAt: null,
+};
 
 /** What the service answers of a kept key: never the key. */
 const MEMORY: MemorySummary = {
@@ -554,7 +564,7 @@ function fakeService() {
     saveGitHubToken: (save) =>
       Effect.sync(() => {
         asked.push(`save-token:${save.token === GITHUB_TOKEN ? "the token" : "another"}`);
-        return { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE };
+        return { token: SAVED_TOKEN };
       }),
     removeGitHubToken: () =>
       Effect.sync(() => {
@@ -1011,6 +1021,11 @@ function subject(
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.HOSTS_CHANGED ? [event.payload] : [],
         ),
+      /** Every telling of the GitHub token the host holds for the windows, whole, in order. */
+      githubToken: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.GITHUB_TOKEN_CHANGED ? [event.payload] : [],
+        ),
       /** Every telling of the memories the host holds for the windows, whole, in order. */
       memories: () =>
         events.flatMap((event) =>
@@ -1170,20 +1185,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { model: CHAPTERS_MODEL.OPUS },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
-      OVERVIEW.pullRequest,
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
       REVIEW_OPTIONS,
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS, { agentId: AGENT_ID }),
-      OVERVIEW.checks,
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, { agentId: AGENT_ID }),
-      OVERVIEW.conversation,
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
@@ -1340,10 +1343,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `chapters-generate:${AGENT_ID}#11`,
       "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
-      `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
-      `overview-checks:${AGENT_ID}`,
-      `overview-conversation:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
       `pull-request-viewed:${AGENT_ID}`,
@@ -1446,21 +1446,27 @@ it.effect(
 );
 
 it.effect(
-  "a GitHub token passes through to the service once and is never answered back, and a save the schema refuses is refused in words that hold no token",
+  "a GitHub token passes through to the service once and is never answered back, held for the windows as its summary, each write's answer laid where it is held, and a save the schema refuses is refused in words that hold no token",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { call, asked, githubToken } = yield* subject();
 
-      const read = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_READ);
+      yield* call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW);
+      yield* settled;
+      const read = githubToken().at(-1);
       const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const afterSave = githubToken().at(-1);
       const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
       const refused = yield* Effect.flip(
         call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
       );
 
-      assert.deepEqual(read, { token: null });
-      assert.deepEqual(saved, { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE });
+      assert.deepEqual(read, { "user-dana": { rows: { token: null } } });
+      assert.deepEqual(saved, { token: SAVED_TOKEN });
+      assert.deepEqual(afterSave, { "user-dana": { rows: { token: SAVED_TOKEN } } });
       assert.deepEqual(removed, { token: null });
+      assert.deepEqual(githubToken().at(-1), { "user-dana": { rows: { token: null } } });
+      assert.ok(!JSON.stringify([githubToken(), saved, removed]).includes(GITHUB_TOKEN));
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
       assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);

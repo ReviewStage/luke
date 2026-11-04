@@ -48,9 +48,6 @@ const AGENT = { agentId: FIXTURE_AGENT_ID };
 const READS: readonly Read[] = [
   read(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
   read(ACT_KIND.AGENTS_PULL_REQUEST, AGENT),
-  read(ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST, AGENT),
-  read(ACT_KIND.AGENTS_OVERVIEW_CHECKS, AGENT),
-  read(ACT_KIND.AGENTS_OVERVIEW_CONVERSATION, AGENT),
   read(ACT_KIND.AGENTS_REVIEW_OPTIONS, AGENT),
   read(ACT_KIND.AGENTS_CHANGES, AGENT),
   read(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, AGENT),
@@ -187,8 +184,8 @@ it.effect(
           sent.push(ACT_KIND.AGENTS_LIST);
           return Promise.resolve({ agents: [] });
         },
-        [ACT_KIND.GITHUB_TOKEN_READ]: () => {
-          sent.push(ACT_KIND.GITHUB_TOKEN_READ);
+        [ACT_KIND.GITHUB_TOKEN_REMOVE]: () => {
+          sent.push(ACT_KIND.GITHUB_TOKEN_REMOVE);
           return Promise.resolve({ token: null });
         },
       });
@@ -196,7 +193,7 @@ it.effect(
       const listed = yield* Effect.promise(() =>
         askAct(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID }),
       );
-      const token = yield* Effect.promise(() => askAct(ACT_KIND.GITHUB_TOKEN_READ));
+      const token = yield* Effect.promise(() => askAct(ACT_KIND.GITHUB_TOKEN_REMOVE));
 
       assert.ok("agents" in listed);
       assert.deepEqual(
@@ -204,6 +201,6 @@ it.effect(
         ["Add teammate invitations"],
       );
       assert.deepEqual(token, { token: null });
-      assert.deepEqual(sent, [ACT_KIND.GITHUB_TOKEN_READ]);
+      assert.deepEqual(sent, [ACT_KIND.GITHUB_TOKEN_REMOVE]);
     }),
 );

@@ -55,6 +55,7 @@ import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { MacCommandAskDialog } from "./mac-command-ask.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
+import { useOfflineRefusedToast } from "./offline-refused-toast.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { OpenAiKeyProvider } from "./openai-key.js";
@@ -180,6 +181,12 @@ function SettingsPalette({
  */
 function UpdatedToast(): null {
   useUpdatedToast(useShownUpdate());
+  return null;
+}
+
+/** The toast that says the changes made offline the service refused once it answered again. */
+function OfflineRefusedToast(): null {
+  useOfflineRefusedToast();
   return null;
 }
 
@@ -713,6 +720,7 @@ function AppWindow(): React.JSX.Element {
                         {/* The menu a right-click on any link in the window hangs. */}
                         <LinkMenu />
                         <UpdatedToast />
+                        <OfflineRefusedToast />
                         {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}

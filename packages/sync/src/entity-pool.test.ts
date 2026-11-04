@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Schema, Scope } from "effect";
 import {
+  anyWrite,
   type EntityPool,
   entityPool,
   type FieldChange,
@@ -139,4 +140,84 @@ it.effect("an answer read at an older sync id never replaces a row taken at a ne
 
     assert.deepEqual(inbox.rows.rows(), [{ id: "1", name: "Triage issues", runs: 2 }]);
   }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "a write that may wait stands while the service answers nothing, is kept, and lands once sent again under its key",
+  () =>
+    Effect.gen(function* () {
+      const reachable = { now: false };
+      const sentUnder: (string | undefined)[] = [];
+      const rename: WriteDeclaration<Row, FieldChange<Row>, string, string> = {
+        kind: ROW,
+        keys: () => ["1"],
+        change: (name) => () => ({ name }),
+        send: (_name, { key }) =>
+          Effect.sync(() => {
+            sentUnder.push(key);
+            return reachable.now
+              ? { answer: "renamed", txid: undefined }
+              : { refused: "not renamed", unanswered: true as const };
+          }),
+        queue: { name: "rename", input: Schema.String, queued: () => "waits" },
+      };
+      const options = { mintKey: () => "key-1", replayRefused: Effect.void };
+      const quit = yield* Scope.make();
+      const before = yield* Scope.provide(quit)(entityPool(options));
+      const list = yield* Scope.provide(quit)(standing(before));
+      yield* list.rows.answer([{ id: "1", name: "Triage", runs: 0 }]);
+
+      const answered = yield* before.write(rename, "Triage issues");
+      const kept = before.queued();
+      yield* Scope.close(quit, Exit.void);
+      const after = yield* entityPool(options);
+      const relaunched = yield* standing(after);
+      yield* relaunched.rows.answer([{ id: "1", name: "Triage", runs: 0 }]);
+      yield* after.requeue(kept, [anyWrite(rename)]);
+      const drawn = relaunched.rows.rows();
+      reachable.now = true;
+      yield* after.resend;
+      yield* settled;
+
+      assert.equal(answered, "waits");
+      assert.deepEqual(kept, [{ name: "rename", key: "key-1", input: "Triage issues" }]);
+      assert.deepEqual(drawn, [{ id: "1", name: "Triage issues", runs: 0 }]);
+      assert.deepEqual(
+        sentUnder,
+        ["key-1", "key-1"],
+        "sent once more, under the key it was kept with",
+      );
+      assert.deepEqual(after.queued(), []);
+    }).pipe(Effect.scoped),
+);
+
+it.effect(
+  "a write that may wait asked while others wait is drawn and answered at once, never held behind the network",
+  () =>
+    Effect.gen(function* () {
+      const network = yield* Deferred.make<void>();
+      const reachable = { now: false };
+      const rename: WriteDeclaration<Row, FieldChange<Row>, string, string> = {
+        kind: ROW,
+        keys: () => ["1"],
+        change: (name) => () => ({ name }),
+        send: () =>
+          reachable.now
+            ? Effect.as(Deferred.await(network), { answer: "renamed", txid: undefined })
+            : Effect.succeed({ refused: "not renamed", unanswered: true as const }),
+        queue: { name: "rename", input: Schema.String, queued: () => "waits" },
+      };
+      const pool = yield* entityPool({ mintKey: () => "key", replayRefused: Effect.void });
+      const list = yield* standing(pool);
+      yield* list.rows.answer([{ id: "1", name: "Triage", runs: 0 }]);
+      yield* pool.write(rename, "Triage issues");
+      reachable.now = true;
+
+      const answered = yield* pool.write(rename, "Triage bugs");
+
+      assert.equal(answered, "waits");
+      assert.deepEqual(list.rows.rows(), [{ id: "1", name: "Triage bugs", runs: 0 }]);
+      assert.equal(pool.queued().length, 2, "both wait while the service holds the first");
+      yield* Deferred.succeed(network, undefined);
+    }).pipe(Effect.scoped),
 );

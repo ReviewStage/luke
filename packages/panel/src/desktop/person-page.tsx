@@ -110,7 +110,7 @@ import {
   SectionSkeleton,
 } from "./person-frame.js";
 import { PhoneBack, PhoneHead, phoneBar, phoneFindGroups } from "./phone-head.js";
-import { RecentRow } from "./recent-row.js";
+import { RecentTasks, RecentTasksSkeleton } from "./recent-tasks.js";
 import { useTaskListView } from "./task-list-view.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 import { useAutomations } from "./use-automations.js";
@@ -571,14 +571,12 @@ function PersonTasks({
   title,
   listed,
   tasks,
-  now,
   unread,
   onShowAll,
 }: {
   title: string;
   listed: readonly TaskSummary[];
   tasks: TasksControl;
-  now: number;
   /** Whether a task is unread, as the sidebar's rows count it. */
   unread: (task: TaskSummary) => boolean;
   /** Lists every one in the sidebar, which filters by assignee alone, so a section of what they created offers none. */
@@ -588,9 +586,9 @@ function PersonTasks({
   // Note that the section and its foot are one block of the page, so the page's gap between sections stands above both and the foot stands close under the rows.
   return (
     <Stack gap={GAP.TIGHT}>
-      <PersonSection title={title} count={listed.length}>
-        <TaskRows listed={listed} tasks={tasks} now={now} unread={unread} />
-      </PersonSection>
+      <PersonSectionFrame label={title} title={title} count={listed.length}>
+        <PersonTaskRows title={title} listed={listed} tasks={tasks} unread={unread} />
+      </PersonSectionFrame>
       {onShowAll === undefined ? null : (
         <ShowMoreRow more={listed.length - PERSON_TASKS_SHOWN} shown={false} onToggle={onShowAll} />
       )}
@@ -604,33 +602,28 @@ function taskKey({ id }: TaskSummary): string {
 }
 
 /** A section's first `PERSON_TASKS_SHOWN` tasks, a row no longer listed drawn on until its exit has played (`useLeaving`). */
-function TaskRows({
+function PersonTaskRows({
+  title,
   listed,
   tasks,
-  now,
   unread,
 }: {
+  title: string;
   listed: readonly TaskSummary[];
   tasks: TasksControl;
-  now: number;
   unread: (task: TaskSummary) => boolean;
 }): React.JSX.Element {
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
   return (
-    <>
-      {drawn.map(({ key, value: task }) => (
-        <RecentRow
-          key={key}
-          tasks={tasks}
-          task={task}
-          now={now}
-          face={false}
-          unread={unread(task)}
-          onOpen={() => tasks.onSelect(task.id)}
-        />
-      ))}
-    </>
+    <RecentTasks
+      tasks={tasks}
+      label={title}
+      listed={drawn.map(({ value }) => value)}
+      unread={unread}
+      face={false}
+      moves
+    />
   );
 }
 
@@ -762,7 +755,7 @@ function PersonColumn({
             </ErrorState>
           </div>
         ) : !tasks.listRead && personPageEmpty(page) ? (
-          <RowsSkeleton label={`Reading ${theirs} tasks…`} />
+          <RecentTasksSkeleton label={`Reading ${theirs} tasks…`} face={false} />
         ) : null}
         {page.working.length === 0 ? null : (
           <PersonSection title="Working now" count={page.working.length}>
@@ -808,7 +801,6 @@ function PersonColumn({
           title={you ? "Assigned to you" : "Assigned"}
           listed={page.assigned}
           tasks={tasks}
-          now={now}
           unread={unread}
           onShowAll={shared ? showTasks : undefined}
         />
@@ -816,7 +808,6 @@ function PersonColumn({
           title={you ? "Created by you" : "Created"}
           listed={page.created}
           tasks={tasks}
-          now={now}
           unread={unread}
         />
         {page.agents.length === 0 ? null : (

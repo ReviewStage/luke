@@ -39,9 +39,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPageParams,
   type AgentPartParams,
@@ -82,9 +79,6 @@ import {
   agentListAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
-  agentOverviewChecksAnswerViewSchema,
-  agentOverviewConversationAnswerViewSchema,
-  agentOverviewPullRequestAnswerViewSchema,
   agentPageAnswerViewSchema,
   agentPartViewSchema,
   agentPullRequestAnswerViewSchema,
@@ -112,6 +106,7 @@ import {
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
+  type PullRequestPartParams,
   providerKeysAnswerViewSchema,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
@@ -347,6 +342,7 @@ import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -361,6 +357,7 @@ import type {
   AppBrowserTabs,
   AppChapters,
   AppDevicePresences,
+  AppGitHubTokens,
   AppHistories,
   AppHolderInboxes,
   AppHostRead,
@@ -376,8 +373,10 @@ import type {
   AppPlanComments,
   AppPlanDocuments,
   AppProviderKeys,
+  AppPullRequestParts,
   AppRepositoryLists,
   AppThisMacHosts,
+  AppTokenRepositories,
   AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
@@ -453,6 +452,8 @@ export interface HostOperator {
   tasksRefresh(): Effect.Effect<void>;
   /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
+  /** A window said the changes made offline the service refused: the host clears their count for every window. */
+  tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
@@ -665,10 +666,20 @@ export interface HostOperator {
   ): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
-  /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
-  workspaceTokenRepositories(
+  /** The repositories members added to a workspace on their own GitHub tokens, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onTokenRepositoriesChanged`. */
+  workspaceTokenRepositoriesFollow(
     params: TasksWorkspaceTokenRepositoriesParams,
-  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+  ): Effect.Effect<void>;
+  /** One workspace's token repositories let go by the windows. */
+  workspaceTokenRepositoriesUnfollow(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<void>;
+  /** One workspace's held token repositories asked again at once, as Try again asks; done once the ask has landed. */
+  workspaceTokenRepositoriesRetry(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<void>;
+  /** Every workspace's token repositories the host holds for the windows, whole, each time any of them moves. */
+  onTokenRepositoriesChanged(listener: (held: AppTokenRepositories) => void): () => void;
   /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
   workspaceTokenRepositorySet(
     params: TasksWorkspaceTokenRepositorySetParams,
@@ -784,6 +795,14 @@ export interface HostOperator {
   onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
+  /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
+  pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One pull request's part let go by the windows, kept a while among those let go lately. */
+  pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
+  pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
+  onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
   /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
   chaptersFollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
   /** One agent's pull request's chapters let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -848,10 +867,6 @@ export interface HostOperator {
   agentPullRequestViewed(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentPullRequestViewedAnswerView>;
-  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
-  agentOverviewPullRequest(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
@@ -862,14 +877,6 @@ export interface HostOperator {
   agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
   /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
   onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
-  /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
-  agentOverviewChecks(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewChecksAnswerView>;
-  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
-  agentOverviewConversation(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onProviderKeysChanged`. */
   providerKeysFollow(): Effect.Effect<void>;
   /** The account's provider keys let go by the windows. */
@@ -888,8 +895,14 @@ export interface HostOperator {
   chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   chatGptSignInCancel(): Effect.Effect<void>;
-  /** The member's own GitHub token as its login, hint, and status; or why there is none. */
-  githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's own GitHub token as its login, hint, and status, never the token, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onGitHubTokenChanged`. */
+  githubTokenFollow(): Effect.Effect<void>;
+  /** The member's GitHub token let go by the windows. */
+  githubTokenUnfollow(): Effect.Effect<void>;
+  /** The member's held GitHub token asked again at once, as Try again asks; done once the ask has landed. */
+  githubTokenRetry(): Effect.Effect<void>;
+  /** The member's GitHub token the host holds for the windows, whole, each time it moves. */
+  onGitHubTokenChanged(listener: (held: AppGitHubTokens) => void): () => void;
   /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
@@ -961,6 +974,8 @@ export interface HostOperator {
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
+  /** How many changes made offline the service refused as they were sent again, each time the count moves. */
+  onOfflineRefusedChanged(listener: (count: number) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -1037,6 +1052,11 @@ function pullRequestRead(params: AgentPullRequestReadParams): AgentPullRequestRe
   return params.number === undefined
     ? { agentId: params.agentId }
     : { agentId: params.agentId, number: params.number };
+}
+
+/** One part of a pull request held as the gateway carries it: the part, the agent, and the number where the tab names one. */
+function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
+  return { part: params.part, ...pullRequestRead(params) };
 }
 
 /** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
@@ -1318,6 +1338,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
+    tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
       Effect.map(
@@ -1730,12 +1751,30 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
         answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
       ),
-    workspaceTokenRepositories: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES, {
+    workspaceTokenRepositoriesFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_FOLLOW, {
           workspaceId: params.workspaceId,
         }),
-        answerOf(tasksWorkspaceTokenRepositoriesAnswerSchema, WORKSPACE_UNANSWERED),
+      ),
+    workspaceTokenRepositoriesUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    workspaceTokenRepositoriesRetry: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES_RETRY, {
+          workspaceId: params.workspaceId,
+        }),
+      ),
+    onTokenRepositoriesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TOKEN_REPOSITORIES_CHANGED,
+        // Note that the held repositories are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppTokenRepositories>(payload) : undefined),
+        listener,
       ),
     workspaceTokenRepositorySet: (params) =>
       Effect.map(
@@ -2074,6 +2113,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           isRecord(payload) ? answered<Partial<AppAutomationReads>>(payload) : undefined,
         listener,
       ),
+    pullRequestPartFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW, pullRequestPart(params))),
+    pullRequestPartUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW, pullRequestPart(params))),
+    pullRequestPartRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY, pullRequestPart(params))),
+    onPullRequestPartsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED,
+        // Note that the held parts are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) =>
+          isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
+        listener,
+      ),
     agentPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
@@ -2207,11 +2260,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
         answerOf(agentPullRequestViewedAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentOverviewPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentOverviewPullRequestAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     agentReviewOptions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
@@ -2231,16 +2279,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
         listener,
-      ),
-    agentOverviewChecks: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
-        answerOf(agentOverviewChecksAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentOverviewConversation: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
-        answerOf(agentOverviewConversationAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeysFollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW, {})),
     providerKeysUnfollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW, {})),
@@ -2284,10 +2322,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         answerOf(chatGptSignInAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
-    githubTokenRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
-        answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
+    githubTokenFollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW, {})),
+    githubTokenUnfollow: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW, {})),
+    githubTokenRetry: () => fire(client.call(GATEWAY_METHOD.GITHUB_TOKEN_RETRY, {})),
+    onGitHubTokenChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.GITHUB_TOKEN_CHANGED,
+        // Note that the held token is the host's own, handed over in this process, so it is passed on as built, as the held keys are.
+        (payload) => (isRecord(payload) ? answered<AppGitHubTokens>(payload) : undefined),
+        listener,
       ),
     githubTokenSave: (params) =>
       Effect.map(
@@ -2504,6 +2547,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                   : undefined),
               }
             : undefined,
+        listener,
+      ),
+    onOfflineRefusedChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.OFFLINE_REFUSED_CHANGED,
+        (payload) => (isRecord(payload) && isWireNumber(payload.count) ? payload.count : undefined),
         listener,
       ),
     onTasksChanged: (listener) =>

@@ -407,7 +407,9 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".ui-list-row-title")].map((name) => name.textContent),
+      [
+        ...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child"),
+      ].map((name) => name.textContent),
     ]),
   );
 }
@@ -654,7 +656,7 @@ test("a person's tasks assigned to them stand above those they created, a task b
   assert.deepEqual(keptViews()[ACME.id]?.assignee, { kind: "member", userId: CHARLES.userId });
 });
 
-test("a person's task leads with its glyph as its sidebar row does, keeps its repository as context, and hangs its card where its time raises no pill", async () => {
+test("a person's task is the Tasks page's row: its status before its name, one from before statuses under Todo, and its card hung beside it while rested on", async () => {
   const started = { ...DASHBOARD, status: TASK_STATUS.IN_PROGRESS };
   const listed = [RETRIES, CACHE, started, SHIM];
   const { page } = mountWith(
@@ -664,15 +666,15 @@ test("a person's task leads with its glyph as its sidebar row does, keeps its re
   await settle();
   const row = (name: string) =>
     [...page.querySelectorAll('section[aria-label="Created"] li')].find((each) =>
-      each.querySelector(".ui-list-row-title")?.textContent?.includes(name),
+      each.querySelector(".ui-task-row-press")?.textContent?.includes(name),
     ) ?? assert.fail(`${name} is listed`);
-  const lead = (name: string) => row(name).querySelector(".ui-list-row-leading > svg");
+  const status = (name: string) =>
+    row(name).querySelector('[data-cell="status"] [data-status]')?.getAttribute("data-status");
 
-  assert.equal(lead(started.name)?.getAttribute("data-status"), TASK_STATUS.IN_PROGRESS);
-  assert.equal(lead(RETRIES.name)?.getAttribute("class"), "icon-button-glyph");
-  assert.equal(row(RETRIES.name).querySelector(".home-row-context")?.textContent, "acme/relay");
+  assert.equal(status(started.name), TASK_STATUS.IN_PROGRESS);
+  assert.equal(status(RETRIES.name), TASK_STATUS.TODO);
 
-  restOn(row(RETRIES.name).querySelector("time") ?? assert.fail("the row says its time"));
+  restOn(row(RETRIES.name).querySelector(".ui-card-press") ?? assert.fail("the row opens"));
   const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, RETRIES.name);
   assert.equal(document.querySelector(".ui-tooltip:not(.ui-tooltip-card)"), null);

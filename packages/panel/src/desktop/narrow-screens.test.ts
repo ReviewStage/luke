@@ -123,7 +123,7 @@ function line(seq: number) {
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
   status: HOST_READ_STATUS.READY,
-  retry: () => undefined,
+  retry: () => Promise.resolve(),
 };
 
 /** Each version as the service answers it, the plan as it stands. */

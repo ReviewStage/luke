@@ -23,9 +23,6 @@ import {
   type AgentListAnswer,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
   type AgentPinParams,
@@ -83,9 +80,15 @@ import {
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
-import { AGENT_ARCHIVER, CONTEXT_WINDOW, MAC_PRESENCE } from "@repo/features/agent-wire";
+import {
+  AGENT_ARCHIVER,
+  type AgentSummary,
+  CONTEXT_WINDOW,
+  MAC_PRESENCE,
+} from "@repo/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
 import {
@@ -102,6 +105,7 @@ import {
   closedNow,
   type InboxReader,
 } from "@repo/features/inbox-writes";
+import { writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -123,6 +127,8 @@ import {
   readParams,
 } from "@repo/gateway";
 import {
+  type AnyWrite,
+  anyWrite,
   declaredMethod,
   type EntityPool,
   type FieldChange,
@@ -141,6 +147,7 @@ import {
   RcMap,
   Schema,
   type Scope,
+  Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
@@ -150,6 +157,8 @@ import {
   type AppChapters,
   type AppDevicePresence,
   type AppDevicePresences,
+  type AppGitHubToken,
+  type AppGitHubTokens,
   type AppHolderInboxes,
   type AppHostRead,
   type AppHosts,
@@ -189,6 +198,12 @@ import {
 import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
 import { heldMemories, memoryForget } from "./memory-follow.js";
 import { heldAgentOrigins } from "./origin-follow.js";
+import {
+  type PullRequestListing,
+  type PullRequestParts,
+  pullRequestParts,
+} from "./pull-request-parts.js";
+import { untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -333,12 +348,16 @@ export interface AgentsDependencies {
    * Start is answered once the list carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
+  /** The task list as each drawing of it stands, from the caller's listening on (`TasksComposer.pullRequestListings`), on which the Pull request tabs' parts are asked again; none moves nothing. */
+  pullRequestListings?: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /**
    * The sync engine's pool, which an agent's row of the task list stands in
    * and a rename, an archive, a pin, a change of model, or a switch of MCP
    * servers is drawn over (`task-list-collections.ts`).
    */
   pool: EntityPool;
+  /** The agent as the task list shows it now, which a rename or a pin waiting for the service answers its caller with; none where the list shows no such agent. */
+  agentListed?: (agentId: string) => AgentSummary | undefined;
   /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
   repositoriesMoved?: Effect.Effect<void>;
 }
@@ -352,6 +371,8 @@ export interface AgentsComposer extends Composer {
   ) => Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
+  /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
+  readonly queueable: readonly AnyWrite[];
 }
 
 /** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
@@ -509,6 +530,19 @@ export function composeAgents(
     const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
+    const parts = yield* pullRequestParts({
+      gate,
+      focus: dependencies.focus,
+      ask: {
+        pullRequest: (key) => asked(client.overviewPullRequest(key.agentId, key.number)),
+        checks: (key) => asked(client.overviewChecks(key.agentId, key.number)),
+        conversation: (key) => asked(client.overviewConversation(key.agentId, key.number)),
+        published: (key) => asked(client.pullRequest(key.agentId, key.number)),
+      },
+      listings: dependencies.pullRequestListings ?? Effect.succeed(Stream.empty),
+      tell: (held) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED, carried(held)),
+    });
     return composed(
       dependencies,
       http,
@@ -521,6 +555,7 @@ export function composeAgents(
       { origins, holds: originHolds },
       { hosts, hold: hostsHold },
       fetched,
+      parts,
     );
   });
 }
@@ -591,6 +626,10 @@ interface FetchedReads {
   readonly keys: HeldFetch<string, AppProviderKeyList>;
   /** The windows' hold on the keys, under the account signed in. */
   readonly keysHold: AccountHeld;
+  /** The account's own GitHub token, by the account. */
+  readonly token: HeldFetch<string, AppGitHubToken>;
+  /** The windows' hold on the token, under the account signed in. */
+  readonly tokenHold: AccountHeld;
 }
 
 /** The keys and plans an answer of the service's says the account holds, without what it says of the one write. */
@@ -610,11 +649,12 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats and the keys are asked for the account signed in now
- * alone, since the service answers that account's, and that an ask of the
- * beats which fails, or runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one
- * answered keeps the beats it answered, marked stale, under the new instant,
- * so a window says it cannot check rather than that a device left.
+ * that the beats, the keys, and the GitHub token are asked for the account
+ * signed in now alone, since the service answers that account's, and that
+ * an ask of the beats which fails, or runs past
+ * `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the beats it
+ * answered, marked stale, under the new instant, so a window says it cannot
+ * check rather than that a device left.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
@@ -674,6 +714,20 @@ function fetchedReads(
       tell: (held: AppProviderKeys) =>
         kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
     });
+    const token = yield* heldFetch<typeof LIVE_READ.GITHUB_TOKEN, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      fetch: (userId) =>
+        userId === accountId()
+          ? Effect.map(asked(client.readGitHubToken()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some({ token: answer.token }),
+            )
+          : Effect.succeed(Option.none()),
+      tell: (held: AppGitHubTokens) =>
+        kernel.emit(GATEWAY_EVENT.GITHUB_TOKEN_CHANGED, carried(held)),
+    });
     return {
       presence,
       presenceHold: yield* accountHeld(presence, accountId),
@@ -681,6 +735,8 @@ function fetchedReads(
       toolsHolds: yield* FiberMap.make<string>(),
       keys,
       keysHold: yield* accountHeld(keys, accountId),
+      token,
+      tokenHold: yield* accountHeld(token, accountId),
     };
   });
 }
@@ -703,7 +759,9 @@ function composed(
   { origins, holds: originHolds }: OriginFollows,
   /** The account's hosts Settings › Hosts holds. */
   { hosts, hold: hostsHold }: HostsFollows,
-  { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
+  { presence, presenceHold, tools, toolsHolds, keys, keysHold, token, tokenHold }: FetchedReads,
+  /** The parts of the pull requests the windows' Pull request tabs hold. */
+  parts: PullRequestParts,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -724,18 +782,32 @@ function composed(
    */
   const agentWrite = <Input extends { readonly agentId: string }>(
     change: (input: Input) => FieldChange<AgentRow>,
-    send: (input: Input) => Effect.Effect<AgentAgentAnswer>,
-  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => ({
-    kind: AGENT,
-    keys: ({ agentId }) => [agentId],
-    change,
-    send: (input) =>
-      Effect.map(send(input), (answered) =>
-        "agent" in answered
-          ? { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid }
-          : { refused: carried<AgentAgentAnswer>(answered) },
-      ),
-  });
+    send: (input: Input, key: string | undefined) => Effect.Effect<AgentAgentAnswer>,
+    queue?: { readonly name: string; readonly input: Schema.Codec<Input, unknown> },
+  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => {
+    // Note that a write that waits, or one the service took already, answers the agent as the list shows it, which a window reads as kept.
+    const keptAs = ({ agentId }: Input): WireValue => {
+      const agent = dependencies.agentListed?.(agentId);
+      return carried<AgentAgentAnswer>(
+        agent === undefined ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { agent },
+      );
+    };
+    return {
+      kind: AGENT,
+      keys: ({ agentId }) => [agentId],
+      change,
+      send: (input, { key }) =>
+        Effect.map(send(input, key), (answered) => {
+          if ("agent" in answered) {
+            return { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid };
+          }
+          const refused = carried<AgentAgentAnswer>(answered);
+          if (queue === undefined) return { refused };
+          return untaken(writeUntakenOf(answered.cause), { kept: keptAs(input), refused });
+        }),
+      ...(queue === undefined ? undefined : { queue: { ...queue, queued: keptAs } }),
+    };
+  };
   /** A change of model, drawn on the agent's row at once, on the model's whole window where it names none. */
   const chosen = agentWrite<AgentChooseParams>(
     (choice) => () => ({
@@ -748,7 +820,8 @@ function composed(
   /** A rename, drawn on the agent's row at once, an empty title clearing it. */
   const renamed = agentWrite<AgentRenameParams>(
     (request) => () => ({ title: request.title.length === 0 ? null : request.title }),
-    ({ agentId, ...request }) => asked(client.rename(agentId, request)),
+    ({ agentId, ...request }, key) => asked(client.rename(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_RENAME, input: agentRenameParamsSchema },
   );
   /** A switch of MCP servers, drawn on the agent's row at once, the whole list of those off. */
   const switched = agentWrite<AgentServersParams>(
@@ -819,7 +892,8 @@ function composed(
             pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
           }
         : { pinnedAt: null, pinPosition: null },
-    ({ agentId, ...request }) => asked(client.pin(agentId, request)),
+    ({ agentId, ...request }, key) => asked(client.pin(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_PIN, input: agentPinParamsSchema },
   );
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
@@ -948,10 +1022,22 @@ function composed(
         : keys.answered(userId, keyListOf(answer));
     });
 
-  /** A token's write answered whole to the window that asked, the repositories every list holds asked again where the service took it, since what the token reaches moved. */
+  /**
+   * A token's write answered whole to the window that asked; where the
+   * service took it, its answer laid on the held token for the account
+   * signed in, and the repositories every list holds asked again, since what
+   * the token reaches moved.
+   */
   const tokenWritten = (answer: GitHubTokenAnswerView) =>
     Effect.as(
-      "failure" in answer ? Effect.void : (dependencies.repositoriesMoved ?? Effect.void),
+      Effect.suspend(() => {
+        if ("failure" in answer) return Effect.void;
+        const userId = dependencies.accountId();
+        return Effect.andThen(
+          userId === undefined ? Effect.void : token.answered(userId, { token: answer.token }),
+          dependencies.repositoriesMoved ?? Effect.void,
+        );
+      }),
       carried<GitHubTokenAnswerView>(answer),
     );
 
@@ -1108,10 +1194,14 @@ function composed(
         );
         return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
       }),
-    [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
-      Effect.map(asked(client.readGitHubToken()), (answer) =>
-        carried<GitHubTokenAnswerView>(answer),
-      ),
+    // The token is held for the windows while any draws it, under the account signed in, and told only on the app state (`GITHUB_TOKEN_CHANGED`); a save's and a removal's own answer is laid there too.
+    [GATEWAY_METHOD.GITHUB_TOKEN_FOLLOW]: () => Effect.as(tokenHold.follow, {}),
+    [GATEWAY_METHOD.GITHUB_TOKEN_UNFOLLOW]: () => Effect.as(tokenHold.unfollow, {}),
+    [GATEWAY_METHOD.GITHUB_TOKEN_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : token.retry(userId), {});
+      }),
     [GATEWAY_METHOD.GITHUB_TOKEN_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a token.
@@ -1358,6 +1448,43 @@ function composed(
         const answer = yield* asked(client.pullRequest(agentId, number));
         return carried<AgentPullRequestAnswerView>(answer);
       }),
+    // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "following a pull request's part names the part and one agent",
+          ),
+          parts.follow,
+        ),
+        {},
+      ),
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "letting a pull request's part go names the part and one agent",
+          ),
+          parts.unfollow,
+        ),
+        {},
+      ),
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "reading a pull request's part again names the part and one agent",
+          ),
+          parts.retry,
+        ),
+        {},
+      ),
     [GATEWAY_METHOD.AGENTS_CHANGES]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
@@ -1434,16 +1561,6 @@ function composed(
         const answer = yield* asked(client.writeChaptersModel(model));
         return carried<ChaptersModelAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request names one agent",
-        );
-        const answer = yield* asked(client.overviewPullRequest(agentId, number));
-        return carried<AgentOverviewPullRequestAnswerView>(answer);
-      }),
     [GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
@@ -1489,26 +1606,6 @@ function composed(
         );
         yield* tools.retry(agentId);
         return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request's checks names one agent",
-        );
-        const answer = yield* asked(client.overviewChecks(agentId, number));
-        return carried<AgentOverviewChecksAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request's conversation names one agent",
-        );
-        const answer = yield* asked(client.overviewConversation(agentId, number));
-        return carried<AgentOverviewConversationAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION]: (params) =>
       Effect.gen(function* () {
@@ -1726,9 +1823,11 @@ function composed(
     yield* presence.end;
     yield* tools.end;
     yield* keys.end;
+    yield* token.end;
+    yield* parts.end;
   });
 
-  // Note that the beats and the keys are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
+  // Note that the beats, the keys, and the token are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
@@ -1738,8 +1837,17 @@ function composed(
     yield* presenceHold.open;
     yield* hostsHold.open;
     yield* keysHold.open;
+    yield* tokenHold.open;
     yield* tools.open;
+    yield* parts.open;
   });
 
-  return { methods, lifetime: Effect.void, open, reset, keysAnswered };
+  return {
+    methods,
+    lifetime: Effect.void,
+    open,
+    reset,
+    keysAnswered,
+    queueable: [anyWrite(renamed), anyWrite(pinned)],
+  };
 }

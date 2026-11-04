@@ -2962,7 +2962,7 @@ function AgentTabView({
             brief={agent.brief}
             published={published}
             doors={doors}
-            tools={() => <AgentPlace agent={agent} />}
+            tools={(narrow) => <AgentPlace agent={agent} narrow={narrow} />}
             onStop={onStop}
             // Note that a started agent's conversation always opens on its plan or
             // task, so the box takes a follow up even before the transcript is read.
