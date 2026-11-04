@@ -151,9 +151,9 @@ const SHADOW_CLASS: Record<CardShadow, string> = {
 const HOVER_CLASS: Record<CardHover, string> = {
   [CARD_HOVER.NONE]: "",
   [CARD_HOVER.WASH]:
-    "[&:is(:hover,[data-lit=true])]:bg-[linear-gradient(var(--color-muted),var(--color-muted))]",
+    "hover:bg-[linear-gradient(var(--color-muted),var(--color-muted))] data-[lit=true]:bg-[linear-gradient(var(--color-muted),var(--color-muted))]",
   [CARD_HOVER.LIFT]:
-    "[&:is(:hover,[data-lit=true]):not([data-drop-target=true])]:border-border-strong [&:is(:hover,[data-lit=true])]:shadow-card-lift",
+    "hover:not-data-[drop-target=true]:border-border-strong data-[lit=true]:not-data-[drop-target=true]:border-border-strong hover:shadow-card-lift data-[lit=true]:shadow-card-lift",
 };
 
 /** The card a dragged row is carried over, ringed and washed, so it reads as the one the row will land in. */

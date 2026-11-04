@@ -268,15 +268,19 @@ const LOOK_CSS = `
   [data-gutter] [data-separator="line-info-basic"]:not([data-expand-index]) [data-separator-content] {
     grid-column: 2;
   }
-  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
-    background-color: var(--ui-color-fill-pressed);
+  @media (hover: hover) {
+    [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
+      background-color: var(--ui-color-fill-pressed);
+    }
   }
   [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"] {
     cursor: var(--ui-cursor-press);
   }
-  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
-    /* The code's own ink, as an arrow's lifts under the pointer. */
-    color: var(--diffs-fg, var(--ui-color-text));
+  @media (hover: hover) {
+    [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
+      /* The code's own ink, as an arrow's lifts under the pointer. */
+      color: var(--diffs-fg, var(--ui-color-text));
+    }
   }
   /* The window's one focus ring (\`styles/base.css\`), which reaches no
      shadow root, drawn inside the band, whose card clips what stands past

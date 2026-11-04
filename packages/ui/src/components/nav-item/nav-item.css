@@ -18,11 +18,17 @@
     color: var(--ui-color-sidebar-ink);
   }
 
-  .ui-nav-item:hover:not(:disabled),
-  .ui-nav-item-frame:hover > .ui-nav-item:not(:disabled),
   .ui-nav-item[aria-expanded="true"][aria-haspopup="menu"] {
     background: var(--ui-color-fill-hover);
     color: var(--ui-color-text);
+  }
+
+  @media (hover: hover) {
+    .ui-nav-item:hover:not(:disabled),
+    .ui-nav-item-frame:hover > .ui-nav-item:not(:disabled) {
+      background: var(--ui-color-fill-hover);
+      color: var(--ui-color-text);
+    }
   }
 
   /* The place standing open is drawn in the work sheet's ground, lifted
