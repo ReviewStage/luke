@@ -16,8 +16,12 @@ const INLINE_STYLESHEETS =
 
 // A `*.browser.test.ts` drives the real app, served by the local stack, in
 // Chromium; it runs where `APP_FIRST_RUN_BROWSER` is set, CI's First run job,
-// which installs Chromium.
-const BROWSER_ONLY = process.env.APP_FIRST_RUN_BROWSER ? [] : ["tests/**/*.browser.test.ts"];
+// which installs Chromium and runs that file alone. Note that the job leaves
+// out the file time cap, which keeps one file from holding a shared shard, a
+// job of one file has none of, and the stack's startup varies with the runner.
+const FIRST_RUN_BROWSER = Boolean(process.env.APP_FIRST_RUN_BROWSER);
+const BROWSER_ONLY = FIRST_RUN_BROWSER ? [] : ["tests/**/*.browser.test.ts"];
+const FILE_TIME_CAP = FIRST_RUN_BROWSER ? [] : ["../../packages/wire/src/testing/file-time-cap.ts"];
 
 export default defineConfig({
   // The panel's imports answered as the build answers them, so the web app's
@@ -31,10 +35,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     exclude: [...configDefaults.exclude, ...BROWSER_ONLY],
     // Every file's sockets refused at once, so a signed-in tab's live reads go over its fake service's HTTP and no test dials a port.
-    setupFiles: [
-      "../../packages/wire/src/testing/file-time-cap.ts",
-      "./tests/support/refused-socket.ts",
-    ],
+    setupFiles: [...FILE_TIME_CAP, "./tests/support/refused-socket.ts"],
     // One migrated PGlite per run, which every file's opening loads.
     globalSetup: ["../../packages/database/src/testing/migrated-pglite-setup.ts"],
     css: { include: [INLINE_STYLESHEETS] },
