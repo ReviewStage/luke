@@ -78,7 +78,7 @@ export const slackAgentThread = pgTable(
     agentId: uuid("agent_id")
       .notNull()
       .references(() => agentTable.id, { onDelete: "cascade" }),
-    /** The member who started the agent from the thread. */
+    /** The member the thread was kept for: who started the agent from it, or the automation owner its run's result was sent to. */
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
