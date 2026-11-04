@@ -133,7 +133,6 @@ import {
   tasksWorkspaceLeaveParamsSchema,
   tasksWorkspaceMemberRemoveParamsSchema,
   tasksWorkspaceMemberRoleParamsSchema,
-  tasksWorkspaceMembersParamsSchema,
   tasksWorkspaceParamsSchema,
   tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
@@ -149,7 +148,7 @@ import {
   tasksWriteSectionParamsSchema,
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
-import type { Workspace } from "@repo/features/workspace-wire";
+import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
   declaredMethod,
@@ -213,11 +212,11 @@ import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections
 import { followTaskList } from "./task-list-follow.js";
 import { type TaskRecordMove, taskRecordMoves } from "./task-record-follow.js";
 import type { WindowFocus } from "./window-focus.js";
+import { type MemberMoved, workspaceMembersReads } from "./workspace-members-read.js";
 import {
   followSidebarRows,
   invitationsMoves,
   type LiveReadDependencies,
-  peopleMoves,
   workspacesMoves,
 } from "./workspaces-follow.js";
 
@@ -440,7 +439,6 @@ export type TasksClient = Pick<
     | "slackBotNotifications"
     | "slackBotRepository"
     | "slackBotChannel"
-    | "people"
     | "peopleLive"
     | "invitationsLive"
     | "photo"
@@ -1086,9 +1084,56 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     yield* FiberHandle.run(workspacesFollow, followed, { onlyIfMissing: true });
   });
 
-  /** The workspaces whose people, and whose invitations, a window follows, each followed while any window does. */
-  const peopleFollows = yield* FiberMap.make<string, void>();
+  /** The workspaces whose invitations a window follows, each followed while any window does. */
   const invitationFollows = yield* FiberMap.make<string, void>();
+
+  /**
+   * Each workspace's people the windows draw, and the few drawn latest, told
+   * on the app state every window draws (`LIVE_READ.WORKSPACE_MEMBERS`):
+   * followed from the first window's hold, so a surface drawn again draws
+   * them from where they stand, and drawn over by a member write's answer
+   * until the read carries it (`workspace-members-read.ts`). A workspace the
+   * account no longer reaches is followed no longer, until every window lets
+   * it go and one holds it anew.
+   */
+  const membersReads = yield* workspaceMembersReads({
+    gate,
+    seal: (workspaceId) => {
+      // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+      const userId = dependencies.accountId();
+      return (poll, after) =>
+        gate() && userId !== undefined
+          ? Effect.map(
+              served(client.workspaces.peopleLive(workspaceId, userId, poll, after)),
+              (sealed) => {
+                if (!("ok" in sealed)) return { ...sealed, gone: true };
+                if (sealed.ok) return sealed.answer;
+                return {
+                  failure: sealed.failure,
+                  gone:
+                    sealed.failure === WORKSPACE_CALL_FAILURE.NOT_FOUND ||
+                    sealed.failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED,
+                };
+              },
+            )
+          : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true });
+    },
+    tell: (held) => kernel.emit(GATEWAY_EVENT.WORKSPACE_MEMBERS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's people, one fiber standing until let go. */
+  const memberHolds = yield* FiberMap.make<string>();
+
+  /** What a member write's answer says of each of `userIds`: the role it answers them with, or gone where it names them no more. */
+  function membersMoved(
+    answered: readonly WorkspaceMember[],
+    userIds: readonly (string | undefined)[],
+  ): MemberMoved[] {
+    return userIds.flatMap((userId) => {
+      if (userId === undefined) return [];
+      const member = answered.find((each) => each.userId === userId);
+      return [member === undefined ? { userId, gone: true } : { userId, role: member.role }];
+    });
+  }
 
   /**
    * One workspace's followed read over Realtime (`workspaces-follow.ts`),
@@ -1156,18 +1201,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           gate(),
       }),
       Effect.ignore,
-    );
-  }
-
-  /** One workspace's people followed, each change told as `WORKSPACE_PEOPLE_CHANGED`. */
-  function followPeople(workspaceId: string): Effect.Effect<void> {
-    return followWorkspaceRead(
-      (userId, poll, after) => client.workspaces.peopleLive(workspaceId, userId, poll, after),
-      peopleMoves,
-      (view) =>
-        Effect.sync(() =>
-          kernel.emit(GATEWAY_EVENT.WORKSPACE_PEOPLE_CHANGED, carried({ workspaceId, view })),
-        ),
     );
   }
 
@@ -3081,36 +3114,49 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           slackBot.ok ? { slackBot: slackBot.answer } : { failure: slackBot.failure },
         );
       }),
-    // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:
-    // it keeps what it read, and reads again as it opens. A read moves
-    // nothing, so nothing else is read with it.
-    // A window follows a workspace's people while it draws them; following
-    // again starts over, so a window that follows later hears where they
-    // stand, and letting them go ends it.
-    [GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW]: (params) =>
+    // A workspace's people are held for a window while it draws them, and
+    // told only on the app state (`WORKSPACE_MEMBERS_CHANGED`). Note that the
+    // windows' hold is one fiber standing until let go, so a window holding
+    // it again holds nothing anew.
+    [GATEWAY_METHOD.WORKSPACES_MEMBERS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           workspacePeopleFollowSchema,
           params,
-          "a follow names a workspace",
+          "holding a workspace's people names the workspace",
         );
-        if (!gate()) return {};
         const { workspaceId } = read;
-        yield* FiberMap.run(peopleFollows, workspaceId, followPeople(workspaceId));
+        yield* FiberMap.run(
+          memberHolds,
+          workspaceId,
+          Effect.scoped(Effect.andThen(membersReads.held.hold(workspaceId), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
-    [GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW]: (params) =>
+    [GATEWAY_METHOD.WORKSPACES_MEMBERS_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
           workspacePeopleFollowSchema,
           params,
-          "a follow names a workspace",
+          "letting a workspace's people go names the workspace",
         );
-        yield* FiberMap.remove(peopleFollows, read.workspaceId);
+        yield* FiberMap.remove(memberHolds, read.workspaceId);
         return {};
       }),
-    // An owner's or an admin's window follows a workspace's invitations as
-    // it follows its people.
+    [GATEWAY_METHOD.WORKSPACES_MEMBERS_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "reading a workspace's people again names the workspace",
+        );
+        yield* membersReads.held.retry(read.workspaceId);
+        return {};
+      }),
+    // An owner's or an admin's window follows a workspace's invitations
+    // while it draws them; following again starts over, so a window that
+    // follows later hears where they stand, and letting them go ends it.
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3133,26 +3179,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(invitationFollows, read.workspaceId);
         return {};
       }),
-    [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspaceMembersParamsSchema,
-          params,
-          "reading members names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const people = yield* served(client.workspaces.people(read.workspaceId));
-        return carried<TasksWorkspaceMembersAnswer>(
-          !people.ok
-            ? { failure: people.failure }
-            : people.answer.former.length === 0
-              ? { members: people.answer.members }
-              : { members: people.answer.members, former: people.answer.former },
-        );
-      }),
-    // A photo is answered to the window that asked and held nowhere, as
-    // the members are: the window keeps it under the version the list
-    // named, and the list itself never carries its bytes.
+    // A photo is answered to the window that asked and held nowhere: the
+    // window keeps it under the version the list named, and the list itself
+    // never carries its bytes.
     [GATEWAY_METHOD.WORKSPACES_PHOTO]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3167,8 +3196,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // A workspace's token repositories, and each change of them, are
-    // answered to the page that asked and held nowhere, as the members are:
-    // they move no task and no workspace the view holds.
+    // answered to the page that asked and held nowhere, as a photo is: they
+    // move no task and no workspace the view holds.
     [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3208,11 +3237,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, userId } = read;
         const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
-        return carried<TasksWorkspaceMembersAnswer>(
-          remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
-        );
+        if (!remaining.ok)
+          return carried<TasksWorkspaceMembersAnswer>({ failure: remaining.failure });
+        yield* membersReads.moved(workspaceId, [{ userId, gone: true }]);
+        return carried<TasksWorkspaceMembersAnswer>({ members: remaining.answer });
       }),
-    // A role changed moves no task; the follow carries it, as a removal's.
+    // A role changed moves no task; the people's read carries it, as a
+    // removal's, drawn from its answer until then.
     [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3225,13 +3256,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const changed = yield* workspaceCall(
           client.workspaces.changeRole(workspaceId, userId, role),
         );
-        return carried<TasksWorkspaceMembersAnswer>(
-          changed.ok ? { members: changed.answer } : { failure: changed.failure },
-        );
+        if (!changed.ok) return carried<TasksWorkspaceMembersAnswer>({ failure: changed.failure });
+        yield* membersReads.moved(workspaceId, membersMoved(changed.answer, [userId]));
+        return carried<TasksWorkspaceMembersAnswer>({ members: changed.answer });
       }),
     // Note that a handover changes the account's own role in the workspace,
     // which the view's workspaces carry and every owner's and admin's act is
-    // drawn from, and which the follow carries; it moves no task.
+    // drawn from, and which the follow carries; it moves no task. The heir's
+    // role and the account's own are drawn from its answer until the
+    // people's read carries them.
     [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3242,13 +3275,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
         const { workspaceId, userId } = read;
         const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
-        return carried<TasksWorkspaceMembersAnswer>(
-          handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
+        if (!handedOver.ok) {
+          return carried<TasksWorkspaceMembersAnswer>({ failure: handedOver.failure });
+        }
+        yield* membersReads.moved(
+          workspaceId,
+          membersMoved(handedOver.answer, [userId, dependencies.accountId()]),
         );
+        return carried<TasksWorkspaceMembersAnswer>({ members: handedOver.answer });
       }),
     // Note that a leave closes the open task where it is that workspace's, as
     // a delete of it does, because the account can no longer read or write a
-    // task of a workspace it left; a refused leave closes nothing.
+    // task of a workspace it left; a refused leave closes nothing. The
+    // account is drawn gone from the workspace's people, which its read,
+    // ended as the account no longer reaches it, never takes back.
     [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3275,9 +3315,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           answer.ok && openWorkspaceId === workspaceId ? closeOpenTask : Effect.void,
         );
         const left = yield* workspaceCall(leave);
-        return carried<TasksWorkspaceLeaveAnswer>(
-          left.ok ? { left: true } : { failure: left.failure },
-        );
+        if (!left.ok) return carried<TasksWorkspaceLeaveAnswer>({ failure: left.failure });
+        const readerId = dependencies.accountId();
+        if (readerId !== undefined) {
+          yield* membersReads.moved(workspaceId, [{ userId: readerId, gone: true }]);
+        }
+        return carried<TasksWorkspaceLeaveAnswer>({ left: true });
       }),
     // An invitation is answered to the window that asked and held nowhere,
     // and moves no workspace or task, so nothing else is read with it.
@@ -3336,6 +3379,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldPageReads.open;
       yield* heldBrowserTabs.open;
       yield* comments.open;
+      yield* membersReads.held.open;
       if (!gate()) return;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
@@ -3347,10 +3391,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
       yield* FiberHandle.clear(openedRead);
-      // Note that the windows' holds on pages, tabs, and comments stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages, tabs, comments, and people stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
       yield* heldBrowserTabs.end;
       yield* comments.end;
+      yield* membersReads.held.end;
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
@@ -3359,7 +3404,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(workspacesFollow);
       yield* FiberHandle.clear(sidebarFollow);
       yield* FiberHandle.clear(githubOpened);
-      yield* FiberMap.clear(peopleFollows);
       yield* FiberMap.clear(invitationFollows);
       yield* Scope.close(sidebar.scope, Exit.void);
       sidebar = yield* openSidebar;

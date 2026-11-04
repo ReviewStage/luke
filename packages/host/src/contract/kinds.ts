@@ -546,14 +546,15 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
   WORKSPACE_SLACK_BOT_REPOSITORY: "workspace.slackBotRepository",
   WORKSPACE_SLACK_BOT_CHANNEL: "workspace.slackBotChannel",
-  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
-  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
-   * A workspace's people, followed while the window holds the stream open:
-   * its members and who its work names but left as they first stand, then
-   * each time they move, or why there are none.
+   * A workspace's people, its members and who its work names but left, held
+   * while the window holds the stream open; the stream carries nothing, and
+   * what they hold reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_MEMBERS`).
    */
-  WORKSPACE_PEOPLE: "workspace.people",
+  WORKSPACE_MEMBERS_FOLLOW: "workspace.membersFollow",
+  /** A held workspace's people read again at once, as Try again asks. */
+  WORKSPACE_MEMBERS_RETRY: "workspace.membersRetry",
   /**
    * A workspace's pending invitations, followed for an owner or an admin
    * while the window holds the stream open: as they first stand, then each
@@ -878,9 +879,8 @@ export const PORT_ACT_USE = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_REPOSITORY: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_CHANNEL: ACT_USE.WRITE,
-  WORKSPACE_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_FORMER_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_PEOPLE: ACT_USE.READ,
+  WORKSPACE_MEMBERS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_MEMBERS_RETRY: ACT_USE.READ,
   WORKSPACE_INVITATIONS: ACT_USE.READ,
   WORKSPACE_MEMBER_REMOVE: ACT_USE.WRITE,
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,

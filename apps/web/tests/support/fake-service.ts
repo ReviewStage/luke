@@ -107,7 +107,7 @@ function json(body: WireValue, status = 200): Response {
   });
 }
 
-/** The one member of every workspace the fake service reads. */
+/** The one member every workspace the fake service answers keeps. */
 export const WORKSPACE_MEMBER = {
   userId: "user-ada",
   name: "Ada Lovelace",
@@ -159,7 +159,8 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     if (pathname === "/api/workspaces/github/connect" && method === "POST" && signedIn) {
       return json({ url: GITHUB_INSTALL });
     }
-    if (pathname === "/api/workspaces/members" && method === "GET" && signedIn) {
+    // A member removed answers those who remain.
+    if (pathname === "/api/workspaces/members/remove" && method === "POST" && signedIn) {
       return json({ members: [WORKSPACE_MEMBER] });
     }
     if (pathname === "/api/github/repositories" && method === "GET" && signedIn) {

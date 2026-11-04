@@ -3,8 +3,7 @@
 import assert from "node:assert/strict";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
-import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@repo/ui/history-adapter";
@@ -39,7 +38,7 @@ import {
 } from "./tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handState } from "./testing/app-state.js";
+import { handHostReads, handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { agentsControl, tasksControl } from "./testing/tasks-control.js";
@@ -951,14 +950,9 @@ test("Back's list names a renamed agent's tab by its name now beside a page's ta
 });
 
 test("Back's list names a person's page by the name the workspace's members give them now, and by the name it was opened with while they are unread", async () => {
-  let answer: (members: readonly WorkspaceMember[]) => void = () => undefined;
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      new Promise((resolve) => {
-        answer = resolve;
-      }),
-  });
+  fakeActPort({});
+  const reads = handHostReads({});
   const workspace = {
     id: "workspace-acme",
     name: "Acme",
@@ -993,7 +987,9 @@ test("Back's list names a person's page by the name the workspace's members give
   assert.equal(window.history().steps.back[0]?.title?.label, "Lee Park");
 
   const lee = { userId: "user-lee", name: "Lee Chen", email: "lee@example.com" };
-  answer([{ ...lee, role: WORKSPACE_ROLE.MEMBER }]);
+  reads.deliverMembers({
+    [workspace.id]: { rows: { members: [{ ...lee, role: WORKSPACE_ROLE.MEMBER }] } },
+  });
   await settle();
   assert.equal(window.history().steps.back[0]?.title?.label, "Lee Chen");
 });

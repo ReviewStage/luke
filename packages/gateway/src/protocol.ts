@@ -151,17 +151,18 @@ export const GATEWAY_METHOD = {
   WORKSPACES_SLACK_BOT_REPOSITORY: "workspaces.slackBotRepository",
   /** One channel's bot membership or default repository changed on the service by an owner or admin, answered with the bot as it then stands. */
   WORKSPACES_SLACK_BOT_CHANNEL: "workspaces.slackBotChannel",
-  /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_MEMBERS: "workspaces.members",
   /**
-   * A workspace's people, followed from now until let go, over Neon
-   * Realtime. What they hold is heard as `WORKSPACE_PEOPLE_CHANGED` events,
-   * never answered; following again starts over, so its first word is told
-   * again.
+   * One workspace's people, its members and who its work names but left,
+   * held followed for a window from now until it is let go, over Neon
+   * Realtime, and a while after among those let go lately. What they hold is
+   * heard as `WORKSPACE_MEMBERS_CHANGED` events, on the app state every
+   * window draws, never answered.
    */
-  WORKSPACES_PEOPLE_FOLLOW: "workspaces.peopleFollow",
-  /** A followed workspace's people let go: no more `WORKSPACE_PEOPLE_CHANGED` events of it until it is followed again. */
-  WORKSPACES_PEOPLE_UNFOLLOW: "workspaces.peopleUnfollow",
+  WORKSPACES_MEMBERS_FOLLOW: "workspaces.membersFollow",
+  /** One workspace's people let go by the window that held them: they stay among those let go lately until later ones push them out. */
+  WORKSPACES_MEMBERS_UNFOLLOW: "workspaces.membersUnfollow",
+  /** One workspace's held people read again at once, as Try again asks; never answered. */
+  WORKSPACES_MEMBERS_RETRY: "workspaces.membersRetry",
   /**
    * A workspace's pending invitations, followed by an owner or an admin from
    * now until let go, over Neon Realtime: heard as
@@ -629,8 +630,8 @@ export const GATEWAY_EVENT = {
   TASKS_HISTORY_CHANGED: "tasks.historyChanged",
   /** One of the automations' held reads, every workspace's or automation's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
   AUTOMATIONS_CHANGED: "automations.changed",
-  /** A followed workspace's people as they now stand, each time they move while followed. */
-  WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
+  /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

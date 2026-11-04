@@ -23,6 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -125,13 +126,14 @@ async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
   const asked: AgentPartParams[] = [];
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
     [ACT_KIND.AGENTS_PART]: (payload: AgentPartParams) => {
       asked.push(payload);
       return answer(payload.index);
     },
   });
+  handMembers(() => ({
+    rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
+  }));
   const control = agentsControl({
     agents: [AGENT],
     me: DEAN.userId,

@@ -12,7 +12,6 @@ import type {
   TasksWorkspaceMemberRemoveParams,
   TasksWorkspaceMemberRoleParams,
   TasksWorkspaceMembersAnswer,
-  TasksWorkspaceMembersParams,
   TasksWorkspaceParams,
   TasksWorkspacePhotoAnswer,
   TasksWorkspacePhotoParams,
@@ -31,10 +30,9 @@ import type {
   TasksWorkspaceTransferParams,
   WorkspaceInvitationsFollowed,
   WorkspacePeopleFollow,
-  WorkspacePeopleFollowed,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_SLUG_PROBLEM } from "@repo/features/workspace-wire";
-import { Effect, Option, Stream } from "effect";
+import { Effect, MutableHashMap, Option, Stream } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
@@ -44,6 +42,8 @@ import {
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import {
+  followedStream,
+  type OpenFollows,
   openRefollows,
   type RefollowedDependencies,
   refollowedStream,
@@ -57,8 +57,12 @@ import {
  * workspace, so every one refuses the takeover and any other window,
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
- * allow in words that say so, and anything else in the kind's own words.
- * Nothing is held here.
+ * allow in words that say so, and anything else in the kind's own words. A
+ * workspace's people are held followed while a panel holds its stream open:
+ * the host holds them on the first stream and lets them go with the last,
+ * and what they hold reaches every panel on app state, never down the
+ * stream, which carries nothing. How many streams stand open of each is all
+ * else held here.
  */
 export interface WorkspaceProceduresDependencies {
   host: {
@@ -93,13 +97,11 @@ export interface WorkspaceProceduresDependencies {
     workspaceSlackBotChannel(
       params: TasksWorkspaceSlackBotChannelParams,
     ): Effect.Effect<TasksWorkspaceSlackBotAnswer>;
-    workspaceMembers(
-      params: TasksWorkspaceMembersParams,
-    ): Effect.Effect<TasksWorkspaceMembersAnswer>;
-    /** A workspace's people followed at the host, heard through `onWorkspacePeopleChanged`; following again starts over. */
-    workspacePeopleFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-    workspacePeopleUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-    onWorkspacePeopleChanged(listener: (followed: WorkspacePeopleFollowed) => void): () => void;
+    /** A workspace's people held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    workspaceMembersFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+    workspaceMembersUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+    /** A held workspace's people read again at once, as Try again asks. */
+    workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     /** A workspace's pending invitations followed at the host, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
     workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
@@ -202,14 +204,10 @@ function workspaceSide<View>(side: {
 
 export function workspaceProcedures(dependencies: WorkspaceProceduresDependencies) {
   const { host, openExternal } = dependencies;
-  /** The streams standing open of each workspace's people, and of its invitations, so the host lets each go only with the last, and hears each one's follows and unfollows in the order its streams opened and closed. */
-  const openPeople = openRefollows<string>();
+  /** Every workspace whose people a window holds a stream open of, so the host lets them go only with the last. */
+  const openPeople: OpenFollows<never> = MutableHashMap.empty();
+  /** The streams standing open of each workspace's invitations, so the host lets each go only with the last, and hears its follows and unfollows in the order its streams opened and closed. */
   const openInvitations = openRefollows<string>();
-  const people = workspaceSide<TasksWorkspaceMembersAnswer>({
-    follow: host.workspacePeopleFollow,
-    unfollow: host.workspacePeopleUnfollow,
-    onChanged: host.onWorkspacePeopleChanged,
-  });
   const invitations = workspaceSide<TasksWorkspaceInvitationsAnswer>({
     follow: host.workspaceInvitationsFollow,
     unfollow: host.workspaceInvitationsUnfollow,
@@ -365,25 +363,30 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       if ("slackBot" in answer) return answer.slackBot;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
-    [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ
+    [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceMembers(input);
-      if ("members" in answer) return answer.members;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+      // Note that nothing is heard down the hold, since the held people reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (scope: WorkspacePeopleFollow) => scope.workspaceId,
+          follow: host.workspaceMembersFollow,
+          unfollow: host.workspaceMembersUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openPeople,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
     }),
-    // A workspace's people, pushed to the stream while the window holds it open.
-    [WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return streamed(
-          yield* Stream.toAsyncIterableEffect(
-            refollowedStream(people, openPeople, input.workspaceId, input),
-          ),
-        );
-      },
-    ),
+    [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceMembersRetry(input);
+    }),
     // A workspace's pending invitations, pushed to an owner's or an admin's stream while it stands open.
     [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS
@@ -394,15 +397,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
           refollowedStream(invitations, openInvitations, input.workspaceId, input),
         ),
       );
-    }),
-    // Who left is read on the same read as the members, so a service that names nobody answers none.
-    [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceMembers(input);
-      if ("members" in answer) return answer.former ?? [];
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     // Note that the photo's answer, a failure among them, is the panel's to
     // read, as an inbox image's is, because a tile that hears none draws its

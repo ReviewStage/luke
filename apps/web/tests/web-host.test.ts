@@ -111,7 +111,10 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
       installActPort(actPort);
 
       const members = yield* Effect.promise(() =>
-        askAct(ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId: "workspace-ada" }),
+        askAct(ACT_KIND.WORKSPACE_MEMBER_REMOVE, {
+          workspaceId: "workspace-ada",
+          userId: "user-grace",
+        }),
       );
 
       assert.deepEqual(members, [WORKSPACE_MEMBER]);

@@ -5,7 +5,6 @@ import { WORKSPACE_CALL_FAILURE } from "@repo/features";
 import type {
   TasksWorkspaceGitHubConnectAnswer,
   WorkspaceInvitationsFollowed,
-  WorkspacePeopleFollowed,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { Effect } from "effect";
@@ -66,7 +65,6 @@ const GRACE = {
   email: "grace@app.test",
   role: WORKSPACE_ROLE.MEMBER,
 };
-const ALAN = { userId: "user-alan", name: "Alan Turing" };
 const SENTRY_INSTALL_URL = "https://sentry.io/sentry-apps/luke/external-install/?state=fixture";
 const SENTRY_INSTALLATION = { installationId: "installation-1", account: "acme" };
 
@@ -88,10 +86,8 @@ const REFUSAL = {
     "Could not install Sentry for that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]:
     "Could not disconnect Sentry from that workspace on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]:
-    "Could not read that workspace's members on this system.",
-  [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]:
-    "Could not read who left that workspace on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]:
+    "Could not read that workspace's members again on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: "Could not remove that member on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE]: "Could not change that member's role on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER]: "Could not transfer that workspace on this system.",
@@ -125,8 +121,7 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, payload: WORKSPACE },
-  { kind: WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, payload: WORKSPACE },
+  { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, payload: WORKSPACE },
   {
     kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE,
     payload: { ...WORKSPACE, userId: GRACE.userId },
@@ -152,8 +147,6 @@ interface Script {
   connectUrl: string;
   /** The address a Sentry install answers to open. */
   sentryInstallUrl: string;
-  /** What a people unfollow waits on once the host has heard it, so a test can open a stream while it is on its way. */
-  peopleUnfollowed: Promise<void>;
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -170,15 +163,12 @@ afterEach(() => {
 function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  /** Whoever hears the host tell a workspace's people, as the gateway's event reaches them. */
-  const peopleListeners = new Set<(changed: WorkspacePeopleFollowed) => void>();
   const invitationListeners = new Set<(changed: WorkspaceInvitationsFollowed) => void>();
   const script: Script = {
     notPermitted: false,
     alreadyInvited: false,
     connectUrl: INSTALL_URL,
     sentryInstallUrl: SENTRY_INSTALL_URL,
-    peopleUnfollowed: Promise.resolve(),
   };
   const refusal = () =>
     script.notPermitted
@@ -263,10 +253,10 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ask(`slack-bot-channel:${params.workspaceId}`, () => ({
         slackBot: { configured: true },
       })),
-    workspaceMembers: (params) =>
-      ask(`members:${params.workspaceId}`, () =>
-        params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),
-      ),
+    workspaceMembersFollow: (scope) => ask(`membersFollow:${scope.workspaceId}`, () => undefined),
+    workspaceMembersUnfollow: (scope) =>
+      ask(`membersUnfollow:${scope.workspaceId}`, () => undefined),
+    workspaceMembersRetry: (scope) => ask(`membersRetry:${scope.workspaceId}`, () => undefined),
     workspacePhoto: (params) =>
       ask(`photo:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id
@@ -291,7 +281,9 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ),
     workspaceInvitations: (params) =>
       ask(`invitations:${params.workspaceId}`, () =>
-        script.notPermitted ? refusal() : { invitations: [INVITATION] },
+        script.notPermitted || params.workspaceId !== ACME.id
+          ? refusal()
+          : { invitations: [INVITATION] },
       ),
     workspaceInvite: (params) =>
       ask(`invite:${params.workspaceId}:${params.email}`, () =>
@@ -301,16 +293,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ),
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
-    workspacePeopleFollow: (scope) => ask(`peopleFollow:${scope.workspaceId}`, () => undefined),
-    workspacePeopleUnfollow: (scope) =>
-      Effect.andThen(
-        ask(`peopleUnfollow:${scope.workspaceId}`, () => undefined),
-        Effect.promise(() => script.peopleUnfollowed),
-      ),
-    onWorkspacePeopleChanged: (listener) => {
-      peopleListeners.add(listener);
-      return () => peopleListeners.delete(listener);
-    },
     workspaceInvitationsFollow: (scope) =>
       ask(`invitationsFollow:${scope.workspaceId}`, () => undefined),
     workspaceInvitationsUnfollow: (scope) =>
@@ -331,15 +313,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   );
   ports.push(port);
   const client = port.as(actor, { trusted: options.trusted ?? true });
-  /** The host telling a workspace's people, as the gateway's event does. */
-  const tellPeople = (changed: WorkspacePeopleFollowed) => {
-    for (const listener of [...peopleListeners]) listener(changed);
-  };
   /** The host telling a workspace's invitations. */
   const tellInvitations = (changed: WorkspaceInvitationsFollowed) => {
     for (const listener of [...invitationListeners]) listener(changed);
   };
-  return { client, asked, browsed, script, tellPeople, peopleListeners, tellInvitations };
+  return { client, asked, browsed, script, tellInvitations };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -404,11 +382,8 @@ it("the workspace acts reach the host from a panel and answer what it answered",
   assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, WORKSPACE), {
     answer: undefined,
   });
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, WORKSPACE), {
-    answer: [GRACE],
-  });
-  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, WORKSPACE), {
-    answer: [ALAN],
+  assert.deepEqual(await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY, WORKSPACE), {
+    answer: undefined,
   });
   assert.deepEqual(
     await ask(WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE, { ...WORKSPACE, userId: GRACE.userId }),
@@ -425,8 +400,7 @@ it("the workspace acts reach the host from a panel and answer what it answered",
     `photoSet:${ACME.id}:none`,
     `connect:${ACME.id}`,
     `disconnect:${ACME.id}`,
-    `members:${ACME.id}`,
-    `members:${ACME.id}`,
+    `membersRetry:${ACME.id}`,
     `remove:${ACME.id}:${GRACE.userId}`,
     `leave:${ACME.id}`,
   ]);
@@ -557,13 +531,13 @@ it("a workspace write the account's role does not allow is refused in words that
     await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET, { ...WORKSPACE, photo: null }),
   ];
   script.notPermitted = false;
-  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, {
+  const unread = await settled(client, WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ, {
     workspaceId: "workspace-gone",
   });
 
   const notPermitted = { refused: WORKSPACE_NOT_PERMITTED_REFUSAL };
   assert.deepEqual(refusedNow, Array(6).fill(notPermitted));
-  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ] });
+  assert.deepEqual(unread, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ] });
   assert.deepEqual(browsed, []);
 });
 
@@ -606,98 +580,12 @@ async function until(ready: () => boolean) {
   }
 }
 
-it("a workspace's people stream to every window following them, each workspace's to its own, and the host lets them go only with the last stream", async () => {
-  const { client, asked, tellPeople, peopleListeners } = windowPort(PANEL);
-  const one = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  const two = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  const first = one.next();
-  const second = two.next();
-  await until(() => asked.length === 2);
-
-  const people = { members: [GRACE] };
-  tellPeople({ workspaceId: "workspace-other", view: { members: [] } });
-  tellPeople({ ...WORKSPACE, view: people });
-
-  assert.deepEqual((await first).value, people);
-  assert.deepEqual((await second).value, people);
-  await one.return(undefined);
-  await until(() => peopleListeners.size === 1);
-  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleFollow:${ACME.id}`]);
-  await two.return(undefined);
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked.at(-1), `peopleUnfollow:${ACME.id}`);
-});
-
-it("a people stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
-  const { client, asked, script } = windowPort(PANEL);
-  const unfollowed = Promise.withResolvers<void>();
-  script.peopleUnfollowed = unfollowed.promise;
-
-  const first = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  void first.next();
-  await until(() => asked.length === 1);
-  const closed = first.return(undefined);
-  await until(() => asked.length === 2);
-  const second = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  void second.next();
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [`peopleFollow:${ACME.id}`, `peopleUnfollow:${ACME.id}`]);
-
-  unfollowed.resolve();
-  await closed;
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [
-    `peopleFollow:${ACME.id}`,
-    `peopleUnfollow:${ACME.id}`,
-    `peopleFollow:${ACME.id}`,
-  ]);
-  await second.return(undefined);
-});
-
-it("one workspace's people unfollow on its way holds no other workspace's follow", async () => {
-  const { client, asked, script } = windowPort(PANEL);
-  const unfollowed = Promise.withResolvers<void>();
-  script.peopleUnfollowed = unfollowed.promise;
-  const other = "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
-
-  const first = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-  void first.next();
-  await until(() => asked.length === 1);
-  const closed = first.return(undefined);
-  await until(() => asked.length === 2);
-  const elsewhere = await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]({ workspaceId: other });
-  void elsewhere.next();
-  await until(() => asked.length === 3);
-  assert.deepEqual(asked, [
-    `peopleFollow:${ACME.id}`,
-    `peopleUnfollow:${ACME.id}`,
-    `peopleFollow:${other}`,
-  ]);
-
-  unfollowed.resolve();
-  await closed;
-  await elsewhere.return(undefined);
-});
-
-it("a window that is not a panel is refused a workspace's people, and the host is not asked", async () => {
-  const { client, asked } = windowPort(OTHER_WINDOW);
-  try {
-    await client[WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE](WORKSPACE);
-    assert.fail("the stream was opened");
-  } catch (error) {
-    assert.ok(error instanceof ORPCError);
-    assert.equal(error.code, ACT_ERROR.REFUSED);
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a workspace's invitations stream apart from its people, and the host lets them go with the last stream", async () => {
-  const { client, asked, tellInvitations, tellPeople } = windowPort(PANEL);
+it("a workspace's invitations stream to the window following them, and the host lets them go with the last stream", async () => {
+  const { client, asked, tellInvitations } = windowPort(PANEL);
   const stream = await client[WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS](WORKSPACE);
   const next = stream.next();
   await until(() => asked.length === 1);
 
-  tellPeople({ ...WORKSPACE, view: { members: [GRACE] } });
   tellInvitations({ ...WORKSPACE, view: { invitations: [INVITATION] } });
 
   assert.deepEqual((await next).value, { invitations: [INVITATION] });

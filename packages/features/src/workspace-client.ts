@@ -57,8 +57,6 @@ import type {
   WorkspacesLiveAnswer,
 } from "./workspace-live.js";
 import {
-  type FormerMember,
-  WORKSPACE_MEMBERS_QUERY,
   type Workspace,
   type WorkspaceMember,
   type WorkspacePhotoType,
@@ -477,23 +475,6 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hosted.workspaceSlackBot.channel, admitted),
       (answer) => answer,
-    );
-  }
-
-  /** One workspace's members, owners first, and who its work names but left; or why there are none: not a member, not permitted, or no answer. */
-  people(workspaceId: string): Effect.Effect<
-    WorkspaceCallResult<{
-      readonly members: readonly WorkspaceMember[];
-      readonly former: readonly FormerMember[];
-    }>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askHosted(this.#hosted.workspaces.members, {
-        [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId,
-      }),
-      (answer) => ({ members: answer.members, former: answer.former ?? [] }),
     );
   }
 

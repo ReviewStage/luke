@@ -9,8 +9,9 @@
  * behind turned on; the window opens on the page the profile names; and each
  * read those pages ask is answered here, through the act door (`act.ts`), as
  * main would answer it with the service behind it. The workspaces' members
- * are answered under every profile, since the window reads them wherever it
- * stands, and a task names its creator from the same people. Every person, address,
+ * are held under every profile, laid on the document as the host lays them,
+ * since the window reads them wherever it stands, and a task names its
+ * creator from the same people. Every person, address,
  * and repository here is invented, and no credential, token, or key is: a
  * stored key is drawn by its hint alone, as the service only ever answers it,
  * and an expired sign-in by its status, which carries nothing secret.
@@ -66,6 +67,7 @@ import {
   type AppMcpClients,
   type AppProviderKeys,
   type AppStateSnapshot,
+  type AppWorkspaceMembers,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
@@ -204,21 +206,10 @@ export function settingsTasksView(profile: string, list: TasksView): TasksView |
   };
 }
 
-/**
- * A fixture workspace's members, answered under every profile rather than
- * only the signed-in ones, because ⌘K's People, a task's assignee and
- * creator faces, and the person page read them wherever the window stands;
- * none for any other read.
- */
-export function fixtureMembersAnswer(
-  kind: PortActKind,
-  payload: PortActPayload<PortActKind>,
-): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (kind !== ACT_KIND.WORKSPACE_MEMBERS_READ) return undefined;
-  // SAFETY: the kind is the members read, whose payload names the workspace.
-  const { workspaceId } = payload as PortActPayload<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>;
-  return { answer: MEMBERS.get(workspaceId) ?? [] };
-}
+/** Each workspace's members as the host holds them read (`LIVE_READ.WORKSPACE_MEMBERS`), one object for every delivery. */
+const HELD_MEMBERS: AppWorkspaceMembers = Object.fromEntries(
+  [...MEMBERS].map(([workspaceId, members]) => [workspaceId, { rows: { members } }]),
+);
 
 /* ----- Settings › Integrations ----- */
 
@@ -858,17 +849,21 @@ function beatsStaged(): AppDevicePresences {
 }
 
 /**
- * Main's document as these profiles draw it: the account signed in, an
- * admin of the service, with the staged pages' experiments on, the staged
- * hosts beating, and its credentials and servers' tools held. The same document, the very object, under any other
- * profile. Each slice laid over is one object across deliveries, but the
- * settings, which carry main's own, so a delivery that moves nothing of them
- * draws nothing again.
+ * Main's document as these profiles draw it: the fixture workspaces'
+ * members held read, and under the signed-in profiles the account signed
+ * in, an admin of the service, with the staged pages' experiments on, the
+ * staged hosts beating, and its credentials and servers' tools held. The
+ * members are held under every profile rather than only the signed-in
+ * ones, because ⌘K's People, a task's assignee and creator faces, and the
+ * person page read them wherever the window stands. Each slice laid over is
+ * one object across deliveries, but the settings, which carry main's own,
+ * so a delivery that moves nothing of them draws nothing again.
  */
 export function settingsAppState(profile: string, state: AppStateSnapshot): AppStateSnapshot {
-  if (!SIGNED_IN_PROFILES.has(profile)) return state;
+  const held = { ...state, [LIVE_READ.WORKSPACE_MEMBERS]: HELD_MEMBERS };
+  if (!SIGNED_IN_PROFILES.has(profile)) return held;
   return {
-    ...state,
+    ...held,
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
