@@ -143,7 +143,7 @@ test("the wait on the browser is announced politely, and taken back once the wai
   assert.equal(announcedPolitely(), "");
 });
 
-test("a sign-in that ended without landing is reported under why it ended", () => {
+test("a sign-in that ended without landing is reported once, under why it ended", () => {
   const codes: unknown[] = [];
   const recording: ShownFailureSentry = {
     captureException: () => "",
@@ -158,7 +158,11 @@ test("a sign-in that ended without landing is reported under why it ended", () =
   };
   const uninstall = installShownFailureReporter((report) => sendShownFailure(recording, report));
   try {
-    mount(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT }));
+    const { root } = mountRoot(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT }));
+    // A draw for any other reason, with the same failure still shown, reports nothing more.
+    act(() =>
+      root.render(gate({ failure: SIGN_IN_FAILURE.TIMED_OUT, lastUsed: ACCOUNT_PROVIDER.GITHUB })),
+    );
   } finally {
     uninstall();
   }
