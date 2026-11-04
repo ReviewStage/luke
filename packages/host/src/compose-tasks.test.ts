@@ -263,6 +263,10 @@ interface FakeService extends TasksClient {
   renameAnswered: Effect.Effect<void>;
   /** What a role change's answer waits on once the store has answered, so a test can see what is drawn before it. */
   roleAnswered: Effect.Effect<void>;
+  /** A slug another workspace holds, which the service refuses as taken; none where every slug is free. */
+  slugTaken: string | undefined;
+  /** What a slug change's answer waits on, so a test can see what is drawn before it. */
+  slugAnswered: Effect.Effect<void>;
   /** Whether the workspaces' follow misses the store's changes, the live read answering none of them. */
   followMisses: boolean;
   /**
@@ -672,6 +676,8 @@ function fakeService(tasks: Task[]): FakeService {
     renamedAgain: undefined,
     renameAnswered: Effect.void,
     roleAnswered: Effect.void,
+    slugTaken: undefined,
+    slugAnswered: Effect.void,
     members: {},
     invitations: {},
     photos: {},
@@ -789,8 +795,10 @@ function fakeService(tasks: Task[]): FakeService {
       setSlug: (workspaceId, slug) =>
         Effect.sync(() => {
           service.reads.push(`slugSet:${workspaceId}:${slug}`);
-          return UNANSWERED_WORKSPACE;
-        }),
+          return slug === service.slugTaken
+            ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN } as const)
+            : UNANSWERED_WORKSPACE;
+        }).pipe(Effect.tap(() => service.slugAnswered)),
       // A photo set stands as its version, the photo's own text, and null takes the version away.
       setPhoto: (workspaceId, photo) =>
         Effect.sync(() => {
@@ -2821,7 +2829,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename's answer that lands after the follow delivered a newer name is not drawn over it",
+  "a rename stands while it is out over a newer name the follow delivers, which stands once it is answered",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2837,7 +2845,7 @@ it.effect(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" }),
       );
       yield* settled;
-      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       yield* Deferred.succeed(answered, undefined);
       yield* Fiber.join(renaming);
       yield* settled;
@@ -2905,7 +2913,7 @@ it.effect(
 );
 
 it.effect(
-  "of two renames out at once, the first one's answer landing last is not drawn over the second's, where the follow answers neither",
+  "of two renames asked at once, the second is sent once the first is answered and stands over it, where the follow answers neither",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2916,18 +2924,54 @@ it.effect(
       service.followMisses = true;
       const firstAnswered = yield* Deferred.make<void>();
       service.renameAnswered = Deferred.await(firstAnswered);
+      const before = service.reads.length;
 
       const first = yield* Effect.forkChild(
         call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Alpha" }),
       );
       yield* settled;
       service.renameAnswered = Effect.void;
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" });
+      const second = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Beta" }),
+      );
+      yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
+      assert.deepEqual(service.reads.slice(before), [`rename:${ACME.id}:Alpha`]);
       yield* Deferred.succeed(firstAnswered, undefined);
       yield* Fiber.join(first);
+      yield* Fiber.join(second);
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Beta" }]);
+      assert.deepEqual(service.reads.slice(before), [
+        `rename:${ACME.id}:Alpha`,
+        `rename:${ACME.id}:Beta`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a slug another workspace holds is drawn, then taken back with the service's refusal",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      service.slugTaken = "acme-labs";
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const answered = yield* Deferred.make<void>();
+      service.slugAnswered = Deferred.await(answered);
+
+      const setting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.WORKSPACES_SLUG_SET, { workspaceId: ACME.id, slug: "acme-labs" }),
+      );
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, slug: "acme-labs" }]);
+      yield* Deferred.succeed(answered, undefined);
+      const refused = yield* Fiber.join(setting);
+
+      assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.SLUG_TAKEN });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     }),
 );
 
