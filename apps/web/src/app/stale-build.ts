@@ -45,8 +45,8 @@ const RELOAD_GUARD_MS = 30_000;
 /** Where the tab's session keeps when it last reloaded unasked, in epoch milliseconds. */
 const RELOADED_AT_KEY = "app.staleBuild.reloadedAt";
 
-/** What the toast says where the tab holds work a reload would lose. */
-const NEW_VERSION_READY = `A new version of ${PRODUCT_NAME} is ready`;
+/** What the toast says where the tab holds work a reload would lose; a deploy or a dropped connection alike. */
+const PART_DID_NOT_LOAD = `Part of ${PRODUCT_NAME} could not load`;
 
 /** The tab's session storage as far as the reload is kept there. */
 type SessionKeep = Pick<Storage, "getItem" | "setItem">;
@@ -135,7 +135,7 @@ export function staleBuildTab(leave: StaleBuildTab["leave"]): StaleBuildTab {
     reload: () => location.reload(),
     askReload: (reload) =>
       showToast({
-        words: NEW_VERSION_READY,
+        words: PART_DID_NOT_LOAD,
         tone: STATUS_TONE.ATTENTION,
         action: { label: "Reload", onPress: reload },
         persists: true,
