@@ -52,9 +52,11 @@
  * first line, and each message sent on, says Slack carried it, with the
  * writer's words and the message's link (`slackLine`), which a window draws
  * in place of the prompt the agent reads. The bot
- * reacts to the message with 👀 at once, as other bots do, rather than
- * replying, and the thread is kept as the agent's; a message sent on to an
- * agent is marked the same way.
+ * reacts to the message with 👀 at once and replies with one line linking
+ * the agent, as other agents' bots do, so the transcript opens from the
+ * thread while the agent works, and the thread is kept as the agent's; a
+ * message sent on to an agent is marked with 👀 alone, since its thread
+ * already links it.
  *
  * Every turn of such an agent that settles is posted in its thread once
  * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
@@ -524,6 +526,20 @@ const agentLink = (userId: string, organizationId: string, agentId: string) =>
     linkOf({ kind: LINK_PLACE.AGENT, agentId }, step),
   );
 
+/** The one line the bot says once an agent starts: that it is on it, where, and the agent's link, so the thread opens the transcript before the agent's first reply. */
+function startedReply(link: string, repository: string | null): SlackMessageContent {
+  const lead = repository === null ? "On it." : `On it in ${repository}.`;
+  return {
+    text: `${lead} ${link}`,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `${slackEscaped(lead)} <${link}|Open in ${PRODUCT_NAME}>` },
+      },
+    ],
+  };
+}
+
 /** The words the bot links a continue with, said once in the thread: the earlier agent had stopped, and where its work goes on. */
 function continuedReply(link: string): SlackMessageContent {
   const lead = "The earlier agent had stopped, so I continued its work in";
@@ -714,7 +730,7 @@ const slackTaskOf = Effect.fnUntraced(function* (
   return id;
 });
 
-/** An agent started as the member from the message on a task made for it, the thread kept as its own, and the message marked heard; a refusal is said instead. */
+/** An agent started as the member from the message on a task made for it, the thread kept as its own, the message marked heard, and the agent's link said in the thread; a refusal is said instead. */
 const startFromSlack = Effect.fnUntraced(function* (
   bot: SlackBotService,
   addressed: SlackAddressed,
@@ -769,8 +785,10 @@ const startFromSlack = Effect.fnUntraced(function* (
     agentId,
     userId,
   });
-  // Note that a reaction says the message was heard, as other bots do; the agent's link comes with its reply.
+  // Note that the reaction says the message was heard, and the reply links the agent at once, as other agents' bots do, rather than at its first settled turn.
   yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
+  const link = yield* agentLink(userId, organizationId, agentId);
+  yield* bot.reply(addressed.channel, thread, startedReply(link, repository));
 });
 
 /**

@@ -562,7 +562,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank plan in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank plan in its channel's repository, reacts to it with 👀, and replies with the agent's link; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -597,7 +597,6 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
         const [refused, ...others] = replies();
         assert.match(refused?.args.text ?? "", /couldn't find you/u);
-        assert.deepEqual(others, []);
         const reactions = calls.filter((call) => call.method === "reactions.add");
         assert.deepEqual(
           reactions.map((call) => call.args),
@@ -605,6 +604,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         );
         const [startedAgent] = yield* (yield* Database)
           .select({
+            agentId: agentTable.id,
             taskId: agentTable.taskId,
             prompt: agentTable.prompt,
             repository: agentTable.repository,
@@ -616,6 +616,16 @@ it.layer(getTestDB())("our Slack route", (it) => {
           .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
           .where(eq(slackAgentThread.userId, owner));
         assert.equal(startedAgent?.repository, "Acme/Relay");
+        // The thread links the agent at once, before its first turn settles.
+        assert.deepEqual(
+          others.map((call) => call.args.thread_ts),
+          ["1700000002.000300"],
+        );
+        assert.ok(
+          others[0]?.args.text?.startsWith("On it in Acme/Relay.") &&
+            others[0].args.text.includes(`/agent/${startedAgent?.agentId}`),
+          "the reply says where the agent works and links it",
+        );
         const made = Option.getOrThrow(yield* readTask(owner, startedAgent?.taskId ?? ""));
         assert.deepEqual(
           {
