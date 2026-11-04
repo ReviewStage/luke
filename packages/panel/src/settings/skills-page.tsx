@@ -7,6 +7,7 @@ import {
   type InstalledSkillFailedView,
 } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { formatBytes } from "@repo/features/number-format";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
@@ -59,8 +60,8 @@ import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js"
 import { MarkdownMessage } from "../markdown-message.js";
 import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
 import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
-import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { useDrawnThroughExit } from "../use-held-through-exit.js";
+import { useHostRead } from "../use-host-read.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -456,7 +457,7 @@ function ShownSkills({
   const added = useDrawnThroughExit(adding);
   const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
-  const members = useWorkspaceMembersRead(workspace).members;
+  const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id).rows?.members;
 
   useEffect(() => {
     let current = true;

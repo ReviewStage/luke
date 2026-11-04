@@ -4,7 +4,6 @@ import { MOTION_DELAY_MS } from "@repo/brand";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
@@ -13,6 +12,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -66,10 +66,8 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
-  });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
 });
 
 afterEach(() => {

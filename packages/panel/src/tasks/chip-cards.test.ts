@@ -30,7 +30,6 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import type {
   AppHolderPages,
   AppHostRead,
@@ -50,6 +49,7 @@ import {
   type AutomationsHold,
   handHostReads,
   holdAutomations,
+  holdMembers,
   holdPages,
   stateWith,
 } from "../testing/app-state.js";
@@ -378,16 +378,17 @@ async function drawn(
     requestAppState: () => Promise.resolve(state),
   });
   const reads = handHostReads({ items: feed });
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
-      Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
-  });
+  fakeActPort({});
   // Note that a workspace's automations are laid on the document as a card holds them, as the host lays them.
   automationHolds = holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: (workspaceId) => ({
       rows: workspaceId === BETA.id ? [AUDIT] : [SWEEP],
     }),
   }).holds;
+  // Note that each workspace's people are laid on the document as a card holds them, as the host lays them.
+  holdMembers(reads.deliverMembers, (workspaceId) => ({
+    rows: { members: workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS },
+  }));
   // Note that a page's card holds its plan's or its agent's pages, which the host lays on the document.
   holdPages(reads.deliverPages, heldPagesOf);
   fakeAppPlatform({ pageFrameUrl });

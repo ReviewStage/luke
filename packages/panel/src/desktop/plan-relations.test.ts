@@ -9,13 +9,13 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import type { Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -48,7 +48,8 @@ let root: Root | undefined;
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
 });
 
 afterEach(() => {

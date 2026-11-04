@@ -71,7 +71,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { ToastHost } from "../toast.js";
 import "../file-tree/index.js";
 import { askKept } from "../act.js";
-import { handHostReads } from "../testing/app-state.js";
+import { handHostReads, handMembers } from "../testing/app-state.js";
 import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
@@ -545,7 +545,8 @@ test("a plan's document opens on its path, its repository as plain words, then i
 test("a sub-task's row opens the task where it was left, as a sidebar row does, never a link to its Overview", () => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
   const home = {
     id: TASK.workspaceId,
     name: "Personal",

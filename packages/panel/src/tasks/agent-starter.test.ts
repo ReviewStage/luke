@@ -14,7 +14,6 @@ import {
 import { FAILURE_REASON } from "@repo/features/failure-remedy";
 import { CALL_KIND } from "@repo/features/turn-rows";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { ACTOR_KIND, SOMEONE_REASON } from "@repo/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -23,6 +22,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import {
@@ -90,7 +90,8 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {

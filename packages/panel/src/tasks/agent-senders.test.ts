@@ -17,7 +17,6 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { ACTOR_KIND } from "@repo/ui/actor-model";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -25,15 +24,9 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import {
-  type AnyAct,
-  FAKE_ANSWER,
-  type FakeActAnswer,
-  fakeActs,
-  fakeAppBridge,
-} from "../testing/app-bridge.js";
+import { FAKE_ANSWER, type FakeActAnswer, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handMembers, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { agentsControl, listedAgent, pushedTranscripts } from "../testing/tasks-control.js";
@@ -190,14 +183,11 @@ async function drawnFor(
   messages: readonly AgentTranscriptMessage[] = MESSAGES,
 ): Promise<readonly Element[]> {
   fakeActs({
-    act: (request: AnyAct): Promise<FakeActAnswer> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-          : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
-      ),
+    act: (): Promise<FakeActAnswer> =>
+      Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not here." }),
   });
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [listedAgent(SENDER_NOW)] } });
+  handMembers(() => ({ rows: { members: MEMBERS } }));
   const control = agentsControl({
     agents: [agent],
     me: reader,
