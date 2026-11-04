@@ -103,7 +103,7 @@ export class LiveBroken extends Data.TaggedError("LiveBroken")<{
 }> {}
 
 /** How long a write waits for its transaction to reach the read that shows it, so a write is never held unbounded, and how long an answer's txids are kept for a write whose own answer lands after it. */
-const TX_WAIT_TIMEOUT = Duration.seconds(10);
+export const TX_WAIT_TIMEOUT = Duration.seconds(10);
 
 /** A snapshot as Postgres spells one (`pg_current_snapshot()::text`): `xmin:xmax:xip,…`, the transactions it lists as running, if any, joined by commas. */
 const SNAPSHOT_SPELLING = /^(\d+):(\d+):((?:\d+(?:,\d+)*)?)$/;

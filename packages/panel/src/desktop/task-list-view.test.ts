@@ -18,6 +18,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handHostReads, handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -76,7 +77,8 @@ beforeEach(() => {
     }),
   });
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
 });
 
 afterEach(() => {
@@ -823,11 +825,11 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
 });
 
 test("Assigned to says the members could not be read, with Retry, after Me and Anyone, and Retry reads them again and leaves the menu standing", async () => {
-  let reads = 0;
+  const reads = handHostReads({ members: { [ACME.id]: { failed: true } } });
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
-      reads += 1;
-      return reads === 1 ? Promise.reject(new Error("offline")) : Promise.resolve(MEMBERS);
+    [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
+      reads.deliverMembers({ [workspaceId]: { rows: { members: MEMBERS } } });
+      return Promise.resolve();
     },
   });
   const sidebar = await mountRead(ACME, ASSIGNED);

@@ -55,6 +55,7 @@ import {
   handHostReads,
   holdIntegrations,
   holdIntegrationTools,
+  holdMembers,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -246,29 +247,27 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
   }
   return Promise.resolve(
-    request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-      ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
-      : request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+    request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
+      ? {
+          status: FAKE_ANSWER.DONE,
+          value: {
+            agents: workspaceAnswer(request.payload),
+          },
+        }
+      : request.kind === ACT_KIND.TASKS_TREE
         ? {
             status: FAKE_ANSWER.DONE,
             value: {
-              agents: workspaceAnswer(request.payload),
+              folder: {
+                path: "",
+                repository: standing,
+                branch: "main",
+                entries: TREES.get(standing) ?? [],
+                truncated: false,
+              },
             },
           }
-        : request.kind === ACT_KIND.TASKS_TREE
-          ? {
-              status: FAKE_ANSWER.DONE,
-              value: {
-                folder: {
-                  path: "",
-                  repository: standing,
-                  branch: "main",
-                  entries: TREES.get(standing) ?? [],
-                  truncated: false,
-                },
-              },
-            }
-          : { status: FAKE_ANSWER.UNKNOWN_ACT },
+        : { status: FAKE_ANSWER.UNKNOWN_ACT },
   );
 }
 
@@ -282,7 +281,9 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeActs({ act: answer });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
-  holdIntegrationTools(handHostReads({}).deliverTools, () => ({ tools: LISTED_TOOLS }));
+  const reads = handHostReads({});
+  holdIntegrationTools(reads.deliverTools, () => ({ tools: LISTED_TOOLS }));
+  holdMembers(reads.deliverMembers, () => ({ rows: { members: MEMBERS } }));
   holdIntegrations(() => ({ rows: { integrations: LINEAR_CONNECTED } }));
 });
 

@@ -36,7 +36,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
 } from "@repo/features/pull-request-write-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppChapters } from "@repo/host/app-state";
 import { Effect } from "effect";
@@ -51,7 +51,7 @@ import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads } from "../testing/app-state.js";
+import { handHostReads, holdMembers } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -304,15 +304,6 @@ beforeEach(() => {
       marked.push(request);
       return Promise.resolve({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE });
     },
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([
-        {
-          userId: "user-dana",
-          name: "Dana",
-          email: "dana@example.com",
-          role: WORKSPACE_ROLE.MEMBER,
-        },
-      ]),
   });
 });
 
@@ -339,6 +330,14 @@ interface Answers {
   readonly filesHeadless?: boolean;
 }
 
+/** The workspace's one member as the host holds its people. */
+const DANA: WorkspaceMember = {
+  userId: "user-dana",
+  name: "Dana",
+  email: "dana@example.com",
+  role: WORKSPACE_ROLE.MEMBER,
+};
+
 /** How the chapters the host holds move, as its live read of them answers; nothing before a test's control lays them. */
 let moveChapters: (next: PullRequestChaptersAnswerView) => void = () => undefined;
 
@@ -353,12 +352,14 @@ function chaptersHeld(answer: PullRequestChaptersAnswerView): AppChapters {
 
 /** The agent's control, its overview, files, and Generate answering as given, and its chapters laid on the window's document as the host holds them. */
 function controlAnswering(answers: Answers): AgentsControl {
-  const { deliverChapters } = handHostReads({
+  const { deliverChapters, deliverMembers } = handHostReads({
     chapters: chaptersHeld(
       answers.chapters ?? answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }),
     ),
   });
   moveChapters = (next) => deliverChapters(chaptersHeld(next));
+  // Note that the workspace's people are laid on the document as the tab holds them, as the host lays them.
+  holdMembers(deliverMembers, () => ({ rows: { members: [DANA] } }));
   return agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],

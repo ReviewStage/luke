@@ -84,7 +84,7 @@ import {
   fakeActsAnswer,
 } from "./app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "./app-platform.js";
-import { handHostReads, holdAutomations, holdPages } from "./app-state.js";
+import { handHostReads, holdAutomations, holdMembers, holdPages } from "./app-state.js";
 import { attachmentChipName } from "./attachment-chip.js";
 import {
   composerEditor,
@@ -350,7 +350,7 @@ class InboxWorld {
   readMarks: string[] = [];
   /** Whether the service refuses a read mark, as one for an item it no longer holds. */
   readMarkRefused = false;
-  /** The listed workspace's members, as a read of them answers. */
+  /** The listed workspace's members, as the host holds them read once the window holds them. */
   members: readonly WorkspaceMember[] = [];
   /** Every read of a file's lines, in order, each answered with as many numbered lines as it asks for. */
   fileReads: TasksFileParams[] = [];
@@ -584,12 +584,6 @@ beforeEach(() => {
         deliverFeed();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: [] });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: world.members });
-      }
       const done = (value: AgentListAnswer) => Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       if (request.kind === ACT_KIND.AGENTS_LIST) {
         return world.agentListHeld
@@ -771,6 +765,8 @@ export function mount(
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () => ({ rows: world.automations }),
   });
+  // Note that a workspace's people are laid on the document as the window holds them, as the host lays them.
+  holdMembers(reads.deliverMembers, () => ({ rows: { members: world.members } }));
   // Note that a task's or an agent's pages are laid on the document as the window holds them, as the host lays them.
   holdPages(reads.deliverPages, (place) => ({
     rows:

@@ -23,6 +23,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
@@ -213,15 +214,6 @@ beforeEach(() => {
   unansweredFiles = 0;
   unreachedPreviews = 0;
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([
-        {
-          userId: "user-dean",
-          name: "Dean",
-          email: "dean@example.com",
-          role: WORKSPACE_ROLE.ADMIN,
-        },
-      ]),
     [ACT_KIND.INSTALLED_SKILLS_LIST]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_LIST, payload });
       return Promise.resolve({ skills: stored });
@@ -297,6 +289,18 @@ beforeEach(() => {
       });
     },
   });
+  handMembers(() => ({
+    rows: {
+      members: [
+        {
+          userId: "user-dean",
+          name: "Dean",
+          email: "dean@example.com",
+          role: WORKSPACE_ROLE.ADMIN,
+        },
+      ],
+    },
+  }));
 });
 
 afterEach(() => {
