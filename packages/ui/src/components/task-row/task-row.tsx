@@ -12,6 +12,7 @@ import { useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import type { ListSelection } from "../selection/list-selection.js";
 import { SelectionRegion } from "../selection/selection-region.js";
+import type { VirtualRowPlace } from "../virtual-rows/virtual-rows.js";
 
 /**
  * task-row.tsx -- a task as one line of columns: how it stands to the list's task, its priority, key, and status before its name, what the list draws of it after, and an end of its owner's, each cell in its own column so the columns line up down every row, and its ⋯ coming in over the row's end.
@@ -59,6 +60,9 @@ import { SelectionRegion } from "../selection/selection-region.js";
  * One being renamed, whose press is its field, keeps it. Renamed, its name gives way
  * to the field its owner hands (`editor`); what did not land stands under
  * it (`note`).
+ *
+ * A row in a list drawing only the rows near the view (`VirtualRows`) wears
+ * its place there (`place`), as a `ListRow` does.
  *
  * A row may stand nested under another (`depth`), its name in by a nest
  * for each level, its other columns still lined up with every row's; and a
@@ -336,6 +340,7 @@ export function TaskRow({
   nest,
   fold,
   settled = false,
+  place,
   children,
 }: {
   /** The task, which keys the row's motion, its choosing, and its box. */
@@ -373,6 +378,8 @@ export function TaskRow({
   fold?: ListRowFold | undefined;
   /** Whether it stands settled beside the rows still open, its name in the muted ink: a blocker that is done. */
   settled?: boolean | undefined;
+  /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
+  place?: VirtualRowPlace | undefined;
   /** What stands beside its cells and draws nothing in the grid: a dialog its menu opens. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -419,8 +426,11 @@ export function TaskRow({
       {note === undefined ? null : <span className={NOTE}>{note}</span>}
     </>
   );
+  const { ref: placeRef, ...placed } = place ?? {};
   return (
     <li
+      ref={placeRef}
+      {...placed}
       className={ROW[edges]}
       data-task-id={taskId}
       {...motionKey(taskId)}

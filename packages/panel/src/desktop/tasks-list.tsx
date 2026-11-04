@@ -46,6 +46,7 @@ import {
   OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
+  reachedKey,
   SelectionBar,
   SelectionRegion,
   Stack,
@@ -90,12 +91,31 @@ import {
   taskIdOf,
   tasksListGroups,
 } from "@repo/ui/tasks-page-model";
+import {
+  useVirtualRuns,
+  VIRTUAL_ROW_KEY_ATTRIBUTE,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+  type VirtualRuns,
+} from "@repo/ui/virtual-rows";
 import { Schema } from "effect";
-import { Fragment, memo, type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  type ReactNode,
+  type RefObject,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -155,6 +175,13 @@ import { useTaskDrag } from "./use-row-drag.js";
  * task. The row hangs no card for the whole task, which would say what its columns
  * already do; its assignee's face and its creator's hang their own instead.
  *
+ * Each group draws only the rows near the view (`VirtualRows`), as the
+ * Inbox's list does, so a long workspace's List draws as quickly as a short
+ * one; every row while a find bar stands open over it, and the row holding
+ * the keyboard wherever the page is scrolled. The keys, the choosing, and a
+ * drag still reach the rows left undrawn, each brought in where it is
+ * reached.
+ *
  * A group's head folds it, kept on this Mac (`KEPT.FOLDS`), its count
  * standing beside its name either way. A row is dragged by its press
  * (`use-row-drag.ts`): within Pinned or a section to a new place there; onto
@@ -177,7 +204,7 @@ import { useTaskDrag } from "./use-row-drag.js";
  * Rows are chosen together (`SelectionRegion`): by the box in a row's gutter,
  * which comes in under the pointer and stays on every row while any is
  * chosen, by X on the row in hand, and as a Mac's list chooses them, ⌘-click
- * one in or out, ⇧-click a run, ⇧↑↓ grow it, ⌘A every row drawn, and Esc
+ * one in or out, ⇧-click a run, ⇧↑↓ grow it, ⌘A every row of an open group, and Esc
  * none, across every group, while a plain press still opens the task. While any is chosen, a bar floating at the foot of the page acts on
  * them all at once: Mark done, Set status, and Move to section, each
  * answered by one toast whose Undo puts every task back where it stood.
@@ -204,6 +231,13 @@ const PINNED = "Pinned";
 
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
 const ROW_HANDLE = CARD_PRESS_SELECTOR;
+
+/** How tall a row is taken to be before it is drawn, in pixels: a control's height and its insets (`min-h-tasks-list-row`). */
+const ROW_ESTIMATE_PX = 36;
+
+/** A group's rows, and the lines its quick add draws over them: each a subgrid of the List's columns, its rows edge to edge. */
+const ROWS_GRID =
+  "col-span-full m-0 grid list-none grid-cols-subgrid content-start gap-x-[normal] p-0";
 
 /** The drop zone Pinned is, the zone of the run of every task, and No assignee's; a section's is its id, a status's or a priority's its value, and an assignee's their account id. */
 const DROP_ZONE = {
@@ -595,6 +629,7 @@ const TasksPageRow = memo(function TasksPageRow({
   more,
   onSelect,
   onStanding,
+  place,
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
@@ -618,6 +653,8 @@ const TasksPageRow = memo(function TasksPageRow({
   /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
+  /** Where it stands in its group's run of rows (`VirtualRows`). */
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
   const onOpen = () => onSelect(task.id);
@@ -635,6 +672,7 @@ const TasksPageRow = memo(function TasksPageRow({
       }
       chosen={chosen}
       more={more}
+      place={place}
       onOpen={onOpen}
       onStanding={(standing) => onStanding(task, standing)}
       content={{
@@ -733,9 +771,24 @@ function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
 }
 
 /**
+ * Where the List's runs of rows stand: the page's scroller they stand in,
+ * the List's grid, whose resizing moves the runs below a group that grew or
+ * folded, whether a find bar stands open, which draws every row so the find
+ * covers them, and where each run is held while it stands, so a row out of
+ * view can be brought in.
+ */
+interface ListRunsPlace {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly list: RefObject<HTMLElement | null>;
+  readonly finding: boolean;
+  readonly holdRun: VirtualRuns["hold"];
+}
+
+/**
  * One group: its head, a press that folds and opens it, its glyph, name,
- * and count, and the + that adds a task in it in place (`quick-add.tsx`);
- * and its rows, or a line saying it holds none. The group is a
+ * and count, and the + that adds a task in it in place (`quick-add.tsx`),
+ * its lines standing over the rows; and its rows, drawing only those near
+ * the view (`VirtualRows`), or a line saying it holds none. The group is a
  * drop zone where a row may be let go in it, and its rows are dragged
  * within it, where it keeps an order, and out of it.
  */
@@ -749,6 +802,7 @@ function TasksListGroup({
   onShowOlder,
   tasks,
   properties,
+  place,
   row,
 }: {
   group: TasksGroup;
@@ -763,10 +817,15 @@ function TasksListGroup({
   tasks: TasksControl;
   /** The cells the rows draw, which a quick add's line stands its own on. */
   properties: readonly TaskRowCell[];
-  /** Draws a task's row. */
-  row: (task: TaskSummary) => ReactNode;
+  place: ListRunsPlace;
+  /** Draws a task's row, wearing its place in the run. */
+  row: (task: TaskSummary, at: VirtualRowPlace) => ReactNode;
 }): React.JSX.Element {
   const drawn = useLeaving(group.tasks, taskIdOf);
+  const keys = useMemo(() => drawn.map(({ key }) => key), [drawn]);
+  const run = useRef<VirtualRowsHandle>(null);
+  const { holdRun } = place;
+  useLayoutEffect(() => holdRun(run), [holdRun]);
   const move = folded ? undefined : drops.move(group);
   const drag = useTaskDrag(move, {
     handle: ROW_HANDLE,
@@ -794,18 +853,42 @@ function TasksListGroup({
         </Text>
       ) : null
     ) : (
-      <Stack
-        as={LAYOUT_ELEMENT.UL}
-        gap={GAP.NONE}
-        moves
-        className="tasks-list-rows col-span-full m-0 grid list-none grid-cols-subgrid content-start gap-x-[normal] p-0 data-[dragging=true]:cursor-grabbing"
-        aria-label={head.name}
-        data-row-drop-rows={ordered(group.head) ? "" : undefined}
-        onPointerDown={draggable ? drag : undefined}
-      >
-        <QuickAddLines quick={quick} line={listQuickAddLine(properties)} />
-        {drawn.map(({ value }) => row(value))}
-      </Stack>
+      <>
+        {/* Note that the quick add's lines stand in a list of their own, over the run, because a run draws only its rows. */}
+        {adding ? (
+          <Stack
+            as={LAYOUT_ELEMENT.UL}
+            gap={GAP.NONE}
+            moves
+            className={`tasks-list-adds ${ROWS_GRID}`}
+          >
+            <QuickAddLines quick={quick} line={listQuickAddLine(properties)} />
+          </Stack>
+        ) : null}
+        {drawn.length === 0 ? null : (
+          <VirtualRows
+            scroller={place.scroller}
+            shiftedBy={place.list}
+            keys={keys}
+            estimate={ROW_ESTIMATE_PX}
+            overscan={place.finding ? keys.length : undefined}
+            anchor={VIRTUAL_ROWS_ANCHOR.START}
+            listItems
+            moves
+            holdsFocus
+            className={`tasks-list-rows ${ROWS_GRID} data-[dragging=true]:cursor-grabbing`}
+            aria-label={head.name}
+            data-row-drop-rows={ordered(group.head) ? "" : undefined}
+            onPointerDown={draggable ? drag : undefined}
+            handle={run}
+          >
+            {(index, at) => {
+              const entry = drawn[index];
+              return entry === undefined ? null : row(entry.value, at);
+            }}
+          </VirtualRows>
+        )}
+      </>
     );
   const body = (
     <>
@@ -938,14 +1021,45 @@ export function TasksList({
   latest.current = tasks;
   const drops = listDrops(tasks, () => latest.current, groups, setStanding);
   const list = useRef<HTMLDivElement>(null);
-  // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn.
-  const roving = useRovingKeys<HTMLDivElement>();
-  const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
-  // Note that only rows drawn stay chosen, so a task the filter or a fold took away is never acted on.
-  const selection = useTasksSelection(
-    tasks,
-    new Set(groups.flatMap((group) => (folds.folded(group.head) ? [] : group.tasks.map(taskIdOf)))),
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const scrollRef = useMemo(() => joinRefs(scroller, frame.scroll), [frame.scroll]);
+  // Every open group's tasks, in the order drawn down the page, those its run leaves undrawn among them; a folded group's are not drawn.
+  const order = groups.flatMap((group) =>
+    folds.folded(group.head) ? [] : group.tasks.map(taskIdOf),
   );
+  const runs = useVirtualRuns();
+  // Note that the runs draw only the rows near the view, and every row while a find bar stands open over the page.
+  const finding = useFindOpen();
+  const runsPlace = useMemo(
+    (): ListRunsPlace => ({ scroller, list, finding, holdRun: runs.hold }),
+    [finding, runs.hold],
+  );
+  const pressIn = (row: Element | null | undefined) =>
+    row?.querySelector<HTMLElement>(ROW_HANDLE) ?? undefined;
+  // The rows of every group are one Tab stop that ↑↓ walk, a folded group's passed by, as they are not drawn; a key
+  // reaching past the rows drawn goes on to the List's own first or last row, or the one after or before, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
+      const id = reachedKey(
+        order,
+        inHand?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? undefined,
+        to,
+      );
+      if (id === undefined) return false;
+      const press = pressIn(
+        list.current?.querySelector(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}="${CSS.escape(id)}"]`),
+      );
+      if (press !== undefined) {
+        press.focus();
+        return true;
+      }
+      return runs.bringIn(id, (row) => pressIn(row)?.focus());
+    },
+  });
+  const listRef = useMemo(() => joinRefs(list, roving.ref, setListElement), [roving.ref]);
+  // Note that only rows an open group lists stay chosen, so a task the filter or a fold took away is never acted on.
+  const selection = useTasksSelection(tasks, new Set(order));
   const { regionId, selected } = selection;
   // Note that the motion is handed what lays the rows out, so a draw that moved none measures none; a fold tells it of its own (`useListMotionReplay`).
   const laidOut = useMemo(() => ({ groups, properties }), [groups, properties]);
@@ -955,7 +1069,7 @@ export function TasksList({
       width={PAGE_WIDTH.FULL}
       label={TASKS}
       toolbar={frame.toolbar}
-      scrollRef={frame.scroll}
+      scrollRef={scrollRef}
       filters={frame.chips}
       state={listState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
@@ -986,7 +1100,12 @@ export function TasksList({
           {REFRESH_FAILED_WORDS}
         </ErrorState>
       ) : null}
-      <SelectionRegion id={regionId} selection={{ selected, onChange: selection.onChange }}>
+      <SelectionRegion
+        id={regionId}
+        selection={{ selected, onChange: selection.onChange }}
+        order={order}
+        bringIn={runs.bringIn}
+      >
         <ListMotion root={list} change={laidOut}>
           <div
             {...roving}
@@ -1027,9 +1146,11 @@ export function TasksList({
                     }
                     tasks={tasks}
                     properties={properties}
-                    row={(task) => (
+                    place={runsPlace}
+                    row={(task, at) => (
                       <TasksPageRow
                         key={task.id}
+                        place={at}
                         tasks={rowTab}
                         task={task}
                         opened={opened?.task.id === task.id ? opened : undefined}

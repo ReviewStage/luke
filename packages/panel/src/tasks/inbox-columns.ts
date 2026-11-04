@@ -21,7 +21,7 @@
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { TOOLBAR_LOOK } from "@repo/ui";
 import { askScroll } from "@repo/ui/scroll-asked";
-import type { VirtualRowsHandle } from "@repo/ui/virtual-rows";
+import { useVirtualRuns, type VirtualRowsHandle } from "@repo/ui/virtual-rows";
 import { type RefObject, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useColumnSplit } from "../column-split.js";
@@ -70,10 +70,10 @@ export interface InboxRowPresses {
 
 /** The list's rows' presses, kept as each row is drawn and dropped as it goes. */
 export function useInboxRowPresses(): InboxRowPresses {
+  const runs = useVirtualRuns();
   const [presses] = useState(() => {
     const held = new Map<string, HTMLElement>();
     const refs = new Map<string, React.RefCallback<HTMLElement>>();
-    const runs = new Set<RefObject<VirtualRowsHandle | null>>();
     return {
       hold: (itemId: string) => {
         const known = refs.get(itemId);
@@ -101,14 +101,8 @@ export function useInboxRowPresses(): InboxRowPresses {
           undefined,
         ),
       itemOf: (element: EventTarget) => [...held].find(([, press]) => press === element)?.[0],
-      holdRun: (run: RefObject<VirtualRowsHandle | null>) => {
-        runs.add(run);
-        return () => {
-          runs.delete(run);
-        };
-      },
-      bringIn: (itemId: string, then: () => void) =>
-        [...runs].some((run) => run.current?.bringIn(itemId, then) === true),
+      holdRun: runs.hold,
+      bringIn: runs.bringIn,
     };
   });
   return presses;
