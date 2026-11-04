@@ -441,6 +441,40 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
+/** A static chip's own options: its tone and whether it draws its mark alone, its look the toolbar's. */
+type StaticChipProps = Pick<ChipFace, "tone" | "iconOnly"> & {
+  children: ReactNode;
+} & Omit<ComponentPropsWithRef<"span">, "style" | "className" | "children">;
+
+/** A static chip's box: a toolbar chip's at rest, washing under no pointer, since it takes no press. */
+const STATIC_BOX =
+  "ui-chip group/chip m-0 inline-flex min-w-0 max-w-full items-center justify-center rounded-control border border-transparent bg-transparent text-body-foreground font-body font-label h-control text-label gap-icon-gap whitespace-nowrap cursor-default";
+
+/**
+ * A chip that only says: a toolbar chip's face taking no press, for a value
+ * fixed where it stands, as where an agent runs stands in its message box
+ * beside the chips that change things. Its hint (`Tooltip`) opens on a rest,
+ * or under a finger on a tap, since it is no control of its own. Its mark
+ * alone stands centered in a square, as a toolbar chip's does.
+ */
+export function StaticChip({
+  tone,
+  iconOnly = false,
+  children,
+  ...span
+}: StaticChipProps): React.JSX.Element {
+  const look = CHIP_LOOK.TOOLBAR;
+  return (
+    <span
+      {...span}
+      className={`${STATIC_BOX} ${iconOnly ? "flex-none w-control p-0" : "flex-initial px-chip-inset"}`}
+      {...faceAttributes({ look, tone, iconOnly })}
+    >
+      <span className={faceClasses({ look, iconOnly }, false)}>{children}</span>
+    </span>
+  );
+}
+
 /** A chip's words: in the code face where they name code, and cut at their end, or, words alone, in their middle. */
 type ChipNameProps = {
   /** Whether the words name code, a branch, and read in the code face. */
