@@ -37,6 +37,7 @@ import {
   messageFailureWords,
   messageWords,
   modelLabel,
+  noteWhileOffline,
   offeredModels,
   offersContinue,
   openingLineOf,
@@ -57,6 +58,7 @@ import {
   unreadSentLines,
   workingLineWords,
 } from "./agent-model.js";
+import { inboxNoteReading } from "./inbox-model.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
@@ -700,13 +702,23 @@ test("a message to an agent whose device is away says it is offline, in the word
   );
 });
 
-test("a message Vespin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry", () => {
+test("a message Vespin heard nothing back on says to try again in the Inbox, which draws no Retry, and its words alone beside the composer's Retry, and says the developer is offline while the app does not reach the service", () => {
+  const unheard = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+  const boxNote = { ...messageFailureNote(unheard, null), cause: unheard };
+  const inboxNote = { words: messageFailureWords(unheard.failure), failure: unheard.failure };
   assert.deepEqual(
     [
-      messageFailureWords(AGENT_CALL_FAILURE.UNANSWERED),
-      messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
+      inboxNoteReading(inboxNote, undefined, true).words,
+      noteWhileOffline(boxNote, true)?.text,
+      inboxNoteReading(inboxNote, undefined, false).words,
+      noteWhileOffline(boxNote, false)?.text,
     ],
-    ["No answer came back. Try again.", "No answer came back."],
+    [
+      "No answer came back. Try again.",
+      "No answer came back.",
+      "You're offline. Try again once you're back online.",
+      "You're offline.",
+    ],
   );
 });
 

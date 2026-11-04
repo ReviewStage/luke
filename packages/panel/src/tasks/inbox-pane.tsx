@@ -88,6 +88,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
+import { useConnected } from "../connection.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
@@ -1576,6 +1577,7 @@ export function InboxPane({
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
+  const connected = useConnected();
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
@@ -1846,7 +1848,8 @@ export function InboxPane({
                 </Stack>
               </ReplyDoorProvider>
             </ItemWords>
-            {control.failed ? (
+            {/* Note that the thread above keeps its words with no line under it while the app is offline, since the Offline mark says why. */}
+            {control.failed && connected ? (
               <ErrorState
                 failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
                 onRetry={control.onRetry}

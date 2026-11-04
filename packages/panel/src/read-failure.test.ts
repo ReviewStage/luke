@@ -24,9 +24,10 @@ import { AgentAuthSection } from "./settings/agent-auth-section.js";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
+import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
-import { handHostReads, handInboxItems } from "./testing/app-state.js";
+import { handHostReads, handInboxItems, handState } from "./testing/app-state.js";
 import { ChangesTabReading } from "./testing/changes-tab.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
@@ -119,63 +120,77 @@ function assertSaidAlike(failure: ReturnType<typeof readFailure>, words: string)
   assert.deepEqual(failure.presses, ["Retry"]);
 }
 
+/** The sidebar over `tasks`, expanded, for an account signed in. */
+function sidebarOver(tasks: TasksControl): React.ReactElement {
+  return createElement(DesktopSidebar, {
+    sidebar: {
+      collapsed: false,
+      compact: false,
+      overlay: SIDEBAR_OVERLAY.CLOSED,
+      width: 264,
+      onToggle: ignore,
+      onOverlay: ignore,
+      onResize: ignore,
+      staged: false,
+    },
+    history: {
+      canGoBack: false,
+      canGoForward: false,
+      onBack: ignore,
+      onForward: ignore,
+      steps: { back: [], forward: [] },
+      onGoTo: ignore,
+    },
+    tasks,
+    tab: PANEL_TAB.TASKS,
+    onTabChange: ignore,
+    onPressWithin: ignore,
+    account: {
+      status: ACCOUNT_STATUS.SIGNED_IN,
+      email: "dev@example.com",
+      name: "Dev",
+      provider: "github",
+    },
+    updates: {
+      update: {
+        status: UPDATE_STATUS.IDLE,
+        currentVersion: "1.0.0",
+        installSupported: true,
+        upToDate: false,
+      },
+      build: { packaged: false },
+      onCheck: () => Promise.resolve(),
+      onInstall: ignore,
+      onMoveToApplications: ignore,
+      onOpenLatest: ignore,
+    },
+    onSignOut: () => Promise.resolve(),
+  });
+}
+
 test("the sidebar's plans that could not be read say so, and Retry reads the list again", async () => {
   let retried = 0;
   const page = await mount(
-    createElement(DesktopSidebar, {
-      sidebar: {
-        collapsed: false,
-        compact: false,
-        overlay: SIDEBAR_OVERLAY.CLOSED,
-        width: 264,
-        onToggle: ignore,
-        onOverlay: ignore,
-        onResize: ignore,
-        staged: false,
-      },
-      history: {
-        canGoBack: false,
-        canGoForward: false,
-        onBack: ignore,
-        onForward: ignore,
-        steps: { back: [], forward: [] },
-        onGoTo: ignore,
-      },
-      tasks: tasksControl({
+    sidebarOver(
+      tasksControl({
         listFailed: true,
         onRetryList: () => {
           retried += 1;
         },
       }),
-      tab: PANEL_TAB.TASKS,
-      onTabChange: ignore,
-      onPressWithin: ignore,
-      account: {
-        status: ACCOUNT_STATUS.SIGNED_IN,
-        email: "dev@example.com",
-        name: "Dev",
-        provider: "github",
-      },
-      updates: {
-        update: {
-          status: UPDATE_STATUS.IDLE,
-          currentVersion: "1.0.0",
-          installSupported: true,
-          upToDate: false,
-        },
-        build: { packaged: false },
-        onCheck: () => Promise.resolve(),
-        onInstall: ignore,
-        onMoveToApplications: ignore,
-        onOpenLatest: ignore,
-      },
-      onSignOut: () => Promise.resolve(),
-    }),
+    ),
   );
   const failure = readFailure(page);
   assertSaidAlike(failure, "Your tasks could not be read.");
   failure.retry();
   assert.equal(retried, 1);
+});
+
+test("the sidebar's tasks that could not be read again while the app is offline stand with no line over them", async () => {
+  handState({}, { network: { online: false, reachable: true } });
+  const page = await mount(sidebarOver(tasksControl({ listFailed: true, tasks: [TASK] })));
+  assert.ok(page.textContent?.includes(TASK.name), "the task held still stands");
+  assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
 test("the Inbox's list says its feed could not be read as the sidebar does, and Retry lists what the plan holds", async () => {

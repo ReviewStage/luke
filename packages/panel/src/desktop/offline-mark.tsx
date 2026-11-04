@@ -1,5 +1,5 @@
 import { HOST_LIVE } from "@repo/features/tasks-view";
-import { ANNOUNCE, Tooltip, useAnnounce } from "@repo/ui";
+import { ANNOUNCE, BANNER_LOOK, Banner, STATUS_TONE, Tooltip, useAnnounce } from "@repo/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
@@ -8,7 +8,7 @@ import { useRef } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**
- * offline-mark.tsx -- the pill that says what the window shows may be behind: this Mac offline, the service not answering, or live updates catching up; in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar.
+ * offline-mark.tsx -- the pill that says what the window shows may be behind: this Mac offline, the service not answering, or live updates catching up; in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar, and as a strip under a phone's header.
  *
  * Every surface still fails on its own while the network is gone, each as
  * its read could not be done; the pill says once why, where the window keeps
@@ -19,7 +19,9 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
  * follow keeps, and draws nothing while both are well, once the pill has
  * faded out. It is a status rather than a press, so
  * it is announced as one, and a sidebar too narrow for its word draws its
- * glyph alone and still names it.
+ * glyph alone and still names it. A phone keeps its sidebar in a drawer out
+ * of sight, so a phone's header says the same under it, as a strip of the
+ * pill's glyph and its hint (`OfflineStrip`).
  */
 
 /** What the pill stands for, the Mac's own network first, since nothing else can be read without it. */
@@ -83,5 +85,26 @@ export function OfflineMark(): React.JSX.Element | null {
         </span>
       </span>
     </Tooltip>
+  );
+}
+
+/**
+ * What the pill says, as a strip under a phone's header (`PhoneHead`), its
+ * glyph and its hint whole, since a finger has no pointer to hover for it;
+ * or nothing while all is well. It says nothing aloud, because the pill in
+ * the sidebar's foot, mounted in its drawer, already announces it.
+ */
+export function OfflineStrip(): React.JSX.Element | null {
+  const mark = useAppSlice(liveMarkAtom);
+  if (mark === undefined) return null;
+  const { hint, Icon } = LIVE_MARK_LOOK[mark];
+  return (
+    <Banner
+      look={BANNER_LOOK.STRIP}
+      tone={STATUS_TONE.ATTENTION}
+      glyph={<Icon aria-hidden="true" />}
+    >
+      {hint}
+    </Banner>
   );
 }

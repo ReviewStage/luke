@@ -63,7 +63,7 @@
  * the sheet draws.
  */
 
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import { CloseIcon } from "../../face/glyphs.js";
 import { AlertIcon, RetryIcon } from "../../icons/lucide-glyphs.js";
 import type { ReportedFailure, Unreported } from "../../reported-failure.js";
@@ -170,7 +170,15 @@ const WORDS = {
 } as const;
 
 /**
- * A failure's sentence, `children`, and, where `onRetry` is given, the
+ * Whether a failure may offer the Retry it is given: true unless the window
+ * says trying again cannot mend anything now, as while the app does not
+ * reach the service, whose reads start again by themselves once it does.
+ */
+export const RetryOffered = createContext(true);
+
+/**
+ * A failure's sentence, `children`, and, where `onRetry` is given and Retry
+ * is offered (`RetryOffered`), the
  * Retry that tries again, said together as an alert and drawn at
  * `placement`; among rows, with the remedy, Remove, and Dismiss where each
  * is given; and, wherever it stands, Copy details for the
@@ -184,7 +192,8 @@ export function ErrorState(
     failure: ReportedFailure | Unreported;
   } & Placed,
 ): React.JSX.Element {
-  const { onRetry, remedy, onRemove, onDismiss, failure, children } = props;
+  const { remedy, onRemove, onDismiss, failure, children } = props;
+  const onRetry = useContext(RetryOffered) ? props.onRetry : undefined;
   const Line = props.as ?? ERROR_STATE_ELEMENT.PARAGRAPH;
   const placement = props.placement ?? ERROR_STATE_PLACEMENT.INLINE;
   if (placement === ERROR_STATE_PLACEMENT.CENTERED) {

@@ -18,6 +18,7 @@ import type { ActHandle } from "./act.js";
 import { installShownFailureReporter } from "./failure-report.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { copyingInto, fakeAppPlatform } from "./testing/app-platform.js";
+import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import {
   TOAST_HOLD,
@@ -28,6 +29,7 @@ import {
   useWorkingToast,
 } from "./toast.js";
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
+import { appStateNow } from "./use-app-state.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -37,7 +39,8 @@ import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
  * place; an act's Undo toast takes the act back and stands for the Undo
  * hold, a row write's taken back once, as ⌘Z's entry, which the key then
  * finds gone; and a failure toast reports what failed to Sentry, which a recording
- * SDK stands in for, and copies the details of that report. jsdom lays nothing out, so the window's height is given. Synthetic
+ * SDK stands in for, and copies the details of that report, but is not shown
+ * where the connection already says why. jsdom lays nothing out, so the window's height is given. Synthetic
  * throughout.
  */
 
@@ -363,9 +366,7 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.ok(!beneath.stack?.includes("fixture-secret"));
 });
 
-test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted, and copies that trace", async () => {
-  const copied: string[] = [];
-  fakeAppPlatform(copyingInto(copied));
+test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted, and is not shown, since the Offline mark says why", () => {
   mount(WINDOW.TALL);
   const lines: { message: string; attributes: unknown }[] = [];
   const recording: ShownFailureSentry = {
@@ -416,14 +417,20 @@ test("a failure toast for a hosted call that never answered reports what the hos
       },
     },
   ]);
-  const copy = document.querySelector<HTMLButtonElement>(
-    '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
-  );
-  await act(async () => copy?.click());
-  assert.ok(
-    copied[0]?.split("\n").includes("hosted.trace_id: 4bf92f3577b34da6a3ce929d0e0e4736"),
-    "the copied details carry the trace the service's lines carry",
-  );
+  assert.deepEqual(standing(), []);
+});
+
+test("while the app does not reach the service, a failure toast nothing named is not shown, and a refusal still is", async () => {
+  handState({}, { network: { online: true, reachable: false } });
+  appStateNow();
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  assert.equal(appStateNow()?.network.reachable, false, "the window read the document");
+  mount(WINDOW.TALL);
+
+  act(() => show?.(unheardStop()));
+  act(() => show?.(refusedStart()));
+
+  assert.deepEqual(standing(), ["Messages are limited to 20,000 characters."]);
 });
 
 test("an unexpected failure toast's Copy details copies what its report sent, with its issue's event id, and a refusal's toast offers no copy", async () => {
