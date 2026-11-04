@@ -10,14 +10,21 @@ import {
 } from "@repo/features/agent-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
-import { ACT_KIND } from "@repo/host/acts";
+import { AGENT_ACT_KIND } from "@repo/host/contract";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { SIDE_PANEL_TAB, type SidebarPin } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import {
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeActs,
+  quietHold,
+} from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -52,16 +59,21 @@ const PIN: SidebarPin = {
   model: "anthropic/claude-opus-5.5",
 };
 
-/** Each pull request read the service was asked, by agent. */
+/** Each part of a pull request the window asked the host to hold, by agent. */
 let reads: string[] = [];
 let root: Root | undefined;
 
 beforeEach(() => {
   reads = [];
   fakeActs({
-    act: (request: AnyAct): Promise<FakeActAnswer> => {
-      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST) reads.push(request.payload.agentId);
-      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
+    act: (): Promise<FakeActAnswer> =>
+      Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: ({ agentId }) => {
+      reads.push(agentId);
+      return quietHold();
     },
   });
 });

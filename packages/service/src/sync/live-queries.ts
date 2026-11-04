@@ -8,6 +8,7 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { hostsLiveStatement } from "@repo/database/models/host-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
@@ -427,6 +428,22 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * The account's hosts, by name, woken on the account's topic by a host
+ * enrolled, approved, renamed, removed, or moving through an update, or
+ * reporting another platform, machine, or model. Note that a beat wakes
+ * nothing, since `deviceSync` ignores when a device was last seen: a
+ * window judges a host by its own presence read.
+ */
+export const hostsLive = defineLiveQuery({
+  name: LIVE_READ.HOSTS,
+  params: ["userId"],
+  reads: [deviceSync],
+  topics: ({ userId }) => [[TOPIC.ACCOUNT, userId]],
+  statements: ({ userId }) => Option.map(hostsLiveStatement(userId), (hosts) => ({ hosts })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -917,6 +934,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   workspaceMemoriesLive,
   installedSkillsLive,
   workspaceIntegrationsLive,
+  hostsLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,

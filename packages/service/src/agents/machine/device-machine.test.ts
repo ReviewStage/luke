@@ -142,7 +142,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const unregistered = yield* Effect.flip(
             machine.layout({ ...agent, deviceId: randomUUID() }),
           );
-          assert.equal(yield* removeHost(userId, deviceId), true);
+          assert.notEqual(yield* removeHost(userId, deviceId), undefined);
 
           const refused = yield* Effect.flip(machine.layout(agent));
 
@@ -493,7 +493,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             version: "0.1.0",
             secretHash: `secret-${randomUUID()}`,
           });
-          assert.equal(yield* removeHost(opened.userId, opened.deviceId), true);
+          assert.notEqual(yield* removeHost(opened.userId, opened.deviceId), undefined);
           const removed = yield* Effect.flip(
             machine.writeLine(handle, '{"type":"message","content":[]}\n'),
           );

@@ -7,13 +7,17 @@ import {
   AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentSummary,
+  CHECK_SUMMARY,
+  PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
 import type { Failure } from "@repo/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "@repo/features/pull-request-chapters-view";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@repo/features/pull-request-chapters-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { OWN_PULL_REQUEST } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
@@ -23,7 +27,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
-import { handState } from "../testing/app-state.js";
+import { handHostReads, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { ToastHost } from "../toast.js";
@@ -216,11 +220,7 @@ test("the task's agents are the followed list's alone, the archived among them, 
     tab.control().archived?.map((agent) => agent.id),
     [archived.id],
   );
-  assert.deepEqual(
-    tab.asked.filter((each) => each.kind !== ACT_KIND.AGENTS_PULL_REQUEST),
-    [],
-    "nothing of the task's agents is read",
-  );
+  assert.deepEqual(tab.asked, [], "nothing of the task's agents is read");
 });
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
@@ -583,54 +583,50 @@ test("a pull request's chapters are generated for the agent's own pull request o
   );
 });
 
-test("a pull request a tab names by its number is read with its number and kept by agent and number apart from the agent's own; an older read landing last keeps the newer, and one naming none lets it go", async () => {
+test("a pull request a tab names by its number is the one the host holds under that number, apart from the agent's own and from a read that failed or named none", async () => {
+  const { deliverParts } = handHostReads({});
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  const named = (title: string) => ({
-    repository: "acme/relay",
-    branch: "luke/base",
-    pullRequest: {
-      number: 41,
-      title,
-      url: "https://github.com/acme/relay/pull/41",
-      state: "open",
-      checks: "passing",
-      additions: 9,
-      deletions: 2,
-      changedFiles: 3,
-    },
-  });
-  let land: (answer: ReturnType<typeof named>) => void = () => undefined;
-  const older = new Promise<ReturnType<typeof named>>((resolve) => {
-    land = resolve;
-  });
   await tab.mount();
-  tab.answer(ACT_KIND.AGENTS_PULL_REQUEST, older, named("Lay the base, retitled"), {
-    repository: "acme/relay",
-    branch: null,
-    pullRequest: null,
+  const opened = (number: number, title: string, url: string) => ({
+    number,
+    title,
+    url,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 9,
+    deletions: 2,
+    changedFiles: 3,
   });
+  const base = opened(41, "Lay the base", "https://github.com/acme/relay/pull/41");
 
-  const first = tab.control().readNumberedPullRequest(AGENT, 41);
-  assert.equal(await act(() => tab.control().readNumberedPullRequest(AGENT, 41)), true);
-  land(named("Lay the base"));
-  await act(() => first);
-  assert.equal(
-    tab.control().numberedPullRequests.get(AGENT)?.get(41)?.title,
-    "Lay the base, retitled",
+  act(() =>
+    deliverParts({
+      [LIVE_READ.PULL_REQUEST_PUBLISHED]: {
+        [AGENT]: {
+          [OWN_PULL_REQUEST]: {
+            rows: {
+              repository: "acme/relay",
+              branch: "luke/expiry-job",
+              pullRequest: opened(
+                42,
+                "Expire invitations",
+                "https://github.com/acme/relay/pull/42",
+              ),
+            },
+          },
+          41: { rows: { repository: "acme/relay", branch: "luke/base", pullRequest: base } },
+          43: { rows: { repository: "acme/relay", branch: null, pullRequest: null } },
+          44: { rows: { failure: AGENT_CALL_FAILURE.UNANSWERED } },
+        },
+      },
+    }),
   );
-  assert.equal(tab.control().pullRequests.get(AGENT), undefined, "the agent's own stands apart");
+  await settle();
+
   assert.deepEqual(
-    tab.asked
-      .filter((each) => each.kind === ACT_KIND.AGENTS_PULL_REQUEST)
-      .map((each) => each.payload),
-    [
-      { agentId: AGENT, number: 41 },
-      { agentId: AGENT, number: 41 },
-    ],
+    [...tab.control().numberedPullRequests].map(([agentId, numbered]) => [agentId, [...numbered]]),
+    [[AGENT, [[41, base]]]],
   );
-
-  assert.equal(await act(() => tab.control().readNumberedPullRequest(AGENT, 41)), false);
-  assert.equal(tab.control().numberedPullRequests.get(AGENT), undefined);
 });
 
 test("a fork joins the task's draft under a key of its own, its words kept and its chips on the source's servers, holds while another task is open, and starts from the source at the message with the box's words and files as a note and its servers named even where none is off; an empty box forks alone", async () => {

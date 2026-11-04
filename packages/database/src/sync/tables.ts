@@ -151,7 +151,9 @@ export const userSync = defineSyncTable(user, {
 /**
  * A member's device, on its account's topic and, through its memberships,
  * every workspace it is in, so a Mac's new name reaches the task lists that
- * name the local agents on it. Note that every column but its name is
+ * name the local agents on it, and a host's platform, machine, model, and
+ * update reach Settings › Hosts (`hostsLive`), as do its enrolling, which
+ * writes its version, and its removal. Note that every other column is
  * ignored, because the device beats and registers again often, rewriting
  * when it was last seen and what it runs, and no view the capture wakes
  * reads them: a window judges a device by its own presence read.
@@ -168,10 +170,7 @@ export const deviceSync = defineSyncTable(device, {
   ],
   ignore: [
     device.kind,
-    device.platform,
     device.arch,
-    device.machineId,
-    device.model,
     device.isolation,
     device.home,
     device.agentsFolder,
@@ -181,11 +180,8 @@ export const deviceSync = defineSyncTable(device, {
     device.capabilities,
     device.setup,
     device.setupFailure,
-    device.updatePhase,
     device.updateFailure,
     device.secretHash,
-    device.version,
-    device.removedAt,
     device.createdAt,
     device.lastSeenAt,
   ],

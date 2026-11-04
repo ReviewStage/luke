@@ -1,36 +1,35 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
-import type { Host } from "@repo/features/host-wire";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
+import type { HostLine } from "@repo/features/host-live";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppThisMacHost } from "@repo/host/app-state";
-import { timeRuntime } from "@repo/ui";
-import { Clock, Context, Effect } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
+import type { AppStateDelivery, AppStateSnapshot, AppThisMacHost } from "@repo/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { TestClock } from "effect/testing";
-import { act, createElement, useEffect } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type FakeActPort,
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { useOpenHostConnect } from "./host-connect-dialog.js";
 import { HostsSection } from "./hosts-section.js";
 
 /**
- * hosts-section.test.ts -- Settings › Hosts: Add hosts shows the public
- * install command and names each host that joins while it stands, one
- * approved from its link in the same window among them, a host that joins
- * is listed, a host updating says so, and This Mac stands first. Synthetic
- * ids, codes, and addresses.
+ * hosts-section.test.ts -- Settings › Hosts, drawn from the hosts the host
+ * holds: Add hosts shows the public install command and names each host
+ * that joins while it stands, a host updating says so, and This Mac stands
+ * first. Synthetic ids, codes, and addresses.
  */
 
 declare global {
@@ -65,9 +64,12 @@ async function settle(): Promise<void> {
 /**
  * Hosts drawn signed in, on a registry of the test's own, so the window's
  * shared presence is read afresh rather than standing as an earlier test
- * left it.
+ * left it, the host answering the window's acts as `procedures` say and
+ * holding its holds quietly, as it does while their reads are laid.
  */
-function drawHosts(registry: AtomRegistry.AtomRegistry = AtomRegistry.make()): void {
+function drawHosts(procedures: Partial<FakeActPort> = {}): void {
+  fakeActPort(procedures);
+  const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");
   document.body.append(container);
@@ -76,32 +78,73 @@ function drawHosts(registry: AtomRegistry.AtomRegistry = AtomRegistry.make()): v
   act(() => root.render(onRegistry(registry, createElement(HostsSection, { signedIn: true }))));
 }
 
-/** A registry whose clock is the test's, so the reads that wait on the minute or the second wait on `TestClock`. */
-const onTestClock = Effect.gen(function* () {
-  const clock = yield* Clock.Clock;
-  return AtomRegistry.make({
-    initialValues: [[timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+/**
+ * Lays the account's hosts as `hostsOf` names them, as the host holds them,
+ * under the account the window's document names, over whatever the window
+ * was handed; answers with how they are laid anew as they move, as the host
+ * lays them, under another account where one is named, as a sign-in to it
+ * lays them.
+ */
+function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) => void {
+  const handed = fakeAppBridgeCalls().requestAppState;
+  const listening = fakeAppBridgeCalls().onAppState;
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let account: AppStateSnapshot["account"] | undefined;
+  let accountId: string | undefined;
+  let version = 0;
+  const laid = () =>
+    accountId === undefined
+      ? {}
+      : {
+          [LIVE_READ.HOSTS]: {
+            [accountId]: { rows: { hosts: hostsOf(), installScriptUrl: SCRIPT } },
+          },
+        };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => {
+      const snapshot = await (handed ?? assert.fail("a document is handed"))();
+      version = Math.max(version, snapshot.version);
+      account = snapshot.account;
+      if (account.status === ACCOUNT_STATUS.SIGNED_IN) accountId = account.id;
+      return { ...snapshot, ...laid() };
+    },
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      const before = listening?.((delivery) => {
+        version = Math.max(version, delivery.version);
+        listener(delivery);
+      });
+      return () => {
+        listeners.delete(listener);
+        before?.();
+      };
+    },
   });
-});
+  return (signedInAs) => {
+    version += 1;
+    if (signedInAs === undefined) {
+      for (const listener of [...listeners]) listener({ version, entries: laid() });
+      return;
+    }
+    const standing = account ?? assert.fail("a document is handed");
+    if (standing.status !== ACCOUNT_STATUS.SIGNED_IN) assert.fail("the window is signed in");
+    const next = { ...standing, id: signedInAs };
+    account = next;
+    accountId = signedInAs;
+    const entries = { ...laid(), account: next };
+    for (const listener of [...listeners]) listener({ version, entries });
+  };
+}
 
 /** The open dialog's words, apart from the list behind it, which names a host's setup too. */
 function dialogText(): string {
   return document.querySelector('[role="dialog"]')?.textContent ?? "";
 }
 
-test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away with the list read again", async () => {
-  const hosts: Host[] = [
-    {
-      id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
-      name: "fra-03",
-      seenAt: 0,
-      version: "0.1.0",
-      upgradeNeeded: false,
-    },
-  ];
-  fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-  });
+test("Add hosts shows the public install command, with no secret in it, waits for a host it has not seen, and Close puts it away", async () => {
+  handBeats({});
+  holdHosts(() => [{ id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" }]);
   drawHosts();
   await settle();
 
@@ -111,133 +154,40 @@ test("Add hosts shows the public install command, with no secret in it, waits fo
   assert.ok(!/lkh_|--token|sudo/u.test(dialogText()), "the command carries no secret");
   assert.ok(dialogText().includes("Waiting for approval"));
   assert.ok(!dialogText().includes("fra-03"), "a host the account had already is not named");
-  // Note that the host is approved after the dialog's last read, and the minute has not turned.
-  hosts.push({
-    id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31",
-    name: "hel-02",
-    seenAt: 0,
-    version: "0.1.0",
-    upgradeNeeded: false,
-  });
   await press("Close");
   assert.equal(document.querySelector('[role="dialog"]'), null, "Close puts the dialog away");
-  assert.ok(document.body.textContent?.includes("hel-02"), "the host approved meanwhile is listed");
 });
 
-it.effect("the dialog names a host that joins while it stands within seconds", () =>
-  Effect.gen(function* () {
-    const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
-    const joined: Host = {
-      id,
-      name: "hel-02",
-      seenAt: Date.now(),
-      version: "0.1.0",
-      upgradeNeeded: false,
-    };
-    const hosts: Host[] = [];
-    fakeActPort({
-      [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    });
-    handBeats({ [id]: 0 });
-    drawHosts(yield* onTestClock);
-    yield* Effect.promise(settle);
-    yield* Effect.promise(() => press("Add hosts"));
-    hosts.push({ ...joined, calledIn: false });
-    yield* TestClock.adjust("5 seconds");
-    yield* Effect.promise(settle);
-    const approved = dialogText();
-
-    assert.ok(approved.includes("hel-02"), approved);
-    assert.ok(!approved.includes("Waiting for approval"));
-  }),
-);
-
-/** What a pairing's link does as it lands in the window: opens its dialog for the code. */
-function OpenLink({ code }: { code: string }): null {
-  const open = useOpenHostConnect();
-  useEffect(() => open(code), [open, code]);
-  return null;
-}
-
-test("a code approved from its link in the same window lets Add hosts, open beneath it, name the host and move on", async () => {
-  const hosts: Host[] = [];
-  fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-    [ACT_KIND.HOSTS_PAIRING_READ]: () =>
-      Promise.resolve({
-        name: "hel-02",
-        platform: DEVICE_PLATFORM.LINUX,
-        arch: DEVICE_ARCH.X64,
-        ip: "203.0.113.7",
-        expiresAt: 1_800_000_000_000,
-      }),
-    [ACT_KIND.HOSTS_PAIRING_APPROVE]: () => {
-      const id = "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31";
-      hosts.push({
-        id,
-        name: "hel-02",
-        seenAt: 0,
-        version: "0.1.0",
-        upgradeNeeded: false,
-        calledIn: false,
-      });
-      return Promise.resolve({ deviceId: id });
-    },
-  });
-  const registry = AtomRegistry.make();
-  drawHosts(registry);
+test("the dialog names a host that joins while it stands, as the host lays it", async () => {
+  const hosts: HostLine[] = [];
+  handBeats({});
+  const lay = holdHosts(() => [...hosts]);
+  drawHosts();
   await settle();
   await press("Add hosts");
 
-  const link = document.createElement("div");
-  document.body.append(link);
-  const root = createRoot(link);
-  roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(OpenLink, { code: "BCDFGHJK" }))));
+  hosts.push({ id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "hel-02" });
+  act(lay);
   await settle();
-  await press("Connect");
+  const approved = dialogText();
 
-  assert.ok(dialogText().includes("hel-02"), dialogText());
+  assert.ok(approved.includes("hel-02"), approved);
+  assert.ok(!approved.includes("Waiting for approval"));
 });
 
-it.effect(
-  "a server or a Mac that enrolls while Settings stays open is listed within a minute",
-  () =>
-    Effect.gen(function* () {
-      const hosts: Host[] = [];
-      fakeActPort({
-        [ACT_KIND.HOSTS_LIST]: () =>
-          Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-      });
-      handBeats({});
-      drawHosts(yield* onTestClock);
-      yield* Effect.promise(settle);
-      assert.ok(!document.body.textContent?.includes("fra-03"), "no server has joined yet");
+test("Add hosts does not outlive the account it opened for", async () => {
+  handBeats({});
+  const lay = holdHosts(() => [{ id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" }]);
+  drawHosts();
+  await settle();
+  await press("Add hosts");
+  assert.ok(dialogText().includes("Waiting for approval"));
 
-      hosts.push({
-        id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14",
-        name: "fra-03",
-        seenAt: Date.now(),
-        version: "0.1.0",
-        upgradeNeeded: false,
-      });
-      hosts.push({
-        id: "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52",
-        name: "Studio",
-        platform: DEVICE_PLATFORM.DARWIN,
-        seenAt: Date.now(),
-        version: "0.1.0",
-        upgradeNeeded: false,
-      });
-      yield* TestClock.adjust("1 minute");
-      yield* Effect.promise(settle);
-      assert.ok(document.body.textContent?.includes("fra-03"), "the server that joined is listed");
-      assert.ok(
-        document.body.textContent?.includes("Offline · Mac"),
-        "a Mac its desktop enrolled is listed as a Mac",
-      );
-    }),
-);
+  act(() => lay("user-elsewhere"));
+  await settle();
+
+  assert.equal(dialogText(), "", "the next account's hosts are not named as joined");
+});
 
 /** The button whose words are these, pressed. */
 async function press(words: string): Promise<void> {
@@ -251,14 +201,12 @@ async function press(words: string): Promise<void> {
 
 /** Hosts drawn in the desktop over the hosts given, This Mac held as given, and the beats given. */
 async function machinesWithThisMac(
-  hosts: readonly Host[],
+  hosts: readonly HostLine[],
   thisMac: AppThisMacHost,
   beats: readonly { readonly deviceId: string; readonly ageMs: number }[] = [],
 ): Promise<void> {
-  fakeActPort({
-    [ACT_KIND.HOSTS_LIST]: () => Promise.resolve({ hosts: [...hosts], installScriptUrl: SCRIPT }),
-  });
   handBeats(Object.fromEntries(beats.map((beat) => [beat.deviceId, beat.ageMs])));
+  holdHosts(() => hosts);
   // This Mac is laid as the host holds it, under the account the beats are held for.
   const handed = fakeAppBridgeCalls().requestAppState;
   fakeAppBridge({
@@ -279,7 +227,7 @@ async function machinesWithThisMac(
 const MACHINE_ID = "a".repeat(64);
 
 /** A server, and a Mac on the machine This Mac is, as the service lists them. */
-const SERVER_AND_THIS_MAC: readonly Host[] = [
+const SERVER_AND_THIS_MAC: readonly HostLine[] = [
   { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-03" },
   {
     id: "7a1c9e3b-2f4d-4c6a-8b0e-5d7f9a1c3e52",
@@ -287,7 +235,7 @@ const SERVER_AND_THIS_MAC: readonly Host[] = [
     platform: DEVICE_PLATFORM.DARWIN,
     machineId: MACHINE_ID,
   },
-].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+];
 
 test("This Mac stands first on the row of the machine it is, with no Remove", async () => {
   await machinesWithThisMac(
@@ -303,10 +251,10 @@ test("This Mac stands first on the row of the machine it is, with no Remove", as
 });
 
 test("a host's row says Updating… while its update runs, though the restart has left its beat past fresh", async () => {
-  const hosts: readonly Host[] = [
+  const hosts: readonly HostLine[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "ord-01", update: HOST_UPDATE.UPDATING },
-  ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+  ];
   await machinesWithThisMac(hosts, {}, [
     { deviceId: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", ageMs: 0 },
     { deviceId: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", ageMs: 90_000 },
@@ -318,10 +266,10 @@ test("a host's row says Updating… while its update runs, though the restart ha
 });
 
 test("each host's ⋯ is named by its host, and its Remove asks about that host first", async () => {
-  const hosts: readonly Host[] = [
+  const hosts: readonly HostLine[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
-  ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
+  ];
   await machinesWithThisMac(hosts, {});
   const more =
     document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
@@ -332,6 +280,36 @@ test("each host's ⋯ is named by its host, and its Remove asks about that host 
 
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(asked.includes("Remove sfo-02?"), asked);
+});
+
+test("a refused Remove is said in the dialog that asked it, though the list drew its host gone while it was asked", async () => {
+  const kept: HostLine = { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" };
+  const removed: HostLine = { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" };
+  let hosts: readonly HostLine[] = [kept, removed];
+  handBeats({});
+  const lay = holdHosts(() => hosts);
+  drawHosts({
+    // The host draws the removal gone at once, and puts the host back once the service refuses it.
+    [ACT_KIND.HOSTS_REMOVE]: async () => {
+      hosts = [kept];
+      lay();
+      await new Promise((done) => setTimeout(done, 0));
+      hosts = [kept, removed];
+      lay();
+      return { failure: AGENT_CALL_FAILURE.NOT_PERMITTED };
+    },
+  });
+  await settle();
+  const more =
+    document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
+    assert.fail("sfo-02's ⋯ is drawn");
+  act(() => more.click());
+  chooseMenuItem("Remove");
+
+  await press("Remove");
+
+  const said = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
+  assert.ok(said.includes("Could not reach the service. Try again."), said);
 });
 
 test("a Mac whose host the service does not list yet keeps a This Mac row that reads offline, with nothing to press", async () => {

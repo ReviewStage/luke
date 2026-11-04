@@ -39,7 +39,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters and parts, the account's beats, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters and parts, the account's beats, hosts, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -48,6 +48,7 @@ type HoldKind =
   | typeof TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
+  | typeof AGENT_ACT_KIND.HOSTS_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW
   | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
@@ -77,6 +78,7 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
   CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW,
   AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW,
+  AGENT_ACT_KIND.HOSTS_FOLLOW,
   AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW,
   AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW,
   INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW,
@@ -131,8 +133,8 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters or parts,
- * the account's beats, integrations, provider keys, or GitHub token, an
- * agent's or a server's tools, the outside MCP clients, a workspace's
+ * the account's beats, hosts, integrations, provider keys, or GitHub token,
+ * an agent's or a server's tools, the outside MCP clients, a workspace's
  * memories, skills, or repositories, a link's standing, the automations'
  * lists and histories, a plan's or a page's comments, a task's plan
  * history, the run that started an agent, a workspace's people, token

@@ -9,6 +9,7 @@ import {
   type Replay,
   toolStep,
 } from "@repo/features/agent-replay";
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
   AGENT_STATUS,
@@ -24,6 +25,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
+import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
@@ -127,6 +129,11 @@ async function drawn(
     },
     { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "On it." }] },
   ];
+  // The host holds what the source published, its branch among it.
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PUBLISHED]: () =>
+      Promise.resolve({ repository: "acme/app", branch: "luke/start-from", pullRequest: null }),
+  });
   const control = agentsControl({
     agents: [agent],
     // An agent's own page lists that agent alone, and reads any other by its id.
@@ -141,12 +148,6 @@ async function drawn(
         title: null,
       },
     ]),
-    readPullRequest: () =>
-      Promise.resolve({
-        repository: "acme/app",
-        branch: "luke/start-from",
-        pullRequest: null,
-      }),
   });
   const cards: TranscriptCards = {
     target: () => undefined,

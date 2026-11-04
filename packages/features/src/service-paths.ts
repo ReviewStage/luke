@@ -135,6 +135,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_MEMORIES: "/api/live/workspace-memories",
   /** One workspace's Sentry installations and Slack bot under `?workspaceId=`, sealed for following over Neon Realtime (GET), with whether this deployment holds each integration, or `not-found`, or their rows inline where polled. `workspace-integrations-live.ts` declares the answer. */
   LIVE_WORKSPACE_INTEGRATIONS: "/api/live/workspace-integrations",
+  /** The account's hosts, sealed for following over Neon Realtime (GET), with the install script's address on the service's own origin, or their rows inline where polled. `host-live.ts` declares the answer. */
+  LIVE_HOSTS: "/api/live/hosts",
   /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
   /** The skills the account sees in one workspace under `?workspaceId=`, the workspace's and its own, sealed for following over Neon Realtime (GET), each with whether the account may manage it, or `not-found`, or their rows inline where polled. `installed-skill-live.ts` declares the answer. */

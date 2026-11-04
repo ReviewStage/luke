@@ -1,25 +1,24 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
-  AGENT_STATUS,
   type AgentPullRequestAnswer,
-  type AgentTranscriptMessage,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
-import { MESSAGE_ROLE } from "@repo/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { useAgentPullRequest, useListedPullRequests } from "./use-agent-pull-request.js";
 
 /**
- * use-agent-pull-request.test.ts -- what an agent published reaches its tab
- * however the tab's transcript lands around the read: a page landing while
- * the read is out does not throw its answer away. A task's agents' pull
- * requests are what the task list carries of its own agents, read from
+ * use-agent-pull-request.test.ts -- an agent's tab draws the pull request the
+ * task list carries before what the host read of it, and a task's agents'
+ * pull requests are what the task list carries of its own agents, read from
  * nothing. Synthetic ids.
  */
 
@@ -40,11 +39,6 @@ const PUBLISHED: AgentPullRequestAnswer = {
   },
 };
 
-/** One page of transcript, as the tab holds it. */
-function page(id: string): readonly AgentTranscriptMessage[] {
-  return [{ id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "Done." }] }];
-}
-
 let root: Root | undefined;
 
 afterEach(() => {
@@ -53,68 +47,24 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("a transcript page landing while the read is out leaves its answer standing", async () => {
-  let answer: ((value: AgentPullRequestAnswerView) => void) | undefined;
-  const read = () =>
-    new Promise<AgentPullRequestAnswerView>((resolve) => {
-      answer = resolve;
-    });
+test("a tab draws the pull request the task list carries over a held read that found none yet, with the branch that read found", async () => {
+  const opened = PUBLISHED.pullRequest ?? assert.fail("a pull request");
+  // The host read the agent's branch before it opened its pull request, which the list now carries.
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PUBLISHED]: () => Promise.resolve({ ...PUBLISHED, pullRequest: null }),
+  });
   let held: AgentPullRequestAnswer | undefined;
-  function Probe({ messages }: { messages: readonly AgentTranscriptMessage[] }) {
-    held = useAgentPullRequest({
-      agentId: AGENT,
-      status: AGENT_STATUS.COMPLETED,
-      shown: true,
-      messages,
-      read,
-      now: () => 1_000,
-    }).published;
+  function Probe(): null {
+    held = useAgentPullRequest({ agentId: AGENT, shown: true, known: opened }).published;
     return null;
   }
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  // The tab opens on an ended agent with nothing held yet, and asks.
-  act(() => root?.render(createElement(Probe, { messages: [] })));
-  // Its transcript's first page lands while the read is still out.
-  act(() => root?.render(createElement(Probe, { messages: page("first") })));
-  await act(async () => answer?.(PUBLISHED));
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  await act(async () => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
 
-  assert.deepEqual(held, PUBLISHED, "the pull request's chip stands without another message");
-});
-
-test("a tab put out of sight drops the read it had out, and asks afresh when shown again", async () => {
-  const answers: ((value: AgentPullRequestAnswerView) => void)[] = [];
-  const read = () =>
-    new Promise<AgentPullRequestAnswerView>((resolve) => {
-      answers.push(resolve);
-    });
-  let held: AgentPullRequestAnswer | undefined;
-  function Probe({ shown }: { shown: boolean }) {
-    held = useAgentPullRequest({
-      agentId: AGENT,
-      status: AGENT_STATUS.COMPLETED,
-      shown,
-      messages: page("first"),
-      read,
-      now: () => 1_000,
-    }).published;
-    return null;
-  }
-  const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
-  act(() => root?.render(createElement(Probe, { shown: true })));
-  act(() => root?.render(createElement(Probe, { shown: false })));
-  act(() => root?.render(createElement(Probe, { shown: true })));
-  assert.equal(answers.length, 2, "shown again inside the gap, it asks afresh");
-
-  const opened = PUBLISHED.pullRequest ?? assert.fail("the fixture names a pull request");
-  const newer: AgentPullRequestAnswer = {
-    ...PUBLISHED,
-    pullRequest: { ...opened, number: 43 },
-  };
-  await act(async () => answers[1]?.(newer));
-  await act(async () => answers[0]?.(PUBLISHED));
-  assert.equal(held?.pullRequest?.number, 43, "the read let go of never lands over the newer one");
+  assert.deepEqual(held, PUBLISHED);
 });
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

@@ -18,6 +18,7 @@ import {
   openTaskAgent,
   openWorkspace,
 } from "@repo/database/testing";
+import { HOST_UPDATE } from "@repo/features/device-agent-wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -149,7 +150,7 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
   );
 
   it.effect(
-    "a teammate's Mac renamed notifies the workspaces they are in, as its local agents' rows name it, and its beat or a register naming it alike notify nothing",
+    "a teammate's Mac renamed, or moving through an update, notifies the workspaces they are in, as its local agents' rows name it, and its beat, the same update beaten again, or a register naming it alike notify nothing",
     () =>
       Effect.gen(function* () {
         const userId = yield* openAccount;
@@ -173,6 +174,12 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
           registerDevice(teammate, { id: deviceId, name: "Studio Display", ...DEVICE_LAYOUT }),
           [],
         );
+        const updating = { update: HOST_UPDATE.UPDATING };
+        yield* expectTopicsFire(beatDevice(teammate, deviceId, undefined, updating), [
+          [TOPIC.ACCOUNT, teammate],
+          [TOPIC.WORKSPACE, teamId],
+        ]);
+        yield* expectTopicsFire(beatDevice(teammate, deviceId, undefined, updating), []);
       }),
   );
 

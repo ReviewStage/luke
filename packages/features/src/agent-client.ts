@@ -89,6 +89,7 @@ import {
 import { dictationRequestSchema } from "./dictation-wire.js";
 import type { FailureFacts } from "./failure-facts.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
+import type { HostsLiveAnswer } from "./host-live.js";
 import {
   HOST_PAIRING_CALL_FAILURE,
   type HostPairingApproveView,
@@ -526,7 +527,30 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.hosts.presence, undefined), ROW_REFUSALS);
   }
 
-  /** One of the account's hosts removed, its secret refused at once. */
+  /**
+   * The account's hosts sealed for following over Neon Realtime, with the
+   * install script's address, or with their rows inline where `poll` asks for
+   * them; signed out where the session is another account's, or why not.
+   */
+  hostsLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    HostsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { [LIVE_USER_QUERY]: userId };
+    return Effect.catchIf(
+      askLive(this.#hosted.live.hosts, read, poll, after),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
+  }
+
+  /** One of the account's hosts removed, its secret refused at once, answering the transaction it was removed in. */
   removeHost(id: string): Effect.Effect<HostDoneAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.hosts.remove, { id }), ROW_REFUSALS);
   }

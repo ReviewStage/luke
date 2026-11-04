@@ -258,14 +258,13 @@ function mentionOf(agent: AgentSummary, name: string): string {
   return mentionMarkdown({ kind: MENTION_KIND.AGENT, agentId: agent.id }, name, PLACE);
 }
 
-/** The acts that read agents or their pull requests, as told. */
+/** The acts that read agents, as told. */
 function agentReads(): readonly AnyAct[] {
   return told.filter(
     (request) =>
       request.kind === ACT_KIND.AGENTS_LIST ||
       request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST ||
-      request.kind === ACT_KIND.AGENTS_PAGE ||
-      request.kind === ACT_KIND.AGENTS_PULL_REQUEST,
+      request.kind === ACT_KIND.AGENTS_PAGE,
   );
 }
 

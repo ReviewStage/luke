@@ -1,116 +1,61 @@
 import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
-import type {
-  AgentPullRequest,
-  AgentPullRequestAnswer,
-  AgentStatus,
-  AgentTranscriptMessage,
-} from "@repo/features/agent-wire";
+import type { AgentPullRequest, AgentPullRequestAnswer } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { ListedPullRequest } from "@repo/features/task-wire";
 import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { agentStillWriting, PUBLISHED_REREAD_MS } from "./agent-model.js";
+import { useHostRead } from "../use-host-read.js";
 
 /**
- * use-agent-pull-request.ts -- what one agent published, as its tab draws it: read when the tab shows, again as its transcript lands pages, and once more as the agent ends.
+ * use-agent-pull-request.ts -- what one agent published, as its tab draws it: the pull request the task list carries for it, and its branch as the host holds it while the tab shows.
  *
- * The service keeps its own answer a short while, so the reads here follow
- * what the tab already hears rather than a clock of their own: one as the
- * tab comes on screen, one as each page of the transcript lands while the
- * agent may still write, no two closer than `PUBLISHED_REREAD_MS` (the
- * next page asks again), and one the moment a page says the agent ended,
- * whatever the gap, since that is when the pull request it opened is most
- * worth showing. An answer the service could not give leaves what was
- * drawn standing; another agent's tab starts from nothing of this one's.
+ * The service writes what an agent published on its row as it happens, the
+ * agent's own `open_pull_request` among it, GitHub's webhook, and the
+ * minute's sweep of a token's pull requests, and the task list carries it
+ * (`useListedPullRequests`), so the tab draws a pull request the agent
+ * opened mid-run without a read of its own. What the row leaves out is the
+ * branch the agent pushed and its repository, which the dock's copies and
+ * the branch's chip name: the host holds them while the tab shows
+ * (`LIVE_READ.PULL_REQUEST_PUBLISHED`), asked again as a window comes
+ * forward, as the agent's status moves, its end among it, and as the list
+ * first names the pull request it opened or its line moves. A read the
+ * service could not give leaves what was drawn standing; another agent's
+ * tab starts from nothing of this one's.
  *
- * The task list carries every agent's pull request beside its agents
- * (`useListedPullRequests`), so the side panel's "+", the task's summary,
- * and ⌘K offer an agent's Changes tab exactly while it has a pull request,
- * its tab open or not.
+ * The task list carries every agent's pull request beside its agents, so
+ * the side panel's "+", the task's summary, and ⌘K offer an agent's
+ * Changes tab exactly while it has a pull request, its tab open or not.
  */
-
-/** How one read is asked: the agent, answered as the view hears it. */
-export type PullRequestReader = (agentId: string) => Promise<AgentPullRequestAnswerView>;
-
-interface Held {
-  agentId: string;
-  published: AgentPullRequestAnswer | undefined;
-}
 
 /** What the tab draws of what the agent published. */
 export interface AgentPublished {
-  /** What a read answered, else the pull request the task already knows of the agent; nothing before either. */
+  /** The branch and repository the host holds, with the pull request the task list carries, else the one the host read; nothing before either. */
   readonly published: AgentPullRequestAnswer | undefined;
 }
 
-/** The last read out or landed: when, and for which standing of the agent. */
-interface LastRead {
-  at: number;
-  ended: boolean;
+/** What the agent published, from what the host holds and the pull request the list carries: the list's pull request first, since it moves without a read. */
+function publishedOf(
+  held: AgentPullRequestAnswerView | undefined,
+  known: AgentPullRequest | undefined,
+): AgentPullRequestAnswer | undefined {
+  const read = held === undefined || "failure" in held ? undefined : held;
+  if (read === undefined) {
+    return known === undefined ? undefined : { repository: null, branch: null, pullRequest: known };
+  }
+  return known === undefined ? read : { ...read, pullRequest: known };
 }
 
 export function useAgentPullRequest(input: {
   agentId: string;
-  status: AgentStatus;
-  /** Whether the tab is on screen. */
+  /** Whether the tab is on screen, while which the host holds what the agent published. */
   shown: boolean;
-  /** The transcript as held, whose every change is a page landed. */
-  messages: readonly AgentTranscriptMessage[];
-  read: PullRequestReader;
-  /** The pull request the task list already carries for the agent (`useListedPullRequests`), drawn until the tab's read answers. */
+  /** The pull request the task list carries for the agent (`useListedPullRequests`). */
   known?: AgentPullRequest | undefined;
-  /** The clock the gap between reads is measured on. */
-  now?: () => number;
 }): AgentPublished {
-  const { agentId, status, shown, messages, read, known } = input;
-  const now = input.now ?? (() => Date.now());
-  const [held, setHeld] = useState<Held>({ agentId, published: undefined });
-  if (held.agentId !== agentId) setHeld({ agentId, published: undefined });
-  const latest = useRef({ read, now });
-  latest.current = { read, now };
-  const last = useRef<{ agentId: string; read: LastRead | undefined }>({
-    agentId,
-    read: undefined,
-  });
-  if (last.current.agentId !== agentId) last.current = { agentId, read: undefined };
-  // Each read asked, numbered, so only the latest one's answer is kept.
-  const asks = useRef(0);
-  const ended = !agentStillWriting(status);
-
-  useEffect(() => {
-    // A tab put out of sight lets go of the read it has out, whose answer may
-    // land after a newer one the plan read, and asks afresh when it is next
-    // shown, whatever the gap, so it never comes back on the older answer.
-    if (!shown) {
-      asks.current += 1;
-      last.current = { agentId, read: undefined };
-      return;
-    }
-    const before = last.current.read;
-    const forced = ended && (before === undefined || !before.ended);
-    const at = latest.current.now();
-    if (!forced && before !== undefined && at - before.at < PUBLISHED_REREAD_MS) return;
-    last.current = { agentId, read: { at, ended } };
-    asks.current += 1;
-    const ask = asks.current;
-    // Note that the answer is kept by its ask, never dropped as the effect
-    // runs again, because a transcript page landing while the read is out
-    // runs it again inside the gap, which asks nothing, and the answer
-    // dropped would leave the chip unshown until the next page.
-    latest.current.read(agentId).then(
-      (answer) => {
-        if (ask !== asks.current || "failure" in answer) return;
-        setHeld((was) => (was.agentId === agentId ? { agentId, published: answer } : was));
-      },
-      () => undefined,
-    );
-  }, [agentId, shown, ended, messages]);
-
-  const own = held.agentId === agentId ? held : undefined;
-  const published =
-    own?.published ??
-    (known === undefined ? undefined : { repository: null, branch: null, pullRequest: known });
-  return { published };
+  const { agentId, shown, known } = input;
+  const held = useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, shown ? { agentId } : undefined).rows;
+  return useMemo(() => ({ published: publishedOf(held, known) }), [held, known]);
 }
 
 /** No agent has a pull request, one map so a render that has none hands down the same one. */
@@ -124,9 +69,9 @@ export type PullRequestHolder = { readonly taskId: string } | { readonly agentId
  * no task given has, as the side panel's "+", the task's summary, and ⌘K
  * offer its Changes tab by: what the task list carries of each (`listed`),
  * as the service last read it on GitHub, archived agents among them, so
- * choosing a task, or an item of it, reads nothing. An agent's own tab still
- * reads what it published as it shows (`useAgentPullRequest`), and that read
- * is written on the agent's row, which the list then carries. Note that the
+ * choosing a task, or an item of it, reads nothing. A read of what an agent
+ * published, its tab's (`useAgentPullRequest`) among them, is written on the
+ * agent's row too, which the list then carries. Note that the
  * map is built again only as the list's pull requests move, since the
  * document keeps their identity while none does, so nothing drawn from it is
  * drawn again.

@@ -8,6 +8,7 @@ import {
   type AgentSummary,
 } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { type PageLine, type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { TaskStatus } from "@repo/features/task-wire";
@@ -98,6 +99,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { ADDRESS, type Address } from "../route.js";
 import { centerWithin } from "../scroll-within.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
+import { useSteadyDoors } from "../steady-door.js";
 import {
   agentGlyphState,
   agentName,
@@ -179,7 +181,7 @@ import {
   sameHolder,
 } from "../tasks/use-side-panel.js";
 import { useCapability } from "../use-app-state.js";
-import { usePlacesPages } from "../use-host-read.js";
+import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
@@ -2465,28 +2467,15 @@ export function SidePanel({
   }, []);
   const { tab } = panel;
   // A Pull request tab naming another pull request by its number is named by
-  // that pull request, read once for each such tab the strip draws, since
-  // only the tab shown reads it on its own.
-  const { readNumberedPullRequest, numberedPullRequests } = agents;
-  // Note that a read that named none, or failed, is let go, so the tab opened again, or another
-  // change of the open tabs, asks again, while the tab standing open asks nothing more.
-  const numberedRead = useRef(new Map<string, Set<number>>());
-  useEffect(() => {
-    for (const each of panel.changes) {
-      const { changes: agentId, number } = each;
-      if (number === undefined || ofPullRequestTab(numberedPullRequests, each) !== undefined) {
-        continue;
-      }
-      const asked = numberedRead.current.get(agentId) ?? new Set<number>();
-      if (asked.has(number)) continue;
-      numberedRead.current.set(agentId, asked.add(number));
-      const forget = () => numberedRead.current.get(agentId)?.delete(number);
-      readNumberedPullRequest(agentId, number).then(
-        (found) => (found ? undefined : forget()),
-        forget,
-      );
-    }
-  }, [panel.changes, numberedPullRequests, readNumberedPullRequest]);
+  // that pull request, which the host holds for each such tab the strip
+  // draws (`numberedPullRequests`), since only the tab shown holds it on its own.
+  // Note that the tabs are handed on as one array while they name the same pull requests, so a draw that changed none holds none anew.
+  const numberedTabs = useSteadyDoors(
+    panel.changes.flatMap(({ changes: agentId, number }) =>
+      number === undefined ? [] : [{ agentId, number }],
+    ),
+  );
+  useHostReads(LIVE_READ.PULL_REQUEST_PUBLISHED, numberedTabs);
   // Whether a File or Changes tab's tree is open, for every one of them
   // alike and for the window's life, as an editor's explorer stands across
   // its tabs.

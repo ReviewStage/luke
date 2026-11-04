@@ -230,7 +230,8 @@ function pullRequestPartRead(part: PullRequestPart) {
  * read of it found; one task's cloud Browser tabs,
  * every one of its agents', or one agent's, which a side panel listing them
  * holds; the account's devices' beats, by the account, which every surface
- * drawing a device's standing holds; This Mac's host, by the account, which
+ * drawing a device's standing holds; the account's hosts, by the account,
+ * which Settings › Hosts holds; This Mac's host, by the account, which
  * the host reads on its own and holds for the session; one agent's own tools, which its
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
@@ -394,6 +395,13 @@ const HOST_READS = {
     // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
     hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
     retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
+  }),
+  [LIVE_READ.HOSTS]: hostRead(LIVE_READ.HOSTS, {
+    slice: APP_SLICE.HOSTS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the hosts of whoever is signed in, so neither act names an account.
+    hold: () => askAct(ACT_KIND.HOSTS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.HOSTS_RETRY),
   }),
   [LIVE_READ.WORKSPACE_INVITATIONS]: hostRead(LIVE_READ.WORKSPACE_INVITATIONS, {
     slice: APP_SLICE.WORKSPACE_INVITATIONS,
