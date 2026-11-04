@@ -217,13 +217,15 @@ function pullRequestPartRead(part: PullRequestPart) {
  * read of it found; one task's cloud Browser tabs,
  * every one of its agents', or one agent's, which a side panel listing them
  * holds; the account's devices' beats, by the account, which every surface
- * drawing a device's standing holds; one agent's own tools, which its
+ * drawing a device's standing holds; This Mac's host, by the account, which
+ * the host reads on its own and holds for the session; one agent's own tools, which its
  * servers popover holds; one integration server's tools, by the account it
  * stands for, which a list of the servers holds; the account's provider
  * keys, by the account, which the window holds while signed in and
  * Settings › Agents draws; the outside MCP clients the account allowed, by
  * the account, which Settings › Integrations holds; one workspace's
- * memories, which Settings › Memory holds; one workspace's
+ * memories, which Settings › Memory holds; the skills the account sees in
+ * one workspace, which Settings › Skills holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
  * page's tab each hold; one task's plan history, which its version history
@@ -237,7 +239,8 @@ function pullRequestPartRead(part: PullRequestPart) {
  * (`@repo/host`'s `live-push.ts`). The beats, which the host asks for again
  * every `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer
  * theirs to the window coming back online (`device-presence.ts`), never to
- * a press.
+ * a press. This Mac's host offers none, since the host reads it again every
+ * few seconds on its own (`compose-this-mac-host.ts`).
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -257,6 +260,12 @@ const HOST_READS = {
     path: (key: InboxHolderKey) => [key.kind, key.id],
     hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
     retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
+  }),
+  [LIVE_READ.INSTALLED_SKILLS]: hostRead(LIVE_READ.INSTALLED_SKILLS, {
+    slice: APP_SLICE.INSTALLED_SKILLS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: (workspaceId) => askAct(ACT_KIND.INSTALLED_SKILLS_FOLLOW, { workspaceId }),
+    retry: (workspaceId) => tellAct(ACT_KIND.INSTALLED_SKILLS_RETRY, { workspaceId }),
   }),
   [LIVE_READ.INTEGRATIONS]: hostRead(LIVE_READ.INTEGRATIONS, {
     slice: APP_SLICE.INTEGRATIONS,
@@ -333,6 +342,12 @@ const HOST_READS = {
     // Note that the host holds the beats of whoever is signed in, so the hold and its asking again name no account.
     hold: () => askAct(ACT_KIND.HOSTS_PRESENCE_FOLLOW),
     retry: () => tellAct(ACT_KIND.HOSTS_PRESENCE_REFRESH),
+  }),
+  [LIVE_READ.THIS_MAC_HOST]: hostRead(LIVE_READ.THIS_MAC_HOST, {
+    slice: APP_SLICE.THIS_MAC_HOST,
+    path: (accountId: string) => [accountId],
+    hold: undefined,
+    retry: undefined,
   }),
   [LIVE_READ.WORKSPACE_MEMBERS]: hostRead(LIVE_READ.WORKSPACE_MEMBERS, {
     slice: APP_SLICE.WORKSPACE_MEMBERS,

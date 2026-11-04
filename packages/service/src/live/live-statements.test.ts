@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
@@ -106,6 +107,9 @@ function liveStatements() {
     ),
     "workspace-memories.memories": Option.getOrThrow(
       workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
+    ),
+    "installed-skills.skills": Option.getOrThrow(
+      installedSkillsLiveStatement(USER_ID, randomUUID()),
     ),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(

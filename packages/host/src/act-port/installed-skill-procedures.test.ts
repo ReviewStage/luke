@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
-import type { InstalledSkillListView } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE } from "@repo/features/installed-skill-wire";
 import { Effect } from "effect";
@@ -11,8 +10,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * Settings › Skills' acts through the act port as a window calls them: a
- * panel's list and install reach the host with what the page names and hear
- * its answer; any other window, and a frame this build does not
+ * panel's Try again, install, and share reach the host with what the page
+ * names and hear its answer; any other window, and a frame this build does not
  * trust, are refused in each kind's own words before the host is asked;
  * and a payload off the kind's schema is refused at the port. Synthetic ids.
  */
@@ -24,14 +23,12 @@ const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const WORKSPACE_ID = "workspace-stage";
 
-const LIST_REFUSAL = "Could not read your skills on this system.";
+const RETRY_REFUSAL = "Could not read your skills again on this system.";
 const INSTALL_REFUSAL = "Could not install the skill on this system.";
 const TOGGLE_REFUSAL = "Could not turn the skill on or off on this system.";
 const SHARE_REFUSAL = "Could not share the skill with the workspace on this system.";
 
 const SKILL_ID = "5d3c2b1a-0f9e-4d8c-b7a6-123456789abc";
-
-const NOTHING: InstalledSkillListView = { skills: [] };
 
 const ports: TestActPort<unknown>[] = [];
 
@@ -46,10 +43,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const port = testActPort<unknown>(
     installedSkillProcedures({
       host: {
-        installedSkillsList: ({ workspaceId }) =>
+        installedSkillsFollow: () => Effect.void,
+        installedSkillsUnfollow: () => Effect.void,
+        installedSkillsRetry: ({ workspaceId }) =>
           Effect.sync(() => {
-            asked.push(`list:${workspaceId}`);
-            return NOTHING;
+            asked.push(`retry:${workspaceId}`);
           }),
         installedSkillsRead: () => Effect.succeed(refused),
         installedSkillsPreview: () => Effect.succeed(refused),
@@ -78,9 +76,9 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   ports.push(port);
   const client: ActPortClient = port.as(actor, { trusted: options.trusted ?? true });
   return {
-    list: () =>
+    retry: () =>
       settledAct(
-        client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_LIST]({ workspaceId: WORKSPACE_ID }),
+        client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_RETRY]({ workspaceId: WORKSPACE_ID }),
       ),
     install: () =>
       settledAct(
@@ -109,16 +107,16 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   };
 }
 
-it("a panel's list, install, and share reach the host with what the page names, and it hears the answer", async () => {
-  const { list, install, share, asked } = windowPort(PANEL);
+it("a panel's Try again, install, and share reach the host with what the page names, and it hears the answer", async () => {
+  const { retry, install, share, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await list(), { answer: NOTHING });
+  assert.deepEqual(await retry(), { answer: undefined });
   assert.deepEqual(await install(), { answer: { skills: [] } });
   assert.deepEqual(await share(), {
     answer: { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
   });
   assert.deepEqual(asked, [
-    `list:${WORKSPACE_ID}`,
+    `retry:${WORKSPACE_ID}`,
     `install:${INSTALLED_SKILL_SCOPE.PERSONAL}`,
     `share:${WORKSPACE_ID}:${SKILL_ID}`,
   ]);
@@ -129,8 +127,8 @@ it("a window that is not a panel, and a frame this build does not trust, are ref
     { actor: OTHER_WINDOW, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
-    const { list, install, share, asked } = windowPort(actor, { trusted });
-    assert.deepEqual(await list(), { refused: LIST_REFUSAL });
+    const { retry, install, share, asked } = windowPort(actor, { trusted });
+    assert.deepEqual(await retry(), { refused: RETRY_REFUSAL });
     assert.deepEqual(await install(), { refused: INSTALL_REFUSAL });
     assert.deepEqual(await share(), { refused: SHARE_REFUSAL });
     assert.deepEqual(asked, []);

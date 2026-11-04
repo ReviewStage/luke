@@ -315,25 +315,35 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   /** A held list or history read again at once, as Try again asks. */
   AUTOMATIONS_RETRY: "automations.retry",
-  /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
-  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  /**
+   * The skills the account sees in one workspace, the workspace's and its
+   * own, held for a window from now until it is let go, followed on the
+   * service's live read, and a while after among the reads let go lately.
+   * What it holds is heard as `INSTALLED_SKILLS_CHANGED` events, on the app
+   * state every window draws, never answered.
+   */
+  INSTALLED_SKILLS_FOLLOW: "installedSkills.follow",
+  /** One workspace's skills let go by the window that held them. */
+  INSTALLED_SKILLS_UNFOLLOW: "installedSkills.unfollow",
+  /** One workspace's held skills read again at once, as Try again asks; answered once the ask has landed. */
+  INSTALLED_SKILLS_RETRY: "installedSkills.retry",
   /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
   INSTALLED_SKILLS_READ: "installedSkills.read",
   /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
   INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
-  /** The skills a paste makes, installed for the account or its workspace, all or none; or why none were. */
+  /** The skills a paste makes, installed for the account or its workspace, all or none, drawn over every held read whose scope they are in once the service answers; or why none were. */
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
-  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
+  /** One installed skill turned on or off, drawn so at once over the held skills; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
   /** Whether a GitHub skill's folder moved at its ref since it was installed. */
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
-  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
+  /** A GitHub skill's files read again at its ref, drawn over the held skills as the service answers it; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
-  /** The account's own personal skill moved into a workspace it is a member of; the skill as it then stands, or why it is unchanged. */
+  /** The account's own personal skill moved into a workspace it is a member of, drawn there at once over the held skills; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_SHARE: "installedSkills.share",
-  /** One installed skill removed with its files; or why it stands. */
+  /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   AGENTS_PULL_REQUEST: "agents.pullRequest",
   /**
@@ -560,8 +570,6 @@ export const GATEWAY_METHOD = {
   SETTINGS_RESET: "settings.reset",
   /** The developer's answer to one command an agent asked to run on this Mac (`@repo/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
   MAC_COMMAND_ANSWER: "macCommands.answer",
-  /** The device This Mac's host's record names (`@repo/host/contract`'s `ThisMacHostRead`), so Hosts draws This Mac on its row. */
-  THIS_MAC_HOST_READ: "thisMacHost.read",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
@@ -698,10 +706,14 @@ export const GATEWAY_EVENT = {
   INBOX_ITEMS_CHANGED: "inboxItems.changed",
   /** Every task's or agent's cloud Browser tabs the host holds for the windows, whole, as its reads of them stand, each time one moves or a takeover lapses. */
   BROWSER_TABS_CHANGED: "browserTabs.changed",
+  /** The skills of every workspace the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  INSTALLED_SKILLS_CHANGED: "installedSkills.changed",
   /** The account's integrations the host holds for the windows, whole, as its read of them stands, each time it moves. */
   INTEGRATIONS_CHANGED: "integrations.changed",
   /** The account's devices' beats the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   DEVICE_PRESENCE_CHANGED: "devicePresence.changed",
+  /** Which machine This Mac is and the device its host's record names, under the account signed in, whole, as the host reads it at its start and every few seconds after, each time it moves. */
+  THIS_MAC_HOST_CHANGED: "thisMacHost.changed",
   /** Every agent's own tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */

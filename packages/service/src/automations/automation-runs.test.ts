@@ -26,7 +26,7 @@ import {
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { readMessageByClientId, sentLineStands } from "@repo/database/models/message-reads";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { createTask } from "@repo/database/models/task-store";
+import { createTask, readTask } from "@repo/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@repo/database/models/writer";
 import { automationRun, automation as automationTable } from "@repo/database/schemas/automation";
 import { turns } from "@repo/database/schemas/storage";
@@ -56,6 +56,7 @@ import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@repo/features/integration-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { TASK_STATUS } from "@repo/features/task-wire";
 import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "@repo/features/trigger-catalog";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
@@ -74,6 +75,7 @@ import {
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import { settleTaskAfterTurn } from "../tasks/task-finish.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -633,6 +635,12 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           adopted,
           "the automation keeps the agent its first run started",
         );
+        const kept = Option.getOrThrow(yield* readAgent(owner, adopted));
+        assert.equal(
+          Option.getOrThrow(yield* readTask(owner, kept.taskId ?? "")).task.name,
+          "Follow-up sweep",
+          "the agent it keeps works on a standing task named for the automation",
+        );
         const run = (yield* listAutomationRuns(owner, fresh.id)).find(
           (each) => each.id === adopting.id,
         );
@@ -968,6 +976,52 @@ it.layer(getTestDB())("an automation's runs", (it) => {
   );
 
   it.effect(
+    "an automation that archives its successful runs archives the helpers its run's agent started with that agent, and none of the run's agents while one of them is still at work",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation, now, workspaceId } = yield* openAutomation({
+          archiveSuccessful: true,
+        });
+        const lead = yield* startedNow(eve, automation);
+        const made = yield* createAgent(owner, {
+          taskId: null,
+          organizationId: workspaceId,
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          planSnapshot: null,
+          prompt: "Bisect the flaky test.",
+          repository: `${RELAY.owner}/${RELAY.name}`,
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: AGENT_PAYER.API_KEY,
+          automationRunId: Option.getOrThrow(yield* readAgent(owner, lead)).automationRunId ?? "",
+          startedByAgentId: lead,
+        });
+        const helper = Option.getOrThrow(made).agent;
+        yield* ranTurn(owner, lead, TURN_STATUS.SETTLED);
+        yield* ranTurn(owner, helper.id, TURN_STATUS.RUNNING);
+        const archived = () =>
+          Effect.forEach([lead, helper.id], (id) =>
+            Effect.map(readAgent(owner, id), (read) => Option.getOrThrow(read).archivedAt !== null),
+          );
+
+        yield* sweepAutomations(eve.sessionsFor, now).pipe(Effect.provide(services));
+        const whileHelping = yield* archived();
+        yield* Database.use((db) =>
+          db
+            .update(turns)
+            .set({ status: TURN_STATUS.SETTLED })
+            .where(eq(turns.conversationId, helper.conversationId)),
+        );
+        yield* sweepAutomations(eve.sessionsFor, now + 60_000).pipe(Effect.provide(services));
+
+        assert.deepEqual(whileHelping, [false, false]);
+        assert.deepEqual(yield* archived(), [true, true]);
+      }),
+  );
+
+  it.effect(
     "a due schedule starts one coding agent as the deployment acting for its owner, handed the prompt as its task, and a sweep after it starts nothing",
     () =>
       Effect.gen(function* () {
@@ -994,10 +1048,28 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           "the agent belongs to the run that started it",
         );
         assert.deepEqual(
-          [agent.taskId, agent.organizationId, agent.repository],
-          [null, workspaceId, `${RELAY.owner}/${RELAY.name}`],
-          "the run's agent stands in the automation's workspace on no plan, on its repository",
+          [agent.organizationId, agent.repository],
+          [workspaceId, `${RELAY.owner}/${RELAY.name}`],
+          "the run's agent stands in the automation's workspace, on its repository",
         );
+        const made = Option.getOrThrow(yield* readTask(owner, agent.taskId ?? ""));
+        assert.deepEqual(
+          {
+            name: made.task.name,
+            assignee: made.task.assignee?.userId,
+            repository: made.task.repository,
+            status: made.task.status,
+          },
+          {
+            // The sweep fired the run at the clock's start, read in the schedule's own zone, UTC.
+            name: "Flaky-test sweep · Jan 1, 0:00",
+            assignee: owner,
+            repository: `${RELAY.owner}/${RELAY.name}`,
+            status: TASK_STATUS.IN_PROGRESS,
+          },
+          "the run's agent works on a task the run made, named for it and assigned to its owner",
+        );
+        assert.equal(made.text, "", "the task's plan is blank, the prompt being the agent's");
         assert.ok(agent.prompt?.startsWith(PROMPT), "the automation's prompt opens the agent's");
         assert.match(agent.prompt ?? "", /the automation "Flaky-test sweep"/u);
         assert.deepEqual(
@@ -1011,6 +1083,38 @@ it.layer(getTestDB())("an automation's runs", (it) => {
           undefined,
           "an automation's choice does not become the account's default",
         );
+      }),
+  );
+
+  it.effect(
+    "a run's task is done once its turn settles well, and one whose turn failed stays in progress",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, automation } = yield* openAutomation({
+          guards: { ...AUTOMATION_DEFAULT_GUARDS, maxConcurrentRuns: 2 },
+        });
+        const succeeded = yield* ranTurn(
+          owner,
+          yield* startedNow(eve, automation),
+          TURN_STATUS.SETTLED,
+        );
+        const failed = yield* ranTurn(
+          owner,
+          yield* startedNow(eve, automation),
+          TURN_STATUS.FAILED,
+        );
+
+        // Each turn's end asks its task to settle, as the runner's events do.
+        const statuses = yield* Effect.forEach([succeeded, failed], (agent) =>
+          Effect.gen(function* () {
+            const taskId = agent.taskId ?? "";
+            yield* settleTaskAfterTurn(owner, taskId, agent.id);
+            return Option.getOrThrow(yield* readTask(owner, taskId)).task.status;
+          }),
+        );
+
+        assert.deepEqual(statuses, [TASK_STATUS.DONE, TASK_STATUS.IN_PROGRESS]);
       }),
   );
 

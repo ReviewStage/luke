@@ -23,7 +23,10 @@
  * tree at that commit with the one pinned, so a busy repository whose
  * skill did not move offers no update. A share moves the account's own
  * personal skill into a workspace it is a member of, never its personal
- * one, on the same rule as an install's scope.
+ * one, on the same rule as an install's scope. Each write answers the
+ * transaction it committed in, which a desktop holding the skills live
+ * waits for (`installedSkillsLive`); the list still answers a desktop
+ * released before it.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
@@ -39,6 +42,7 @@ import {
   setInstalledSkillEnabled,
   shareInstalledSkill,
   updateInstalledSkill,
+  type WrittenSkill,
 } from "@repo/database/models/installed-skill-store";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
 import { listWorkspaces, personalWorkspaceOf } from "@repo/database/models/workspace-store";
@@ -164,6 +168,11 @@ function managedBy(userId: string, workspace: MemberWorkspace, skill: InstalledS
     skill.organizationId === workspace.id &&
     (skill.installedByUserId === userId || MANAGING_ROLES.has(workspace.role))
   );
+}
+
+/** The transaction a write committed in, as its answer carries it; none where it wrote nothing. */
+function txidOf(written: WrittenSkill | undefined): { readonly txid?: string } {
+  return written === undefined ? {} : { txid: written.txid };
 }
 
 /** An install the store refused, since the account is no longer a member of the workspace it installs in; it undoes the transaction it stands in. */
@@ -296,7 +305,11 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         made.length === 1 ? made[0]?.name : undefined,
       );
       yield* skillChanged(userId, SERVER_SKILL_ACTION.INSTALL);
-      return { skills: installed.map((skill) => summaryOf(skill, true)) };
+      // Note that every skill of an install is written in the one transaction, so the first's names it.
+      return {
+        skills: installed.map((skill) => summaryOf(skill, true)),
+        ...txidOf(installed[0]),
+      };
     }),
 
     /** One skill turned on or off. */
@@ -313,7 +326,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
         userId,
         body.enabled ? SERVER_SKILL_ACTION.ENABLE : SERVER_SKILL_ACTION.DISABLE,
       );
-      return { skill: summaryOf(written.value, true) };
+      return { skill: summaryOf(written.value, true), txid: written.value.txid };
     }),
 
     /** Whether a GitHub skill's folder moved at its ref since it was pinned; never for a pasted one. */
@@ -366,6 +379,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       return {
         skill: summaryOf(written.value, true),
         changed: written.value.computedHash !== skill.computedHash,
+        txid: written.value.txid,
       };
     }),
 
@@ -377,16 +391,16 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       const written = yield* storeWrite(shareInstalledSkill(userId, id, workspace.id), undefined);
       if (Option.isNone(written)) return yield* refusedWrite(userId, id);
       yield* skillChanged(userId, SERVER_SKILL_ACTION.SHARE);
-      return { skill: summaryOf(written.value, true) };
+      return { skill: summaryOf(written.value, true), txid: written.value.txid };
     }),
 
     /** One skill removed with its files. */
     remove: skills.remove.effect(function* ({ input, context: { userId } }) {
       const id = yield* pathUuid(input.id);
       const removed = yield* hostedStoreOrUnavailable(removeInstalledSkill(userId, id));
-      if (!removed) return yield* refusedWrite(userId, id);
+      if (Option.isNone(removed)) return yield* refusedWrite(userId, id);
       yield* skillChanged(userId, SERVER_SKILL_ACTION.REMOVE);
-      return { id };
+      return { id, txid: removed.value };
     }),
   };
 }

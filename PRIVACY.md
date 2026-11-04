@@ -1,14 +1,14 @@
 # Privacy
 
-Last updated: 3 November 2026
+Last updated: 4 November 2026
 
 Vespin is an inbox for all your coding agents. This policy explains
 what we collect, who we send it to, and how to turn it off.
 
 ## In short
 
-- **What Vespin stores.** On your Mac, only its window layout and the messages
-  you have not sent yet. On our service: your account, your tasks and their
+- **What Vespin stores.** On your Mac, only its window layout, the messages
+  you have not sent yet, and, sealed, a copy of your workspaces' lists. On our service: your account, your tasks and their
   plans, your agents' transcripts, and your conversation. Agents work
   in sandboxes on our service, not on your Mac. An agent you run on This Mac
   or on a host instead runs straight on that machine, as you or the user Vespin's
@@ -47,7 +47,7 @@ read from our service. Each agent reads a task's repository in its
 sandbox on our service. No part of an agent runs on this Mac, so no
 transcript, working memory, or inbox of one is held here on disk, and in
 memory only the tabs described next and the content they showed that never
-changes once read. On disk, under its application data, Vespin keeps only
+changes once read. On disk, under its application data, Vespin keeps
 the layout of its window: which tasks' tabs are open and which are pinned,
 each pin with its label (an agent's title or a file's path), which
 inbox items you have seen, and which groups you folded and how you sorted
@@ -58,6 +58,17 @@ you send it or the agent changes the item, each shown only while the account
 that wrote it is signed in. The files attached to such a message or answer
 stay in memory only.
 None of it is sent anywhere.
+
+While you are signed in, Vespin on your Mac also keeps a copy of your
+workspaces' lists as our service last sent them, so the app opens on them
+before it reaches us: your tasks and their agents as the task list shows
+them, your sidebar's sections and the tasks and agents you keep in them,
+your pinned repositories, and your workspaces with their GitHub
+installations. The copy is one file, `entities.sealed`, beside the
+settings, sealed under a key held in the macOS Keychain, and deleted when
+you sign out. It holds no transcript, inbox item, plan, page, comment,
+browser tab, command or its output, picture, or credential, and it is sent
+nowhere. Vespin in a browser keeps none of it.
 
 **Commands agents run on your Mac.** Every agent can run any shell
 command on your Mac, as many at a time as you allow; the workers a Claude Code
@@ -1780,7 +1791,10 @@ encrypted under a key held in the macOS Keychain, beside whatever settings,
 keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversations with agents or their working memory is kept on your Mac
-beyond the layout of its window described under "On your Mac", and the
+beyond the layout of its window described under "On your Mac". While you
+are signed in, the copy of your workspaces' lists described there is kept
+in `entities.sealed` beside the settings, encrypted under a key held in
+the macOS Keychain, and deleted when you sign out. The
 switch for commands on your Mac is kept with that Mac's settings. Vespin in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
 signed in by the site's session cookie, which only the browser holds. Its

@@ -1,7 +1,5 @@
-import { devBuildBadge } from "@repo/settings/dev-build";
 import {
   BUTTON_SIZE,
-  BuildChip,
   COPY_FIELD_WIDTH,
   COPY_LOOK,
   CopyButton,
@@ -25,12 +23,6 @@ import { CatalogSection } from "../section";
  */
 
 const copyToClipboard = (text: string): Promise<void> => navigator.clipboard.writeText(text);
-
-/** Two development builds, a named instance and a plain one on a detached head. */
-const BUILDS = [
-  devBuildBadge({ instance: "demo", commit: { sha: "f8b5406", dirty: false, branch: "main" } }),
-  devBuildBadge({ commit: { sha: "8f3c2a1", dirty: true, branch: "fix/merge-queue-notice~2" } }),
-];
 
 const refuse = (): Promise<void> => Promise.reject(new Error("The clipboard refused the copy."));
 
@@ -93,18 +85,6 @@ function CopyButtons(): React.JSX.Element {
             width={COPY_FIELD_WIDTH.FULL}
           />
         </Stack>
-      </CatalogSection>
-      <CatalogSection id="copy-button-build" title="A development build, led by its color">
-        <Inline gap={GAP.CONTROL}>
-          {BUILDS.map((build) => (
-            <BuildChip
-              key={build.detail}
-              detail={build.detail}
-              color={build.color}
-              copy={copyToClipboard}
-            />
-          ))}
-        </Inline>
       </CatalogSection>
     </>
   );

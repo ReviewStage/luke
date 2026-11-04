@@ -558,6 +558,7 @@ export function ListRow({
   current,
   unread,
   muted,
+  latent = false,
   hint,
   density,
   ink = LIST_ROW_INK.TEXT,
@@ -616,6 +617,12 @@ export function ListRow({
   unread?: boolean | undefined;
   /** Whether what the row stands for is done with, so the row stands back, its words in quieter inks and its marks faded, its fill and acts as they are. */
   muted?: boolean | undefined;
+  /**
+   * Whether the row stands unseen until the pointer or the keyboard reaches
+   * it, keeping a way back to something put away in the place it stood; a
+   * screen with no hover draws it at rest.
+   */
+  latent?: boolean | undefined;
   /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
   hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
@@ -941,6 +948,7 @@ export function ListRow({
         data-selected={chosen ? "true" : undefined}
         data-unread={unread === true ? "true" : undefined}
         data-muted={muted === true ? "true" : undefined}
+        data-latent={latent ? "true" : undefined}
         data-density={density}
         data-ink={ink}
         data-menu-open={menuOpen || rowMenu.open ? "true" : undefined}

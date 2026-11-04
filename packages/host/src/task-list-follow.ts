@@ -19,7 +19,9 @@ import {
  *
  * The read is fetched from the service and followed by sync id
  * (`live-follow.ts`, `LIVE_POLL.SYNC`): its first answer, and any while it
- * is too far behind, is every plan and agent whole, and each poll after is
+ * is too far behind, is every plan and agent whole, unless the list drawn
+ * was kept on disk at a sync id (`entity-store.ts`), which the first read
+ * asks past instead, and each poll after is
  * held until something moves past the id the last answer named, and
  * answered only the rows that moved, with the ids of those that stand no
  * longer. The rows are decoded where they arrive and handed on with where
@@ -41,6 +43,8 @@ type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: b
 export interface TaskListFollowDependencies {
   /** The read with its rows inline, fetched from the service, past the sync id named, whole where it is empty or none. */
   readonly live: (sync: string | undefined) => Effect.Effect<Sealed>;
+  /** The sync id the list already drawn was read at, as the entity store kept it, which the first read asks past; every read after asks whole. */
+  readonly from?: string;
   /** Takes each answer's rows, both parts, decoded, as its poll answers, with where it stands by sync id. */
   readonly take: (rows: TaskListLiveRows, standing?: SyncStanding) => Effect.Effect<void>;
   /** That the list could not be read, each time a read goes unanswered; the list already drawn stands. */
@@ -96,8 +100,10 @@ function followRows(
 
 /** The task list, followed live until interrupted or until the service says it never will again. */
 export function followTaskList(dependencies: TaskListFollowDependencies): Effect.Effect<void> {
+  let past = dependencies.from;
   const attempt = Effect.gen(function* () {
-    const sealed = yield* dependencies.live("");
+    const sealed = yield* dependencies.live(past ?? "");
+    past = undefined;
     if ("failure" in sealed) {
       if (sealed.gone === true) return false;
       dependencies.failed();

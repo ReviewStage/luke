@@ -4,6 +4,10 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
+import {
+  type InstalledSkillOwner,
+  installSkill,
+} from "@repo/database/models/installed-skill-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
 import { rememberMemory } from "@repo/database/models/memory-store";
 import { startPlanCommentThread } from "@repo/database/models/plan-comments";
@@ -26,6 +30,12 @@ import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/a
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
+import {
+  installedSkillsLiveAnswerSchema,
+  installedSkillsLiveRowsSchema,
+  installedSkillsOfLiveRows,
+} from "@repo/features/installed-skill-live";
+import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
   integrationLiveRowsOf,
   integrationStatusesLiveAnswerSchema,
@@ -74,6 +84,7 @@ import {
   workspacesLiveAnswerSchema,
   workspacesLiveRowsSchema,
 } from "@repo/features/workspace-live";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
@@ -1296,6 +1307,78 @@ it.layer(getTestDB())("a workspace's memories' live read", (it) => {
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the installed skills' live read", (it) => {
+  it.effect(
+    "a member is answered their workspace's skills and their own polled, never a teammate's own, each manageable by its installer and an admin but no other member, and an outsider is not found",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, installer, admin, teammate, outsider] = [
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+        ];
+        for (const id of [owner, installer, admin, teammate, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, installer);
+        yield* joinWorkspace(workspaceId, admin, WORKSPACE_ROLE.ADMIN);
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* openWorkspace(outsider);
+        const install = (userId: string, name: string, owned: InstalledSkillOwner) =>
+          installSkill(userId, {
+            owner: owned,
+            name,
+            description: `Does ${name}.`,
+            userInvocable: true,
+            source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+            files: [
+              {
+                path: "SKILL.md",
+                bytes: new TextEncoder().encode(`---\nname: ${name}\n---\n# ${name}\n`),
+              },
+            ],
+          });
+        yield* install(installer, "release-notes", {
+          scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+          organizationId: workspaceId,
+        });
+        yield* install(teammate, "pr-style", { scope: INSTALLED_SKILL_SCOPE.PERSONAL });
+        const path = `/api/live/installed-skills?workspaceId=${workspaceId}`;
+        const read = (bearer: string) =>
+          Effect.gen(function* () {
+            const polled = yield* ask({ bearer, path });
+            assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+            const answer = Schema.decodeUnknownSync(installedSkillsLiveAnswerSchema)(polled.body);
+            assert.equal(answer.url, LIVE_POLL_URL);
+            const { skills } = Schema.decodeUnknownSync(installedSkillsLiveRowsSchema)({
+              skills: answer.queries.skills.rows,
+            });
+            return installedSkillsOfLiveRows(skills).map((skill) => [
+              skill.name,
+              skill.scope,
+              skill.manageable,
+            ]);
+          });
+        const shared = ["release-notes", INSTALLED_SKILL_SCOPE.WORKSPACE] as const;
+
+        assert.deepEqual(yield* read(installer), [[...shared, true]]);
+        assert.deepEqual(yield* read(admin), [[...shared, true]]);
+        assert.deepEqual(yield* read(teammate), [
+          [...shared, false],
+          ["pr-style", INSTALLED_SKILL_SCOPE.PERSONAL, true],
+        ]);
+        assert.deepEqual(yield* ask({ bearer: outsider, path }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
       }),
   );
 });

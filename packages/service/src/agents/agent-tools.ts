@@ -20,6 +20,7 @@ import {
   updateAgentChoice,
   updateAgentServers,
 } from "@repo/database/models/agent-store";
+import { currentAutomationRun } from "@repo/database/models/automation-store";
 import {
   listJournals,
   messageSeqOf,
@@ -1397,6 +1398,19 @@ function agentIntroduction(agent: Agent): string {
 }
 
 /**
+ * The run an agent the caller starts on no task belongs to: the run the
+ * caller works on now, else the one the caller itself belongs to, else none.
+ * Note that the run handed to it is read rather than its own row's, because
+ * a same-agent automation hands every run to one agent, whose row keeps the
+ * run that first started it.
+ */
+function runOfCaller(calling: Agent) {
+  return Effect.map(currentAutomationRun(calling.id), (current) =>
+    Option.getOrElse(current, () => calling.automationRunId ?? undefined),
+  );
+}
+
+/**
  * The note an agent a coding agent starts is handed: which agent started it,
  * that its final message reaches that agent by itself once its turn ends
  * (`coder-host/starter-report.ts`), that it messages it before then with
@@ -1868,11 +1882,14 @@ export function runStartAgent(
         ...(calling === undefined
           ? undefined
           : { noteHeading: START_NOTE_HEADING.AGENT, startedBy: calling }),
-        // One that lands on no task belongs to the caller's run, if any; one on a task is the task's.
-        // Note that the automation and its origin are not handed on, because either would make it an
-        // automation's agent, which changes who it commits as and how its start is counted.
+        // One that lands beside the caller, on its task or on none, belongs to the caller's run, if any;
+        // one on another task is that task's. Note that the automation and its origin are not handed
+        // on, because either would make it an automation's agent, which changes who it commits as and
+        // how its start is counted.
         automationRunId:
-          place.taskId === null ? (calling?.automationRunId ?? undefined) : undefined,
+          place.taskId === ownTask && calling !== undefined
+            ? yield* runOfCaller(calling)
+            : undefined,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

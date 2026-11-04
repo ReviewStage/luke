@@ -22,7 +22,7 @@ import {
 } from "@repo/gateway";
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
 import { entityPool } from "@repo/sync";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Exit, Layer, Option, Scope } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -43,7 +43,7 @@ import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
-  type AccountSource,
+  AccountSource,
   type AppIdentity,
   type Environment,
   Reporter,
@@ -52,6 +52,7 @@ import {
   TerminalSocket,
   type ThisMacHost,
 } from "./effect/seams.js";
+import { type EntityStore, forgetEntityStore, openEntityStore } from "./entity-store.js";
 import {
   HOST_CONCERN,
   HOST_PLATFORM_CONCERN,
@@ -127,6 +128,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const hostService = yield* HostService;
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
+    const { tokenCipher } = yield* AccountSource;
+    const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings });
@@ -174,6 +177,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const focus = yield* windowFocus;
     /** Every row the composers' reads hold, once, and the writes drawn over them (`@repo/sync`). */
     const pool = yield* entityPool();
+    /** The signed-in account's lists kept on disk (`entity-store.ts`), from the account gate opening until it closes; none where nothing seals them. */
+    let entities: { readonly store: EntityStore; readonly scope: Scope.Closeable } | undefined;
+    yield* Effect.addFinalizer(() =>
+      entities === undefined ? Effect.void : Scope.close(entities.scope, Exit.void),
+    );
     // Note that the integrations stand before the tasks, which ask GitHub's standing of them again once a GitHub connect or disconnect answers.
     const integrations = yield* served(
       composeIntegrations({
@@ -207,6 +215,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         kept,
         focus,
         pool,
+        entities: () => entities?.store,
         githubMoved: integrations.githubMoved,
         client: Object.assign(
           new HostedTaskClient({
@@ -254,6 +263,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         accountId,
         pool,
         client: new HostedAutomationClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
+      }),
+    );
+    const installedSkills = yield* served(
+      composeInstalledSkills({
+        kernel,
+        account,
+        accountId,
+        pool,
+        client: new HostedInstalledSkillClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
         }),
@@ -339,18 +360,52 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
 
     /**
+     * The signed-in account's store opened where none stands: only where the
+     * account source seals with a cipher the system can use, and the run
+     * needs an account, so neither a browser tab nor a fixture run keeps one,
+     * and only once the account is signed in, so the Keychain is never read
+     * before the tokens' own read.
+     */
+    const openEntities = Effect.gen(function* () {
+      const signedInId = account.signedIn() ? accountId() : undefined;
+      if (entities !== undefined || signedInId === undefined) return;
+      if (tokenCipher === undefined || !tokenCipher.isAvailable()) return;
+      if (!kernel.runMode.requiresAccount) return;
+      const scope = yield* Scope.make();
+      const store = yield* openEntityStore({
+        directory: kernel.stateRoot,
+        cipher: tokenCipher,
+        accountId: signedInId,
+      }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
+      entities = { store, scope };
+    });
+
+    /** The store forgotten, its file deleted, as a sign-out does; a file no store stands over is deleted too. */
+    const forgetEntities = Effect.gen(function* () {
+      const standing = entities;
+      entities = undefined;
+      if (standing !== undefined) {
+        yield* standing.store.forget;
+        yield* Scope.close(standing.scope, Exit.void);
+      }
+      yield* Effect.provideContext(forgetEntityStore(kernel.stateRoot), fileSystemContext);
+    });
+
+    /**
      * The account gate opening, which is what a sign-in runs and what a launch
-     * behind an account already signed in runs: the preferences reconciled
-     * and the account's access read.
+     * behind an account already signed in runs: the preferences reconciled,
+     * the account's access read, and its lists kept on disk opened.
      */
     const openCapabilities = Effect.gen(function* () {
       if (account.signedIn()) {
         yield* settings.reconcileAccountPreferences();
         yield* account.refreshAccess;
+        yield* openEntities;
         yield* tasks.open;
         yield* agents.open;
         yield* automations.open;
         yield* integrations.open;
+        yield* installedSkills.open;
       }
       yield* settings.emitSettings();
     });
@@ -358,10 +413,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
       yield* account.forgetAccess;
+      yield* forgetEntities;
       yield* tasks.reset;
       yield* agents.reset;
       yield* integrations.reset;
       yield* automations.reset;
+      yield* installedSkills.reset;
       yield* terminals.reset;
       yield* chatGptSignIn.reset;
       yield* settings.emitSettings();
@@ -376,16 +433,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
       confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
     });
-    const installedSkills = yield* served(
-      composeInstalledSkills({
-        kernel,
-        account,
-        client: new HostedInstalledSkillClient({
-          serviceBaseUrl: kernel.hostedServiceBaseUrl,
-          credential: account.credential,
-        }),
-      }),
-    );
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,

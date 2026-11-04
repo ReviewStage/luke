@@ -154,4 +154,5 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: {},
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: {},
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: { data: hostPairingHeldData },
+  [HOSTED_API_ERROR.ALREADY_WRITTEN]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

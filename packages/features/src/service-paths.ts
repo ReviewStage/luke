@@ -135,6 +135,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_MEMORIES: "/api/live/workspace-memories",
   /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
+  /** The skills the account sees in one workspace under `?workspaceId=`, the workspace's and its own, sealed for following over Neon Realtime (GET), each with whether the account may manage it, or `not-found`, or their rows inline where polled. `installed-skill-live.ts` declares the answer. */
+  LIVE_INSTALLED_SKILLS: "/api/live/installed-skills",
   /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */
   LIVE_INTEGRATION_STATUSES: "/api/live/integration-statuses",
   /**

@@ -130,13 +130,6 @@ export interface HeldRows<Row extends object, Change = unknown> {
    * newer id, as from a read whose answer was computed before another's.
    */
   readonly answer: (rows: readonly Row[], answered?: Answered) => Effect.Effect<readonly string[]>;
-  /**
-   * Takes a row the service answered made in the read's place, where the
-   * read can confirm no write yet: held from now as if the read had answered
-   * it. A row the read holds already is left as it answered it, which is as
-   * new.
-   */
-  readonly confirmNew: (row: Row) => Effect.Effect<void>;
   /** Whether the read shows `key`'s row. */
   readonly holds: (key: string) => boolean;
   /** The rows the read shows, in the order it answered them and then those it adopted, each as the writes standing draw it. */
@@ -145,6 +138,12 @@ export interface HeldRows<Row extends object, Change = unknown> {
   readonly row: (key: string) => Row | undefined;
   /** The keys of the rows the read shows that a write stands over. */
   readonly pending: () => readonly string[];
+  /**
+   * The rows the read answered, in the order it answered them, each as the
+   * service last answered it with no write drawn over it, as a store that
+   * keeps what the service holds reads them.
+   */
+  readonly synced: () => readonly Row[];
   /** Every change standing over the kind, oldest first, which a read beside the pool draws over its own rows. */
   readonly standing: () => readonly Change[];
 }
@@ -419,20 +418,15 @@ function stood<Row extends object, Change>(
             ...new Set([...written, ...placed]),
           ]);
         }),
-      confirmNew: (row) =>
-        Effect.sync(() => {
-          const key = rows.kind.key(row);
-          if (holding.held.has(key)) return;
-          holding.order = [...holding.order, key];
-          holding.held = new Set([...holding.held, key]);
-          const synced = rows.synced.held();
-          if (!synced.has(key)) rows.synced.take(new Map(synced).set(key, row));
-        }),
       holds: (key) => shows(holding, key),
       rows: () => shown(holding).flatMap((key) => drawnRow(rows, key) ?? []),
       row: (key) =>
         holding.held.has(key) || holding.adopted.has(key) ? drawnRow(rows, key) : undefined,
       pending: () => shown(holding).filter((key) => standingOver(rows, key)),
+      synced: () => {
+        const synced = rows.synced.held();
+        return holding.order.flatMap((key) => synced.get(key) ?? []);
+      },
       standing: () => rows.standing.map((write) => write.change),
     }),
   );
