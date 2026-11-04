@@ -1400,6 +1400,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       // A follow gone mid-way was refused as signed out by a poll, which no read mends either.
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.gen(function* () {
+          // Note that a list of none is said before anything is drawn or let go, so the last good list and its kept content stay.
+          if (workspaces.length === 0) {
+            write({ workspacesStatus: TASKS_READ.FAILED });
+            return yield* new LiveBroken({ reason: "the account holds no workspace" });
+          }
           const drawn = new Set(view.workspaces.map((each) => each.id));
           const installed = new Map(
             view.workspaces.map((each) => [
@@ -1420,10 +1425,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
           if ([...drawn].some((id) => !listed.has(id))) yield* kept.clear;
           yield* workspaceList.rows.answer(workspaces);
-          if (workspaces.length === 0) {
-            write({ workspacesStatus: TASKS_READ.FAILED });
-            return yield* new LiveBroken({ reason: "the account holds no workspace" });
-          }
           if (view.workspacesStatus !== TASKS_READ.READY) {
             write({ workspacesStatus: TASKS_READ.READY });
           }

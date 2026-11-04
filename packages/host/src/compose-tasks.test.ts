@@ -2761,22 +2761,26 @@ it.effect(
     }),
 );
 
-it.effect("a workspace list of none says failed, and its Retry reads it again at once", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    service.memberships = [];
-    const { call, last, settled } = yield* subject(service);
+it.effect(
+  "a workspace list of none says failed and leaves the last list drawn, and its Retry reads it again at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
 
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* settled;
-    assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      service.memberships = [];
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
 
-    service.memberships = [PERSONAL];
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* settled;
-    assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
-    assert.deepEqual(last()?.workspaces, [PERSONAL]);
-  }),
+      service.memberships = [PERSONAL];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+    }),
 );
 
 it.effect(
