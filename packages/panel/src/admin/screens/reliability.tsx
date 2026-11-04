@@ -59,6 +59,7 @@ import {
   type StatSpec,
 } from "../charts/stat-card.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
+import { AppTurnsNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
@@ -125,6 +126,33 @@ const AUTOMATION_REASON_LABEL = {
 } as const satisfies Record<AutomationRunReason, string>;
 
 const NO_REASON_LABEL = "No reason recorded";
+
+/** The failure classes no agent fails with now, which only older rows still hold. */
+const RETIRED_AGENT_FAILURES: readonly AgentFailure[] = [AGENT_FAILURE.FAST_ON_OWN_KEY];
+
+/** The automation reasons no run is given now, which only older rows still hold. */
+const RETIRED_AUTOMATION_REASONS: readonly AutomationRunReason[] = [
+  AUTOMATION_RUN_REASON.NO_REPOSITORY,
+  AUTOMATION_RUN_REASON.GITHUB_SIGN_IN,
+  AUTOMATION_RUN_REASON.AGENT_GONE,
+];
+
+/**
+ * A breakdown's rows with the retired ones moved under every live one, each
+ * marked retired, the answer's order otherwise kept.
+ */
+function retiredLast<Row>(
+  rows: readonly Row[],
+  retired: (row: Row) => boolean,
+  toBreakdown: (row: Row) => BreakdownRow,
+): BreakdownRow[] {
+  const live = rows.filter((row) => !retired(row)).map(toBreakdown);
+  const old = rows
+    .filter(retired)
+    .map(toBreakdown)
+    .map((row) => ({ ...row, label: retiredTitle(row.label) }));
+  return [...live, ...old];
+}
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
   { key: "count", label: "Failed runs", color: "var(--ui-color-danger)" },
@@ -225,14 +253,22 @@ function attentionColumns(
   ];
 }
 
-/** The headline failure cards, in the order they stand. */
-const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
+/**
+ * The app's own turns failed, the one card the retired section holds: every
+ * conversation the service starts now is an agent's, so only turns from
+ * before that still land here.
+ */
+const APP_TURN_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "app-turns",
     label: () => `${PRODUCT_NAME} turns failed`,
     value: ({ headline }) => formatPercent(share(headline.appTurns), RATE_PLACES),
     hint: ({ headline, windowDays }) => ofHint(headline.appTurns, "turns", windowDays),
   },
+];
+
+/** The headline failure cards, in the order they stand. */
+const FAILURE_STATS: readonly StatSpec<AdminReliability>[] = [
   {
     key: "agent-runs",
     label: () => "Agent runs failed",
@@ -273,20 +309,25 @@ const BREAKDOWNS: readonly Breakdown[] = [
     title: "Agent failures by class",
     series: AGENT_FAILURES_SERIES,
     rows: (reliability) =>
-      reliability.agentFailures.map((row) => ({
-        label: AGENT_FAILURE_LABEL[row.failure],
-        counts: { count: row.count },
-      })),
+      retiredLast(
+        reliability.agentFailures,
+        (row) => RETIRED_AGENT_FAILURES.includes(row.failure),
+        (row) => ({ label: AGENT_FAILURE_LABEL[row.failure], counts: { count: row.count } }),
+      ),
     empty: "No agent run failed in this window.",
   },
   {
     title: "Automation skips and failures by reason",
     series: AUTOMATION_REASONS_SERIES,
     rows: (reliability) =>
-      reliability.automationReasons.map((row) => ({
-        label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
-        counts: { skipped: row.skipped, failed: row.failed },
-      })),
+      retiredLast(
+        reliability.automationReasons,
+        (row) => row.reason !== null && RETIRED_AUTOMATION_REASONS.includes(row.reason),
+        (row) => ({
+          label: row.reason === null ? NO_REASON_LABEL : AUTOMATION_REASON_LABEL[row.reason],
+          counts: { skipped: row.skipped, failed: row.failed },
+        }),
+      ),
     empty: "No automation run was skipped or failed in this window.",
   },
 ];
@@ -518,6 +559,12 @@ function ReliabilityBody({
         </AdminSection>
       )}
       <SystemHealth health={reliability?.systemHealth} />
+      {reliability === undefined || reliability.systemHealth.database.reachable ? (
+        <AdminSection title={retiredTitle(`${PRODUCT_NAME} turns`)}>
+          <StatCards layout={STAT_LAYOUT.ROW} stats={APP_TURN_STATS} data={reliability} />
+          <AppTurnsNote />
+        </AdminSection>
+      ) : null}
     </>
   );
 }

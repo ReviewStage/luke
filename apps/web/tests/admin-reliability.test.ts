@@ -29,7 +29,13 @@ import { choose, menuItems, openViewOptions } from "./support/view-options";
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
-const SECTIONS = ["Failures", "Why work failed", "Accounts that need attention", "System health"];
+const SECTIONS = [
+  "Failures",
+  "Why work failed",
+  "Accounts that need attention",
+  "System health",
+  "Vespin turns · retired",
+];
 
 const CONSOLE_URL = "https://analytics.example.test/project/1";
 

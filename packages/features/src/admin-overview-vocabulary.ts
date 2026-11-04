@@ -16,7 +16,7 @@
 export const ACTIVITY_FEATURE = {
   /** A coding agent started (`agent.created_at`), by hand, by the app, or by an automation. */
   AGENTS_STARTED: "agentsStarted",
-  /** A plan revision written by the developer, or by our notetaker on their call. */
+  /** A plan revision written by the developer, or by the retired notetaker on their behalf before agents wrote plans. */
   PLAN_REVISIONS: "planRevisions",
   /** An inbox item the developer answered (`inbox_item.settled_at`, answered). */
   INBOX_ANSWERED: "inboxAnswered",
@@ -65,7 +65,7 @@ export const REACH_FEATURE = {
   AGENTS: "agents",
   /** Answered an inbox item. */
   INBOX: "inbox",
-  /** Has an integration connected, their own or their workspace's; a state, not a use. */
+  /** Has an integration of their own connected; a state, not a use. */
   INTEGRATIONS: "integrations",
   /** Owns an automation that fired and was not held back. */
   AUTOMATIONS: "automations",
@@ -77,7 +77,7 @@ export type ReachFeature = (typeof REACH_FEATURE)[keyof typeof REACH_FEATURE];
 export const RETENTION_BASIS = {
   /** A task created, a plan revision written as the developer, or an agent started. */
   MEANINGFUL: "meaningful",
-  /** Any metered hosted-tier call, the grid's basis before the Overview was rebuilt. */
+  /** Any metered hosted-tier call, the grid's basis before the Overview was rebuilt; retired, since only dictation still meters one. */
   HOSTED_CALL: "hostedCall",
 } as const;
 

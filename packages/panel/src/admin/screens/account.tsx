@@ -26,7 +26,7 @@ import { ActivityCalendar, ActivityCalendarSkeleton } from "../charts/activity-c
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { UsageChart, UsageChartSkeleton } from "../charts/usage-chart.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
-import { AccountActivityNote } from "../chrome/notes.js";
+import { AccountActivityNote, retiredTitle } from "../chrome/notes.js";
 import {
   AccountAvatar,
   AdminPage,
@@ -65,7 +65,7 @@ function streakWords(detail: AdminUserDetail): string {
   return `${streak} ${days === 1 ? "day" : "days"}`;
 }
 
-/** The daily-use cards, in the two pairs they stand in. */
+/** The hosted tier's daily-use cards, in the two pairs they stand in. */
 const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "active-days-window",
@@ -97,7 +97,7 @@ const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The volume cards, side by side. */
+/** The hosted tier's volume cards, side by side, under its calendar. */
 const VOLUME_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "calls",
@@ -202,7 +202,14 @@ function AccountSections({
     <>
       {detail === undefined ? <MastheadSkeleton /> : <Masthead detail={detail} />}
 
-      <AdminSection title="Daily use · hosted tier">
+      <AccountSupportSections
+        support={detail?.support}
+        windowDays={detail?.windowDays ?? windowDays}
+      />
+
+      {/* Note that the hosted tier stands last, under everything the account
+      does today, because only dictation still writes its rows. */}
+      <AdminSection title={retiredTitle("Hosted tier")}>
         <StatCards layout={STAT_LAYOUT.PAIRS} stats={DAILY_USE_STATS} data={detail} />
         {detail === undefined ? (
           <UsageChartSkeleton label={USAGE_LABEL} />
@@ -226,17 +233,9 @@ function AccountSections({
             generatedAt={detail.generatedAt}
           />
         )}
-      </AdminSection>
-
-      <AdminSection title="Volume">
         <StatCards layout={STAT_LAYOUT.ROW} stats={VOLUME_STATS} data={detail} />
         <AccountActivityNote />
       </AdminSection>
-
-      <AccountSupportSections
-        support={detail?.support}
-        windowDays={detail?.windowDays ?? windowDays}
-      />
     </>
   );
 }

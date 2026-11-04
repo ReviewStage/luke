@@ -15,7 +15,7 @@ import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminViewOptions } from "../chrome/controls.js";
-import { DayNote } from "../chrome/notes.js";
+import { DayNote, retiredTitle } from "../chrome/notes.js";
 import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
@@ -99,9 +99,10 @@ function DayAccountsTable({
 
 /**
  * The day's sections under its toolbar, drawn from `detail` once it is read
- * and as their skeletons until then. Whether the day is still filling is
- * known from `day` before the answer, by the clock, and from the answer's
- * own instant once it lands.
+ * and as their skeletons until then. Both read the retired hosted tier, the
+ * only thing the day's read counts, so both are headed retired. Whether the
+ * day is still filling is known from `day` before the answer, by the clock,
+ * and from the answer's own instant once it lands.
  */
 function DaySections({
   day,
@@ -115,11 +116,11 @@ function DaySections({
   const stillFilling = partialDayKey([{ day }], detail?.generatedAt ?? Date.now()) !== undefined;
   return (
     <>
-      <AdminSection title="Hosted tier · this day">
+      <AdminSection title={retiredTitle("Hosted tier · this day")}>
         <StatCards layout={STAT_LAYOUT.ROW} stats={dayStats(stillFilling)} data={detail} />
       </AdminSection>
 
-      <AdminSection title="Accounts active this day">
+      <AdminSection title={retiredTitle("Hosted-tier accounts this day")}>
         {detail === undefined ? (
           <DataTableSkeleton
             label="Accounts active this day"

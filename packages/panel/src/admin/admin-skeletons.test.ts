@@ -131,21 +131,20 @@ test("the Reliability page's skeleton states the notes the loaded page states", 
   );
 });
 
-test("an account's skeleton stands every section the account page states, down to its failures", async () => {
+test("an account's skeleton stands every section the account page states, the retired hosted tier last", async () => {
   const region = loadingRegion(
     await draw(
       createElement(AccountScreen, { ...QUIET, id: "account-ada", onBack: () => undefined }),
     ),
   );
   expect(sectionHeadings(region)).toEqual([
-    "Daily use · hosted tier",
-    "Volume",
     "Work",
     "Recent agents",
     "Workspaces",
     "Keys and connections",
     "Defaults and experiments",
     "Recent failures · 30 days",
+    "Hosted tier · retired",
   ]);
   expect(region.textContent).toContain("Each cell is one UTC day, whatever the window.");
 });
