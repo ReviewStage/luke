@@ -69,6 +69,243 @@ Vespin is an inbox for all your coding agents. These are its notable changes,
 newest first. Each heading is a released version and the date its release was
 published.
 
+## 0.26.0 — 2026-11-04
+
+### Your agents can work Vespin
+
+Claude Code, Codex, Claude.ai, and ChatGPT can now work Vespin for you
+through its MCP server at vespin.dev/api/mcp: reading and starting tasks and
+agents, editing plans, messaging agents, answering the Inbox, commenting,
+running automations, and acting on an agent's pull request, all as you.
+Vespin asks first, on a page that names the agent and what it may do.
+Settings › Integrations lists every agent you let in, each with Revoke, and
+Connect an agent gives the server's address and each agent's steps.
+([#6596](https://github.com/ReviewStage/vespin/pull/6596),
+[#6601](https://github.com/ReviewStage/vespin/pull/6601),
+[#6613](https://github.com/ReviewStage/vespin/pull/6613),
+[#6620](https://github.com/ReviewStage/vespin/pull/6620),
+[#6621](https://github.com/ReviewStage/vespin/pull/6621),
+[#6623](https://github.com/ReviewStage/vespin/pull/6623),
+[#6630](https://github.com/ReviewStage/vespin/pull/6630),
+[#6631](https://github.com/ReviewStage/vespin/pull/6631),
+[#6632](https://github.com/ReviewStage/vespin/pull/6632),
+[#6690](https://github.com/ReviewStage/vespin/pull/6690))
+
+### Places and things
+
+Places stand in the middle of the window, and things open on the right. A
+task is one frame, its Overview first and then a tab for each agent, and it
+opens on the agent waiting on you, otherwise the most recent. A page, file,
+or pull request from any task opens beside you, under a line naming its task
+with Open task, and Back and Forward put the panel back exactly as it was.
+Threads open in the Inbox, which can be narrowed to one task.
+([#6584](https://github.com/ReviewStage/vespin/pull/6584),
+[#6612](https://github.com/ReviewStage/vespin/pull/6612))
+
+### Pages in the conversation
+
+A page an agent shows draws in the transcript, and under its link in an
+Inbox thread, at its whole height with no frame, in Vespin's own colors and
+type, light or dark. Full screen and Open in panel wait in its corner, and a
+page may now hold up to 1 MB.
+([#6572](https://github.com/ReviewStage/vespin/pull/6572),
+[#6670](https://github.com/ReviewStage/vespin/pull/6670),
+[#6675](https://github.com/ReviewStage/vespin/pull/6675),
+[#6677](https://github.com/ReviewStage/vespin/pull/6677),
+[#6679](https://github.com/ReviewStage/vespin/pull/6679))
+
+### Snooze
+
+Press H on an Inbox thread, or choose Snooze from its menu, to put it away
+until In 1 hour, Tomorrow, Next week, or a date and time you pick. It comes
+back to the top of the Inbox, unread, when its time comes, or sooner when
+someone writes on it. View options gain Snoozed, and the sidebar's Inbox
+count leaves snoozed threads out.
+([#6686](https://github.com/ReviewStage/vespin/pull/6686))
+
+### Every agent works on a task
+
+Every automation run, every Slack message to Vespin, and every agent another
+agent starts now works on a task of its own, so its helpers, pull requests,
+and transcript stay together. A run's task is named for its automation and
+when it fired, as in "Nightly triage · Nov 4, 9:00", and each marks itself
+Done once its agents finish well with nothing waiting on you. A finished
+run's task leaves your sidebar.
+([#6673](https://github.com/ReviewStage/vespin/pull/6673),
+[#6676](https://github.com/ReviewStage/vespin/pull/6676),
+[#6678](https://github.com/ReviewStage/vespin/pull/6678),
+[#6682](https://github.com/ReviewStage/vespin/pull/6682),
+[#6695](https://github.com/ReviewStage/vespin/pull/6695),
+[#6707](https://github.com/ReviewStage/vespin/pull/6707),
+[#6720](https://github.com/ReviewStage/vespin/pull/6720))
+
+### Instant, even offline
+
+What you change draws the moment you press: a new task or automation, a
+task's status, pin, block, or move, a comment, a member's role, an
+invitation, a workspace's name, an integration, and your default models. A
+change Vespin refuses comes back with a toast saying so. ⌘Z takes back your
+last change to a task or agent and ⇧⌘Z puts it back. On the Mac your lists
+draw from disk as Vespin opens, and a change made offline stays drawn and
+lands once you're back online.
+([#6642](https://github.com/ReviewStage/vespin/pull/6642),
+[#6698](https://github.com/ReviewStage/vespin/pull/6698),
+[#6700](https://github.com/ReviewStage/vespin/pull/6700),
+[#6701](https://github.com/ReviewStage/vespin/pull/6701),
+[#6702](https://github.com/ReviewStage/vespin/pull/6702),
+[#6705](https://github.com/ReviewStage/vespin/pull/6705),
+[#6706](https://github.com/ReviewStage/vespin/pull/6706),
+[#6713](https://github.com/ReviewStage/vespin/pull/6713),
+[#6725](https://github.com/ReviewStage/vespin/pull/6725),
+[#6726](https://github.com/ReviewStage/vespin/pull/6726),
+[#6731](https://github.com/ReviewStage/vespin/pull/6731),
+[#6742](https://github.com/ReviewStage/vespin/pull/6742),
+[#6743](https://github.com/ReviewStage/vespin/pull/6743),
+[#6744](https://github.com/ReviewStage/vespin/pull/6744),
+[#6745](https://github.com/ReviewStage/vespin/pull/6745),
+[#6746](https://github.com/ReviewStage/vespin/pull/6746))
+
+### Improvements
+
+- Settings › Agents names the credential Claude and Codex each run on, and
+  a row in trouble offers its fix, such as Sign in again or Manage usage
+  ([#6609](https://github.com/ReviewStage/vespin/pull/6609),
+  [#6614](https://github.com/ReviewStage/vespin/pull/6614))
+- Connecting Claude or Codex draws its plan and API key as settings rows,
+  with a switch for which one new agents use, and setup and Home's Finish
+  setting up connect either in place
+  ([#6618](https://github.com/ReviewStage/vespin/pull/6618),
+  [#6625](https://github.com/ReviewStage/vespin/pull/6625),
+  [#6672](https://github.com/ReviewStage/vespin/pull/6672))
+- The model menu ends on one line saying who pays, your plan or an API key
+  with what it has cost so far
+  ([#6605](https://github.com/ReviewStage/vespin/pull/6605))
+- Codex agents run GPT models on Fast, on an OpenAI API key or your ChatGPT
+  plan, and GPT-6 Astra and GPT-6.1 Sol add Ultrafast on an API key
+  ([#6573](https://github.com/ReviewStage/vespin/pull/6573),
+  [#6577](https://github.com/ReviewStage/vespin/pull/6577),
+  [#6587](https://github.com/ReviewStage/vespin/pull/6587))
+- Where an agent runs reads as one Runs on chip in New task and an agent's
+  message box, whose card says where it runs and whether that's online
+  ([#6734](https://github.com/ReviewStage/vespin/pull/6734))
+- Slack DMs let you answer an ask that takes several options with a checkbox
+  for each, and a to-do with Mark done or Couldn't do it
+  ([#6724](https://github.com/ReviewStage/vespin/pull/6724),
+  [#6735](https://github.com/ReviewStage/vespin/pull/6735),
+  [#6738](https://github.com/ReviewStage/vespin/pull/6738))
+- An agent started from Slack offers Open in Slack on its menu
+  ([#6732](https://github.com/ReviewStage/vespin/pull/6732))
+- An agent hears when the merge queue takes its pull request out, with
+  GitHub's reason, and queues it again or tells you why it can't
+  ([#6568](https://github.com/ReviewStage/vespin/pull/6568))
+- An agent's pointer is an amber arrow that ripples on a click, and its
+  recordings show the keys it presses as key caps
+  ([#6542](https://github.com/ReviewStage/vespin/pull/6542),
+  [#6549](https://github.com/ReviewStage/vespin/pull/6549))
+- @ offers your workspace's automations, and an automation's chip wears what
+  fires it and how its last run went
+  ([#6636](https://github.com/ReviewStage/vespin/pull/6636),
+  [#6688](https://github.com/ReviewStage/vespin/pull/6688))
+- An agent you ask to make an automation links it in its reply
+  ([#6635](https://github.com/ReviewStage/vespin/pull/6635))
+- An @ row hangs the same card as the chip it writes, and an agent's chip
+  names its model and shows it working
+  ([#6671](https://github.com/ReviewStage/vespin/pull/6671))
+- The Tasks page stays drawn between visits and draws only the rows and
+  cards near the view, so it opens at once however many tasks it holds
+  ([#6599](https://github.com/ReviewStage/vespin/pull/6599),
+  [#6622](https://github.com/ReviewStage/vespin/pull/6622),
+  [#6680](https://github.com/ReviewStage/vespin/pull/6680),
+  [#6683](https://github.com/ReviewStage/vespin/pull/6683),
+  [#6697](https://github.com/ReviewStage/vespin/pull/6697))
+- Home's Recent and a person's tasks draw as the Tasks page's rows
+  ([#6729](https://github.com/ReviewStage/vespin/pull/6729))
+- Every repository is drawn the same way, its owner's picture then its name,
+  with owner/name only where two share a name
+  ([#6733](https://github.com/ReviewStage/vespin/pull/6733))
+- Hover cards for agents and pull requests draw at once from what Vespin
+  already holds ([#6595](https://github.com/ReviewStage/vespin/pull/6595))
+- A pull request's Chapters arrive on their own once a teammate's
+  generation finishes
+  ([#6603](https://github.com/ReviewStage/vespin/pull/6603),
+  [#6627](https://github.com/ReviewStage/vespin/pull/6627))
+- Files changed scrolls smoothly through a long pull request
+  ([#6589](https://github.com/ReviewStage/vespin/pull/6589))
+- Vespin draws a working agent in its own blue again, apart from the copper
+  of one that needs you
+  ([#6600](https://github.com/ReviewStage/vespin/pull/6600))
+- Recommended and Needs you read as quiet words rather than badges
+  ([#6674](https://github.com/ReviewStage/vespin/pull/6674))
+- A name cut short in a chip or badge ends in an ellipsis, and pills draw
+  their words in full ink
+  ([#6723](https://github.com/ReviewStage/vespin/pull/6723))
+- Setup's Back and Skip line up with its card's edges, and its step count
+  holds still ([#6574](https://github.com/ReviewStage/vespin/pull/6574))
+
+### Fixes
+
+- Fixed an update failing with only "Couldn't install" while Vespin ran from
+  its disk image, which now offers to move itself to Applications
+  ([#6593](https://github.com/ReviewStage/vespin/pull/6593))
+- Fixed setup greeting an account that had already finished it on another
+  device ([#6557](https://github.com/ReviewStage/vespin/pull/6557),
+  [#6580](https://github.com/ReviewStage/vespin/pull/6580))
+- Fixed a scheduled or triggered automation run sometimes failing as "the
+  agent never started"
+  ([#6565](https://github.com/ReviewStage/vespin/pull/6565))
+- Fixed a Claude setup-token pasted from a wrapped terminal line being
+  refused ([#6564](https://github.com/ReviewStage/vespin/pull/6564))
+- Fixed the model menus offering a model's batch version, which no agent
+  could run on ([#6575](https://github.com/ReviewStage/vespin/pull/6575))
+- Fixed Merge when ready and the Pull request tab's other controls flicking
+  back to their old state after a press
+  ([#6567](https://github.com/ReviewStage/vespin/pull/6567))
+- Fixed a plan's sections jumping as you clicked into it to edit
+  ([#6556](https://github.com/ReviewStage/vespin/pull/6556))
+- Fixed dragging a Tasks card while a quick add stood open snapping back
+  ([#6653](https://github.com/ReviewStage/vespin/pull/6653))
+- Fixed a lone small picture in an Inbox thread drawing enlarged and blurry
+  ([#6594](https://github.com/ReviewStage/vespin/pull/6594))
+- Fixed Reply not appearing after a triple-click on an Inbox message's last
+  paragraph ([#6579](https://github.com/ReviewStage/vespin/pull/6579))
+- Fixed a hover card vanishing while you held ⌃⇧⌘ to screenshot it
+  ([#6585](https://github.com/ReviewStage/vespin/pull/6585))
+- Fixed a name's hover drawing square corners in Inbox threads and comments
+  ([#6561](https://github.com/ReviewStage/vespin/pull/6561))
+- Fixed an automation's zap standing off center at a sidebar row's end
+  ([#6640](https://github.com/ReviewStage/vespin/pull/6640))
+- Fixed a phone zooming on a double tap, bouncing on a drag, and keeping a
+  button lit after a tap
+  ([#6681](https://github.com/ReviewStage/vespin/pull/6681),
+  [#6689](https://github.com/ReviewStage/vespin/pull/6689))
+- Fixed controls on a phone too small or too close together to tap
+  ([#6684](https://github.com/ReviewStage/vespin/pull/6684),
+  [#6714](https://github.com/ReviewStage/vespin/pull/6714),
+  [#6722](https://github.com/ReviewStage/vespin/pull/6722))
+- Fixed dialogs and ⌘K drawing under a phone's notch and home indicator
+  ([#6691](https://github.com/ReviewStage/vespin/pull/6691))
+- Fixed a message box on an iPhone hiding under the keyboard
+  ([#6727](https://github.com/ReviewStage/vespin/pull/6727))
+- Fixed a phone correcting what you typed into search and name fields
+  ([#6687](https://github.com/ReviewStage/vespin/pull/6687))
+- Fixed New task's box on a phone wrapping onto two rows
+  ([#6693](https://github.com/ReviewStage/vespin/pull/6693))
+- Fixed the web app's loading mark standing off center on a phone
+  ([#6736](https://github.com/ReviewStage/vespin/pull/6736))
+
+### Misc
+
+- Updated vespin.dev's top bar to float as one pill, its devices section,
+  and its Bring your own keys section
+  ([#6555](https://github.com/ReviewStage/vespin/pull/6555),
+  [#6571](https://github.com/ReviewStage/vespin/pull/6571),
+  [#6611](https://github.com/ReviewStage/vespin/pull/6611),
+  [#6641](https://github.com/ReviewStage/vespin/pull/6641),
+  [#6664](https://github.com/ReviewStage/vespin/pull/6664))
+- Updated `PRIVACY.md` to say what Vespin keeps sealed on your Mac and what
+  leaves it when you leave a workspace
+  ([#6749](https://github.com/ReviewStage/vespin/pull/6749))
+
 ## 0.25.1 — 2026-11-03
 
 ### Setting up a new account
