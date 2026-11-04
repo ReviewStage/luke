@@ -1,35 +1,39 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { AGENT_CALL_FAILURE, type AgentCallFailure } from "@repo/features/agent-view";
+import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
-import {
-  FAILURE_KIND,
-  FAILURE_SURFACE,
-  type ShownFailureReport,
-} from "@repo/features/shown-failure";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import {
+  type AppHostRead,
+  type AppMemories,
+  type AppStateDelivery,
+  NO_KEYS_HELD,
+} from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { installShownFailureReporter } from "../failure-report.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { stateWith } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { chooseMenuItem, menuItems } from "../testing/phone-head.js";
 import { MemorySection } from "./memory-page.js";
 
 /**
  * Settings › Memory over a bridge answering as the host would: the memories
- * of the workspace Settings shows are read for that workspace, listed in the
- * service's order with their words whole and whose words they are; the workspace's and the reader's own stand
- * on two sides of a switcher, each counting what the search leaves of it;
- * Forget is offered from a memory's ⋯, unavailable on one the reader may not
- * forget, asks first in the confirm dialog, and the memory leaves the list
- * once the service says so; several chosen are forgotten one after another
- * on one question; a forget that fails says so in the dialog and keeps the
- * memory listed; another workspace reads its own memories; and a read that
- * fails offers to try again. Synthetic workspaces, members, and memories.
+ * of the workspace Settings shows are held for that workspace and drawn as
+ * the host lays them on the document, listed in the service's order with
+ * their words whole and whose words they are; Forget is offered from a
+ * memory's ⋯, unavailable on one the reader may not forget, asks first in
+ * the confirm dialog, and the memory leaves the list as the host draws it
+ * gone; several chosen are forgotten one after another on one question; a
+ * forget that fails says so in the dialog and keeps the memory listed;
+ * another workspace is held for its own memories; and a read that fails
+ * offers to try again. Synthetic workspaces, members, and memories.
  */
 
 const READER = "user-reader";
@@ -61,18 +65,21 @@ const TESTS: MemorySummary = {
   updatedAt: Date.UTC(2026, 9, 9, 12),
 };
 
-/** The memories the test's service holds, read and forgotten by the page. */
-let stored: MemorySummary[] = [];
+/** The memories the test's service holds, by the workspace, held and forgotten by the page. */
+let stored: Readonly<Record<string, readonly MemorySummary[]>> = {};
 /** Every act the page sent, in order. */
 let sent: AnyAct[] = [];
-/** The failure the read is answered with rather than the memories, where it fails. */
-let readFailure: { readonly failure: AgentCallFailure } | undefined;
+/** Whether the host's read of the memories failed before it ever answered. */
+let readFails = false;
 /** Whether a forget is answered with a failure rather than the memories. */
 let refuseForget = false;
-/** Where a forget is held unanswered until the test lets it go, rather than answered at once. */
-let holdForgets: ((answer: FakeActAnswer) => void)[] | undefined;
-/** Where a read is held unanswered until the test lets it go, rather than answered at once. */
-let holdReads: ((answer: FakeActAnswer) => void)[] | undefined;
+/** Whether the host has read nothing yet, so it lays no memories. */
+let readsNothing = false;
+/** Each workspace's memories as the test's host lays them on the document, under the version it last delivered. */
+let laid: AppMemories = NO_KEYS_HELD;
+let version = 1;
+/** The window's listeners to the document's deliveries. */
+const listeners = new Set<(delivery: AppStateDelivery) => void>();
 
 const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
   status: FAKE_ANSWER.DONE,
@@ -81,24 +88,47 @@ const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
 
 const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** Lays one workspace's read on the document and delivers it, as the host does as a read moves. */
+function lay(workspaceId: string, read: AppHostRead<readonly MemorySummary[]>): void {
+  laid = { ...laid, [workspaceId]: read };
+  version += 1;
+  for (const listener of [...listeners]) {
+    listener({ version, entries: { [LIVE_READ.MEMORIES]: laid } });
+  }
+}
+
+/** Lays a workspace's memories as the test's host reads them now; nothing while it reads nothing. */
+function layRead(workspaceId: string): void {
+  if (readsNothing) return;
+  lay(workspaceId, readFails ? { failed: true } : { rows: stored[workspaceId] ?? [] });
+}
+
 /** The bridge, answering the page's acts the way the host would. */
 function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
-    case ACT_KIND.MEMORIES_READ:
-      if (holdReads !== undefined) {
-        const held = holdReads;
-        return new Promise((resolve) => held.push(resolve));
+    case ACT_KIND.MEMORIES_FOLLOW: {
+      const { workspaceId } = request.payload;
+      // Note that the host lays what it read once the hold is taken, never inside it, and holds it quietly.
+      void Promise.resolve().then(() => layRead(workspaceId));
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+    }
+    case ACT_KIND.MEMORIES_RETRY:
+      layRead(request.payload.workspaceId);
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.MEMORIES_FORGET: {
+      const { workspaceId, id } = request.payload;
+      const before = stored[workspaceId] ?? [];
+      const after = before.filter((memory) => memory.id !== id);
+      // The host draws the memory gone the moment it is asked, and puts it back where the service refused it.
+      lay(workspaceId, { rows: after });
+      if (refuseForget) {
+        lay(workspaceId, { rows: before });
+        return Promise.resolve(done(unanswered));
       }
-      return Promise.resolve(done(readFailure ?? { memories: stored }));
-    case ACT_KIND.MEMORIES_FORGET:
-      if (refuseForget) return Promise.resolve(done(unanswered));
-      if (holdForgets !== undefined) {
-        const held = holdForgets;
-        return new Promise((resolve) => held.push(resolve));
-      }
-      stored = stored.filter((memory) => memory.id !== request.payload.id);
-      return Promise.resolve(done({ memories: stored }));
+      stored = { ...stored, [workspaceId]: after };
+      return Promise.resolve(done({ memories: after }));
+    }
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
@@ -107,13 +137,22 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 const roots: Root[] = [];
 
 beforeEach(() => {
-  stored = [DEPLOYS, TESTS];
+  stored = { [ACME.id]: [DEPLOYS, TESTS] };
   sent = [];
-  readFailure = undefined;
+  readFails = false;
   refuseForget = false;
-  holdForgets = undefined;
-  holdReads = undefined;
-  fakeActs({ act: answer });
+  readsNothing = false;
+  laid = NO_KEYS_HELD;
+  version = 1;
+  listeners.clear();
+  fakeActs({
+    act: answer,
+    requestAppState: () => Promise.resolve(stateWith({}, { version, [LIVE_READ.MEMORIES]: laid })),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
 });
 
 afterEach(() => {
@@ -147,16 +186,20 @@ async function mount(
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
   const draw = (shown: Workspace | null, readerId: string | undefined) =>
     act(() =>
       root.render(
-        createElement(MemorySection, {
-          signedIn,
-          workspace: shown ?? undefined,
-          readerId,
-          workspacesFailed: workspaces.failed,
-          onRetryWorkspaces: workspaces.retry,
-        }),
+        onRegistry(
+          registry,
+          createElement(MemorySection, {
+            signedIn,
+            workspace: shown ?? undefined,
+            readerId,
+            workspacesFailed: workspaces.failed,
+            onRetryWorkspaces: workspaces.retry,
+          }),
+        ),
       ),
     );
   draw(workspace, signedIn ? READER : undefined);
@@ -227,12 +270,12 @@ async function searchFor(page: HTMLElement, query: string): Promise<void> {
   await settle();
 }
 
-test("what Vespin kept in the workspace is read for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
+test("what Vespin kept in the workspace is held for it and listed in the service's order, each memory's words whole and named by whose they are, and kept out of the screen recording", async () => {
   const { page } = await mount();
 
   assert.deepEqual(
     sent
-      .filter((request) => request.kind === ACT_KIND.MEMORIES_READ)
+      .filter((request) => request.kind === ACT_KIND.MEMORIES_FOLLOW)
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }],
   );
@@ -249,7 +292,7 @@ test("what Vespin kept in the workspace is read for it and listed in the service
 
 test("a memory's code in backticks is drawn as inline code, never as the backticks themselves", async () => {
   const written = { ...TESTS, text: "Run `pnpm db:generate` after changing a schema." };
-  stored = [written];
+  stored = { [ACME.id]: [written] };
   const { page } = await mount();
 
   const code = [
@@ -265,7 +308,7 @@ test("a memory's code in backticks is drawn as inline code, never as the backtic
   assert.doesNotMatch(page.textContent ?? "", /`/u);
 });
 
-test("Forget asks first, then forgets the memory for good and lists what the service then keeps", async () => {
+test("Forget asks first, then forgets the memory for good and lists what the host then holds", async () => {
   const { page } = await mount();
 
   const askedFirst = await forget(page, DEPLOYS);
@@ -341,7 +384,7 @@ test("several memories chosen are forgotten on one question, one after another, 
     id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
     text: "Pricing lives in the billing service.",
   };
-  stored = [DEPLOYS, pricing, TESTS];
+  stored = { [ACME.id]: [DEPLOYS, pricing, TESTS] };
   const { page } = await mount();
 
   for (const memory of [DEPLOYS, pricing, TESTS]) {
@@ -371,15 +414,15 @@ test("several memories chosen are forgotten on one question, one after another, 
   assert.deepEqual(words(page), [TESTS.text]);
 });
 
-test("showing another workspace reads that workspace's memories in place of the first's", async () => {
+test("showing another workspace holds that workspace's memories in place of the first's", async () => {
+  stored = { ...stored, [GLOBEX.id]: [] };
   const { page, show } = await mount();
-  stored = [];
 
   await show(GLOBEX);
 
   assert.deepEqual(
     sent
-      .filter((request) => request.kind === ACT_KIND.MEMORIES_READ)
+      .filter((request) => request.kind === ACT_KIND.MEMORIES_FOLLOW)
       .map((request) => request.payload),
     [{ workspaceId: ACME.id }, { workspaceId: GLOBEX.id }],
   );
@@ -387,129 +430,36 @@ test("showing another workspace reads that workspace's memories in place of the 
   assert.match(page.textContent ?? "", /hasn't remembered anything yet/u);
 });
 
-test("a forget answered after the page moved on to another workspace leaves that workspace's list as it read it", async () => {
-  holdForgets = [];
-  const { page, show } = await mount();
-  await forget(page, DEPLOYS);
-  stored = [];
-
-  await show(GLOBEX);
-  const release = holdForgets[0] ?? assert.fail("the forget was not sent");
-  release(done({ memories: [TESTS] }));
-  await settle();
-
-  assert.deepEqual(words(page), []);
-  assert.match(page.textContent ?? "", /hasn't remembered anything yet/u);
-});
-
-test("a forget answered after the page left its workspace and came back reads that workspace again, so the forgotten memory is not left listed", async () => {
-  holdForgets = [];
-  const { page, show } = await mount();
-  await forget(page, DEPLOYS);
-  await show(GLOBEX);
-  await show(ACME);
-  const listedOnReturn = words(page);
-
-  stored = [TESTS];
-  const release = holdForgets[0] ?? assert.fail("the forget was not sent");
-  release(done({ memories: stored }));
-  await settle();
-
-  assert.deepEqual(listedOnReturn, [DEPLOYS.text, TESTS.text]);
-  assert.deepEqual(words(page), [TESTS.text]);
-});
-
-test("a read out while a later forget lands never puts back the memory that forget removed", async () => {
-  const pricing: MemorySummary = {
-    ...DEPLOYS,
-    id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
-    text: "Pricing lives in the billing service.",
-  };
-  stored = [DEPLOYS, pricing, TESTS];
-  holdForgets = [];
-  const { page, show } = await mount();
-  await forget(page, DEPLOYS);
-  await show(GLOBEX);
-  await show(ACME);
-  // A second forget goes out before the first answers.
-  await forget(page, pricing);
-  const [releaseFirst, releaseSecond] = holdForgets;
-  assert.ok(releaseFirst !== undefined && releaseSecond !== undefined);
-
-  // The first forget lands after the round trip, so the page reads again, and that read is held.
-  holdReads = [];
-  releaseFirst(done({ memories: [pricing, TESTS] }));
-  await settle();
-  const releaseRead = holdReads[0] ?? assert.fail("the page did not read again");
-  // The second forget lands while that read is out; the read had seen the list before it.
-  stored = [TESTS];
-  holdReads = undefined;
-  releaseSecond(done({ memories: stored }));
-  await settle();
-  releaseRead(done({ memories: [pricing, TESTS] }));
-  await settle();
-
-  assert.deepEqual(words(page), [TESTS.text]);
-});
-
-test("another account signing in on the same workspace reads its memories again, as that reader may forget them", async () => {
-  const { show } = await mount();
-
-  await show(ACME, "user-dean");
-
-  assert.deepEqual(
-    sent
-      .filter((request) => request.kind === ACT_KIND.MEMORIES_READ)
-      .map((request) => request.payload),
-    [{ workspaceId: ACME.id }, { workspaceId: ACME.id }],
-  );
-});
-
 test("a workspace Vespin has remembered nothing in says so", async () => {
-  stored = [];
+  stored = { [ACME.id]: [] };
   const { page } = await mount();
 
   assert.deepEqual(words(page), []);
   assert.match(page.textContent ?? "", /Vespin hasn't remembered anything yet\./u);
 });
 
-test("a read that fails offers to try again, and no account reads nothing", async () => {
-  readFailure = unanswered;
+test("a read that fails offers to try again, and no account holds nothing", async () => {
+  readFails = true;
   const { page: failed } = await mount();
   const { page: signedOut } = await mount(false);
 
   assert.match(failed.textContent ?? "", /Vespin's memory could not be read\./u);
-  readFailure = undefined;
+  readFails = false;
   act(() => button(failed, "Retry").click());
   await settle();
   assert.deepEqual(words(failed), [DEPLOYS.text, TESTS.text]);
   assert.equal(signedOut.textContent, "Sign in to use this page.");
-  assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.MEMORIES_READ).length,
-    2,
-    "the signed-out page reads nothing",
-  );
-});
-
-test("a read the service refused is reported as that refusal, never as a page that read nothing", async () => {
-  const refusal = { failure: AGENT_CALL_FAILURE.NOT_FOUND } as const;
-  readFailure = refusal;
-  const reports: ShownFailureReport[] = [];
-  const uninstall = installShownFailureReporter((report) => {
-    reports.push(report);
-    return undefined;
-  });
-  await mount();
-  uninstall();
-
   assert.deepEqual(
-    reports.map((report) => [report.surface, report.kind, report.cause]),
-    [[FAILURE_SURFACE.MEMORIES_READ, FAILURE_KIND.REFUSED, refusal]],
+    sent
+      .filter((request) => request.kind === ACT_KIND.MEMORIES_FOLLOW)
+      .map((request) => request.payload),
+    [{ workspaceId: ACME.id }],
+    "the signed-out page holds nothing",
   );
 });
 
 test("while the memories are read the page says Reading, which is neither its failure nor its empty line", async () => {
-  holdReads = [];
+  readsNothing = true;
   const { page } = await mount();
 
   const status = page.querySelector('[role="status"]') ?? assert.fail("no reading region");

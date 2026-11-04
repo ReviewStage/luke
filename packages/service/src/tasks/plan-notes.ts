@@ -295,7 +295,12 @@ export function saveNotes(
 
 /** What the developer's edit answers: the plan as saved, the text as it stands where the edit conflicts with it, or why nothing was saved. */
 export type PlanEditSaveResult =
-  | { readonly status: typeof PLAN_SAVE_STATUS.SAVED; readonly task: Task }
+  | {
+      readonly status: typeof PLAN_SAVE_STATUS.SAVED;
+      readonly task: Task;
+      /** The transaction the edit's revision was written in; none where it moved no text. */
+      readonly txid: string | undefined;
+    }
   | PlanConflict
   | PlanNotSaved;
 
@@ -367,7 +372,7 @@ export function saveDeveloperEdit(
     savedUnderLock(binding, DEVELOPER, take),
     (result): PlanEditSaveResult =>
       result.status === PLAN_SAVE_STATUS.SAVED
-        ? { status: PLAN_SAVE_STATUS.SAVED, task: result.task }
+        ? { status: PLAN_SAVE_STATUS.SAVED, task: result.task, txid: result.txid }
         : result,
   );
   return reachedStore(saved);

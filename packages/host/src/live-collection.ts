@@ -523,6 +523,18 @@ export interface HeldSlice<Key> {
   readonly end: Effect.Effect<void>;
 }
 
+/** A held slice's rows by key, read and laid apart from its follows, as a write's answer lays a key's. */
+export interface HeldRows<Key, Rows> {
+  /** The rows `key` holds on the slice now; none where its read has not answered, or nobody holds it. */
+  readonly rowsOf: (key: Key) => Rows | undefined;
+  /**
+   * Lays `rows` at `key` as an answer of its read would be, as a write's
+   * answer is drawn before its read carries it. Note that a key nobody holds
+   * stands laid until one holds it and lets it go, or the session ends.
+   */
+  readonly lay: (key: Key, rows: Rows) => void;
+}
+
 /** `keyed` with `read` laid at `path`, or the key there dropped where it is none, every other key and level the very one held. */
 function withKeyLaid(keyed: object, path: readonly string[], read: object | undefined): object {
   const [id, ...below] = path;
@@ -568,7 +580,7 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
   /** `key`'s read followed until let go, each answer and each failure to answer told through `answers`. */
   readonly follow: (key: Key, answers: HeldAnswers<AppHostReads[Slice]>) => Effect.Effect<void>;
   readonly tell: (slice: AppState[Slice]) => void;
-}): Effect.Effect<HeldSlice<Key>, never, Scope.Scope> {
+}): Effect.Effect<HeldSlice<Key> & HeldRows<Key, AppHostReads[Slice]>, never, Scope.Scope> {
   return Effect.gen(function* () {
     let held = options.empty;
     const lay = (key: Key, read: AppHostRead<AppHostReads[Slice]> | undefined) => {
@@ -602,6 +614,8 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
       hold: reads.hold,
       held: reads.held,
       retry: (key) => Effect.andThen(Effect.sync(answers(key).retried), reads.reopen(key)),
+      rowsOf: (key) => answers(key).rows(),
+      lay: (key, rows) => lay(key, { rows }),
       open: reads.reopenHeld,
       end: reads.end,
     };

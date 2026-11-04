@@ -20,7 +20,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handHostReads, holdIntegrationTools } from "../testing/app-state.js";
+import { handHostReads, holdIntegrations, holdIntegrationTools } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
@@ -123,7 +123,6 @@ const statuses: IntegrationStatuses = {
   signInOf: () => undefined,
   readFailed: false,
   read: () => Promise.resolve(),
-  settle: () => undefined,
   signInBegun: () => undefined,
   cancelSignIn: () => Promise.resolve(true),
 };
@@ -530,26 +529,26 @@ test("two accounts at a provider stand as two rows, each named by its label, and
   assert.deepEqual(switched, [["notion-2"]]);
 });
 
-/** The act port answering where each provider stands and each server's tools, Linear's with `problem`, as the service would. */
+/** The host holding where each provider stands, and the act port answering each server's tools, Linear's with `problem`, as the service would. */
 function answerLinear(problem: {
   readonly reason: IntegrationToolsProblemReason;
   readonly message?: string;
 }): void {
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
-      Promise.resolve({
-        // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
-        integrations: Object.fromEntries(
-          INTEGRATION_PROVIDER_LIST.map((provider) => [
-            provider,
-            STANDING.get(provider) ?? INTEGRATION_STATUS.UNAVAILABLE,
-          ]),
-        ) as Record<IntegrationProvider, IntegrationStatus>,
-      }),
-  });
+  fakeActPort({});
   holdTools((server) =>
     (server.connection ?? server.provider) === LINEAR ? { problem } : listed(server),
   );
+  holdIntegrations(() => ({
+    rows: {
+      // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
+      integrations: Object.fromEntries(
+        INTEGRATION_PROVIDER_LIST.map((provider) => [
+          provider,
+          STANDING.get(provider) ?? INTEGRATION_STATUS.UNAVAILABLE,
+        ]),
+      ) as Record<IntegrationProvider, IntegrationStatus>,
+    },
+  }));
 }
 
 /** The act port answering as `answerLinear` does, Linear's sign-in refused. */

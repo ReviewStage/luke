@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_ROW_STATUS } from "@repo/database/integration-vocabulary";
-import { getTestDB } from "@repo/database/testing";
+import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
+import { expectTopicsFire, getTestDB } from "@repo/database/testing";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Effect, Layer } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import { openGithubUser } from "../testing/github-app-fake.js";
 import { firstIntegrationAccount } from "../testing/integration-connect.js";
 import {
@@ -19,12 +20,17 @@ import {
   readIntegrationConnections,
   renameIntegrationConnection,
 } from "./integration-store.js";
+import { INTEGRATION_GRANT_HOLDER } from "./integration-token.js";
+import { readStoredTools, storeTools } from "./integration-tool-store.js";
 
 /**
  * An account's integration rows over the real migration on PGlite: a
  * sign-in is found by its state alone and by no other account's, it settles
  * once, whether with a grant or without one, an account reads only its own
- * rows, and the rows go with the account that owns them.
+ * rows, and the rows go with the account that owns them. Each write that
+ * moves what the account's integrations read draws notifies that account's
+ * integrations topic alone, and a tools listing, which every native launch
+ * writes, notifies nothing.
  */
 
 const LINEAR = INTEGRATION_PROVIDER.LINEAR;
@@ -213,8 +219,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         );
         const row = yield* readIntegrationConnection(userId, "notion-2");
         assert.deepEqual(
-          [first, second, row?.connectSubject, row?.state],
-          [true, false, "subject-a", `state-race-a-${userId}`],
+          [first !== undefined, second, row?.connectSubject, row?.state],
+          [true, undefined, "subject-a", `state-race-a-${userId}`],
         );
       }),
   );
@@ -265,11 +271,43 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the integration connection row
         yield* deleteIntegrationConnection(userId, "notion-2");
         yield* under("subject-replacing", `state-replacing-${userId}`);
 
-        assert.equal(yield* deleteIntegrationAccount(read), false);
+        assert.equal(yield* deleteIntegrationAccount(read), undefined);
         assert.equal(
           (yield* readIntegrationConnection(userId, "notion-2"))?.connectSubject,
           "subject-replacing",
         );
+      }),
+  );
+
+  it.effect(
+    "each write the integrations read draws notifies the account's integrations topic alone, and a tools listing notifies nothing",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const integrations: readonly SyncTopic[] = [[TOPIC.ACCOUNT_INTEGRATIONS, userId]];
+        const account = firstIntegrationAccount(userId, LINEAR);
+        const fires = <A, E, R>(write: Effect.Effect<A, E, R>) =>
+          expectTopicsFire(write, integrations);
+
+        yield* fires(beginIntegrationSignIn(userId, account, `state-begin-${userId}`));
+        yield* fires(completeIntegrationSignIn(userId, LINEAR, `state-begin-${userId}`));
+        const grant = {
+          holder: INTEGRATION_GRANT_HOLDER.ACCOUNT,
+          provider: LINEAR,
+          userId,
+          connectionName: LINEAR,
+          connectSubject: userId,
+        };
+        const listed = [{ name: "list_issues" }];
+        yield* expectTopicsFire(storeTools(grant, listed, yield* DateTime.nowAsDate), []);
+        assert.ok((yield* readStoredTools(grant)) !== undefined, "the listing was kept");
+        yield* fires(renameIntegrationConnection(userId, LINEAR, "Acme"));
+        yield* fires(expireIntegrationConnection(userId, LINEAR));
+        yield* fires(beginIntegrationSignIn(userId, account, `state-again-${userId}`));
+        yield* fires(endIntegrationSignIn(userId, LINEAR, `state-again-${userId}`));
+        const read = yield* readIntegrationConnection(userId, LINEAR);
+        assert.ok(read !== undefined);
+        yield* fires(deleteIntegrationAccount(read));
       }),
   );
 });

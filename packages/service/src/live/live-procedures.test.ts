@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
 import { queueMacCommand } from "@repo/database/models/mac-command-store";
+import { rememberMemory } from "@repo/database/models/memory-store";
 import { startPlanCommentThread } from "@repo/database/models/plan-comments";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimChapterGeneration } from "@repo/database/models/pull-request-chapters-store";
@@ -25,6 +26,11 @@ import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/a
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
+import {
+  integrationLiveRowsOf,
+  integrationStatusesLiveAnswerSchema,
+} from "@repo/features/integration-live";
+import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
@@ -48,6 +54,11 @@ import {
   taskRecordLiveAnswerSchema,
 } from "@repo/features/live-wire";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
+import {
+  memoriesOfLiveRows,
+  workspaceMemoriesLiveAnswerSchema,
+  workspaceMemoriesLiveRowsSchema,
+} from "@repo/features/memory-live";
 import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { taskCommentsLiveAnswerSchema } from "@repo/features/plan-comment-live";
 import { PLAN_COMMENT_ACTOR } from "@repo/features/plan-comment-wire";
@@ -77,6 +88,10 @@ import {
   postInboxThread,
   withdrawInboxMessage,
 } from "../inbox/inbox-store.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+} from "../integrations/integration-store.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -85,6 +100,11 @@ import {
   type InstallationFixture,
 } from "../testing/github-app-fake.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
+import {
+  CONNECTOR_ASKED_NOTHING,
+  firstIntegrationAccount,
+  integrationConnectOf,
+} from "../testing/integration-connect.js";
 import { liveProcedures } from "./live-procedures.js";
 import { pollSealer } from "./poll-sealer.js";
 
@@ -112,7 +132,14 @@ function readOf(path: string, forUser: string | undefined): URL {
   return url;
 }
 
-/** The procedures answering one request as `bearer`, over the test's database. */
+/** A deployment that offers every provider but Granola, Notion alone taking several accounts, and asks Connect nothing. */
+const INTEGRATION_CONNECT = integrationConnectOf((provider) => ({
+  ...CONNECTOR_ASKED_NOTHING,
+  configured: provider !== INTEGRATION_PROVIDER.GRANOLA,
+  multipleAccounts: provider === INTEGRATION_PROVIDER.NOTION,
+}));
+
+/** The procedures answering one request as `bearer`, over the test's database and `INTEGRATION_CONNECT`. */
 const ask = (options: {
   readonly bearer?: string;
   readonly method?: string;
@@ -125,6 +152,7 @@ const ask = (options: {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      INTEGRATION_CONNECT,
     );
     const procedures = liveProcedures({
       resolveUserId: (incoming) => {
@@ -1204,6 +1232,74 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
   );
 });
 
+it.layer(getTestDB())("a workspace's memories' live read", (it) => {
+  it.effect(
+    "a member is answered every memory of their workspace polled, named by its keeper and forgettable by its keeper and an owner but no other member; a member of another workspace reads only their own, and is not found asking for this one",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, keeper, teammate, outsider] = [
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+        ];
+        for (const [id, name] of [
+          [owner, "Olive Owner"],
+          [keeper, "Kai Keeper"],
+          [teammate, "Tess Teammate"],
+          [outsider, "Otto Outsider"],
+        ] as const) {
+          yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, keeper);
+        yield* joinWorkspace(workspaceId, teammate);
+        const elsewhere = yield* openWorkspace(outsider);
+        yield* rememberMemory(workspaceId, keeper, "Deployments go out from main.", undefined);
+        yield* rememberMemory(elsewhere, outsider, "Pricing lives in billing.", undefined);
+        const read = (bearer: string, workspace: string) =>
+          Effect.gen(function* () {
+            const polled = yield* ask({
+              bearer,
+              path: `/api/live/workspace-memories?workspaceId=${workspace}`,
+            });
+            assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+            const answer = Schema.decodeUnknownSync(workspaceMemoriesLiveAnswerSchema)(polled.body);
+            assert.equal(answer.url, LIVE_POLL_URL);
+            const { memories } = Schema.decodeUnknownSync(workspaceMemoriesLiveRowsSchema)({
+              memories: answer.queries.memories.rows,
+            });
+            return memoriesOfLiveRows(memories).map((memory) => [
+              memory.text,
+              memory.keptBy?.name,
+              memory.forgettable,
+            ]);
+          });
+
+        assert.deepEqual(yield* read(keeper, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", true],
+        ]);
+        assert.deepEqual(yield* read(owner, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", true],
+        ]);
+        assert.deepEqual(yield* read(teammate, workspaceId), [
+          ["Deployments go out from main.", "Kai Keeper", false],
+        ]);
+        assert.deepEqual(yield* read(outsider, elsewhere), [
+          ["Pricing lives in billing.", "Otto Outsider", true],
+        ]);
+        assert.deepEqual(
+          yield* ask({
+            bearer: outsider,
+            path: `/api/live/workspace-memories?workspaceId=${workspaceId}`,
+          }),
+          { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+});
+
 it.layer(getTestDB())("the account's sidebar's live read", (it) => {
   it.effect(
     "the account's sidebar is answered polled as its sections, the tasks in them, and its pins",
@@ -1285,6 +1381,52 @@ const askChapters = (options: {
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body };
   });
+
+it.layer(getTestDB())("the account's integrations' live read", (it) => {
+  it.effect(
+    "an account is answered its own rows polled, each where it stands as stored and a sign-in past its window not pending, with the providers it is offered; another account's never, and a read naming another account is signed out",
+    () =>
+      Effect.gen(function* () {
+        const { LINEAR, NOTION, POSTHOG } = INTEGRATION_PROVIDER;
+        const dana = yield* openUser;
+        const eli = yield* openUser;
+        // A first sign-in begun sixteen minutes before the read, past its window, never completed; and one begun five minutes before it, within it.
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, POSTHOG), "state-lapsed");
+        yield* TestClock.adjust(Duration.minutes(11));
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, LINEAR), "state-linear");
+        yield* completeIntegrationSignIn(dana, LINEAR, "state-linear", "Acme");
+        yield* beginIntegrationSignIn(dana, firstIntegrationAccount(dana, NOTION), "state-notion");
+        yield* beginIntegrationSignIn(eli, firstIntegrationAccount(eli, LINEAR), "state-eli");
+        yield* TestClock.adjust(Duration.minutes(5));
+
+        const answered = yield* ask({ bearer: dana, path: "/api/live/integration-statuses" });
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(integrationStatusesLiveAnswerSchema)(answered.body);
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.deepEqual(
+          integrationLiveRowsOf(answer.queries.connections.rows ?? [])
+            .map((row) => [row.connection, row.label, row.status])
+            .toSorted(([a], [b]) => String(a).localeCompare(String(b))),
+          [
+            [LINEAR, "Acme", INTEGRATION_STATUS.CONNECTED],
+            [NOTION, null, INTEGRATION_STATUS.PENDING],
+            [POSTHOG, null, INTEGRATION_STATUS.DISCONNECTED],
+          ],
+        );
+        assert.ok(!answer.offered.includes(INTEGRATION_PROVIDER.GRANOLA));
+        assert.ok(answer.offered.includes(LINEAR));
+        assert.deepEqual(answer.multiple, [NOTION]);
+        assert.deepEqual(
+          yield* ask({ bearer: dana, forUser: eli, path: "/api/live/integration-statuses" }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+          "a read naming another account is signed out",
+        );
+      }),
+  );
+});
 
 it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   it.effect(

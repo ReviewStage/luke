@@ -9,6 +9,7 @@
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { messageStandingNow } from "@repo/database/models/message-reads";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
@@ -40,9 +41,11 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
+  integrationConnectionSync,
   invitationSync,
   macCommandSync,
   memberSync,
+  memorySync,
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
@@ -82,6 +85,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
@@ -238,6 +242,33 @@ export const macCommandsLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/**
+ * Every integration row the account holds, where each stands as stored,
+ * woken on the account's integrations topic alone, which a sign-in begun,
+ * completed, or ended, a label, an expiry, and a disconnect each name. Note
+ * that a sign-in counts as under way while it began at `issuedSince` or
+ * later, which its procedure binds from the clock, since a live statement
+ * reads none; one that lapses with no write turns not pending only as the
+ * read is looked at again. Which providers the account is offered, and
+ * which take several accounts, come from the deployment and the account's
+ * email, which no statement reads, so the procedure answers them beside the
+ * rows on every poll.
+ */
+export const integrationStatusesLive = defineLiveQuery({
+  name: LIVE_READ.INTEGRATIONS,
+  params: ["userId", "issuedSince"],
+  reads: [integrationConnectionSync],
+  topics: ({ userId }) => [[TOPIC.ACCOUNT_INTEGRATIONS, userId]],
+  statements: ({ userId, issuedSince }) =>
+    Option.map(
+      integrationStatusesLiveStatement(userId, instantParam(issuedSince)),
+      (connections) => ({
+        connections,
+      }),
+    ),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 /** What reaches an inbox item: its workspace's membership and, for one of an agent on a member's own token, that member's GitHub access. */
 const ITEM_GATES = [memberSync, githubPersonalTokenSync, githubRepositoryReadSync] as const;
 
@@ -385,6 +416,28 @@ export const workspaceMembersLive = defineLiveQuery({
   ],
   topics: ({ workspaceId }) => [[TOPIC.WORKSPACE, workspaceId]],
   statements: ({ userId, workspaceId }) => workspaceMembersLiveStatements(userId, workspaceId),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * A workspace's memories, each with its keeper's name and whether the
+ * reader may forget it, woken on the workspace's memory topic by a memory
+ * kept, corrected, or forgotten, and on the reader's own by their
+ * membership made, ended, or given another role, which decides what they
+ * read and may forget. Note that a teammate's rename wakes neither, since a
+ * member's row names only their own topic and their workspaces': a keeper's
+ * new name shows at the hold's end.
+ */
+export const workspaceMemoriesLive = defineLiveQuery({
+  name: LIVE_READ.MEMORIES,
+  params: ["userId", "workspaceId"],
+  reads: [memorySync, memberSync, userSync],
+  topics: ({ userId, workspaceId }) => [
+    [TOPIC.MEMORY, workspaceId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, workspaceId }) =>
+    Option.map(workspaceMemoriesLiveStatement(userId, workspaceId), (memories) => ({ memories })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -790,12 +843,14 @@ export const LIVE_QUERIES = liveQueryRegistry([
   tasksLive,
   workspacesLive,
   macCommandsLive,
+  integrationStatusesLive,
   inboxLive,
   inboxItemsLive,
   taskInboxLive,
   agentInboxLive,
   workspaceMembersLive,
   workspaceInvitationsLive,
+  workspaceMemoriesLive,
   automationsLive,
   automationWorkspaceRunsLive,
   automationRunsLive,

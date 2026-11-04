@@ -59,6 +59,8 @@ export const HOSTED_SERVICE_PATH = {
    * The read settles only for a bearer, so a browser's cookie settles here.
    */
   ACCOUNT_INTEGRATIONS_SETTLE: "/api/account/integrations/settle",
+  /** Where GitHub stands for the account as an integration (GET): connected while its GitHub sign-in yields a token. `integration-wire.ts` declares the answer. */
+  ACCOUNT_INTEGRATIONS_GITHUB: "/api/account/integrations/github",
   /**
    * Where Vercel Connect returns the browser from an integration's sign-in
    * (GET), with the sign-in's own state, which names the provider too: the
@@ -129,8 +131,12 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
   /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
   LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
+  /** One workspace's memories under `?workspaceId=`, sealed for following over Neon Realtime (GET), each with its keeper's name and whether the reader may forget it, or `not-found`, or their rows inline where polled. `memory-live.ts` declares the answer. */
+  LIVE_WORKSPACE_MEMORIES: "/api/live/workspace-memories",
   /** One coding agent's pull request's newest chapters, the agent under `?id=` and the pull request under `&number=`, sealed for following over Neon Realtime (GET), with whether the reader can generate them, or `not-found`. `pull-request-chapters-live.ts` declares the answer. */
   LIVE_PULL_REQUEST_CHAPTERS: "/api/live/pull-request-chapters",
+  /** Every integration row the account holds and where each stands as stored, sealed for following over Neon Realtime (GET), with the providers it is offered and those that take several accounts. `integration-live.ts` declares the answer. */
+  LIVE_INTEGRATION_STATUSES: "/api/live/integration-statuses",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

@@ -970,8 +970,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * The developer's edit of the plan's document: answered with the plan as
-     * saved, with the text as it now stands and who last wrote it where the
-     * edit conflicts with it, or as refused where the plan would be longer than a plan may be.
+     * saved and the transaction it was saved in, which a host waits for on
+     * the plan's record before it lets a delivery of the plan land, with the
+     * text as it now stands and who last wrote it where the edit conflicts
+     * with it, or as refused where the plan would be longer than a plan may be.
      */
     edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
@@ -983,7 +985,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             { userId: context.userId, workspaceId: saved.task.workspaceId },
             {},
           );
-          return { plan: saved.task };
+          return {
+            plan: saved.task,
+            ...(saved.txid === undefined ? undefined : { txid: saved.txid }),
+          };
         case PLAN_SAVE_STATUS.CONFLICT:
           return {
             conflict:

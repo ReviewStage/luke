@@ -60,11 +60,15 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
-   * the workspace Settings shows, shared by its members, read as the page
-   * opens, and one forgotten for good. Each answers the memories as the
-   * service then keeps them.
+   * the workspace Settings shows, shared by its members, held for the
+   * window while it holds the stream open, and one forgotten for good. The
+   * hold's stream carries nothing: what it holds reaches the panel on app
+   * state (`LIVE_READ.MEMORIES`), and a forget is drawn there the moment it
+   * is asked, answering the memories as the service then keeps them.
    */
-  MEMORIES_READ: "memories.read",
+  MEMORIES_FOLLOW: "memories.follow",
+  /** A workspace's held memories, which the panel reads on app state, asked again at once, as Try again asks. */
+  MEMORIES_RETRY: "memories.retry",
   MEMORIES_FORGET: "memories.forget",
   /**
    * A clip dictated into a message box, carried once from the panel that
@@ -278,12 +282,21 @@ export const INSTALLED_SKILL_ACT_KIND = {
 
 /**
  * Settings' integration rows: where every one of the account's integrations
- * stands, a browser sign-in to one begun and opened by the host, and one
- * connection ended. The window hears whether the browser was sent, never the
- * address it was sent to.
+ * stands, held, a browser sign-in to one begun and opened by the host, and
+ * one connection ended. The window hears whether the browser was sent, never
+ * the address it was sent to.
  */
 export const INTEGRATION_ACT_KIND = {
-  INTEGRATIONS_STATUS: "integrations.status",
+  /**
+   * Where every one of the account's integrations stands, held for the
+   * window while it holds the stream open and a while after among those let
+   * go lately, a sign-in pending settled by the host as it waits: what it
+   * holds reaches the panel on app state (`LIVE_READ.INTEGRATIONS`), so the
+   * stream carries nothing.
+   */
+  INTEGRATIONS_FOLLOW: "integrations.follow",
+  /** The account's held integrations, which the panel reads on app state, read again at once, as Try again asks. */
+  INTEGRATIONS_RETRY: "integrations.retry",
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
@@ -419,6 +432,15 @@ export const TASKS_ACT_KIND = {
    * stream carries nothing.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One task's plan held followed while the window holds the stream open
+   * for the task it has open, and a while after among those let go lately:
+   * what it holds reaches the panel on app state
+   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   */
+  TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
+  /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
+  TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
    * One plan's newest page of history, followed while the window holds the
    * stream open for its version history: each time a save lands, over Neon
@@ -682,7 +704,8 @@ export const PORT_ACT_USE = {
   GITHUB_TOKEN_READ: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
   GITHUB_TOKEN_REMOVE: ACT_USE.WRITE,
-  MEMORIES_READ: ACT_USE.READ,
+  MEMORIES_FOLLOW: ACT_USE.READ,
+  MEMORIES_RETRY: ACT_USE.READ,
   MEMORIES_FORGET: ACT_USE.WRITE,
   DICTATION_TRANSCRIBE: ACT_USE.FETCH,
 
@@ -771,7 +794,8 @@ export const PORT_ACT_USE = {
   INSTALLED_SKILLS_SHARE: ACT_USE.WRITE,
   INSTALLED_SKILLS_REMOVE: ACT_USE.WRITE,
 
-  INTEGRATIONS_STATUS: ACT_USE.READ,
+  INTEGRATIONS_FOLLOW: ACT_USE.READ,
+  INTEGRATIONS_RETRY: ACT_USE.READ,
   INTEGRATIONS_CONNECT: ACT_USE.WRITE,
   INTEGRATIONS_CANCEL: ACT_USE.WRITE,
   INTEGRATIONS_DISCONNECT: ACT_USE.WRITE,
@@ -828,6 +852,8 @@ export const PORT_ACT_USE = {
   TASKS_RESTORE: ACT_USE.WRITE,
   TASKS_PAGE_SOURCE: ACT_USE.FETCH,
   TASKS_PAGES_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_RETRY: ACT_USE.READ,
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,

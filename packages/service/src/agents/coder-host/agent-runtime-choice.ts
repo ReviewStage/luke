@@ -356,7 +356,6 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
   const registered = yield* devicesSeenSince(userId, new Date(0));
   if (registered.length === 0) return [];
   const paid = yield* paidMacProviders(userId);
-  // Note that a Mac signed in to a harness runs its models on that login, paid for or not.
   return registered.map((device) => ({
     deviceId: device.id,
     name: device.name,

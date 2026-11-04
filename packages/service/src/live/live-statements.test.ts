@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
+import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
 import { pullRequestChaptersLiveStatement } from "@repo/database/models/pull-request-chapters-store";
 import { repositoryPinsLiveStatement } from "@repo/database/models/repository-pin-store";
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
@@ -20,6 +21,7 @@ import {
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
 import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -72,6 +74,9 @@ function liveStatements() {
     "agent.pullRequestChapters": Option.getOrThrow(
       pullRequestChaptersLiveStatement(USER_ID, randomUUID(), 7),
     ),
+    "account.integrations": Option.getOrThrow(
+      integrationStatusesLiveStatement(USER_ID, new Date(0)),
+    ),
     "mac.commands": Option.getOrThrow(
       macCommandsLiveStatement(USER_ID, Object.values(MAC_COMMAND_KIND)),
     ),
@@ -98,6 +103,9 @@ function liveStatements() {
     ),
     "workspace-invitations.invitations": Option.getOrThrow(
       workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
+    ),
+    "workspace-memories.memories": Option.getOrThrow(
+      workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
     ),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(

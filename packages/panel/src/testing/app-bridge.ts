@@ -38,10 +38,11 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the outside MCP clients, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, and a workspace's people and invitations. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, integrations, and provider keys, an agent's or a server's tools, the outside MCP clients, a workspace's memories, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, a workspace's people and invitations, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
+  | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
@@ -50,15 +51,18 @@ type HoldKind =
   | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
   | typeof INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW
   | typeof ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
+  | typeof ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
   | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
-  | typeof WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW;
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW
+  | typeof TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW;
 
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW,
   AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
+  INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
   TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
   CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW,
@@ -67,10 +71,12 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW,
   INTEGRATION_ACT_KIND.MCP_CLIENTS_FOLLOW,
   ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW,
+  ACCOUNT_ASK_ACT_KIND.MEMORIES_FOLLOW,
   AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW,
+  TASKS_ACT_KIND.TASKS_DOCUMENT_FOLLOW,
 ]);
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
@@ -106,17 +112,20 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
- * account's beats or provider keys, an agent's or a server's tools, the
- * outside MCP clients, the automations' lists and histories, a plan's or a
- * page's comments, the run that started an agent, or a workspace's people,
- * is held quietly, and an automations' Try again taken, since what the hold
- * reads reaches the window on app state.
+ * account's beats, integrations, or provider keys, an agent's or a
+ * server's tools, the outside MCP clients, a workspace's memories, the
+ * automations' lists and histories, a plan's or a page's comments, the run
+ * that started an agent, a workspace's people, or a task's plan, is held
+ * quietly, and an automations', the integrations', or the memories' Try
+ * again taken, since what the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
   const answered: Partial<FakeActPort> = {
     ...Object.fromEntries([...QUIET_HOLDS].map((kind) => [kind, quietHold])),
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: () => Promise.resolve(),
     [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: () => Promise.resolve(),
+    [ACCOUNT_ASK_ACT_KIND.MEMORIES_RETRY]: () => Promise.resolve(),
     ...procedures,
   };
   answeringPort = answered;

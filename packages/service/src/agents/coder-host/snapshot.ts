@@ -72,7 +72,6 @@ export const SNAPSHOT = {
 /** Why the source's work was not copied: the Start already made its agent, the task moved repository since the source started, the source never opened a sandbox, the copy failed, or it ran past its bound. */
 export const SNAPSHOT_MISS = {
   STARTED: "started",
-  /** The task moved to another repository than the source's, which the new agent's checkout would not hold the branch in. */
   MOVED: "moved",
   NO_SANDBOX: "no-sandbox",
   FAILED: "failed",

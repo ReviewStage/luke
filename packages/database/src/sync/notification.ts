@@ -27,6 +27,12 @@ export const SYNC_PAYLOAD_BYTES = 8000;
 export const TOPIC = {
   /** A user's account, by user id. */
   ACCOUNT: "account",
+  /**
+   * A user's integrations, by user id: narrower than the account's own
+   * topic, so a sign-in begun, settled, or ended wakes the account's open
+   * integration reads and never its task list or its inbox.
+   */
+  ACCOUNT_INTEGRATIONS: "account-integrations",
   /** A workspace, by organization id. */
   WORKSPACE: "workspace",
   /**
@@ -35,6 +41,12 @@ export const TOPIC = {
    * chapter reads of that workspace and never its members' task lists.
    */
   WORKSPACE_CHAPTERS: "workspace-chapters",
+  /**
+   * A workspace's memories, by organization id: narrower than the
+   * workspace's own topic, so an agent's `save_memory` wakes the open memory
+   * reads of that workspace and never its members' task lists.
+   */
+  MEMORY: "memory",
   TASK: "task",
   AGENT: "agent",
   CONVERSATION: "conversation",

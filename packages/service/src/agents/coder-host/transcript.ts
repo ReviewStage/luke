@@ -92,11 +92,8 @@ import { usageOfTurns } from "./usage.js";
  * The transcript is the conversation's own `messages` rows: the plan the
  * agent was handed, each turn's journal as the relay writes it, which
  * grows in place while the turn runs and is replaced by the finished answer
- * when it ends, and the lines said on calls into the agent, the developer's
- * and its own, as the voice writes them on the voice channel, each written
- * once its words are first heard and grown in place, and carrying when its
- * words began, so the tab places it on its call (`agents.calls` reads the
- * calls themselves). A reader holds a cursor of two numbers, the highest message
+ * when it ends, and the lines said on calls into the agent before calls were
+ * removed, each carrying when its words began. A reader holds a cursor of two numbers, the highest message
  * sequence it has and the journal revision it last read at, so a row added
  * past the first or amended past the second is new to it. A read with
  * nothing new is held open while the agent is starting or its newest turn
@@ -144,7 +141,6 @@ export function cursorOfWire(after: string): MessageCursor {
   return { seq: Number(seq ?? 0), revision: Number(revision ?? 0) };
 }
 
-/** The cursor as the wire carries it. */
 export function cursorToWire(cursor: MessageCursor): string {
   return `${cursor.seq}${CURSOR_SEPARATOR}${cursor.revision}`;
 }
@@ -366,7 +362,6 @@ function senderOf(sent: LineSent): AgentSender {
   }
 }
 
-/** The ids of the developer's lines among the rows. */
 function lineIdsAmong(records: readonly StoredMessageRecord[]): readonly string[] {
   return records
     .filter((record) => record.message.role === MESSAGE_ROLE.USER)
@@ -520,7 +515,6 @@ const withUsage = (
 ): TranscriptEffect<TranscriptPage, ModelCatalog> =>
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
-    // Note that every read here stands apart from the others, so they run at once rather than one round trip after another.
     const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue, launch } =
       yield* Effect.all(
         {
@@ -812,7 +806,6 @@ function transcriptTopics(target: ConversationTarget, own?: OwnAgent): readonly 
  * ends the hold is read with that page, so a hold that ran out on an agent
  * that ended meanwhile still says so. The agent's own transcript names the
  * agent as `own`, whose context its pages carry; a worker's names none.
- * The brain's worker's looks again on the voice's own beat (`poll`).
  * An ended agent's empty page is held too while `titleAwaited` says a
  * title may still land, because a reader stops at that page and the
  * agent's own title, or a short worker's, lands after its turn ended; the
@@ -864,12 +857,9 @@ export interface TranscriptNow {
 
 /**
  * The transcript past the cursor as it stands, never held, with whether
- * `transcriptPast` would have held on it: for a reader that follows the
- * transcript's live statements (`transcript-live.ts`) and reads again once
- * they move, rather than having the service look on a clock. Where it would
- * hold, the page says how soon the clock alone may end that, as the agent
- * passing the grace its first turn had to land in or the window of a title
- * it waits on closing (`titleEdge`), so the reader reads again then.
+ * `transcriptPast` would have held on it and, where it would, how soon the
+ * clock alone may end that: for a reader that follows the transcript's live
+ * statements (`transcript-live.ts`) and reads again once they move.
  */
 export function transcriptNow(
   target: ConversationTarget,

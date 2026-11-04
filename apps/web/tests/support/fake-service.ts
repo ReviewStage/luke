@@ -2,7 +2,8 @@
  * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories our GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
- * answers a cookie caller. The web client's host calls the origin that
+ * answers a cookie caller, and the account's integration rows, followed as
+ * the tab follows them, polled, say so once it has. The web client's host calls the origin that
  * served it, which jsdom names `http://localhost:3000`. A route the fake does not hold answers 404, which
  * every client reads as unanswered, so a test states only what it reads.
  * The session is the browser's cookie in a real tab: here it is whatever the
@@ -61,6 +62,35 @@ const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, rea
   ["issues", []],
 ]);
 
+/** One integration row as the live read delivers it: the Slack account, pending until the settling POST connects it. */
+function slackRow(settled: boolean): WireValue {
+  return {
+    id: "integration-slack",
+    connection: "slack",
+    provider: "slack",
+    label: null,
+    status: settled ? "connected" : "pending",
+  };
+}
+
+/** The account's integrations as a polled read answers them: the Slack row inline at the poll address, or only where it stands where it has not moved, with Slack offered beside it. */
+function polledIntegrations(settled: boolean, unchanged: boolean): WireValue {
+  return {
+    url: LIVE_POLL_URL,
+    queries: {
+      connections: {
+        capability: "connections",
+        queryFingerprint: "connections",
+        expiresAt: 4_000_000_000_000,
+        digest: settled ? "2" : "1",
+        ...(unchanged ? undefined : { rows: JSON.stringify([slackRow(settled)]) }),
+      },
+    },
+    offered: ["slack"],
+    multiple: [],
+  };
+}
+
 /** Where the task list's rows stand, which never moves in the fake: each part's digest, in the parts' name order. */
 const LIVE_DIGEST = "1,1,1";
 
@@ -97,6 +127,8 @@ export interface FakeService {
   readonly setSession: (signedIn: boolean) => void;
   /** Each request the fake answered, in order. */
   readonly seen: () => readonly SeenRequest[];
+  /** Whether the settling POST has connected the Slack sign-in. */
+  readonly settled: () => boolean;
 }
 
 /** An answer as the service writes one: JSON, with the status given. */
@@ -133,6 +165,7 @@ interface FakeServiceOptions {
 /** The fake service, signed in or not as it starts. */
 export function fakeService(options: FakeServiceOptions): FakeService {
   let signedIn = options.signedIn;
+  let settled = false;
   const seen: SeenRequest[] = [];
   const layer = fakeHttpClientLayer(async (url, init) => {
     const { pathname } = new URL(url);
@@ -146,11 +179,17 @@ export function fakeService(options: FakeServiceOptions): FakeService {
       signedIn = false;
       return json({ success: true });
     }
-    // A sign-in to Slack under way: the cookie's GET reads it as stored, and only the POST settles it.
-    if (pathname === "/api/account/integrations" && method === "GET" && signedIn) {
-      return json({ integrations: { slack: "pending" } });
+    // A sign-in to Slack under way: the rows read it as stored, and only the POST settles it.
+    if (pathname === "/api/live/integration-statuses" && method === "GET") {
+      if (!signedIn) return json({ error: "unauthorized" }, 401);
+      const after = new URL(url).searchParams.get(LIVE_POLL.AFTER);
+      return json(polledIntegrations(settled, after === (settled ? "2" : "1")));
+    }
+    if (pathname === "/api/account/integrations/github" && method === "GET" && signedIn) {
+      return json({ status: "disconnected" });
     }
     if (pathname === "/api/account/integrations/settle" && method === "POST" && signedIn) {
+      settled = true;
       return json({ integrations: { slack: "connected" } });
     }
     if (pathname === "/api/account/integrations/notion/connect" && method === "POST" && signedIn) {
@@ -189,5 +228,6 @@ export function fakeService(options: FakeServiceOptions): FakeService {
       signedIn = next;
     },
     seen: () => seen,
+    settled: () => settled,
   };
 }

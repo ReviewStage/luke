@@ -38,7 +38,9 @@ import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
+import { integrationConnection } from "../schemas/integration.js";
 import { macCommand } from "../schemas/mac-command.js";
+import { memory } from "../schemas/memory.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { planComment, planCommentThread } from "../schemas/plan-comment.js";
 import { planPageVersion } from "../schemas/plan-page.js";
@@ -276,6 +278,29 @@ export const macCommandSync = defineSyncTable(macCommand, {
 });
 
 /**
+ * One account's connection to an account at an integration, on the
+ * account's integrations topic, which only its open integration reads are
+ * woken on: the account's own topic would wake its task list and its inbox
+ * on every sign-in. Note that a sign-in's one-time state, the retired
+ * verifier, and the subject Connect holds the grant under are ignored,
+ * since no view reads them and a sign-in begun or ended moves its issue
+ * instant beside the state; and so are the tools a launch lists and their
+ * instant, which every native agent's start rewrites, and the row's own
+ * instant, which moves only beside a watched column.
+ */
+export const integrationConnectionSync = defineSyncTable(integrationConnection, {
+  topics: [{ kind: TOPIC.ACCOUNT_INTEGRATIONS, column: integrationConnection.userId }],
+  ignore: [
+    integrationConnection.state,
+    integrationConnection.connectVerifier,
+    integrationConnection.connectSubject,
+    integrationConnection.tools,
+    integrationConnection.toolsListedAt,
+    integrationConnection.updatedAt,
+  ],
+});
+
+/**
  * A line queued for a cloud agent's runner, on the agent's topic, which the
  * runner's held read waits on (`@repo/service`'s `runner-lines-app.ts`).
  * Note that its acceptance is ignored, because the runner's read waits on
@@ -485,6 +510,17 @@ export const pullRequestChaptersSync = defineSyncTable(pullRequestChapters, {
 });
 
 /**
+ * A workspace's memory, on its workspace's memory topic, which only the open
+ * memory reads of the workspace are woken on: the workspace's own topic
+ * would wake every member's task list on each agent's `save_memory`. No
+ * column is ignored, since the page reads every one, and a keep, a
+ * correction, and a forget each move a column it reads or the row itself.
+ */
+export const memorySync = defineSyncTable(memory, {
+  topics: [{ kind: TOPIC.MEMORY, column: memory.organizationId }],
+});
+
+/**
  * A transcript's message, on its conversation's topic alone. Note that no
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
@@ -592,6 +628,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   taskPinSync,
   agentPinSync,
   macCommandSync,
+  integrationConnectionSync,
   runnerLineSync,
   agentQueueSync,
   deviceAgentLineSync,
@@ -608,6 +645,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   planPageVersionSync,
   agentBrowserTabSync,
   pullRequestChaptersSync,
+  memorySync,
   messagesSync,
   conversationsSync,
   turnsSync,

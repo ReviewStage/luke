@@ -849,8 +849,12 @@ export const LIVE_READ = {
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */
   HOLDER_INBOX: "holderInbox",
+  /** Where each of the account's integrations stands, by the account: the service's `integrationStatusesLive` query, with GitHub's standing fetched beside it, held while a window draws an integration. */
+  INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",
+  /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
+  MEMORIES: "workspaceMemories",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",
   /** The account's own provider keys and plans, as hints and statuses and never a key, by the account: fetched by the host while a window holds it, and laid from each write's own answer. */
@@ -877,6 +881,13 @@ export const LIVE_READ = {
   AUTOMATION_WORKSPACE_RUNS: "automationWorkspaceRuns",
   /** One automation's runs, by the automation: the service's `automationRuns` query, held as the automations are. */
   AUTOMATION_RUNS: "automationRuns",
+  /**
+   * One task's plan, by the task, held for the windows that opened it and a
+   * few they opened lately. Note that no live query carries its text: the
+   * host follows the task's record (`taskRecordLive`), whose plan mark moves
+   * with each save, and reads the plan again where it moved past the copy held.
+   */
+  PLAN_DOCUMENT: "planDocument",
 } as const;
 
 export type LiveRead = (typeof LIVE_READ)[keyof typeof LIVE_READ];

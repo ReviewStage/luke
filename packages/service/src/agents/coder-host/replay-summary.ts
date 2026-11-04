@@ -47,7 +47,6 @@ import { CODER } from "./bounds.js";
  * its model must refuse.
  */
 
-/** The bounds the replay's fit and its summary keep to. */
 export const REPLAY_FIT = {
   /** Room left in the new agent's context for its first steps past its first message. */
   HEADROOM_TOKENS: 16_000,

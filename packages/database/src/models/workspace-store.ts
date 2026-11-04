@@ -12,6 +12,7 @@ import {
   WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type WorkspacePhoto,
+  type WorkspaceRole,
   workspacePhotoOfDataUrl,
 } from "@repo/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
@@ -238,6 +239,18 @@ const insertPersonalWorkspace = SqlSchema.void({
         .onConflictDoNothing(),
     ),
 });
+
+/**
+ * The condition that a membership's role, the plugin's text, which may name
+ * several roles comma-separated as `roleOf` reads it, names one of `roles`:
+ * read on `member.role` wherever a statement reads `member`.
+ */
+export function roleAmong(roles: readonly WorkspaceRole[]): SQL {
+  return sql`string_to_array(replace(${member.role}, ' ', ''), ',') && array[${sql.join(
+    roles.map((role) => sql`${role}`),
+    sql`, `,
+  )}]::text[]`;
+}
 
 /**
  * The condition that the account is a member of the workspace: a literal id,

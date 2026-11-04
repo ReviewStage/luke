@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AdminMetrics } from "@repo/features/admin-answer-wire";
 import {
   ADMIN_METRICS_SCOPE,
@@ -56,7 +57,6 @@ const READS: readonly Read[] = [
   read(ACT_KIND.AGENTS_MODELS, undefined),
   read(ACT_KIND.AGENTS_DEFAULT_READ, undefined),
   read(ACT_KIND.CHAPTERS_MODEL_READ, undefined),
-  read(ACT_KIND.INTEGRATIONS_STATUS, undefined),
   read(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACME),
   read(ACT_KIND.WORKSPACE_SENTRY_READ, ACME),
   read(ACT_KIND.WORKSPACE_SLACK_BOT_READ, ACME),
@@ -66,7 +66,6 @@ const READS: readonly Read[] = [
     skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001",
   }),
   read(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: "5d2b7c1e-4a3f-4e8b-9c6d-000000000001" }),
-  read(ACT_KIND.MEMORIES_READ, ACME),
   read(ACT_KIND.ADMIN_READ, { procedure: ADMIN_READ.METRICS, query: {} }),
 ];
 
@@ -105,12 +104,14 @@ test("every read a signed-in profile answers is one the act port's contract carr
 });
 
 test("the integrations profile draws some accounts connected and some with their sign-in expired", () => {
-  const statuses = answered(
-    RUN_PROFILE.SETTINGS_INTEGRATIONS,
-    ACT_KIND.INTEGRATIONS_STATUS,
-    undefined,
+  const { run } = stateWith({}, {});
+  const staged = fixtureAppState(
+    stateWith({}, { run: { ...run, profile: RUN_PROFILE.SETTINGS_INTEGRATIONS } }),
   );
-  assert.ok("integrations" in statuses);
+  const accountId =
+    staged.account.status === ACCOUNT_STATUS.SIGNED_IN ? staged.account.id : undefined;
+  const statuses = staged[LIVE_READ.INTEGRATIONS][accountId ?? ""]?.rows;
+  assert.ok(statuses !== undefined, "the profile holds the account's integrations");
 
   const standing = new Set(statuses.accounts?.map((account) => account.status));
   assert.ok(standing.has(INTEGRATION_STATUS.CONNECTED));
@@ -201,7 +202,10 @@ test("a signed-in profile lays the synthetic account, an admin, over main's sign
 
 test("a profile that stages no account answers none of its pages' reads itself", () => {
   assert.equal(
-    fixtureActAnswer({ profile: RUN_PROFILE.TASKS }, ACT_KIND.MEMORIES_READ, ACME),
+    fixtureActAnswer({ profile: RUN_PROFILE.TASKS }, ACT_KIND.ADMIN_READ, {
+      procedure: ADMIN_READ.METRICS,
+      query: {},
+    }),
     undefined,
   );
 });

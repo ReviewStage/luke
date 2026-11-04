@@ -196,9 +196,9 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
         });
         const managed = yield* forgetMemory(workspaceId, owners, { userId: third, manages: true });
 
-        assert.equal(refused, MEMORY_FORGET.NOT_PERMITTED);
-        assert.equal(ownWords, MEMORY_FORGET.FORGOTTEN);
-        assert.equal(managed, MEMORY_FORGET.FORGOTTEN);
+        assert.equal(refused.outcome, MEMORY_FORGET.NOT_PERMITTED);
+        assert.equal(ownWords.outcome, MEMORY_FORGET.FORGOTTEN);
+        assert.equal(managed.outcome, MEMORY_FORGET.FORGOTTEN);
         assert.deepEqual(yield* wordsOf(workspaceId), []);
       }),
   );
@@ -210,10 +210,13 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
       yield* rememberMemory(workspaceId, owner, TESTS_RUN, undefined);
       const by = { userId: owner, manages: false };
 
-      assert.equal(yield* forgetMemory(workspaceId, id, by), MEMORY_FORGET.FORGOTTEN);
+      assert.equal((yield* forgetMemory(workspaceId, id, by)).outcome, MEMORY_FORGET.FORGOTTEN);
       // Forgetting twice, or by an id that is no memory's, answers the same and fails nothing.
-      assert.equal(yield* forgetMemory(workspaceId, id, by), MEMORY_FORGET.FORGOTTEN);
-      assert.equal(yield* forgetMemory(workspaceId, "not-a-memory", by), MEMORY_FORGET.FORGOTTEN);
+      assert.equal((yield* forgetMemory(workspaceId, id, by)).outcome, MEMORY_FORGET.FORGOTTEN);
+      assert.equal(
+        (yield* forgetMemory(workspaceId, "not-a-memory", by)).outcome,
+        MEMORY_FORGET.FORGOTTEN,
+      );
 
       const late = yield* rememberMemory(workspaceId, owner, DEPLOYS_CORRECTED, id);
       assert.equal(late.kind, MEMORY_OUTCOME.NOT_FOUND);
@@ -275,9 +278,9 @@ it.layer(getTestDB())("the workspace's memory store", (it) => {
             [TESTS_RUN, null],
           ].toSorted(),
         );
-        assert.equal(byMember, MEMORY_FORGET.NOT_PERMITTED);
+        assert.equal(byMember.outcome, MEMORY_FORGET.NOT_PERMITTED);
         assert.equal(
-          yield* forgetMemory(workspaceId, orphan.id, { userId: owner, manages: true }),
+          (yield* forgetMemory(workspaceId, orphan.id, { userId: owner, manages: true })).outcome,
           MEMORY_FORGET.FORGOTTEN,
         );
       }),

@@ -563,37 +563,26 @@ function FilterField({ filter }: { filter: IntegrationsFilter }): React.JSX.Elem
 /**
  * Disconnects one account: a Connect grant at the service, and GitHub by
  * unlinking the account's GitHub under the Mac's session, whose refusal is
- * the window's toast, so the dialog closes either way. The integrations
- * are read again after, so an account past the provider's first leaves the
- * page with its row.
+ * the window's toast, so the dialog closes either way. Each answers once the
+ * host's read carries where the account then stands, so an account past the
+ * provider's first leaves the page with its row as the answer lands.
  */
 function disconnectAccount(
   act: ActHandle["act"],
   github: GitHubConnectControl,
   row: ServerRow,
-  statuses: IntegrationStatuses,
 ): Promise<ActionResult> {
   const { provider, connection, name } = row;
   const refused: ActionResult = {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: `${name} could not be disconnected. Try again.`,
   };
-  if (grantedBySignIn(provider)) {
-    return github.disconnect().then((disconnected) => {
-      if (disconnected) statuses.settle(provider, INTEGRATION_STATUS.DISCONNECTED);
-      return ACCEPTED;
-    });
-  }
+  if (grantedBySignIn(provider)) return github.disconnect().then(() => ACCEPTED);
   return act(ACT_KIND.INTEGRATIONS_DISCONNECT, {
     provider,
     ...(connection === provider ? undefined : { connection }),
   }).then(
-    (answer: IntegrationStatusView) => {
-      if ("failure" in answer) return refused;
-      statuses.settle(connection, answer.status);
-      void statuses.read();
-      return ACCEPTED;
-    },
+    (answer: IntegrationStatusView) => ("failure" in answer ? refused : ACCEPTED),
     () => refused,
   );
 }
@@ -628,7 +617,7 @@ function IntegrationRow({
   // Note that the sign-in's own Cancel is the one busy while it is called off, as Connect is while one begins.
   const [canceling, setCanceling] = useState(false);
   const [editing, setEditing] = useState(false);
-  // The name a rename asked for, drawn in the account's place until the read after it lands, so the old name never stands between.
+  // The name a rename asked for, drawn in the account's place until the host's read carries it, so the old name never stands between.
   const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   // Several accounts at a provider are each renamed, and each disconnected leaving the others.
@@ -668,27 +657,31 @@ function IntegrationRow({
     });
   }, [cancelSignIn, connection, name]);
 
-  /** A rename ended: a new label asked of the service, and the integrations read again so every surface draws it. */
+  /** A rename ended: a new label asked of the service, drawn until the host's read carries the label the service kept, which every surface then draws. */
   const renamed = ({ value: label }: InlineEditEnd) => {
     setEditing(false);
     if (label === undefined || label === account?.label) return;
     setRejection(undefined);
     setRenaming(label);
-    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label })
-      .then(
-        (answer) => {
-          if ("failure" in answer) setRejection(`${name} could not be renamed. Try again.`);
-          return statuses.read();
-        },
-        () => setRejection(`${name} could not be renamed. Try again.`),
-      )
-      .finally(() => setRenaming(undefined));
+    const refused = () => {
+      setRenaming(undefined);
+      setRejection(`${name} could not be renamed. Try again.`);
+    };
+    void act(ACT_KIND.INTEGRATIONS_RENAME, { provider, connection, label }).then((answer) => {
+      if ("failure" in answer) return refused();
+      setRenaming(answer.account.label ?? label);
+    }, refused);
   };
+
+  // The read carries the label the rename kept: the account's own is drawn from here on.
+  useEffect(() => {
+    if (renaming !== undefined && account?.label === renaming) setRenaming(undefined);
+  }, [renaming, account?.label]);
 
   const connected = status === INTEGRATION_STATUS.CONNECTED;
   const disconnect = useConfirmDialog(
     { subject: connected, surfaceOpen: true },
-    () => disconnectAccount(act, github, row, statuses),
+    () => disconnectAccount(act, github, row),
     confirmFailure(FAILURE_SURFACE.INTEGRATION_DISCONNECT),
   );
 

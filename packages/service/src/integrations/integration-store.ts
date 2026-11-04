@@ -15,7 +15,17 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { Database, type DatabaseServices, type QueryError } from "@repo/database/core/query";
+import {
+  type LiveStatement,
+  liveSelection,
+  liveStatementOf,
+} from "@repo/database/core/live-statement";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+} from "@repo/database/core/query";
 import {
   INTEGRATION_ROW_STATUS,
   type IntegrationRowStatus,
@@ -23,12 +33,19 @@ import {
 import { InstantColumnSchema } from "@repo/database/models/columns";
 import { integrationConnection } from "@repo/database/schemas/integration";
 import {
+  INTEGRATION_STATUS,
   type IntegrationProvider,
   integrationProviderSchema,
 } from "@repo/features/integration-wire";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+
+/** The transaction a write committed in, as Postgres names it, which a live read that carries it says it holds. */
+const TXID = { txid: sql<string>`pg_current_xact_id()::text` };
+
+/** The transaction a write committed in, as a statement answers it. */
+const TxidSchema = Schema.Struct({ txid: Schema.String });
 
 export type IntegrationStoreEffect<A> = Effect.Effect<
   A,
@@ -160,6 +177,54 @@ export function readIntegrationConnection(
   );
 }
 
+/**
+ * Where a row stands as stored, settling nothing, in the wire's words, as
+ * the statuses read answers one that settles nothing
+ * (`integrations-procedures.ts`'s `storedStanding`): connected, else
+ * pending while a sign-in begun at `issuedSince` or later stands, else
+ * expired, else disconnected. Note that a sign-in under way is told by when
+ * it began alone, since its state is set and cleared beside that instant
+ * and the capture ignores it.
+ */
+function storedStatusWord(issuedSince: Date) {
+  return sql<string>`case
+    when ${eq(integrationConnection.status, INTEGRATION_ROW_STATUS.CONNECTED)} then ${INTEGRATION_STATUS.CONNECTED}
+    when ${gte(integrationConnection.stateIssuedAt, issuedSince)} then ${INTEGRATION_STATUS.PENDING}
+    when ${eq(integrationConnection.status, INTEGRATION_ROW_STATUS.EXPIRED)} then ${INTEGRATION_STATUS.EXPIRED}
+    else ${INTEGRATION_STATUS.DISCONNECTED}
+  end`;
+}
+
+/**
+ * Every row the account holds as its live read answers them
+ * (`@repo/service`'s `integrationStatusesLive`): each by its id, under the
+ * name it goes by, its provider, its label, and where it stands as stored
+ * (`storedStatusWord`), each under the key `@repo/features/integration-live`
+ * reads it by. Nothing reads the clock: a sign-in's window is bound by the
+ * reader as `issuedSince`, and the order is the reader's, since Realtime
+ * keeps none. The grant's subject, the state, and the tools are never
+ * selected.
+ */
+export function integrationStatusesLiveStatement(
+  userId: string,
+  issuedSince: Date,
+): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          id: integrationConnection.id,
+          connection: integrationConnection.connectionName,
+          provider: integrationConnection.provider,
+          label: integrationConnection.label,
+          status: storedStatusWord(issuedSince),
+        }),
+      )
+      .from(integrationConnection)
+      .where(eq(integrationConnection.userId, userId)),
+  );
+}
+
 /** Every row the account holds, one per account it connected or is signing in to, by provider and then by name. */
 export function readIntegrationConnections(
   userId: string,
@@ -193,7 +258,7 @@ const BeginSchema = Schema.Struct({
  */
 const upsertSignIn = SqlSchema.findAll({
   Request: BeginSchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: TxidSchema,
   execute: ({ id, userId, provider, connectionName, connectSubject, state, at }) =>
     Database.use((db) =>
       db
@@ -214,20 +279,21 @@ const upsertSignIn = SqlSchema.findAll({
           set: { state, stateIssuedAt: at, updatedAt: at },
           setWhere: eq(integrationConnection.connectSubject, connectSubject),
         })
-        .returning({ id: integrationConnection.id }),
+        .returning(TXID),
     ),
 });
 
 /**
  * Records a sign-in under way for one account at a provider, under the
- * state only its callback carries back; answers whether it took, which it does not where the name already
- * stands for another subject's account.
+ * state only its callback carries back; answers the transaction it took in,
+ * or nothing where it did not take, as where the name already stands for
+ * another subject's account.
  */
 export function beginIntegrationSignIn(
   userId: string,
   account: IntegrationAccountKey,
   state: string,
-): IntegrationStoreEffect<boolean> {
+): IntegrationStoreEffect<string | undefined> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
     const taken = yield* upsertSignIn({
@@ -239,7 +305,7 @@ export function beginIntegrationSignIn(
       state,
       at,
     });
-    return taken.length > 0;
+    return taken[0]?.txid;
   });
 }
 
@@ -318,14 +384,14 @@ const RenameSchema = Schema.Struct({
 
 const updateLabel = SqlSchema.findAll({
   Request: RenameSchema,
-  Result: Schema.Struct({ userId: Schema.String }),
+  Result: TxidSchema,
   execute: ({ at, label, ...account }) =>
     Database.use((db) =>
       db
         .update(integrationConnection)
         .set({ label, updatedAt: at })
         .where(ofAccount(account))
-        .returning({ userId: integrationConnection.userId }),
+        .returning(TXID),
     ),
 });
 
@@ -373,14 +439,14 @@ export function fillIntegrationLabel(
   );
 }
 
-/** Names one account as the developer calls it; answers whether the account held such a row. */
+/** Names one account as the developer calls it; answers the transaction it was named in, or nothing where the account held no such row. */
 export function renameIntegrationConnection(
   userId: string,
   connectionName: string,
   label: string,
-): IntegrationStoreEffect<boolean> {
+): IntegrationStoreEffect<string | undefined> {
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    Effect.map(updateLabel({ userId, connectionName, label, at }), (rows) => rows.length > 0),
+    Effect.map(updateLabel({ userId, connectionName, label, at }), (rows) => rows[0]?.txid),
   );
 }
 
@@ -430,30 +496,32 @@ const HeldAccountSchema = Schema.Struct({
 
 const deleteHeld = SqlSchema.findAll({
   Request: HeldAccountSchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: TxidSchema,
   execute: ({ id, ...account }) =>
     Database.use((db) =>
       db
         .delete(integrationConnection)
         .where(and(ofAccount(account), eq(integrationConnection.id, id)))
-        .returning({ id: integrationConnection.id }),
+        .returning(TXID),
     ),
 });
 
 /**
- * Disconnects the one account read, by its row's own id, and answers
- * whether it was still there: an account added since under the same name
- * stands, even a provider's first, whose subject is always the user's own.
+ * Disconnects the one account read, by its row's own id, and answers the
+ * transaction it was deleted in, or nothing where it was no longer there:
+ * an account added since under the same name stands, even a provider's
+ * first, whose subject is always the user's own.
  */
 export function deleteIntegrationAccount(
   account: Pick<IntegrationConnectionRow, "userId" | "connectionName" | "id">,
-): IntegrationStoreEffect<boolean> {
+): IntegrationStoreEffect<string | undefined> {
   const { userId, connectionName, id } = account;
-  return Effect.map(deleteHeld({ userId, connectionName, id }), (deleted) => deleted.length > 0);
+  return Effect.map(deleteHeld({ userId, connectionName, id }), (deleted) => deleted[0]?.txid);
 }
 
-const deleteUnfinished = SqlSchema.void({
+const deleteUnfinished = SqlSchema.findAll({
   Request: CompleteSchema,
+  Result: TxidSchema,
   execute: ({ state, ...account }) =>
     Database.use((db) =>
       db
@@ -464,18 +532,21 @@ const deleteUnfinished = SqlSchema.void({
             eq(integrationConnection.state, state),
             eq(integrationConnection.status, INTEGRATION_ROW_STATUS.PENDING),
           ),
-        ),
+        )
+        .returning(TXID),
     ),
 });
 
-const clearState = SqlSchema.void({
+const clearState = SqlSchema.findAll({
   Request: CompleteSchema,
+  Result: TxidSchema,
   execute: ({ at, state, ...account }) =>
     Database.use((db) =>
       db
         .update(integrationConnection)
         .set({ state: null, stateIssuedAt: null, updatedAt: at })
-        .where(and(ofAccount(account), eq(integrationConnection.state, state))),
+        .where(and(ofAccount(account), eq(integrationConnection.state, state)))
+        .returning(TXID),
     ),
 });
 
@@ -484,17 +555,19 @@ const clearState = SqlSchema.void({
  * came back without one ends it: a first sign-in's row goes, so the account
  * stands disconnected, and a row that stood before it keeps its status and
  * loses only the state. A sign-in begun again since carries another state,
- * so it is left to run.
+ * so it is left to run. Answers the transaction of whichever of the two
+ * wrote, since they run one after the other, each in its own; nothing where
+ * neither did.
  */
 export function endIntegrationSignIn(
   userId: string,
   connectionName: string,
   state: string,
-): IntegrationStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (at) =>
-    Effect.andThen(
-      deleteUnfinished({ userId, connectionName, state, at }),
-      clearState({ userId, connectionName, state, at }),
-    ),
-  );
+): IntegrationStoreEffect<string | undefined> {
+  return Effect.gen(function* () {
+    const at = yield* DateTime.nowAsDate;
+    const deleted = yield* deleteUnfinished({ userId, connectionName, state, at });
+    const cleared = yield* clearState({ userId, connectionName, state, at });
+    return (cleared[0] ?? deleted[0])?.txid;
+  });
 }

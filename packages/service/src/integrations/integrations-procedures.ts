@@ -1,7 +1,7 @@
 /**
  * integrations-procedures.ts -- the account's integrations: its connections read, begun, ended, and settled.
  *
- * Seven procedures the signed-in desktop calls with its bearer, or a page of
+ * Eight procedures the signed-in desktop calls with its bearer, or a page of
  * the deployment's own with its session cookie; the browser's return from a
  * sign-in is `integrations-app.ts`'s. A user account may hold more than
  * one account at a provider, each its own row and grant under its own
@@ -26,7 +26,12 @@
  *   not settle the account's sign-in.
  * - `POST /api/account/integrations/settle` is that read with its settling,
  *   for any caller; a POST a cookie carries is held to the deployment's own
- *   pages by the origin guard before it gets here.
+ *   pages by the origin guard before it gets here. A desktop that follows
+ *   the account's rows live (`live-procedures.ts`'s `integrationStatuses`)
+ *   asks it while a sign-in stands pending.
+ * - `GET /api/account/integrations/github` answers where GitHub alone
+ *   stands, which comes from the account's GitHub sign-in rather than a row,
+ *   so a desktop following the rows live reads it beside them.
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
  *   to begin a browser sign-in to the provider for the account, records the
  *   sign-in's one-time state, and answers the address the desktop opens and
@@ -57,6 +62,12 @@
  *   carries no credential (`packages/service/src/integrations/mcp-tools.ts`), and is never held, so a
  *   connection mended at the provider reads as mended at once. A provider
  *   the account has not connected is refused before any token is read.
+ *
+ * A Connect, a Cancel that ended a sign-in, a Disconnect that deleted a
+ * row, and a rename each answer the transaction they wrote in as `txid`,
+ * which a desktop following the account's live read of its integrations
+ * waits to carry before it answers its window; one that wrote nothing
+ * answers none.
  *
  * A provider's route names it as a path segment, read as words so a
  * provider this build has no route for is not found, as it was; every
@@ -693,7 +704,9 @@ const signInAccount = /* @__PURE__ */ Effect.fnUntraced(function* (
       (row) =>
         row.state === undefined
           ? Effect.void
-          : hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
+          : Effect.asVoid(
+              hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state)),
+            ),
       { discard: true },
     );
     // Note that the rows are read again, so a sign-in restarted, or an account added, while these were let go keeps its name and its place.
@@ -789,6 +802,10 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
     settle: integrations.settle.effect(function* ({ context }) {
       return yield* statusesAnswer(seams, unnamed, context.userId, true);
     }),
+    /** GET: where GitHub stands for the caller, as the statuses read answers it. */
+    github: integrations.github.effect(function* ({ context }) {
+      return { status: yield* githubIntegrationStatus(context.userId) };
+    }),
     /**
      * POST: begins a browser sign-in to one account at a provider. Connect is
      * asked first, so a sign-in it refused leaves the row as it stood; the
@@ -823,10 +840,10 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
           ),
           Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
         );
-      const begun = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
+      const txid = yield* hostedStoreOrUnavailable(seams.beginSignIn(userId, account, state));
       // Another sign-in took the name meanwhile: this one would settle a grant no row names, so it is refused.
-      if (!begun) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return { url, connection: account.connectionName };
+      if (txid === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return { url, connection: account.connectionName, txid };
     }),
     /**
      * GET: the tools one provider's server offers the account's agents. A
@@ -898,11 +915,15 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       const named = (rows: readonly IntegrationConnectionRow[]) =>
         rows.find((each) => each.connectionName === connectionName);
       const row = named(yield* hostedStoreOrUnavailable(seams.readConnections(userId)));
-      if (row?.state !== undefined) {
-        yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
-      }
+      const txid =
+        row?.state === undefined
+          ? undefined
+          : yield* hostedStoreOrUnavailable(seams.endSignIn(userId, row.connectionName, row.state));
       const after = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
-      return { status: storedStanding(seams, named(after)) };
+      return {
+        status: storedStanding(seams, named(after)),
+        ...(txid === undefined ? undefined : { txid }),
+      };
     }),
     /**
      * POST: ends one account's connection at a provider; every other account
@@ -922,18 +943,18 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
       }
       const rows = yield* hostedStoreOrUnavailable(seams.readConnections(userId));
       const row = rows.find((each) => each.connectionName === connectionName);
-      if (row === undefined || (yield* hostedStoreOrUnavailable(seams.deleteAccount(row)))) {
-        if (row !== undefined) {
-          yield* revokeIntegrationGrant(row);
-          yield* recordServerEvent(
-            SERVER_EVENT.INTEGRATION_CONNECTION_DELETE,
-            { userId },
-            {
-              provider: row.provider,
-            },
-          );
-        }
-        return { status: INTEGRATION_STATUS.DISCONNECTED };
+      if (row === undefined) return { status: INTEGRATION_STATUS.DISCONNECTED };
+      const txid = yield* hostedStoreOrUnavailable(seams.deleteAccount(row));
+      if (txid !== undefined) {
+        yield* revokeIntegrationGrant(row);
+        yield* recordServerEvent(
+          SERVER_EVENT.INTEGRATION_CONNECTION_DELETE,
+          { userId },
+          {
+            provider: row.provider,
+          },
+        );
+        return { status: INTEGRATION_STATUS.DISCONNECTED, txid };
       }
       // Note that only the row read is deleted and revoked, so an account added since under the same name stands, and is answered as it stands.
       const standing = (yield* hostedStoreOrUnavailable(seams.readConnections(userId))).find(
@@ -951,11 +972,11 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
     rename: integrations.rename.effect(function* ({ context, input }) {
       const { provider, connectionName } = yield* requestedAccount(input);
       const userId = context.userId;
-      const renamed = yield* hostedStoreOrUnavailable(
+      const txid = yield* hostedStoreOrUnavailable(
         seams.renameConnection(userId, connectionName, input.body.label),
       );
-      if (!renamed) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* accountAnswer(seams, userId, provider, connectionName);
+      if (txid === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { ...(yield* accountAnswer(seams, userId, provider, connectionName)), txid };
     }),
   };
 }

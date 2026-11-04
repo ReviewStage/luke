@@ -107,7 +107,7 @@ import {
   hostDoneAnswerViewSchema,
   hostsAnswerViewSchema,
   type MemoriesAnswerView,
-  type MemoriesReadParams,
+  type MemoriesFollowParams,
   type MemoryForgetParams,
   memoriesAnswerViewSchema,
   type ProviderKeyForAgentsParams,
@@ -181,11 +181,9 @@ import {
   type IntegrationConnectView,
   type IntegrationProviderParams,
   type IntegrationRenameParams,
-  type IntegrationStatusesView,
   type IntegrationStatusView,
   integrationAccountViewSchema,
   integrationConnectViewSchema,
-  integrationStatusesViewSchema,
   integrationStatusViewSchema,
 } from "@repo/features/integration-view";
 import {
@@ -208,6 +206,7 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
+  type TaskDocumentFollow,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -376,10 +375,13 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppIntegrations,
   AppIntegrationTools,
   AppMcpClients,
+  AppMemories,
   AppPages,
   AppPlanComments,
+  AppPlanDocuments,
   AppProviderKeys,
   AppWorkspaceInvitations,
   AppWorkspaceMembers,
@@ -518,6 +520,14 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
+  /** One task's plan held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onPlanDocumentsChanged`. */
+  tasksDocumentFollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** One task's plan let go by the windows: it stays followed among those let go lately until later ones push it out. */
+  tasksDocumentUnfollow(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** One task's held plan read again at once, as Try again asks. */
+  tasksDocumentRetry(scope: TaskDocumentFollow): Effect.Effect<void>;
+  /** Every task's plan the host holds for the windows, whole, each time any of them moves. */
+  onPlanDocumentsChanged(listener: (held: AppPlanDocuments) => void): () => void;
   /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
   /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -546,8 +556,14 @@ export interface HostOperator {
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
   tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
-  /** Where every one of the account's integrations stands; or why there is no answer. */
-  integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
+  /** Where every one of the account's integrations stands, held followed for the windows from now until let go, and a while after; what it holds is heard through `onIntegrationsChanged`. */
+  integrationsFollow(): Effect.Effect<void>;
+  /** The account's integrations let go by the windows. */
+  integrationsUnfollow(): Effect.Effect<void>;
+  /** The account's held integrations read again at once, as Try again asks. */
+  integrationsRetry(): Effect.Effect<void>;
+  /** The account's integrations the host holds for the windows, whole, each time they move. */
+  onIntegrationsChanged(listener: (held: AppIntegrations) => void): () => void;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
   /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
@@ -859,9 +875,15 @@ export interface HostOperator {
   githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token removed; none then stands. */
   githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
-  /** The memories our agents kept in a workspace; or why there are none. */
-  memoriesRead(params: MemoriesReadParams): Effect.Effect<MemoriesAnswerView>;
-  /** One memory forgotten for good; the workspace's memories as they then stand, or why they are unchanged. */
+  /** The memories our agents kept in a workspace, held for the windows from now until let go and followed live; what they hold is heard through `onMemoriesChanged`. */
+  memoriesFollow(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** A workspace's memories let go by the windows. */
+  memoriesUnfollow(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** A workspace's held memories asked again at once, as Try again asks; done once the ask has landed. */
+  memoriesRetry(params: MemoriesFollowParams): Effect.Effect<void>;
+  /** Every workspace's memories the host holds for the windows, whole, each time any of them moves. */
+  onMemoriesChanged(listener: (held: AppMemories) => void): () => void;
+  /** One memory forgotten for good, drawn gone at once over the held memories; the workspace's memories as they then stand, or why they are unchanged. */
   memoryForget(params: MemoryForgetParams): Effect.Effect<MemoriesAnswerView>;
   /** One dictated clip, carried once; its words, or why there are none. */
   dictationTranscribe(
@@ -1122,10 +1144,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   });
 
   return {
-    integrationsStatus: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_STATUS),
-        answerOf(integrationStatusesViewSchema, INTEGRATION_UNANSWERED),
+    integrationsFollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_FOLLOW, {})),
+    integrationsUnfollow: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_UNFOLLOW, {})),
+    integrationsRetry: () => fire(client.call(GATEWAY_METHOD.INTEGRATIONS_RETRY, {})),
+    onIntegrationsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INTEGRATIONS_CHANGED,
+        // Note that the held integrations are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppIntegrations>(payload) : undefined),
+        listener,
       ),
     integrationsConnect: (params) =>
       Effect.map(
@@ -1467,6 +1494,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.PAGES_CHANGED,
         // Note that the held pages are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppPages>(payload) : undefined),
+        listener,
+      ),
+    tasksDocumentFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_FOLLOW, { taskId: scope.taskId })),
+    tasksDocumentUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_UNFOLLOW, { taskId: scope.taskId })),
+    tasksDocumentRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_DOCUMENT_RETRY, { taskId: scope.taskId })),
+    onPlanDocumentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLAN_DOCUMENTS_CHANGED,
+        // Note that the held plans are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppPlanDocuments>(payload) : undefined),
         listener,
       ),
     tasksBrowserTabsFollow: (scope) =>
@@ -2215,10 +2255,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
         answerOf(githubTokenAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    memoriesRead: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.MEMORIES_READ, { workspaceId: params.workspaceId }),
-        answerOf(memoriesAnswerViewSchema, AGENT_UNANSWERED),
+    memoriesFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_FOLLOW, { workspaceId: params.workspaceId })),
+    memoriesUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_UNFOLLOW, { workspaceId: params.workspaceId })),
+    memoriesRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.MEMORIES_RETRY, { workspaceId: params.workspaceId })),
+    onMemoriesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MEMORIES_CHANGED,
+        // Note that the held memories are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppMemories>(payload) : undefined),
+        listener,
       ),
     memoryForget: (params) =>
       Effect.map(

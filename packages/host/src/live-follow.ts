@@ -149,7 +149,9 @@ export interface SyncStanding {
 }
 
 /** Where an answer stands by sync id; none for an answer of a read not followed by one, or asked whole without one. */
-function syncStandingOf<Part extends string>(read: SealedRead<Part>): SyncStanding | undefined {
+export function syncStandingOf<Part extends string>(
+  read: SealedRead<Part>,
+): SyncStanding | undefined {
   const parts = Object.values<SealedLiveQueryWire>(read.queries);
   const answered = parts.find((query) => query.sync !== undefined)?.sync;
   if (answered === undefined) return undefined;
@@ -158,6 +160,11 @@ function syncStandingOf<Part extends string>(read: SealedRead<Part>): SyncStandi
     next: answered.next,
     gone: [...new Set(parts.flatMap((query) => query.gone ?? []))],
   };
+}
+
+/** The sync id an answer was read at, as the host compares one, from the decimal it spells; none where it spells none. */
+export function syncIdOf(standing: SyncStanding | undefined): bigint | undefined {
+  return standing !== undefined && /^\d+$/.test(standing.next) ? BigInt(standing.next) : undefined;
 }
 
 /** A read answered for following: the address it was answered at, and each part's answer. */
@@ -536,6 +543,19 @@ export function followTakingRows<Part extends string, Rows>(
  * empty and carries no txids.
  */
 const SYNC_STALL = Duration.seconds(30);
+
+/**
+ * How long a live follow waits before sealing again after a seal the
+ * service did not answer, or a follow that stopped: the first wait, doubling
+ * on each that fails again, up to the longest.
+ */
+export const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
+
+export const FOLLOW_BACKOFF = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
+  ),
+);
 
 /** How long a follow that stopped, or whose read the service did not answer, waits before it is read again. */
 export const LIVE_RESTART = Duration.seconds(5);

@@ -79,8 +79,8 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  * another writer made was saved after the agent's previous turn started,
  * so a save made while that turn ran, which none of its steps may have
  * read, is handed too; or where the rest of it is not what the session
- * last handed; never on a typed first turn, whose first message the plan,
- * or the prompt beside it, already is. A read that fails is logged and
+ * last handed; never on a first turn, whose first message the plan, or the
+ * prompt beside it, already is. A read that fails is logged and
  * hands nothing.
  */
 const taskOf = (
@@ -125,9 +125,7 @@ const taskOf = (
  * The message the agent's turn opens with after the history, and what the
  * session has handed once it is: after a spoken turn, the line saying the
  * call's words no longer hold (`turnKindWords`); the developer's time on
- * every turn; and the task as it stands where someone other than the agent
- * saved the plan since its previous turn started, or the rest of it is not
- * what the session last handed (`handed`). A read that fails is logged and
+ * every turn; and the task where `taskOf` hands it. A read that fails is logged and
  * leaves its part out, so the turn still opens.
  */
 export function coderTurnMessage(
@@ -192,7 +190,7 @@ export function recordNativeTurnHanded(
 /**
  * What a native harness's session has handed once its harness compacted its
  * history (`handedAfterCompaction`), so the next message hands the call's
- * words and the task again, as eve's store hook does on eve's compaction.
+ * words and the task again.
  */
 export function compactNativeTurnHanded(
   target: ConversationTarget,

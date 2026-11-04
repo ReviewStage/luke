@@ -52,7 +52,7 @@ import {
 } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, holdAutomations } from "../testing/app-state.js";
+import { handHostReads, holdAutomations, holdIntegrations } from "../testing/app-state.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
@@ -326,27 +326,6 @@ beforeEach(() => {
         layStanding();
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
-        if (integrationsHeld) return new Promise(() => undefined);
-        if (integrationsRefusals > 0) {
-          integrationsRefusals -= 1;
-          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
-        }
-        // Linear and Sentry are connected; the rest are not.
-        const integrations = Object.fromEntries(
-          INTEGRATION_PROVIDER_LIST.map((provider) => [
-            provider,
-            provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
-              ? INTEGRATION_STATUS.CONNECTED
-              : INTEGRATION_STATUS.DISCONNECTED,
-          ]),
-        );
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          // SAFETY: every provider on the list is given a status above, which is the whole of the record.
-          value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
-        });
-      }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
         runsAsked.push(request.payload.automationId);
         if (runHeld) return new Promise(() => undefined);
@@ -440,6 +419,26 @@ beforeEach(() => {
     },
     [AUTOMATION_FOLLOW.WORKSPACE_RUNS]: () => ({ rows: workspaceRuns }),
     [AUTOMATION_FOLLOW.RUNS]: () => (runsHeld ? undefined : { rows: runs }),
+  });
+  // Note that the account's integrations are laid as the host holds them: none while held, failed while refused, and Linear and Sentry connected otherwise.
+  holdIntegrations(() => {
+    if (integrationsHeld) return undefined;
+    if (integrationsRefusals > 0) {
+      integrationsRefusals -= 1;
+      return { failed: true };
+    }
+    const integrations = Object.fromEntries(
+      INTEGRATION_PROVIDER_LIST.map((provider) => [
+        provider,
+        provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+          ? INTEGRATION_STATUS.CONNECTED
+          : INTEGRATION_STATUS.DISCONNECTED,
+      ]),
+    );
+    // SAFETY: every provider on the list is given a status above, which is the whole of the record.
+    return {
+      rows: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
+    };
   });
 });
 

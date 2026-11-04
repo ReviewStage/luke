@@ -3,10 +3,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { IntegrationTool } from "@repo/features/integration-health";
-import { SIGN_IN_GRACE, SIGN_IN_WAIT } from "@repo/features/integration-sign-in";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
+import { SIGN_IN_WAIT } from "@repo/features/integration-sign-in";
 import {
   INTEGRATION_CALL_FAILURE,
-  type IntegrationStatusesView,
   type IntegrationToolsView,
 } from "@repo/features/integration-view";
 import {
@@ -20,8 +20,9 @@ import {
   type IntegrationSignInFailure,
   type IntegrationStatus,
 } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppStateDelivery } from "@repo/host/app-state";
+import type { AppHostRead, AppStateDelivery } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -42,7 +43,9 @@ import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.j
 import {
   deliveryOf,
   handHostReads,
+  holdIntegrations,
   holdIntegrationTools,
+  type IntegrationsHeld,
   signedInAs,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -61,8 +64,9 @@ import { IntegrationsSection } from "./integrations-page.js";
  * connected in place through the account's GitHub connect, stands among the
  * rows by its name, and once connected keeps the same ⋯ as the rest, its
  * Disconnect the account's own GitHub disconnect. A Connect stands its
- * provider pending at the service until the bridge settles it, as the
- * browser would, or a Cancel ends it. A connected
+ * provider pending at the service until the test settles it, as the browser
+ * would, or a Cancel ends it, each reaching the host's read of where they
+ * stand, which the test lays again as the service's rows move. A connected
  * provider's server lists the tools the bridge holds for it, which its row
  * opens onto in place. The page's own search keeps the rows it finds under
  * Connected and Not connected, opens a row onto the tools it found, says
@@ -71,7 +75,7 @@ import { IntegrationsSection } from "./integrations-page.js";
 
 /** The providers the deployment does not offer the account, which the service answers as unavailable; every other one is disconnected. */
 let withheld: readonly IntegrationProvider[] = [];
-/** Whether the next read of where they stand fails. */
+/** Whether the host's read of where they stand fails, never having answered. */
 let refuseRead = false;
 /** Whether the account's own GitHub is connected, which is where GitHub stands. */
 let githubConnected = false;
@@ -101,18 +105,18 @@ let reopenedDuringCancel = false;
 const touched = new Map<IntegrationProvider, IntegrationStatus>();
 /** The tools each provider's server lists; one absent here is never answered. */
 const listed = new Map<IntegrationProvider, readonly IntegrationTool[]>();
-/** The sign-in failures the service's next read names, as it names each once while it ends it. */
+/** The sign-in failures the host's next read carries, each named once as the service ends it. */
 let signInFailures: IntegrationSignInFailure[] = [];
-/** The accounts the service's reads name, past a provider's own word. */
+/** The accounts the host's read names, past a provider's own word. */
 let accounts: IntegrationAccount[] = [];
-/** The providers the service's reads say another account may be added at. */
+/** The providers the host's read says another account may be added at. */
 let addable: IntegrationProvider[] = [];
 /** The name the service gives an account added. */
 let addedConnection = "notion-3";
-/** Whether a statuses read waits to be let go, answering what stood when it was sent. */
+/** Whether the host has read nothing of where they stand yet, as while its first read is out. */
 let holdReads = false;
-/** The statuses reads held, each let go by its own call, in the order they were sent. */
-const heldReads: (() => void)[] = [];
+/** The account's integrations as the host holds them for the window, laid again as the service's rows move. */
+let integrations: IntegrationsHeld;
 /** Where a Cancel leaves an account the service holds by connection name, past a provider's own word. */
 const canceled = new Map<string, IntegrationStatus>();
 
@@ -137,6 +141,20 @@ function serviceStatuses(): Record<IntegrationProvider, IntegrationStatus> {
   ) as Record<IntegrationProvider, IntegrationStatus>;
 }
 
+/** Where every provider and account stands as the host's read holds it now: none while it has read nothing, failed while refused. */
+function heldRead(): AppHostRead<IntegrationStatusesAnswer> | undefined {
+  if (holdReads) return undefined;
+  if (refuseRead) return { failed: true };
+  return {
+    rows: {
+      integrations: serviceStatuses(),
+      ...(accounts.length > 0 ? { accounts } : undefined),
+      ...(addable.length > 0 ? { addable } : undefined),
+      ...(signInFailures.length > 0 ? { signInFailures: signInFailures.splice(0) } : undefined),
+    },
+  };
+}
+
 beforeEach(() => {
   withheld = [];
   refuseRead = false;
@@ -155,36 +173,19 @@ beforeEach(() => {
   addedConnection = "notion-3";
   canceled.clear();
   holdReads = false;
-  heldReads.length = 0;
   accounts = [];
   addable = [];
   reopenedDuringCancel = false;
   fakeAppBridge({});
-  // What the service answers an act the page sends on the act port.
+  // What the service answers an act the page sends on the act port; a Connect and a Cancel each answer once the host's read carries them.
   fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () => {
-      sent.push({ kind: ACT_KIND.INTEGRATIONS_STATUS, payload: undefined });
-      const answer: IntegrationStatusesView = refuseRead
-        ? { failure: INTEGRATION_CALL_FAILURE.UNANSWERED }
-        : {
-            integrations: serviceStatuses(),
-            ...(accounts.length > 0 ? { accounts } : undefined),
-            ...(addable.length > 0 ? { addable } : undefined),
-            ...(signInFailures.length > 0
-              ? { signInFailures: signInFailures.splice(0) }
-              : undefined),
-          };
-      if (!holdReads) return Promise.resolve(answer);
-      const { promise, resolve } = Promise.withResolvers<IntegrationStatusesView>();
-      heldReads.push(() => resolve(answer));
-      return promise;
-    },
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload });
       if (payload.add === true) {
         return Promise.resolve({ opened: true, connection: addedConnection });
       }
       touched.set(payload.provider, INTEGRATION_STATUS.PENDING);
+      integrations.lay();
       return Promise.resolve({ opened: true });
     },
     // A Cancel ends a sign-in still pending; one that finished first stays connected.
@@ -192,13 +193,15 @@ beforeEach(() => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_CANCEL, payload });
       const { provider } = payload;
       const account = canceled.get(payload.connection ?? provider);
-      if (account !== undefined) return Promise.resolve({ status: account });
-      if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
-        touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+      if (account === undefined) {
+        if (touched.get(provider) === INTEGRATION_STATUS.PENDING && !reopenedDuringCancel) {
+          touched.set(provider, INTEGRATION_STATUS.DISCONNECTED);
+        }
       }
-      return Promise.resolve({ status: serviceStatuses()[provider] });
+      integrations.lay();
+      return Promise.resolve({ status: account ?? serviceStatuses()[provider] });
     },
-    // A rename names the account anew, which the next read of the integrations says.
+    // A rename names the account anew, which the host's read says once the test lays it again.
     [ACT_KIND.INTEGRATIONS_RENAME]: (payload) => {
       sent.push({ kind: ACT_KIND.INTEGRATIONS_RENAME, payload });
       if (refuseRename) return Promise.resolve({ failure: INTEGRATION_CALL_FAILURE.UNANSWERED });
@@ -218,6 +221,7 @@ beforeEach(() => {
     const tools = listed.get(server.provider);
     return tools === undefined ? Promise.reject(new Error("Not in this test.")) : { tools };
   });
+  integrations = holdIntegrations(heldRead);
 });
 
 afterEach(() => {
@@ -256,9 +260,11 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
             githubConnects += 1;
             return Promise.resolve(true);
           },
+          // A disconnect answers once the host has asked GitHub's standing again, which its read then holds.
           disconnect: () => {
             githubDisconnects += 1;
             if (!refuseGitHubDisconnect) githubConnected = false;
+            integrations.lay();
             return Promise.resolve(!refuseGitHubDisconnect);
           },
         },
@@ -338,11 +344,9 @@ async function pressOnGranola(page: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
-/** The developer back in the window, which reads where every provider stands again. */
-async function focusWindow(): Promise<void> {
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
+/** The service's rows moved, which the host's read of where every provider stands carries. */
+async function readMoves(): Promise<void> {
+  act(() => integrations.lay());
   await settle();
 }
 
@@ -450,20 +454,22 @@ test("an account offered no provider is told so, with no row", async () => {
   assert.match(page.textContent ?? "", /No integrations available/u);
 });
 
-test("a read that fails after one that offered nothing still says so and offers to read again", async () => {
+test("a read that never answered says so, and Retry reads it again", async () => {
   withheld = INTEGRATION_PROVIDER_LIST;
-  const page = await mount();
   refuseRead = true;
-  await act(async () => {
-    window.dispatchEvent(new Event("focus"));
-    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-  });
+  const page = await mount();
 
   assert.match(page.textContent ?? "", /Your integrations could not be read\./u);
-  assert.ok(
-    [...page.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
-    "Retry is offered",
+  refuseRead = false;
+  act(() =>
+    (
+      [...page.querySelectorAll("button")].find((button) => button.textContent === "Retry") ??
+      assert.fail("Retry is offered")
+    ).click(),
   );
+  await settle();
+  assert.equal(integrations.retries(), 1);
+  assert.match(page.textContent ?? "", /No integrations available/u);
 });
 
 test("GitHub, granted by the account's own GitHub, offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
@@ -481,7 +487,7 @@ test("GitHub, granted by the account's own GitHub, offers Connect, which connect
   assert.equal(githubConnects, 1);
   assert.deepEqual(links, [], "nothing leaves the page");
   assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u);
-  await focusWindow();
+  await readMoves();
   assert.match(page.textContent ?? "", /Waiting for GitHub in your browser…/u, "still waiting");
 
   const cancel = buttonNamed("Cancel") ?? assert.fail("GitHub's wait offers Cancel");
@@ -677,7 +683,7 @@ test("a Connect waits on the browser with Reopen and Cancel, and a Cancel ends t
     "the sign-in is ended at the service",
   );
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
-  await focusWindow();
+  await readMoves();
   assert.deepEqual(granolaRow(page), { line: undefined, buttons: ["Connect"] });
 });
 
@@ -686,25 +692,11 @@ test("a sign-in begun on one surface is what every other surface draws at once, 
   registries.push(registry);
   const settings = await mount(registry);
   const other = await mount(registry);
-  holdReads = true;
 
   await pressOnGranola(settings, "Connect");
   assert.deepEqual(granolaRow(other), WAITING);
   await pressOnGranola(other, "Cancel");
   assert.deepEqual(granolaRow(settings), { line: undefined, buttons: ["Connect"] });
-});
-
-test("the window's focus still reads for the surfaces left once the first one drawn has closed", async () => {
-  const registry = AtomRegistry.make();
-  registries.push(registry);
-  await mount(registry);
-  const first = roots.at(-1) ?? assert.fail("the first surface has a root");
-  const other = await mount(registry);
-  act(() => first.unmount());
-
-  touched.set(GRANOLA, INTEGRATION_STATUS.EXPIRED);
-  await focusWindow();
-  assert.equal(granolaRow(other).line, "Sign-in expired · Reconnect");
 });
 
 test("a sign-out leaves nothing of one account's integrations to the next account signed in", async () => {
@@ -717,12 +709,16 @@ test("a sign-out leaves nothing of one account's integrations to the next accoun
       return () => listeners.delete(listener);
     },
   });
+  integrations = holdIntegrations(heldRead);
   const page = await mount();
   await pressOnGranola(page, "Connect");
   assert.deepEqual(granolaRow(page), WAITING);
 
   touched.clear();
-  const next = signedInAs({ id: "two", email: "two@example.com", name: "Two" });
+  const next = {
+    ...signedInAs({ id: "two", email: "two@example.com", name: "Two" }),
+    [LIVE_READ.INTEGRATIONS]: { two: heldRead() ?? assert.fail("the host read the next account") },
+  };
   act(() => {
     for (const listener of listeners) listener({ ...deliveryOf(next), version: 2 });
   });
@@ -746,13 +742,13 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
 
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
-  await focusWindow();
+  await readMoves();
   assert.deepEqual(granolaRow(page), {
     line: "You canceled connecting Granola. · Retry",
     buttons: ["Retry"],
   });
   // The service names a failure once; the next read leaves the line as it stood.
-  await focusWindow();
+  await readMoves();
   assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
 });
 
@@ -768,7 +764,7 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
       message: "client_assertion aud must be the authorization server issuer",
     },
   ];
-  await focusWindow();
+  await readMoves();
   assert.deepEqual(granolaRow(page), {
     line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
     buttons: ["Retry"],
@@ -781,11 +777,11 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
 test("a sign-in the browser came back from without a grant says it could not connect, and why, with Retry", async () => {
   const page = await mount();
   await pressOnGranola(page, "Connect");
-  await focusWindow();
+  await readMoves();
   assert.deepEqual(granolaRow(page), WAITING, "still pending: still waiting");
 
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
-  await focusWindow();
+  await readMoves();
   assert.deepEqual(granolaRow(page), {
     line: "Granola could not be connected: the sign-in came back without access. · Retry",
     buttons: ["Retry"],
@@ -812,7 +808,7 @@ it.effect(
       });
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
-      yield* Effect.promise(focusWindow);
+      yield* Effect.promise(readMoves);
       assert.equal(granolaRow(page).line, "Connected · 1 tool");
     }),
 );
@@ -866,25 +862,6 @@ it.effect("a sign-in begun later does not put off the deadline of one begun befo
       "Linear still waits its own three minutes",
     );
   }),
-);
-
-it.effect(
-  "back in the window, a sign-in still pending is given a grace to land, and then said not to have finished",
-  () =>
-    Effect.gen(function* () {
-      const registry = registryOn(yield* Clock.Clock);
-      const page = yield* Effect.promise(() => mount(registry));
-      yield* Effect.promise(() => pressOnGranola(page, "Connect"));
-      yield* Effect.promise(focusWindow);
-      assert.deepEqual(granolaRow(page), WAITING);
-
-      yield* TestClock.adjust(SIGN_IN_GRACE);
-      yield* Effect.promise(settle);
-      assert.deepEqual(granolaRow(page), {
-        line: "Sign-in didn't finish. · Retry",
-        buttons: ["Retry"],
-      });
-    }),
 );
 
 /** Vercel and Linear connected, their servers listing these tools, Vercel's annotated as a server may. */
@@ -1064,8 +1041,8 @@ test("while where the providers stand is read, the search stands usable above pl
   await searchFor(page, "linear");
   assert.equal(searchField(page).value, "linear");
 
-  for (const release of heldReads.splice(0)) act(() => release());
-  await settle();
+  holdReads = false;
+  await readMoves();
 
   assert.equal(page.querySelector('[role="status"]'), null);
   assert.deepEqual(rowNames(page), ["Linear"]);
@@ -1426,7 +1403,7 @@ test("an account alone at its provider is named by its label where it carries on
   assert.ok(!names.some((name) => name?.includes("Account 1")));
 });
 
-test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one, which stands while the integrations are read again", async () => {
+test("an account renamed from its row's ⋯ is named in place: Escape keeps its name, and Return asks for the new one, which stands until the host's read carries it", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
   accounts = [
@@ -1471,14 +1448,12 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(typing, "Work");
     typing.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  holdReads = true;
   press("Enter");
   await settle();
   assert.equal(field(), null);
   assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
-  assert.ok(rowOf("Work"), "the old name never stands again while the read is out");
-  for (const release of heldReads.splice(0)) release();
-  await settle();
+  assert.ok(rowOf("Work"), "the old name never stands again before the read carries the new one");
+  await readMoves();
   assert.ok(rowOf("Work"), "the row says the new name");
 });
 
@@ -1546,7 +1521,7 @@ test("an added account whose first sign-in Connect refused keeps its row with th
       message: "access_denied",
     },
   ];
-  await focusWindow();
+  await readMoves();
   const added =
     [...page.querySelectorAll(".ui-settings-row")].find(
       (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 3",
@@ -1674,93 +1649,6 @@ test("a canceled sign-in that held a provider's last place frees it at once, off
   assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
 });
 
-test("a statuses read answered after a newer one changes nothing the newer one drew", async () => {
-  const notion = INTEGRATION_PROVIDER.NOTION;
-  standing.set(notion, INTEGRATION_STATUS.CONNECTED);
-  const acme = {
-    provider: notion,
-    connection: "notion",
-    label: "Acme",
-    status: INTEGRATION_STATUS.CONNECTED,
-  };
-  accounts = [acme];
-  const page = await mount();
-  holdReads = true;
-  await focusWindow();
-  accounts = [
-    acme,
-    {
-      provider: notion,
-      connection: "notion-2",
-      label: "Personal",
-      status: INTEGRATION_STATUS.CONNECTED,
-    },
-  ];
-  await focusWindow();
-
-  // The newer read lands first, then the older.
-  const [older, newer] = heldReads;
-  act(() => newer?.());
-  await settle();
-  act(() => older?.());
-  await settle();
-
-  assert.ok(
-    [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => nameOf(name) === "Notion · Personal",
-    ),
-  );
-});
-
-test("a statuses read answered after a newer one still says why the sign-in it settled failed", async () => {
-  const page = await mount();
-  await pressOnGranola(page, "Connect");
-
-  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
-  signInFailures = [
-    { provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message: "access_denied" },
-  ];
-  holdReads = true;
-  // The first read settles the sign-in and is told why it failed; the second is told nothing of it.
-  await focusWindow();
-  await focusWindow();
-  const [older, newer] = heldReads;
-  act(() => newer?.());
-  await settle();
-  act(() => older?.());
-  await settle();
-
-  assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “access_denied”",
-    buttons: ["Retry"],
-  });
-});
-
-test("a failure an older read was told never comes back over a sign-in a newer read found connected, so a later disconnect offers Connect", async () => {
-  const page = await mount();
-  await pressOnGranola(page, "Connect");
-
-  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
-  signInFailures = [
-    { provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.ERROR, message: "access_denied" },
-  ];
-  holdReads = true;
-  await focusWindow();
-  // Another window connects Granola before the next read.
-  touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
-  await focusWindow();
-  const [older, newer] = heldReads;
-  act(() => newer?.());
-  await settle();
-  act(() => older?.());
-  await settle();
-
-  holdReads = false;
-  touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
-  await focusWindow();
-  assert.deepEqual(granolaRow(page).buttons, ["Connect"]);
-});
-
 test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
   const notion = INTEGRATION_PROVIDER.NOTION;
   standing.set(notion, INTEGRATION_STATUS.CONNECTED);
@@ -1852,7 +1740,7 @@ test("with motion held still, an integration that connects takes its place and n
     layRowsInOrder(page);
 
     touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
-    await focusWindow();
+    await readMoves();
 
     assert.deepEqual(sections(page), [
       ["Connected", ["Mercury"]],
