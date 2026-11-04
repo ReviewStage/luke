@@ -2757,6 +2757,53 @@ it.effect(
     }),
 );
 
+it.effect("a workspace list of none kept on disk is not drawn as ready at launch", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("tasks-entities-");
+    const earlier = yield* Scope.make();
+    const kept = yield* Scope.provide(earlier)(
+      openEntityStore({ directory, cipher: testCipher(), accountId: "user-dana" }),
+    );
+    yield* kept.keep(KEPT_READ.WORKSPACES, []);
+    yield* Scope.close(earlier, Exit.void);
+    const entities = yield* openEntityStore({
+      directory,
+      cipher: testCipher(),
+      accountId: "user-dana",
+    });
+    const service = fakeService([]);
+    service.workspacesFail = true;
+    const { tasks, last, settled } = yield* subject(service, { entities });
+
+    yield* tasks.open;
+    yield* settled;
+
+    assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "a workspace list of none says failed and leaves the last list drawn, and its Retry reads it again at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+
+      service.memberships = [];
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+
+      service.memberships = [PERSONAL];
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.workspaces, [PERSONAL]);
+    }),
+);
+
 it.effect(
   "a workspace made reaches the service and the view then holds it over the follow, nothing read again",
   () =>
