@@ -113,26 +113,23 @@ function ready(headSha: string, chapters: readonly Chapter[]): PullRequestChapte
   };
 }
 
-test("the view waits on its first read, and on a read asked again after a failure, but keeps what it drew while asked again", () => {
+test("the view waits on its first read, and draws a read that failed as failed", () => {
   const failed = { failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED } as const;
-  const drawn = answering(ready(HEAD, [FIRST]));
 
-  assert.equal(chaptersShown(undefined, true, undefined).kind, CHAPTERS_SHOWN.READING);
-  assert.equal(chaptersShown(failed, true, undefined).kind, CHAPTERS_SHOWN.READING);
-  assert.deepEqual(chaptersShown(failed, false, undefined), {
+  assert.equal(chaptersShown(undefined, undefined).kind, CHAPTERS_SHOWN.READING);
+  assert.deepEqual(chaptersShown(failed, undefined), {
     kind: CHAPTERS_SHOWN.FAILED,
     failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED,
   });
-  assert.equal(chaptersShown(drawn, true, undefined).kind, CHAPTERS_SHOWN.READY);
 });
 
 test("no pull request, no chapters yet, chapters being made, and a generation that failed are each their own state", () => {
   assert.equal(
-    chaptersShown({ pullRequest: null }, false, undefined).kind,
+    chaptersShown({ pullRequest: null }, undefined).kind,
     CHAPTERS_SHOWN.NO_PULL_REQUEST,
   );
   assert.deepEqual(
-    chaptersShown(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false), false, undefined),
+    chaptersShown(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false), undefined),
     { kind: CHAPTERS_SHOWN.NONE, generatable: false },
   );
   assert.deepEqual(
@@ -143,7 +140,6 @@ test("no pull request, no chapters yet, chapters being made, and a generation th
         baseSha: BASE,
         startedAt: 5_000,
       }),
-      false,
       undefined,
     ),
     { kind: CHAPTERS_SHOWN.GENERATING, startedAt: 5_000, ours: false },
@@ -156,7 +152,6 @@ test("no pull request, no chapters yet, chapters being made, and a generation th
         baseSha: BASE,
         failureKind: PULL_REQUEST_CHAPTERS_FAILURE_KIND.TOO_LARGE,
       }),
-      false,
       undefined,
     ),
     {
@@ -168,20 +163,15 @@ test("no pull request, no chapters yet, chapters being made, and a generation th
 });
 
 test("this window's own Generate stands over whatever the read last said, timed from its press", () => {
-  const shown = chaptersShown(answering(ready(OLDER, [FIRST])), false, 9_000);
+  const shown = chaptersShown(answering(ready(OLDER, [FIRST])), 9_000);
 
   assert.deepEqual(shown, { kind: CHAPTERS_SHOWN.GENERATING, startedAt: 9_000, ours: true });
 });
 
 test("chapters made for an older head than the tab holds are stale, those for the head now are not, and Other changes is read last wherever it was put", () => {
   const now = { pullRequest: HEAD, files: HEAD };
-  const current = chaptersShown(
-    answering(ready(HEAD, [OTHER, FIRST, SECOND])),
-    false,
-    undefined,
-    now,
-  );
-  const older = chaptersShown(answering(ready(OLDER, [FIRST])), false, undefined, now);
+  const current = chaptersShown(answering(ready(HEAD, [OTHER, FIRST, SECOND])), undefined, now);
+  const older = chaptersShown(answering(ready(OLDER, [FIRST])), undefined, now);
 
   assert.equal(current.kind, CHAPTERS_SHOWN.READY);
   assert.equal(older.kind, CHAPTERS_SHOWN.READY);
@@ -196,7 +186,7 @@ test("chapters made for an older head than the tab holds are stale, those for th
 
 test("chapters are stale where the files drawn are of another push than they were made for, or name no head, whatever the pull request's head", () => {
   const stale = (files: string | undefined) => {
-    const shown = chaptersShown(answering(ready(HEAD, [FIRST])), false, undefined, {
+    const shown = chaptersShown(answering(ready(HEAD, [FIRST])), undefined, {
       pullRequest: undefined,
       files,
     });

@@ -22,6 +22,8 @@ export interface UpdateServiceHost {
   start: () => void;
   check: () => Promise<UpdateSnapshot>;
   install: () => void;
+  /** Moves the app into Applications, where an install it could not land in place can. */
+  moveToApplications: () => void;
   openLatestRelease: () => void;
   openChangelog: () => void;
 }
@@ -58,10 +60,15 @@ interface UpdateServiceHostDependencies {
    * the menu bar's Check for Updates runs with no window of its own to say it.
    */
   showSettings: () => void;
+  /**
+   * Moves the app into Applications, quitting this copy through the ordinary
+   * quit once the move lands; it throws where the copy could not be made.
+   */
+  moveToApplications: () => void;
 }
 
 /**
- * The updater's lifecycle and the four actions the Updates row offers, built
+ * The updater's lifecycle and the five actions the Updates row offers, built
  * on the ambient scope, with the menu bar's update item drawn from every
  * state it moves to: `UpdateService`'s timed check and first check fork
  * into it directly, so they are interrupted by the
@@ -162,6 +169,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
           service.install();
         });
       },
+      moveToApplications: () => dependencies.moveToApplications(),
       openLatestRelease: () => {
         recordProductEvent(PRODUCT_EVENT.UPDATE_ACTION, {
           update_action: PRODUCT_UPDATE_ACTION.RELEASE_OPEN,

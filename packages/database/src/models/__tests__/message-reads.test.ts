@@ -26,6 +26,7 @@ import {
   messageCursorNow,
   messageSeqOf,
   newestAwaitingLineAt,
+  newestJournalsOfReached,
   readMessageById,
   runningChildTurns,
   turnStoppedUnderReached,
@@ -418,6 +419,33 @@ it.layer(getTestDB())("a conversation's reader", (it) => {
         yield* client.unsafe("reset enable_seqscan");
 
         assert.match(JSON.stringify(plan), /messages_awaiting_line/);
+      }),
+  );
+
+  it.effect(
+    "the newest journals of many conversations answer each one's newest assistant row, whoever owns it, and leave out a conversation with none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const busy = yield* openConversation(owner);
+        const quiet = yield* openConversation(teammate);
+        const unanswered = yield* openConversation(owner);
+        yield* writeTurnRow(owner, busy, 1, null, MESSAGE_ROLE.ASSISTANT);
+        yield* writeTurnRow(owner, busy, 2, null, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(owner, busy, 3, null, MESSAGE_ROLE.ASSISTANT);
+        yield* writeTurnRow(owner, busy, 4, null, MESSAGE_ROLE.USER);
+        yield* writeTurnRow(teammate, quiet, 1, null, MESSAGE_ROLE.ASSISTANT);
+        yield* writeTurnRow(owner, unanswered, 1, null, MESSAGE_ROLE.USER);
+
+        const newest = yield* newestJournalsOfReached([busy, quiet, unanswered], {});
+        assert.deepEqual(
+          [...newest.entries()].map(([id, record]) => [id, record.seq]).sort(),
+          [
+            [busy, 3],
+            [quiet, 1],
+          ].sort(),
+        );
       }),
   );
 });

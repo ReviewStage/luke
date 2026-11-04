@@ -627,18 +627,12 @@ test("a read of an agent's changes keeps who its pull request names, by agent an
   assert.equal(tab.control().changesPeople.get(AGENT), undefined, "no pull request names nobody");
 });
 
-test("a pull request's chapters are read and generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
+test("a pull request's chapters are generated for the agent's own pull request or the one a tab names by its number, and an ask the port refused is heard as unanswered", async () => {
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  const none = {
+  const generating = {
     pullRequest: {
       number: 41,
       generatable: true,
-      chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
-    },
-  };
-  const generating = {
-    pullRequest: {
-      ...none.pullRequest,
       chapters: {
         status: PULL_REQUEST_CHAPTERS_STATE.GENERATING,
         headSha: "c0ffee1",
@@ -647,22 +641,17 @@ test("a pull request's chapters are read and generated for the agent's own pull 
       },
     },
   };
-  tab.answer(ACT_KIND.CHAPTERS_READ, none);
   tab.answer(ACT_KIND.CHAPTERS_GENERATE, generating);
   await tab.mount();
 
-  assert.deepEqual(await tab.control().readChapters(AGENT, 41), none);
   assert.deepEqual(await tab.control().generateChapters(AGENT, 41), generating);
   // Nothing more is queued, so the port refuses this one.
   assert.deepEqual(await tab.control().generateChapters(AGENT), {
     failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
   });
   assert.deepEqual(
-    tab.asked.filter(
-      ({ kind }) => kind === ACT_KIND.CHAPTERS_READ || kind === ACT_KIND.CHAPTERS_GENERATE,
-    ),
+    tab.asked.filter(({ kind }) => kind === ACT_KIND.CHAPTERS_GENERATE),
     [
-      { kind: ACT_KIND.CHAPTERS_READ, payload: { agentId: AGENT, number: 41 } },
       { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT, number: 41 } },
       { kind: ACT_KIND.CHAPTERS_GENERATE, payload: { agentId: AGENT } },
     ],

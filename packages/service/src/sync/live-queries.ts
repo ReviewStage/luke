@@ -18,6 +18,7 @@ import {
   workspacesLiveStatements,
 } from "@repo/database/models/workspace-store";
 import { agentTable } from "@repo/database/schemas/agent";
+import { inboxItem } from "@repo/database/schemas/inbox";
 import { task } from "@repo/database/schemas/task";
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
@@ -45,6 +46,8 @@ import {
   messagesSync,
   organizationSync,
   personalWorkspaceSync,
+  planCommentSync,
+  planCommentThreadSync,
   planPageVersionSync,
   planRevisionSync,
   pullRequestChaptersSync,
@@ -73,10 +76,12 @@ import {
 } from "../automations/automation-live.js";
 import {
   accountInboxLiveStatements,
+  accountItemsDeltaStatements,
   accountItemsLiveStatements,
   memberAgentInboxLiveStatements,
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
+import { taskCommentsLiveStatements } from "../tasks/plan-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { taskListDeltaStatements, taskListLiveStatements } from "../tasks/task-list-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -316,6 +321,14 @@ function instantParam(param: string): Date {
  * as for the account's inbox: either shows at the hold's end. The settled
  * items it carries are those changed since `settledSince`, which its
  * procedure binds from the clock, since a live statement reads none.
+ *
+ * A reader past a sync id is answered the items that moved alone, each
+ * whole (`accountItemsDeltaStatements`), taking the moved rows its
+ * workspaces' topics reach, since a task, an agent, or a member names
+ * those rather than the account; a message or a file names only its item's
+ * task and agent, so its rows are taken whatever they name. An item that
+ * leaves by the clock, past thirty days settled, logs nothing, and the
+ * reader drops it itself.
  */
 export const inboxItemsLive = defineLiveQuery({
   name: LIVE_READ.INBOX_ITEMS,
@@ -325,6 +338,17 @@ export const inboxItemsLive = defineLiveQuery({
   statements: ({ userId, since, settledSince }) =>
     accountItemsLiveStatements(userId, instantParam(since), instantParam(settledSince)),
   mode: LIVE_MODE.SNAPSHOT,
+  delta: {
+    whole: ITEM_GATES,
+    anyTopic: [inboxMessageSync, attachmentSync],
+    reach: ({ userId }) => readerAndWorkspaceTopics(userId),
+    own: {
+      stamps: { table: inboxItemSync, key: inboxItem.id },
+      items: { table: inboxItemSync, key: inboxItem.id },
+    },
+    statements: ({ userId, settledSince }, moved) =>
+      accountItemsDeltaStatements(userId, instantParam(settledSince), moved),
+  },
 });
 
 /** One agent's inbox, as any member of its workspace reads it, woken as a task's is, on the agent's topic. */
@@ -528,6 +552,39 @@ export const taskHistoryLive = defineLiveQuery({
   mode: LIVE_MODE.SNAPSHOT,
 });
 
+/** The page a comments read's param names where it names none: the plan's own threads (`taskCommentsLive`). */
+export const PLAN_THREADS = "";
+
+/**
+ * One subject of a task's comments, its plan's own threads where it names
+ * no page (`PLAN_THREADS`) or one page's on every version, woken by a
+ * thread or an entry written, a file kept on a comment, and the task
+ * itself, all of which name the task. Note that a writer's own name, read
+ * beside each entry, wakes no comments, as the history's editor's wakes no
+ * history: one shows at the hold's end.
+ */
+export const taskCommentsLive = defineLiveQuery({
+  name: LIVE_READ.PLAN_COMMENTS,
+  params: ["userId", "taskId", "pageId"],
+  reads: [
+    planCommentThreadSync,
+    planCommentSync,
+    attachmentSync,
+    userSync,
+    taskSync,
+    memberSync,
+    githubPersonalTokenSync,
+    githubRepositoryReadSync,
+  ],
+  topics: ({ userId, taskId }) => [
+    [TOPIC.TASK, taskId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, taskId, pageId }) =>
+    taskCommentsLiveStatements(userId, pageId === PLAN_THREADS ? { taskId } : { taskId, pageId }),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
 /**
  * One task's Browser tabs, every one of its agents', the agent's pointer on
  * each among them, woken by a tab opened, moved, pointed at, taken over, or
@@ -719,6 +776,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   taskPagesLive,
   agentPagesLive,
   taskHistoryLive,
+  taskCommentsLive,
   taskBrowserTabsLive,
   agentBrowserTabsLive,
   pullRequestChaptersLive,

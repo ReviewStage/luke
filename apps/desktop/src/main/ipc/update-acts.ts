@@ -1,5 +1,5 @@
 /**
- * update-acts.ts -- the updater's acts as main carries them: a check, the install, and the releases page and changelog opened.
+ * update-acts.ts -- the updater's acts as main carries them: a check, the install, the move to Applications, and the releases page and changelog opened.
  *
  * Each is handed to the update service as it stands; none reads which window
  * asked.
@@ -13,7 +13,10 @@ import type { UpdateServiceHost } from "../services/update-service-host";
 type UpdateActKind = (typeof UPDATE_ACT_KIND)[keyof typeof UPDATE_ACT_KIND];
 
 export interface UpdateActsDependencies {
-  updates: Pick<UpdateServiceHost, "check" | "install" | "openLatestRelease" | "openChangelog">;
+  updates: Pick<
+    UpdateServiceHost,
+    "check" | "install" | "moveToApplications" | "openLatestRelease" | "openChangelog"
+  >;
 }
 
 const updatePort = actPortFor<WebContents>();
@@ -28,6 +31,9 @@ export function updateProcedures({
     [UPDATE_ACT_KIND.UPDATE_INSTALL]: updatePort[UPDATE_ACT_KIND.UPDATE_INSTALL].handler(() =>
       updates.install(),
     ),
+    [UPDATE_ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS]: updatePort[
+      UPDATE_ACT_KIND.UPDATE_MOVE_TO_APPLICATIONS
+    ].handler(() => updates.moveToApplications()),
     [UPDATE_ACT_KIND.UPDATE_OPEN_RELEASE]: updatePort[UPDATE_ACT_KIND.UPDATE_OPEN_RELEASE].handler(
       () => updates.openLatestRelease(),
     ),

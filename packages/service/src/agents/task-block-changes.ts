@@ -4,7 +4,7 @@ import {
   removeTaskBlock,
   type TaskBlockPair,
 } from "@repo/database/models/task-block-store";
-import { readTaskHeader } from "@repo/database/models/task-store";
+import { readTaskHeaders } from "@repo/database/models/task-store";
 import { describeWire } from "@repo/wire/effect";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import { wireUuidSchema } from "../core.js";
@@ -143,9 +143,9 @@ export const blockWritesAsked = (
       return Result.fail(TASK_BLOCK_REFUSAL.SELF);
     }
     others.delete(taskId);
-    const headers = yield* Effect.forEach(others, (otherId) => readTaskHeader(userId, otherId));
-    for (const header of headers) {
-      if (Option.isNone(header) || header.value.workspaceId !== workspaceId) {
+    const headers = yield* readTaskHeaders(userId, [...others]);
+    for (const otherId of others) {
+      if (headers.get(otherId)?.workspaceId !== workspaceId) {
         return Result.fail(TASK_BLOCK_REFUSAL.NO_TASK);
       }
     }
@@ -192,21 +192,20 @@ export const writeTaskBlocks = (userId: string, writes: TaskBlockWrites) =>
 
 /** The tasks under these ids as the model reads them, in their order, each one the member reaches. */
 const readingsOf = (userId: string, taskIds: readonly string[], step: string) =>
-  Effect.map(
-    Effect.forEach(taskIds, (taskId) =>
-      Effect.map(readTaskHeader(userId, taskId), (header) =>
-        Option.map(
-          header,
-          ({ name, status, number }): TaskBlockReading => ({
-            id: taskId,
-            name,
-            status,
-            mention: writtenTaskMention({ id: taskId, number }, name, step),
-          }),
-        ),
-      ),
-    ),
-    (read) => read.flatMap((reading) => Option.toArray(reading)),
+  Effect.map(readTaskHeaders(userId, taskIds), (headers) =>
+    taskIds.flatMap((taskId): TaskBlockReading[] => {
+      const header = headers.get(taskId);
+      if (header === undefined) return [];
+      const { name, status, number } = header;
+      return [
+        {
+          id: taskId,
+          name,
+          status,
+          mention: writtenTaskMention({ id: taskId, number }, name, step),
+        },
+      ];
+    }),
   );
 
 /**

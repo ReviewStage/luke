@@ -72,6 +72,7 @@ function settingsOn(account: AccountSnapshot): SettingsPanelProps {
       build: { packaged: true },
       onCheck: () => Promise.resolve(),
       onInstall: ignore,
+      onMoveToApplications: ignore,
       onOpenLatest: ignore,
     },
     settings: neverChosen(),

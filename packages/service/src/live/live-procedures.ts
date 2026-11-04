@@ -31,6 +31,11 @@
  * (`task-record-live.ts`), after the task is read as the account, so one it
  * does not reach is not found, as its own read answers, woken by a write
  * that names the task (`taskRecordLive`), as its pages and its history are.
+ * `GET /api/live/task-comments?id=` answers its plan's own comment threads,
+ * or with `&page=` one page's on every version, as three statements, the
+ * threads, their entries, and the files their comments carry
+ * (`plan-comments-live.ts`), the same way and woken the same way
+ * (`taskCommentsLive`).
  * `GET /api/live/task-browser-tabs?id=` answers its Browser tabs as one
  * statement, the agent's pointer on each among them, woken by a write that
  * names the task, so a window draws the pointer moving within a moment of
@@ -157,9 +162,11 @@ import {
   inboxItemsLive,
   inboxLive,
   macCommandsLive,
+  PLAN_THREADS,
   pullRequestChaptersLive,
   sidebarLive,
   taskBrowserTabsLive,
+  taskCommentsLive,
   taskHistoryLive,
   taskInboxLive,
   taskPagesLive,
@@ -169,7 +176,13 @@ import {
   workspaceMembersLive,
   workspacesLive,
 } from "../sync/live-queries.js";
-import { type LiveParams, type LiveQuery, ownMovedKeys, syncMovedOf } from "../sync/live-query.js";
+import {
+  type LiveParams,
+  type LiveQuery,
+  type LiveTopics,
+  ownMovedKeys,
+  syncMovedOf,
+} from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
@@ -335,13 +348,17 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   );
 });
 
+/** Topics named outright, or looked up; unavailable where the lookup fails. */
+function topicsNamed(named: LiveTopics) {
+  return Effect.isEffect(named) ? hostedStoreOrUnavailable(named) : Effect.succeed(named);
+}
+
 /** The topics a defined live read's params name, or that it looks up from them; unavailable where the lookup fails. */
 function topicsOf<Param extends string, Part extends string>(
   query: LiveQuery<Param, Part>,
   params: LiveParams<Param>,
 ) {
-  const named = query.topics(params);
-  return Effect.isEffect(named) ? hostedStoreOrUnavailable(named) : Effect.succeed(named);
+  return topicsNamed(query.topics(params));
 }
 
 /**
@@ -561,7 +578,8 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   if (delta === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const past = yield* syncIdOf(sync);
   const topics = yield* topicsOf(query, params);
-  const accounts = new Set(topics.flatMap(([kind, id]) => (kind === TOPIC.ACCOUNT ? [id] : [])));
+  const reached = delta.reach === undefined ? topics : yield* topicsNamed(delta.reach(params));
+  const accounts = new Set(reached.flatMap(([kind, id]) => (kind === TOPIC.ACCOUNT ? [id] : [])));
   const whole = new Set(delta.whole.map((table) => table.name));
   const looked: Effect.Effect<DeltaStanding, HostedRefusal, DatabaseServices> =
     hostedStoreOrUnavailable(
@@ -572,7 +590,7 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
           settled,
           tables: query.reads.map((table) => table.name),
           anyTopic: delta.anyTopic.map((table) => table.name),
-          topics,
+          topics: reached,
         });
         const admissionMoved = window.rows.some(
           (row) =>
@@ -672,13 +690,17 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const since = yield* sinceOf(input[ACCOUNT_INBOX_ITEMS.SINCE]);
       const now = yield* Clock.currentTimeMillis;
       const settledSince = String(now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS);
-      return yield* liveQueryParts(
-        inboxItemsLive,
-        { userId: context.userId, since, settledSince },
-        input,
-        LIVE_POLL_HOLD.LOOK,
-        ACCOUNT_INBOX_ITEMS.HELD_ON,
-      );
+      const params = { userId: context.userId, since, settledSince };
+      const sync = input[LIVE_POLL.SYNC];
+      return yield* sync === undefined
+        ? liveQueryParts(
+            inboxItemsLive,
+            params,
+            input,
+            LIVE_POLL_HOLD.LOOK,
+            ACCOUNT_INBOX_ITEMS.HELD_ON,
+          )
+        : liveDeltaParts(inboxItemsLive, params, sync);
     }),
     tasks: signedIn.tasks.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
@@ -752,6 +774,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(taskHistoryLive, { userId: context.userId, taskId }, input);
+    }),
+    taskComments: signedIn.taskComments.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const taskId = yield* pathUuid(input.id);
+      const pageId = input.page === undefined ? PLAN_THREADS : yield* pathUuid(input.page);
+      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
+      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(
+        taskCommentsLive,
+        { userId: context.userId, taskId, pageId },
+        input,
+      );
     }),
     taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);

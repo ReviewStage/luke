@@ -17,9 +17,8 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The Pull request tab's chapters acts, through the act port as a window
- * calls them: a panel's read and Generate reach the host with the pull
- * request the tab names, and the panel hears the chapters or why there are
- * none; Settings' read and write of the chapters model reach it the same
+ * calls them: a panel's Generate reaches the host with the pull request the
+ * tab names, and the panel hears the chapters or why there are none; Settings' read and write of the chapters model reach it the same
  * way, a model outside the set refused at the port; any other window, and a frame this build does not trust,
  * are refused in each kind's own words before the host is asked; and an
  * answer the kind's schema does not admit is refused rather than handed to
@@ -34,7 +33,7 @@ const OTHER_WINDOW: ActSender = { ...PANEL, panel: false };
 
 const AGENT_ID = "6b1f3c2e-9d4a-4f1b-8c7d-2e3f4a5b6c7d";
 
-const READ_REFUSAL = "Could not read the pull request's chapters on this system.";
+const RETRY_REFUSAL = "Could not read the pull request's chapters again on this system.";
 const GENERATE_REFUSAL = "Could not generate the pull request's chapters on this system.";
 const MODEL_READ_REFUSAL = "Could not read the chapters model on this system.";
 const MODEL_WRITE_REFUSAL = "Could not change the chapters model on this system.";
@@ -86,7 +85,9 @@ function windowPort(
   const port = testActPort<unknown>(
     chaptersProcedures({
       host: {
-        pullRequestChapters: answering("read"),
+        chaptersFollow: () => Effect.sync(() => asked.push("follow")),
+        chaptersUnfollow: () => Effect.sync(() => asked.push("unfollow")),
+        chaptersRetry: () => Effect.sync(() => asked.push("retry")),
         pullRequestChaptersGenerate: answering("generate"),
         chaptersModelRead: () =>
           Effect.sync(() => {
@@ -104,8 +105,8 @@ function windowPort(
   ports.push(port);
   const client: ActPortClient = port.as(actor, { trusted: options.trusted ?? true });
   return {
-    read: (params: PullRequestChaptersReadParams) =>
-      settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_READ](params)),
+    retry: (params: PullRequestChaptersReadParams) =>
+      settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_RETRY](params)),
     generate: (params: PullRequestChaptersParams) =>
       settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_GENERATE](params)),
     readModel: () => settledAct(client[CHAPTERS_ACT_KIND.CHAPTERS_MODEL_READ](undefined)),
@@ -116,12 +117,11 @@ function windowPort(
   };
 }
 
-it("a panel's read and Generate reach the host with the pull request the tab names, and it hears the chapters", async () => {
-  const { read, generate, asked } = windowPort(PANEL);
+it("a panel's Generate reaches the host with the pull request the tab names, and it hears the chapters", async () => {
+  const { generate, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await read({ agentId: AGENT_ID, number: 11 }), { answer: READY });
   assert.deepEqual(await generate({ agentId: AGENT_ID, number: 11 }), { answer: READY });
-  assert.deepEqual(asked, [`read:${AGENT_ID}#11`, `generate:${AGENT_ID}#11`]);
+  assert.deepEqual(asked, [`generate:${AGENT_ID}#11`]);
 });
 
 it("a window that is not a panel, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
@@ -129,8 +129,8 @@ it("a window that is not a panel, and a frame this build does not trust, are ref
     { actor: OTHER_WINDOW, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
-    const { read, generate, asked } = windowPort(actor, { trusted });
-    assert.deepEqual(await read({ agentId: AGENT_ID, number: 11 }), { refused: READ_REFUSAL });
+    const { retry, generate, asked } = windowPort(actor, { trusted });
+    assert.deepEqual(await retry({ agentId: AGENT_ID, number: 11 }), { refused: RETRY_REFUSAL });
     assert.deepEqual(await generate({ agentId: AGENT_ID }), { refused: GENERATE_REFUSAL });
     assert.deepEqual(asked, []);
   }
@@ -160,7 +160,9 @@ it("a failure word crosses as the answer, and an answer the schema does not admi
       },
     } as PullRequestChaptersAnswerView,
   });
-  assert.deepEqual(await broken.read({ agentId: AGENT_ID, number: 11 }), { refused: READ_REFUSAL });
+  assert.deepEqual(await broken.generate({ agentId: AGENT_ID, number: 11 }), {
+    refused: GENERATE_REFUSAL,
+  });
 });
 
 it("a panel reads and writes the chapters model, and a model outside the set is refused before the host is asked", async () => {

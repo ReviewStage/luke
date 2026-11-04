@@ -1,4 +1,3 @@
-import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -68,8 +67,8 @@ export function App(): React.JSX.Element {
         scene={LANDING_SCENE.AGENTS}
       />
       <LandingSection
-        title="On every device."
-        lead={`Use ${PRODUCT_NAME} on Mac or the web.`}
+        title="Check in from anywhere."
+        lead="Use the Mac app at your desk, or the web app on your phone."
         scene={LANDING_SCENE.DEVICES}
       />
       <LandingSection

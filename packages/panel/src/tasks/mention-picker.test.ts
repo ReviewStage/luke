@@ -2,25 +2,32 @@
 
 import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import {
+  AUTOMATION_ACTION,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_TRIGGER,
+} from "@repo/features/automation-wire";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
 import { LINK_PLACE, readLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { decodeMention, MENTION_KIND } from "@repo/features/mention-link";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { MentionNodeChip } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 
 /**
- * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys and its Inbox threads by their titles.
+ * mention-picker.test.ts -- the `@` list as the editor's reports drive it: a list closed with Escape, which fades out before it goes; and on a plan, the workspace's other tasks found by their keys, its Inbox threads by their titles, and its automations by their names.
  */
 
 let root: Root | undefined;
@@ -338,4 +345,63 @@ test("on a plan, an Inbox feed that could not be read is said with Retry, never 
 
   act(() => picker().onTrigger(word("keep")));
   assert.match(page.textContent ?? "", /Inbox threads could not be read\./u);
+});
+
+test("on a plan, the workspace's automations are found by their name, a pick written as the automation's link", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [workspace("workspace-stage", "Stage", "stage")],
+        tasks: [task("plan-1", "workspace-stage", 1, "Ship the palette")],
+      },
+    },
+  );
+  const automation = (id: string, name: string) => ({
+    id,
+    planId: null,
+    planName: null,
+    workspaceId: "workspace-stage",
+    name,
+    enabled: true,
+    trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+    action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Write it." },
+    guards: AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    lastRun: null,
+    createdAt: 1,
+  });
+  const asked: string[] = [];
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: ({ workspaceId }) => {
+      asked.push(workspaceId ?? "");
+      return Promise.resolve({
+        automations: [
+          automation("automation-notes", "Deploy notes"),
+          automation("automation-triage", "Triage Sentry"),
+        ],
+      });
+    },
+  });
+  const chosen: MentionNode[] = [];
+  const { picker, page } = await mountedOnPlan(chosen);
+
+  await act(async () => {
+    picker().onTrigger(word("automations:deploy"));
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(asked, ["workspace-stage"]);
+  assert.deepEqual(rows(page), ["Deploy notes"]);
+
+  act(() => {
+    picker().onKey(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  });
+  const [picked] = chosen;
+  assert.ok(picked, "the highlighted automation is written");
+  assert.equal(picked.name, "Deploy notes");
+  assert.deepEqual(readLink(picked.target), {
+    workspace: "stage",
+    place: { kind: LINK_PLACE.AUTOMATION, automationId: "automation-notes" },
+  });
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { AppStateStore } from "@repo/host/client";
 import type { UpdaterEngine, UpdaterEngineEvents } from "@repo/host/update-service";
+import { UPDATE_FAILURE, UPDATE_STATUS, type UpdateSnapshot } from "@repo/settings/update";
 import { Effect } from "effect";
 import { vi } from "vitest";
 import type { DesktopConfig } from "./desktop-config";
@@ -57,6 +58,7 @@ const restartFixture = (answer: boolean) =>
       // SAFETY: the updater only writes where it stands, which no assertion reads.
       state: { update: () => undefined } as unknown as AppStateStore,
       showSettings: () => undefined,
+      moveToApplications: () => undefined,
     });
     heard?.onDownloaded("2.0.0");
     return { updates, happened };
@@ -92,4 +94,46 @@ it.effect(
         "squirrel quit and install",
       ]);
     }).pipe(Effect.scoped),
+);
+
+it.effect("an install Squirrel refuses on a read-only volume is told as that failure", () =>
+  Effect.gen(function* () {
+    const told: UpdateSnapshot[] = [];
+    let heard: UpdaterEngineEvents | undefined;
+    yield* createUpdateServiceHost({
+      // SAFETY: the updater reads only the fields `CONFIG` names.
+      config: CONFIG as unknown as DesktopConfig,
+      recordProductEvent: () => undefined,
+      engine: {
+        wire: (events) => {
+          heard = events;
+        },
+        checkForUpdates: async () => undefined,
+        quitAndInstall: () => undefined,
+        clearCachedUpdate: async () => undefined,
+      },
+      beforeRestart: async () => undefined,
+      askBeforeRestart: async () => true,
+      // SAFETY: the updater only writes where it stands, which `told` keeps.
+      state: {
+        update: ({ update }: { update: UpdateSnapshot }) => told.push(update),
+      } as unknown as AppStateStore,
+      showSettings: () => undefined,
+      moveToApplications: () => undefined,
+    });
+
+    heard?.onAvailable("2.0.0");
+    // Squirrel.Mac's own words, as electron-updater hands them on.
+    heard?.onError(
+      "Cannot update while running on a read-only volume. The application is on a read-only volume. Please move the application and try again.",
+    );
+
+    assert.deepEqual(told.at(-1), {
+      status: UPDATE_STATUS.ERROR,
+      currentVersion: "1.0.0",
+      installSupported: true,
+      latestVersion: "2.0.0",
+      failure: UPDATE_FAILURE.READ_ONLY_VOLUME,
+    });
+  }).pipe(Effect.scoped),
 );

@@ -7,6 +7,7 @@ import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, protocol, shell } from "electron";
 import { menuBarDrawer } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
+import { offerMoveToApplications } from "./move-to-applications";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { initializeCrashReporting, mainSentry } from "./services/telemetry-service";
 import { PAGE_SCHEME_PRIVILEGES } from "./window/page-protocol";
@@ -125,6 +126,9 @@ if (app.requestSingleInstanceLock()) {
 
 async function main(): Promise<void> {
   await app.whenReady();
+  // A copy that cannot update itself where it stands is offered the move
+  // first, before anything stands that its quit would have to give back.
+  if (await offerMoveToApplications(config)) return;
   // This is an ordinary app with a window of its own: the bundle gives it a
   // Dock tile and a place in Command-Tab, and these menus give its fields Copy
   // and Paste, its window Close, Minimize, and Quit, and its own commands

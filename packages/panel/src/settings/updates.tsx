@@ -3,6 +3,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { UPDATE_ENDPOINT } from "@repo/host/update-service";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import type { UpdateControl } from "@repo/settings/settings-controls";
+import { UPDATE_FAILURE } from "@repo/settings/update";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "@repo/settings/update-row";
 import {
   BUTTON_VARIANT,
@@ -18,11 +19,23 @@ import {
   SettingsSection,
 } from "@repo/ui";
 import { useAct } from "../act.js";
-import { failureShown } from "../failure-report.js";
+import { failureShown, type ShownFailure } from "../failure-report.js";
+
+/**
+ * An install a read-only volume refused, as its note reports it: a refusal
+ * the row named, so Sentry hears a log line under its own code rather than
+ * an issue, and one value, so the note standing is reported once.
+ */
+const READ_ONLY_VOLUME_FAILURE: ShownFailure = {
+  surface: FAILURE_SURFACE.UPDATE_CHECK,
+  cause: { code: UPDATE_FAILURE.READ_ONLY_VOLUME },
+  refused: true,
+};
 
 /**
  * The row's one act, in the outline face every Settings row's act wears:
- * restart into the release, reach its page in the browser as a link, check for one,
+ * restart into the release, reach its page in the browser as a link, move
+ * the app into Applications beside that link, check for one,
  * or check again — or none at all, while a download runs or for a
  * development build no release is newer than. The accent is kept for a
  * form's Save alone.
@@ -37,6 +50,15 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
         <Button variant={BUTTON_VARIANT.OUTLINE} onClick={control.onInstall}>
           Restart to update
         </Button>
+      );
+    case UPDATE_ROW_ACTION.MOVE:
+      return (
+        <Inline gap={GAP.CONTROL}>
+          <Button variant={BUTTON_VARIANT.OUTLINE} onClick={control.onMoveToApplications}>
+            Move to Applications
+          </Button>
+          {updateButton(UPDATE_ROW_ACTION.GET, control)}
+        </Inline>
       );
     case UPDATE_ROW_ACTION.GET:
       return (
@@ -118,10 +140,14 @@ export function UpdatesSection({
               row.failed
                 ? () => (
                     <FailureNote
-                      failure={failureShown({
-                        surface: FAILURE_SURFACE.UPDATE_CHECK,
-                        cause: FAILURE_CONDITION.UNREAD,
-                      })}
+                      failure={failureShown(
+                        row.action === UPDATE_ROW_ACTION.MOVE
+                          ? READ_ONLY_VOLUME_FAILURE
+                          : {
+                              surface: FAILURE_SURFACE.UPDATE_CHECK,
+                              cause: FAILURE_CONDITION.UNREAD,
+                            },
+                      )}
                       onRetry={
                         row.action === UPDATE_ROW_ACTION.RETRY
                           ? () => void control.onCheck()
