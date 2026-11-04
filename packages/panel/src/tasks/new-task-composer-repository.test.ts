@@ -2,14 +2,15 @@
 
 import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -59,7 +60,7 @@ async function settle(): Promise<void> {
 }
 
 /** A read listing `octo/tools` on a member's token. */
-const TOKEN_LISTING = (): Promise<TasksRepositoriesAnswer> =>
+const TOKEN_LISTING = (): Promise<RepositoriesRead> =>
   Promise.resolve({
     repositories: {
       installed: true,
@@ -78,13 +79,14 @@ const TOKEN_LISTING = (): Promise<TasksRepositoriesAnswer> =>
     },
   });
 
-/** The card in Acme over `read`, opened on `preset`, each start's repository written down. */
+/** The card in Acme over the repositories `read` answers each list the host holds, by its key, opened on `preset`, each start's repository written down. */
 async function mount(
-  read: () => Promise<TasksRepositoriesAnswer>,
+  read: (workspace: string) => Promise<RepositoriesRead>,
   preset?: string,
   scope: { id: string | undefined } = { id: ACME.id },
   recent: readonly string[] = [],
 ) {
+  const { again } = holdRepositoryLists(handHostReads({}).deliverRepositoryLists, read);
   const control = tasksControl();
   const starts: (string | null)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
@@ -101,7 +103,7 @@ async function mount(
             workspaces: [ACME],
             workspaceId: scope.id,
             ...(preset === undefined ? undefined : { preset: { repository: preset } }),
-            repositoriesIn: () => ({ ...control.repositories, recent, scope: scope.id, read }),
+            repositoriesIn: () => ({ ...control.repositories, recent, scope: scope.id }),
             start: (_name: string, repository: string | null) => {
               starts.push(repository);
               return Promise.resolve(undefined);
@@ -120,7 +122,12 @@ async function mount(
     act(draw);
     await settle();
   };
-  return { container, starts, redraw };
+  /** The host asking every list held again, as a window coming forward asks it. */
+  const comeForward = async () => {
+    await act(again);
+    await settle();
+  };
+  return { container, starts, redraw, comeForward };
 }
 
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
@@ -138,47 +145,6 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   await settle();
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
-});
-
-test("a refresh that fails when the window comes back keeps the listed repositories, says Could not refresh with Retry, and Retry lists again", async () => {
-  let failing = false;
-  const { container } = await mount(() =>
-    failing ? Promise.reject(new Error("offline")) : TOKEN_LISTING(),
-  );
-  const chip =
-    container.querySelector<HTMLButtonElement>(".ui-chip") ??
-    assert.fail("the card draws the repository chip");
-  act(() => chip.click());
-  await settle();
-  const listed = () =>
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].some((option) =>
-      option.textContent?.includes("tools"),
-    );
-  const refreshNote = () =>
-    [...document.querySelectorAll('[role="alert"]')].find((each) =>
-      each.textContent?.includes("Could not refresh"),
-    );
-  assert.equal(listed(), true);
-
-  failing = true;
-  act(() => {
-    window.dispatchEvent(new Event("focus"));
-  });
-  await settle();
-
-  assert.equal(listed(), true, "the last listing stands");
-  const note = refreshNote();
-  assert.ok(note, "the failed refresh says so");
-
-  failing = false;
-  const retry = [...note.querySelectorAll("button")].find((each) =>
-    each.textContent?.includes("Retry"),
-  );
-  act(() => retry?.click());
-  await settle();
-
-  assert.equal(listed(), true);
-  assert.equal(refreshNote(), undefined);
 });
 
 test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
@@ -214,7 +180,7 @@ test("a preset on a token repository the picker lists stands chosen once the rea
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
 });
 
-test("a preset the workspace's GitHub does not reach is not started on while the picker's read is out", async () => {
+test("a preset the workspace's GitHub does not reach is not started on while the host's read is out", async () => {
   const { container, starts } = await mount(() => new Promise(() => undefined), "alice/private");
   // ⌘Return on the empty box: a bare task, which starts on no repository as on one.
   pressInComposer(container, "Enter", { metaKey: true });
@@ -225,7 +191,7 @@ test("a preset the workspace's GitHub does not reach is not started on while the
 
 test("a preset a read does not list is let go, so a later read listing it does not bring it back", async () => {
   let reads = 0;
-  const { container } = await mount(() => {
+  const { container, comeForward } = await mount(() => {
     reads += 1;
     return reads === 1
       ? Promise.resolve({
@@ -237,8 +203,7 @@ test("a preset a read does not list is let go, so a later read listing it does n
         })
       : TOKEN_LISTING();
   }, "octo/tools");
-  act(() => window.dispatchEvent(new Event("focus")));
-  await settle();
+  await comeForward();
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
@@ -250,8 +215,8 @@ test("a preset a read does not list is let go, so a later read listing it does n
 test("a preset survives a read made before the workspace resolved and stands once its workspace's read lists it", async () => {
   const scope: { id: string | undefined } = { id: undefined };
   const { container, redraw } = await mount(
-    () =>
-      scope.id === undefined
+    (workspace) =>
+      workspace === EVERY_WORKSPACE
         ? Promise.resolve({
             repositories: {
               installed: true,
@@ -274,7 +239,7 @@ test("a preset survives a read made before the workspace resolved and stands onc
 
 test("a recent default a read does not list is let go, so a later read listing it does not bring it back", async () => {
   let reads = 0;
-  const { container } = await mount(
+  const { container, comeForward } = await mount(
     () => {
       reads += 1;
       return reads === 1
@@ -291,8 +256,7 @@ test("a recent default a read does not list is let go, so a later read listing i
     { id: ACME.id },
     ["octo/tools"],
   );
-  act(() => window.dispatchEvent(new Event("focus")));
-  await settle();
+  await comeForward();
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");

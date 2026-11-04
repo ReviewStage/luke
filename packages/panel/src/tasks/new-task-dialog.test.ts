@@ -42,7 +42,12 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import {
+  handHostReads,
+  handState,
+  holdRepositoryLists,
+  type RepositoriesRead,
+} from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -130,8 +135,13 @@ async function settle(): Promise<void> {
 async function mount(
   answer: string | Failure | undefined | Promise<Failure | undefined> = undefined,
   preset?: NewTaskPreset,
-  chooser: Partial<RepositoryChooser> = {},
+  chooser: Partial<RepositoryChooser> & {
+    /** What the service answers the chooser's workspace's repositories with, which the host holds for the chip. */
+    readonly list?: () => Promise<RepositoriesRead>;
+  } = {},
 ) {
+  const { list, ...chose } = chooser;
+  if (list !== undefined) holdRepositoryLists(handHostReads({}).deliverRepositoryLists, list);
   const starts: [string, string | null][] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
@@ -139,7 +149,7 @@ async function mount(
   let repositories: RepositoryChooser = {
     ...control.repositories,
     recent: ["acme/web", "acme/api"],
-    ...chooser,
+    ...chose,
   };
   const links: SettingsLink[] = [];
   let registry = AtomRegistry.make();
@@ -809,7 +819,7 @@ const NOWHERE_INSTALLED = () =>
 test("an owner or admin of a workspace with no GitHub connected is told so and offered Open Settings at that workspace's Integrations", async () => {
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
-    read: NOWHERE_INSTALLED,
+    list: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
@@ -833,7 +843,7 @@ test("a member of a workspace with no GitHub connected is told only to ask an ow
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     manages: false,
-    read: NOWHERE_INSTALLED,
+    list: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
@@ -869,7 +879,7 @@ test("a member of a workspace with no GitHub connected is told which owners and 
     scope: "workspace-acme",
     workspaceName: "Acme",
     manages: false,
-    read: NOWHERE_INSTALLED,
+    list: NOWHERE_INSTALLED,
   });
 
   await openChip();
@@ -884,7 +894,7 @@ test("a member of a workspace whose GitHub reaches no repository is told so and 
     scope: "workspace-acme",
     manages: false,
     connected: true,
-    read: NOTHING_REACHED,
+    list: NOTHING_REACHED,
   });
 
   const buttons = await openChip();
@@ -904,7 +914,7 @@ test("an owner of a workspace whose GitHub reaches no repository is offered Open
   const dialog = await mount(undefined, undefined, {
     scope: "workspace-acme",
     connected: true,
-    read: NOTHING_REACHED,
+    list: NOTHING_REACHED,
   });
 
   const buttons = await openChip();
@@ -931,7 +941,7 @@ async function lapsedMenu(manages: boolean) {
     workspaceName: "Acme",
     connected: true,
     manages,
-    read: NOWHERE_INSTALLED,
+    list: NOWHERE_INSTALLED,
   });
   const buttons = await openChip();
   return {
@@ -962,7 +972,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
     scope: "workspace-personal",
     workspaceName: "Dean Stratakos",
     recent: ["ReviewStage/luke"],
-    read: NOWHERE_INSTALLED,
+    list: NOWHERE_INSTALLED,
   });
 
   const buttons = await openChip();
@@ -1002,12 +1012,12 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
         installationUrl: "https://github.com/apps/luke/installations/new",
       },
     });
-  const unlisted = await mount(undefined, undefined, { read: listing });
+  const unlisted = await mount(undefined, undefined, { list: listing });
   await unlisted.key("Enter", { metaKey: true });
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 
-  const listed = await mount(undefined, { repository: "acme/api" }, { read: listing });
+  const listed = await mount(undefined, { repository: "acme/api" }, { list: listing });
   listed.type("Rate limits");
   await listed.key("Enter");
 
@@ -1027,7 +1037,7 @@ test("the repository menu names each repository first and its owner after it, so
   });
   const dialog = await mount(undefined, undefined, {
     recent: [],
-    read: () =>
+    list: () =>
       Promise.resolve({
         repositories: {
           installed: true,

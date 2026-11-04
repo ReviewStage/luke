@@ -1,7 +1,9 @@
+import type { GitHubRepositoriesAnswer } from "@repo/features/github-repositories-wire";
 import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -30,6 +32,7 @@ import { confirmFailure, unreadShown } from "../failure-report.js";
 import { SettingsPageLink } from "../open-settings.js";
 import { repositoryMenuRow } from "../repository-row.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 
 /**
@@ -140,6 +143,37 @@ type Candidates =
   | { readonly kind: "no-token" }
   | { readonly kind: "read"; readonly rows: readonly MenuRow[] };
 
+/** What the member's own token was found to be as the picker last opened: not asked yet, being asked, none saved, or one saved or not known. */
+const TOKEN_WORD = {
+  UNASKED: "unasked",
+  ASKING: "asking",
+  NONE: "none",
+  HELD: "held",
+} as const;
+
+type TokenWord = (typeof TOKEN_WORD)[keyof typeof TOKEN_WORD];
+
+/** What the picker offers, from the token as it was found and the workspace's repositories as the host holds them, less those already listed. */
+function candidatesOf(
+  token: TokenWord,
+  list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
+  listed: readonly { readonly fullName: string }[],
+): Candidates {
+  if (token === TOKEN_WORD.NONE) return { kind: "no-token" };
+  if (token === TOKEN_WORD.ASKING || token === TOKEN_WORD.UNASKED) return { kind: "reading" };
+  if (list.rows === undefined) {
+    return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
+  }
+  const added = new Set(listed.map((one) => one.fullName.toLowerCase()));
+  // A service older than `addable` lists the token's repositories among the picker's own.
+  const { addable, repositories } = list.rows;
+  const offered = addable ?? repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+  const rows = offered
+    .filter((one) => !added.has(one.fullName.toLowerCase()))
+    .map((one) => repositoryMenuRow(one.fullName, true));
+  return { kind: "read", rows };
+}
+
 /**
  * Add repository and its menu: the outline `Button`, and under it the
  * app's searched menu hung from it at a Settings picker's width.
@@ -154,36 +188,22 @@ export function AddTokenRepository({
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [candidates, setCandidates] = useState<Candidates>({ kind: "reading" });
+  // Note that the workspace's repositories are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`), and the token is asked as it opens.
+  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const [token, setToken] = useState<TokenWord>(TOKEN_WORD.UNASKED);
   const read = () => {
-    setCandidates({ kind: "reading" });
-    const added = new Set(repositories.listed.map((one) => one.fullName.toLowerCase()));
+    setToken(TOKEN_WORD.ASKING);
+    if (list.status === HOST_READ_STATUS.FAILED) list.retry();
     // Note that a token read that fails is taken for no word on the token, because the list alone says what the token may reach.
-    const noToken = act(ACT_KIND.GITHUB_TOKEN_READ).then(
-      (answer) => !("failure" in answer) && answer.token === null,
-      () => false,
-    );
-    Promise.all([act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }), noToken]).then(
-      ([answer, tokenless]) => {
-        if (tokenless) {
-          setCandidates({ kind: "no-token" });
-          return;
-        }
-        if ("failure" in answer) {
-          setCandidates({ kind: "failed" });
-          return;
-        }
-        // A service older than `addable` lists the token's repositories among the picker's own.
-        const { addable, repositories: listed } = answer.repositories;
-        const offered = addable ?? listed.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
-        const rows = offered
-          .filter((one) => !added.has(one.fullName.toLowerCase()))
-          .map((one) => repositoryMenuRow(one.fullName, true));
-        setCandidates({ kind: "read", rows });
-      },
-      () => setCandidates({ kind: "failed" }),
+    act(ACT_KIND.GITHUB_TOKEN_READ).then(
+      (answer) =>
+        setToken(
+          !("failure" in answer) && answer.token === null ? TOKEN_WORD.NONE : TOKEN_WORD.HELD,
+        ),
+      () => setToken(TOKEN_WORD.HELD),
     );
   };
+  const candidates = candidatesOf(token, list, repositories.listed);
   const rows = candidates.kind === "read" ? candidates.rows : [];
   const note = (close: () => void) =>
     candidates.kind === "reading" ? (

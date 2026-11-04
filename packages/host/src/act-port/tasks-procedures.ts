@@ -41,8 +41,7 @@ import {
   type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
-  type TasksIssueAnswer,
-  type TasksIssueParams,
+  type TasksLinkStandingParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -54,10 +53,7 @@ import {
   type TasksPictureParams,
   type TasksPinParams,
   type TasksPinRepositoryParams,
-  type TasksPullRequestAnswer,
-  type TasksPullRequestParams,
   type TasksRenameParams,
-  type TasksRepositoriesAnswer,
   type TasksRepositoriesParams,
   type TasksRevisionAnswer,
   type TasksRevisionParams,
@@ -76,8 +72,9 @@ import {
   type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@repo/features/tasks-view";
-import { Effect, MutableHashMap, Option, Stream } from "effect";
+import { Data, Effect, MutableHashMap, Option, Stream } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL, isWebAddress } from "../acts.js";
+import { EVERY_WORKSPACE } from "../app-state.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
@@ -94,7 +91,11 @@ export interface TasksProceduresDependencies {
     tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
     tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
-    tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
+    /** One workspace's repositories held at the host while any stream of them stands; what it holds reaches the panel on app state. */
+    tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+    tasksRepositoriesUnfollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+    /** One workspace's held repositories asked again at once, as Try again asks; done once the ask has landed. */
+    tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
     tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
     tasksMove(params: TasksMoveParams): Effect.Effect<TasksMoveAnswer>;
     tasksBlock(params: TasksBlockParams): Effect.Effect<TasksBlockAnswer>;
@@ -111,8 +112,9 @@ export interface TasksProceduresDependencies {
     tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
     tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
     tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
-    tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
-    tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+    /** One link's standing held at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
+    tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
     tasksBrowserTabOpen(
       params: TasksBrowserTabOpenParams,
     ): Effect.Effect<TasksBrowserTabOpenAnswer>;
@@ -168,6 +170,12 @@ function isServicePage(url: string, serviceBaseUrl: string): boolean {
   return URL.canParse(url) && new URL(url).origin === new URL(serviceBaseUrl).origin;
 }
 
+/** A link's standing as a key that equals another naming the same workspace and address. */
+class LinkStandingStreamKey extends Data.Class<{
+  readonly workspaceId: string;
+  readonly address: string;
+}> {}
+
 /**
  * The admin dashboard's page on the service's own origin, or nothing where
  * that origin is no http or https one, which the browser alone would open.
@@ -188,6 +196,10 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
   const { host, openExternal } = dependencies;
   /** How many streams stand open of each plan's pages, and each agent's on no task, by its id. */
   const openPages: OpenFollows<never> = MutableHashMap.empty();
+  /** Every workspace's repositories a window holds a stream open of, so the host lets them go only with the last. */
+  const openRepositories: OpenFollows<never> = MutableHashMap.empty();
+  /** Every link's standing a window holds a stream open of, so the host lets it go only with the last. */
+  const openLinks: OpenFollows<never, LinkStandingStreamKey> = MutableHashMap.empty();
   /** How many streams stand open of each agent's or task's Browser tabs, by its id, which never collide. */
   const openBrowserTabs: OpenFollows<never> = MutableHashMap.empty();
   /** How many streams stand open of each plan's comments, and each page's, by the task and the page. */
@@ -261,12 +273,30 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         return yield* host.tasksWriteSection(input);
       },
     ),
-    [TASKS_ACT_KIND.TASKS_REPOSITORIES]: actPort[TASKS_ACT_KIND.TASKS_REPOSITORIES].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.tasksRepositories(input);
-      },
-    ),
+    [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actPort[
+      TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held repositories reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (scope: TasksRepositoriesParams) => scope.workspaceId ?? EVERY_WORKSPACE,
+          follow: host.tasksRepositoriesFollow,
+          unfollow: host.tasksRepositoriesUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openRepositories,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]: actPort[
+      TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.tasksRepositoriesRetry(input);
+    }),
     [TASKS_ACT_KIND.TASKS_SET_REPOSITORY]: actPort[TASKS_ACT_KIND.TASKS_SET_REPOSITORY].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -429,26 +459,23 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksSkills(input);
     }),
-    // A service that did not answer is refused, so a link draws what it holds
-    // rather than reading the silence as no pull request.
-    [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: actPort[TASKS_ACT_KIND.TASKS_PULL_REQUEST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const answer = yield* host.tasksPullRequest(input);
-        if ("pullRequest" in answer) return answer.pullRequest;
-        return yield* Effect.fail(errors.REFUSED());
-      },
-    ),
-    // Likewise an issue: a service that did not answer is refused, never read as no issue.
-    [TASKS_ACT_KIND.TASKS_ISSUE]: actPort[TASKS_ACT_KIND.TASKS_ISSUE].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
+    [TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW]: actPort[
+      TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.tasksIssue(input);
-      if ("issue" in answer) return answer.issue;
-      return yield* Effect.fail(errors.REFUSED());
+      // Note that nothing is heard down the hold, since the held standing reaches the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (link: TasksLinkStandingParams) => new LinkStandingStreamKey(link),
+          follow: host.tasksLinkStandingFollow,
+          unfollow: host.tasksLinkStandingUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openLinks,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
     }),
     // A tab opened in an agent's browser answers why none opened as the panel's own answer, for its words.
     [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN].effect(

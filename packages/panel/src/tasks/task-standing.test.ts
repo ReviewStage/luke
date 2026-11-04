@@ -8,7 +8,6 @@ import {
   type TaskStanding,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
@@ -82,10 +81,9 @@ function drawn(
   return host;
 }
 
-/** A chooser whose read never lands, for a chip that only says. */
+/** A chooser whose list the host holds unread, for a chip that only says. */
 const UNREAD_CHOOSER: RepositoryChooser = {
   recent: [],
-  read: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
   openGitHub: () => undefined,
   pictures: false,
   manages: true,

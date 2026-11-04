@@ -12,6 +12,11 @@ import type {
   AutomationSummary,
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
+import type {
+  GitHubRepositoriesAnswer,
+  GitHubRepositoryIssueAnswer,
+  GitHubRepositoryPullRequestAnswer,
+} from "@repo/features/github-repositories-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -416,6 +421,20 @@ export type AppProviderKeyList = Pick<ProviderKeysAnswer, "keys" | "subscription
 /** The account's provider keys the windows hold, by the account, as the host's read of them stands. */
 export type AppProviderKeys = Readonly<Record<string, AppHostRead<AppProviderKeyList>>>;
 
+/** What GitHub holds of the page a link names, as the host last read it: its pull request or its issue, null where GitHub holds no such page. */
+export type AppLinkStanding = GitHubRepositoryPullRequestAnswer | GitHubRepositoryIssueAnswer;
+
+/** Each link's standing the windows hold, by the workspace it is read through and then the link's own address, as the host's read of it stands. */
+export type AppLinkStandings = Readonly<
+  Record<string, Readonly<Record<string, AppHostRead<AppLinkStanding>>>>
+>;
+
+/** Each workspace's repositories the windows hold, by the workspace, as the host's read of them stands. */
+export type AppRepositoryLists = Readonly<Record<string, AppHostRead<GitHubRepositoriesAnswer>>>;
+
+/** The key the repositories the account reaches in every workspace stand under, where a list names none; no workspace's id, which is a UUID. */
+export const EVERY_WORKSPACE = "every-workspace";
+
 /** No key held of a read keyed by one id, as the host stands before any window holds one and after the session ends. */
 export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
 
@@ -463,8 +482,10 @@ export interface AppHostReads {
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
+  [LIVE_READ.LINK_STANDINGS]: AppLinkStanding;
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
+  [LIVE_READ.REPOSITORY_LISTS]: GitHubRepositoriesAnswer;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
@@ -567,10 +588,14 @@ export interface AppState {
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
   [LIVE_READ.INTEGRATION_TOOLS]: AppIntegrationTools;
+  /** Each link's standing the windows' chips chose, held while a chip draws it and a while after. */
+  [LIVE_READ.LINK_STANDINGS]: AppLinkStandings;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
   [LIVE_READ.PAGES]: AppPages;
   /** The account's own provider keys, held while a window draws them: what Settings › Agents and Call and Dictate read. */
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeys;
+  /** Each workspace's repositories the windows chose, held while a repository chip or picker stands and a while after. */
+  [LIVE_READ.REPOSITORY_LISTS]: AppRepositoryLists;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   /** Each task's or agent's cloud Browser tabs the windows' side panels list, held while one lists them and a while after: what the side panel's Browser tabs draw. Never written to disk. */
@@ -708,6 +733,8 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.LINK_STANDINGS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.REPOSITORY_LISTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PLAN_COMMENTS]: {
     keys: READ_KEYS.TWO,

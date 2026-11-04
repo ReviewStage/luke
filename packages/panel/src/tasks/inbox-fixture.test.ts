@@ -23,6 +23,7 @@ import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, refusedOnPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { appStateFirstRead } from "../use-app-state.js";
+import { fixtureAppState as tasksAppState } from "./tasks-fixture.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js";
 
 /**
@@ -173,17 +174,19 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
   }),
 );
 
-it.effect("any other profile leaves main's document as it is, and stages no Inbox", () =>
-  Effect.gen(function* () {
-    yield* standFixtureRun(RUN_PROFILE.TASKS);
-    const fixture = loadedTasksFixture();
-    assert.ok(fixture);
-    const tasks = fixtureRun(RUN_PROFILE.TASKS);
+it.effect(
+  "any other profile lays nothing over the tasks fixture's own document, and stages no Inbox",
+  () =>
+    Effect.gen(function* () {
+      yield* standFixtureRun(RUN_PROFILE.TASKS);
+      const fixture = loadedTasksFixture();
+      assert.ok(fixture);
+      const tasks = fixtureRun(RUN_PROFILE.TASKS);
 
-    assert.equal(fixture.fixtureAppState(tasks), tasks);
-    assert.equal(
-      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
-      undefined,
-    );
-  }),
+      assert.deepEqual(fixture.fixtureAppState(tasks), tasksAppState(tasks));
+      assert.equal(
+        fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
+        undefined,
+      );
+    }),
 );

@@ -20,8 +20,6 @@ import {
   type AdminReadAnswer,
 } from "@repo/features/admin-wire";
 import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
-import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
-import { ISSUE_STATE } from "@repo/features/github-repositories-wire";
 import { pagePlaceId } from "@repo/features/page-wire";
 import { PICTURE_TYPE } from "@repo/features/picture-wire";
 import {
@@ -78,7 +76,8 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_PIN]: "Could not pin that task on this system.",
   [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: "Could not pin that repository on this system.",
   [TASKS_ACT_KIND.TASKS_WRITE_SECTION]: "Could not change that section on this system.",
-  [TASKS_ACT_KIND.TASKS_REPOSITORIES]: "Could not read your GitHub repositories on this system.",
+  [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]:
+    "Could not read your GitHub repositories again on this system.",
   [TASKS_ACT_KIND.TASKS_SET_REPOSITORY]: "Could not change that task's repository on this system.",
   [TASKS_ACT_KIND.TASKS_MOVE]: "Could not move that task on this system.",
   [TASKS_ACT_KIND.TASKS_EDIT]: "Could not save that edit on this system.",
@@ -93,8 +92,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_FILE]: "Could not read that file on this system.",
   [TASKS_ACT_KIND.TASKS_TREE]: "Could not list that folder on this system.",
   [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
-  [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
-  [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]:
     "Could not open a tab in that agent's browser on this system.",
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: "Could not color that code on this system.",
@@ -140,23 +137,6 @@ const COMMENT_ACT = {
   threadId: THREAD_ID,
   action: { action: PLAN_COMMENT_ACTION.RESOLVE },
 };
-
-/** The one pull request the fake host's service holds; it holds none numbered `PULL_REQUEST_NONE`, and answers nothing for any other number. */
-const PULL_REQUEST = {
-  number: 42,
-  title: "Send invitations in batches",
-  url: "https://github.com/acme/relay/pull/42",
-  state: PULL_REQUEST_STATE.OPEN,
-};
-const PULL_REQUEST_NONE = 43;
-/** The one issue the fake host's service holds; it holds none numbered `ISSUE_NONE`, and answers nothing for any other number. */
-const ISSUE = {
-  number: 7,
-  title: "Invitations expire too soon",
-  url: "https://github.com/acme/relay/issues/7",
-  state: ISSUE_STATE.CLOSED,
-};
-const ISSUE_NONE = 8;
 
 /** One Browser tab in a coding agent's browser on the task. */
 const BROWSER_TAB = {
@@ -205,7 +185,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
     kind: TASKS_ACT_KIND.TASKS_WRITE_SECTION,
     payload: { writes: [{ kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null }] },
   },
-  { kind: TASKS_ACT_KIND.TASKS_REPOSITORIES, payload: { workspaceId: "workspace-acme" } },
+  { kind: TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY, payload: { workspaceId: "workspace-acme" } },
   { kind: TASKS_ACT_KIND.TASKS_SET_REPOSITORY, payload: { ...TASK, repository: "acme/relay" } },
   { kind: TASKS_ACT_KIND.TASKS_MOVE, payload: { ...TASK, workspaceId: "workspace-relay" } },
   { kind: TASKS_ACT_KIND.TASKS_EDIT, payload: EDIT },
@@ -223,8 +203,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   },
   { kind: TASKS_ACT_KIND.TASKS_TREE, payload: { ...PLAN, path: "src" } },
   { kind: TASKS_ACT_KIND.TASKS_SKILLS, payload: PLAN },
-  { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
-  { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
   { kind: TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, payload: BROWSER_TAB_OPEN },
   { kind: TASKS_ACT_KIND.TASKS_COLOR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
@@ -303,10 +281,11 @@ function windowPort(
         // A key no start answer names, carried on purpose to show the port drops it.
         script.startExtra ? Object.assign({ extra: true }, script.start) : script.start,
       ),
-    tasksRepositories: (params) =>
-      ask(`repositories:${params.workspaceId}`, () => ({
-        failure: TASK_CALL_FAILURE.UNANSWERED,
-      })),
+    tasksRepositoriesFollow: (params) => ask(`repositories:${params.workspaceId}`, () => undefined),
+    tasksRepositoriesUnfollow: (params) =>
+      ask(`repositories-let-go:${params.workspaceId}`, () => undefined),
+    tasksRepositoriesRetry: (params) =>
+      ask(`repositories-retry:${params.workspaceId}`, () => undefined),
     tasksSetRepository: (params) =>
       ask(`repository:${params.taskId}:${params.repository}`, () => ({
         repository: params.repository,
@@ -369,18 +348,8 @@ function windowPort(
         `skills:${"planId" in params ? params.planId : params.repository}`,
         () => ({ refusal: TASK_FILE_REFUSAL.NO_REPOSITORY }) as const,
       ),
-    tasksPullRequest: (params) =>
-      ask(`pullRequest:${params.repository}:${params.number}`, () => {
-        if (params.number === PULL_REQUEST.number) return { pullRequest: PULL_REQUEST };
-        if (params.number === PULL_REQUEST_NONE) return { pullRequest: null };
-        return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
-      }),
-    tasksIssue: (params) =>
-      ask(`issue:${params.repository}:${params.number}`, () => {
-        if (params.number === ISSUE.number) return { issue: ISSUE };
-        if (params.number === ISSUE_NONE) return { issue: null };
-        return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
-      }),
+    tasksLinkStandingFollow: (params) => ask(`link:${params.address}`, () => undefined),
+    tasksLinkStandingUnfollow: (params) => ask(`link-let-go:${params.address}`, () => undefined),
     tasksBrowserTabOpen: (params) =>
       ask(`browserTabOpen:${params.agentId}`, () =>
         params.agentId === AGENT_UNREACHABLE
@@ -518,8 +487,8 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     { answer: true },
   );
   assert.deepEqual(
-    await ask(TASKS_ACT_KIND.TASKS_REPOSITORIES, { workspaceId: "workspace-acme" }),
-    { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } },
+    await ask(TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY, { workspaceId: "workspace-acme" }),
+    { answer: undefined },
   );
   assert.deepEqual(
     await ask(TASKS_ACT_KIND.TASKS_SET_REPOSITORY, { ...TASK, repository: "acme/relay" }),
@@ -540,7 +509,7 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     `pin:${TASK_ID}:true`,
     "pin-repository:acme/relay:false",
     `section:${TASK_SECTION_WRITE.PLACE}`,
-    "repositories:workspace-acme",
+    "repositories-retry:workspace-acme",
     `repository:${TASK_ID}:acme/relay`,
     `move:${TASK_ID}:workspace-relay`,
     `edit:${TASK_ID}:Invites expire.`,
@@ -866,35 +835,6 @@ it("a plan's comments are read again and acted on through the host from a panel"
     answer: { deleted: THREAD_ID },
   });
   assert.deepEqual(asked, [`comments-retry:${TASK_ID}`, `act:${THREAD_ID}:resolve`]);
-});
-
-it("a pull request is answered to a panel as the host read it, or as none, and a service that did not answer is refused in its kind's own words", async () => {
-  const { client, asked } = windowPort(PANEL);
-  const ask = (number: number) =>
-    settled(client, TASKS_ACT_KIND.TASKS_PULL_REQUEST, { ...PLACE, number });
-
-  assert.deepEqual(await ask(PULL_REQUEST.number), { answer: PULL_REQUEST });
-  assert.deepEqual(await ask(PULL_REQUEST_NONE), { answer: null });
-  assert.deepEqual(await ask(44), { refused: REFUSAL[TASKS_ACT_KIND.TASKS_PULL_REQUEST] });
-  assert.deepEqual(asked, [
-    `pullRequest:acme/relay:${PULL_REQUEST.number}`,
-    `pullRequest:acme/relay:${PULL_REQUEST_NONE}`,
-    "pullRequest:acme/relay:44",
-  ]);
-});
-
-it("an issue is answered to a panel as the host read it, or as none, and a service that did not answer is refused in its kind's own words", async () => {
-  const { client, asked } = windowPort(PANEL);
-  const ask = (number: number) => settled(client, TASKS_ACT_KIND.TASKS_ISSUE, { ...PLACE, number });
-
-  assert.deepEqual(await ask(ISSUE.number), { answer: ISSUE });
-  assert.deepEqual(await ask(ISSUE_NONE), { answer: null });
-  assert.deepEqual(await ask(9), { refused: REFUSAL[TASKS_ACT_KIND.TASKS_ISSUE] });
-  assert.deepEqual(asked, [
-    `issue:acme/relay:${ISSUE.number}`,
-    `issue:acme/relay:${ISSUE_NONE}`,
-    "issue:acme/relay:9",
-  ]);
 });
 
 it("a tab opened in an agent's browser is answered to a panel as the host read it, why none opened among it, for the panel's words", async () => {

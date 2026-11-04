@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_PORT_CHANNEL,
@@ -9,7 +10,7 @@ import {
 } from "@repo/features/terminal-acts";
 import { TERMINAL_RELAY } from "@repo/features/terminal-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { RUN_PROFILE } from "@repo/host/app-state";
+import { EVERY_WORKSPACE, RUN_PROFILE } from "@repo/host/app-state";
 import { askAct } from "@repo/panel/act";
 import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { HOST_CAPABILITY, THEME } from "@repo/settings";
@@ -119,16 +120,24 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
   ),
 );
 
-it.effect("a task act rides the tab's act port to the service and back", () =>
+it.effect("a task read the tab holds is read from the service into the tab's state", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
       installAppBridge(bridge);
       installActPort(actPort);
 
-      const listed = yield* Effect.promise(() => askAct(ACT_KIND.TASKS_REPOSITORIES, {}));
+      yield* Effect.promise(() => askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, {}));
 
-      assert.deepEqual(listed, { repositories: GITHUB_REPOSITORIES });
+      yield* Effect.promise(() =>
+        vi.waitFor(async () => {
+          const state = await bridge.requestAppState();
+          assert.deepEqual(
+            state[LIVE_READ.REPOSITORY_LISTS][EVERY_WORKSPACE]?.rows,
+            GITHUB_REPOSITORIES,
+          );
+        }),
+      );
     }),
   ),
 );

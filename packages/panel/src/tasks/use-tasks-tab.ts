@@ -2289,13 +2289,6 @@ export function useTasksTab(input: {
             );
       return {
         recent: recentRepositories(offered),
-        read: () =>
-          tasksFixture !== undefined && fixture !== undefined
-            ? Promise.resolve(tasksFixture.fixtureRepositories(workspaceId))
-            : act(
-                ACT_KIND.TASKS_REPOSITORIES,
-                workspaceId === undefined ? {} : { workspaceId },
-              ).catch(() => ({ failure: TASK_CALL_FAILURE.UNANSWERED })),
         openGitHub,
         pictures: fixture === undefined,
         scope: workspaceId,
@@ -2304,7 +2297,7 @@ export function useTasksTab(input: {
         ...(workspace?.github == null ? undefined : { connected: true }),
       };
     },
-    [viewed.workspaces, tasks.tasks, tasksFixture, fixture, act, openGitHub],
+    [viewed.workspaces, tasks.tasks, fixture, openGitHub],
   );
   // The open task's chip, or New task's, made again only as what it lists from moves.
   const repositories = useMemo(

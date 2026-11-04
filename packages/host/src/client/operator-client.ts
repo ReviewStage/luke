@@ -96,11 +96,17 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onIntegrationToolsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
       }),
+      gateway.host.onLinkStandingsChanged((held) => {
+        state.update({ [LIVE_READ.LINK_STANDINGS]: held });
+      }),
       gateway.host.onPagesChanged((held) => {
         state.update({ [LIVE_READ.PAGES]: held });
       }),
       gateway.host.onProviderKeysChanged((held) => {
         state.update({ [LIVE_READ.PROVIDER_KEYS]: held });
+      }),
+      gateway.host.onRepositoryListsChanged((held) => {
+        state.update({ [LIVE_READ.REPOSITORY_LISTS]: held });
       }),
       gateway.host.onChaptersChanged((held) => {
         state.update({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: held });

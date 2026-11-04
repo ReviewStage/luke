@@ -10,6 +10,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@repo/features/inbox-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
@@ -268,6 +269,8 @@ test("a new account with an agent is greeted as new on Home itself, over New tas
 });
 
 test("a new account without an agent is asked to finish setting up above the composer", async () => {
+  // The host's read of the workspace's repositories did not answer.
+  handState({}, { [LIVE_READ.REPOSITORY_LISTS]: { [ACME.id]: { failed: true } } });
   const { page } = mount(newAccount(true), []);
   await settle();
   const setup = page.querySelector("[aria-label='Finish setting up']");

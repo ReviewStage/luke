@@ -13,13 +13,11 @@
   "packages/panel/src/settings/hosts-section.tsx": "P18: hosts",
   "packages/panel/src/settings/memory-page.tsx": "P16: Memory",
   "packages/panel/src/settings/skills-page.tsx": "P17: Skills",
-  "packages/panel/src/settings/slack-bot-channels.tsx": "P19: repositories",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
-  "packages/panel/src/settings/workspace-token-repositories.tsx": "P18, P19: GitHub token set, token repositories, repositories",
+  "packages/panel/src/settings/workspace-token-repositories.tsx": "P18: GitHub token set, token repositories",
   "packages/panel/src/tasks/task-mentions.tsx": "P18: agents for mentions",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default",
-  "packages/panel/src/tasks/use-link-standing.ts": "P19: a link chip's standing",
-  "packages/panel/src/tasks/use-tasks-tab.ts": "P11, P19: version history, repositories",
+  "packages/panel/src/tasks/use-tasks-tab.ts": "P11: version history",
   "packages/panel/src/tasks/use-workspace-members.ts": "P7: member directory"
 }

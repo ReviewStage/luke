@@ -1,10 +1,12 @@
 import type { GitHubRepository } from "@repo/features";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@repo/features/tasks-view";
-import { countWords, orList, REFRESH_FAILED_WORDS, readingWords } from "@repo/features/words";
+import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import { countWords, orList, readingWords } from "@repo/features/words";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { EVERY_WORKSPACE } from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import {
   AVATAR_SIZE,
@@ -31,11 +33,12 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import { repositoryFailureNote } from "@repo/ui/tasks-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { failureShown } from "../failure-report.js";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useWorkspaceMembers } from "./use-workspace-members.js";
 
 /**
@@ -62,9 +65,10 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
  * the menu says which in the list's place: an owner or an admin is offered
  * Open Settings at the workspace's GitHub repositories, the one place they
  * are set, and a member is told which owners and admins, by name, to ask;
- * the same holds where GitHub is installed and reaches no repository. The list is read from the service when the chip mounts and again
- * whenever the window takes focus, so a developer back from connecting
- * GitHub in the browser sees the change on the next opening; nothing polls. The menu
+ * the same holds where GitHub is installed and reaches no repository. The list is held by the host while the chip stands, drawn at once from its
+ * last answer, and asked again whenever a window comes forward, so a
+ * developer back from connecting GitHub in the browser sees the change on
+ * the next opening; nothing polls. The menu
  * is placed as a Settings picker's is, below the chip or above it where the
  * window leaves more room there, its list capped to that room. It
  * closes on a choice, on Escape, and on focus leaving it; Escape stops
@@ -75,13 +79,11 @@ import { useWorkspaceMembers } from "./use-workspace-members.js";
 export interface RepositoryChooser {
   /** The repositories the account's tasks were about lately, the newest first, each once. */
   recent: readonly string[];
-  /** Reads the repositories the account reaches now, as the service answers them. */
-  read: () => Promise<TasksRepositoriesAnswer>;
   /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
   pictures: boolean;
-  /** The workspace the list is for, where one is chosen; a chip keyed by it reads afresh when it changes. */
+  /** The workspace the list is for, where one is chosen, whose repositories the host holds for the chip (`LIVE_READ.REPOSITORY_LISTS`); every workspace's where none is. */
   scope?: string | undefined;
   /** Whether the account manages that workspace, so can connect its GitHub; a member is told to ask. */
   manages: boolean;
@@ -228,12 +230,6 @@ function repositoryRows(
   return names.map((fullName) => repositoryMenuRow(fullName, pictures, onToken.has(fullName)));
 }
 
-/** What a read that listed answers: the repositories, and whether the App is installed. */
-type ListedRepositories = Extract<
-  TasksRepositoriesAnswer,
-  { repositories: unknown }
->["repositories"];
-
 /** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
 interface RepositoryMenuProps {
   /** The repository named now, `owner/name`, or null while none is. */
@@ -281,37 +277,12 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const openSettings = useOpenSettings();
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
-  const [list, setList] = useState<TasksRepositoriesAnswer | undefined>(undefined);
-  // The last read that listed, kept while a later one fails, so the rows stand and a line says the refresh did not land.
-  const [lastListed, setLastListed] = useState<ListedRepositories | undefined>(undefined);
+  // Note that the host asks the list again as a window comes forward, which is how a developer returns from installing the App in the browser.
+  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, chooser.scope ?? EVERY_WORKSPACE);
   const menuId = useId();
   const room = useRef<HTMLDivElement>(null);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
-  // Note that the chooser is read through a ref, because the tab hands a
-  // new one on every render and a read is owed to the window's focus, not
-  // to a render.
-  const latest = useRef(chooser);
-  latest.current = chooser;
-
-  const read = useCallback(() => {
-    const settle = (answer: TasksRepositoriesAnswer) => {
-      setList(answer);
-      if ("repositories" in answer) setLastListed(answer.repositories);
-    };
-    latest.current.read().then(settle, () => {
-      settle({ failure: TASK_CALL_FAILURE.UNANSWERED });
-    });
-  }, []);
-
-  // The list is read on arrival and whenever the window comes back, which
-  // is how a developer returns from installing the App in the browser.
-  useEffect(() => {
-    read();
-    window.addEventListener("focus", read);
-    return () => window.removeEventListener("focus", read);
-  }, [read]);
-
   // Each ask from elsewhere, ⌘K's Change repository, opens the menu once, and is answered.
   const answered = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -334,8 +305,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     pick();
   };
 
-  const listed = lastListed;
-  const failure = list !== undefined && "failure" in list ? list.failure : undefined;
+  const listed = list.rows;
+  const failure =
+    list.status === HOST_READ_STATUS.FAILED ? TASK_CALL_FAILURE.UNANSWERED : undefined;
   // A pick the read does not list is handed back, so nothing out of reach stands chosen.
   const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
   useEffect(() => {
@@ -383,9 +355,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     failure !== undefined ? (
       <ErrorState
         failure={failureShown({ surface: FAILURE_SURFACE.REPOSITORIES_READ, cause: failure })}
-        onRetry={read}
+        onRetry={list.retry}
       >
-        {listed === undefined ? repositoryFailureNote(failure) : REFRESH_FAILED_WORDS}
+        {repositoryFailureNote(failure)}
       </ErrorState>
     ) : listed !== undefined && !listed.installed && listed.repositories.length === 0 ? (
       // Only an owner or an admin can connect the workspace's GitHub, so a member is shown whom to ask.
@@ -394,7 +366,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         chooser.connected === true ? OWNER_ASK.RECONNECT : OWNER_ASK.CONNECT,
         chooser.connected === true ? undefined : chooser.workspaceName,
       )
-    ) : list === undefined ? (
+    ) : listed === undefined ? (
       <Spinner delay label={readingWords("repositories")} />
     ) : rows.length === 0 && listed?.installed ? (
       // Installed but giving us nothing: the repositories are chosen on GitHub, through the workspace's row.

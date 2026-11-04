@@ -335,6 +335,8 @@ export interface AgentsDependencies {
    * servers is drawn over (`task-list-collections.ts`).
    */
   pool: EntityPool;
+  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
+  repositoriesMoved?: Effect.Effect<void>;
 }
 
 export interface AgentsComposer extends Composer {
@@ -906,6 +908,13 @@ function composed(
         : keys.answered(userId, keyListOf(answer));
     });
 
+  /** A token's write answered whole to the window that asked, the repositories every list holds asked again where the service took it, since what the token reaches moved. */
+  const tokenWritten = (answer: GitHubTokenAnswerView) =>
+    Effect.as(
+      "failure" in answer ? Effect.void : (dependencies.repositoriesMoved ?? Effect.void),
+      carried<GitHubTokenAnswerView>(answer),
+    );
+
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
       Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
@@ -1031,13 +1040,10 @@ function composed(
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a token.
         const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
-        const answer = yield* asked(client.saveGitHubToken(save));
-        return carried<GitHubTokenAnswerView>(answer);
+        return yield* tokenWritten(yield* asked(client.saveGitHubToken(save)));
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
-      Effect.map(asked(client.removeGitHubToken()), (answer) =>
-        carried<GitHubTokenAnswerView>(answer),
-      ),
+      Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
     [GATEWAY_METHOD.AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(

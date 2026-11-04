@@ -32,8 +32,20 @@ export const GATEWAY_METHOD = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repositories the account reaches through our GitHub App, read from the service now. */
-  TASKS_REPOSITORIES: "tasks.repositories",
+  /**
+   * The repositories the account reaches in one workspace, or in every one
+   * where the params name none, held for a window from now until it is let
+   * go, asked of the service at once and again as a window comes forward, as
+   * the workspace's installations move, and as a token or a token repository
+   * changes, and a while after among the reads let go lately. What it holds is
+   * heard as `REPOSITORY_LISTS_CHANGED` events, on the app state every window
+   * draws, never answered.
+   */
+  TASKS_REPOSITORIES_FOLLOW: "tasks.repositoriesFollow",
+  /** One workspace's repositories let go by the window that held them. */
+  TASKS_REPOSITORIES_UNFOLLOW: "tasks.repositoriesUnfollow",
+  /** One workspace's held repositories asked again at once, as Try again asks; answered once the ask has landed. */
+  TASKS_REPOSITORIES_RETRY: "tasks.repositoriesRetry",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
@@ -54,10 +66,17 @@ export const GATEWAY_METHOD = {
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of one task's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_SKILLS: "tasks.skills",
-  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_PULL_REQUEST: "tasks.pullRequest",
-  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_ISSUE: "tasks.issue",
+  /**
+   * What GitHub holds of the pull request or issue a link names, through a
+   * workspace's installation, held for a window from now until it is let go
+   * and asked again as a window comes forward, no oftener than the host keeps
+   * a link's read, and a while after among the reads let go lately. What it
+   * holds is heard as `LINK_STANDINGS_CHANGED` events, on the app state every
+   * window draws, never answered.
+   */
+  TASKS_LINK_STANDING_FOLLOW: "tasks.linkStandingFollow",
+  /** One link's standing let go by the window that held it. */
+  TASKS_LINK_STANDING_UNFOLLOW: "tasks.linkStandingUnfollow",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
@@ -624,6 +643,8 @@ export const GATEWAY_EVENT = {
   AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
+  /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  LINK_STANDINGS_CHANGED: "linkStandings.changed",
   /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   CHAPTERS_CHANGED: "chapters.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
@@ -642,6 +663,8 @@ export const GATEWAY_EVENT = {
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
+  /** Every workspace's repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  REPOSITORY_LISTS_CHANGED: "repositoryLists.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

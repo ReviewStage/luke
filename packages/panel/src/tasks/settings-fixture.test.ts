@@ -21,6 +21,7 @@ import {
 import { Result, Schema } from "effect";
 import { test } from "vitest";
 import { stateWith } from "../testing/app-state.js";
+import { settingsAppState } from "./settings-fixture.js";
 import { fixtureActAnswer, fixtureAppState } from "./tasks-fixture.js";
 
 /**
@@ -196,7 +197,7 @@ test("a signed-in profile lays the synthetic account, an admin, over main's sign
   assert.equal(staged.account.status, "signed-in");
   assert.equal(staged.access.admin, true);
   assert.equal(staged.settings?.experiments.memory, true);
-  assert.equal(fixtureAppState(tasks), tasks);
+  assert.equal(settingsAppState(RUN_PROFILE.TASKS, tasks), tasks);
 });
 
 test("a profile that stages no account answers none of its pages' reads itself", () => {
