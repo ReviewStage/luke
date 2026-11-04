@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_SOURCE,
   AGENT_STATUS,
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
@@ -526,8 +527,12 @@ function sharedOnRow(agent: TasklessAgent): string[] {
     .map((each) => each.label);
 }
 
-test("every action an agent's tab and page offer stands in its row's right-click unless NOT_ON_A_ROW names it, at rest and archived", () => {
-  for (const agent of [RUN, { ...RUN, archivedAt: 3 }]) {
+test("every action an agent's tab and page offer stands in its row's right-click unless NOT_ON_A_ROW names it, at rest, archived, and started from Slack", () => {
+  const fromSlack: TasklessAgent = {
+    ...RUN,
+    source: { kind: AGENT_SOURCE.SLACK, url: "https://acme.slack.com/archives/C1/p1" },
+  };
+  for (const agent of [RUN, { ...RUN, archivedAt: 3 }, fromSlack]) {
     const shared = sharedOnRow(agent);
     const row = mount(agent);
     const labels = rightClick(row).map((each) => wordsOf(each));
