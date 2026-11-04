@@ -372,7 +372,7 @@ Members and agents leave comment threads on a plan's text, each beside the words
     olderLinks: " and `<scheme>://folder/<path>/`",
     comments: "",
     status: "",
-    startAgent: ` You work on no task, so leave its taskId out to start it on a new task made for it from its prompt, in the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
+    startAgent: ` You work on no task, so leave its taskId out to start it on a new task made for it, in the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
   },
 } as const;
 

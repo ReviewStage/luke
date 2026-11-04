@@ -117,7 +117,6 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
-import { taskNameOfWords } from "../tasks/words-task-name.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
@@ -859,10 +858,10 @@ export const START_AGENT_TOOL = {
     "branch, pull request, and transcript stand under that task; name another task only for " +
     "work unrelated to it, or where the developer asked for that, and for work that should " +
     `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first. Where you work ` +
-    "on no task, taskId left out starts it on a new task made for it, named from its prompt, " +
+    "on no task, taskId left out starts it on a new task made for it, named as its agent is, " +
     "assigned to the member you work for, in the repository you work in or the one repository " +
-    "names, and done by itself once its agents finish well; it needs a prompt, which is that " +
-    "task's plan. " +
+    "names, and done by itself once its agents finish well; it needs a prompt, since that task " +
+    "has no plan to hand it. " +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -1755,10 +1754,11 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 }
 
 /**
- * The task made for the agent a caller on no task starts: named for the
- * prompt's first line, assigned to the
- * member the caller works for, in the repository named or the caller's
- * own, or none, in progress, its plan the prompt, marked as made by
+ * The task made for the agent a caller on no task starts: untitled, so the
+ * agent's title names it as it names any untitled task (`title.ts`),
+ * assigned to the member the caller works for, in the repository named or
+ * the caller's own, or none, in progress, and with a blank plan, since the
+ * prompt is handed to the agent as its first message; marked as made by
  * `start_agent` so it finishes once its agents finished well, with no merge
  * asked (`task-finish.ts`). Note that it is made under an id drawn from the
  * call's key, as the agent is keyed by it, because a call run again must
@@ -1768,7 +1768,6 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 const startTaskOf = (
   call: AgentCall,
   repository: string | null,
-  prompt: string,
 ): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const { caller } = call;
@@ -1781,7 +1780,6 @@ const startTaskOf = (
     yield* createTaskOnce(userId, {
       id,
       organizationId: workspace.value,
-      name: taskNameOfWords(prompt),
       repository,
       status: TASK_STATUS.IN_PROGRESS,
       assigneeId: userId,
@@ -1789,7 +1787,7 @@ const startTaskOf = (
         ? undefined
         : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
       madeByStart: true,
-      text: prompt,
+      text: "",
     });
     return id;
   }).pipe(Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)));
@@ -1904,8 +1902,7 @@ export function runStartAgent(
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
       // Note that the task is made only once the call's input is read whole, so a call refused for it makes none.
-      const made =
-        fresh && prompt !== undefined ? yield* startTaskOf(call, repository, prompt) : undefined;
+      const made = fresh ? yield* startTaskOf(call, repository) : undefined;
       const onTask = taskId ?? made;
       const place: StartWhere | undefined =
         landing?.success.place ?? (onTask === undefined ? undefined : { taskId: onTask });

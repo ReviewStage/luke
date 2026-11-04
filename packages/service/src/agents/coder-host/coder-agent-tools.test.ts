@@ -97,6 +97,7 @@ import {
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
+  UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@repo/wire";
@@ -1899,9 +1900,9 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   );
   assert.equal(eve.sent.length, 1, "a task of another workspace starts nothing");
 
-  // An agent on no task starts one on a task made for it, named for its prompt's first line, assigned
-  // to the member it works for, in progress with the prompt as its plan, in its own repository, or in
-  // none where it names none, and on a task it names only where it names one. A run's agent starts one
+  // An agent on no task starts one on a task made for it, untitled for its agent's title to name,
+  // assigned to the member it works for, in progress with a blank plan, the prompt handed to the agent
+  // alone, in its own repository, or in none where it names none, and on a task it names only where it names one. A run's agent starts one
   // on a task made for it that belongs to its run, and one on a named task that the task alone owns.
   const {
     runIds: [run = "", later = ""],
@@ -1914,33 +1915,32 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     const made = Option.getOrThrow(await database.run(readAgent(caller.userId, answer.agent.id)));
     return [made.taskId, made.organizationId, made.repository, made.automationRunId];
   };
+  const prompt = "Sweep the stale invitations.\nThen say what you swept.";
   const madeFor = async (answer: WireRecord) => {
     const [taskId, ...rest] = await placeOf(answer);
     assert.ok(isWireString(taskId), "a helper of an agent on no task lands on a task");
+    assert.ok(isRecord(answer.agent) && isWireString(answer.agent.id));
+    const helper = Option.getOrThrow(await database.run(readAgent(caller.userId, answer.agent.id)));
+    assert.ok(helper.prompt?.includes(prompt), "the prompt is handed to the agent");
     const stored = Option.getOrThrow(await database.run(readTask(caller.userId, taskId)));
     const { name, status, repository, assignee } = stored.task;
     return [name, assignee?.userId, status, repository, stored.text, ...rest];
   };
-  const prompt = "sweep the stale invitations.\nThen say what you swept.";
   assert.deepEqual(
     await madeFor(await fromNoTask(CODER_TOOL.START_AGENT, { prompt }, "call-none")),
     [
-      "Sweep the stale invitations.",
+      UNTITLED_TASK_NAME,
       caller.userId,
       TASK_STATUS.IN_PROGRESS,
       RELAY_FULL_NAME,
-      prompt,
+      "",
       workspaceId,
       RELAY_FULL_NAME,
       run,
     ],
   );
   const bare = await madeFor(
-    await fromNoTask(
-      CODER_TOOL.START_AGENT,
-      { prompt: "Talk the release through.", repository: null },
-      "call-bare",
-    ),
+    await fromNoTask(CODER_TOOL.START_AGENT, { prompt, repository: null }, "call-bare"),
   );
   assert.deepEqual([bare[3], bare.at(-2)], [null, null]);
   assert.deepEqual(

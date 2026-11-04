@@ -879,9 +879,9 @@ const MEMBER_START_AGENT_TOOL = memberMcpTool({
     "Start a new coding agent as the member, exactly as their own Start would: on a task " +
     "they can open by its taskId, on the task's plan itself with no prompt, or on the prompt " +
     "given in the plan's place, with the note after either; or on a new task made for it in " +
-    "the workspace named, named from its prompt, assigned to the member, in the repository " +
+    "the workspace named, named as its agent is, assigned to the member, in the repository " +
     "named or none, and done by itself once its agents finish well, where it needs a prompt, " +
-    "which is that task's plan. This one call carries everything the agent is told as it starts, and the " +
+    "since that task has no plan to hand it. This one call carries everything the agent is told as it starts, and the " +
     "agent sets to work on it at once. Its checkout is the repository's default branch, or " +
     "the branch named, which must already be on GitHub. It runs on the model and effort " +
     "named, as the member is offered them, or on the member's default with neither; " +
