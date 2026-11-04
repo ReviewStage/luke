@@ -6,9 +6,9 @@
  * plan's head once kept every earlier task's title. React says so only
  * through `console.error`, which fails nothing, and a key may cross a
  * component's edge (a slot such as `PlanBody`'s `head`) where no lint can
- * follow it. The `vitest.config.ts` of the panel and of `@repo/ui` run this
- * before each of their files, by a relative path since vitest resolves a
- * setup file by path: it records React's message as it is printed and fails
+ * follow it. The `vitest.config.ts` of every React suite (the panel, `@repo/ui`,
+ * and the web, catalog, and desktop apps) runs this before each of its files,
+ * by a relative path since vitest resolves a setup file by path: it records React's message as it is printed and fails
  * the test that printed it from its `afterEach`, which runs after the file's
  * own, and the file from its `afterAll` for one printed after its last test.
  *

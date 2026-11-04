@@ -729,16 +729,18 @@ test("two sections titled alike are two items in Move to section, on one task's 
   );
 
   for (const name of [INVITES.name, RETRIES.name]) {
-    const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
-      (each) => each.textContent?.includes(name),
-    );
+    const row =
+      [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find((each) =>
+        each.textContent?.includes(name),
+      ) ?? assert.fail(`no ${name} row`);
     act(() => {
-      row?.dispatchEvent(
+      row.dispatchEvent(
         new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
       );
     });
   }
   openRowMenu(sidebar, RETRIES.name);
+  assert.equal(document.querySelector(".ui-menu-heading")?.textContent, "2 tasks");
   act(() => item("Move to section").click());
   assert.deepEqual(
     menuLabels().filter((label) => label === "Launch"),
