@@ -567,7 +567,7 @@ test("the mouse passing slowly over another submenu's item on its way into a sub
   });
   act(() => {
     crossing.dispatchEvent(
-      new MouseEvent("mousemove", { bubbles: true, movementX: 6, clientX: 206, clientY: 39 }),
+      new MouseEvent("mousemove", { bubbles: true, movementX: 3, clientX: 203, clientY: 39 }),
     );
     vi.advanceTimersByTime(60);
   });
