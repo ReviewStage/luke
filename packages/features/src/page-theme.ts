@@ -18,12 +18,12 @@ import { Schema as EffectSchema } from "effect";
  * its own reads on the ground it is drawn over, the transcript's or the tab's,
  * in the scheme the window draws in, rather than on the browser's light
  * canvas. Drawn in words, a transcript's or a thread's, the page stands at
-the words' own edges, so it is told to keep no side room of its own; drawn
-in a room of its own, its tab or full screen, the window hands it an inset
-as well, which the script keeps around the page as its root's padding, so
-its words stand off the room's edges as the window's own pages do: the
-window's page inset, and its narrow inset in a frame under 480px wide. What the
-window sends is the window's word and carries no
+ * the words' own edges, so it is told to keep no side room of its own; drawn
+ * in a room of its own, its tab or full screen, the window hands it an inset
+ * as well, which the script keeps around the page as its root's padding, so
+ * its words stand off the room's edges as the window's own pages do: the
+ * window's page inset, and its narrow inset in a frame under 480px wide.
+ * What the window sends is the window's word and carries no
  * credential, only colors, fonts, and sizes; the script takes it only from
  * the window that framed the page and only in the shape below.
  */
