@@ -657,6 +657,8 @@ interface AppNotificationsSlice {
  */
 interface AppNetworkSlice {
   online: boolean;
+  /** How many changes made offline the service refused as they were sent again, until a window clears the count; none where none was. */
+  offlineRefused?: number;
 }
 
 /**

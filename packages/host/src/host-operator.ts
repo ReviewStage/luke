@@ -344,6 +344,7 @@ import {
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -452,6 +453,8 @@ export interface HostOperator {
   tasksRefresh(): Effect.Effect<void>;
   /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
+  /** A window said the changes made offline the service refused: the host clears their count for every window. */
+  tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
   workspacesRefresh(): Effect.Effect<void>;
   /** The Tasks tab stopped showing: the host follows nothing, and the open task and its call stand. */
@@ -966,6 +969,8 @@ export interface HostOperator {
   onTasksChanged(listener: (view: TasksView) => void): () => void;
   /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
   onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
+  /** How many changes made offline the service refused as they were sent again, each time the count moves. */
+  onOfflineRefusedChanged(listener: (count: number) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -1328,6 +1333,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
+    tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
       Effect.map(
@@ -2531,6 +2537,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                   : undefined),
               }
             : undefined,
+        listener,
+      ),
+    onOfflineRefusedChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.OFFLINE_REFUSED_CHANGED,
+        (payload) => (isRecord(payload) && isWireNumber(payload.count) ? payload.count : undefined),
         listener,
       ),
     onTasksChanged: (listener) =>

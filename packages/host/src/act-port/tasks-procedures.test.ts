@@ -267,6 +267,7 @@ function windowPort(
     tasksRefresh: () => ask("refresh", () => undefined),
     tasksOpen: (taskId) => ask(`open:${taskId}`, () => true),
     tasksClose: () => ask("close", () => undefined),
+    tasksOfflineRefusedClear: () => ask("offlineRefusedClear", () => undefined),
     tasksDelete: (taskId) => ask(`delete:${taskId}`, () => true),
     tasksRename: (params) => ask(`rename:${params.taskId}:${params.name}`, () => true),
     tasksPin: (params) => ask(`pin:${params.taskId}:${params.pinned}`, () => true),

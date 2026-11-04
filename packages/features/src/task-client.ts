@@ -27,8 +27,10 @@ import {
   type HostedClient,
   type HostedFailure,
   hostedClient,
+  hostedFailureFacts,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
+import { WRITE_UNTAKEN, type WriteUntaken, writeUntakenOf } from "./keyed-write.js";
 import {
   LIVE_POLL,
   LIVE_SIGNED_OUT,
@@ -289,6 +291,19 @@ function fileWindowQuery(window: TaskFileRequest):
     ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
     ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
   };
+}
+
+/** A write the wire refuses by shape, which never travels. */
+const UNTRAVELED = { ok: false, failure: WRITE_UNTAKEN.REFUSED } as const;
+
+/** A keyed write's answer, or how it ended untaken: refused, unanswered, or taken already under its key (`keyed-write.ts`). */
+function keyedWrite<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<TaskCallResult<Answer, WriteUntaken>, never, HttpClient.HttpClient> {
+  return Effect.match(asked, {
+    onSuccess: succeeded,
+    onFailure: (failed) => ({ ok: false, failure: writeUntakenOf(hostedFailureFacts(failed)) }),
+  });
 }
 
 /** A procedure's answer, or nothing where it reached none. */
@@ -951,73 +966,92 @@ export class HostedTaskClient {
   }
 
   /**
-   * Renames one task, answering it as renamed with its document, or nothing
-   * where the service did not rename it; a name the service would refuse by
-   * shape is refused here without traveling at all.
+   * Renames one task, under the idempotency key given where one is,
+   * answering it as renamed with its document, or how it went untaken
+   * (`keyed-write.ts`); a name the service would refuse by shape is refused
+   * here without traveling at all.
    */
   rename(
     taskId: string,
     request: TaskRenameRequest,
-  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
+    key?: string,
+  ): Effect.Effect<TaskCallResult<TaskWritten, WriteUntaken>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(this.#update(taskId, admitted));
+    if (admitted === undefined) return Effect.succeed(UNTRAVELED);
+    return keyedWrite(this.#update(taskId, admitted, key));
   }
 
   /**
-   * Sets where one task stands, how much it matters, who it is assigned to, or any of them, answering it as
-   * changed with its document, or nothing where the service did not change
-   * it; a change that names neither never travels.
+   * Sets where one task stands, how much it matters, who it is assigned
+   * to, or any of them, under the idempotency key given where one is,
+   * answering it as changed with its document, or how it went untaken; a
+   * change that names neither never travels.
    */
   setStanding(
     taskId: string,
     standing: TaskStanding,
-  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
+    key?: string,
+  ): Effect.Effect<TaskCallResult<TaskWritten, WriteUntaken>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(standing));
-    if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(this.#update(taskId, admitted));
+    if (admitted === undefined) return Effect.succeed(UNTRAVELED);
+    return keyedWrite(this.#update(taskId, admitted, key));
   }
 
   /**
-   * Pins or unpins one task, answering it as
-   * changed with its document, or nothing where the service did not change
-   * it; a change that names neither never travels.
+   * Pins or unpins one task, under the idempotency key given where one is,
+   * answering it as changed with its document, or how it went untaken; a
+   * change that names neither never travels.
    */
   mark(
     taskId: string,
     marks: TaskMarks,
-  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
+    key?: string,
+  ): Effect.Effect<TaskCallResult<TaskWritten, WriteUntaken>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(marks));
-    if (admitted === undefined) return Effect.succeed(undefined);
-    return orNothing(this.#update(taskId, admitted));
+    if (admitted === undefined) return Effect.succeed(UNTRAVELED);
+    return keyedWrite(this.#update(taskId, admitted, key));
   }
 
-  /** One plan changed as the request names, answered as changed. */
+  /** One plan changed as the request names, answered as changed, sent under the idempotency key given where one is. */
   #update(
     taskId: string,
     changes: TaskUpdateRequest,
+    key?: string,
   ): Effect.Effect<TaskWritten, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
-      askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
+      askHosted(
+        this.#hosted.plans.update,
+        { params: { id: taskId }, body: changes },
+        HOSTED_DEADLINE.USUAL,
+        key,
+      ),
       writtenOf,
     );
   }
 
   /**
-   * Pins one repository or unpins it, answering the account's pins as they
-   * then stand and the transaction the pin was written in, none where it
-   * changed nothing; nothing where the service refused or did not answer. A
-   * repository the wire would refuse by shape never travels.
+   * Pins one repository or unpins it, under the idempotency key given where
+   * one is, answering the account's pins as they then stand and the
+   * transaction the pin was written in, none where it changed nothing, or
+   * how it went untaken. A repository the wire would refuse by shape never
+   * travels.
    */
   pinRepository(
     repository: string,
     pinned: boolean,
-  ): Effect.Effect<RepositoryPinsWritten | undefined, never, HttpClient.HttpClient> {
+    key?: string,
+  ): Effect.Effect<
+    TaskCallResult<RepositoryPinsWritten, WriteUntaken>,
+    never,
+    HttpClient.HttpClient
+  > {
     const asked = Result.getOrUndefined(
       readEither(repositoryPinRequestSchema)({ repository, pinned }),
     );
-    if (asked === undefined) return Effect.succeed(undefined);
-    return orNothing(askHosted(this.#hosted.repositoryPins.set, asked));
+    if (asked === undefined) return Effect.succeed(UNTRAVELED);
+    return keyedWrite(
+      askHosted(this.#hosted.repositoryPins.set, asked, HOSTED_DEADLINE.USUAL, key),
+    );
   }
 
   /**
@@ -1041,17 +1075,25 @@ export class HostedTaskClient {
   }
 
   /**
-   * Writes one change to the account's sections, answering them all as they
-   * then stand and the transaction the change was written in, none where it
-   * changed nothing; nothing where the service refused or did not answer. A
-   * write the wire would refuse by shape never travels.
+   * Writes one change to the account's sections, under the idempotency key
+   * given where one is, answering them all as they then stand and the
+   * transaction the change was written in, none where it changed nothing,
+   * or how it went untaken. A write the wire would refuse by shape never
+   * travels.
    */
   writeTaskSection(
     write: TaskSectionWrite,
-  ): Effect.Effect<TaskSectionsWritten | undefined, never, HttpClient.HttpClient> {
+    key?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskSectionsWritten, WriteUntaken>,
+    never,
+    HttpClient.HttpClient
+  > {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
-    if (asked === undefined) return Effect.succeed(undefined);
-    return orNothing(askHosted(this.#hosted.taskSections.write, asked));
+    if (asked === undefined) return Effect.succeed(UNTRAVELED);
+    return keyedWrite(
+      askHosted(this.#hosted.taskSections.write, asked, HOSTED_DEADLINE.USUAL, key),
+    );
   }
 
   /**

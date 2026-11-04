@@ -85,7 +85,12 @@ import {
   pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
-import { AGENT_ARCHIVER, CONTEXT_WINDOW, MAC_PRESENCE } from "@repo/features/agent-wire";
+import {
+  AGENT_ARCHIVER,
+  type AgentSummary,
+  CONTEXT_WINDOW,
+  MAC_PRESENCE,
+} from "@repo/features/agent-wire";
 import { FAILURE_FACT, type FailureFacts, GATE_CLOSED_BY } from "@repo/features/failure-facts";
 import { GITHUB_IMAGE_SOURCE, githubImageOf } from "@repo/features/github-image";
 import {
@@ -102,6 +107,7 @@ import {
   closedNow,
   type InboxReader,
 } from "@repo/features/inbox-writes";
+import { writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -123,6 +129,8 @@ import {
   readParams,
 } from "@repo/gateway";
 import {
+  type AnyWrite,
+  anyWrite,
   declaredMethod,
   type EntityPool,
   type FieldChange,
@@ -195,6 +203,7 @@ import {
   type PullRequestParts,
   pullRequestParts,
 } from "./pull-request-parts.js";
+import { untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -347,6 +356,8 @@ export interface AgentsDependencies {
    * servers is drawn over (`task-list-collections.ts`).
    */
   pool: EntityPool;
+  /** The agent as the task list shows it now, which a rename or a pin waiting for the service answers its caller with; none where the list shows no such agent. */
+  agentListed?: (agentId: string) => AgentSummary | undefined;
   /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
   repositoriesMoved?: Effect.Effect<void>;
 }
@@ -360,6 +371,8 @@ export interface AgentsComposer extends Composer {
   ) => Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
+  /** The row writes this composer declares that may wait for the service, which a queue kept on disk is laid back by. */
+  readonly queueable: readonly AnyWrite[];
 }
 
 /** What a call the closed gate kept from the service answers: unanswered, as the window draws it, with why the host asked nothing. */
@@ -751,18 +764,32 @@ function composed(
    */
   const agentWrite = <Input extends { readonly agentId: string }>(
     change: (input: Input) => FieldChange<AgentRow>,
-    send: (input: Input) => Effect.Effect<AgentAgentAnswer>,
-  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => ({
-    kind: AGENT,
-    keys: ({ agentId }) => [agentId],
-    change,
-    send: (input) =>
-      Effect.map(send(input), (answered) =>
-        "agent" in answered
-          ? { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid }
-          : { refused: carried<AgentAgentAnswer>(answered) },
-      ),
-  });
+    send: (input: Input, key: string | undefined) => Effect.Effect<AgentAgentAnswer>,
+    queue?: { readonly name: string; readonly input: Schema.Codec<Input, unknown> },
+  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => {
+    // Note that a write that waits, or one the service took already, answers the agent as the list shows it, which a window reads as kept.
+    const keptAs = ({ agentId }: Input): WireValue => {
+      const agent = dependencies.agentListed?.(agentId);
+      return carried<AgentAgentAnswer>(
+        agent === undefined ? { failure: AGENT_CALL_FAILURE.UNANSWERED } : { agent },
+      );
+    };
+    return {
+      kind: AGENT,
+      keys: ({ agentId }) => [agentId],
+      change,
+      send: (input, { key }) =>
+        Effect.map(send(input, key), (answered) => {
+          if ("agent" in answered) {
+            return { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid };
+          }
+          const refused = carried<AgentAgentAnswer>(answered);
+          if (queue === undefined) return { refused };
+          return untaken(writeUntakenOf(answered.cause), { kept: keptAs(input), refused });
+        }),
+      ...(queue === undefined ? undefined : { queue: { ...queue, queued: keptAs } }),
+    };
+  };
   /** A change of model, drawn on the agent's row at once, on the model's whole window where it names none. */
   const chosen = agentWrite<AgentChooseParams>(
     (choice) => () => ({
@@ -775,7 +802,8 @@ function composed(
   /** A rename, drawn on the agent's row at once, an empty title clearing it. */
   const renamed = agentWrite<AgentRenameParams>(
     (request) => () => ({ title: request.title.length === 0 ? null : request.title }),
-    ({ agentId, ...request }) => asked(client.rename(agentId, request)),
+    ({ agentId, ...request }, key) => asked(client.rename(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_RENAME, input: agentRenameParamsSchema },
   );
   /** A switch of MCP servers, drawn on the agent's row at once, the whole list of those off. */
   const switched = agentWrite<AgentServersParams>(
@@ -846,7 +874,8 @@ function composed(
             pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
           }
         : { pinnedAt: null, pinPosition: null },
-    ({ agentId, ...request }) => asked(client.pin(agentId, request)),
+    ({ agentId, ...request }, key) => asked(client.pin(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_PIN, input: agentPinParamsSchema },
   );
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
@@ -1783,5 +1812,12 @@ function composed(
     yield* parts.open;
   });
 
-  return { methods, lifetime: Effect.void, open, reset, keysAnswered };
+  return {
+    methods,
+    lifetime: Effect.void,
+    open,
+    reset,
+    keysAnswered,
+    queueable: [anyWrite(renamed), anyWrite(pinned)],
+  };
 }

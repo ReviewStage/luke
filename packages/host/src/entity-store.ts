@@ -20,6 +20,13 @@
  * shapes, or one that will not open, is deleted and read as none, and every
  * read reads whole. A store saves what moved at most every `SAVE_EVERY`, and
  * once more as it closes; a sign-out forgets it, which deletes the file.
+ *
+ * Beside the lists it keeps the row writes made while the service could not
+ * be reached, as the sync engine hands them out (`EntityPool.queued`) and
+ * takes them back at the next launch (`requeue`): each a write's name, its
+ * idempotency key, and its input. They are the account's own, so they
+ * outlast a build of other row shapes where they still read, and leave with
+ * the file at a sign-out.
  */
 
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
@@ -30,6 +37,7 @@ import {
 } from "@repo/features/task-section-wire";
 import { repositoryPinSchema } from "@repo/features/task-wire";
 import { workspaceSchema } from "@repo/features/workspace-wire";
+import type { QueuedEntry } from "@repo/sync";
 import { Duration, Effect, Path, Result, Schedule, Schema, type Scope, Semaphore } from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
@@ -66,20 +74,40 @@ const keptRowsSchema = Schema.Struct({
 /** Each kept read's rows, as a read hands them to the store and takes them back. */
 export type KeptRows = typeof keptRowsSchema.Type;
 
-/** What the file holds once opened, every read optional, since a read that never answered keeps nothing. */
+/** A row write waiting for the service, as the engine hands it out: its name, its key, and its input in its declaration's kept form. */
+const queuedEntrySchema = Schema.Struct({
+  name: Schema.String,
+  key: Schema.String,
+  input: Schema.Unknown,
+});
+
+/** Every read's rows, each optional, since a read that never answered keeps nothing. */
+const keptReadsSchema = Schema.Struct({
+  [KEPT_READ.TASK_LIST]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.TASK_LIST]),
+  [KEPT_READ.SIDEBAR]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.SIDEBAR]),
+  [KEPT_READ.WORKSPACES]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.WORKSPACES]),
+});
+
+/** What the file holds once opened: whose it is, the shapes its rows were kept at, the rows, and the writes waiting. */
 const keptSchema = Schema.Struct({
   hash: Schema.String,
   accountId: Schema.String,
-  reads: Schema.Struct({
-    [KEPT_READ.TASK_LIST]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.TASK_LIST]),
-    [KEPT_READ.SIDEBAR]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.SIDEBAR]),
-    [KEPT_READ.WORKSPACES]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.WORKSPACES]),
-  }),
+  reads: keptReadsSchema,
+  queue: Schema.Array(queuedEntrySchema),
 });
 
-type Kept = typeof keptSchema.Type;
+/** The file opened as far as its account and its waiting writes, whatever shapes its rows were kept at. */
+const envelopeSchema = Schema.Struct({
+  hash: Schema.String,
+  accountId: Schema.String,
+  reads: Schema.Unknown,
+  queue: Schema.optionalKey(Schema.Array(queuedEntrySchema)),
+});
 
-const decodeKept = Schema.decodeUnknownResult(Schema.fromJsonString(keptSchema));
+type Envelope = typeof envelopeSchema.Type;
+
+const decodeEnvelope = Schema.decodeUnknownResult(Schema.fromJsonString(envelopeSchema));
+const decodeReads = Schema.decodeUnknownResult(keptReadsSchema);
 const encodeKept = Schema.encodeEffect(Schema.fromJsonString(keptSchema));
 
 /** The account's lists as they were kept, and what moved since, written within `SAVE_EVERY`. */
@@ -88,6 +116,8 @@ export interface EntityStore {
   readonly stored: <Read extends KeptRead>(read: Read) => KeptRows[Read] | undefined;
   /** `read`'s rows as the service answered them now, written within `SAVE_EVERY` and as the store closes. */
   readonly keep: <Read extends KeptRead>(read: Read, rows: KeptRows[Read]) => Effect.Effect<void>;
+  /** The row writes waiting for the service as the file held them when the store opened, oldest first. */
+  readonly queue: readonly QueuedEntry[];
   /** Deletes the file and keeps nothing more, as a sign-out does. */
   readonly forget: Effect.Effect<void>;
 }
@@ -99,6 +129,8 @@ export interface EntityStoreOptions {
   readonly cipher: SecretCipher;
   /** The account signed in, whose lists alone the file may hold. */
   readonly accountId: string;
+  /** The row writes waiting for the service now, oldest first, which every save keeps beside the lists. */
+  readonly queued?: () => readonly QueuedEntry[];
 }
 
 /** The SHA-256, in hex, of every kept row shape's JSON Schema, which a build that changes any of them changes. */
@@ -113,13 +145,13 @@ const shapesHash: Effect.Effect<string> = Effect.map(
     [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
 );
 
-/** The file's text opened and read, or none where it will not open or is not a store's. */
-function opened(cipher: SecretCipher, text: string): Kept | undefined {
+/** The file's text opened and read as far as its account and its waiting writes, or none where it will not open or is not a store's. */
+function opened(cipher: SecretCipher, text: string): Envelope | undefined {
   const plain = Result.flatMap(Base64.decode(text.trim()), (bytes) =>
     Result.try(() => cipher.decrypt(bytes)),
   );
   if (Result.isFailure(plain)) return undefined;
-  return Result.getOrUndefined(decodeKept(plain.success));
+  return Result.getOrUndefined(decodeEnvelope(plain.success));
 }
 
 /** Deletes the file, a temporary one a cut-off write left beside it among it. */
@@ -156,19 +188,28 @@ export function openEntityStore(
       () => undefined,
     );
     const read = text === undefined ? undefined : opened(cipher, text);
-    const fits = read !== undefined && read.accountId === accountId && read.hash === hash;
+    const ours = read !== undefined && read.accountId === accountId;
+    const kept =
+      ours && read.hash === hash ? Result.getOrUndefined(decodeReads(read.reads)) : undefined;
     // Note that a file that is not this account's at these shapes is deleted before anything reads it, so no other account's rows are ever drawn.
-    if (text !== undefined && !fits) yield* removed(directory);
-    const stored: Partial<KeptRows> = fits ? read.reads : {};
+    if (text !== undefined && kept === undefined) yield* removed(directory);
+    const stored: Partial<KeptRows> = kept ?? {};
+    // Note that the account's own waiting writes outlast other row shapes, and are kept again at the next save.
+    const queue: readonly QueuedEntry[] = ours ? (read.queue ?? []) : [];
+    const queued = options.queued ?? (() => queue);
     let reads: Partial<KeptRows> = stored;
-    let dirty = false;
+    let dirty = kept === undefined && queue.length > 0;
+    let savedQueue = JSON.stringify(queue);
     let forgotten = false;
     const lock = yield* Semaphore.make(1);
     const save = lock.withPermits(1)(
       Effect.suspend(() => {
-        if (!dirty || forgotten) return Effect.void;
+        const waiting = queued();
+        const waitingText = JSON.stringify(waiting);
+        if ((!dirty && waitingText === savedQueue) || forgotten) return Effect.void;
         dirty = false;
-        return encodeKept({ hash, accountId, reads }).pipe(
+        savedQueue = waitingText;
+        return encodeKept({ hash, accountId, reads, queue: waiting }).pipe(
           Effect.map((plain) => Base64.encode(cipher.encrypt(plain))),
           Effect.flatMap((sealed) =>
             writeSettingsFileAtomic(directory, sealed, undefined, ENTITY_STORE_FILE_NAME),
@@ -184,7 +225,8 @@ export function openEntityStore(
     yield* Effect.forkScoped(Effect.repeat(save, Schedule.spaced(SAVE_EVERY)));
     yield* Effect.addFinalizer(() => save);
     return {
-      stored: (kept) => stored[kept],
+      stored: (read) => stored[read],
+      queue,
       keep: (kept, rows) =>
         Effect.sync(() => {
           reads = { ...reads, [kept]: rows };
