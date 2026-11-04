@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-@font-face{font-family:Mono;src:url(../mono.woff2) format("woff2");font-weight:100 800}
+/* The address is set in JetBrains Mono, the woff2 apps/web installs (run ./scripts/bootstrap.sh first); monospace stands in where it is missing. */
+@font-face{font-family:Mono;src:url(../../../../../apps/web/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2) format("woff2"),local("JetBrains Mono");font-weight:100 800}
 html,body{margin:0}#c{display:block}
 </style></head><body><canvas id="c" width="2400" height="1592"></canvas><script>
 // The landing's field (packages/ui/src/components/landing/landing-field.tsx), drawn at the card's scale.
@@ -32,11 +33,11 @@ const c=document.getElementById('c'),x=c.getContext('2d');const W=2400,H=1592;
 x.fillStyle=ground;x.fillRect(0,0,W,H);
 const cell=7*S,dot=cell*0.42;const w=W/S,h=H/S;
 // The address, laid out once, for both the plate and the dotted lettering.
-const word1='vespin.dev/api/',word2='mcp';x.font='120px Mono';
-document.fonts.load('120px Mono').then(()=>{
- x.font='120px Mono';const w1=x.measureText(word1).width,w2=x.measureText(word2).width;const tw=w1+w2,tx=q.get('tx')?+q.get('tx'):(W-tw)/2,ty=q.get('ty')?+q.get('ty'):H/2+42;
+const word1='vespin.dev/api/',word2='mcp';x.font='120px Mono, monospace';
+document.fonts.load('120px Mono, monospace').then(()=>{
+ x.font='120px Mono, monospace';const w1=x.measureText(word1).width,w2=x.measureText(word2).width;const tw=w1+w2,tx=q.get('tx')?+q.get('tx'):(W-tw)/2,ty=q.get('ty')?+q.get('ty'):H/2+42;
  let mask=null;
- if(mode==='dotted'){const m=document.createElement('canvas');m.width=W;m.height=H;const mx=m.getContext('2d');mx.font='bold 200px Mono';const a1=mx.measureText(word1).width,a2=mx.measureText(word2).width;const sx=(W-a1-a2)/2;mx.fillStyle='#fff';mx.fillText(word1,sx,H/2+70);mx.fillStyle='#f00';mx.fillText(word2,sx+a1,H/2+70);mask=mx.getImageData(0,0,W,H).data;}
+ if(mode==='dotted'){const m=document.createElement('canvas');m.width=W;m.height=H;const mx=m.getContext('2d');mx.font='bold 200px Mono, monospace';const a1=mx.measureText(word1).width,a2=mx.measureText(word2).width;const sx=(W-a1-a2)/2;mx.fillStyle='#fff';mx.fillText(word1,sx,H/2+70);mx.fillStyle='#f00';mx.fillText(word2,sx+a1,H/2+70);mask=mx.getImageData(0,0,W,H).data;}
  const t=+(q.get('t')||8);
  for(let j=0,y=cell/2;y<H;y+=cell,j++)for(let i=0,xx=cell/2;xx<W;xx+=cell,i++){
   let col=null;
