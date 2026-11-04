@@ -41,21 +41,24 @@ import {
   PULL_REQUEST_MOMENT,
   type PullRequestMoment,
   type StandingPullRequest,
+  usePlaceStanding,
 } from "./use-link-standing.js";
 
 /**
  * pull-request-card.tsx -- the one card a pull request hangs wherever the window names one: its mark and title, its key and where it stands, its size and checks, its branches and labels, who opened it, the agent whose it is, and its reviewers.
  *
- * A pull request is named in three kinds of place: the chip beside its
- * agent in the plan's list of agents, which knows what the task's row
- * says of it; its Pull request tab, a pin of that tab, and the chip of a
- * pull request one of the plan's agents opened, which know the agent and,
- * once the tab has read them, who the pull request names; and a link to
- * its page in any words, which knows what the workspace's GitHub App
- * answered for it (`use-link-standing.ts`). Each hangs this one card and
- * passes what it knows, and the card draws only what it is given, so a
- * card read from an older service, which answers little, still draws its
- * head. The head is the mark for where it stands, the title, and under it
+ * A pull request is named in several kinds of place: the chip beside its
+ * agent in the plan's list of agents and a task row's chip, which know
+ * what the task's row says of it; its Pull request tab, a pin of that tab,
+ * and the chip of a pull request one of the plan's agents opened, which
+ * know the agent and, once the tab has read them, who the pull request
+ * names; and a link to its page in any words. Each hangs this one card,
+ * passes what it knows and the place it stands in, and the card fills
+ * every part its place did not pass from what the workspace's GitHub App
+ * answered for the pull request's page (`use-link-standing.ts`), read
+ * through that place's workspace, so every card of one pull request says
+ * the same. It draws only what it knows, so a card read from an older
+ * service, which answers little, still draws its head. The head is the mark for where it stands, the title, and under it
  * one key everywhere, `acme/relay#42 · Merged`, with the age of its latest
  * moment, opened, merged, or closed, at the corner where the service said
  * one. One note says its size and checks, `+120 −14 in 3 files · Checks
@@ -268,18 +271,14 @@ function ReviewerRow({ reviewer }: { reviewer: PullRequestReviewer }): React.JSX
  */
 export function PullRequestCard({
   pullRequest,
-  lines,
-  files,
-  when,
-  branches,
-  labels,
-  comments,
-  commits,
-  opener,
+  place,
   agent,
   reviewers,
+  ...given
 }: {
   pullRequest: CardedPullRequest;
+  /** Where the card stands: its task, or on none the workspace named, whose GitHub App fills what the place did not pass. */
+  place: { readonly taskId: string | null; readonly workspaceId?: string | undefined };
   /** The lines it adds and removes. */
   lines?: StandingPullRequest["lines"];
   /** How many files it changes. */
@@ -302,6 +301,17 @@ export function PullRequestCard({
   useEffect(() => {
     if (owned) PULL_REQUEST_TAB.prefetch();
   }, [owned]);
+  // What the place passed stands, and the pull request's link standing fills the rest.
+  const standing = usePlaceStanding(place, pullRequest.url);
+  const read = standing?.pullRequest;
+  const lines = given.lines ?? read?.lines;
+  const files = given.files ?? read?.files;
+  const when = given.when ?? read?.when;
+  const branches = given.branches ?? read?.branches;
+  const labels = given.labels ?? read?.labels;
+  const comments = given.comments ?? read?.comments;
+  const commits = given.commits ?? read?.commits;
+  const opener = given.opener ?? standing?.opener;
   const marked = { ...pullRequest, checks: pullRequest.checks ?? CHECK_SUMMARY.NONE };
   return (
     <HoverCard data-pull-request-card="">

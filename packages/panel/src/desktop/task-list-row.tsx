@@ -117,6 +117,7 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
           card={
             <PullRequestCard
               pullRequest={pullRequest}
+              place={{ taskId: task.id }}
               lines={pullRequest}
               opener={openerOf(pullRequest)}
             />

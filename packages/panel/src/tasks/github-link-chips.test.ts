@@ -20,6 +20,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { PublishedRow } from "./agent-published.js";
+import { PullRequestCard } from "./pull-request-card.js";
+import { PullRequestChip } from "./pull-request-chip.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -582,6 +584,37 @@ test("a pull request's link standing alone in words drawn as a document is a row
   assert.deepEqual(cardNotes(row), chipNotes);
   assert.deepEqual(cardNotes(row), [
     "+120 −30 in 4 files · 7 comments · 1 commit",
+    "main ← invite-expiry",
+    "Opened by octo-dev",
+  ]);
+});
+
+test("a pull request's chip whose place knows no more than its line hangs the card its link's chip hangs, read through the place's workspace", async () => {
+  const pullRequest = {
+    number: 42,
+    title: "Expire old invitations",
+    url: MERGED,
+    state: PULL_REQUEST_STATE.MERGED,
+    checks: CHECK_SUMMARY.PASSING,
+  };
+  const { container } = await drawnOnPage(
+    createElement(PullRequestChip, {
+      pullRequest,
+      card: createElement(PullRequestCard, { pullRequest, place: { taskId: TASK_ID } }),
+      onOpen: () => undefined,
+    }),
+    ACME_WITH_GITHUB,
+  );
+
+  const chip = container.querySelector("a") ?? assert.fail("the chip is drawn");
+  restOn(chip);
+  // The card reads the pull request's standing as it hangs, which the host already holds.
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(cardNotes(chip), [
+    "+120 −30 in 4 files · Checks passing · 7 comments · 1 commit",
     "main ← invite-expiry",
     "Opened by octo-dev",
   ]);
