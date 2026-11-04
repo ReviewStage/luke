@@ -161,7 +161,9 @@ import { readAutomation } from "@repo/database/models/automation-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { readSyncWindow, SYNC_LOG, syncStanding } from "@repo/database/models/sync-log";
 import { readTaskHeader } from "@repo/database/models/task-store";
+import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import {
+  ensurePersonalWorkspace,
   isWorkspaceMember,
   workspaceOf as workspaceOfAccount,
 } from "@repo/database/models/workspace-store";
@@ -181,6 +183,7 @@ import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { readEither } from "@repo/wire/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
+import { pluginWriteOrUnavailable } from "../accounts/workspaces-procedures.js";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { pullRequestNumberOf } from "../agents/asked-pull-request.js";
 import { installScriptUrlOf } from "../agents/hosts-procedures.js";
@@ -244,6 +247,8 @@ import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
+  /** The plugin's create, for the account's first workspace, which its workspaces' read makes where none stands. */
+  workspaces: WorkspaceSeams;
 }
 
 /**
@@ -937,6 +942,8 @@ export function liveProcedures(seams: LiveProcedureSeams) {
     }),
     workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
+      // Note that this read is the only one a client makes of the account's workspaces, so it makes the first.
+      yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(context.userId, seams.workspaces));
       return yield* liveQueryParts(workspacesLive, { userId: context.userId }, input);
     }),
     workspaceMembers: signedIn.workspaceMembers.effect(function* ({ input, context }) {
