@@ -48,7 +48,11 @@ import {
   runningTurnIds,
   settleRunnerLostTurns,
 } from "@repo/database/models/abandoned-turns";
-import { readNativeRunStanding } from "@repo/database/models/agent-store";
+import {
+  type NativeRunStanding,
+  readNativeRunStanding,
+  readNativeRunStandings,
+} from "@repo/database/models/agent-store";
 import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
@@ -317,26 +321,31 @@ const settledLostRunner = (
     yield* ErrorReporter.report(Cause.fail(lost));
   });
 
-/** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
-const runGoesOn = (sandbox: NativeSandbox) =>
-  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) =>
-    Option.isSome(standing) && standing.value.endedAt === null
-      ? Option.some(standing.value.conversationId)
-      : Option.none(),
-  );
+/** The conversation of the run where it still has a turn queued or running. */
+const goingOf = (standing: Option.Option<NativeRunStanding>): Option.Option<string> =>
+  Option.isSome(standing) && standing.value.endedAt === null
+    ? Option.some(standing.value.conversationId)
+    : Option.none();
 
-/** The run of the sandbox's agent where it ended longer ago than the wait given, the grace where none is, read from the store: its conversation and its starter. */
-const runEnded = (
-  sandbox: NativeSandbox,
+/** The run where it ended longer ago than the wait given, the grace where none is: its conversation and its starter. */
+const endedOf = (
+  standing: Option.Option<NativeRunStanding>,
   now: Date,
   wait: Duration.Duration = NATIVE_SANDBOX_SWEEP.GRACE,
-) =>
-  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => {
-    if (Option.isNone(standing)) return Option.none();
-    const { endedAt } = standing.value;
-    const endedBefore = now.getTime() - Duration.toMillis(wait);
-    return endedAt === null || endedAt.getTime() > endedBefore ? Option.none() : standing;
-  });
+): Option.Option<NativeRunStanding> => {
+  if (Option.isNone(standing)) return Option.none();
+  const { endedAt } = standing.value;
+  const endedBefore = now.getTime() - Duration.toMillis(wait);
+  return endedAt === null || endedAt.getTime() > endedBefore ? Option.none() : standing;
+};
+
+/** Whether the run of the sandbox's agent still has a turn queued or running, read from the store again. */
+const runGoesOn = (sandbox: NativeSandbox) =>
+  Effect.map(readNativeRunStanding(sandbox.agentId), goingOf);
+
+/** The run of the sandbox's agent where it ended past the grace, read from the store again. */
+const runEnded = (sandbox: NativeSandbox, now: Date) =>
+  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => endedOf(standing, now));
 
 /**
  * A runner still up after its run ended, asked to end once the run has
@@ -345,9 +354,13 @@ const runEnded = (
  * ends only where it is still warm, so a message sent since keeps it. A
  * retire Vercel did not take is left for the next sweep.
  */
-const retiredPastWarm = (api: VercelSandboxApi, sandbox: NativeSandbox, now: Date) =>
+const retiredPastWarm = (
+  sandbox: NativeSandbox,
+  standing: Option.Option<NativeRunStanding>,
+  now: Date,
+) =>
   Effect.gen(function* () {
-    const ended = yield* runEnded(sandbox, now, CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL]);
+    const ended = endedOf(standing, now, CODER.RUNNER_WARM[AGENT_MACHINE.VERCEL]);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
     const retired = yield* Effect.result(
       retireWarmRunner({ ...sandbox, userId: ended.value.userId }),
@@ -399,6 +412,7 @@ const endSandbox = (
   api: VercelSandboxApi,
   writer: Pick<StoreWriter, "consume">,
   sandbox: NativeSandbox,
+  standing: Option.Option<NativeRunStanding>,
   now: Date,
   budget: StopBudget,
 ): Effect.Effect<
@@ -407,7 +421,7 @@ const endSandbox = (
   DatabaseServices | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
-    const going = yield* runGoesOn(sandbox);
+    const going = goingOf(standing);
     if (Option.isSome(going)) {
       const exited = yield* exitedRunner(api, sandbox);
       if (exited === undefined) return SANDBOX_ENDING.LEFT;
@@ -422,10 +436,12 @@ const endSandbox = (
       yield* settledLostRunner(writer, sandbox, going.value, lostTurns, { ...exited, stderr }, now);
       return SANDBOX_ENDING.LOST;
     }
-    if (Option.isNone(yield* runEnded(sandbox, now))) return SANDBOX_ENDING.LEFT;
+    if (Option.isNone(endedOf(standing, now))) return SANDBOX_ENDING.LEFT;
     const runner = yield* runnerStanding(api, sandbox);
     if (runner === RUNNER_STANDING.MOVED_ON) return SANDBOX_ENDING.LEFT;
-    if (runner === RUNNER_STANDING.RUNNING) return yield* retiredPastWarm(api, sandbox, now);
+    if (runner === RUNNER_STANDING.RUNNING) {
+      return yield* retiredPastWarm(sandbox, standing, now);
+    }
     return yield* stoppedUnderLease(api, sandbox, now, budget);
   });
 
@@ -452,9 +468,20 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
     }
     const budget: StopBudget = { remaining: NATIVE_SANDBOX_SWEEP.MAX_STOPS };
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const window = windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now);
+    // The window's runs are read once for the lot; a sandbox reads its own again only just before it settles or stops.
+    const standings = yield* readNativeRunStandings(window.map((sandbox) => sandbox.agentId));
     const endings = yield* Effect.forEach(
-      windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now),
-      (sandbox) => endSandbox(api, writer, sandbox, now, budget),
+      window,
+      (sandbox) =>
+        endSandbox(
+          api,
+          writer,
+          sandbox,
+          Option.fromUndefinedOr(standings.get(sandbox.agentId)),
+          now,
+          budget,
+        ),
       { concurrency: NATIVE_SANDBOX_SWEEP.CONCURRENCY },
     );
     const count = (ending: SandboxEnding) => endings.filter((each) => each === ending).length;
