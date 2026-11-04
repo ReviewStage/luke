@@ -16,7 +16,11 @@ import {
   readAgent,
   recordAgentPublished,
 } from "@repo/database/models/agent-store";
-import { createAutomation, recordAutomationRun } from "@repo/database/models/automation-store";
+import {
+  claimAutomationRun,
+  createAutomation,
+  recordAutomationRun,
+} from "@repo/database/models/automation-store";
 import { keepConversationPicture } from "@repo/database/models/conversation-pictures";
 import { deviceAgentLinesWaiting } from "@repo/database/models/device-agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
@@ -312,16 +316,12 @@ async function tasklessAgentOn(
   });
 }
 
-/** The id of a run, fired by hand, of an automation the account makes in the workspace. */
-async function automationRunIn(userId: string, workspaceId: string): Promise<string> {
-  return (await automationRunOf(userId, workspaceId)).runId;
-}
-
-/** A run, fired by hand, of an automation the account makes in the workspace: the run's id and the automation's. */
-async function automationRunOf(
+/** `count` runs, fired by hand a minute apart, of an automation the account makes in the workspace: their ids in the order fired, and the automation's. */
+async function automationRunsOf(
   userId: string,
   workspaceId: string,
-): Promise<{ readonly runId: string; readonly automationId: string }> {
+  count = 1,
+): Promise<{ readonly runIds: readonly string[]; readonly automationId: string }> {
   const made = await database.run(
     createAutomation(userId, {
       organizationId: workspaceId,
@@ -335,14 +335,18 @@ async function automationRunOf(
     }),
   );
   const automation = Option.getOrThrow(made);
-  const run = await database.run(
-    recordAutomationRun(automation, {
-      dedupeKey: randomUUID(),
-      firing: { kind: AUTOMATION_FIRING.MANUAL },
-      firedAt: new Date(NOW),
-    }),
-  );
-  return { runId: Option.getOrThrow(run).id, automationId: automation.id };
+  const runIds: string[] = [];
+  for (let index = 0; index < count; index++) {
+    const run = await database.run(
+      recordAutomationRun(automation, {
+        dedupeKey: randomUUID(),
+        firing: { kind: AUTOMATION_FIRING.MANUAL },
+        firedAt: new Date(NOW + index * 60_000),
+      }),
+    );
+    runIds.push(Option.getOrThrow(run).id);
+  }
+  return { runIds, automationId: automation.id };
 }
 
 /** The agent the start made, its eve session recorded as the store hook records it. */
@@ -746,7 +750,10 @@ test("list_agents narrows by archive, by whose agents, by an automation's runs, 
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
-  const { runId, automationId } = await automationRunOf(agents.caller.userId, workspaceId);
+  const {
+    runIds: [runId = ""],
+    automationId,
+  } = await automationRunsOf(agents.caller.userId, workspaceId);
   const sweeper = await tasklessAgentOn(agents.caller.userId, workspaceId, runId);
   assert.ok(
     Option.isSome(
@@ -1890,7 +1897,9 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
   // An agent on no task starts one beside itself, in its own workspace and repository, or in none
   // where it names none, and on a task only where it names one. A run's agent starts one beside
   // itself that belongs to its run, and one on a task that the task alone owns.
-  const run = await automationRunIn(caller.userId, workspaceId);
+  const {
+    runIds: [run = "", later = ""],
+  } = await automationRunsOf(caller.userId, workspaceId, 2);
   const sweeper = await tasklessAgentOn(caller.userId, workspaceId, run);
   const fromNoTask = await peerCaller(hostOf(), sweeper, eve.services);
   const placeOf = async (answer: WireRecord) => {
@@ -1936,6 +1945,14 @@ test("list_tasks names the open tasks of the caller's workspace, each with the m
     null,
   ]);
   assert.equal(eve.sent.length, 4);
+
+  // A later run handed to the same agent, as a same-agent automation hands each run, owns the
+  // agents it starts from then on, from the run's claim on, before the run holds the agent.
+  assert.ok(await database.run(claimAutomationRun(later, sweeper.id)));
+  assert.deepEqual(
+    await placeOf(await fromNoTask(CODER_TOOL.START_AGENT, { prompt: "Sweep." }, "call-later")),
+    [null, workspaceId, RELAY_FULL_NAME, later],
+  );
 });
 
 /** The ids of the tasks of the workspace the account reads under the name, newest first. */

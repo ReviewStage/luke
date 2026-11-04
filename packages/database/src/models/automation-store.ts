@@ -1522,6 +1522,38 @@ export function withAutomationLocked<A, E, R>(
   );
 }
 
+const findCurrentRun = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (agentId) =>
+    Database.use((db) =>
+      db
+        .select({ id: automationRun.id })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.status, AUTOMATION_RUN_STATUS.STARTED),
+            or(eq(automationRun.agentId, agentId), eq(automationRun.claimedAgentId, agentId)),
+          ),
+        )
+        .orderBy(desc(automationRun.settledAt), desc(automationRun.firedAt))
+        .limit(1),
+    ),
+});
+
+/**
+ * The run the agent works on now: the one last handed to it, started by it
+ * or claimed to be sent to it; none for an agent no run was handed to.
+ * Note that a run claimed for a same-agent automation's agent counts from
+ * its claim, because its line reaches the agent before the run holds it.
+ */
+export function currentAutomationRun(agentId: string): TaskStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findCurrentRun(agentId),
+    Option.map((run) => run.id),
+  );
+}
+
 /** Claims a queued run for its start: started, with no agent yet, and the agent it is to be sent to where it is handed to one; false where it was not queued. */
 export function claimAutomationRun(
   runId: string,
