@@ -232,15 +232,6 @@ const GATEWAY_ACT = {
 
 /** The row writes still served by hand, by the change that declares each; only ever cut. */
 const UNDECLARED_ROW_WRITES = [
-  // The task list and agent rows' writes drawn at once today, declared by E4's second PR.
-  GATEWAY_METHOD.TASKS_RENAME,
-  GATEWAY_METHOD.TASKS_PIN,
-  GATEWAY_METHOD.TASKS_SET_STANDING,
-  GATEWAY_METHOD.AGENTS_RENAME,
-  GATEWAY_METHOD.AGENTS_PIN,
-  GATEWAY_METHOD.AGENTS_ARCHIVE,
-  GATEWAY_METHOD.AGENTS_CHOOSE,
-  GATEWAY_METHOD.AGENTS_SERVERS,
   // An inbox item's writes, declared by E4's third PR.
   GATEWAY_METHOD.AGENTS_INBOX_ANSWER,
   GATEWAY_METHOD.AGENTS_INBOX_CLOSE,

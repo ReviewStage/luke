@@ -59,14 +59,14 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
-import type { RowWrite } from "./live-collection.js";
-import { type AgentRow, taskListCollections } from "./task-list-collections.js";
+import { taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
@@ -800,7 +800,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
-    writeAgent?: RowWrite<AgentRow>;
+    pool?: EntityPool;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -819,7 +819,7 @@ function subject(
       focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
-      ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
+      pool: options.pool ?? (yield* entityPool()),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -2942,13 +2942,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const drawn: (readonly AgentSummary[])[] = [];
+      const pool = yield* entityPool();
       const list = yield* taskListCollections({
+        pool,
         draw: ({ taskAgents }) => void drawn.push(taskAgents),
         txWait: () => undefined,
       });
       yield* list.answer({ plans: [], agents: [{ ...agentListRow(TASK_ID, NOW), id: AGENT_ID }] });
       const answered = yield* Deferred.make<void>();
-      const { call, holdChanges } = yield* subject({ writeAgent: list.writeAgent });
+      const { call, holdChanges } = yield* subject({ pool });
       holdChanges(Deferred.await(answered));
       const standing = () => drawn.at(-1)?.[0];
 

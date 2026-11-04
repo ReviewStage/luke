@@ -3,7 +3,9 @@ import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
   type AgentAgentAnswer,
+  type AgentArchiveParams,
   type AgentChangesAnswerView,
+  type AgentChooseParams,
   type AgentDefaultAnswer,
   type AgentDeleteAnswerView,
   type AgentGitHubImageView,
@@ -21,11 +23,14 @@ import {
   type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
+  type AgentPinParams,
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
+  type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
+  type AgentServersParams,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
   ARCHIVE_DRAWN,
@@ -114,6 +119,13 @@ import {
   readParams,
 } from "@repo/gateway";
 import {
+  declaredMethod,
+  type EntityPool,
+  type FieldChange,
+  type WriteDeclaration,
+} from "@repo/sync";
+import type { WireRecord, WireValue } from "@repo/wire";
+import {
   Clock,
   Duration,
   Effect,
@@ -160,14 +172,7 @@ import {
   type KeptKey,
   keptOfAgent,
 } from "./kept-content.js";
-import {
-  type AccountReads,
-  accountReads,
-  type HeldSlice,
-  type RowRefused,
-  type RowWrite,
-  type RowWritten,
-} from "./live-collection.js";
+import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -175,7 +180,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
-import type { AgentRow } from "./task-list-collections.js";
+import { AGENT, type AgentRow } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -310,12 +315,11 @@ export interface AgentsDependencies {
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
   /**
-   * A change to an agent's row of the task list, drawn at once and kept or
-   * taken back as the service answers it (`TasksComposer.writeAgent`): a
-   * rename, an archive, a pin, a change of model, or a switch of MCP
-   * servers. None writes alone, drawing nothing.
+   * The sync engine's pool, which an agent's row of the task list stands in
+   * and a rename, an archive, a pin, a change of model, or a switch of MCP
+   * servers is drawn over (`task-list-collections.ts`).
    */
-  writeAgent?: RowWrite<AgentRow>;
+  pool: EntityPool;
 }
 
 export interface AgentsComposer extends Composer {
@@ -605,17 +609,92 @@ function composed(
     carries: (answer: Answer | GateClosed) => KeptAnswer<Key> | undefined,
   ) => (gate() ? kept.answer(key, dependencies.accountId, asked(call), carries) : asked(call));
   const listed = dependencies.listed ?? (() => Effect.void);
-  const writeAgent: RowWrite<AgentRow> =
-    dependencies.writeAgent ??
-    ((_agentId, _change, written) =>
-      Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer)));
-  /** An agent's row written as the service answers it: kept on the transaction it names, or refused. */
-  const agentWritten = (call: Effect.Effect<AgentAgentAnswer>) =>
-    Effect.map(
-      call,
-      (answered): RowWritten<AgentRow, AgentAgentAnswer> | RowRefused<AgentAgentAnswer> =>
-        "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
-    );
+  /**
+   * A write to an agent's row of the task list, as the agents' own writes
+   * declare it: drawn at once over the row, sent as `send` asks, and kept on
+   * the transaction the service names, or refused.
+   */
+  const agentWrite = <Input extends { readonly agentId: string }>(
+    change: (input: Input) => FieldChange<AgentRow>,
+    send: (input: Input) => Effect.Effect<AgentAgentAnswer>,
+  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => ({
+    kind: AGENT,
+    keys: ({ agentId }) => [agentId],
+    change,
+    send: (input) =>
+      Effect.map(send(input), (answered) =>
+        "agent" in answered
+          ? { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid }
+          : { refused: carried<AgentAgentAnswer>(answered) },
+      ),
+  });
+  /** A change of model, drawn on the agent's row at once, on the model's whole window where it names none. */
+  const chosen = agentWrite<AgentChooseParams>(
+    (choice) => () => ({
+      model: choice.model,
+      effort: choice.effort,
+      contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+    }),
+    ({ agentId, ...choice }) => asked(client.choose(agentId, choice)),
+  );
+  /** A rename, drawn on the agent's row at once, an empty title clearing it. */
+  const renamed = agentWrite<AgentRenameParams>(
+    (request) => () => ({ title: request.title.length === 0 ? null : request.title }),
+    ({ agentId, ...request }) => asked(client.rename(agentId, request)),
+  );
+  /** A switch of MCP servers, drawn on the agent's row at once, the whole list of those off. */
+  const switched = agentWrite<AgentServersParams>(
+    (request) => () => ({ disabledServers: request.disabledServers }),
+    ({ agentId, ...request }) => asked(client.switchServers(agentId, request)),
+  );
+  /**
+   * An archive, drawn on the agent's row at once, stamped now by the member,
+   * unless a dialog that asked waits on the answer, which then draws nothing
+   * and comes once the list carries it. Note that an agent archived lets go
+   * of what this host held of its transcript and its workers', and of their
+   * content kept.
+   */
+  const archived = agentWrite<AgentArchiveParams>(
+    ({ drawn, archived: archive }) => {
+      if (drawn === ARCHIVE_DRAWN.ON_ANSWER) return () => ({});
+      const archiver = reader();
+      const at = kernel.now();
+      return () =>
+        archive
+          ? {
+              archivedAt: at,
+              archivedBy:
+                archiver === undefined
+                  ? null
+                  : { by: AGENT_ARCHIVER.MEMBER, userId: archiver.userId },
+              archiverName: archiver?.name ?? null,
+            }
+          : { archivedAt: null, archivedBy: null, archiverName: null };
+    },
+    ({ agentId, drawn, ...request }) =>
+      Effect.tap(asked(client.archive(agentId, request)), (answer) =>
+        "agent" in answer
+          ? Effect.andThen(
+              Effect.andThen(
+                held.forget((key) => key.agentId === agentId),
+                kept.forget(keptOfAgent(agentId)),
+              ),
+              drawn === ARCHIVE_DRAWN.ON_ANSWER ? listed(answer.txid) : Effect.void,
+            )
+          : Effect.void,
+      ),
+  );
+  /** A pin, drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it. */
+  const pinned = agentWrite<AgentPinParams>(
+    (request) => (row) =>
+      request.pinned
+        ? {
+            pinnedAt: row.pinnedAt ?? kernel.now(),
+            pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
+          }
+        : { pinnedAt: null, pinPosition: null },
+    ({ agentId, ...request }) => asked(client.pin(agentId, request)),
+  );
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -914,56 +993,36 @@ function composed(
         // before the write can take it away, and the next send waits on this answer.
         return carried<AgentAgentAnswer>({ agent: answer.agent });
       }),
-    [GATEWAY_METHOD.AGENTS_CHOOSE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...choice } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_CHOOSE]: declaredMethod(
+      dependencies.pool,
+      chosen,
+      (params: WireRecord) =>
+        readParams(
           agentChooseParamsSchema,
           params,
           "changing an agent's model names the agent, a model, and its effort",
-        );
-        // A change of model is drawn on the agent's row at once, on the model's whole window where it names none.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({
-            model: choice.model,
-            effort: choice.effort,
-            contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
-          }),
-          agentWritten(asked(client.choose(agentId, choice))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_RENAME]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_RENAME]: declaredMethod(
+      dependencies.pool,
+      renamed,
+      (params: WireRecord) =>
+        readParams(
           agentRenameParamsSchema,
           params,
           "renaming an agent names the agent and its title",
-        );
-        // A rename is drawn on the agent's row at once, an empty title clearing it.
-        const title = request.title.length === 0 ? null : request.title;
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({ title }),
-          agentWritten(asked(client.rename(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_SERVERS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_SERVERS]: declaredMethod(
+      dependencies.pool,
+      switched,
+      (params: WireRecord) =>
+        readParams(
           agentServersParamsSchema,
           params,
           "switching an agent's MCP servers names the agent and the servers off",
-        );
-        // A switch is drawn on the agent's row at once, the whole list of those off.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({ disabledServers: request.disabledServers }),
-          agentWritten(asked(client.switchServers(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.AGENTS_QUEUE]: (params) =>
       Effect.gen(function* () {
         const { agentId, change } = yield* readParams(
@@ -974,69 +1033,23 @@ function composed(
         const answer = yield* asked(client.changeQueue(agentId, change));
         return carried<AgentQueueAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_ARCHIVE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, drawn, ...request } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_ARCHIVE]: declaredMethod(
+      dependencies.pool,
+      archived,
+      (params: WireRecord) =>
+        readParams(
           agentArchiveParamsSchema,
           params,
           "archiving an agent names the agent and whether it is archived",
-        );
-        // Note that an agent archived lets go of what this host held of its transcript and its workers', and of their content kept.
-        const written = Effect.tap(asked(client.archive(agentId, request)), (answer) =>
-          "agent" in answer
-            ? Effect.andThen(
-                held.forget((key) => key.agentId === agentId),
-                kept.forget(keptOfAgent(agentId)),
-              )
-            : Effect.void,
-        );
-        // An archive is drawn on the agent's row at once, stamped now by the member, unless a dialog
-        // that asked waits on the answer, which then comes once the list carries it.
-        if (drawn === ARCHIVE_DRAWN.ON_ANSWER) {
-          const answer = yield* written;
-          if ("txid" in answer) yield* listed(answer.txid);
-          return carried<AgentAgentAnswer>(answer);
-        }
-        const archiver = reader();
-        const at = kernel.now();
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () =>
-            request.archived
-              ? {
-                  archivedAt: at,
-                  archivedBy:
-                    archiver === undefined
-                      ? null
-                      : { by: AGENT_ARCHIVER.MEMBER, userId: archiver.userId },
-                  archiverName: archiver?.name ?? null,
-                }
-              : { archivedAt: null, archivedBy: null, archiverName: null },
-          agentWritten(written),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_PIN]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
-          agentPinParamsSchema,
-          params,
-          "pinning an agent names the agent and whether it is pinned",
-        );
-        // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          (row) =>
-            request.pinned
-              ? {
-                  pinnedAt: row.pinnedAt ?? kernel.now(),
-                  pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
-                }
-              : { pinnedAt: null, pinPosition: null },
-          agentWritten(asked(client.pin(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
+      readParams(
+        agentPinParamsSchema,
+        params,
+        "pinning an agent names the agent and whether it is pinned",
+      ),
+    ),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(

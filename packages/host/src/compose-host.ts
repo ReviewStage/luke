@@ -173,6 +173,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         accountId,
         kept,
         focus,
+        pool,
         client: Object.assign(
           new HostedTaskClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -208,7 +209,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         },
         client: agentClient,
         listed: tasks.listed,
-        writeAgent: tasks.writeAgent,
+        pool,
       }),
     );
     const automations = yield* served(
