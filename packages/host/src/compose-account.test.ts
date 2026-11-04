@@ -198,8 +198,8 @@ it.effect(
       yield* account.session.refreshOnce();
       yield* until(() => gate.length === 2);
       assert.deepEqual(gate, ["stop", "start"]);
-      vi.restoreAllMocks();
     }).pipe(
+      Effect.ensuring(Effect.sync(() => vi.restoreAllMocks())),
       Effect.provideService(FetchHttpClient.Fetch, identity),
       Effect.provide([NodeFileSystem.layer, NodePath.layer]),
     );

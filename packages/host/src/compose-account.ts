@@ -3,6 +3,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
   isAccountProvider,
+  signedInAccountId,
 } from "@repo/credentials/snapshot";
 import type { AccountToken, CallCredential } from "@repo/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@repo/features/analytics";
@@ -70,11 +71,6 @@ export interface AccountComposer extends Composer {
 
 interface AccountDependencies {
   settings: SettingsComposer;
-}
-
-/** The id of the person signed in, where the session names one; none while nobody is. */
-function signedInId(account: AccountSnapshot): string | undefined {
-  return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
 }
 
 /**
@@ -157,8 +153,14 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // reads one: the capabilities of whoever stood before stop before the
     // next person is shown, so nothing they held, their transcripts among
     // it, is drawn for the next.
-    const [previousId, nextId] = [signedInId(previousAccount), signedInId(next)];
-    const anotherPerson = previousId !== undefined && nextId !== undefined && previousId !== nextId;
+    // Note that a person is told by their id where both name one, and by their address otherwise, as the session manager tells them.
+    const [previousId, nextId] = [signedInAccountId(previousAccount), signedInAccountId(next)];
+    const anotherPerson =
+      wasSignedIn &&
+      signedIn &&
+      (previousId !== undefined && nextId !== undefined
+        ? previousId !== nextId
+        : previousAccountKey !== nextAccountKey);
     previousAccount = next;
     if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
     if (anotherPerson) yield* Effect.flatMap(late.value, (links) => links.stopCapabilities);
