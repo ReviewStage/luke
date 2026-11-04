@@ -23,6 +23,7 @@ import {
   type AppHostRead,
   type AppInboxItems,
   type AppPages,
+  type AppPlanComments,
   type AppStateDelivery,
   type AppStateSnapshot,
   NO_BROWSER_TABS,
@@ -30,6 +31,7 @@ import {
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
   NO_PAGES,
+  NO_PLAN_COMMENTS,
   UNREAD,
 } from "@repo/host/app-state";
 import { AUTOMATION_ACT_KIND, SETTINGS_ACT_KIND, TASKS_ACT_KIND } from "@repo/host/contract";
@@ -94,6 +96,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
+    [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -187,6 +190,7 @@ export interface HostReadsHanded {
   readonly deliverChapters: (next: AppChapters) => void;
   readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
+  readonly deliverComments: (next: AppPlanComments) => void;
 }
 
 /**
@@ -231,6 +235,7 @@ export function handHostReads(first: {
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
     deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
+    deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
   };
 }
 
@@ -394,17 +399,18 @@ const BEATING_ACCOUNT_ID = "user-beating";
 /**
  * Lays the signed-in account's beats as the host holds them over whatever
  * document the window was handed: each device named having beat `ageMs` ago
- * on the window's clock, the latest ask failed after it as `stale` says, or,
- * where none are given, the read failed before it ever answered. The account
+ * on the window's clock, by a read that landed `askedAgoMs` ago (now where
+ * not given), the latest ask failed after it as `stale` says, or, where none
+ * are given, the read failed before it ever answered. The account
  * is given an id where the document names none, since the beats are held by
  * it.
  */
 export function handBeats(
   ages: Readonly<Record<string, number>> | undefined,
-  options: { readonly stale?: true } = {},
+  { askedAgoMs = 0, ...options }: { readonly stale?: true; readonly askedAgoMs?: number } = {},
 ): void {
   const handed = fakeAppBridgeCalls().requestAppState;
-  const at = Date.now();
+  const now = Date.now();
   const read: AppHostRead<AppDevicePresence> =
     ages === undefined
       ? { failed: true }
@@ -412,9 +418,9 @@ export function handBeats(
           rows: {
             beats: Object.entries(ages).map(([deviceId, ageMs]) => ({
               deviceId,
-              beatAt: at - ageMs,
+              beatAt: now - ageMs,
             })),
-            askedAt: at,
+            askedAt: now - askedAgoMs,
             ...options,
           },
         };

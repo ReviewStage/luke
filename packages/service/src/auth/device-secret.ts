@@ -9,7 +9,7 @@ import {
 } from "@repo/features/host-wire";
 import { Effect, Option } from "effect";
 import {
-  HOSTED_REFUSAL,
+  HOST_REMOVED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
   hostUpgradeNeeded,
@@ -35,7 +35,9 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
  * nothing, so the route reads it as a desktop's sign-in, which it refuses as
  * needing an upgrade (`../orpc/base.ts`'s `deviceCallerOf`); a device secret
  * that names no standing host (unknown, or its host removed) is
- * refused at once; and a host whose daemon is below `HOST_VERSION.FLOOR`,
+ * refused at once, as the 401 every host has read as removed, marked
+ * `hostRemoved` (`HOST_REMOVED_REFUSAL`) so a host tells it from any other
+ * 401 on the service's origin; and a host whose daemon is below `HOST_VERSION.FLOOR`,
  * or sent no version, is refused as needing an upgrade, after its version
  * was recorded, so its Hosts row says which it runs.
  */
@@ -129,7 +131,7 @@ export const hostCallerOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const secret = presentedDeviceSecret(request);
   if (secret === undefined) return Option.none();
   const host = yield* hostedStoreOrUnavailable(hostBySecret(hostSecretHash(secret)));
-  if (Option.isNone(host)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  if (Option.isNone(host)) return yield* Effect.fail(HOST_REMOVED_REFUSAL);
   const version = presentedHostVersion(request);
   // Note that only a version that reads is recorded, so a header of junk never lands on the Hosts row.
   if (

@@ -39,6 +39,7 @@ import {
 } from "./live-wire.js";
 import { type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL, planAttachmentTypeSchema } from "./plan-attachment-wire.js";
+import type { TaskCommentsLiveAnswer } from "./plan-comment-live.js";
 import {
   type PlanCommentActionRequest,
   type PlanCommentStart,
@@ -109,7 +110,7 @@ import {
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
   type TasksCommentAnswer,
-  type TasksCommentsAnswer,
+  type TasksCommentsFollow,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
 } from "./tasks-view.js";
@@ -329,22 +330,6 @@ export class HostedTaskClient {
       credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-  }
-
-  /** The plan's comment threads, or the named page's, past the cursor, held by the service while nothing changed; not found where the plan is not the account's. */
-  comments(
-    planId: string,
-    after: string,
-    pageId?: string,
-  ): Effect.Effect<TasksCommentsAnswer, never, HttpClient.HttpClient> {
-    const page = pageId === undefined ? undefined : { page: pageId };
-    return commentAnswer(
-      askHosted(
-        this.#hosted.planComments.read,
-        { id: planId, ...page, after },
-        HOSTED_DEADLINE.HELD,
-      ),
-    );
   }
 
   /** A thread started on the plan, or one of its task's pages, with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
@@ -642,6 +627,29 @@ export class HostedTaskClient {
       askLive(
         "taskId" in place ? this.#hosted.live.taskBrowserTabs : this.#hosted.live.agentBrowserTabs,
         { id: browserTabsPlaceId(place), [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's comments, its plan's own threads or one page's where `subject` names one, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  commentsLive(
+    subject: TasksCommentsFollow,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskCommentsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const page = subject.pageId === undefined ? undefined : { page: subject.pageId };
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskComments,
+        { id: subject.taskId, ...page, [LIVE_USER_QUERY]: userId },
         poll,
         after,
       ),

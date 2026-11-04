@@ -45,7 +45,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
-import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
+import { MentionedAgents } from "../tasks/mentioned-place.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useAgentLook, useTaskLooks } from "../tasks/use-task-looks.js";
 import {

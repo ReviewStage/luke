@@ -9,6 +9,7 @@ import { utcDayKey } from "@repo/database/models/quota";
 import { account, session, user } from "@repo/database/schemas/auth";
 import { adminFavorite } from "@repo/database/schemas/favorite";
 import { hostedUsage } from "@repo/database/schemas/usage";
+import { MEANINGFUL_ACTION, type MeaningfulAction } from "@repo/features/admin-overview-vocabulary";
 import {
   ADMIN_METRICS_SCOPE,
   type AdminMetricsScope,
@@ -37,7 +38,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { meaningfulActions, utcDay } from "./admin-activity-queries.js";
-import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
+import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDayHostedSource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
   type AdminMetricsSource,
@@ -364,6 +365,32 @@ const findAllTimeUsage = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * One account's meaningful actions since `since`, counted per UTC day and
+ * kind: a single grouped read, whose filter on the account Postgres pushes
+ * into each arm of the union, so a year of one account is never a scan of
+ * everyone's tasks or agents, or a round trip per day.
+ */
+const findActionsByDay = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, since: Schema.Date }),
+  Result: Schema.Struct({
+    day: Schema.String,
+    kind: Schema.Literals(Object.values(MEANINGFUL_ACTION)),
+    value: AggregateColumnSchema,
+  }),
+  execute: (request) => {
+    const actions = meaningfulActions(request.since);
+    const day = utcDay(actions.at);
+    return Database.use((db) =>
+      db
+        .select({ day, kind: actions.kind, value: count() })
+        .from(actions)
+        .where(eq(actions.userId, request.userId))
+        .groupBy(day, actions.kind),
+    );
+  },
+});
+
 const DayAccountRowSchema = Schema.Struct({
   ...ACCOUNT_FACE_FIELDS,
   calls: AggregateColumnSchema,
@@ -584,19 +611,28 @@ export function readAdminUserSource(input: {
     // window, so switching windows never redraws the year.
     const calendarStartDay = calendarDayKeys(input.now)[0] ?? utcDayKey(input.now);
 
-    const [account, signInMethods, windowRows, calendarRows, allTime] = yield* Effect.all(
-      [
-        findAccount(input.userId),
-        findSignInMethods(input.userId),
-        findUsageSince({ userId: input.userId, sinceDay: fetchStartDay }),
-        findUsageSince({ userId: input.userId, sinceDay: calendarStartDay }),
-        findAllTimeUsage(input.userId),
-      ],
-      { concurrency: "unbounded" },
-    );
+    const [account, signInMethods, actionRows, windowRows, calendarRows, allTime] =
+      yield* Effect.all(
+        [
+          findAccount(input.userId),
+          findSignInMethods(input.userId),
+          findActionsByDay({ userId: input.userId, since: dayStart(calendarStartDay) }),
+          findUsageSince({ userId: input.userId, sinceDay: fetchStartDay }),
+          findUsageSince({ userId: input.userId, sinceDay: calendarStartDay }),
+          findAllTimeUsage(input.userId),
+        ],
+        { concurrency: "unbounded" },
+      );
 
     if (Option.isNone(account)) return undefined;
     const row = account.value;
+
+    const actionsByDay = new Map<string, Map<MeaningfulAction, number>>();
+    for (const action of actionRows) {
+      const kinds = actionsByDay.get(action.day) ?? new Map<MeaningfulAction, number>();
+      kinds.set(action.kind, action.value);
+      actionsByDay.set(action.day, kinds);
+    }
 
     const byDay = new Map<string, number>();
     for (const usageRow of windowRows) byDay.set(usageRow.day, usageRow.calls);
@@ -614,6 +650,7 @@ export function readAdminUserSource(input: {
         createdAt: row.createdAt.getTime(),
         signInMethods: signInMethods.map((linked) => linked.providerId),
       },
+      actionsByDay,
       usage: {
         byDay,
         calendarByDay,
@@ -641,19 +678,20 @@ export function readAdminUserSource(input: {
 }
 
 /**
- * Reads one UTC day's active accounts with the day's totals. The usage table
- * holds one row per account per day, so each bounded row is already the
- * account's whole day and needs no aggregation; the totals ride their own
- * aggregate read because the rows are cut at the bound. Busiest first, with
- * the account id breaking ties so equally busy accounts keep a stable order
- * across refreshes.
+ * Reads one UTC day's hosted-tier accounts with the day's totals, for the
+ * Day page's retired sections; `admin-day-queries.ts` reads its live ones
+ * beside this. The usage table holds one row per account per day, so each
+ * bounded row is already the account's whole day and needs no aggregation;
+ * the totals ride their own aggregate read because the rows are cut at the
+ * bound. Busiest first, with the account id breaking ties so equally busy
+ * accounts keep a stable order across refreshes.
  * Like the account detail, this has no probe and no empty fallback: a
  * database that does not answer throws into the handler's 503.
  */
-export function readAdminDaySource(input: {
+export function readAdminDayHostedSource(input: {
   day: string;
   scope: AdminMetricsScope;
-}): Effect.Effect<AdminDaySource, AdminQueryFailure, DatabaseServices> {
+}): Effect.Effect<AdminDayHostedSource, AdminQueryFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const [accountRows, totals] = yield* Effect.all(
       [findDayAccounts(input), findDayTotals(input)],

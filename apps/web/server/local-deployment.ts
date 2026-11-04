@@ -6,13 +6,16 @@
  * builds the same dispatchers over the same modules, imported where they
  * stand, and lands each request on one by the same table
  * (`platform-landing.ts`), so a path answers here as it does on the
- * deployment. The two WebSocket functions are not served: they relay a
- * cloud sandbox's terminal and Browser tab, which a local run has none of,
- * and export the `http.Server` Vercel upgrades into, which no fetch
- * dispatcher fronts. Nor is the feedback courier, which is no route's. A
- * path the table lands on a function not served here answers 404. A page's
- * path is served from the built page the web service's own page rewrites
- * land it on (`vercel.json`), as an app link lands on `app.html`.
+ * deployment. The WebSocket functions are not served: they export the
+ * `http.Server` Vercel upgrades into, which no fetch dispatcher fronts. Two
+ * relay a cloud sandbox's terminal and Browser tab, which a local run has
+ * none of, and the third is the live reads' socket, whose upgrade answered
+ * 404 here sends a host's live polls over HTTP instead
+ * (`@repo/host`'s `live-socket.ts`). Nor is the feedback courier, which is
+ * no route's. A path the table lands on a function not served here answers
+ * 404. A page's path is served from the built page the web service's own
+ * page rewrites land it on (`vercel.json`), as an app link lands on
+ * `app.html`.
  *
  * No route module is imported until `localDeployment` is called, which the
  * caller does once the environment the routes read as they load is settled.

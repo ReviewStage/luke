@@ -289,16 +289,15 @@ test("This Mac stands first on the row of the machine it is, with no Remove", as
   assert.equal(document.querySelector('button[aria-label="This Mac actions"]'), null);
 });
 
-test("a host's row says Updating… in place of Online while its update runs", async () => {
+test("a host's row says Updating… while its update runs, though the restart has left its beat past fresh", async () => {
   const hosts: readonly Host[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "ams-01", update: HOST_UPDATE.WAITING },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "ord-01", update: HOST_UPDATE.UPDATING },
   ].map((host) => ({ seenAt: 0, version: "0.2.1", upgradeNeeded: false, ...host }));
-  await machinesWithThisMac(
-    hosts,
-    {},
-    hosts.map((host) => ({ deviceId: host.id, ageMs: 0 })),
-  );
+  await machinesWithThisMac(hosts, {}, [
+    { deviceId: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", ageMs: 0 },
+    { deviceId: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", ageMs: 90_000 },
+  ]);
   const text = document.body.textContent ?? "";
 
   assert.ok(text.includes("ams-01Online · Linux server"), text);

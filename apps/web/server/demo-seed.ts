@@ -105,10 +105,10 @@ const seedConfiguredDatabase = Effect.gen(function* () {
   ).pipe(Effect.provide(sqlClientOverUrl(url.success)));
   yield* Effect.logInfo(
     `Seeded the acme world: ${seeded.taskIds.length} tasks, ${seeded.memberIds.length + 1} members`,
-    { deanId: seeded.deanId, workspaceId: seeded.workspaceId },
+    { memberId: seeded.deanId, workspaceId: seeded.workspaceId },
   );
   if (Option.isSome(credential)) {
-    yield* Effect.logInfo(`Saved Dean's ${credential.value.kind} for his agents`);
+    yield* Effect.logInfo(`Saved the ${credential.value.kind} the demo's agents run on`);
   }
   if (Option.isSome(host)) {
     const { stateRoot, serviceOrigin, minted } = host.value;
@@ -117,7 +117,7 @@ const seedConfiguredDatabase = Effect.gen(function* () {
       deviceSecret: minted.secret,
       serviceOrigin,
     }).pipe(Effect.provide(NodeServices.layer));
-    yield* Effect.logInfo(`Enrolled Dean's host on this Mac, its record in ${stateRoot}`);
+    yield* Effect.logInfo(`Enrolled the demo's host on this Mac, its record in ${stateRoot}`);
   }
 });
 

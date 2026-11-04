@@ -95,8 +95,8 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  * agent's question in the draft under it; a task's page shows its agent's
  * log, folded calls and all, starting another agent and trading messages
  * with it, the plan's sub-tasks beside it; an automation's page fires a run;
- * the phone holds the same Inbox; and Settings › Agents connects Claude on a
- * subscription and Codex on an API key. None is pressed: each plays its story on a clock that
+ * the phone holds the same Inbox; and Settings › Agents connects Claude on
+ * its plan and Codex on an API key. None is pressed: each plays its story on a clock that
  * runs only while it is on screen (`landing-story.ts`).
  */
 
@@ -1069,7 +1069,7 @@ function DevicesScene(): React.JSX.Element {
   );
 }
 
-/** A harness's row in Settings › Agents: its mark, its name, how it is connected, and the step of the story it connects at. */
+/** A harness's row in Settings › Agents: its mark, its name, the credential it connects with, and the step of the story it connects at. */
 type KeyRow = {
   readonly id: string;
   readonly name: string;
@@ -1083,14 +1083,14 @@ const KEY_ROWS: readonly KeyRow[] = [
     id: "claude",
     name: "Claude",
     mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
-    connected: "Connected with a subscription",
+    connected: "Claude plan",
     at: 0,
   },
   {
     id: "codex",
     name: "Codex",
     mark: <ProviderMark provider={MARK_PROVIDER.CHATGPT} />,
-    connected: "Connected with an API key",
+    connected: "OpenAI API key",
     at: 2,
   },
 ];
@@ -1107,7 +1107,7 @@ function KeysScene(): React.JSX.Element {
       ref={ref}
       className="ui-landing-scene ui-landing-keys"
       role="img"
-      aria-label="Settings › Agents: Claude connected with a subscription, and Codex connecting with an API key"
+      aria-label="Settings › Agents: Claude connected on its Claude plan, and Codex connecting with an OpenAI API key"
       {...DESKTOP_SURFACE}
     >
       <div inert>
@@ -1120,11 +1120,11 @@ function KeysScene(): React.JSX.Element {
                 leading={<SettingsRowMark>{row.mark}</SettingsRowMark>}
                 label={row.name}
                 description={
-                  connected ? (
-                    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-                      {row.connected}
-                    </SettingsRowStateLine>
-                  ) : undefined
+                  <SettingsRowStateLine
+                    state={connected ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.PLAIN}
+                  >
+                    {connected ? row.connected : "Not connected"}
+                  </SettingsRowStateLine>
                 }
               >
                 {() => (

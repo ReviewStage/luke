@@ -1,9 +1,9 @@
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PLAN_COMMENT_ACTOR,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
-  PLAN_COMMENTS_CURSOR_START,
   type PlanCommentEntry,
   type PlanCommentThread,
   type PlanCommentWriter,
@@ -18,6 +18,7 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import {
+  COMMENT_SUBJECT,
   TASK_CALL_FAILURE,
   TASKS_READ,
   type TasksRepositoriesAnswer,
@@ -26,7 +27,7 @@ import {
 } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import { type AppPlanComments, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@repo/host/fixture-stage";
 import type { SettingsLink } from "@repo/settings/settings-views";
@@ -441,8 +442,8 @@ function thread(input: {
 }
 
 /**
- * The comment threads on the fixture's plan, oldest first, as the service
- * answers a read of them: one on a whole block, one its coding agent
+ * The comment threads on the fixture's plan, oldest first, as the host
+ * holds them: one on a whole block, one its coding agent
  * started, one answered by a member and by the app, and one resolved, which
  * only the Comments tab lists. The open ones stand in the plan's first
  * sections, so the window's first screen of it shows their marks.
@@ -536,40 +537,30 @@ const FIXTURE_THREADS: readonly PlanCommentThread[] = [
   }),
 ].sort((older, newer) => older.createdAt - newer.createdAt);
 
-/** Where a reader of the fixture's comments stands once it has read them, which nothing moves past. */
-const FIXTURE_COMMENTS_CURSOR = "1";
+/** Main's held comments with the fixture task's plan's threads among them, one object for each of main's. */
+const STAGED_COMMENTS = new WeakMap<AppPlanComments, AppPlanComments>();
 
 /**
- * The tasks-comments profile's answer to a read of a plan's comments: the
- * fixture task's threads to a reader starting out, none on any other plan
- * or on a page,
- * and to a reader already caught up a read held, as the service holds one
- * until something moves, which here nothing does. Note that the held read is
- * a promise that never settles (`Promise.race([])`), because one answered at
- * once would have the window read again at once, for good.
+ * Main's document as the tasks-comments profile draws it: the fixture
+ * task's plan's threads held as the window's read of them holds them
+ * (`LIVE_READ.PLAN_COMMENTS`), none on its pages. The same document, the
+ * very object, under any other profile.
  */
-function commentsAnswer(
-  payload: PortActPayload<typeof ACT_KIND.TASKS_COMMENTS>,
-): PortActResult<typeof ACT_KIND.TASKS_COMMENTS> | Promise<never> {
-  if (payload.after !== PLAN_COMMENTS_CURSOR_START) return Promise.race([]);
-  return {
-    threads:
-      payload.planId === FIXTURE_TASK_ID && payload.pageId === undefined ? FIXTURE_THREADS : [],
-    cursor: FIXTURE_COMMENTS_CURSOR,
-  };
-}
-
-/** The tasks-comments profile's answers: its plan's comments, and nothing else, which the agent's answers and main's take. */
-function commentsActAnswer(
-  profile: string,
-  kind: PortActKind,
-  payload: PortActPayload<PortActKind>,
-): { readonly answer: PortActResult<PortActKind> } | undefined {
-  if (profile !== RUN_PROFILE.TASKS_COMMENTS || kind !== ACT_KIND.TASKS_COMMENTS) return undefined;
-  // SAFETY: the kind is the comments read, so its payload is that read's; a held read is a promise
-  // the port's caller awaits as it awaits every answer.
-  const read = payload as PortActPayload<typeof ACT_KIND.TASKS_COMMENTS>;
-  return { answer: commentsAnswer(read) as PortActResult<PortActKind> };
+function commentsAppState(state: AppStateSnapshot): AppStateSnapshot {
+  if (state.run.profile !== RUN_PROFILE.TASKS_COMMENTS) return state;
+  const held = state[LIVE_READ.PLAN_COMMENTS];
+  let staged = STAGED_COMMENTS.get(held);
+  if (staged === undefined) {
+    staged = {
+      ...held,
+      [COMMENT_SUBJECT.PLAN]: {
+        ...held[COMMENT_SUBJECT.PLAN],
+        [FIXTURE_TASK_ID]: { rows: FIXTURE_THREADS },
+      },
+    };
+    STAGED_COMMENTS.set(held, staged);
+  }
+  return { ...state, [LIVE_READ.PLAN_COMMENTS]: staged };
 }
 
 /** The side panels the fixture profiles open their task with: open, for an agent profile to stage a tab in, or shut. */
@@ -643,8 +634,7 @@ function emptyTaskAnswer(
 /**
  * What a fixture run answers an act with in place of main (`act.ts`), boxed
  * so an act that answers nothing is told from one left to main: the
- * tasks-comments profile's plan comments, the fixture task's version
- * history under every profile, its agent
+ * fixture task's version history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads (an
  * Automations profile's are laid on its document instead), every
  * profile's workspace members, every other profile's task as one with no
@@ -657,7 +647,6 @@ export function fixtureActAnswer(
   payload: PortActPayload<PortActKind>,
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   return (
-    commentsActAnswer(run.profile, kind, payload) ??
     historyActAnswer(kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
@@ -672,12 +661,15 @@ export function fixtureActAnswer(
  * (`settings-fixture.ts`), the open task's pages held with the page its
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles
- * (`automations-fixture.ts`), and as main holds it under any other.
+ * (`automations-fixture.ts`), its plan's comment threads held under the
+ * tasks-comments profile, and as main holds it under any other.
  */
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
-  return automationsAppState(
-    agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID),
-    FIXTURE_WORKSPACE_IDS,
+  return commentsAppState(
+    automationsAppState(
+      agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID),
+      FIXTURE_WORKSPACE_IDS,
+    ),
   );
 }
 

@@ -3,7 +3,7 @@
  */
 
 export { readHostDevice, writeHostDevice } from "../host-device-record.js";
-export { HOST_DAEMON_END, hostDaemon } from "./host-daemon.js";
+export { HOST_DAEMON_END, hostDaemon, hostRefusedRest } from "./host-daemon.js";
 export {
   DARWIN_HOST,
   type HostRuntime,

@@ -161,7 +161,29 @@ const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
   "maximum context length",
 ];
 
-/** The host's refusal sentences, and a provider's words for a prompt past the window, a failed turn's detail may carry, by the word the wire says for each. */
+/**
+ * What the turn of a run its host lost records after the host's name, the
+ * lease sweep having taken the run from a host that stopped beating
+ * (`device-lease-sweep.ts`): the same words in every such turn, the name
+ * before them being the host's own.
+ */
+const HOST_AWAY_DETAIL = " went away during this turn. Send a message to carry on once it's back.";
+
+/** What the turn of a run the host named lost records. */
+export function hostAwayDetail(hostName: string): string {
+  return `${hostName}${HOST_AWAY_DETAIL}`;
+}
+
+/**
+ * The host's refusal sentences, a provider's words for a prompt past the
+ * window, and the words of a run its host lost, a failed turn's detail may
+ * carry, by the word the wire says for each. Note that a host lost reads as
+ * `other` rather than a word of its own, because a window reads
+ * `failureReason` as one of the words it knows and an older build would
+ * refuse the whole page over a new one: `other` reads there as a run that
+ * ended without saying why, rather than as the model's failure, and a newer
+ * window names the host from the page's `hostLost`.
+ */
 export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]])[] = [
   [
     AGENT_FAILURE.GITHUB,
@@ -191,6 +213,7 @@ export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]]
       REPOSITORY_REFUSAL.CHECKOUT_FAILED,
     ],
   ],
+  [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL]],
 ];
 
 /**
@@ -211,6 +234,18 @@ export function ranDirectlyFolderOf(
   if (!detail.startsWith(RAN_DIRECTLY_DETAIL)) return undefined;
   const folder = detail.slice(RAN_DIRECTLY_DETAIL.length);
   return folder.length > 0 ? folder : undefined;
+}
+
+/** The host that lost a failed turn's run, by the name its turn records; nothing for any other turn. */
+export function hostLostOf(
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): { readonly host: string } | undefined {
+  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
+  if (turn.failure !== TURN_FAILURE.MODEL) return undefined;
+  const detail = turn.failureDetail ?? "";
+  if (!detail.endsWith(HOST_AWAY_DETAIL)) return undefined;
+  const host = detail.slice(0, -HOST_AWAY_DETAIL.length);
+  return host.length > 0 ? { host } : undefined;
 }
 
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */

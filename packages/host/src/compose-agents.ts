@@ -142,6 +142,7 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import { type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
@@ -520,9 +521,10 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
  * that the beats are asked for the account signed in now alone, since the
- * service answers that account's devices, and that an ask which fails after
- * one answered keeps the beats it answered, marked stale, under the new
- * instant, so a window says it cannot check rather than that a device left.
+ * service answers that account's devices, and that an ask which fails, or
+ * runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the
+ * beats it answered, marked stale, under the new instant, so a window says it
+ * cannot check rather than that a device left.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
@@ -540,9 +542,15 @@ function fetchedReads(
       fetch: (userId, held) =>
         Effect.gen(function* () {
           if (userId !== dependencies.accountId()) return Option.none();
-          const answer = yield* asked(client.devicePresence());
+          // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
+          const answer = yield* Effect.timeoutOption(
+            asked(client.devicePresence()),
+            Duration.millis(MAC_PRESENCE.READ_TIMEOUT_MS),
+          );
           const askedAt = yield* Clock.currentTimeMillis;
-          if (!("failure" in answer)) return Option.some(presenceOf(answer, askedAt));
+          if (Option.isSome(answer) && !("failure" in answer.value)) {
+            return Option.some(presenceOf(answer.value, askedAt));
+          }
           return held === undefined
             ? Option.none()
             : Option.some({ beats: held.beats, askedAt, stale: true as const });
@@ -666,7 +674,7 @@ function composed(
         );
   });
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
       Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
     [GATEWAY_METHOD.AGENTS_DEFAULT_READ]: () =>
@@ -694,6 +702,12 @@ function composed(
       Effect.gen(function* () {
         presenceHeld = false;
         yield* FiberHandle.clear(presenceHold);
+        return {};
+      }),
+    // Note that the beats are asked again only where a window holds them, as a window coming forward asks them.
+    [GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH]: () =>
+      Effect.gen(function* () {
+        yield* presence.wake(() => true);
         return {};
       }),
     [GATEWAY_METHOD.HOSTS_REMOVE]: (params) =>

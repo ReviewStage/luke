@@ -27,11 +27,16 @@ import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
 import { AttachmentViewer } from "../../tasks/attachment-viewer.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
-import { ActivityCalendar, ActivityCalendarSkeleton } from "../charts/activity-calendar.js";
+import { ActionsChart, ActionsChartSkeleton } from "../charts/actions-chart.js";
+import {
+  ActivityCalendar,
+  ActivityCalendarSkeleton,
+  CALENDAR_MEASURE,
+} from "../charts/activity-calendar.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { UsageChart, UsageChartSkeleton } from "../charts/usage-chart.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
-import { AccountActivityNote, retiredTitle } from "../chrome/notes.js";
+import { AccountActionsNote, AccountActivityNote, retiredTitle } from "../chrome/notes.js";
 import {
   AccountAvatar,
   AdminPage,
@@ -65,16 +70,67 @@ const PHOTO_MEDIA_TYPE = "image/*";
 /** What the usage chart is headed. */
 const USAGE_LABEL = "This account's calls per day";
 
+/** What the live activity section is headed. */
+const ACTIVITY_TITLE = "Activity";
+
 /**
- * A streak as long as the window may run past it; the page says so rather
- * than posing the truncation as the exact count.
+ * A streak as long as the series it is read off may run past it; the page
+ * says so rather than posing the truncation as the exact count.
  */
-function streakWords(detail: AdminUserDetail): string {
-  const days = detail.activity.currentStreakDays;
-  const streak =
-    days >= detail.windowDays ? `${formatCount(detail.windowDays)}+` : formatCount(days);
+function streakWords(days: number, capped: boolean): string {
+  const streak = capped ? `${formatCount(days)}+` : formatCount(days);
   return `${streak} ${days === 1 ? "day" : "days"}`;
 }
+
+/**
+ * When the account first acted in the trailing year: its first active day
+ * ever where it joined inside the year, and only the year's earliest where
+ * it joined before, since the read reaches no further back.
+ */
+function firstActiveWords(detail: AdminUserDetail): string {
+  const { firstActiveDay, calendarDaily } = detail.actions;
+  if (firstActiveDay === null) return "none in the past year";
+  const yearStart = calendarDaily[0]?.day;
+  const joinedInYear =
+    yearStart !== undefined && detail.account.createdAt >= Date.parse(`${yearStart}T00:00:00Z`);
+  return `${joinedInYear ? "first active" : "earliest in the past year"} ${formatDayTick(firstActiveDay)}`;
+}
+
+/**
+ * The live activity's cards, in the two pairs they stand in, each read off
+ * the account's meaningful actions. A streak caps where it reaches the
+ * year's first day, which today not yet active leaves one short of its length.
+ */
+const ACTIVITY_STATS: readonly StatSpec<AdminUserDetail>[] = [
+  {
+    key: "active-days-window",
+    label: (detail) => `Active days · ${detail.windowDays} days`,
+    value: (detail) => formatCount(detail.actions.activeDaysWindow),
+    hint: (detail) => `of ${formatCount(detail.windowDays)} window days`,
+  },
+  {
+    key: "streak",
+    label: () => "Current streak",
+    value: ({ actions }) =>
+      streakWords(
+        actions.currentStreakDays,
+        actions.currentStreakDays >= actions.calendarDaily.length - 1,
+      ),
+    hint: () => "consecutive active days",
+  },
+  {
+    key: "active-days-trend",
+    label: ({ actions }) => `Active days · ${actions.activeDaysTrend.days} days`,
+    value: ({ actions }) => formatCount(actions.activeDaysTrend.recent),
+    hint: ({ actions }) => `${formatCount(actions.activeDaysTrend.prior)} the week before`,
+  },
+  {
+    key: "last-active",
+    label: () => "Last active",
+    value: ({ actions }) => (actions.lastActiveDay ? formatDayTick(actions.lastActiveDay) : "—"),
+    hint: firstActiveWords,
+  },
+];
 
 /** The hosted tier's daily-use cards, in the two pairs they stand in. */
 const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
@@ -87,7 +143,11 @@ const DAILY_USE_STATS: readonly StatSpec<AdminUserDetail>[] = [
   {
     key: "streak",
     label: () => "Current streak",
-    value: streakWords,
+    value: (detail) =>
+      streakWords(
+        detail.activity.currentStreakDays,
+        detail.activity.currentStreakDays >= detail.windowDays,
+      ),
     hint: () => "consecutive active days",
   },
   {
@@ -249,6 +309,25 @@ function AccountSections({
     <>
       {detail === undefined ? <MastheadSkeleton /> : <Masthead detail={detail} />}
 
+      <AdminSection title={ACTIVITY_TITLE}>
+        <StatCards layout={STAT_LAYOUT.PAIRS} stats={ACTIVITY_STATS} data={detail} />
+        {detail === undefined ? (
+          <ActionsChartSkeleton />
+        ) : (
+          <ActionsChart actions={detail.actions} generatedAt={detail.generatedAt} />
+        )}
+        {detail === undefined ? (
+          <ActivityCalendarSkeleton measure={CALENDAR_MEASURE.ACTIONS} />
+        ) : (
+          <ActivityCalendar
+            daily={detail.actions.calendarDaily}
+            measure={CALENDAR_MEASURE.ACTIONS}
+            generatedAt={detail.generatedAt}
+          />
+        )}
+        <AccountActionsNote />
+      </AdminSection>
+
       <AccountSupportSections
         support={detail?.support}
         windowDays={detail?.windowDays ?? windowDays}
@@ -273,10 +352,11 @@ function AccountSections({
         the all-neutral year, because at a year's span the quiet grid is the
         answer rather than a restatement of the chart's empty notice. */}
         {detail === undefined ? (
-          <ActivityCalendarSkeleton />
+          <ActivityCalendarSkeleton measure={CALENDAR_MEASURE.HOSTED_CALLS} />
         ) : (
           <ActivityCalendar
-            daily={detail.activity.calendarDaily}
+            daily={detail.activity.calendarDaily.map((day) => ({ day: day.day, count: day.calls }))}
+            measure={CALENDAR_MEASURE.HOSTED_CALLS}
             generatedAt={detail.generatedAt}
           />
         )}

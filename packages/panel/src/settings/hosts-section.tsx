@@ -140,20 +140,26 @@ function machineOf(host: Host): ListedMachine {
   return { deviceId: host.id, name: host.name, machineId: host.machineId, model: host.model };
 }
 
-/** What a host's line leads with, and its tint: online after the finished session's dot, offline tinted, and updating plain; none while its standing cannot be told. */
+/**
+ * What a host's line leads with, and its tint: updating plain while the host
+ * says it is, whatever its beat, because it restarts on purpose to update and
+ * is quiet meanwhile; online after the finished session's dot; offline
+ * tinted; and none while its standing cannot be told.
+ */
 function standingOf(
   host: Host,
   book: PresenceBook,
 ): { readonly words: string; readonly state: SettingsRowState } | undefined {
+  if (host.update === HOST_UPDATE.UPDATING) {
+    return { words: WORDS.UPDATING, state: SETTINGS_ROW_STATE.PLAIN };
+  }
   // Note that a host the read does not name, though it is the account's own, is gone.
   const standing = presenceStanding(book, host.id) ?? DEVICE_STANDING.OFFLINE;
   if (standing === DEVICE_STANDING.OFFLINE) {
     return { words: WORDS.OFFLINE, state: SETTINGS_ROW_STATE.ATTENTION };
   }
   if (standing !== DEVICE_STANDING.ONLINE) return undefined;
-  return host.update === HOST_UPDATE.UPDATING
-    ? { words: WORDS.UPDATING, state: SETTINGS_ROW_STATE.PLAIN }
-    : { words: WORDS.ONLINE, state: SETTINGS_ROW_STATE.CONNECTED };
+  return { words: WORDS.ONLINE, state: SETTINGS_ROW_STATE.CONNECTED };
 }
 
 /**

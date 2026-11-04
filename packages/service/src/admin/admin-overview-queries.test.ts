@@ -42,6 +42,7 @@ import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@repo/features/integra
 import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
+import { readAdminDaySource } from "./admin-day-queries.js";
 import { readAdminOverviewSource } from "./admin-overview-queries.js";
 
 /**
@@ -50,8 +51,9 @@ import { readAdminOverviewSource } from "./admin-overview-queries.js";
  * agent started, and nothing else makes an account active; each
  * daily count lands on its own UTC day; the funnel counts what the window's
  * new accounts ever did; reach counts the week's active developers alone;
- * the most active accounts carry their own counts; and hiding admins leaves
- * an admin's rows out of every number.
+ * the most active accounts carry their own counts; hiding admins leaves
+ * an admin's rows out of every number; and the Day page reads one UTC day of
+ * those same rows, naming who was active by a meaningful action.
  *
  * Synthetic accounts throughout, read on Wednesday 2026-10-21 at noon UTC over
  * a 7-day window: the recent run is 10-15 to 10-21, the prior 10-08 to 10-14.
@@ -406,5 +408,57 @@ it.layer(getTestDB())("the overview's reads", (it) => {
       assert.equal(on(DAILY_COUNT.AGENTS_FROM_AGENTS), 1);
       assert.equal(on(DAILY_COUNT.PILOTS_STARTED), 1);
     }),
+  );
+});
+
+it.layer(getTestDB())("one day's reads", (it) => {
+  it.effect(
+    "a day of agents and tasks with no hosted usage counts the chart's bar and lists who was active",
+    () =>
+      Effect.gen(function* () {
+        const { ada, root } = yield* seedService;
+        // Note that the next day's first instant is past the day's bound.
+        yield* createTask(ada, yield* openWorkspace(ada), "2026-10-21T00:00:00Z");
+
+        const day = yield* readAdminDaySource({
+          day: "2026-10-20",
+          scope: ADMIN_METRICS_SCOPE.NON_ADMINS,
+        });
+
+        // Bob's notetaker revision is in the bar, as the chart counts it, but makes him no active account.
+        assert.deepEqual(day.activity.features, {
+          agentsStarted: 1,
+          planRevisions: 1,
+          inboxAnswered: 1,
+          automationRuns: 1,
+        });
+        assert.equal(day.activity.activeDevelopers, 1);
+        assert.deepEqual(
+          day.activity.accounts.map((account) => [account.id, account.counts]),
+          [
+            [
+              ada,
+              {
+                tasksCreated: 1,
+                planRevisions: 0,
+                agentsStarted: 1,
+                inboxAnswered: 1,
+                automationRuns: 1,
+              },
+            ],
+          ],
+        );
+        assert.deepEqual(day.hosted, { accounts: [], totals: { accounts: 0, calls: 0 } });
+
+        const everyone = yield* readAdminDaySource({
+          day: "2026-10-20",
+          scope: ADMIN_METRICS_SCOPE.ALL,
+        });
+        assert.equal(everyone.activity.activeDevelopers, 2);
+        assert.deepEqual(
+          everyone.activity.accounts.map((account) => account.id),
+          [ada, root],
+        );
+      }),
   );
 });

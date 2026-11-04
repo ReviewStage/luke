@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AdminDayAccount,
+  AdminDayActivity,
   AdminDayDetail,
   AdminDayTotals,
 } from "@repo/features/admin-answer-wire";
@@ -15,12 +16,13 @@ import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
- * One UTC day of the overview's usage chart opened into the accounts behind
- * it, answering the question the bar cannot: forty calls that day, but whose?
- * It reads the same hosted-usage rows the chart's series aggregates — one row
- * per account per day, the service's own metering — behind the same admin
- * gate and the same scope, and it widens no analytics event: nothing here is
- * read off a user's machine.
+ * One UTC day of the Overview's activity chart opened into the accounts
+ * behind it, answering the question the bar cannot: forty agents that day,
+ * but whose? It reads the same daily-count rows the chart's bar counts, and
+ * names who was active by the one meaningful-action definition, behind the
+ * same admin gate and the same scope. The retired hosted tier's day rides
+ * beside it for the page's retired sections. It widens no analytics event:
+ * nothing here is read off a user's machine.
  */
 
 /**
@@ -31,13 +33,19 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 export const ADMIN_DAY_ACCOUNTS_LIMIT = 50;
 
 /**
- * The raw shape the queries produce for one day. The rows arrive bounded and
- * ordered, so the totals ride their own aggregate read — folding them from
- * the rows would state a truncated day's totals short.
+ * The hosted tier's day as its queries produce it. The rows arrive bounded
+ * and ordered, so the totals ride their own aggregate read — folding them
+ * from the rows would state a truncated day's totals short.
  */
-export interface AdminDaySource {
+export interface AdminDayHostedSource {
   accounts: readonly AdminDayAccount[];
   totals: AdminDayTotals;
+}
+
+/** The raw shape the queries produce for one day: its live activity, and the hosted tier's. */
+export interface AdminDaySource {
+  activity: AdminDayActivity;
+  hosted: AdminDayHostedSource;
 }
 
 /** Stamps one day's queried source with the day it covers and the bound it was read under. */
@@ -50,8 +58,9 @@ export function buildAdminDayDetail(
     generatedAt: now,
     day,
     limit: ADMIN_DAY_ACCOUNTS_LIMIT,
-    totals: source.totals,
-    accounts: [...source.accounts],
+    activity: source.activity,
+    totals: source.hosted.totals,
+    accounts: [...source.hosted.accounts],
   };
 }
 
@@ -64,7 +73,7 @@ export interface AdminDayOptions {
  * Answers one day's read behind the same gate the overview's metrics stand
  * behind, with the same distinct refusals, plus one of its own: a request
  * naming no real UTC calendar day is a 400 before any seam is touched. A real
- * day nobody spent anything on is an ordinary 200 with empty rows — unlike an
+ * day nobody did anything on is an ordinary 200 with empty rows — unlike an
  * account, a day cannot be gone, so there is no 404 here.
  */
 export function handleAdminDay(

@@ -404,15 +404,18 @@ export interface AutomationWritten {
 
 /**
  * An automation made for the account as the request asks, on a workspace
- * of its with the repositories its runs work in, under the id given where
- * the caller names one. Who made it, the member or one of their agents, is
- * what its count says, so an agent's automation is not counted as theirs.
+ * of its with the repositories its runs work in, under the id the request
+ * names where it names one. Made under that id already, by the request sent
+ * again, it is answered as the account reads it, with no transaction and no
+ * webhook secret; an id an automation the account does not read stands
+ * under is refused as a workspace it is not in is, naming nothing of that
+ * automation. Who made it, the member or one of their agents, is what its
+ * count says, so an agent's automation is not counted as theirs.
  */
 export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   made: typeof automationCreateRequestSchema.Type,
   source: (typeof SERVER_AUTOMATION_SOURCE)[keyof typeof SERVER_AUTOMATION_SOURCE],
-  id?: string,
 ): Effect.fn.Return<
   AutomationWritten,
   HostedRefusal,
@@ -431,6 +434,7 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
   const target = yield* checkedTarget(userId, made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT });
   const webhook =
     made.trigger.kind === AUTOMATION_TRIGGER.WEBHOOK ? mintWebhookSecret() : undefined;
+  const { id } = made;
   const created = yield* hostedStoreOrUnavailable(
     createAutomationCommitted(userId, {
       ...(id === undefined ? undefined : { id }),

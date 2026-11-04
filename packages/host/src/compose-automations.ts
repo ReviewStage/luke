@@ -11,8 +11,10 @@ import {
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
+  type AutomationChangeParams,
   type AutomationDeletedView,
   type AutomationFollow,
+  type AutomationIdParams,
   type AutomationRunView,
   type AutomationView,
   automationChangeParamsSchema,
@@ -22,18 +24,21 @@ import {
   automationRunParamsSchema,
 } from "@repo/features/automation-view";
 import { LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  readParams,
-} from "@repo/gateway";
+  declaredMethod,
+  type EntityPool,
+  type FieldChange,
+  ROW_GONE,
+  type WriteDeclaration,
+} from "@repo/sync";
+import type { WireRecord, WireValue } from "@repo/wire";
 import { Data, Effect, FiberMap, Result, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AppAutomationReads, type AppHostReads, NO_KEYS_HELD } from "./app-state.js";
 import {
+  AUTOMATION,
   type AutomationListCollections,
   type AutomationRow,
   automationListCollections,
@@ -43,15 +48,9 @@ import {
 import { followAutomationRead, historyAtEdges } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import type { HostKernel } from "./host-kernel.js";
-import {
-  type HeldAnswers,
-  type HeldSlice,
-  heldSlice,
-  ROW_GONE,
-  type RowRefused,
-  type RowWritten,
-} from "./live-collection.js";
+import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -66,10 +65,11 @@ import type { RunMode } from "./run-mode.js";
  * after the last lets go, each laid on its app-state slice, which every
  * window draws, and told as `AUTOMATIONS_CHANGED`. A sign-out lets every
  * follow go and lays none, and the account gate opening follows the holds
- * anew (`open`). A held workspace's automations stand in a collection
- * (`automation-collections.ts`), which a change or a deletion of one is
- * drawn on the moment it is asked, and a new one once the service has made
- * it, each answered once the list drawn shows it. Behind a closed account
+ * anew (`open`). A held workspace's automations stand in the sync engine's
+ * pool (`automation-collections.ts`). A change or a deletion of one is a
+ * write declared here, which the pool draws over every read holding it the
+ * moment it is asked, and a new one is drawn once the service has made it,
+ * each answered once the list drawn shows it. Behind a closed account
  * gate, or on a run that sends nothing, every ask answers unanswered. A
  * webhook's secret is the one secret answered here, by root AGENTS.md's
  * carve-out: one the service minted as a webhook was made, or one minted
@@ -98,6 +98,8 @@ export interface AutomationsDependencies {
   /** The account signed in now, which a follow names from its start; none where nobody is. */
   accountId: () => string | undefined;
   client: AutomationsClient;
+  /** The sync engine's pool, which a held workspace's automations stand in. */
+  pool: EntityPool;
 }
 
 export interface AutomationsComposer extends Composer {
@@ -119,7 +121,7 @@ interface Held {
   /** The windows' hold on each key, one fiber standing until let go. */
   readonly holds: ByKind<FiberMap.FiberMap<string>>;
   readonly waits: Waits;
-  /** Each followed workspace's automations in a collection, by the workspace's id, for as long as its follow stands. */
+  /** Each followed workspace's automations standing in the pool, by the workspace's id, for as long as its follow stands. */
   readonly lists: Map<string, AutomationListCollections>;
 }
 
@@ -214,6 +216,7 @@ function automationFollows(
       return Effect.scoped(
         Effect.gen(function* () {
           const list = yield* automationListCollections({
+            pool: dependencies.pool,
             draw: answers.answered,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             txWait: wait.handed,
@@ -386,24 +389,54 @@ function composed(
   };
 
   /**
-   * A change to an automation, or its deletion, drawn at once on the held
-   * list that holds it and standing until that list carries it
-   * (`automation-collections.ts`); one no held list holds is only written,
-   * as no window draws it.
+   * A change to an automation's fields, drawn at once over every read that
+   * holds it. Note that only the written fields reach the list, so a secret
+   * a change to a webhook minted is answered to the window alone.
    */
-  const writtenOver = <Answer>(
-    automationId: string,
-    change: () => Partial<AutomationRow> | typeof ROW_GONE,
-    written: Effect.Effect<RowWritten<AutomationRow, Answer> | RowRefused<Answer>>,
-  ): Effect.Effect<Answer> =>
-    Effect.suspend(() => {
-      const showing = listShowing(automationId);
-      return showing === undefined
-        ? Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer))
-        : showing.list.write(automationId, change, written);
-    });
+  const changed: WriteDeclaration<
+    AutomationRow,
+    FieldChange<AutomationRow>,
+    AutomationChangeParams,
+    WireValue
+  > = {
+    kind: AUTOMATION,
+    keys: (change) => [change.automationId],
+    change: (change) => () => changedFields(change.change),
+    send: (change) =>
+      Effect.map(asked(client.change(change)), (answer) =>
+        "automation" in answer
+          ? {
+              answer: carried<AutomationView>(answer),
+              txid: answer.txid,
+              taken: () => writtenFields(answer.automation),
+            }
+          : { refused: carried<AutomationView>(answer) },
+      ),
+  };
 
-  const methods: GatewayMethodTable = {
+  /**
+   * An automation deleted, gone at once from every read that holds it. Note
+   * that a delete is confirmed on its list alone, since its runs' follow
+   * ends not found rather than carrying it.
+   */
+  const deleted: WriteDeclaration<
+    AutomationRow,
+    FieldChange<AutomationRow>,
+    AutomationIdParams,
+    WireValue
+  > = {
+    kind: AUTOMATION,
+    keys: (named) => [named.automationId],
+    change: () => () => ROW_GONE,
+    send: (named) =>
+      Effect.map(asked(client.remove(named)), (answer) =>
+        "deleted" in answer
+          ? { answer: carried<AutomationDeletedView>(answer), txid: answer.txid }
+          : { refused: carried<AutomationDeletedView>(answer) },
+      ),
+  };
+
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.AUTOMATIONS_CREATE]: (params) =>
       Effect.gen(function* () {
         const made = yield* readParams(
@@ -421,50 +454,22 @@ function composed(
         }
         return carried<AutomationView>(answer);
       }),
-    [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: (params) =>
-      Effect.gen(function* () {
-        const change = yield* readParams(
+    [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: declaredMethod(
+      dependencies.pool,
+      changed,
+      (params: WireRecord) =>
+        readParams(
           automationChangeParamsSchema,
           params,
           "a change names an automation and what changes",
-        );
-        // Note that only the written fields reach the list, so a secret a change to a webhook minted is answered to the window alone.
-        return yield* writtenOver(
-          change.automationId,
-          () => changedFields(change.change),
-          Effect.map(asked(client.change(change)), (answer) =>
-            "automation" in answer
-              ? {
-                  answer: carried<AutomationView>(answer),
-                  txid: answer.txid,
-                  fields: writtenFields(answer.automation),
-                }
-              : { refused: carried<AutomationView>(answer) },
-          ),
-        );
-      }),
-    [GATEWAY_METHOD.AUTOMATIONS_DELETE]: (params) =>
-      Effect.gen(function* () {
-        const named = yield* readParams(
-          automationIdParamsSchema,
-          params,
-          "a delete names an automation",
-        );
-        // Note that a delete is confirmed on its list alone, since its runs' follow ends not found rather than carrying it.
-        return yield* writtenOver(
-          named.automationId,
-          () => ROW_GONE,
-          Effect.map(asked(client.remove(named)), (answer) =>
-            "deleted" in answer
-              ? {
-                  answer: carried<AutomationDeletedView>(answer),
-                  txid: answer.txid,
-                  fields: ROW_GONE,
-                }
-              : { refused: carried<AutomationDeletedView>(answer) },
-          ),
-        );
-      }),
+        ),
+    ),
+    [GATEWAY_METHOD.AUTOMATIONS_DELETE]: declaredMethod(
+      dependencies.pool,
+      deleted,
+      (params: WireRecord) =>
+        readParams(automationIdParamsSchema, params, "a delete names an automation"),
+    ),
     [GATEWAY_METHOD.AUTOMATIONS_RUN]: (params) =>
       Effect.gen(function* () {
         const run = yield* readParams(

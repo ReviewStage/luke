@@ -30,6 +30,7 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { entityPool } from "@repo/sync";
 import { unparsedWire, type WireRecord, type WireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { noNetwork } from "@repo/wire/testing";
@@ -267,6 +268,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       accountId: () => (options.signedIn === false ? undefined : ACCOUNT_ID),
       client: service.client,
+      pool: yield* entityPool(),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];

@@ -95,6 +95,7 @@ const DECLARED_TABLES = [
   "plan_revision",
   "pull_request_chapters",
   "queued_message",
+  "rate_limit",
   "repository_pin",
   "runner_line",
   "sandbox_terminal_lease",

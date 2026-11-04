@@ -30,8 +30,7 @@ import {
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
-  tasksCommentsAnswerSchema,
-  tasksCommentsParamsSchema,
+  tasksCommentsFollowSchema,
   tasksEditAnswerSchema,
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
@@ -259,11 +258,17 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: actProcedure("Could not keep that picture on this system.")
     .input(exactInput(tasksPictureKeepParamsSchema))
     .output(EffectSchema.flip(tasksPictureKeepAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_COMMENTS]: actProcedure(
-    "Could not read the task's comments on this system.",
+  // Note that the hold's stream carries nothing: the held comments reach the panel on app state, and the stream is the window's hold on them.
+  [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: actProcedure(
+    "Could not follow the task's comments on this system.",
   )
-    .input(exactInput(tasksCommentsParamsSchema))
-    .output(EffectSchema.flip(tasksCommentsAnswerSchema)),
+    .input(exactInput(tasksCommentsFollowSchema))
+    .output(eventIterator(type<never>())),
+  [TASKS_ACT_KIND.TASKS_COMMENTS_RETRY]: actProcedure(
+    "Could not read the task's comments again on this system.",
+  )
+    .input(exactInput(tasksCommentsFollowSchema))
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_COMMENT_START]: actProcedure(
     "Could not comment on the task on this system.",
   )

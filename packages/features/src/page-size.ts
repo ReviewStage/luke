@@ -61,3 +61,38 @@ export const PAGE_SIZE_SCRIPT = `(() => {
   else watch();
   addEventListener("load", post, { once: true });
 })();`;
+
+/** How a page drawn in words is fitted: not yet heard from, as tall as its own content, or filling whatever frame holds it. */
+export const PAGE_FIT = {
+  PENDING: "pending",
+  CONTENT: "content",
+  FILLS: "fills",
+} as const;
+
+export type PageFit =
+  | { readonly kind: typeof PAGE_FIT.PENDING }
+  | { readonly kind: typeof PAGE_FIT.CONTENT; readonly height: number }
+  | { readonly kind: typeof PAGE_FIT.FILLS };
+
+/** A page not yet heard from. */
+export const PAGE_FIT_PENDING: PageFit = { kind: PAGE_FIT.PENDING };
+
+/** How near a reported height may stand to the frame's own and still be the frame's, a rounded pixel either way. */
+const FRAME_SLACK = 1;
+
+/**
+ * How a page is fitted once it reports `height` from a frame `frameHeight`
+ * tall. A page as tall as its words is drawn at that height. A page that
+ * holds its root to the frame's height (`100vh`, `height: 100%`) has no
+ * height of its own and always reports the frame's, so it is drawn at a
+ * screenful instead of shrinking to the stand-in it was first framed at.
+ * Note that a page found to have a height of its own keeps it, because one
+ * whose words happen to match the frame it first stood in would otherwise
+ * swing between the two.
+ */
+export function pageFitAfter(fit: PageFit, height: number, frameHeight: number): PageFit {
+  if (fit.kind !== PAGE_FIT.CONTENT && Math.abs(height - frameHeight) <= FRAME_SLACK) {
+    return { kind: PAGE_FIT.FILLS };
+  }
+  return { kind: PAGE_FIT.CONTENT, height };
+}

@@ -13,12 +13,12 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
   type GatewayMethodHandler,
-  type GatewayMethodTable,
   RefusedRefusal,
 } from "@repo/gateway";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { Effect } from "effect";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 
 /** The concerns, by the name each is built under. */
 export const HOST_CONCERN = {
@@ -141,7 +141,7 @@ export const NOT_ON_THIS_PLATFORM = "not available on this platform";
 
 /** A platform concern this host left out: nothing begun, and each of its methods refused. */
 export function unavailableConcern(concern: HostPlatformConcern): Composer {
-  const methods: GatewayMethodTable = {};
+  const methods: HostMethodTable = {};
   for (const method of PLATFORM_CONCERN_METHODS[concern]) {
     methods[method] = () => Effect.fail(new RefusedRefusal({ message: NOT_ON_THIS_PLATFORM }));
   }

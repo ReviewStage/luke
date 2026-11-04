@@ -1,13 +1,13 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, pullRequestAddressOf } from "@repo/features/link-grammar";
-import type { CatalogModel } from "@repo/features/models-wire";
 import { summaryOfTaskless, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { listedPullRequestOf } from "@repo/ui/pull-request-link";
 import * as Atom from "effect/reactivity/Atom";
-import { createContext, type ReactNode, useContext } from "react";
+import type { ReactNode } from "react";
 import { tabCard } from "../desktop/tab-card.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { type AgentSubject, agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-place.js";
 import { TAB_KIND } from "./tab-look.js";
 import { useListedPullRequest } from "./use-agent-pull-request.js";
 import type { AgentsControl } from "./use-agents.js";
@@ -38,29 +38,6 @@ import { useOpenPlace } from "./use-open-link.js";
  * few a task's row names, takes its harness from the same list
  * (`ReadAgentModel`).
  */
-
-/** What a mentioned agent's card names it by: the catalog that names its model, and the reader, whose own agents name no starter. */
-export interface MentionedAgentsPlace {
-  readonly models: readonly CatalogModel[] | undefined;
-  readonly me: string | undefined;
-}
-
-const NO_PLACE: MentionedAgentsPlace = { models: undefined, me: undefined };
-
-const MentionedAgentsContext = createContext<MentionedAgentsPlace>(NO_PLACE);
-
-/** Hands every agent's chip under it what its card is named by. */
-export const MentionedAgents = MentionedAgentsContext.Provider;
-
-/** The reader, as the window around the chips names them, whose own work a card names no one over. */
-export function useMentionedReader(): string | undefined {
-  return useContext(MentionedAgentsContext).me;
-}
-
-/** What the window around the chips names an agent's card by: the catalog that names its model, and the reader. */
-export function useMentionedPlace(): MentionedAgentsPlace {
-  return useContext(MentionedAgentsContext);
-}
 
 /** What a card's foot says of the task an agent works on. */
 const TASK_WORDS = {
@@ -170,7 +147,7 @@ export function MentionedAgentCard({
   reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const place = useContext(MentionedAgentsContext);
+  const place = useMentionedPlace();
   const listed = useAppSlice(listedAgentAtom(agentId));
   const agent = agentOf(listed);
   const foot = useTaskFoot(agent);
@@ -216,7 +193,7 @@ function OwnedPullRequestCard({
   reading: ReactNode;
   fallback: ReactNode;
 }): ReactNode {
-  const place = useContext(MentionedAgentsContext);
+  const place = useMentionedPlace();
   const openPlace = useOpenPlace();
   const { agentId, taskId, number } = owned;
   const listed = useAppSlice(listedAgentAtom(agentId));
