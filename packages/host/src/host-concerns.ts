@@ -107,8 +107,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that the panel asks nothing of a local agent's runner, which the service reaches through rows, only of This Mac's host.
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [GATEWAY_METHOD.THIS_MAC_HOST_READ],
+  // Note that the panel asks nothing of a local agent's runner, which the service reaches through rows, nor of This Mac's host, which tells the windows itself.
+  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
     GATEWAY_METHOD.TERMINALS_LIST,
     GATEWAY_METHOD.TERMINALS_CREATE,

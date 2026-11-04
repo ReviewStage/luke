@@ -3,7 +3,29 @@
  */
 
 import { AGENT_BRIEF } from "@repo/features/agent-wire";
-import type { AgentRow } from "../task-list-collections.js";
+import { TASK_PRIORITY, TASK_STATUS } from "@repo/features/task-wire";
+import type { AgentRow, PlanRow } from "../task-list-collections.js";
+
+/** One plan as the plans statement delivers its row, unpinned, unassigned, and still to do. */
+export function planListRow(id: string, name: string): PlanRow {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name,
+    repository: null,
+    ownerId: "user-dana",
+    ownerName: "Dana",
+    assigneeId: null,
+    assigneeName: null,
+    pinnedAt: null,
+    pinPosition: null,
+    createdAt: 1_000,
+    updatedAt: 2_000,
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.NONE,
+    number: 1,
+  };
+}
 
 /** One agent of the plan, or of none, as the agents statement delivers its row, started at `createdAt`, with no turn yet. */
 export function agentListRow(planId: string | null, createdAt: number): AgentRow {

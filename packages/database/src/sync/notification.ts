@@ -33,6 +33,12 @@ export const TOPIC = {
    * integration reads and never its task list or its inbox.
    */
   ACCOUNT_INTEGRATIONS: "account-integrations",
+  /**
+   * A user's personal skills, by user id: narrower than the account's own
+   * topic, which every session read is woken on all session, so a toggle
+   * wakes only the account's open skills reads.
+   */
+  ACCOUNT_SKILLS: "account-skills",
   /** A workspace, by organization id. */
   WORKSPACE: "workspace",
   /**
@@ -47,6 +53,12 @@ export const TOPIC = {
    * reads of that workspace and never its members' task lists.
    */
   MEMORY: "memory",
+  /**
+   * A workspace's skills, by organization id: narrower than the workspace's
+   * own topic, so a skill installed or toggled wakes the open skills reads of
+   * that workspace and never its members' task lists.
+   */
+  WORKSPACE_SKILLS: "workspace-skills",
   TASK: "task",
   AGENT: "agent",
   CONVERSATION: "conversation",
