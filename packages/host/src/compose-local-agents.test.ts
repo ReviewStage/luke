@@ -6,12 +6,12 @@
  * token at each ask, answers each claim as a test says, its first answer
  * lost where it says, and whose beat answers the launches it holds the
  * device to, on the test's clock. The device beats on time whatever an
- * answer sets off, a settle slower than a beat among it, and converges to
- * that answer on every beat: a launch it runs nothing for is settled, again
- * where the settle was not taken, a runner whose launch is no longer named
- * is stopped as a stop line stops it, its process group killed, and neither
- * a launch claimed after the beat was sent nor one still starting is
- * touched; and a runner's GitHub token is renewed by its age on the wall
+ * answer sets off, a settle slower than a beat and a beat never answered
+ * among it, and converges to that answer on every beat: a launch it runs
+ * nothing for is settled, again where the settle was not taken, a runner
+ * whose launch is no longer named is stopped as a stop line stops it, its
+ * process group killed, and neither a launch claimed after the beat was
+ * sent nor one still starting is touched; and a runner's GitHub token is renewed by its age on the wall
  * clock. A host updating itself (`daemon/host-update.ts`) runs on the
  * machine's own file system and processes in a releases folder of its own,
  * its release's tarball answered in place of GitHub, and switches only
@@ -537,6 +537,23 @@ it.effect("a settle that takes longer than a beat holds up none of the beats aft
       const before = beats.length;
       yield* beatsOn(3);
       yield* until(() => beats.length >= before + 3);
+    }),
+  ),
+);
+
+it.effect("a beat left unanswered is given up, so the next is sent on time", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { service, beats } = yield* followingDevice(() => Effect.void, { lines: [] });
+      yield* until(() => beats.length > 0);
+      yield* TestClock.adjust(Duration.seconds(1));
+      const before = beats.length;
+      // Note that every beat from here on is never answered, so only its deadline lets the next go.
+      service.beatTakes = Duration.hours(1);
+      yield* TestClock.adjust(Duration.seconds(14));
+      yield* until(() => beats.length === before + 1);
+      yield* beatsOn(1);
+      yield* until(() => beats.length === before + 2);
     }),
   ),
 );
