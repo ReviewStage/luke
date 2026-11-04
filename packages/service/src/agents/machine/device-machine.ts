@@ -51,13 +51,13 @@
  * stopped sandbox's is. `launchRunner`, `writeFiles`, and `writeLine` refuse
  * an away Mac at once too, as a Start on it is refused
  * (`LOCAL_AGENT_REFUSAL.MAC_AWAY`), and a host its account removed by name,
- * rather than queue a line no one may take for hours: a message to it fails
- * in words, and its open run is taken from it once its lease lapses
+ * rather than queue a line no one may take for hours: a message, a Stop, or
+ * a retire to it fails in words, and its open run is taken from it once its
+ * lease lapses
  * (`../../maintenance/device-lease-sweep.ts`).
  */
 
 import { randomUUID } from "node:crypto";
-import { INPUT_LINE, InputLineSchema } from "@repo/agent-runner/protocol";
 import type { DatabaseServices } from "@repo/database/core/query";
 import { hasRepository, readAgent } from "@repo/database/models/agent-store";
 import {
@@ -165,18 +165,6 @@ const nameOfAgent = Brand.nominal<MachineName>();
 const encodeFilesPayload = Schema.encodeSync(deviceAgentFilesPayloadSchema);
 const encodeLaunchPayload = Schema.encodeSync(deviceAgentLaunchPayloadSchema);
 const encodeSecrets = Schema.encodeSync(Schema.fromJsonString(deviceAgentLaunchSecretsSchema));
-const decodeInputLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
-
-/** The runner's lines that only end what it does, which an away Mac is still sent. */
-const ENDING_LINES: ReadonlySet<string> = new Set([INPUT_LINE.STOP, INPUT_LINE.RETIRE]);
-
-/** Whether every line of a write only stops or retires the runner, carrying no message and no model. */
-function onlyEnds(text: string): boolean {
-  return text
-    .split("\n")
-    .filter((each) => each.length > 0)
-    .every((each) => Option.exists(decodeInputLine(each), (input) => ENDING_LINES.has(input.type)));
-}
 
 /** A local agent's place on its Mac, under our session given: the agent itself, since it has one place. */
 function macPlace(session: string, agentId: string): MachinePlace {
@@ -526,9 +514,7 @@ function deviceMachineOver(
         if (yield* runnerEnded(pin, handle)) {
           return yield* new SandboxUnavailable({ status: NOT_FOUND_STATUS });
         }
-        // Note that a line that only stops or retires the runner still goes, because a Stop on an
-        // away Mac is honored when it is back, and its lease's own stop stands for it if it never is.
-        if (!onlyEnds(text)) yield* refuseAway(pin);
+        yield* refuseAway(pin);
         yield* queued(pin, stdinLine(text));
       }),
 

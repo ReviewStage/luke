@@ -35,7 +35,7 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
- * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, reads which of its agents should still stand, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
+ * device-agent-client.ts -- a local agent's Mac as it asks the service (`contract/device-agents.ts`): it registers and beats, holds a read for its lines and one for its requests, claims each by its id, says which step a launch it claimed has reached, settles a line or answers a request, and saves its agents' state.
  *
  * Each is a procedure of the hosted contract over the one account call, so
  * the bearer is read fresh per attempt and a 401 is renewed and retried
@@ -43,8 +43,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * which the caller asks again after a pause; a claim refused is
  * `DEVICE_AGENT_NOT_CLAIMED` (another claim took it, or its caller withdrew
  * it) and one unanswered nothing; a
- * register, a step, a settle, or an answer not taken is false, and a beat or a
- * read of the live agents not taken is nothing. A save of an agent's
+ * register, a step, a settle, or an answer not taken is false, and a beat
+ * not taken is nothing. A save of an agent's
  * state, or its commit, refused says whether a newer save made it stale,
  * and one unanswered, or refused as unavailable, is nothing. A host also
  * asks the runner token route for a GitHub token for one of its agents
@@ -67,9 +67,9 @@ export interface DeviceAgentClaimedLine {
   readonly secretsGone?: true | undefined;
 }
 
-/** A beat the service took: the ids of the launches it holds the device to, none from a service before the field, and a release newer than the host's, where the service names one (`deviceAgentBeatAnswerSchema`). */
+/** A beat the service took: the ids of the launches it holds the device to, and a release newer than the host's, where the service names one (`deviceAgentBeatAnswerSchema`). */
 export interface DeviceAgentBeat {
-  readonly openLaunches?: readonly string[] | undefined;
+  readonly openLaunches: readonly string[];
   readonly release?: DeviceAgentRelease | undefined;
 }
 
@@ -331,16 +331,6 @@ export class HostedDeviceAgentClient {
           release: answer.release,
         }),
       ),
-      Effect.orElseSucceed(() => undefined),
-    );
-  }
-
-  /** The ids of the account's agents that should still stand on this Mac; nothing where the service did not answer or refused, which is never an empty list. */
-  liveAgents(
-    deviceId: string,
-  ): Effect.Effect<readonly string[] | undefined, never, HttpClient.HttpClient> {
-    return askHosted(this.#hosted.deviceAgents.liveAgents, { deviceId }).pipe(
-      Effect.map((answer): readonly string[] => answer.agentIds),
       Effect.orElseSucceed(() => undefined),
     );
   }

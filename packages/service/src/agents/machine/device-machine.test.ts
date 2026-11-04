@@ -469,7 +469,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
-      "a launch, a message, or its files to an agent whose Mac is away are refused as a Start on it is, and by name on a host its account removed, while a stop still goes",
+      "a launch, a message, or its files to an agent whose Mac is away are refused as a Start on it is, and by name on a host its account removed, queuing nothing",
       () =>
         Effect.gen(function* () {
           const opened = yield* openLocalAgent();
@@ -487,7 +487,6 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
             ]),
           );
           const launch = yield* Effect.flip(launched(opened));
-          yield* machine.writeLine(handle, '{"type":"stop","launch":4}\n');
           // The Mac is enrolled and removed, as Settings › Hosts removes one.
           yield* enrollOwnDevice(opened.userId, {
             id: opened.deviceId,
@@ -505,13 +504,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           }
           assert.ok(removed instanceof LaunchRefused);
           assert.equal(removed.deviceRemoved, true);
-          assert.deepEqual(
-            (yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId)).map(
-              (line) => line.payload,
-            ),
-            [{ text: '{"type":"stop","launch":4}\n' }],
-            "only the stop was queued",
-          );
+          assert.deepEqual(yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId), []);
         }),
     );
 

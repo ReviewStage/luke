@@ -214,7 +214,7 @@ describe("a host's daemon", () => {
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group, marks its record refused, and ends once its beat hears it was removed and hears it again",
+    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group, marks its record refused, and ends once its beat hears it was removed",
     ({ os, name, machine, platform: devicePlatform, uid, sandboxed, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -259,7 +259,7 @@ describe("a host's daemon", () => {
             case `GET ${HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS}`:
               return jsonResponse({}, HTTP.SERVER_ERROR);
             case `POST ${HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE}`:
-              return jsonResponse({ done: true, release: NEWER_RELEASE });
+              return jsonResponse({ done: true, openLaunches: [LINE_ID], release: NEWER_RELEASE });
             default:
               return jsonResponse({ done: true });
           }
@@ -327,12 +327,7 @@ describe("a host's daemon", () => {
         expect(reports).toContain("Vespin host: Connected to Vespin.");
 
         removed = true;
-        yield* TestClock.adjust(Duration.seconds(20));
-        yield* settled(() => reports.some((line) => line.includes("refused this box's calls")));
-        // Note that one answer saying the host was removed is not yet taken as the removal.
-        expect(daemon.pollUnsafe()).toBeUndefined();
-        expect(runner?.ended).toBe("running");
-        yield* elapsed(Duration.minutes(1));
+        yield* elapsed(Duration.seconds(20));
         yield* Fiber.join(daemon);
         expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBe(true);
         // Note that a daemon handed no releases, as a development run, neither fetches the release named nor says it updates.
@@ -419,52 +414,32 @@ describe("a host's daemon", () => {
 });
 
 describe("a refused host's rest", () => {
-  it.effect(
-    "says so once, asks Vespin on its secret every twenty minutes, and takes back its record's refusal once Vespin takes the secret again",
-    () =>
-      Effect.gen(function* () {
-        const { stateRoot } = yield* box;
-        const reports: string[] = [];
-        let accepting = false;
-        const http = recordingHttpClient(() =>
-          accepting
-            ? jsonResponse({ agentIds: [] })
-            : jsonResponse(HOST_REMOVED, HTTP.UNAUTHORIZED),
-        );
-        const asks = () => at(http.requests, "GET", HOSTED_SERVICE_PATH.DEVICE_AGENT_LIVE_AGENTS);
-        const device = { ...DEVICE, refused: true as const };
-        yield* writeHostDevice(stateRoot, device);
+  it.effect("says so once, and ends once a connect again replaces its record", () =>
+    Effect.gen(function* () {
+      const { stateRoot } = yield* box;
+      const reports: string[] = [];
+      const device = { ...DEVICE, refused: true as const };
+      yield* writeHostDevice(stateRoot, device);
 
-        const resting = yield* hostRefusedRest({ stateRoot, device, version: VERSION }).pipe(
-          Effect.provide(
-            Layer.merge(
-              reporterLayer((line) => reports.push(line)),
-              http.layer,
-            ),
-          ),
-          Effect.forkScoped,
-        );
-        yield* settled(() => reports.length === 1);
-        yield* elapsed(Duration.minutes(1));
-        yield* settled(() => asks().length === 1);
-        yield* elapsed(Duration.minutes(19));
-        expect(asks()).toHaveLength(1);
-        accepting = true;
-        // Note that each minute's read of the record is real file work, which may land a step late, so the clock moves on until the next ask rather than by exactly a minute.
-        yield* TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)).pipe(
-          Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
-          Effect.repeat({ until: () => asks().length === 2, times: 40 }),
-        );
-        yield* Fiber.join(resting);
+      const resting = yield* hostRefusedRest({ stateRoot, device }).pipe(
+        Effect.provide(reporterLayer((line) => reports.push(line))),
+        Effect.forkScoped,
+      );
+      yield* settled(() => reports.length === 1);
+      yield* elapsed(Duration.minutes(2));
+      expect(resting.pollUnsafe()).toBeUndefined();
+      yield* writeHostDevice(stateRoot, { ...DEVICE, deviceSecret: `lkd_${"b".repeat(43)}` });
+      // Note that each minute's read of the record is real file work, which may land a step late, so the clock moves on until the rest ends rather than by exactly a minute.
+      yield* TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)).pipe(
+        Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
+        Effect.repeat({ until: () => resting.pollUnsafe() !== undefined, times: 40 }),
+      );
+      yield* Fiber.join(resting);
 
-        expect(asks()).toHaveLength(2);
-        expect(new Set(asks().map((ask) => ask.authorization))).toEqual(
-          new Set([`Bearer ${DEVICE_SECRET}`]),
-        );
-        expect(asks()[1]?.headers.get(HOST_WIRE.VERSION_HEADER)).toBe(VERSION);
-        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual(DEVICE);
-        expect(reports).toHaveLength(2);
-      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+      expect(reports).toEqual([
+        "Vespin host: Vespin refused this box's secret, so it was removed. Connect it again to follow its agents.",
+      ]);
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 });
 

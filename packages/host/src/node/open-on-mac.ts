@@ -36,12 +36,12 @@ export function cloneFolder(stateRoot: string, repository: string): string {
 }
 
 /**
- * How long a stalled step may stand before the script gives it up, and how
- * long a launch waits on a clone another holds alive before it gives up.
- * Note that the lock wait is the host's own deadline for the whole script
- * (`compose-local-agents.ts`'s `WORKTREE_DEADLINE`), which a first clone of a
- * large repository over a slow link has to fit in; a transfer that has
- * stopped is cut off far sooner, by `STALL`, and a dead network by `CONNECT`.
+ * How long a stalled step may stand before the script gives it up. Note
+ * that the script as a whole, a wait on a clone another launch holds among
+ * it, is bounded by the host's own deadline (`compose-local-agents.ts`'s
+ * `WORKTREE_DEADLINE`), which a first clone of a large repository over a
+ * slow link has to fit in; a transfer that has stopped is cut off far
+ * sooner, by `STALL`, and a dead network by `CONNECT`.
  */
 const WORKTREE_TIMING = {
   /** Seconds a transfer may move under `LOW_SPEED_BYTES` a second before Git, over HTTPS, fails it. */
@@ -49,11 +49,7 @@ const WORKTREE_TIMING = {
   LOW_SPEED_BYTES: 1000,
   /** Seconds a connection over SSH, which a clone made over it before still fetches by, may take to open. */
   CONNECT_SECONDS: 20,
-  LOCK_WAIT_SECONDS: 25 * 60,
 } as const;
-
-/** The exit code of a script whose launch gave up waiting on a clone another held alive (`EX_TEMPFAIL`). */
-export const WORKTREE_LOCK_BUSY = 75;
 
 /** A word quoted for a POSIX shell. */
 function shellQuoted(word: string): string {
@@ -89,36 +85,20 @@ function nonInteractiveGit(stallSeconds: number): string[] {
  * time, over HTTPS, checking nothing out. Every agent of the repository
  * shares the clone, so the whole of bringing a branch in, its clone, fetch,
  * and worktree, is done under the lock. A script defines `brought_in`, and
- * sets `clone`, `https`, and `lock_wait`, before it calls `opened`.
+ * sets `clone` and `https`, before it calls `opened`.
  */
 const SHARED_CLONE = [
   "opened() {",
   '  mkdir -p "$(dirname "$clone")" || return 1',
   '  lock="$clone.lock"',
-  "  waited=0",
-  "  blocked=0",
   '  until mkdir "$lock" 2>/dev/null; do',
   '    holder="$(cat "$lock/pid" 2>/dev/null)"',
-  // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
-  '    if [ -n "$holder" ]; then',
-  // Note that the id is read again once its holder is found gone, since a holder lets go as it ends, and another open may have taken the lock since the first read; only a lock still naming the one gone is deleted.
-  '      if ! kill -0 "$holder" 2>/dev/null; then',
-  '        [ "$(cat "$lock/pid" 2>/dev/null)" = "$holder" ] && rm -rf "$lock"',
-  "        continue",
-  "      fi",
-  "      waited=0",
-  '    elif [ "$waited" -ge 30 ]; then',
+  // Note that a lock is taken over only from a holder that is gone, never from one alive, however long it takes.
+  '    if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then',
   '      rm -rf "$lock"',
   "      continue",
   "    fi",
-  // Note that a live holder's lock is never taken, but a launch waits on it only so long, so one stalled holder cannot hold every other launch of the repository.
-  '    if [ "$blocked" -ge "$lock_wait" ]; then',
-  '      echo "▸ Gave up waiting on another launch of ${https%.git} to finish making its clone." >&2',
-  `      return ${WORKTREE_LOCK_BUSY}`,
-  "    fi",
   "    sleep 1",
-  "    waited=$((waited + 1))",
-  "    blocked=$((blocked + 1))",
   "  done",
   '  echo "$$" > "$lock/pid"',
   "  brought_in",
@@ -169,19 +149,15 @@ export function agentWorktreeScript(input: {
   readonly branch: string | null;
   /** Where the repository is cloned from; GitHub's over HTTPS unless a test names its own. */
   readonly remote?: string | undefined;
-  /** The seconds a stalled transfer and a wait on a live holder of the clone's lock last; `WORKTREE_TIMING`'s unless a test names its own. */
-  readonly seconds?: { readonly stall: number; readonly lockWait: number } | undefined;
+  /** The seconds a stalled transfer lasts; `WORKTREE_TIMING`'s unless a test names its own. */
+  readonly stallSeconds?: number | undefined;
 }): string {
-  const seconds = input.seconds ?? {
-    stall: WORKTREE_TIMING.STALL_SECONDS,
-    lockWait: WORKTREE_TIMING.LOCK_WAIT_SECONDS,
-  };
+  const stallSeconds = input.stallSeconds ?? WORKTREE_TIMING.STALL_SECONDS;
   return [
     // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
     'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
     "export PATH",
-    ...nonInteractiveGit(Math.max(1, Math.trunc(seconds.stall))),
-    `lock_wait=${Math.max(1, Math.trunc(seconds.lockWait))}`,
+    ...nonInteractiveGit(Math.max(1, Math.trunc(stallSeconds))),
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch ?? "")}`,

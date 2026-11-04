@@ -1,18 +1,17 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and an agent whose checkout stands started though the machine's state file is corrupt.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, and a launch whose claim's answer was lost claimed again and launched once.
  *
  * The follower runs over a scripted spawner, a file system that holds
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
  * token at each ask, answers each claim as a test says, its first answer
  * lost where it says, and whose beat answers the launches it holds the
  * device to, on the test's clock. The device beats on time whatever an
- * answer sets off, a settle slower than a beat among it, sends a beat left
- * unanswered again within seconds, and converges to that answer on every
- * beat: a launch it runs nothing for is settled, a settle not taken
- * is asked again, a runner whose launch is no longer named is stopped as a
- * stop line stops it, its process group killed, and neither a launch
- * claimed after the beat was sent nor one still starting is touched; a
- * launch kept from a run that ended is settled; and a runner's GitHub token is renewed by its age on the wall
+ * answer sets off, a settle slower than a beat and a beat never answered
+ * among it, and converges to that answer on every beat: a launch it runs
+ * nothing for is settled, again where the settle was not taken, a runner
+ * whose launch is no longer named is stopped as a stop line stops it, its
+ * process group killed, and neither a launch claimed after the beat was
+ * sent nor one still starting is touched; and a runner's GitHub token is renewed by its age on the wall
  * clock. A host updating itself (`daemon/host-update.ts`) runs on the
  * machine's own file system and processes in a releases folder of its own,
  * its release's tarball answered in place of GitHub, and switches only
@@ -61,7 +60,6 @@ const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const LINE_ID = "0e9b7c1d-5a2f-4e63-8b40-7c1d2e3f4a5b";
 /** A launch the service holds the device to that this run of the follower never claimed. */
 const GONE_LINE_ID = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
-const GONE_AGENT_ID = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
 const STATE_ROOT = "/Users/dev/Library/Application Support/Vespin";
 const LAYOUT = deviceAgentLayout(HOME, AGENT_ID);
 const SECRET_ENV = { APP_RUNNER_TOKEN: "runner-secret" };
@@ -89,9 +87,6 @@ const LAUNCH: DeviceAgentClaimedLine = {
   secrets: { env: SECRET_ENV, stdin: "{}\n" },
 };
 
-/** Every follower a test started, by the files it was handed, so each mints a lease holder of its own. */
-const holders: Map<string, string>[] = [];
-
 /** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
 const until = (holds: () => boolean) =>
   Effect.gen(function* () {
@@ -103,19 +98,12 @@ const until = (holds: () => boolean) =>
 
 /**
  * The follower on a host whose agents run straight on the box, with its
- * CLIs ready once `ready` succeeds; one launch line is handed.
- * `checkoutStands` says the agent's checkout already stands, as an earlier
- * launch left it. With what it registered, spawned, asked, settled, and
- * reported.
+ * CLIs ready once `ready` succeeds; one launch line is handed. With what it
+ * registered, spawned, asked, settled, and reported.
  */
 const followingDevice = (
   ready: LocalAgentClis["ready"],
   options: {
-    readonly checkoutStands?: boolean;
-    /** The service refuses a register naming a setup, as one from before the field does. */
-    readonly refusesSetup?: boolean;
-    /** The files of the machine's state, shared with another follower on the same machine where given. */
-    readonly files?: Map<string, string>;
     /** How the service answers each claim of the launch line, by the token it carries; the line with its secrets where not given. */
     readonly claim?: (
       token: string | undefined,
@@ -129,8 +117,6 @@ const followingDevice = (
     readonly worktreeTakes?: Duration.Input;
     /** Making the agent's repository fails, as a clone that cannot be fetched does. */
     readonly worktreeFails?: boolean;
-    /** The service's beat names no open launches, as one from before the list does. */
-    readonly listsNoLaunches?: boolean;
     /** The clock the follower reads, the test's own where none is named. */
     readonly clock?: Clock.Clock;
     /** The host's update of itself, as a host's daemon hands it. */
@@ -140,8 +126,7 @@ const followingDevice = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const files = options.files ?? new Map<string, string>();
-    holders.push(files);
+    const files = new Map<string, string>();
     let minted = 0;
     const signal = yield* Deferred.make<void>();
     const runner: Script =
@@ -178,8 +163,8 @@ const followingDevice = (
      * to, which a claim adds and a settle it takes removes; how many settles
      * it refuses next, and the ids of those it refused; how long a settle
      * takes to answer; how long a beat takes to answer, its answer read as
-     * it was asked; how many beats it leaves unanswered next; and the release
-     * it names on each beat's answer, where it publishes one newer.
+     * it was asked; and the release it names on each beat's answer, where it
+     * publishes one newer.
      */
     const service = {
       held: new Set<string>(),
@@ -187,26 +172,18 @@ const followingDevice = (
       refused: [] as string[],
       settleTakes: Duration.zero as Duration.Input,
       beatTakes: Duration.zero as Duration.Input,
-      unanswered: 0,
       release: undefined as DeviceAgentRelease | undefined,
     };
     let launched = false;
     const client = {
       register: (_deviceId: string, device: DeviceAgentDevice) =>
-        Effect.sync(() => registered.push(device)).pipe(
-          Effect.as(options.refusesSetup !== true || device.setup === undefined),
-        ),
+        Effect.sync(() => registered.push(device)).pipe(Effect.as(true)),
       beat: (_deviceId: string, updating?: DeviceAgentUpdate) =>
         Effect.gen(function* () {
           beats.push(registered.length);
           said.push(updating);
-          const answer =
-            options.listsNoLaunches === true ? {} : { openLaunches: [...service.held] };
+          const answer = { openLaunches: [...service.held] };
           const { release } = service;
-          if (service.unanswered > 0) {
-            service.unanswered -= 1;
-            return yield* Effect.never;
-          }
           yield* Effect.sleep(service.beatTakes);
           return release === undefined ? answer : { ...answer, release };
         }),
@@ -256,8 +233,7 @@ const followingDevice = (
       spawner.layer,
       NodePath.layer,
       FileSystem.layerNoop({
-        exists: (path) =>
-          Effect.succeed(options.checkoutStands === true && path === LAYOUT.checkoutPath),
+        exists: () => Effect.succeed(false),
         makeDirectory: (path) =>
           options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
             ? Effect.sleep(options.writingTakes)
@@ -284,19 +260,6 @@ const followingDevice = (
             if (held !== undefined) files.set(to, held);
           }),
         remove: (path) => Effect.sync(() => void files.delete(path)),
-        link: (from, to) => {
-          const held = files.get(from);
-          return held === undefined || files.has(to)
-            ? Effect.fail(
-                systemError({
-                  _tag: "AlreadyExists",
-                  module: "FileSystem",
-                  method: "link",
-                  pathOrDescriptor: to,
-                }),
-              )
-            : Effect.sync(() => void files.set(to, held));
-        },
       }),
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
@@ -319,8 +282,7 @@ const followingDevice = (
     const composer = yield* composeLocalAgents({
       kernel: {
         stateRoot: STATE_ROOT,
-        // Note that each follower mints its own lease holder first.
-        createId: () => (minted++ === 0 ? `holder-${holders.length}` : `claim-${minted}`),
+        createId: () => `claim-${++minted}`,
       },
       deviceId: "device-1",
       switchedOn: Effect.succeed(true),
@@ -423,34 +385,7 @@ it.effect(
 );
 
 it.effect(
-  "a device whose getting-ready register a service refuses beats nothing while it fetches, so its earlier ready row ages away, then registers ready",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { registered, beats, spawned } = yield* followingDevice(
-          (preparing) => Effect.andThen(preparing, Effect.sleep(Duration.minutes(3))),
-          { refusesSetup: true },
-        );
-        yield* TestClock.adjust(Duration.seconds(5));
-        yield* until(() => registered.length > 0);
-        yield* TestClock.adjust(Duration.minutes(3));
-        yield* until(() => spawned.some((each) => each.program === RUNNER));
-
-        assert.deepEqual(
-          registered.map((each) => each.setup),
-          [DEVICE_SETUP.PREPARING, undefined],
-        );
-        assert.deepEqual(
-          beats.filter((after) => after === 1),
-          [],
-        );
-        yield* TestClock.adjust(Duration.seconds(1));
-      }),
-    ),
-);
-
-it.effect(
-  "a device whose CLIs could not be had registers why and beats, taking no agent, and tries again on its own after a wait that doubles, until it registers ready",
+  "a device whose CLIs could not be had registers why and beats, taking no agent, and tries again on its own a minute later, until it registers ready",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -466,8 +401,7 @@ it.effect(
           }),
         );
         yield* until(() => reported.length > 0);
-        // Note that the first wait is thirty seconds, give or take a fifth, so a twenty-second one has not ended it.
-        yield* TestClock.adjust(Duration.seconds(20));
+        yield* TestClock.adjust(Duration.seconds(50));
 
         assert.equal(tries, 1);
         assert.ok(beats.length >= 2, `beats ${beats.join(",")}`);
@@ -475,12 +409,9 @@ it.effect(
           spawned.some((each) => each.program === RUNNER),
           false,
         );
-        yield* TestClock.adjust(Duration.seconds(20));
+        yield* TestClock.adjust(Duration.seconds(10));
         yield* until(() => tries === 2);
-        // Note that the second try came by thirty-six seconds in and its wait is doubled, sixty seconds give or take a fifth, so the third comes between seventy-two and a hundred and eight.
-        yield* TestClock.adjust(Duration.seconds(30));
-        assert.equal(tries, 2);
-        yield* TestClock.adjust(Duration.seconds(40));
+        yield* TestClock.adjust(Duration.minutes(1));
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 
         assert.deepEqual(
@@ -496,41 +427,6 @@ it.effect(
           "the local agents' setup failed: Codex couldn't be downloaded",
         ]);
         yield* TestClock.adjust(Duration.seconds(1));
-      }),
-    ),
-);
-
-it.effect(
-  "a device whose setup failed tries nothing again, and registers nothing, once another follower has taken the machine's lease",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        let tries = 0;
-        const files = new Map<string, string>();
-        const { registered, reported } = yield* followingDevice(
-          () =>
-            Effect.suspend(() => {
-              tries += 1;
-              return Effect.fail(
-                new LocalAgentClisUnavailable({ detail: "Codex couldn't be downloaded" }),
-              );
-            }),
-          { files },
-        );
-        yield* until(() => tries === 1 && registered.length === 1);
-        // Note that another follower's lease, renewed far ahead, stands for the whole test.
-        const now = yield* Clock.currentTimeMillis;
-        files.set(
-          `${STATE_ROOT}/local-agents.lock`,
-          JSON.stringify({ holder: "another-follower", renewedAt: now + 3_600_000 }),
-        );
-        yield* TestClock.adjust(Duration.seconds(10));
-        yield* until(() =>
-          reported.includes("this follower lost the machine's lease, so it stops"),
-        );
-        yield* TestClock.adjust(Duration.minutes(2));
-
-        assert.deepEqual([tries, registered.length], [1, 1]);
       }),
     ),
 );
@@ -608,80 +504,8 @@ it.effect(
     ),
 );
 
-it.effect(
-  "an agent whose checkout already stands starts though the machine's state file is corrupt and keeps nothing of it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map([[`${STATE_ROOT}/local-agents.json`, "{ not json\n"]]);
-        const { spawned, settled } = yield* followingDevice(() => Effect.void, {
-          checkoutStands: true,
-          files,
-        });
-        yield* until(() => spawned.some((each) => each.program === RUNNER));
-
-        assert.equal(settled.length, 0);
-        yield* TestClock.adjust(Duration.seconds(1));
-        yield* until(() => settled.some((each) => each.id === LINE_ID));
-      }),
-    ),
-);
-
-it.effect(
-  "a second follower on the same machine follows nothing while the first holds its lease, and says why",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const files = new Map<string, string>();
-        const first = yield* followingDevice(() => Effect.void, { files });
-        yield* until(() => first.spawned.some((each) => each.program === RUNNER));
-        const second = yield* followingDevice(() => Effect.void, { files });
-        yield* until(() => second.reported.length > 0);
-        yield* TestClock.adjust(Duration.seconds(30));
-
-        assert.deepEqual(second.registered, []);
-        assert.deepEqual(second.spawned, []);
-        assert.deepEqual(second.reported, [
-          "another follower runs this machine's local agents, so this one follows none",
-        ]);
-      }),
-    ),
-);
-
-/** The ids of the launches the machine's state keeps. */
-const keptLaunches = (files: Map<string, string>) => {
-  const text = files.get(`${STATE_ROOT}/local-agents.json`);
-  return text === undefined
-    ? []
-    : (JSON.parse(text) as { launches: { id: string }[] }).launches.map((each) => each.id);
-};
-
 /** The clock nudged on by whole beats, so each beat's answer is converged to. */
 const beatsOn = (count: number) => TestClock.adjust(Duration.seconds(15 * count));
-
-it.effect(
-  "a runner's exit the service did not take is settled again on every beat, with its exit code, until it is taken, and only then let go of",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { service, settled, files, spawned } = yield* followingDevice(() => Effect.void);
-        service.refusing = 2;
-        yield* until(() => spawned.some((each) => each.program === RUNNER));
-        yield* TestClock.adjust(Duration.seconds(1));
-        yield* until(() => service.refused.length === 1);
-
-        assert.deepEqual(keptLaunches(files), [LINE_ID]);
-        yield* beatsOn(1);
-        yield* until(() => service.refused.length === 2);
-        assert.deepEqual(settled, []);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-
-        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
-        yield* until(() => keptLaunches(files).length === 0);
-      }),
-    ),
-);
 
 it.effect(
   "a launch the service holds the device to that it runs nothing for is settled as a runner gone, again on the next beat where the service did not take it",
@@ -717,23 +541,21 @@ it.effect("a settle that takes longer than a beat holds up none of the beats aft
   ),
 );
 
-it.effect(
-  "a beat left unanswered is given up and sent again within seconds, before the next is due",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { service, beats } = yield* followingDevice(() => Effect.void, { lines: [] });
-        yield* until(() => beats.length > 0);
-        yield* TestClock.adjust(Duration.seconds(1));
-        const before = beats.length;
-        service.unanswered = 1;
-        yield* TestClock.adjust(Duration.seconds(14));
-        yield* until(() => beats.length === before + 1);
-        // Note that the beat is given up five seconds in and sent again about two seconds later, so eight seconds on, well before the next is due.
-        yield* TestClock.adjust(Duration.seconds(8));
-        yield* until(() => beats.length === before + 2);
-      }),
-    ),
+it.effect("a beat left unanswered is given up, so the next is sent on time", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { service, beats } = yield* followingDevice(() => Effect.void, { lines: [] });
+      yield* until(() => beats.length > 0);
+      yield* TestClock.adjust(Duration.seconds(1));
+      const before = beats.length;
+      // Note that every beat from here on is never answered, so only its deadline lets the next go.
+      service.beatTakes = Duration.hours(1);
+      yield* TestClock.adjust(Duration.seconds(14));
+      yield* until(() => beats.length === before + 1);
+      yield* beatsOn(1);
+      yield* until(() => beats.length === before + 2);
+    }),
+  ),
 );
 
 it.effect(
@@ -806,24 +628,6 @@ it.effect(
     ),
 );
 
-it.effect("after a restart, a launch kept from the run before is settled as a runner gone", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const files = new Map([
-        [
-          `${STATE_ROOT}/local-agents.json`,
-          `${JSON.stringify({ launches: [{ id: GONE_LINE_ID, agentId: GONE_AGENT_ID }] })}\n`,
-        ],
-      ]);
-      const { settled } = yield* followingDevice(() => Effect.void, { files, lines: [] });
-      yield* until(() => settled.length > 0);
-
-      assert.deepEqual(settled, [{ id: GONE_LINE_ID }]);
-      assert.deepEqual(keptLaunches(files), []);
-    }),
-  ),
-);
-
 it.effect(
   "a runner's GitHub token is renewed in gh's config once it is fifty minutes old by the wall clock, though the machine slept through the wait",
   () =>
@@ -855,48 +659,6 @@ it.effect(
         yield* until(() => asked.length === 2);
         // Note that the renewal is written where the running agent's gh and git read it on every call.
         yield* until(() => files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_2"') === true);
-      }),
-    ),
-);
-
-it.effect(
-  "a service whose beat names no open launches has the device stop and settle nothing by it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { service, settled, spawned } = yield* followingDevice(() => Effect.void, {
-          runsUntilSignaled: true,
-          listsNoLaunches: true,
-        });
-        yield* until(() => spawned.some((each) => each.program === RUNNER));
-        service.held.clear();
-        service.held.add(GONE_LINE_ID);
-        yield* beatsOn(3);
-
-        const runner = spawned.find((each) => each.program === RUNNER);
-        assert.deepEqual([runner?.killed, settled, service.refused], [undefined, [], []]);
-        assert.equal(runner?.ended, "running");
-      }),
-    ),
-);
-
-it.effect(
-  "a kept launch the service no longer lists, as a stop queued after it hides it, is settled again until the service takes it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { service, settled, spawned } = yield* followingDevice(() => Effect.void);
-        yield* until(() => spawned.some((each) => each.program === RUNNER));
-        service.refusing = 2;
-        yield* TestClock.adjust(Duration.seconds(1));
-        yield* until(() => service.refused.length === 1);
-        service.held.delete(LINE_ID);
-        yield* beatsOn(1);
-        yield* until(() => service.refused.length === 2);
-        yield* beatsOn(1);
-        yield* until(() => settled.length > 0);
-
-        assert.deepEqual(settled, [{ id: LINE_ID, exitCode: 0 }]);
       }),
     ),
 );
