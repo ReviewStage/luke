@@ -43,16 +43,13 @@ import {
   type AgentServersParams,
   type AgentStartParams,
   type AgentStopParams,
-  type AgentTranscriptChanged,
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
-  type AgentTranscriptPage,
   type AgentWorkspaceListParams,
   type HostDoneAnswerView,
   type PullRequestPart,
   type PullRequestPartParams,
-  TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import type {
   HostPairingApproveView,
@@ -60,7 +57,7 @@ import type {
   HostPairingView,
 } from "@repo/features/host-pairing-view";
 import type { ModelChoice } from "@repo/features/models-wire";
-import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effect";
+import { Data, Effect, MutableHashMap, Option, Stream } from "effect";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
@@ -94,12 +91,13 @@ export interface AgentProceduresDependencies {
     agentMessages(params: AgentMessagesParams): Effect.Effect<AgentMessagesAnswerView>;
     agentMessage(params: AgentMessageParams): Effect.Effect<AgentAgentAnswer>;
     agentPart(params: AgentPartParams): Effect.Effect<AgentPartView>;
-    /** A transcript followed at the host from its start, its pages heard through `onTranscriptChanged`; following again starts over. */
+    /** A transcript held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
     transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
     transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-    /** The page of a transcript below the oldest message the window holds, read at once. */
+    /** A held transcript read again at once, as Try again asks. */
+    transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
+    /** The page of a held transcript below the oldest message it holds, read at once and laid before them: whether it landed. */
     transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
-    onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
     agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
     agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
     agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
@@ -177,60 +175,10 @@ function transcriptKeyOf(transcript: AgentTranscriptKey): TranscriptStreamKey {
   });
 }
 
-/**
- * A transcript's pages for one stream a window holds open: the host follows
- * it from its start as the stream opens, so the window hears it whole, and
- * lets it go once the last stream of it closes. Every page the host tells of
- * it reaches every stream of it, which joins a page heard again by id.
- */
-function transcriptPages(
-  host: AgentProceduresDependencies["host"],
-  open: MutableHashMap.MutableHashMap<TranscriptStreamKey, number>,
-  transcript: AgentTranscriptKey,
-): Stream.Stream<AgentTranscriptPage> {
-  const key = transcriptKeyOf(transcript);
-  return Stream.callback<AgentTranscriptPage>((queue) =>
-    Effect.gen(function* () {
-      yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          host.onTranscriptChanged((changed) => {
-            if (Equal.equals(transcriptKeyOf(changed.transcript), key)) {
-              Queue.offerUnsafe(queue, changed.page);
-            }
-          }),
-        ),
-        (stop) => Effect.sync(stop),
-      );
-      yield* Effect.acquireRelease(
-        Effect.andThen(
-          Effect.sync(() =>
-            MutableHashMap.set(
-              open,
-              key,
-              Option.getOrElse(MutableHashMap.get(open, key), () => 0) + 1,
-            ),
-          ),
-          host.transcriptFollow(transcript),
-        ),
-        () =>
-          Effect.suspend(() => {
-            const left = Option.getOrElse(MutableHashMap.get(open, key), () => 1) - 1;
-            if (left > 0) {
-              MutableHashMap.set(open, key, left);
-              return Effect.void;
-            }
-            MutableHashMap.remove(open, key);
-            return host.transcriptUnfollow(transcript);
-          }),
-      );
-    }),
-  );
-}
-
 export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, notices } = dependencies;
-  /** How many streams stand open of each transcript, so the host lets one go only with the last. */
-  const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
+  /** Every transcript a window holds a stream open of, so the host lets one go only with the last. */
+  const openTranscripts: OpenFollows<never, TranscriptStreamKey> = MutableHashMap.empty();
   /** Every agent's origin a window holds a stream open of, so the host lets one go only with the last. */
   const openOrigins: OpenFollows<never> = MutableHashMap.empty();
   /** The account's beats while a window holds a stream open of them, so the host lets them go only with the last. */
@@ -412,19 +360,27 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: actPort[AGENT_ACT_KIND.AGENTS_TRANSCRIPT].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        const pages = transcriptPages(host, openTranscripts, input).pipe(
-          Stream.tap((page) =>
-            Effect.sync(() => {
-              // A worker's page says where the worker stands, which is no word on the agent.
-              if (!("status" in page)) return;
-              if (input.kind !== TRANSCRIPT_KIND.AGENT || input.callId !== undefined) return;
-              notices.observeStatus(input.agentId, page.status);
-            }),
-          ),
+        // Note that nothing is heard down the hold, since the held transcript reaches the panel on app state, whose notices note the agent's end (`client-notices.ts`).
+        const hold = followedStream(
+          {
+            keyOf: transcriptKeyOf,
+            follow: host.transcriptFollow,
+            unfollow: host.transcriptUnfollow,
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openTranscripts,
+          input,
         );
-        return streamed(yield* Stream.toAsyncIterableEffect(pages));
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
       },
     ),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY]: actPort[
+      AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.transcriptRetry(input);
+    }),
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: actPort[
       AGENT_ACT_KIND.AGENTS_TRANSCRIPT_OLDER
     ].effect(function* ({ input, context, errors }) {

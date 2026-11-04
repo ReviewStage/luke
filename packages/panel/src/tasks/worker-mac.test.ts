@@ -42,31 +42,31 @@ afterEach(() => {
 
 /** Where the worker's tab says its Mac command ran once its page is read, as `reader` sees it. */
 async function workerTabFor(reader: string): Promise<string> {
+  pushedTranscripts(() => [
+    {
+      messages: [
+        {
+          id: "worker-step",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-run_on_mac",
+              toolCallId: "mac-call",
+              state: "output-available",
+              input: { command: "pnpm test" },
+              output: { status: "ran", exitCode: 0, stdout: "ok", stderr: "" },
+            },
+          ],
+        },
+      ],
+      cursor: "1:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents: [AGENT],
     me: reader,
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [
-          {
-            id: "worker-step",
-            role: "assistant",
-            parts: [
-              {
-                type: "tool-run_on_mac",
-                toolCallId: "mac-call",
-                state: "output-available",
-                input: { command: "pnpm test" },
-                output: { status: "ran", exitCode: 0, stdout: "ok", stderr: "" },
-              },
-            ],
-          },
-        ],
-        cursor: "1:0",
-        status: AGENT_STATUS.COMPLETED,
-        title: null,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

@@ -9,10 +9,12 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { MESSAGE_ROLE } from "@repo/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab.js";
 import { agentForkDoors, ForkProvider } from "./fork-action.js";
@@ -242,11 +244,9 @@ async function forkedAtInTab(
 ): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
   fakeAppBridge({});
   const agent = summary(SOURCE, { status, brief: AGENT_BRIEF.PROMPT });
+  pushedTranscripts(() => [{ messages: [...messages], cursor: "2:0", status, title: null }]);
   const control = agentsControl({
     agents: [agent],
-    transcripts: pushedTranscripts(() => [
-      { messages: [...messages], cursor: "2:0", status, title: null },
-    ]),
   });
   const forks: AgentFork[] = [];
   const doors = agentForkDoors({
@@ -261,16 +261,19 @@ async function forkedAtInTab(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        ForkProvider,
-        { value: doors },
-        createElement(AgentTab, {
-          agent,
-          control,
-          shown: true,
-          onOpenSubagent: () => undefined,
-          onHeld: () => undefined,
-        }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          ForkProvider,
+          { value: doors },
+          createElement(AgentTab, {
+            agent,
+            control,
+            shown: true,
+            onOpenSubagent: () => undefined,
+            onHeld: () => undefined,
+          }),
+        ),
       ),
     ),
   );

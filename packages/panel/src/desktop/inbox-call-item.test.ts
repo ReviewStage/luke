@@ -150,6 +150,9 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: ITEMS }, [INBOX_SCOPE_KIND.AGENT]: {} },
   });
+  pushedTranscripts(() => [
+    { messages: [POSTED], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
+  ]);
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: TASK.id,
@@ -170,9 +173,6 @@ async function mount(onOpen: (link: ReadLink) => void): Promise<HTMLElement> {
     agents: agentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id, OTHER_AGENT],
-      transcripts: pushedTranscripts(() => [
-        { messages: [POSTED], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
-      ]),
     }),
   });
   const container = document.body.appendChild(document.createElement("div"));

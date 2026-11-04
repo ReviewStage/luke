@@ -70,11 +70,7 @@ import type { MessageSender } from "./use-agent-composer.js";
 import type { ChoiceWriter } from "./use-agent-model.js";
 import { useListedPullRequests } from "./use-agent-pull-request.js";
 import type { ServersWriter } from "./use-agent-servers.js";
-import {
-  type TranscriptFollower,
-  type TranscriptReader,
-  windowTranscriptFollower,
-} from "./use-agent-transcript.js";
+import type { TranscriptReader } from "./use-agent-transcript.js";
 import type {
   InboxAnswerer,
   InboxImageReader,
@@ -392,8 +388,6 @@ export interface AgentsControl {
   readAgent: (agentId: string) => Promise<AgentSummary | undefined>;
   /** One read of an agent's transcript past a cursor at once, as Copy transcript asks it. */
   readTranscript: TranscriptReader;
-  /** How a shown tab follows its transcript and hears its pages pushed. */
-  transcripts: TranscriptFollower;
   /** Each of the task's agents' pull requests, by agent, of those that have one, as the task list carries them (`useListedPullRequests`). */
   pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Each pull request a Pull request tab names by its number, by agent and then by number (`pull-request-number.ts`), as the host holds what was published of it while a surface holds it. */
@@ -1571,7 +1565,6 @@ export function useAgents(input: {
     onDelete,
     readAgent,
     readTranscript,
-    transcripts: windowTranscriptFollower,
     pullRequests,
     numberedPullRequests,
     readChanges,

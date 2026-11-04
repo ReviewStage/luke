@@ -1282,8 +1282,6 @@ function subject(
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
     }[] = [];
-    /** Every followed transcript's page the host told, in order. */
-    const pages: WireValue[] = [];
     const focus = yield* windowFocus;
     const tasks = yield* composeTasks({
       kernel: {
@@ -1292,7 +1290,6 @@ function subject(
         // Note that the id the host mints for a task it starts is the one the service answers it under.
         createId: () => INVITES,
         emit: (kind, payload) => {
-          if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) {
             pushed.push([kind, payload]);
             events.push({ kind, payload });
@@ -1375,7 +1372,6 @@ function subject(
       tasks,
       call,
       told,
-      pages,
       pushed,
       events,
       last,

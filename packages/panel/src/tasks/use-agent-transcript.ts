@@ -6,70 +6,52 @@ import {
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
-  type AgentTranscriptPage,
 } from "@repo/features/agent-view";
-import {
-  type AgentContext,
-  type AgentFailure,
-  type AgentLaunch,
-  type AgentPayer,
-  type AgentStatus,
-  type AgentSubagentStanding,
-  type AgentTranscriptMessage,
-  type AgentUsage,
-  applyMessagesPage,
+import type {
+  AgentContext,
+  AgentFailure,
+  AgentLaunch,
+  AgentPayer,
+  AgentStatus,
+  AgentSubagentStanding,
+  AgentTranscriptMessage,
+  AgentUsage,
 } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
-import { askAct, type Unreached } from "../act.js";
+import type { AppTranscript } from "@repo/host/app-state";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { askAct } from "../act.js";
 import { jsonBytes, PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
+import { useHeldRows, useHostRead } from "../use-host-read.js";
 import { type AgentRun, agentStillWriting } from "./agent-model.js";
 
 /**
- * use-agent-transcript.ts -- one agent's transcript, or one of its workers', or a task's planning worker's, as its tab draws it, pushed to the window page by page while the tab is on screen.
+ * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, from the read the host holds of it on app state.
  *
- * The tab holds its transcript's stream open on the act port while it is
- * shown (`agents.transcript`) and closes it when it is not; the host
- * follows the transcript and pushes every page down that stream, so nothing
- * here follows a cursor or keeps a loop. The first page is the
- * transcript's newest, which names where the page older than it is read
- * below, each later one what moved past the last, and each joins the
- * messages held by id. A newest page that does not meet what is held, as
- * one pushed after the tab was away while more was written than a page
- * holds, takes its place. Older pages are read one at a time as the reader
- * asks for them (`loadOlder`, `agents.transcriptOlder`), each put
- * before the messages held in a transition, which a page landing meanwhile
- * goes ahead of. Each page's status is
- * the agent's as the page was read, with why where its turn failed, which
- * the tab's end line says, what its model's context holds, which the box's
- * ring draws, and when its run and each worker it waits on began, which the
- * working line and a subagent's row count from. A page that says the
- * transcript could not be read says so, with Try again, which follows it
- * anew; the messages held stand meanwhile. Each follow is timed to its
- * first page drawn and to the page that caught it up (`panel-spans.ts`),
- * each told whether that first page was the window the host held, which
- * draws with no round trip.
+ * The tab holds its transcript while it is shown (`useHostRead`), and the
+ * host follows it and lays every page on app state as it is read
+ * (`LIVE_READ.TRANSCRIPT`), the messages that moved crossing alone, so
+ * nothing here follows a cursor or keeps a loop. A transcript the host
+ * still holds, as one a tab showed lately, draws in the tab's first frame,
+ * before anything is read. Older pages are read one at a time as the reader
+ * asks for them (`loadOlder`, `agents.transcriptOlder`), each laid before
+ * the messages held by the host while they still begin where it was asked.
+ * The host's word on the agent is the last page's: its status, with why
+ * where its turn failed, which the tab's end line says, what its model's
+ * context holds, which the box's ring draws, and when its run and each
+ * worker it waits on began, which the working line and a subagent's row
+ * count from. A transcript that could not be read says so, with Try again,
+ * which reads it anew; the messages held stand meanwhile. Each hold is
+ * timed to its first page drawn and to the page that caught it up
+ * (`panel-spans.ts`), each told whether the transcript already stood as the
+ * hold was taken, which draws with no round trip.
  */
 
 /** How one read is asked at once: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. Copy transcript reads this way. */
 export type TranscriptReader = (params: AgentMessagesParams) => Promise<AgentMessagesAnswerView>;
 
-/** A page as the window hears it: one the host pushed, or one saying the stream itself could not open or broke, with the error it broke with, which never crosses the act port. */
-export type HeardTranscriptPage =
-  | AgentTranscriptPage
-  | Unreached<typeof AGENT_CALL_FAILURE.UNANSWERED>;
-
-/**
- * How the window follows a transcript: each page is handed to `hear` as it
- * is pushed, a stream that could not open or broke as a page that could not
- * be read, until the returned call stops it.
- */
-export type TranscriptFollower = (
-  transcript: AgentTranscriptKey,
-  hear: (page: HeardTranscriptPage) => void,
-) => () => void;
-
-/** How the page below the oldest message held is read: the transcript and where to read below, answered as the view hears it. */
+/** How the page below the oldest message held is read and laid: the transcript and where to read below, answered with whether it landed. */
 export type TranscriptOlderReader = (
   params: AgentTranscriptOlderParams,
 ) => Promise<AgentTranscriptOlderAnswer>;
@@ -77,31 +59,6 @@ export type TranscriptOlderReader = (
 /** The window's own older read, through the act door. */
 const windowTranscriptOlder: TranscriptOlderReader = (params) =>
   askAct(ACT_KIND.AGENTS_TRANSCRIPT_OLDER, params);
-
-/** The window's own follower: the transcript's stream, opened through the act door. */
-export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) => {
-  let stopped = false;
-  let stream: AsyncIteratorObject<AgentTranscriptPage> | undefined;
-  const following = askAct(ACT_KIND.AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
-    stream = opened;
-    // A stream that opened only after the tab let it go is closed at once.
-    if (stopped) {
-      await opened.return?.(undefined);
-      return;
-    }
-    // A page a read already out hands over after the tab let go is heard by no one.
-    for await (const page of opened) {
-      if (!stopped) hear(page);
-    }
-  });
-  following.catch((cause: unknown) => {
-    if (!stopped) hear({ failure: AGENT_CALL_FAILURE.UNANSWERED, cause });
-  });
-  return () => {
-    stopped = true;
-    void stream?.return?.(undefined);
-  };
-};
 
 /** Whether two keys name the same transcript. */
 function sameTranscript(one: AgentTranscriptKey, other: AgentTranscriptKey): boolean {
@@ -135,7 +92,7 @@ export interface AgentTranscriptControl {
   loadingOlder: boolean;
   /** Whether the last older read did not answer, until the next is asked for. */
   olderFailed: boolean;
-  /** Reads the page older than the oldest message held and puts it before them; nothing while one is out or none stands. */
+  /** Reads the page older than the oldest message held and has it laid before them; nothing while one is out or none stands. */
   loadOlder: () => void;
   /** How many pages have been read, which an ask counts from to know a page landed after it. */
   pages: number;
@@ -153,334 +110,197 @@ export interface AgentTranscriptControl {
   launch: AgentLaunch | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
-  /** Whether the last read did not answer, so the tab offers to try again. */
+  /** Whether the transcript could not be read, so the tab offers to try again. */
   failed: boolean;
-  /** What the last read that did not answer failed with, for the tab to report: the page saying so, with what failed beneath it; nothing while none failed. */
+  /** What the read that did not answer failed with, for the tab to report: the page saying so, with what failed beneath it; nothing while none failed. */
   failedWith: unknown;
   onRetry: () => void;
 }
 
-interface Held {
-  transcript: AgentTranscriptKey;
-  messages: readonly AgentTranscriptMessage[];
-  failure: AgentFailure | undefined;
-  ranDirectly: { readonly folder: string } | undefined;
-  hostLost: { readonly host: string } | undefined;
-  usage: AgentUsage | undefined;
-  payer: AgentPayer | undefined;
-  context: AgentContext | undefined;
-  runStartedAt: number | undefined;
-  pageStatus: AgentStatus | undefined;
-  /** Whether the last page pushed came back short, so every message written by then past the oldest held is held. */
-  caughtUp: boolean;
-  /** Where the page older than the oldest message held is read below; none where nothing older stands, or before a page landed. */
-  before: string | undefined;
-  /** The `before` an older read is out for; none while none is. */
-  olderOut: string | undefined;
-  /** Whether the last older read did not answer. */
-  olderFailed: boolean;
-  /** How many pages have been pushed, which an ask counts from to know a page landed after it. */
-  pages: number;
-  pageTitle: string | undefined;
-  subagentTitles: ReadonlyMap<string, string>;
-  delegations: ReadonlyMap<string, number>;
-  subagents: ReadonlyMap<string, AgentSubagentStanding>;
-  queue: AgentQueue | undefined;
-  launch: AgentLaunch | undefined;
-  /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
-  rewound: number | undefined;
-  failed: boolean;
-  failedWith: unknown;
-}
+/** No messages, for a transcript not read yet. */
+const NO_MESSAGES: readonly AgentTranscriptMessage[] = [];
 
-function fresh(transcript: AgentTranscriptKey): Held {
-  return {
-    transcript,
-    messages: [],
-    failure: undefined,
-    ranDirectly: undefined,
-    hostLost: undefined,
-    usage: undefined,
-    payer: undefined,
-    context: undefined,
-    runStartedAt: undefined,
-    pageStatus: undefined,
-    caughtUp: false,
-    before: undefined,
-    olderOut: undefined,
-    olderFailed: false,
-    pages: 0,
-    pageTitle: undefined,
-    subagentTitles: new Map(),
-    delegations: new Map(),
-    subagents: new Map(),
-    queue: undefined,
-    launch: undefined,
-    rewound: undefined,
-    failed: false,
-    failedWith: undefined,
-  };
+/** The tab's older read: the transcript it was asked for, the `before` one is out for, and the `before` the last one that did not answer was asked at. */
+interface OlderRead {
+  readonly transcript: AgentTranscriptKey;
+  readonly out: string | undefined;
+  readonly failedAt: string | undefined;
 }
 
 /**
- * The map a page read, or the one held where the page read it alike: each
- * page answers the agent's workers whole, mostly as they stood, and a map
- * kept as it was asks nothing that reads it to be drawn again.
+ * One hold, as it is timed: when it was taken, the pages the transcript had
+ * been read for then, whether rows already stood, and which of its two
+ * spans ended.
  */
-function keptIfSame<V>(
-  held: ReadonlyMap<string, V>,
-  read: readonly (readonly [string, V])[],
-  same: (a: V, b: V) => boolean,
-): ReadonlyMap<string, V> {
-  const unchanged =
-    held.size === read.length &&
-    read.every(([key, value]) => {
-      const was = held.get(key);
-      return was !== undefined && same(was, value);
-    });
-  return unchanged ? held : new Map(read);
-}
-
-/** Whether two readings of a worker say it stands alike. */
-function sameStanding(a: AgentSubagentStanding, b: AgentSubagentStanding): boolean {
-  return (
-    a.callId === b.callId &&
-    a.status === b.status &&
-    a.model === b.model &&
-    a.effort === b.effort &&
-    a.startedAt === b.startedAt
-  );
-}
-
-/**
- * Whether a newest page meets the messages held, so joining it leaves no
- * gap: it holds the whole transcript, or one of the held messages, since
- * both run unbroken to their ends.
- */
-function meets(held: readonly AgentTranscriptMessage[], page: AgentTranscriptPage): boolean {
-  if ("failure" in page || page.before === undefined) return true;
-  const ids = new Set(page.messages.map((message) => message.id));
-  return held.some((message) => ids.has(message.id));
-}
-
-/** A page pushed, joined to what is held: its messages by id, and where the agent stands as it says. */
-function joined(was: Held, page: HeardTranscriptPage): Held {
-  // Note that a transcript the account does not reach draws nothing it held of it, as one the host drew from what it held before access was checked.
-  if ("failure" in page) {
-    return page.failure === AGENT_CALL_FAILURE.NOT_FOUND
-      ? { ...fresh(was.transcript), pages: was.pages, failed: true, failedWith: page }
-      : { ...was, failed: true, failedWith: page };
-  }
-  // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap,
-  // and so does one read at another rewind, since the rewind dropped messages a join would keep.
-  const replaces =
-    page.newest === true &&
-    (was.messages.length === 0 || !meets(was.messages, page) || page.rewound !== was.rewound);
-  return {
-    ...was,
-    messages: replaces ? page.messages : applyMessagesPage(was.messages, page.messages),
-    before: replaces ? page.before : was.before,
-    olderOut: replaces ? undefined : was.olderOut,
-    // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
-    olderFailed: replaces ? false : was.olderFailed,
-    failure: page.failureReason,
-    ranDirectly: page.ranDirectly,
-    hostLost: page.hostLost,
-    usage: page.usage,
-    payer: page.payer,
-    context: page.context,
-    runStartedAt: page.runStartedAt,
-    pageStatus: page.status,
-    caughtUp: page.caughtUp,
-    pages: was.pages + 1,
-    rewound: page.newest === true ? page.rewound : was.rewound,
-    pageTitle: page.title ?? undefined,
-    subagentTitles: keptIfSame(
-      was.subagentTitles,
-      (page.subagentTitles ?? []).map((titled) => [titled.callId, titled.title]),
-      Object.is,
-    ),
-    delegations: keptIfSame(
-      was.delegations,
-      (page.delegations ?? []).map((started) => [started.callId, started.startedAt]),
-      Object.is,
-    ),
-    subagents: keptIfSame(
-      was.subagents,
-      (page.subagents ?? []).map((standing) => [standing.callId, standing]),
-      sameStanding,
-    ),
-    queue: page.queue,
-    launch: page.launch,
-    failed: false,
-    failedWith: undefined,
-  };
-}
-
-/**
- * One follow, as it is timed: when it opened, how many readable pages it
- * has heard and the last of them, whether the first was the window the host
- * held, and which of its two spans ended.
- */
-interface FollowTiming {
+interface HoldTiming {
   readonly startedAt: number;
-  heard: number;
-  page: AgentTranscriptPage | undefined;
-  held: boolean;
+  readonly pagesAtStart: number;
+  readonly held: boolean;
   painted: boolean;
   caughtUp: boolean;
 }
 
-/** Ends one of a follow's spans now, measured by the messages held and the page that ended it. */
-function endFollowSpan(
+/** Ends one of a hold's spans now, measured by the messages held and the transcript that ended it. */
+function endHoldSpan(
   name: typeof PANEL_SPAN.TRANSCRIPT_FIRST_PAINT | typeof PANEL_SPAN.TRANSCRIPT_CAUGHT_UP,
-  timing: FollowTiming,
-  messageCount: number,
+  timing: HoldTiming,
+  held: AppTranscript,
 ): void {
-  const { page } = timing;
   recordPanelSpan({
     name,
     startedAt: timing.startedAt,
     endedAt: Date.now(),
     attributes: () => ({
-      [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: messageCount,
-      [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: page === undefined ? 0 : jsonBytes(page),
+      [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: held.messages.length,
+      [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(held),
       [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: timing.held ? 1 : 0,
     }),
   });
 }
 
+/** A list the last page said, by the field each entry is keyed by, the very map while the list is the one it was built from. */
+function useKeyed<Entry, Value>(
+  list: readonly Entry[] | undefined,
+  entryOf: (entry: Entry) => readonly [string, Value],
+): ReadonlyMap<string, Value> {
+  const latest = useRef(entryOf);
+  latest.current = entryOf;
+  // Note that the host keeps every part of a page that said nothing new, so a list read alike is the very list.
+  return useMemo(() => new Map((list ?? []).map((entry) => latest.current(entry))), [list]);
+}
+
 export function useAgentTranscript(input: {
-  /** Which transcript: the agent's own, one of its workers' by the call that started it, or a task's planning worker's. */
+  /** Which transcript: the agent's own, or one of its workers' by the call that started it. */
   transcript: AgentTranscriptKey;
   /** Whether the tab is on screen: the panel open on it, on the Tasks tab. */
   shown: boolean;
-  follower: TranscriptFollower;
   /** How an older page is read; the window's own where none is named. */
   older?: TranscriptOlderReader | undefined;
   /** A page said where a worker stands now, and since when, which no list holds; none for an agent, which the task list says. */
   onStatus?: ((agentId: string, run: AgentRun) => void) | undefined;
 }): AgentTranscriptControl {
-  const { shown, follower, onStatus } = input;
-  const [held, setHeld] = useState<Held>(() => fresh(input.transcript));
-  // Note that another transcript's tab starts from nothing of this one's.
-  const changed = !sameTranscript(held.transcript, input.transcript);
-  if (changed) setHeld(fresh(input.transcript));
-  // Note that the key is kept as it was while it names the same transcript, so a tab drawn again follows nothing anew.
-  const transcript = changed ? input.transcript : held.transcript;
-  const [attempt, setAttempt] = useState(0);
+  const { transcript, shown, onStatus } = input;
+  // Note that what the host holds is drawn whether shown or not, and held only while shown, so a tab kept behind another stands as it was.
+  const { retry } = useHostRead(LIVE_READ.TRANSCRIPT, shown ? transcript : undefined);
+  const held = useHeldRows(LIVE_READ.TRANSCRIPT, transcript);
+  const word = held?.word;
   const older = input.older ?? windowTranscriptOlder;
-  const latest = useRef({ follower, onStatus, older });
-  latest.current = { follower, onStatus, older };
-  // The follow standing, as it is timed; none while the tab follows nothing.
-  const timing = useRef<FollowTiming | undefined>(undefined);
+  const latest = useRef({ onStatus, older });
+  latest.current = { onStatus, older };
+  const [olderRead, setOlderRead] = useState<OlderRead>({
+    transcript,
+    out: undefined,
+    failedAt: undefined,
+  });
+  // Note that another transcript's tab starts from nothing of this one's.
+  const ownOlder: OlderRead = sameTranscript(olderRead.transcript, transcript)
+    ? olderRead
+    : { transcript, out: undefined, failedAt: undefined };
+  // The hold standing, as it is timed; none while the tab holds nothing.
+  const timing = useRef<HoldTiming | undefined>(undefined);
+  const heldNow = useRef(held);
+  heldNow.current = held;
 
+  const { agentId, callId } = transcript;
   useEffect(() => {
     if (!shown) return;
-    const { agentId } = transcript;
-    const timed: FollowTiming = {
+    const standing = heldNow.current;
+    const timed: HoldTiming = {
       startedAt: Date.now(),
-      heard: 0,
-      page: undefined,
-      held: false,
+      pagesAtStart: standing?.pages ?? 0,
+      // Note that a hold whose transcript already stands is timed as such, so a span with no round trip in it is told apart.
+      held: standing !== undefined && standing.pages > 0,
       painted: false,
       caughtUp: false,
     };
     timing.current = timed;
-    const stop = latest.current.follower(transcript, (page) => {
-      setHeld((was) => (sameTranscript(was.transcript, transcript) ? joined(was, page) : was));
-      if ("failure" in page) return;
-      // Note that a follow whose first page the host held is timed as such, so a span with no round trip in it is told apart.
-      if (timed.heard === 0) timed.held = page.held === true;
-      timed.heard += 1;
-      timed.page = page;
-      latest.current.onStatus?.(agentId, page);
-    });
     return () => {
       if (timing.current === timed) timing.current = undefined;
-      stop();
     };
-  }, [shown, transcript, attempt]);
+  }, [shown, agentId, callId]);
 
-  // Note that a span ends once the page that ends it has been drawn, since
-  // this runs after the commit that joined it, and never for a follow let go
-  // before its page landed.
-  const messageCount = held.messages.length;
+  // Note that a span ends once the transcript that ends it has been drawn,
+  // since this runs after the commit that drew it, and never for a hold let
+  // go before its first page landed.
   useEffect(() => {
     const timed = timing.current;
-    if (timed === undefined || timed.heard === 0) return;
+    if (timed === undefined || held === undefined || held.pages === 0) return;
     if (!timed.painted) {
       timed.painted = true;
-      endFollowSpan(PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, timed, messageCount);
+      endHoldSpan(PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, timed, held);
     }
-    if (held.caughtUp && !timed.caughtUp) {
+    // Note that a transcript held before the hold is read past its cursor again, so only a page since says it caught up.
+    const read = !timed.held || held.pages > timed.pagesAtStart;
+    if (held.word?.caughtUp === true && read && !timed.caughtUp) {
       timed.caughtUp = true;
-      endFollowSpan(PANEL_SPAN.TRANSCRIPT_CAUGHT_UP, timed, messageCount);
+      endHoldSpan(PANEL_SPAN.TRANSCRIPT_CAUGHT_UP, timed, held);
     }
-  }, [held.pages, held.caughtUp, messageCount]);
+  }, [held]);
 
-  const { before, olderOut } = held;
+  // A worker's tab hears where the worker stands from its own page, which no list holds.
+  useEffect(() => {
+    if (shown && word !== undefined) latest.current.onStatus?.(agentId, word);
+  }, [shown, word, agentId]);
+
+  const before = held?.before;
+  const out = ownOlder.out;
   const loadOlder = useCallback(() => {
-    if (before === undefined || olderOut !== undefined) return;
-    setHeld((was) =>
-      sameTranscript(was.transcript, transcript) && was.before === before
-        ? { ...was, olderOut: before, olderFailed: false }
-        : was,
-    );
-    // Note that an answer is put before the messages only while they still begin where it was asked, so one for a transcript left or replaced since is dropped.
+    if (before === undefined || out === before) return;
+    setOlderRead({ transcript, out: before, failedAt: undefined });
+    // Note that an older read that landed stays out until the page it laid arrives, so it is never asked for twice.
     const settle = (answer: AgentTranscriptOlderAnswer) =>
-      setHeld((was) => {
-        if (!sameTranscript(was.transcript, transcript) || was.olderOut !== before) return was;
-        if ("failure" in answer) return { ...was, olderOut: undefined, olderFailed: true };
-        const held = new Set(was.messages.map((message) => message.id));
-        return {
-          ...was,
-          messages: [
-            ...answer.messages.filter((message) => !held.has(message.id)),
-            ...was.messages,
-          ],
-          before: answer.before,
-          olderOut: undefined,
-        };
+      setOlderRead((was) => {
+        if (!sameTranscript(was.transcript, transcript) || was.out !== before) return was;
+        if ("failure" in answer) return { transcript, out: undefined, failedAt: before };
+        return answer.landed ? was : { transcript, out: undefined, failedAt: undefined };
       });
-    // Note that an older page is put before the messages in a transition, so drawing it never holds the window: a page or a keystroke landing meanwhile is drawn first.
-    latest.current.older({ ...transcript, before }).then(
-      (answer) => startTransition(() => settle(answer)),
-      () => settle({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    );
-  }, [transcript, before, olderOut]);
+    latest.current
+      .older({ ...transcript, before })
+      .then(settle, () => settle({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
+  }, [transcript, before, out]);
 
   const onRetry = useCallback(() => {
-    setHeld((was) => ({ ...was, failed: false, failedWith: undefined }));
-    setAttempt((count) => count + 1);
-  }, []);
+    retry();
+  }, [retry]);
 
-  const writing = held.pageStatus === undefined || agentStillWriting(held.pageStatus);
+  const subagentTitles = useKeyed(
+    word?.subagentTitles,
+    (titled) => [titled.callId, titled.title] as const,
+  );
+  const delegations = useKeyed(
+    word?.delegations,
+    (started) => [started.callId, started.startedAt] as const,
+  );
+  const subagents = useKeyed(word?.subagents, (standing) => [standing.callId, standing] as const);
+  const messages = held?.messages ?? NO_MESSAGES;
+  const failed = held?.failure !== undefined;
+  const writing = word === undefined || agentStillWriting(word.status);
   return {
-    messages: held.messages,
-    failure: held.failure,
-    ranDirectly: held.ranDirectly,
-    hostLost: held.hostLost,
-    usage: held.usage,
-    payer: held.payer,
-    context: held.context,
-    runStartedAt: held.runStartedAt,
-    pageStatus: held.pageStatus,
-    caughtUp: held.caughtUp,
-    hasOlder: held.before !== undefined,
-    loadingOlder: held.olderOut !== undefined,
-    olderFailed: held.olderFailed,
+    messages,
+    failure: word?.failureReason,
+    ranDirectly: word?.ranDirectly,
+    hostLost: word?.hostLost,
+    usage: word?.usage,
+    payer: word?.payer,
+    context: word?.context,
+    runStartedAt: word?.runStartedAt,
+    pageStatus: word?.status,
+    caughtUp: word?.caughtUp ?? false,
+    hasOlder: before !== undefined,
+    // Note that a read is out only while the messages still begin where it was asked, so a newer page that took their place ends it.
+    loadingOlder: out !== undefined && out === before,
+    olderFailed: ownOlder.failedAt !== undefined && ownOlder.failedAt === before,
     loadOlder,
-    pages: held.pages,
-    pageTitle: held.pageTitle,
-    subagentTitles: held.subagentTitles,
-    delegations: held.delegations,
-    subagents: held.subagents,
-    queue: held.queue,
-    launch: held.launch,
-    reading: shown && !held.failed && held.messages.length === 0 && writing,
-    failed: held.failed,
-    failedWith: held.failedWith,
+    pages: held?.pages ?? 0,
+    pageTitle: word?.title ?? undefined,
+    subagentTitles,
+    delegations,
+    subagents,
+    queue: word?.queue,
+    launch: word?.launch,
+    reading: shown && !failed && messages.length === 0 && writing,
+    failed,
+    failedWith: held?.failure,
     onRetry,
   };
 }

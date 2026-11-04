@@ -30,7 +30,6 @@ import {
   type AgentRenameParams,
   type AgentServersParams,
   type AgentTranscriptOlderAnswer,
-  type AgentTranscriptPage,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
   agentDefaultWriteParamsSchema,
@@ -137,7 +136,6 @@ import {
   Clock,
   Duration,
   Effect,
-  Equal,
   FiberHandle,
   FiberMap,
   Option,
@@ -170,8 +168,12 @@ import {
   type AppModels,
   type AppProviderKeyList,
   type AppProviderKeys,
+  type AppTranscript,
+  type AppTranscripts,
   type AppWorkspaceTools,
   NO_KEYS_HELD,
+  NO_TRANSCRIPTS,
+  OWN_TRANSCRIPT,
   UNREAD,
 } from "./app-state.js";
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
@@ -199,7 +201,13 @@ import {
   type KeptKey,
   keptOfAgent,
 } from "./kept-content.js";
-import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
+import {
+  type AccountReads,
+  accountReads,
+  type HeldRows,
+  type HeldSlice,
+  heldSlice,
+} from "./live-collection.js";
 import { heldMemories, memoryForget } from "./memory-follow.js";
 import { heldAgentOrigins } from "./origin-follow.js";
 import {
@@ -218,13 +226,15 @@ import {
 import { AGENT, type AgentRow } from "./task-list-collections.js";
 import {
   followTranscript,
+  HELD_BYTES,
+  HELD_BYTES_EACH,
+  HELD_TRANSCRIPTS,
   type TranscriptFollows,
   TranscriptKey,
-  type TranscriptMemory,
   transcriptFollows,
   windowsPage,
+  withOlderPage,
 } from "./transcript-follow.js";
-import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 import type { WindowFocus } from "./window-focus.js";
 
 /**
@@ -241,10 +251,12 @@ import type { WindowFocus } from "./window-focus.js";
  * a forget drawn gone over them the moment it is asked. The window holds the agents it draws and the cursor it reads
  * from, asks when a task opens, when it starts or stops an agent, and while
  * an agent's tab shows its running transcript, and every ask is one call of
- * the service answered whole. The transcript read is held open here while
- * the agent runs and nothing new stands, on the service's held poll of what
- * its pages are read from (`transcript-follow.ts`), which a sign-out lets
- * go. What waits across the account is followed the same way, on the
+ * the service answered whole. An agent's or a worker's transcript is held
+ * for the windows whose tab shows it and the few let go lately
+ * (`heldSlice`), followed on the service's held poll of what its pages are
+ * read from (`transcript-follow.ts`) only while a window holds it, and told
+ * as `TRANSCRIPTS_CHANGED` events to the app state every window draws; a
+ * sign-out lets every one go. What waits across the account is followed the same way, on the
  * account's own live read (`account-inbox-follow.ts`), heard as
  * `ACCOUNT_INBOX_CHANGED` events by main's notices rather than a window
  * (`agent-notices.ts`). Every item the account reaches is followed whole
@@ -453,9 +465,30 @@ export function composeAgents(
         ),
       accountId: dependencies.accountId,
     });
-    const followed = yield* FiberMap.make<TranscriptKey>();
+    const gate = gateOf(dependencies);
+    // Note that a transcript no window holds stops following, its messages standing for a window that steps back to it, since a working agent nobody looks at would otherwise stream its journal on.
+    const transcriptSlice = yield* heldSlice<typeof LIVE_READ.TRANSCRIPT, TranscriptKey>({
+      empty: NO_TRANSCRIPTS,
+      path: (key) => [key.agentId, key.callId ?? OWN_TRANSCRIPT],
+      gate,
+      // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
+      follow: (key, answers) =>
+        followTranscript(
+          transcripts,
+          key,
+          {
+            newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
+            after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
+          },
+          answers,
+        ),
+      tell: (held: AppTranscripts) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.TRANSCRIPTS_CHANGED, carried(held)),
+      pause: true,
+      budget: { reads: HELD_TRANSCRIPTS, bytes: HELD_BYTES, bytesEach: HELD_BYTES_EACH },
+    });
+    const transcriptHolds = yield* FiberMap.make<TranscriptKey>();
     const accountWide = accountWideReads();
-    const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
         asked(
@@ -471,7 +504,6 @@ export function composeAgents(
       pool: dependencies.pool,
       accountWide,
     });
-    const gate = gateOf(dependencies);
     const tellItems = (read: AppHostRead<AppInboxItems>) =>
       Effect.sync(() => dependencies.kernel.emit(GATEWAY_EVENT.INBOX_ITEMS_CHANGED, carried(read)));
     const holders = yield* holderInboxes(inboxes, {
@@ -562,7 +594,7 @@ export function composeAgents(
     return composed(
       dependencies,
       http,
-      { transcripts, followed, held },
+      { transcripts, slice: transcriptSlice, holds: transcriptHolds },
       { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems, preferences, holdPreferences },
@@ -576,11 +608,11 @@ export function composeAgents(
   });
 }
 
-/** The transcripts' subscriptions the windows share, the follows main asked for, one fiber each, and the windows this host held of the transcripts it followed last. */
+/** The transcripts' subscriptions the windows share, the held lifetime over the transcripts the windows hold, and the windows' holds, one fiber per transcript held. */
 interface Transcripts {
   readonly transcripts: TranscriptFollows;
-  readonly followed: FiberMap.FiberMap<TranscriptKey>;
-  readonly held: TranscriptHeld<TranscriptKey>;
+  readonly slice: HeldSlice<TranscriptKey> & HeldRows<TranscriptKey, AppTranscript>;
+  readonly holds: FiberMap.FiberMap<TranscriptKey>;
 }
 
 /** The scopes' subscriptions the windows share, the held lifetime over them, and the windows' holds, one fiber per scope held. */
@@ -791,7 +823,7 @@ function fetchedReads(
 function composed(
   dependencies: AgentsDependencies,
   http: HttpClient.HttpClient,
-  { transcripts, followed, held }: Transcripts,
+  { transcripts, slice: transcriptSlice, holds: transcriptHolds }: Transcripts,
   { inboxes, holders, holds: inboxHolds, accountWide }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
@@ -888,8 +920,8 @@ function composed(
   /**
    * An archive, drawn on the agent's row at once, stamped now by the member,
    * a dialog's that asked first among them. Note that an agent archived
-   * lets go of what this host held of its transcript and its workers', and
-   * of their content kept.
+   * closes its transcript and its workers' that no window holds any longer,
+   * and lets go of their content kept; one a window holds stays drawn.
    */
   const archived = agentWrite<AgentArchiveParams>(
     ({ archived: archive }) => {
@@ -911,7 +943,7 @@ function composed(
       Effect.tap(asked(client.archive(agentId, request)), (answer) =>
         "agent" in answer
           ? Effect.andThen(
-              held.forget((key) => key.agentId === agentId),
+              transcriptSlice.drop((key) => key.agentId === agentId),
               kept.forget(keptOfAgent(agentId)),
             )
           : Effect.void,
@@ -952,23 +984,6 @@ function composed(
     ({ agentId, ...request }, key) => asked(client.pin(agentId, request, key)),
     { name: GATEWAY_METHOD.AGENTS_PIN, input: agentPinParamsSchema },
   );
-
-  /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
-  const memoryOf = (key: TranscriptKey): TranscriptMemory => {
-    const userId = dependencies.accountId();
-    if (userId === undefined) {
-      return {
-        recall: Effect.succeed(Option.none()),
-        keep: () => Effect.void,
-        forget: Effect.void,
-      };
-    }
-    return {
-      recall: held.recall(key, userId),
-      keep: (window) => held.keep(key, userId, window),
-      forget: held.forget((other) => Equal.equals(other, key)),
-    };
-  };
 
   /** The member signed in now, whom a write drawn before the service answers names. */
   const reader = () => dependencies.reader?.();
@@ -1326,27 +1341,28 @@ function composed(
         const answer = yield* asked(client.messagesNow(agentId, after, callId));
         return carried<AgentMessagesAnswerView>(windowsPage(answer));
       }),
+    // A transcript is held for a window while its tab shows it, and told only on the app state (`TRANSCRIPTS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const { transcript, key } = yield* agentTranscriptOf(params);
-        const tell = (page: AgentTranscriptPage) =>
-          Effect.sync(() =>
-            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
-          );
-        const follow = gate()
-          ? followTranscript(
-              transcripts,
-              key,
-              // The window draws a followed page, so its heavy parts come cut, each fetched whole as it opens.
-              {
-                newest: () => asked(client.messagesNewest(key.agentId, key.callId, true)),
-                after: (after) => asked(client.messagesNow(key.agentId, after, key.callId, true)),
-              },
-              memoryOf(key),
-              tell,
-            )
-          : tell(gateKept());
-        yield* FiberMap.run(followed, key, follow);
+        const { key } = yield* agentTranscriptOf(params);
+        yield* FiberMap.run(
+          transcriptHolds,
+          key,
+          Effect.scoped(Effect.andThen(transcriptSlice.hold(key), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { key } = yield* agentTranscriptOf(params);
+        yield* FiberMap.remove(transcriptHolds, key);
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { key } = yield* agentTranscriptOf(params);
+        yield* transcriptSlice.retry(key);
         return {};
       }),
     [GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER]: (params) =>
@@ -1357,13 +1373,12 @@ function composed(
           "reading an older page names the transcript and where to read below",
         );
         const answer = yield* asked(client.messagesBefore(agentId, before, callId, true));
-        return carried<AgentTranscriptOlderAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
-      Effect.gen(function* () {
-        const { key } = yield* agentTranscriptOf(params);
-        yield* FiberMap.remove(followed, key);
-        return {};
+        if ("failure" in answer) return carried<AgentTranscriptOlderAnswer>(answer);
+        const key = new TranscriptKey({ agentId, callId });
+        // Note that the page is laid only while the messages held still begin where it was asked, so one answering after a newer page took their place leaves no gap.
+        const laid = withOlderPage(transcriptSlice.rowsOf(key), before, answer);
+        if (laid !== undefined) transcriptSlice.lay(key, laid);
+        return carried<AgentTranscriptOlderAnswer>({ landed: laid !== undefined });
       }),
     [GATEWAY_METHOD.AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
@@ -1861,7 +1876,7 @@ function composed(
 
   // Note that the windows' holds stand through a sign-out, so a session signing in follows them anew (`open`).
   const reset = Effect.gen(function* () {
-    yield* FiberMap.clear(followed);
+    yield* transcriptSlice.end;
     yield* holders.end;
     yield* chapters.end;
     yield* memories.end;
@@ -1869,7 +1884,6 @@ function composed(
     yield* hosts.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
-    yield* held.clear;
     yield* kept.clear;
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const userId of yield* RcMap.keys(accounts)) yield* RcMap.invalidate(accounts, userId);
@@ -1887,6 +1901,7 @@ function composed(
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* sessionReads.open(LIVE_READ.ACCOUNT_PREFERENCES, holdPreferences);
+    yield* transcriptSlice.open;
     yield* holders.open;
     yield* chapters.open;
     yield* memories.open;

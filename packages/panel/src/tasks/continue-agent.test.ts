@@ -190,6 +190,16 @@ async function drawnTab(input: {
     continued.push({ agentId, note, attachments });
     return input.answer?.() ?? Promise.resolve(undefined);
   };
+  pushedTranscripts(() => [
+    {
+      messages: [...(input.messages ?? MESSAGES)],
+      cursor: "2:0",
+      status: input.status,
+      title: null,
+      ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
+      ...input.usage,
+    },
+  ]);
   const control = agentsControl({
     agents: [source, ...(input.others ?? [])],
     archived: input.archived ?? [],
@@ -207,16 +217,6 @@ async function drawnTab(input: {
     },
     onOpenApiKeys: (provider) => input.onOpenApiKeys?.(provider),
     onMessage: () => Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [...(input.messages ?? MESSAGES)],
-        cursor: "2:0",
-        status: input.status,
-        title: null,
-        ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
-        ...input.usage,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);

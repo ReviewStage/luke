@@ -1,5 +1,3 @@
 {
-  "packages/panel/src/act-stream.ts": "P22: the hold's door",
-  "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
-  "packages/panel/src/tasks/use-agents.ts": "P6: transcript"
+  "packages/panel/src/act-stream.ts": "P22: the hold's door"
 }

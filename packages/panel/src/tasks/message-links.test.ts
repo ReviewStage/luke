@@ -88,18 +88,18 @@ async function drawn(
   const revealed: number[] = [];
   const registry = AtomRegistry.make();
   // Note that the transcript ends on a page with nothing on it, as an ended agent's does.
+  pushedTranscripts(
+    () =>
+      [...pages, []].map((messages, at) => ({
+        messages: [...messages],
+        cursor: `${at + 1}:0`,
+        status: agent.status,
+        title: null,
+      })),
+    held,
+  );
   const control = agentsControl({
     agents: [agent],
-    transcripts: pushedTranscripts(
-      () =>
-        [...pages, []].map((messages, at) => ({
-          messages: [...messages],
-          cursor: `${at + 1}:0`,
-          status: agent.status,
-          title: null,
-        })),
-      held,
-    ),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

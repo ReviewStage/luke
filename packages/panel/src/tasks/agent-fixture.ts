@@ -22,7 +22,6 @@
  * profile stages.
  */
 
-import { AsyncIteratorClass } from "@orpc/client";
 import {
   AGENT_CALL_FAILURE,
   type AgentOverviewChecksAnswerView,
@@ -31,7 +30,6 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentReviewOptionsAnswerView,
-  type AgentTranscriptPage,
 } from "@repo/features/agent-view";
 import {
   AGENT_AUTHOR,
@@ -84,13 +82,16 @@ import {
   type AppPages,
   type AppPullRequestPart,
   type AppStateSnapshot,
+  type AppTranscript,
+  type AppTranscripts,
   OWN_PULL_REQUEST,
+  OWN_TRANSCRIPT,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_PAGE } from "@repo/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
-import { longRunPicture, longRunStream } from "./agent-long-run-fixture.js";
+import { longRunHold, longRunPicture, longRunTranscript } from "./agent-long-run-fixture.js";
 import { MAIN_TAB, type MainTab } from "./use-main-tabs.js";
 import {
   PULL_REQUEST_VIEW,
@@ -565,16 +566,21 @@ const LONG_MESSAGES: readonly AgentTranscriptMessage[] = [
   }),
 ];
 
-/** The agent's transcript, as its stream opens on it: the whole turn, caught up. */
-const TRANSCRIPT_PAGE: AgentTranscriptPage = {
+/** The agent's transcript as the host holds it once read: the whole turn, caught up. */
+const TRANSCRIPT: AppTranscript = {
   messages: MESSAGES,
   cursor: "1:0",
-  status: AGENT_STATUS.COMPLETED,
-  runStartedAt: STARTED_AT,
-  title: "Add teammate invitations",
-  newest: true,
-  caughtUp: true,
+  word: {
+    status: AGENT_STATUS.COMPLETED,
+    runStartedAt: STARTED_AT,
+    title: "Add teammate invitations",
+    caughtUp: true,
+  },
+  pages: 1,
 };
+
+/** The agent's transcript with every step the turn took, which runs past the window's height. */
+const LONG_TRANSCRIPT: AppTranscript = { ...TRANSCRIPT, messages: LONG_MESSAGES };
 
 /** A check on the pull request's head, run by GitHub Actions. */
 function check(name: string, state: (typeof CHECK_STATE)[keyof typeof CHECK_STATE], took: number) {
@@ -964,22 +970,12 @@ function postShellPort(stage: Extract<TerminalStage, { kind: typeof TERMINAL_STA
   );
 }
 
-/** The transcript's stream, as main opens one: its one page, as long as the stage says, then its end, as a finished agent's stands. */
-function transcriptStream(stage: AgentStage): AsyncIteratorClass<AgentTranscriptPage, void> {
-  if (longRun(stage)) return longRunStream();
-  const page =
-    "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
-      ? { ...TRANSCRIPT_PAGE, messages: LONG_MESSAGES }
-      : TRANSCRIPT_PAGE;
-  let told = false;
-  return new AsyncIteratorClass<AgentTranscriptPage, void>(
-    async () => {
-      if (told) return { done: true, value: undefined };
-      told = true;
-      return { done: false, value: page };
-    },
-    async () => undefined,
-  );
+/** The agent's transcript as the stage says it stands: the long run's at the step it reached, or the one turn, as long as the stage says. */
+function stagedTranscript(stage: AgentStage): AppTranscript {
+  if (longRun(stage)) return longRunTranscript();
+  return "view" in stage && stage.transcript === TRANSCRIPT_LENGTH.LONG
+    ? LONG_TRANSCRIPT
+    : TRANSCRIPT;
 }
 
 /** Whether the profile stages the orchestrator's long run. */
@@ -1003,7 +999,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_LIST]: ({ taskId }, stage) => ({
     agents: [agentSummary(taskId, longRun(stage))],
   }),
-  [ACT_KIND.AGENTS_TRANSCRIPT]: (_payload, stage) => transcriptStream(stage),
+  [ACT_KIND.AGENTS_TRANSCRIPT]: () => longRunHold(),
   [ACT_KIND.AGENTS_TRANSCRIPT_OLDER]: () => ({
     failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
@@ -1116,6 +1112,27 @@ export function agentColumnTab(profile: string): MainTab | undefined {
 /** Main's held pages with the open task's holding the page its agent showed, one object for each of main's. */
 const STAGED_PAGES = new WeakMap<AppPages, AppPages>();
 
+/** Main's held transcripts with the agent's own holding the one its stage says, one object for each of main's and each transcript staged. */
+const STAGED_TRANSCRIPTS = new WeakMap<AppTranscripts, WeakMap<AppTranscript, AppTranscripts>>();
+
+/** Lays `transcript` as the agent's own over main's held transcripts, one object for each pair. */
+function stagedTranscripts(held: AppTranscripts, transcript: AppTranscript): AppTranscripts {
+  let ofHeld = STAGED_TRANSCRIPTS.get(held);
+  if (ofHeld === undefined) {
+    ofHeld = new WeakMap();
+    STAGED_TRANSCRIPTS.set(held, ofHeld);
+  }
+  let laid = ofHeld.get(transcript);
+  if (laid === undefined) {
+    laid = {
+      ...held,
+      [FIXTURE_AGENT_ID]: { ...held[FIXTURE_AGENT_ID], [OWN_TRANSCRIPT]: { rows: transcript } },
+    };
+    ofHeld.set(transcript, laid);
+  }
+  return laid;
+}
+
 /** Main's held chapters with the agent's pull request's holding its chapters, one object for each of main's. */
 const STAGED_CHAPTERS = new WeakMap<AppChapters, AppChapters>();
 
@@ -1160,11 +1177,14 @@ const STAGED_PARTS = {
  * with the page its agent showed, as the window's read of them holds them
  * (`LIVE_READ.PAGES`), and the agent's pull request's chapters and parts
  * held as its Pull request tab's reads of them hold them
- * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings).
+ * (`LIVE_READ.PULL_REQUEST_CHAPTERS`, `LIVE_READ.PULL_REQUEST` and its siblings),
+ * and the agent's transcript as its tab's read of it holds it
+ * (`LIVE_READ.TRANSCRIPT`), the long run's at the step it reached.
  * The same document, the very object, under any other profile.
  */
 export function agentAppState(state: AppStateSnapshot, taskId: string): AppStateSnapshot {
-  if (!AGENT_STAGES.has(state.run.profile)) return state;
+  const stage = AGENT_STAGES.get(state.run.profile);
+  if (stage === undefined) return state;
   const held = state[LIVE_READ.PAGES];
   let staged = STAGED_PAGES.get(held);
   if (staged === undefined) {
@@ -1188,6 +1208,7 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     ...state,
     [LIVE_READ.PAGES]: staged,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: chapters,
+    [LIVE_READ.TRANSCRIPT]: stagedTranscripts(state[LIVE_READ.TRANSCRIPT], stagedTranscript(stage)),
     [LIVE_READ.PULL_REQUEST]: STAGED_PARTS[LIVE_READ.PULL_REQUEST](state[LIVE_READ.PULL_REQUEST]),
     [LIVE_READ.PULL_REQUEST_CHECKS]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_CHECKS](
       state[LIVE_READ.PULL_REQUEST_CHECKS],
@@ -1258,6 +1279,8 @@ export function agentActAnswer(
 ): { readonly answer: PortActResult<PortActKind> } | undefined {
   const stage = AGENT_STAGES.get(profile);
   if (stage === undefined) return undefined;
+  // Note that only the long run's hold is the fixture's own, which writes its transcript on; any other goes to main, which holds nothing behind its closed gate, the transcript staged whole (`agentAppState`).
+  if (kind === ACT_KIND.AGENTS_TRANSCRIPT && !longRun(stage)) return undefined;
   // SAFETY: the table is keyed by kind, each answer taking that kind's payload and answering its result.
   const answer = ANSWERS[kind] as StagedAnswer<PortActKind> | undefined;
   return answer === undefined ? undefined : { answer: answer(payload, stage) };

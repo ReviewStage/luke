@@ -12,7 +12,6 @@ import {
   agentMessageAnswerSchema,
   agentMessageRequestSchema,
   agentMessagesAnswerSchema,
-  agentOlderAnswerSchema,
   agentOverviewChecksAnswerSchema,
   agentOverviewConversationAnswerSchema,
   agentOverviewPullRequestAnswerSchema,
@@ -387,20 +386,18 @@ export const agentTranscriptKeySchema = EffectSchema.Struct({
 export type AgentTranscriptKey = typeof agentTranscriptKeySchema.Type;
 
 /**
- * A followed transcript's page as the window hears it pushed, with where the
+ * A followed transcript's page as the host's follow tells it, with where the
  * agent stands as it was read; or why there is none. The follow opens with
  * the transcript's `newest` page, which carries `before`, where the next
  * older page is read below (absent where nothing older stands), and each
- * later page is what moved past the last. A newest page that is `held`
- * came from the host's own memory of the transcript, not a read. `caughtUp` says the page came
- * back short, so every message written by then is told.
+ * later page is what moved past the last. `caughtUp` says the page came
+ * back short, so every message written by then is told; the newest page is
+ * told not caught up, since what was written past its cursor is read next.
  */
 const agentTranscriptPageSchema = EffectSchema.Union([
   EffectSchema.Struct({
     ...agentMessagesAnswerSchema.fields,
     newest: EffectSchema.optionalKey(EffectSchema.Literal(true)),
-    /** The newest page is the window the host held from the last time the transcript was followed, told before the service was asked anything. */
-    held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
     before: EffectSchema.optionalKey(agentBeforeSchema),
     caughtUp: EffectSchema.Boolean,
   }),
@@ -408,14 +405,6 @@ const agentTranscriptPageSchema = EffectSchema.Union([
 ]);
 
 export type AgentTranscriptPage = typeof agentTranscriptPageSchema.Type;
-
-/** A followed transcript's next page, as the window hears it pushed. */
-export const agentTranscriptChangedSchema = EffectSchema.Struct({
-  transcript: agentTranscriptKeySchema,
-  page: agentTranscriptPageSchema,
-});
-
-export type AgentTranscriptChanged = typeof agentTranscriptChangedSchema.Type;
 
 /** The page of a followed transcript below the oldest message a window holds, as the window asks it: the transcript, and the `before` its last page named. */
 export const agentTranscriptOlderParamsSchema = EffectSchema.Struct({
@@ -425,9 +414,13 @@ export const agentTranscriptOlderParamsSchema = EffectSchema.Struct({
 
 export type AgentTranscriptOlderParams = typeof agentTranscriptOlderParamsSchema.Type;
 
-/** An older page of a transcript, as the window hears it: its messages, oldest first, and where the page older still is read below; or why there is none. */
+/**
+ * An older page of a held transcript, as the window hears it read: whether
+ * the host laid it before the messages it holds, which it does only while
+ * they still begin where the window asked; or why it was not read.
+ */
 export const agentTranscriptOlderAnswerSchema = EffectSchema.Union([
-  agentOlderAnswerSchema,
+  EffectSchema.Struct({ landed: EffectSchema.Boolean }),
   failed,
 ]);
 

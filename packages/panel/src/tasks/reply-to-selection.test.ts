@@ -431,21 +431,21 @@ const AGENT: AgentSummary = {
 
 test("on the agent's tab, Reply quotes its words into the tab's own box, and stands while a message is out, since the box takes words", async () => {
   const sent: string[] = [];
+  pushedTranscripts(() => [
+    {
+      messages: [
+        { id: "task", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Plan it." }] },
+        TURN,
+      ],
+      cursor: "1:0",
+      status: AGENT.status,
+      title: null,
+    },
+    { messages: [], cursor: "2:0", status: AGENT.status, title: null },
+  ]);
   const control = agentsControl({
     agents: [AGENT],
     // The transcript ends on a page with nothing on it, as an ended agent's does.
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [
-          { id: "task", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Plan it." }] },
-          TURN,
-        ],
-        cursor: "1:0",
-        status: AGENT.status,
-        title: null,
-      },
-      { messages: [], cursor: "2:0", status: AGENT.status, title: null },
-    ]),
     // The message never answers, so it stays out.
     onMessage: (_agentId, text) => {
       sent.push(text);

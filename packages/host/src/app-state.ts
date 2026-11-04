@@ -13,11 +13,16 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentReviewOptionsAnswerView,
+  type AgentTranscriptPage,
   INBOX_SCOPE_KIND,
   PULL_REQUEST_PART,
   type PullRequestPart,
 } from "@repo/features/agent-view";
-import type { AgentOrigin } from "@repo/features/agent-wire";
+import type {
+  AgentMessagesAnswer,
+  AgentOrigin,
+  AgentTranscriptMessage,
+} from "@repo/features/agent-wire";
 import type {
   AutomationRunSummary,
   AutomationSummary,
@@ -319,6 +324,64 @@ export type AppAgentOrigins = Readonly<Record<string, AppAgentOrigin>>;
 
 /** No origin held, as the host stands before any window shows an agent's page and after the session ends. */
 export const NO_AGENT_ORIGINS: AppAgentOrigins = {};
+
+/** The key an agent's own transcript stands under beside its workers', which stand under the call that started each. */
+export const OWN_TRANSCRIPT = "own";
+
+/**
+ * What a transcript's last readable page said beside its messages: where
+ * the agent, or the worker, stands, why its turn failed, what it cost, who
+ * pays, what its context holds, when its run began, its titles, its
+ * workers, its queue, where its launch stands, and the rewind it was read
+ * at; whether that page came back short, so every message written by then
+ * is held; and the agent's queue revision the page's queue is at least as
+ * new as, none from a service older than the queue and before the live read
+ * first stood.
+ */
+export type AppTranscriptWord = Omit<AgentMessagesAnswer, "messages" | "cursor"> & {
+  readonly caughtUp: boolean;
+  readonly queueRevision?: number;
+};
+
+/** A page that said a transcript could not be read, with what failed beneath it where it says. */
+export type AppTranscriptFailure = Extract<AgentTranscriptPage, { readonly failure: unknown }>;
+
+/**
+ * One transcript as the host holds it for the windows
+ * (`transcript-follow.ts`): its messages, oldest first, the newest page's
+ * and every page past it joined on by id, with every older page a window
+ * read laid before them; where the page older than them is read below; the
+ * cursor the host reads on from; what the last readable page said; how many
+ * readable pages were told; and the page that said it could not be read,
+ * standing until a readable one is told or it is read again. A transcript
+ * the account no longer reaches holds no messages.
+ */
+export interface AppTranscript {
+  readonly messages: readonly AgentTranscriptMessage[];
+  /** Where the page older than the oldest message held is read below; none where nothing older stands. */
+  readonly before?: string;
+  /** Where the host's follow reads on from: the newest page's cursor, moved past each message told since; none before a readable page, and where the service refused it. */
+  readonly cursor?: string;
+  /** What the last readable page said; none before one was told. */
+  readonly word?: AppTranscriptWord;
+  /** How many readable pages were told, which an ask counts from to know a page landed after it. */
+  readonly pages: number;
+  readonly failure?: AppTranscriptFailure;
+}
+
+/**
+ * Each transcript the host holds for the windows: those a tab shows, and
+ * the few let go lately, which stop following while no window holds them,
+ * by the agent's id and then the worker's call or `OWN_TRANSCRIPT`, never
+ * by a key built from both, each as its own read stands. One absent is held
+ * by nobody.
+ */
+export type AppTranscripts = Readonly<
+  Record<string, Readonly<Record<string, AppHostRead<AppTranscript>>>>
+>;
+
+/** No transcript held, as the host stands before any tab shows one and after the session ends. */
+export const NO_TRANSCRIPTS: AppTranscripts = {};
 
 /** One value for each holder of inbox items, a plan or an agent, by its kind and then its id, never by a key built from both. */
 type ByInboxHolder<Value> = {
@@ -682,6 +745,7 @@ export interface AppHostReads {
   [LIVE_READ.HOSTS]: AppHostsHeld;
   [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
+  [LIVE_READ.TRANSCRIPT]: AppTranscript;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_INTEGRATIONS]: WorkspaceIntegrations;
   [LIVE_READ.SLACK_CHANNELS]: readonly SlackListedChannel[];
@@ -835,6 +899,8 @@ export interface AppState {
   [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
   /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
+  /** Each agent's or worker's transcript the windows' tabs show, held while a tab shows it and a while after, followed only while one does: what an agent's tab and a worker's draw. Never written to disk. */
+  [LIVE_READ.TRANSCRIPT]: AppTranscripts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each workspace's own integrations the windows draw, held while Settings › Workspace or an automation's editor draws them and a while after: what its Sentry and Slack bot rows read. */
@@ -956,6 +1022,13 @@ interface HostReadSliceEntry {
   readonly rowId?: string;
   /** For a slice keyed by part, the field each part that is a list of rows tells its rows apart by, by the part's name; a part it does not name crosses whole. */
   readonly rowIds?: { readonly [part: string]: string };
+  /**
+   * The field a key's list of rows stands under, where its read's rows are
+   * a record rather than the list itself: the list crosses as its rows that
+   * moved, and the record's other fields cross whole beside them wherever
+   * the key moved. Absent where a key's rows are its list.
+   */
+  readonly rowsAt?: string;
 }
 
 /**
@@ -1032,6 +1105,13 @@ export const HOST_READ_SLICE = {
     rowId: "id" satisfies keyof WorkspaceInvitation,
   },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  // Note that a transcript crosses as the messages that moved, since each step of a turn rewrites one message, its journal, while the rest stand.
+  [LIVE_READ.TRANSCRIPT]: {
+    keys: READ_KEYS.TWO,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof AgentTranscriptMessage,
+    rowsAt: "messages" satisfies keyof AppTranscript,
+  },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   // Note that a workspace's integrations cross whole, since a write moves one of a few rows.
   [LIVE_READ.WORKSPACE_INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
@@ -1085,6 +1165,8 @@ type KeyMoved =
       readonly key: readonly string[];
       readonly rows: readonly object[];
       readonly ids?: readonly string[];
+      /** Where the key's rows are a record (`rowsAt`), its fields beside the list, whole. */
+      readonly beside?: Keyed;
     };
 
 /**
@@ -1134,15 +1216,36 @@ function rowsAreValue(entry: HostReadSliceEntry): boolean {
   return entry.on === KEYS_ON.ROWS || entry.keys === READ_KEYS.PARTS;
 }
 
+/** The record a key's read's rows are, where its slice names the field its list stands under (`rowsAt`); none otherwise. */
+function recordOf(entry: HostReadSliceEntry, value: unknown): Keyed | undefined {
+  if (entry.rowsAt === undefined || typeof value !== "object" || value === null) return undefined;
+  const rows: unknown = Reflect.get(value, "rows");
+  // SAFETY: a read whose slice names `rowsAt` holds its rows as a record of fields.
+  return typeof rows === "object" && rows !== null ? (rows as Keyed) : undefined;
+}
+
 /**
  * The rows a key's value holds: the value itself, or its read's rows (see
- * `rowsAreValue`); none where it holds none. Note that a read holding rows
- * says nothing else (`AppHostRead`), so its rows are all of it that can move.
+ * `rowsAreValue`), or the list its read's rows hold under `rowsAt`; none
+ * where it holds none. Note that a read holding rows says nothing else
+ * (`AppHostRead`), so its rows are all of it that can move.
  */
 function rowsOf(entry: HostReadSliceEntry, value: unknown): readonly object[] | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const rows: unknown = rowsAreValue(entry) ? value : Reflect.get(value, "rows");
+  const rows: unknown =
+    entry.rowsAt === undefined
+      ? rowsAreValue(entry)
+        ? value
+        : Reflect.get(value, "rows")
+      : recordOf(entry, value)?.[entry.rowsAt];
   return Array.isArray(rows) ? rows : undefined;
+}
+
+/** A key's read's record of rows without its list, where its slice names `rowsAt`; none otherwise. */
+function besideOf(entry: HostReadSliceEntry, value: unknown): Keyed | undefined {
+  const record = recordOf(entry, value);
+  if (record === undefined) return undefined;
+  return Object.fromEntries(Object.entries(record).filter(([field]) => field !== entry.rowsAt));
 }
 
 /** A row's id, under the field its slice names. */
@@ -1177,10 +1280,12 @@ function keyMoved(
     return { key, value: next };
   }
   const reordered = ids.length !== sentIds.length || ids.some((id, at) => id !== sentIds[at]);
+  const beside = besideOf(entry, next);
   return {
     key,
     rows: after.filter((row) => sentRows.get(idOf(rowId, row)) !== row),
     ...(reordered ? { ids } : undefined),
+    ...(beside === undefined ? undefined : { beside }),
   };
 }
 
@@ -1240,9 +1345,45 @@ function valueLaid(entry: HostReadSliceEntry, held: unknown, move: KeyMoved): un
     move.ids === undefined
       ? heldList.map((row) => movedRows.get(idOf(rowId, row)) ?? row)
       : move.ids.flatMap((id) => movedRows.get(id) ?? heldRows.get(id) ?? []);
-  if (rows.length === heldList.length && rows.every((row, at) => row === heldList[at])) return held;
+  const listKept = rows.length === heldList.length && rows.every((row, at) => row === heldList[at]);
+  if (entry.rowsAt !== undefined) {
+    return recordLaid(entry.rowsAt, held, listKept ? heldList : rows, move.beside);
+  }
+  if (listKept) return held;
   if (rowsAreValue(entry)) return rows;
   return typeof held === "object" && held !== null ? { ...held, rows } : { rows };
+}
+
+/**
+ * The read `held` stood at with its record of rows laid anew: `list` under
+ * `rowsAt`, and the fields beside it as `beside` says, each the very one
+ * held where it says nothing new, or as held where it says nothing; the
+ * very read held where nothing moved.
+ */
+function recordLaid(
+  rowsAt: string,
+  held: unknown,
+  list: readonly object[],
+  beside: Keyed | undefined,
+): unknown {
+  // SAFETY: a read is a record of its fields, its rows among them, as `recordOf` reads it.
+  const read = (typeof held === "object" && held !== null ? held : {}) as Keyed;
+  const was = read.rows;
+  // SAFETY: a read whose slice names `rowsAt` holds its rows as a record of fields.
+  const heldRecord = (typeof was === "object" && was !== null ? was : {}) as Keyed;
+  const fields =
+    beside === undefined
+      ? Object.entries(heldRecord).filter(([field]) => field !== rowsAt)
+      : Object.entries(beside).map(([field, value]) => {
+          const kept = field !== rowsAt && Object.hasOwn(heldRecord, field);
+          return [field, kept ? keepIdentity(heldRecord[field], value) : value] as const;
+        });
+  const record: Keyed = { ...Object.fromEntries(fields), [rowsAt]: list };
+  const entries = Object.entries(record);
+  const kept =
+    entries.length === Object.keys(heldRecord).length &&
+    entries.every(([field, value]) => ownValue(heldRecord, field) === value);
+  return kept ? held : { ...read, rows: record };
 }
 
 /** One level of keys once `moves` land on it, by each move's last segment, and every id they do not name the very value held. */

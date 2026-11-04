@@ -39,9 +39,10 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, an agent's or a worker's transcript, a pull request's chapters and parts, the account's beats, hosts, models, integrations, provider keys, and GitHub token, an agent's or a server's tools, the outside MCP clients, a workspace's memories, skills, and repositories, a link's standing, the automations' lists and histories, a plan's or a page's comments, a task's plan history, the run that started an agent, a workspace's people, token repositories, invitations, own integrations, and Slack channels, and a task's plan. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
+  | typeof AGENT_ACT_KIND.AGENTS_TRANSCRIPT
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
@@ -73,6 +74,7 @@ type HoldKind =
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW,
+  AGENT_ACT_KIND.AGENTS_TRANSCRIPT,
   AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
   INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
@@ -134,7 +136,7 @@ export function heldUntilClosed<Kind extends HoldKind>(
 /**
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
- * task's or an agent's inbox or pages, a pull request's chapters or parts,
+ * task's or an agent's inbox or pages, an agent's or a worker's transcript, a pull request's chapters or parts,
  * the account's beats, hosts, models, integrations, provider keys, or GitHub token,
  * an agent's or a server's tools, the outside MCP clients, a workspace's
  * memories, skills, or repositories, a link's standing, the automations'
@@ -143,7 +145,7 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * repositories, own integrations, or Slack channels, or a task's plan, is
  * held quietly, and an automations', the integrations', the memories', the
  * skills', a repository list's, a workspace's integrations', its Slack
- * channels', the models', or the preferences' Try again taken, since what
+ * channels', the models', the preferences', or a transcript's Try again taken, since what
  * the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
@@ -160,6 +162,7 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
     [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_CHANNELS_RETRY]: () => Promise.resolve(),
     [AGENT_ACT_KIND.AGENTS_MODELS_RETRY]: () => Promise.resolve(),
     [AGENT_ACT_KIND.AGENTS_PREFERENCES_RETRY]: () => Promise.resolve(),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT_RETRY]: () => Promise.resolve(),
     ...procedures,
   };
   answeringPort = answered;

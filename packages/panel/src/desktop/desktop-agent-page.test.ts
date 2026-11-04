@@ -39,7 +39,6 @@ import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { PortActResult } from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
@@ -93,7 +92,7 @@ import { holdFrames, settleFrames } from "../testing/frames.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { pushedTranscripts, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 // Note that a Pull request tab is loaded as the side panel loads it, on first use
@@ -213,15 +212,8 @@ let deletes: string[] = [];
 let deleteRefused: AgentCallFailure | undefined;
 /** What the agent's workspace's members read answers; none refuses it. */
 let members: readonly WorkspaceMember[] | undefined;
-/** What the agent's transcript is pushed as once its tab follows it, and what a read of it answers once; none refuses it. */
+/** What the host lays of the agent's transcript once its tab holds it, and what a read of it answers once; none refuses it. */
 let transcript: AgentMessagesAnswerView | undefined;
-/** The pages a transcript's stream pushes, then held open as a followed transcript stays. */
-async function* streamOf(
-  pages: readonly AgentMessagesAnswerView[],
-): AsyncGenerator<AgentMessagesAnswerView> {
-  yield* pages;
-  await new Promise(() => undefined);
-}
 /** Every act the page told or asked, in order. */
 let told: AnyAct[] = [];
 /** What a read of what the agent published answers; none refuses it. */
@@ -267,14 +259,6 @@ beforeEach(() => {
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
-      if (request.kind === ACT_KIND.AGENTS_TRANSCRIPT) {
-        const pages = transcript === undefined ? [] : [transcript];
-        // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
-        const value = streamOf(pages) as unknown as PortActResult<
-          typeof ACT_KIND.AGENTS_TRANSCRIPT
-        >;
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const value = {
           skills: {
@@ -381,6 +365,8 @@ beforeEach(() => {
       ),
     [PULL_REQUEST_PART.PUBLISHED]: () => Promise.resolve(published ?? unanswered),
   });
+  // The host lays the agent's transcript once its tab holds it.
+  pushedTranscripts(() => (transcript === undefined ? [] : [transcript]));
 });
 
 afterEach(() => {
@@ -1126,6 +1112,7 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
     title: null,
   };
   handState(experimentsOn(EXPERIMENT.SKILLS));
+  pushedTranscripts(() => (transcript === undefined ? [] : [transcript]));
   localStorage.clear();
   installScrollIntoView();
   // Note that the skills are read once the frame that asked for them has painted.
@@ -1473,6 +1460,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
+  pushedTranscripts(() => (transcript === undefined ? [] : [transcript]));
   listed = {
     ...RUN_PAGE,
     origin: { prompt: "Review it.", subject: { number: 2905, title: "View commands", url } },

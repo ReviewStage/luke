@@ -906,6 +906,8 @@ export const LIVE_READ = {
   WORKSPACE_INVITATIONS: "workspaceInvitations",
   /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */
   THIS_MAC_HOST: "thisMacHost",
+  /** One agent's transcript, or one of its workers', by the agent and then the worker's call or the agent's own: the service's `agentTranscriptLive` query with the pages read beside it, held for the windows whose tab shows it and a few they showed lately, which stop following while no window holds them. */
+  TRANSCRIPT: "transcripts",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
   /** One workspace's Sentry installations and Slack bot, by the workspace: the service's `workspaceIntegrations` query, held for the windows that draw Settings › Workspace's integrations or an automation's editor, and a few they drew lately. */

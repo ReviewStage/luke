@@ -56,7 +56,6 @@ import {
   type AgentServersParams,
   type AgentStartParams,
   type AgentStopParams,
-  type AgentTranscriptChanged,
   type AgentTranscriptKey,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptOlderParams,
@@ -79,7 +78,6 @@ import {
   agentPartViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
-  agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
   type ChatGptSignInAnswerView,
   chatGptSignInAnswerViewSchema,
@@ -368,6 +366,7 @@ import type {
   AppSlackChannels,
   AppThisMacHosts,
   AppTokenRepositories,
+  AppTranscripts,
   AppWorkspaceIntegrations,
   AppWorkspaceInvitations,
   AppWorkspaceMembers,
@@ -955,14 +954,16 @@ export interface HostOperator {
   /** The account's preferences row, whole, each time the host's read of it for the session moves or a write is drawn over it. */
   onAccountPreferencesChanged(listener: (held: AppAccountPreferences) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
-  /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
+  /** One agent's or worker's transcript held followed for the windows from now until let go, and kept a while after among those let go lately, following no longer; what it holds is heard through `onTranscriptsChanged`. */
   transcriptFollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** One followed transcript let go: nothing more is heard of it until it is followed again. */
+  /** One held transcript let go by the window that held it. */
   transcriptUnfollow(transcript: AgentTranscriptKey): Effect.Effect<void>;
-  /** The page of a transcript below the oldest message the window holds, read at once; or why there is none. */
+  /** One held transcript read again at once, as Try again asks. */
+  transcriptRetry(transcript: AgentTranscriptKey): Effect.Effect<void>;
+  /** The page of a held transcript below the oldest message it holds, read at once and laid before them: whether it landed, or why it was not read. */
   transcriptOlder(params: AgentTranscriptOlderParams): Effect.Effect<AgentTranscriptOlderAnswer>;
-  /** A followed transcript's next page, or why there is none, each time it moves. */
-  onTranscriptChanged(listener: (changed: AgentTranscriptChanged) => void): () => void;
+  /** Every transcript the host holds for the windows, whole, each time any of them moves. */
+  onTranscriptsChanged(listener: (held: AppTranscripts) => void): () => void;
   agentInboxAttachment(params: AgentInboxAttachmentParams): Effect.Effect<AgentInboxAttachmentView>;
   /** One picture a tool answered an agent or one of its workers, read under the account: its bytes in base64 under its type, or why there is none. */
   agentPicture(params: AgentPictureParams): Effect.Effect<AgentInboxAttachmentView>;
@@ -2533,13 +2534,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     transcriptUnfollow: (transcript) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcriptParams(transcript))),
-    onTranscriptChanged: (listener) =>
+    transcriptRetry: (transcript) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY, transcriptParams(transcript))),
+    onTranscriptsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TRANSCRIPT_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(agentTranscriptChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.TRANSCRIPTS_CHANGED,
+        // Note that the held transcripts are the host's own, handed over in this process, so they are passed on as built, as the held origins are.
+        (payload) => (isRecord(payload) ? answered<AppTranscripts>(payload) : undefined),
         listener,
       ),
     agentInboxAttachment: (params) =>
