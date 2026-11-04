@@ -73,12 +73,13 @@ const STAND_IN =
 
 /**
  * A failed picture's stand-in: the fault's glyph in its red, then Retry and
- * Copy details as glyphs alone, on one line in the middle of the box the
- * spinner stood in, its sentence spoken rather than drawn, since a box a
- * thumbnail's or a phone's width has no room to wrap it in.
+ * Copy details as glyphs alone, in the middle of the box the spinner stood
+ * in, its sentence spoken rather than drawn, since a box a thumbnail's or a
+ * phone's width has no room to wrap it in. Note that the glyphs wrap within
+ * the box, because a portrait thumbnail is narrower than the three in a row.
  */
 const FAILED_STAND_IN =
-  "ui-picture-failed inline-flex flex-none items-center gap-control-gap text-muted-foreground";
+  "ui-picture-failed inline-flex max-w-full flex-wrap items-center justify-center gap-control-gap text-muted-foreground";
 
 /** The fault's glyph before Retry, at a control's glyph size in the fault's red. */
 const FAILED_GLYPH =
