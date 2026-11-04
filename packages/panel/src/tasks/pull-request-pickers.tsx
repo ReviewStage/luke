@@ -1,10 +1,10 @@
-import { AGENT_CALL_FAILURE, type AgentReviewOptionsAnswerView } from "@repo/features/agent-view";
 import type {
   AgentReviewOptions,
   GitHubPerson,
   PullRequestLabel,
   PullRequestReviewTeam,
 } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PULL_REQUEST_ACTION,
   type PullRequestAction,
@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { usePendingNow } from "../pending-clock.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
@@ -107,35 +108,32 @@ export interface ReviewOptions {
   readonly ask: () => void;
 }
 
-/** The agent's repository's labels, assignable users, and teams, read once, as a picker first asks, and again only after a failure. */
-export function useReviewOptions(
-  agentId: string,
-  readOptions: () => Promise<AgentReviewOptionsAnswerView>,
-): ReviewOptions {
-  const [held, setHeld] = useState<{ agentId: string; read: OptionsRead }>({
-    agentId,
-    read: { kind: OPTIONS.UNASKED },
-  });
-  const read = held.agentId === agentId ? held.read : { kind: OPTIONS.UNASKED };
+/**
+ * The agent's repository's labels, assignable users, and teams, held by the
+ * host from the moment a picker first asks (`LIVE_READ.REVIEW_OPTIONS`), so a
+ * tab drawn again offers them at once, asked again as a window comes forward
+ * and on Retry after a failure.
+ */
+export function useReviewOptions(agentId: string): ReviewOptions {
+  const [asked, setAsked] = useState<string | undefined>(undefined);
+  const [retrying, setRetrying] = useState(false);
+  const held = useHostRead(LIVE_READ.REVIEW_OPTIONS, asked === agentId ? { agentId } : undefined);
+  const answer = held.rows;
+  const read: OptionsRead =
+    asked !== agentId
+      ? { kind: OPTIONS.UNASKED }
+      : retrying || (answer === undefined && held.status === HOST_READ_STATUS.LOADING)
+        ? { kind: OPTIONS.READING }
+        : answer === undefined || "failure" in answer
+          ? { kind: OPTIONS.FAILED }
+          : { kind: OPTIONS.LANDED, value: answer };
+  const { retry } = held;
   const ask = useCallback(() => {
-    if (read.kind === OPTIONS.READING || read.kind === OPTIONS.LANDED) return;
-    setHeld({ agentId, read: { kind: OPTIONS.READING } });
-    void readOptions()
-      .catch(
-        (): AgentReviewOptionsAnswerView => ({
-          failure: AGENT_CALL_FAILURE.UNANSWERED,
-        }),
-      )
-      .then((answer) =>
-        setHeld({
-          agentId,
-          read:
-            "failure" in answer
-              ? { kind: OPTIONS.FAILED }
-              : { kind: OPTIONS.LANDED, value: answer },
-        }),
-      );
-  }, [agentId, read.kind, readOptions]);
+    if (asked !== agentId) return setAsked(agentId);
+    if (read.kind !== OPTIONS.FAILED) return;
+    setRetrying(true);
+    void retry().finally(() => setRetrying(false));
+  }, [agentId, asked, read.kind, retry]);
   return { read, ask };
 }
 

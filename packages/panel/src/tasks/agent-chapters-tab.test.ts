@@ -383,6 +383,15 @@ function controlAnswering(answers: Answers): AgentsControl {
       }),
     [PULL_REQUEST_PART.CONVERSATION]: () => Promise.resolve({ pullRequest: CONVERSATION }),
     [PULL_REQUEST_PART.CHECKS]: () => Promise.resolve({ pullRequest: { checks: [] } }),
+    [PULL_REQUEST_PART.VIEWED]: () =>
+      Promise.resolve(
+        answers.viewed === undefined
+          ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
+          : {
+              outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+              files: answers.viewed.map((path) => ({ path, state: FILE_VIEWED_STATE.VIEWED })),
+            },
+      ),
   });
   return agentsControl({
     agents: [AGENT],
@@ -416,15 +425,6 @@ function controlAnswering(answers: Answers): AgentsControl {
         },
       });
     },
-    readPullRequestViewed: () =>
-      Promise.resolve(
-        answers.viewed === undefined
-          ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
-          : {
-              outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-              files: answers.viewed.map((path) => ({ path, state: FILE_VIEWED_STATE.VIEWED })),
-            },
-      ),
     generateChapters: answers.generateChapters ?? (() => Promise.resolve(answering(ready()))),
   });
 }

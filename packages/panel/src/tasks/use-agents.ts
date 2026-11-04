@@ -3,8 +3,6 @@ import {
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
   type AgentModelsAnswer,
-  type AgentPullRequestViewedAnswerView,
-  type AgentReviewOptionsAnswerView,
 } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
@@ -395,13 +393,6 @@ export interface AgentsControl {
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
-  /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
-  readReviewOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>;
-  /** One read of which of an agent's pull request's files the member marked viewed on GitHub, on their own GitHub sign-in. */
-  readPullRequestViewed: (
-    agentId: string,
-    number?: number,
-  ) => Promise<AgentPullRequestViewedAnswerView>;
   /** The words a dictation into an agent's box is likely to say, read off the open task. */
   keywords: readonly string[];
   /** The skills of the open plan's repository a `/` in an agent's box offers, read once for the plan (`repository-skills.ts`), or of the agent's own where no plan is open; nothing while neither names a workspace, or while the Skills experiment is off. */
@@ -1486,17 +1477,6 @@ export function useAgents(input: {
     [act],
   );
 
-  const readReviewOptions = useCallback<AgentsControl["readReviewOptions"]>(
-    (agentId) => act(ACT_KIND.AGENTS_REVIEW_OPTIONS, { agentId }),
-    [act],
-  );
-
-  const readPullRequestViewed = useCallback<AgentsControl["readPullRequestViewed"]>(
-    (agentId, number) =>
-      act(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, pullRequestAsked(agentId, number)),
-    [act],
-  );
-
   const answerInbox = useCallback<InboxAnswerer>(
     (params) => act(ACT_KIND.AGENTS_INBOX_ANSWER, params),
     [act],
@@ -1613,8 +1593,6 @@ export function useAgents(input: {
     readChanges,
     changesPeople,
     generateChapters,
-    readReviewOptions,
-    readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
     answerInbox,

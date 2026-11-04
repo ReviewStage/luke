@@ -401,7 +401,6 @@ export const GATEWAY_METHOD = {
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
-  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -418,8 +417,6 @@ export const GATEWAY_METHOD = {
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
-  /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
-  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
   /**
    * The account's own provider keys an agent runs on, as hints and statuses
    * and never a key, held for a window from now until it is let go, asked

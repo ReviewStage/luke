@@ -48,9 +48,7 @@ const AGENT = { agentId: FIXTURE_AGENT_ID };
 const READS: readonly Read[] = [
   read(ACT_KIND.AGENTS_LIST, { taskId: FIXTURE_TASK_ID, includeArchived: true }),
   read(ACT_KIND.AGENTS_PULL_REQUEST, AGENT),
-  read(ACT_KIND.AGENTS_REVIEW_OPTIONS, AGENT),
   read(ACT_KIND.AGENTS_CHANGES, AGENT),
-  read(ACT_KIND.AGENTS_PULL_REQUEST_VIEWED, AGENT),
   read(ACT_KIND.TASKS_FILE, {
     taskId: FIXTURE_TASK_ID,
     path: "src/members/invite.ts",
