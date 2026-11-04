@@ -183,13 +183,15 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     );
     /**
      * Every row the composers' reads hold, once, and the writes drawn over
-     * them (`@repo/sync`). Where the lists may be kept on disk, a row write
+     * them (`@repo/sync`). Where the run needs an account, a row write
      * that may wait for the service is sent under a key of the host's own
-     * minting and waits while the service does not answer; a browser tab
-     * or a fixture run keeps none waiting, as it keeps no lists.
+     * minting and waits while the service does not answer: kept on disk
+     * beside the lists where they are kept (`openEntities`), and in a
+     * browser tab for the tab's life alone. A fixture run keeps none
+     * waiting.
      */
     const pool = yield* entityPool(
-      tokenCipher !== undefined && kernel.runMode.requiresAccount
+      kernel.runMode.requiresAccount
         ? {
             mintKey: kernel.createId,
             replayRefused: Effect.sync(() => offlineRefused.raise()),

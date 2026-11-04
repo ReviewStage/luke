@@ -71,7 +71,7 @@ import {
   pathUuid,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import { providerModelOf } from "../providers/model-catalog.js";
 import { settleThreadDms } from "../slack/thread-dms.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
@@ -685,7 +685,9 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
  * state, and an item of a workspace the account is not in is not found.
  * Marking every item read marks every item their Inbox lists, in the
  * workspace the body names or in all of theirs, and answers how many were
- * unread.
+ * unread. Each of the member's writes but a message is taken once under
+ * the idempotency key its request carries (`writeReceiptMiddleware`), so
+ * one sent again after an answer lost lands once.
  */
 export function inboxProcedures(seams: InboxProcedureSeams) {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
@@ -714,10 +716,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(agentInboxPast(context.userId, agent.value.id, after));
     }),
-    answer: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).answer.effect(function* ({
-      input,
-      context,
-    }) {
+    answer: signedIn.answer.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const itemId = yield* pathUuid(input.params.id);
       const { revision, clientKey } = input.body;
       return yield* acknowledged(writer, context.userId, itemId, {
@@ -754,10 +753,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
         attachments,
       });
     }),
-    close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({
-      input,
-      context,
-    }) {
+    close: signedIn.close.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const itemId = yield* pathUuid(input.params.id);
       return yield* closeAsMember(writer, context.userId, itemId, input.body);
     }),
@@ -768,19 +764,28 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       if (Option.isNone(home)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return home.value;
     }),
-    markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
+    markItemRead: signedIn.markItemRead.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
       const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: false, ...marked };
     }),
-    markItemUnread: signedIn.markItemUnread.effect(function* ({ input, context }) {
+    markItemUnread: signedIn.markItemUnread.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
       const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };
     }),
-    snoozeItem: signedIn.snoozeItem.effect(function* ({ input, context }) {
+    snoozeItem: signedIn.snoozeItem.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
       const itemId = yield* pathUuid(input.params.id);
       const { until } = input.body;
       const marked = yield* hostedStoreOrUnavailable(
@@ -789,10 +794,11 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: false, ...marked };
     }),
-    markAllRead: hosted.inbox
-      .use(accountMiddleware(seams.resolveUserId))
-      .markAllRead.effect(function* ({ input, context }) {
-        return yield* hostedStoreOrUnavailable(markInboxRead(context.userId, input.workspaceId));
-      }),
+    markAllRead: signedIn.markAllRead.use(writeReceiptMiddleware).effect(function* ({
+      input,
+      context,
+    }) {
+      return yield* hostedStoreOrUnavailable(markInboxRead(context.userId, input.workspaceId));
+    }),
   };
 }
