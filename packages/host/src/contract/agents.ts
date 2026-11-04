@@ -35,7 +35,6 @@ import {
   agentPartViewSchema,
   agentPinParamsSchema,
   agentPullRequestActionParamsSchema,
-  agentPullRequestAnswerViewSchema,
   agentPullRequestParamsSchema,
   agentPullRequestReadParamsSchema,
   agentPullRequestWriteAnswerViewSchema,
@@ -202,11 +201,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actProcedure(
-    "Could not read the agent's pull request on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentPullRequestAnswerViewSchema)),
   // Note that the hold's stream carries nothing: the held part reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actProcedure(
     "Could not follow the agent's pull request on this system.",

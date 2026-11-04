@@ -34,7 +34,6 @@ import {
   type AgentPartView,
   type AgentPinParams,
   type AgentPullRequestActionParams,
-  type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
   type AgentPullRequestWriteAnswerView,
@@ -111,7 +110,6 @@ export interface AgentProceduresDependencies {
     agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
     /** One agent's held origin read again at once, as Try again asks. */
     agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
-    agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
     /** One part of one agent's pull request held at the host while any stream of it stands; what it holds reaches the panel on app state. */
     pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
     pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
@@ -515,12 +513,6 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         yield* host.agentOriginRetry(input);
-      },
-    ),
-    [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actPort[AGENT_ACT_KIND.AGENTS_PULL_REQUEST].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* host.agentPullRequest(input);
       },
     ),
     [AGENT_ACT_KIND.AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.AGENTS_CHANGES].effect(function* ({

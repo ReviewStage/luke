@@ -26,7 +26,6 @@ import {
   type AgentPageAnswerView,
   type AgentPartView,
   type AgentPinParams,
-  type AgentPullRequestAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentRenameParams,
@@ -1409,16 +1408,6 @@ function composed(
         );
         yield* origins.retry(agentId);
         return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_PULL_REQUEST]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading what an agent published names one agent",
-        );
-        const answer = yield* asked(client.pullRequest(agentId, number));
-        return carried<AgentPullRequestAnswerView>(answer);
       }),
     // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW]: (params) =>

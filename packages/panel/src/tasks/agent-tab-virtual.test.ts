@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
+import {
+  type AgentMessagesAnswerView,
+  type AgentTranscriptPage,
+  PULL_REQUEST_PART,
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
@@ -18,6 +22,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
 import { FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
+import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { agentsControl, pushedPage } from "../testing/tasks-control.js";
@@ -578,13 +583,11 @@ test("the log draws while the agent's pull request is still read, and its dock l
       changedFiles: number;
     } | null;
   }>();
-  const { container } = await drawTab(
-    agentsControl({
-      agents: [AGENT],
-      transcripts: follower,
-      readPullRequest: published.read,
-    }),
-  );
+  // The host holds what the agent published, its answer landing once the test hands it.
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PUBLISHED]: published.read,
+  });
+  const { container } = await drawTab(agentsControl({ agents: [AGENT], transcripts: follower }));
   assert.ok(drawnRows(container).length > 0, "the lines are drawn while the pull request is read");
   assert.equal(container.querySelector(".agent-published-dock"), null, "with no dock yet");
 

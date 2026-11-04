@@ -180,8 +180,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
   /** A held agent's origin, which the panel reads on app state, read again at once, as Try again asks. */
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
-  /** What one agent published: its branch and pull request as GitHub holds them. */
-  AGENTS_PULL_REQUEST: "agents.pullRequest",
   /**
    * One part of one agent's pull request, which its Pull request tab draws:
    * the pull request itself, its checks, its conversation, or what the agent
@@ -769,7 +767,6 @@ export const PORT_ACT_USE = {
   AGENTS_PAGE: ACT_USE.FETCH,
   AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
   AGENTS_ORIGIN_RETRY: ACT_USE.READ,
-  AGENTS_PULL_REQUEST: ACT_USE.READ,
   AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
   AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,

@@ -8,5 +8,5 @@
   "packages/panel/src/settings/hosts-section.tsx": "P18: hosts",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
-  "packages/panel/src/tasks/use-agents.ts": "P6, P19, P28: transcript, pull request tab, models and default"
+  "packages/panel/src/tasks/use-agents.ts": "P6, P28: transcript, models and default"
 }

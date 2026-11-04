@@ -1135,10 +1135,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: AGENT_ID }), {
       agent: PAGE,
     });
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
-      PUBLISHED,
-    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID }), CHANGES);
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_CHANGES, { agentId: AGENT_ID, number: 11 }),
@@ -1303,7 +1299,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pin:${AGENT_ID}:true`,
       `delete:${AGENT_ID}`,
       `page:${AGENT_ID}`,
-      `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
       `chapters-generate:${AGENT_ID}#11`,

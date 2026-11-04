@@ -80,7 +80,6 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.AGENTS_SEEN]: "Could not mark the agent as read on this system.",
   [AGENT_ACT_KIND.AGENTS_PAGE]: "Could not read the agent on this system.",
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
   [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: "Could not read the pull request's image on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: "Could not change the pull request on this system.",
@@ -183,11 +182,6 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.AGENTS_PAGE,
     payload: { agentId: AGENT_ID },
     ask: "agentPage",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_PULL_REQUEST,
-    payload: { agentId: AGENT_ID },
-    ask: "agentPullRequest",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_CHANGES,
@@ -435,10 +429,6 @@ it("a payload carrying a key its kind's schema does not name is refused in the k
       stray: true,
     }),
     { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_SHOWN] },
-  );
-  assert.deepEqual(
-    await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST, { agentId: AGENT_ID, stray: true }),
-    { refused: REFUSAL[AGENT_ACT_KIND.AGENTS_PULL_REQUEST] },
   );
   assert.deepEqual(
     await call(AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION, {

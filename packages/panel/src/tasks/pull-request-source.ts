@@ -18,9 +18,11 @@ import type { AgentsControl } from "./use-agents.js";
  *
  * The tab and its parts, its header, Conversation, Checks, Chapters, and
  * Files changed, reach the pull request only through a `PullRequestSource`:
- * the pull request as last read, its changed files,
- * its chapters' Generate, the member's viewed marks, and its changes, a review's among
- * them. A tab is an agent's for now (`agentPullRequestSource`), so each read
+ * the pull request as last read, its changed files, its chapters' Generate,
+ * and its changes, a review's among them; the reads the host holds for the
+ * tab, its parts, the pickers' options, and the viewed marks, are drawn
+ * through `useHostRead` under the agent and the number the source names. A
+ * tab is an agent's for now (`agentPullRequestSource`), so each read
  * names the agent, and the pull request's number where the tab names one
  * (`pull-request-number.ts`). The tab hands its source down
  * (`PullRequestSourceProvider`), so a change made anywhere under it goes to

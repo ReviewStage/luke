@@ -11,13 +11,16 @@
  * four parts a window holds of one pull request are asked again together as
  * its agent's status moves, which is how its end is heard, or as the task
  * list's line for it moves: its state, checks, merge queue, or head commit,
- * which a push moves; the viewed marks only as its head moves, since a push
- * is what unmarks a file; and the pickers' options on nothing but focus and
- * Try again, since they are the repository's. Note that the line is found by the pull request's address,
- * from the pull request part's own answer, or from the agent's listed pull
- * request for its own, so a pull request no agent of the list published,
- * or one not answered yet, is asked again on nothing but focus and Try
- * again. A part whose ask fails after one answered keeps that answer, as a
+ * which a push moves, or, for an agent's own, as the list first names a pull
+ * request the agent published, or another in its place, which is how a
+ * window drawing the pull request from the list hears its branch; the viewed
+ * marks only as its head moves, since a push is what unmarks a file; and the
+ * pickers' options on nothing but focus and Try again, since they are the
+ * repository's. Note that the line is found by the pull request's address,
+ * from the pull request or published part's own answer, or from the agent's
+ * listed pull request for its own, so a pull request no agent of the list
+ * published, or one not answered yet, is asked again on nothing but focus
+ * and Try again. A part whose ask fails after one answered keeps that answer, as a
  * fetch the host holds does; one that fails before any answered holds the
  * failure, so its tab says why; but the viewed marks hold every answer,
  * since marks a read can no longer vouch for are taken away until one does.
@@ -131,18 +134,24 @@ function linesOf(listing: PullRequestListing): ReadonlyMap<string, AgentPullRequ
   return lines;
 }
 
-/** What moved from one drawing of the list to the next: the agents whose status moved, the addresses of the pull requests whose line moved or left, and of those whose head moved or left among them. */
+/** What moved from one drawing of the list to the next: the agents whose status moved, those the list names a pull request of anew, the addresses of the pull requests whose line moved or left, and of those whose head moved or left among them. */
 function movedOf(
   before: PullRequestListing,
   after: PullRequestListing,
 ): {
   readonly agents: ReadonlySet<string>;
+  readonly opened: ReadonlySet<string>;
   readonly urls: ReadonlySet<string>;
   readonly heads: ReadonlySet<string>;
 } {
   const agents = new Set<string>();
   for (const [agentId, status] of before.statuses) {
     if (after.statuses.get(agentId) !== status) agents.add(agentId);
+  }
+  const opened = new Set<string>();
+  for (const { agentId, pullRequest } of after.pullRequests) {
+    const was = before.pullRequests.find((listed) => listed.agentId === agentId);
+    if (was?.pullRequest.url !== pullRequest.url) opened.add(agentId);
   }
   const urls = new Set<string>();
   const heads = new Set<string>();
@@ -152,7 +161,7 @@ function movedOf(
     if (lineMoved(line, now)) urls.add(url);
     if (now?.headSha !== line.headSha) heads.add(url);
   }
-  return { agents, urls, heads };
+  return { agents, opened, urls, heads };
 }
 
 /** The parts of the pull requests the windows hold, for as long as the scope that made them stands. */
@@ -161,7 +170,7 @@ export function pullRequestParts(
 ): Effect.Effect<PullRequestParts, never, Scope.Scope> {
   return Effect.gen(function* () {
     const { gate, focus, ask, tell } = dependencies;
-    /** Each held pull request's address, as its pull request part last answered it. */
+    /** Each held pull request's address, as its pull request or published part last answered it. */
     const urls = MutableHashMap.empty<PullRequestKey, string>();
     const pullRequest = yield* heldFetch<typeof LIVE_READ.PULL_REQUEST, PullRequestKey>({
       empty: NO_KEYS_HELD,
@@ -201,7 +210,13 @@ export function pullRequestParts(
       path: pathOf,
       gate,
       focus,
-      fetch: (key, held) => Effect.map(ask.published(key), (answer) => keptOver(answer, held)),
+      fetch: (key, held) =>
+        Effect.map(ask.published(key), (answer) => {
+          if (!("failure" in answer) && answer.pullRequest !== null) {
+            MutableHashMap.set(urls, key, answer.pullRequest.url);
+          }
+          return keptOver(answer, held);
+        }),
       tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_PUBLISHED]: held }),
     });
     const reviewOptions = yield* heldFetch<typeof LIVE_READ.REVIEW_OPTIONS, PullRequestKey>({
@@ -240,7 +255,7 @@ export function pullRequestParts(
     /** The parts asked again together as the pull request or its agent moves. */
     const moving: readonly PartFetch[] = [pullRequest, checks, conversation, published];
 
-    /** The address a key's pull request is listed by: its pull request part's answer, or for the agent's own, the pull request the list says it published. */
+    /** The address a key's pull request is listed by: its pull request or published part's answer, or for the agent's own, the pull request the list says it published. */
     const urlOf = (key: PullRequestKey, listing: PullRequestListing): string | undefined =>
       Option.getOrUndefined(MutableHashMap.get(urls, key)) ??
       (key.number === undefined
@@ -255,9 +270,12 @@ export function pullRequestParts(
         before = listing;
         if (was === undefined) return Effect.void;
         const moved = movedOf(was, listing);
-        if (moved.agents.size === 0 && moved.urls.size === 0) return Effect.void;
+        if (moved.agents.size === 0 && moved.opened.size === 0 && moved.urls.size === 0) {
+          return Effect.void;
+        }
         const named = (key: PullRequestKey) => {
           if (moved.agents.has(key.agentId)) return true;
+          if (key.number === undefined && moved.opened.has(key.agentId)) return true;
           const url = urlOf(key, was);
           return url !== undefined && moved.urls.has(url);
         };
