@@ -107,6 +107,7 @@ const POST_THREAD_WORDS =
   `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
   `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
   "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
+  "A picture the message is about is drawn in it, never pointed at in a transcript, yours or another agent's, which the thread's reader does not see. " +
   "ask is what the message asks of them, which ends it: " +
   `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several, and recommended then takes a list of the labels you recommend; ` +
   "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
