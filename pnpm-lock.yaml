@@ -455,6 +455,9 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
+      playwright:
+        specifier: 1.64.1
+        version: 1.64.1
       tsx:
         specifier: 'catalog:'
         version: 4.23.12
@@ -13593,13 +13596,11 @@ snapshots:
 
   pkce-challenge@5.0.1: {}
 
-  playwright-core@1.64.1:
-    optional: true
+  playwright-core@1.64.1: {}
 
   playwright@1.64.1:
     dependencies:
       playwright-core: 1.64.1
-    optional: true
 
   plist@3.1.0:
     dependencies:
