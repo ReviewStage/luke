@@ -35,6 +35,8 @@ let failRead = false;
 let refuseWrite = false;
 /** Lays the account's row as the host holds it, from what the test's service stores. */
 let deliverRow: () => void = () => undefined;
+/** Lays the account's row with a write drawn over it, as the host draws one on the press. */
+let deliverDrawn: (model: ChaptersModelId) => void = () => undefined;
 
 /** The account's row as the host holds it, the model the test's service stores. */
 const rowOf = (model: ChaptersModelId) => ({
@@ -55,9 +57,13 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
       deliverRow();
       return Promise.resolve(done(undefined));
     case ACT_KIND.CHAPTERS_MODEL_WRITE:
-      if (refuseWrite) return Promise.resolve(done(UNANSWERED));
+      // Note that the host draws the write over the row as it is pressed, before the service answers, and takes it back where the service refused it.
+      deliverDrawn(request.payload.model);
+      if (refuseWrite) {
+        deliverRow();
+        return Promise.resolve(done(UNANSWERED));
+      }
       stored = request.payload.model;
-      // Note that the host draws the write over the row as it is pressed, before the service answers.
       deliverRow();
       return Promise.resolve(done({ model: stored }));
     default:
@@ -96,6 +102,7 @@ async function mount(): Promise<HTMLElement> {
     failRead ? { preferences: { failed: true } } : { preferences: rowOf(stored) },
   );
   deliverRow = () => deliverPreferences(rowOf(stored));
+  deliverDrawn = (model) => deliverPreferences(rowOf(model));
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

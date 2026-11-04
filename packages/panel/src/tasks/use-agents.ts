@@ -839,29 +839,42 @@ export function useAgents(input: {
   // The archives asked here and still out.
   const [archivesOut, setArchivesOut] = useState(0);
 
+  /** Settles the ask of `generation` where it is still the newest: read at any point, failed only while it is out. */
+  const settleModels = useCallback((generation: number, state: ModelsReadState) => {
+    setModelsRead((was) =>
+      was.generation === generation &&
+      (state === MODELS_READ.READ || was.state === MODELS_READ.READING)
+        ? { state, generation }
+        : was,
+    );
+  }, []);
+  // The newest ask that landed, whose settling waits on what the slice then holds.
+  const [modelsLanded, setModelsLanded] = useState(0);
   /**
    * Asks the host for the models again, stamping the ask with a generation
    * of its own. Note that only the newest ask settles where the read
-   * stands, though any that lands lays what it read on the slice, and that
-   * one still out past its bound is said as failed, so nothing waits on it
-   * for ever; should it land after, it settles as read.
+   * stands, and that one still out past its bound is said as failed, so
+   * nothing waits on it for ever; should it land after, it settles as read.
+   * An ask that landed settles once the slice says how it went (below),
+   * since a Try again answers alike whether its ask was answered or not.
    */
   const retryModels = offered.retry;
   const readModels = useCallback(() => {
     modelsGeneration.current += 1;
     const generation = modelsGeneration.current;
-    const settle = (state: ModelsReadState) =>
-      setModelsRead((was) =>
-        was.generation === generation &&
-        (state === MODELS_READ.READ || was.state === MODELS_READ.READING)
-          ? { state, generation }
-          : was,
-      );
     // The menu reads again while a read is out, so a Retry shows its reading.
     setModelsRead({ state: MODELS_READ.READING, generation });
-    retryModels().then(() => settle(MODELS_READ.READ));
-    rendererPause(MODELS_READ_BOUND_MS).then(() => settle(MODELS_READ.FAILED));
-  }, [retryModels]);
+    retryModels().then(() => setModelsLanded(generation));
+    rendererPause(MODELS_READ_BOUND_MS).then(() => settleModels(generation, MODELS_READ.FAILED));
+  }, [retryModels, settleModels]);
+  // Note that a landed ask reads as read only where the slice holds models, and as failed where it never answered, so a card waiting on its devices never takes no list for an empty one.
+  useEffect(() => {
+    if (modelsLanded === 0) return;
+    if (offered.rows !== undefined) settleModels(modelsLanded, MODELS_READ.READ);
+    else if (offered.status === HOST_READ_STATUS.FAILED) {
+      settleModels(modelsLanded, MODELS_READ.FAILED);
+    }
+  }, [modelsLanded, offered.rows, offered.status, settleModels]);
 
   /** One Start asked of the service on the task, or, from the page's agent, where that agent is, held as under way until it answers. */
   const askStart = (

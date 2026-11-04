@@ -868,7 +868,7 @@ export const LIVE_READ = {
   LINK_STANDINGS: "linkStandings",
   /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
   MEMORIES: "workspaceMemories",
-  /** The models a coding agent may run on as the account is offered them, and its devices a task may run on, by the account: fetched by the host while a window holds it, and asked again as the account's provider keys move and every `MODEL_CATALOG_TTL`. */
+  /** The models a coding agent may run on as the account is offered them, and its devices a task may run on, by the account: fetched by the host while a window holds it, and asked again as a window comes forward, as the account's provider keys move, and every `MODEL_CATALOG_TTL`. */
   MODELS: "models",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
   PAGES: "pages",

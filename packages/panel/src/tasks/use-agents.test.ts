@@ -172,7 +172,7 @@ function startPayloads(
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
-test("an ask of the models that never lands is said as failed past its bound, and one that lands reads the models the host holds, no device as none", async () => {
+test("an ask of the models that never lands is said as failed past its bound, one that lands on models never read as failed, and one that lands on models read as read, no device as none", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const { deliverModels } = handHostReads({});
@@ -190,6 +190,12 @@ test("an ask of the models that never lands is said as failed past its bound, an
     assert.equal(tab.control().modelsFailed, true);
 
     fakeActPort({});
+    deliverModels({ failed: true });
+    act(() => tab.control().readModels());
+    await settle();
+    assert.equal(tab.control().modelsRead.state, MODELS_READ.FAILED);
+    assert.equal(tab.control().macs, undefined);
+
     deliverModels({ rows: { models: [] } });
     act(() => tab.control().readModels());
     await settle();

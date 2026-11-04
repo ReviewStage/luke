@@ -86,10 +86,10 @@ import { SwitchRow } from "./switch-row.js";
  * harnesses and the Default model share the one read of the keys, so a
  * key saved or removed above is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
- * alone; until the page writes it, the service answers the fallback the
- * account's credentials pay for (`agentFallbackChoice`), so the page reads
- * it as it opens and again at each answer of the keys, which may move that
- * fallback. The model row is the same picker every settings row uses,
+ * alone; the page draws it, and the models, from what the host holds for
+ * the account (`account-choices.ts`), and until the page writes it, the
+ * fallback the models mark as paid for (`agentDefaultOf`), which the host
+ * moves on its own as a key saved or removed moves the models. The model row is the same picker every settings row uses,
  * searched because the catalog is long: each base model under the mark
  * of the harness that runs it, the newest first within each provider, every fast
  * and Ultrafast version folded into its model, the chosen one checked; a model no
@@ -110,8 +110,9 @@ import { SwitchRow } from "./switch-row.js";
  * model lists, and for a model that offers two context windows a context
  * row is one over the two, the whole window the default, saying what it
  * costs past the standard one; a change of model keeps the standard window
- * where the next model offers two. A write is one ask of the service, the rows resting until
- * it answers; the model, Effort, and Context rows each write through
+ * where the next model offers two. A write is one ask of the service, which
+ * the host draws over the account's preferences on the press, so the rows
+ * stay live while it is out; the model, Effort, and Context rows each write through
  * `useSettingWrite`, so each says its own refusal under it and ticks Saved
  * once its write lands, and Modified while it differs from the fallback this
  * account would start on with none stored. Fast is a `SwitchRow` like every other settings switch, so its
@@ -184,7 +185,6 @@ function DefaultRows({
   choice,
   models,
   ownKeys,
-  busy,
   modelsRetrying,
   onRetryModels,
   onChange,
@@ -194,7 +194,6 @@ function DefaultRows({
   models: readonly CatalogModel[] | undefined;
   /** How each provider the account holds a key of its own for last answered it. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
-  busy: boolean;
   /** Whether a read of the catalog, asked for again after it failed, is out. */
   modelsRetrying: boolean;
   /** Reads the catalog again: the failure's Retry. */
@@ -289,7 +288,6 @@ function DefaultRows({
           ) : undefined
         }
         anchor={SETTINGS_SEARCH_ROW.AGENT_MODEL}
-        disabled={busy}
         onPick={(id) => {
           // The pick keeps the speed chosen where the model has a version at it, and drops to standard where it has none.
           const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
@@ -315,7 +313,6 @@ function DefaultRows({
               items={speedsOf(base).map((speed) => ({ value: speed, label: SPEED_WORD[speed] }))}
               value={read.speed}
               look={CHOICE_BAR_LOOK.SEGMENTED}
-              disabled={busy}
               {...searchAnchorProps(SETTINGS_SEARCH_ROW.AGENT_FAST)}
               onChange={(speed) => {
                 // A model nothing pays for runs no faster: the press goes to connect it, as its pick does.
@@ -353,7 +350,7 @@ function DefaultRows({
           }
           checked={read.speed === MODEL_SPEED.FAST}
           anchor={SETTINGS_SEARCH_ROW.AGENT_FAST}
-          disabled={busy || base?.fast === undefined}
+          disabled={base?.fast === undefined}
           onChange={(fast) => {
             if (base === undefined) return Promise.resolve(WRITE_ACCEPTED);
             // A model nothing pays for runs no faster: the press goes to connect it, as its pick does, and the switch stands.
@@ -378,7 +375,6 @@ function DefaultRows({
             items={efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))}
             value={choice.effort}
             look={CHOICE_BAR_LOOK.SEGMENTED}
-            disabled={busy}
             {...searchAnchorProps(SETTINGS_SEARCH_ROW.AGENT_EFFORT)}
             onChange={(effort) => effortWrite.run({ ...choice, effort })}
           />
@@ -402,7 +398,6 @@ function DefaultRows({
               ]}
               value={window}
               look={CHOICE_BAR_LOOK.SEGMENTED}
-              disabled={busy}
               onChange={(each) => contextWrite.run(choiceOn(models ?? [], choice, each))}
             />
           )}
@@ -458,8 +453,6 @@ function AgentsSection({
           choice={drawn.choice}
           models={models}
           ownKeys={ownKeys ?? new Map()}
-          // Note that the rows stay live while a write is out, because the host draws the default on the press.
-          busy={false}
           modelsRetrying={modelsRetrying}
           onRetryModels={onRetryModels}
           onChange={write}

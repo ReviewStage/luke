@@ -18,7 +18,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 /**
  * The Pull request tab's chapters acts, through the act port as a window
  * calls them: a panel's Generate reaches the host with the pull request the
- * tab names, and the panel hears the chapters or why there are none; Settings' read and write of the chapters model reach it the same
+ * tab names, and the panel hears the chapters or why there are none; Settings' write of the chapters model reaches it the same
  * way, a model outside the set refused at the port; any other window, and a frame this build does not trust,
  * are refused in each kind's own words before the host is asked; and an
  * answer the kind's schema does not admit is refused rather than handed to
