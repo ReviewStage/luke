@@ -17,9 +17,11 @@
  * open button to the thread; a decide ask that takes one option offers each
  * as a button beside it (`SlackChoice`), and one that takes several offers
  * them as checkboxes with a Submit button, whose press names the ticked ones
- * by their place among the options (`SLACK_PICKS_ACTION`); our Slack route
- * answers the ask with either (`slack-events-app.ts`), and every other ask
- * is the link alone.
+ * by their place among the options (`SLACK_PICKS_ACTION`); a do ask's steps
+ * are listed under the words, numbered, with Mark done, which ticks every
+ * step, and Couldn't do it beside the open button. Our Slack route answers
+ * the ask with any of these (`slack-events-app.ts`), and every other ask is
+ * the link alone.
  *
  * Each DM, a reply among them, is kept on the agent's message it said
  * (`inbox_message.slack_dm`), with the member it went to and, for a reply,
@@ -45,9 +47,11 @@ import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
+  INBOX_REPLY,
   INBOX_STATUS,
   type InboxItem,
   type InboxMessage,
+  type InboxReadAsk,
   knownAsk,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
@@ -81,6 +85,27 @@ const SUBMIT_LABEL = "Submit";
  */
 export const SLACK_PICKS_ACTION = "picks";
 
+/** The answers a do ask's buttons give: Mark done and Couldn't do it. */
+const SLACK_DO_REPLIES = [INBOX_REPLY.DONE, INBOX_REPLY.NOT_DONE] as const;
+
+/** A do ask's answer as its button gives it. */
+type SlackDoReply = (typeof SLACK_DO_REPLIES)[number];
+
+/** The words on a do ask's buttons, by the answer each gives, as the app words them. */
+const DO_BUTTON = {
+  [INBOX_REPLY.DONE]: "Mark done",
+  [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
+} as const satisfies Record<SlackDoReply, string>;
+
+/** What a settled DM says once its member answered its do ask from it, by the answer. */
+const DO_LINE = {
+  [INBOX_REPLY.DONE]: "You marked it done",
+  [INBOX_REPLY.NOT_DONE]: "You couldn't do it",
+} as const satisfies Record<SlackDoReply, string>;
+
+/** The indent that keeps a step's later lines, a fenced block's among them, inside its numbered item. */
+const STEP_INDENT = "   ";
+
 /** What a settled DM says in its button's place, by where its ask now stands. */
 const SETTLED_LINE = {
   [INBOX_ASK_STATUS.ANSWERED]: `Answered in ${PRODUCT_NAME}`,
@@ -96,25 +121,31 @@ export function chosenLine(labels: readonly string[]): string {
   return `You chose ${labels.join(", ")}`;
 }
 
+/** What a settled DM says once its member answered its do ask from it. */
+export function doneLine(reply: SlackDoReply): string {
+  return DO_LINE[reply];
+}
+
 /**
  * What a button carries back when pressed: the item, the message whose ask
- * it answers, and an option's label, or none for the Submit of an ask
- * taking several, whose picks the press's checkboxes hold; as JSON in the
- * button's value, which Slack bounds at 2,000 characters, far past two ids
- * and a label.
+ * it answers, and an option's label, or a do ask's answer, or neither for
+ * the Submit of an ask taking several, whose picks the press's checkboxes
+ * hold; as JSON in the button's value, which Slack bounds at 2,000
+ * characters, far past two ids and a label.
  */
 export const SlackChoiceSchema = Schema.fromJsonString(
   Schema.Struct({
     item: Schema.String,
     ask: Schema.String,
     choice: Schema.optionalKey(Schema.String),
+    reply: Schema.optionalKey(Schema.Literals(SLACK_DO_REPLIES)),
   }),
 );
 
-/** A press of an option's button or a Submit, as `SlackChoiceSchema` reads it. */
+/** A press of an option's button, a do ask's, or a Submit, as `SlackChoiceSchema` reads it. */
 export type SlackChoice = typeof SlackChoiceSchema.Type;
 
-/** What an open decide ask is drawn with in its DM: blocks of their own above the buttons, and buttons beside the open one. */
+/** What an open ask is drawn with in its DM: blocks of their own above the buttons, and buttons beside the open one. */
 interface AskControls {
   readonly blocks: readonly SlackBlock[];
   readonly buttons: readonly SlackBlock[];
@@ -162,19 +193,46 @@ function postedMessage(item: InboxItem, asked: boolean): InboxMessage | undefine
     : item.thread?.findLast((message) => message.author === INBOX_MESSAGE_AUTHOR.AGENT);
 }
 
+/** A do ask's steps, as the message's ask names them; none for any other ask. */
+function askSteps(ask: InboxReadAsk | undefined): readonly string[] {
+  const known = ask === undefined ? undefined : knownAsk(ask);
+  return known?.type === INBOX_ASK.DO ? known.steps : [];
+}
+
+/** The agent's words with a do ask's steps listed under them, numbered, each step's later lines kept inside its item. */
+function wordsWithSteps(text: string, steps: readonly string[]): string {
+  if (steps.length === 0) return text;
+  const list = steps.map(
+    (step, at) => `${at + 1}. ${step.trim().replaceAll("\n", `\n${STEP_INDENT}`)}`,
+  );
+  return [text.trim(), ...list].filter((part) => part !== "").join("\n\n");
+}
+
 /**
  * The controls of an open decide ask: a button per option where it takes
  * one, the recommended ones primary, each under an action id of its own,
  * which the route answers the ask under, so a press Slack sends again is the
  * same answer; where it takes several, a checkbox per option, the
- * recommended ones saying so in parentheses after the label, and a Submit button under an action id of its
- * own on the same terms. None for any other ask.
+ * recommended ones saying so in parentheses after the label, and a Submit
+ * button under an action id of its own on the same terms. An open do ask's
+ * Mark done and Couldn't do it, each under an action id of its own. None for
+ * any other ask.
  */
 function askControls(itemId: string, message: InboxMessage): AskControls {
   if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) {
     return NO_CONTROLS;
   }
   const ask = knownAsk(message.ask);
+  if (ask?.type === INBOX_ASK.DO) {
+    const buttons = SLACK_DO_REPLIES.map((reply) => ({
+      type: "button",
+      text: { type: "plain_text", text: DO_BUTTON[reply] },
+      action_id: randomUUID(),
+      value: Schema.encodeSync(SlackChoiceSchema)({ item: itemId, ask: message.id, reply }),
+      ...(reply === INBOX_REPLY.DONE ? { style: "primary" } : undefined),
+    }));
+    return { blocks: [], buttons };
+  }
   if (ask?.type !== INBOX_ASK.DECIDE) return NO_CONTROLS;
   const recommended = new Set([
     ...(ask.recommended === undefined ? [] : [ask.recommended]),
@@ -378,7 +436,7 @@ const findDmAt = SqlSchema.findOneOption({
 
 /**
  * The DMs of the item's messages whose ask has settled, each marked settled
- * as it is read, with the message's words and where its ask stands. Note
+ * as it is read, with the message's words, a do ask's steps, and where its ask stands. Note
  * that the outer statement asks again that a DM is unsettled, because a
  * second caller blocked on the row rechecks it once the first commits and
  * so takes none, and no DM is rewritten twice.
@@ -389,6 +447,7 @@ const claimSettledDms = SqlSchema.findAll({
     id: Schema.String,
     dm: SlackDmSchema,
     text: Schema.String,
+    steps: Schema.NullOr(Schema.Array(Schema.String)),
     status: Schema.Literals(SETTLED_STATUSES),
   }),
   execute: (itemId) =>
@@ -413,6 +472,7 @@ const claimSettledDms = SqlSchema.findAll({
           id: inboxMessage.id,
           dm: settled.dm,
           text: inboxMessage.text,
+          steps: sql<unknown>`case when ${inboxMessage.ask} ->> 'type' = ${INBOX_ASK.DO} then ${inboxMessage.ask} -> 'steps' end`,
           status: sql<string>`${inboxMessage.ask} ->> 'status'`,
         });
     }),
@@ -489,7 +549,7 @@ export function threadDmAt(
 export function rewriteThreadDm(
   dm: SlackMessage,
   itemId: string,
-  message: { readonly text: string },
+  message: { readonly text: string; readonly ask?: InboxReadAsk | undefined },
   line: string,
 ): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
@@ -499,7 +559,7 @@ export function rewriteThreadDm(
     if (Option.isNone(place)) return;
     const view = {
       title: place.value.title,
-      text: message.text,
+      text: wordsWithSteps(message.text, askSteps(message.ask)),
       link: threadLink(itemId, place.value),
     };
     yield* bot.value.update(dm.channel, dm.ts, threadDmContent(view, line));
@@ -536,12 +596,12 @@ export function settleThreadDms(
     const link = threadLink(itemId, place.value);
     yield* Effect.forEach(
       claimed,
-      ({ id, dm, text, status }) =>
+      ({ id, dm, text, steps, status }) =>
         bot.value.update(
           dm.channel,
           dm.ts,
           threadDmContent(
-            { title, text, link },
+            { title, text: wordsWithSteps(text, steps ?? []), link },
             id === chosen?.messageId ? chosen.line : SETTLED_LINE[status],
           ),
         ),
@@ -577,7 +637,11 @@ export function dmThreadPost(
     if (thread === undefined && post.wasOpen && !post.asked) return;
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
-    const view = { title: item.title, text: message.text, link: threadLink(item.id, place.value) };
+    const view = {
+      title: item.title,
+      text: wordsWithSteps(message.text, askSteps(message.ask)),
+      link: threadLink(item.id, place.value),
+    };
     const content = threadDmContent(view, undefined, askControls(item.id, message));
     const sent = yield* bot.value.dm(organizationId, recipient, content, thread);
     if (Option.isNone(sent)) return;

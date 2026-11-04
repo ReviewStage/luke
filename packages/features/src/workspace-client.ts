@@ -46,7 +46,6 @@ import {
 } from "./workspace-call.js";
 import type { WorkspaceIntegrationsLiveAnswer } from "./workspace-integrations-live.js";
 import {
-  WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
@@ -634,22 +633,6 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hostedInSession.workspaceInvitations.invite, admitted),
       (answer) => answer.invitation,
-    );
-  }
-
-  /** The workspace's pending invitations, soonest to expire first, to an owner or an admin. */
-  invitations(
-    workspaceId: string,
-  ): Effect.Effect<
-    WorkspaceCallResult<readonly WorkspaceInvitation[]>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return hostedResult(
-      askHosted(this.#hostedInSession.workspaceInvitations.list, {
-        [WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID]: workspaceId,
-      }),
-      (answer) => answer.invitations,
     );
   }
 

@@ -32,6 +32,8 @@ import { readPageById } from "@repo/database/models/plan-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
+  createTaskOnce,
+  deleteTask,
   listTasks,
   readTask,
   type StoredTask,
@@ -76,6 +78,7 @@ import { PAGE_OWNER, type PageOwner } from "@repo/features/page-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import {
+  PLAN_ACTOR,
   TASK_BOUNDS,
   TASK_PRIORITY,
   TASK_STATUS,
@@ -116,6 +119,7 @@ import {
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
+import { calledId } from "./called-id.js";
 import {
   forwardedImageRefusalWords,
   forwardedImages,
@@ -384,6 +388,9 @@ export const START_AGENT_REFUSAL = {
   NO_PROMPT:
     "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
     `a task by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+  NO_WORKSPACE:
+    "Not started: the member you work for is no longer a member of your workspace, so no task " +
+    "can be made for the agent there.",
   BRANCH_NO_REPOSITORY:
     "Not started: the agent works in no repository, so there is no branch to clone; name a " +
     "repository with the branch, or leave branch out.",
@@ -628,9 +635,10 @@ const START_AGENT_INPUT = Schema.Struct({
   repository: Schema.optionalKey(
     describeWire(
       Schema.NullOr(githubRepositoryFullNameSchema),
-      "Where you work on no task and name none, the GitHub repository the agent works in, as " +
-        "owner/name, which the workspace's GitHub installation must reach; null for none. Leave " +
-        "it out for the repository you work in, if any. A task's agent works in the task's own.",
+      "Where you work on no task and name none, the GitHub repository of the task made for the " +
+        "agent, as owner/name, which the workspace's GitHub installation must reach; null for " +
+        "none. Leave it out for the repository you work in, if any. A task's agent works in the " +
+        "task's own.",
     ),
   ),
   prompt: Schema.optionalKey(
@@ -850,9 +858,10 @@ export const START_AGENT_TOOL = {
     "branch, pull request, and transcript stand under that task; name another task only for " +
     "work unrelated to it, or where the developer asked for that, and for work that should " +
     `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first. Where you work ` +
-    "on no task, taskId left out starts it in your own workspace with no task, in the " +
-    "repository you work in or the one repository names, and it needs a prompt, since there is " +
-    "no plan to hand it. " +
+    "on no task, taskId left out starts it on a new task made for it, named as its agent is, " +
+    "assigned to the member you work for, in the repository you work in or the one repository " +
+    "names, and done by itself once its agents finish well; it needs a prompt, since that task " +
+    "has no plan to hand it. " +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -1745,20 +1754,55 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 }
 
 /**
- * The caller's own place, which a start on no task lands in: its
- * workspace, with no task, and the repository named, or the caller's own
- * where none is.
+ * The task made for the agent a caller on no task starts: untitled, so the
+ * agent's title names it as it names any untitled task (`title.ts`),
+ * assigned to the member the caller works for, in the repository named or
+ * the caller's own, or none, in progress, and with a blank plan, since the
+ * prompt is handed to the agent as its first message; marked as made by
+ * `start_agent` so it finishes once its agents finished well, with no merge
+ * asked (`task-finish.ts`). Note that it is made under an id drawn from the
+ * call's key, as the agent is keyed by it, because a call run again must
+ * find the task it made rather than make a second. None where the member no
+ * longer stands in the caller's workspace.
  */
-function ownPlaceOf(
-  agent: Pick<Agent, "organizationId" | "repository">,
-  named: string | null | undefined,
-): StartWhere {
-  const repository = named === undefined ? agent.repository : named;
-  const { organizationId } = agent;
-  return repository === null
-    ? { taskId: null, organizationId, repository: null }
-    : { taskId: null, organizationId, repository };
-}
+const startTaskOf = (
+  call: AgentCall,
+  repository: string | null,
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
+  Effect.gen(function* () {
+    const { caller } = call;
+    const userId = callerUserId(caller);
+    const id = calledId(userId, call.clientKey);
+    if (Option.isSome(yield* readTask(userId, id))) return id;
+    const workspace = yield* callerWorkspace(caller);
+    if (Option.isNone(workspace)) return undefined;
+    const calling = callerAgent(caller);
+    yield* createTaskOnce(userId, {
+      id,
+      organizationId: workspace.value,
+      repository,
+      status: TASK_STATUS.IN_PROGRESS,
+      assigneeId: userId,
+      ...(calling === undefined
+        ? undefined
+        : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
+      madeByStart: true,
+      text: "",
+    });
+    return id;
+  }).pipe(Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)));
+
+/**
+ * The task a refused start made for its agent, deleted where no agent
+ * stands on it, so a refusal leaves nothing behind; one an agent the
+ * refused start made stands on is kept, as that agent works all the same,
+ * and a delete that failed is logged.
+ */
+const discardUnstarted = (userId: string, taskId: string) =>
+  deleteTask(userId, taskId, { stoppedAgentIds: new Set() }).pipe(
+    Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(false)),
+    Effect.catch((failure) => Effect.as(logStoreFailure(failure), false)),
+  );
 
 /** Why a start's input asks for nothing that can start, read before anything is: a repository for an agent that lands on a task or with its source, a source with a prompt or a branch, or a coding agent continuing itself. */
 function startInputRefusal(
@@ -1781,8 +1825,11 @@ function startInputRefusal(
 
 /**
  * One call of `start_agent`: an agent started under the call's own key on
- * the caller's own task, another of its workspace, or the task of the agent
- * it starts from, or why nothing was started. A call naming `newTask`, as a
+ * the caller's own task, another of its workspace, the task of the agent
+ * it starts from, or, for a caller on no task naming none, a task made for
+ * it (`startTaskOf`), or why nothing was started; a fresh start never
+ * lands on no task. Only a continue or a fork of an agent on no task does,
+ * in that agent's own place. A call naming `newTask`, as a
  * start did before `create_task` made tasks, is refused with where to go
  * now, rather than started on the caller's own task. Note that a start from another agent
  * can take tens of seconds, a copy of its work and a summary of its
@@ -1834,26 +1881,16 @@ export function runStartAgent(
       if (landing !== undefined && Result.isFailure(landing)) {
         return agentToolRejected(landing.failure);
       }
-      // A caller on no task starts beside itself where it names none, handing words alone: a member in their workspace, in the repository named or none.
+      // A caller on no task that names none starts on a task made for the agent, handed words alone,
+      // in the repository named or its own.
       const taskId = named ?? ownTask;
-      const place: StartWhere =
-        landing?.success.place ??
-        (taskId !== null
-          ? { taskId }
-          : ownPlaceOf(
-              caller.kind === AGENT_CALLER.AGENT
-                ? caller.agent
-                : { organizationId: caller.workspaceId, repository: null },
-              asked.success.repository,
-            ));
-      if (place.taskId === null && from === undefined && prompt === undefined) {
-        return agentToolRejected(START_AGENT_REFUSAL.NO_PROMPT);
-      }
-      if (
-        place.taskId === null &&
-        place.repository === null &&
-        asked.success.branch !== undefined
-      ) {
+      const fresh = landing === undefined && taskId === null;
+      if (fresh && prompt === undefined) return agentToolRejected(START_AGENT_REFUSAL.NO_PROMPT);
+      const repository =
+        asked.success.repository === undefined
+          ? (callerAgent(caller)?.repository ?? null)
+          : asked.success.repository;
+      if (fresh && repository === null && asked.success.branch !== undefined) {
         return agentToolRejected(START_AGENT_REFUSAL.BRANCH_NO_REPOSITORY);
       }
       // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
@@ -1864,6 +1901,12 @@ export function runStartAgent(
       if (Result.isFailure(images)) {
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
+      // Note that the task is made only once the call's input is read whole, so a call refused for it makes none.
+      const made = fresh ? yield* startTaskOf(call, repository) : undefined;
+      const onTask = taskId ?? made;
+      const place: StartWhere | undefined =
+        landing?.success.place ?? (onTask === undefined ? undefined : { taskId: onTask });
+      if (place === undefined) return agentToolRejected(START_AGENT_REFUSAL.NO_WORKSPACE);
       // An agent a coding agent starts hears who started it, and that it reports back to it by message; one a member starts hears their note as the developer's.
       const calling = callerAgent(caller);
       const note =
@@ -1882,17 +1925,18 @@ export function runStartAgent(
         ...(calling === undefined
           ? undefined
           : { noteHeading: START_NOTE_HEADING.AGENT, startedBy: calling }),
-        // One that lands beside the caller, on its task or on none, belongs to the caller's run, if any;
-        // one on another task is that task's. Note that the automation and its origin are not handed
-        // on, because either would make it an automation's agent, which changes who it commits as and
-        // how its start is counted.
+        // One that lands beside the caller, on its task or on one made for it, belongs to the caller's
+        // run, if any; one on another task is that task's. Note that the automation and its origin are
+        // not handed on, because either would make it an automation's agent, which changes who it
+        // commits as and how its start is counted.
         automationRunId:
-          place.taskId === ownTask && calling !== undefined
+          (place.taskId === ownTask || place.taskId === made) && calling !== undefined
             ? yield* runOfCaller(calling)
             : undefined,
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;
+        if (made !== undefined) yield* discardUnstarted(userId, made);
         if (refusal instanceof ModelChoiceRefused) {
           // The choices are the models the start was checked against, so no second read can lose them.
           return agentToolRejected(choiceRefusal(choice, refusal.offered));

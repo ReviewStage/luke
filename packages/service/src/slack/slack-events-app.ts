@@ -1,5 +1,5 @@
 /**
- * slack-events-app.ts -- our Slack bot's one inbound route: a press of a decide ask's option in a member's DM answers the ask, as the member would in the app.
+ * slack-events-app.ts -- our Slack bot's one inbound route: a press of an ask's button in a member's DM answers the ask, as the member would in the app.
  *
  * Vercel Connect holds the bot's Slack app and forwards every request Slack
  * sends it, events and interactivity alike, to this one path, with a Vercel
@@ -18,7 +18,8 @@
  * left, a failure logged by its kind alone. It is read for the option
  * button's value, which
  * names the item, the message whose ask it answers, and the option
- * (`SlackChoice`, `thread-dms.ts`), or for a Submit's, which names no option
+ * (`SlackChoice`, `thread-dms.ts`), or a do ask's answer, Mark done ticking
+ * every step, or for a Submit's, which names no option
  * and is answered with the checkboxes the press's state holds ticked, each
  * found back by its place among the ask's options; a press with none, the
  * Open button's and a tick of a checkbox among them, is acknowledged and
@@ -61,6 +62,7 @@ import { actOnSlackEvent } from "./slack-agent-starts.js";
 import { SlackBot, type SlackMessage } from "./slack-bot.js";
 import {
   chosenLine,
+  doneLine,
   itemWorkspace,
   rewriteThreadDm,
   SLACK_PICKS_ACTION,
@@ -188,26 +190,51 @@ function tickedPlaces(press: BlockActions): readonly number[] {
   return [];
 }
 
+/** The ask a press answers, as the member reads it; none where the item, the message, or its ask is not found. */
+const pressedAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
+  member: string,
+  choice: SlackChoice,
+) {
+  const stored = yield* hostedStoreOrUnavailable(readInboxItem(member, choice.item));
+  if (Option.isNone(stored)) return undefined;
+  const message = (stored.value.item.thread ?? []).find((each) => each.id === choice.ask);
+  return message?.ask === undefined ? undefined : knownAsk(message.ask);
+});
+
 /**
- * The labels a press picked: the option its button names, or for a Submit,
- * the ticked checkboxes' options as the member reads the ask; none where
- * the ask is not found or takes no options.
+ * The answer a press gives, with the line its DM says once taken: a do
+ * ask's Mark done, every step ticked, or Couldn't do it, none ticked; the
+ * option its button names; or for a Submit, the ticked checkboxes' options
+ * as the member reads the ask, none where the ask is not found or takes no
+ * options, which the ask's own check refuses.
  */
-const pickedLabels = /* @__PURE__ */ Effect.fnUntraced(function* (
+const pressedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   member: string,
   choice: SlackChoice,
   press: BlockActions,
 ) {
-  if (choice.choice !== undefined) return [choice.choice];
-  const stored = yield* hostedStoreOrUnavailable(readInboxItem(member, choice.item));
-  if (Option.isNone(stored)) return [];
-  const message = (stored.value.item.thread ?? []).find((each) => each.id === choice.ask);
-  const ask = message?.ask === undefined ? undefined : knownAsk(message.ask);
-  if (ask?.type !== INBOX_ASK.DECIDE) return [];
-  return tickedPlaces(press).flatMap((place) => {
-    const option = ask.options[place];
+  const { reply } = choice;
+  if (reply !== undefined) {
+    const ask = yield* pressedAsk(member, choice);
+    const steps = ask?.type === INBOX_ASK.DO ? ask.steps : [];
+    const ticked = reply === INBOX_REPLY.DONE ? steps.map((_, at) => at) : [];
+    return { answers: { ask: choice.ask, reply, steps: ticked }, line: doneLine(reply) };
+  }
+  if (choice.choice !== undefined) {
+    const choices = [choice.choice];
+    const answers = { ask: choice.ask, reply: INBOX_REPLY.CHOSE, choices };
+    return { answers, line: chosenLine(choices) };
+  }
+  const ask = yield* pressedAsk(member, choice);
+  const options = ask?.type === INBOX_ASK.DECIDE ? ask.options : [];
+  const choices = tickedPlaces(press).flatMap((place) => {
+    const option = options[place];
     return option === undefined ? [] : [option.label];
   });
+  return {
+    answers: { ask: choice.ask, reply: INBOX_REPLY.CHOSE, choices },
+    line: chosenLine(choices),
+  };
 });
 
 /** The DM a press was made in, where Slack named it. */
@@ -218,9 +245,9 @@ function pressedDm(press: BlockActions): SlackMessage | undefined {
 }
 
 /**
- * A press of an option, or a Submit of the options ticked, answered as the
- * member who pressed it, and the DM
- * rewritten past the answer: the answer taken says the options chosen
+ * A press of an option, a do ask's button, or a Submit of the options
+ * ticked, answered as the member who pressed it, and the DM
+ * rewritten past the answer: the answer taken says what was answered
  * through the hand-off's own settling of the item's DMs, and one already
  * taken, or an ask no longer open, is said here. Nothing where the item,
  * the member, or the option is not found.
@@ -237,8 +264,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
     (yield* SlackBot).memberOf(organizationId.value, teamId, press.user.id),
   );
   if (Option.isNone(member)) return;
-  const choices = yield* pickedLabels(member.value, choice, press);
-  const line = chosenLine(choices);
+  const { answers, line } = yield* pressedAnswer(member.value, choice, press);
   const answered = yield* answerAsMember(
     storeWriter({ tools: CODER_TOOL_SET }),
     member.value,
@@ -247,7 +273,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
       text: "",
       clientKey: actionId,
       attachments: [],
-      answers: { ask: choice.ask, reply: INBOX_REPLY.CHOSE, choices },
+      answers,
     },
     { messageId: choice.ask, line },
   ).pipe(
@@ -266,7 +292,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   // A refused answer to an ask still open leaves the DM's buttons standing.
   if (outcome === INBOX_ASK_ANSWER.REFUSED && status === INBOX_ASK_STATUS.OPEN) return;
   const said = outcome === INBOX_ASK_ANSWER.REPEATED ? line : settledLine(status);
-  yield* rewriteThreadDm(dm, choice.item, { text: message?.text ?? "" }, said);
+  yield* rewriteThreadDm(dm, choice.item, { text: message?.text ?? "", ask: message?.ask }, said);
 });
 
 /** POST: one request Connect forwarded, its bearer confirmed before anything of it is read. */

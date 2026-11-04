@@ -41,12 +41,15 @@ import {
   NAV_CURRENT,
   NavItem,
   NOTE_LINE_LOOK,
+  NoRepositoryGlyph,
   NoteLine,
   opensMenu,
   PanePin,
   PinIcon,
   ProviderMark,
   RESIZE_EDGE_SIDE,
+  RepositoryName,
+  RepositoryPicture,
   ResizeEdge,
   type ResizeEdgeHandle,
   SCROLL_FADE,
@@ -69,14 +72,7 @@ import {
   useRovingKeys,
   VisuallyHidden,
 } from "@repo/ui";
-import {
-  FolderPlusIcon,
-  FolderXIcon,
-  HouseIcon,
-  ListTodoIcon,
-  ShieldUserIcon,
-  ZapIcon,
-} from "@repo/ui/icons";
+import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
@@ -88,6 +84,7 @@ import {
   drawnTaskRows,
   hiddenStatuses,
   homedTaskRows,
+  NO_REPOSITORY,
   openParentIds,
   orderTaskRows,
   type RepositoryGroup,
@@ -133,7 +130,6 @@ import {
   PANEL_SPAN_ATTRIBUTE,
 } from "../panel-spans.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
-import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentName } from "../tasks/agent-model.js";
@@ -202,9 +198,6 @@ import { WorkspaceSwitcher } from "./workspace-switcher.js";
  * sidebar is dragged no wider than the window less this.
  */
 const WORK_RESERVE = 360;
-
-/** What the header over the tasks with no repository says. */
-const NO_REPOSITORY = "No repository";
 
 /** What the Automations row's count counts, as a reader hears it after the figure. */
 const RUNNING_NOUN = "running";
@@ -460,7 +453,7 @@ function TaskRows({
 }: {
   rows: readonly TaskRow[];
   context: RowContext;
-  repository?: (row: TaskRow) => string | undefined;
+  repository?: (row: TaskRow) => React.ReactNode;
 }): React.JSX.Element {
   const { faces } = context;
   // Note that the rows keep the view's order, so a row is dragged only out of them, into a section or Pinned.
@@ -1148,7 +1141,7 @@ function RepositorySection({
         heading={GROUP_HEADING.NONE}
         glyph={
           repository === null ? (
-            <FolderXIcon />
+            <NoRepositoryGlyph />
           ) : (
             <RepositoryPicture
               repository={repository}
@@ -1378,7 +1371,7 @@ function TaskGroups({
   context,
 }: {
   sections: TaskSections;
-  repositoryOf: (row: TaskRow) => string | undefined;
+  repositoryOf: (row: TaskRow) => React.ReactNode;
   folds: FoldedGroups;
   onNewTaskIn: (repository: string) => void;
   context: RowContext;
@@ -2134,11 +2127,17 @@ function SidebarColumn({
       ].flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task.id] : [])),
     ),
   );
-  // A row names its repository as its group's header would, owner and all where two share a name.
+  // A row names its repository as its group's header would, its owner's picture and its name, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
   const repositoryOf = (row: TaskRow) => {
     const repository = taskRowRepository(row);
-    return repository === null ? NO_REPOSITORY : repositoryLabel(repository, named);
+    return (
+      <RepositoryName
+        repository={repository}
+        label={repository === null ? undefined : repositoryLabel(repository, named)}
+        pictures={tasks.repositories.pictures}
+      />
+    );
   };
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open row standing in its place even under a fold, so walking

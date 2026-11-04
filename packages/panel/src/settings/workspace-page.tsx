@@ -95,9 +95,7 @@ import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { streamFrom } from "../act-stream.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
-import { actPort } from "../app-bridge.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
@@ -984,16 +982,11 @@ function Invitations({
 }): React.JSX.Element {
   const { act } = useAct();
   const copy = useCopyToast();
-  const [pending, setPendingState] = useState<readonly WorkspaceInvitation[] | undefined>(
-    undefined,
-  );
-  const [firstReadFailed, setFirstReadFailed] = useState<string>();
-  const pendingRead = useRef(false);
-  const setPending: typeof setPendingState = (next) => {
-    pendingRead.current = true;
-    setFirstReadFailed(undefined);
-    setPendingState(next);
-  };
+  const {
+    rows: pending,
+    status,
+    retry,
+  } = useHostRead(LIVE_READ.WORKSPACE_INVITATIONS, workspaceId);
   const [email, setEmail] = useState("");
   const [emailProblem, setEmailProblem] = useState<string>();
   const emailField = useRef<HTMLInputElement>(null);
@@ -1004,42 +997,16 @@ function Invitations({
   // Note that the press reads a ref rather than `busy`, because a second
   // press can land before the render that would disable the button.
   const sending = useRef(false);
-  // Note that only the list last asked for is shown, because a read, an
-  // invite's re-read, and a cancel can answer out of the order they were asked.
-  const latest = useRef(0);
-  // Note that a write's answer is passed over where the stream told a list
-  // while it was out, since that list may already hold a newer change, such
-  // as another window canceling what this one just invited.
-  const streamed = useRef(0);
-  const show = (listed: Promise<readonly WorkspaceInvitation[]>) => {
-    const asked = ++latest.current;
-    listed.then(
-      (invitations) => {
-        if (asked === latest.current) setPending(invitations);
-      },
-      (refused: Error) => {
-        if (asked !== latest.current) return;
-        // A list never read is not an empty one: it says so with Retry in its place.
-        if (pendingRead.current) setNote(refused.message);
-        else setFirstReadFailed(READ_FAILED.INVITATIONS);
-      },
-    );
-  };
-  // Note that one write runs at a time, invite or cancel, so no list read
-  // after one can see the service before another has settled.
-  const write = <A,>(
-    which: InvitationWrite,
-    made: () => Promise<A>,
-    done: (answer: A, fresh: boolean) => void,
-  ) => {
+  // Note that one write runs at a time, invite or cancel, and what it moves
+  // is drawn by the host from its answer, so nothing here lays it.
+  const write = (which: InvitationWrite, made: () => Promise<unknown>, done?: () => void) => {
     if (sending.current) return;
     sending.current = true;
     setWriting(which);
     setNote(undefined);
-    const before = streamed.current;
     made()
       .then(
-        (answer) => done(answer, streamed.current === before),
+        () => done?.(),
         (refused: Error) => setNote(refused.message),
       )
       .finally(() => {
@@ -1048,37 +1015,8 @@ function Invitations({
       });
   };
 
-  const read = () => {
-    setFirstReadFailed(undefined);
-    show(act(ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId }));
-  };
-
-  useEffect(() => {
-    read();
-    return () => {
-      latest.current += 1;
-    };
-  }, [act, workspaceId]);
-
-  // The invitations are followed while the group stands: what any window or
-  // Mac invites or cancels, or what is accepted, is streamed, and is the
-  // newest word of them, whatever read is out.
-  useEffect(
-    () =>
-      streamFrom(
-        () => actPort()[ACT_KIND.WORKSPACE_INVITATIONS]({ workspaceId }),
-        (view) => {
-          if (!("invitations" in view)) return;
-          latest.current += 1;
-          streamed.current += 1;
-          setPending(view.invitations);
-        },
-      ),
-    [workspaceId],
-  );
-
-  // The invitation made is listed at once, its link copyable, and the
-  // followed list then carries it as the service holds it.
+  // The invitation made is listed at once, its link copyable, as the host
+  // draws it from its answer until the held read carries it.
   const invite = (event: React.FormEvent) => {
     event.preventDefault();
     // Note that the address is checked here, as the service reads it, because the browser never checks a form.
@@ -1096,25 +1034,13 @@ function Invitations({
     write(
       INVITATION_WRITE.INVITE,
       () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
-      (made, fresh) => {
-        setEmail("");
-        if (!fresh) return;
-        latest.current += 1;
-        setPending((standing) => [...(standing ?? []).filter((one) => one.id !== made.id), made]);
-      },
+      () => setEmail(""),
     );
   };
 
   const cancel = (invitationId: string) =>
-    write(
-      INVITATION_WRITE.CANCEL,
-      () => act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
-      // The cancel's own answer is the list after it, so a read out before it is passed over.
-      (left, fresh) => {
-        if (!fresh) return;
-        latest.current += 1;
-        setPending(left);
-      },
+    write(INVITATION_WRITE.CANCEL, () =>
+      act(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId }),
     );
 
   // Note that the question goes with its invitation, canceled or accepted meanwhile.
@@ -1185,11 +1111,11 @@ function Invitations({
           </SettingsLine>
         )}
       </Stack>
-      {firstReadFailed !== undefined ? (
+      {status === HOST_READ_STATUS.FAILED ? (
         <ReadFailed
-          line={firstReadFailed}
+          line={READ_FAILED.INVITATIONS}
           surface={FAILURE_SURFACE.WORKSPACE_INVITATIONS_READ}
-          onRetry={read}
+          onRetry={retry}
         />
       ) : pending === undefined ? (
         <SettingsRowsSkeleton

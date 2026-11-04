@@ -26,7 +26,6 @@ import type {
   TasksWorkspaceTokenRepositoriesParams,
   TasksWorkspaceTokenRepositorySetParams,
   TasksWorkspaceTransferParams,
-  WorkspaceInvitationsFollowed,
   WorkspacePeopleFollow,
 } from "@repo/features/tasks-view";
 import { WORKSPACE_SLUG_PROBLEM } from "@repo/features/workspace-wire";
@@ -39,14 +38,7 @@ import {
 } from "../acts.js";
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
-import {
-  followedStream,
-  type OpenFollows,
-  openRefollows,
-  type RefollowedDependencies,
-  refollowedStream,
-  streamed,
-} from "./followed-stream.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
  * workspace-procedures.ts -- the panel's asks of the host about the account's workspaces.
@@ -56,12 +48,12 @@ import {
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words. A
- * workspace's people, its token repositories, its own integrations, and its
- * Slack channels are each held while a panel holds their stream open: the
- * host holds them on the first stream and lets them go with the last, and
- * what they hold reaches every panel on app state, never down the stream,
- * which carries nothing. How many streams stand open of each is all else
- * held here.
+ * workspace's people, its token repositories, its invitations, its own
+ * integrations, and its Slack channels are each held while a panel holds
+ * their stream open: the host holds them on the first stream and lets them
+ * go with the last, and what they hold reaches every panel on app state,
+ * never down the stream, which carries nothing. How many streams stand open
+ * of each is all else held here.
  */
 export interface WorkspaceProceduresDependencies {
   host: {
@@ -110,12 +102,11 @@ export interface WorkspaceProceduresDependencies {
     workspaceSlackChannelsUnfollow(params: TasksWorkspaceParams): Effect.Effect<void>;
     /** A held workspace's Slack channels asked again at once, as Try again asks; done once the ask has landed. */
     workspaceSlackChannelsRetry(params: TasksWorkspaceParams): Effect.Effect<void>;
-    /** A workspace's pending invitations followed at the host, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+    /** A workspace's pending invitations held followed at the host while any stream of them stands; what they hold reaches the panel on app state. */
     workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-    onWorkspaceInvitationsChanged(
-      listener: (followed: WorkspaceInvitationsFollowed) => void,
-    ): () => void;
+    /** A held workspace's invitations read again at once, as Try again asks. */
+    workspaceInvitationsRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
     workspaceMemberRemove(
       params: TasksWorkspaceMemberRemoveParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -126,9 +117,6 @@ export interface WorkspaceProceduresDependencies {
       params: TasksWorkspaceTransferParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
     workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-    workspaceInvitations(
-      params: TasksWorkspaceParams,
-    ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
     workspaceInvite(
       params: TasksWorkspaceInviteParams,
     ): Effect.Effect<TasksWorkspaceInvitationAnswer>;
@@ -198,42 +186,42 @@ function isSentryAddress(url: string): boolean {
   return URL.canParse(url) && new URL(url).origin === SENTRY_ORIGIN;
 }
 
-/** One kind of a workspace's follow, as a stream of it reads the host: its follow, its let-go, and its words. */
-function workspaceSide<View>(side: {
-  readonly follow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
-  readonly unfollow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
-  readonly onChanged: (
-    listener: (changed: { readonly workspaceId: string; readonly view: View }) => void,
-  ) => () => void;
-}): RefollowedDependencies<
-  WorkspacePeopleFollow,
-  { readonly workspaceId: string; readonly view: View },
-  View
-> {
-  return {
-    ...side,
-    valueOf: (changed, scope) =>
-      changed.workspaceId === scope.workspaceId ? Option.some(changed.view) : Option.none(),
-  };
+/**
+ * The hold one stream a window opens keeps on a workspace's read, held at
+ * the host while any stream of it stands. Note that nothing is heard down
+ * it, since the held read reaches the panel on app state.
+ */
+function workspaceHold(
+  side: {
+    readonly follow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
+    readonly unfollow: (scope: WorkspacePeopleFollow) => Effect.Effect<void>;
+  },
+  open: OpenFollows<never>,
+  scope: WorkspacePeopleFollow,
+): Stream.Stream<never> {
+  return followedStream(
+    {
+      keyOf: (held: WorkspacePeopleFollow) => held.workspaceId,
+      follow: side.follow,
+      unfollow: side.unfollow,
+      onChanged: () => () => undefined,
+      valueOf: () => Option.none<never>(),
+    },
+    open,
+    scope,
+  );
 }
 
 export function workspaceProcedures(dependencies: WorkspaceProceduresDependencies) {
   const { host, openExternal } = dependencies;
-  /** Every workspace whose people a window holds a stream open of, so the host lets them go only with the last. */
+  /** Every workspace whose people, token repositories, or invitations a window holds a stream open of, each so the host lets them go only with the last. */
   const openPeople: OpenFollows<never> = MutableHashMap.empty();
-  /** Every workspace whose token repositories a window holds a stream open of, so the host lets them go only with the last. */
   const openTokenRepositories: OpenFollows<never> = MutableHashMap.empty();
   /** Every workspace whose integrations a window holds a stream open of, as its people are. */
   const openIntegrations: OpenFollows<never> = MutableHashMap.empty();
   /** Every workspace whose Slack channels a window holds a stream open of, as its people are. */
   const openChannels: OpenFollows<never> = MutableHashMap.empty();
-  /** The streams standing open of each workspace's invitations, so the host lets each go only with the last, and hears its follows and unfollows in the order its streams opened and closed. */
-  const openInvitations = openRefollows<string>();
-  const invitations = workspaceSide<TasksWorkspaceInvitationsAnswer>({
-    follow: host.workspaceInvitationsFollow,
-    unfollow: host.workspaceInvitationsUnfollow,
-    onChanged: host.onWorkspaceInvitationsChanged,
-  });
+  const openInvitations: OpenFollows<never> = MutableHashMap.empty();
   return {
     [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_CREATE].effect(
       function* ({ input, context, errors }) {
@@ -267,14 +255,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         return yield* refusedWorkspace(errors.REFUSED, answer.failure);
       },
     ),
-    [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceInvitations(input);
-      if ("invitations" in answer) return answer.invitations;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
-    }),
     [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: actPort[WORKSPACE_ACT_KIND.WORKSPACE_INVITE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
@@ -380,15 +360,8 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      // Note that nothing is heard down the hold, since the held people reach the panel on app state.
-      const hold = followedStream(
-        {
-          keyOf: (scope: WorkspacePeopleFollow) => scope.workspaceId,
-          follow: host.workspaceMembersFollow,
-          unfollow: host.workspaceMembersUnfollow,
-          onChanged: () => () => undefined,
-          valueOf: () => Option.none<never>(),
-        },
+      const hold = workspaceHold(
+        { follow: host.workspaceMembersFollow, unfollow: host.workspaceMembersUnfollow },
         openPeople,
         input,
       );
@@ -448,16 +421,22 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.workspaceSlackChannelsRetry(input);
     }),
-    // A workspace's pending invitations, pushed to an owner's or an admin's stream while it stands open.
-    [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS
+    [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return streamed(
-        yield* Stream.toAsyncIterableEffect(
-          refollowedStream(invitations, openInvitations, input.workspaceId, input),
-        ),
+      const hold = workspaceHold(
+        { follow: host.workspaceInvitationsFollow, unfollow: host.workspaceInvitationsUnfollow },
+        openInvitations,
+        input,
       );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceInvitationsRetry(input);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE

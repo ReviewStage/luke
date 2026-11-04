@@ -17,7 +17,7 @@
           "type": "null"
         }
       ],
-      "description": "Where you work on no task and name none, the GitHub repository the agent works in, as owner/name, which the workspace's GitHub installation must reach; null for none. Leave it out for the repository you work in, if any. A task's agent works in the task's own."
+      "description": "Where you work on no task and name none, the GitHub repository of the task made for the agent, as owner/name, which the workspace's GitHub installation must reach; null for none. Leave it out for the repository you work in, if any. A task's agent works in the task's own."
     },
     "prompt": {
       "type": "string",

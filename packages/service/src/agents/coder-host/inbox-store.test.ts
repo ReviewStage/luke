@@ -82,6 +82,7 @@ import {
   readInboxAttachment,
   readInboxItem,
   replyInboxItem,
+  snoozeInboxItem,
   taskInboxItems,
   taskInboxLiveStatements,
   withdrawInboxAnswer,
@@ -1493,6 +1494,80 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         assert.equal(yield* markInboxItemRead(outsider, id), false, "an outsider reaches no item");
         assert.equal(yield* markInboxItemUnread(outsider, id), false);
         assert.equal(yield* markInboxItemRead(agent.userId, randomUUID()), false);
+      }),
+  );
+
+  it.effect(
+    "a snooze marks the item read for its member alone and holds until a change wakes it or it comes due, and a read then takes it off",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const id = yield* postedId(agent, SETTINGS.key);
+        const taskId = agent.taskId ?? "";
+        const snoozedFor = (userId: string) =>
+          Effect.map(
+            taskInboxItems(userId, taskId),
+            (items) => items.find((item) => item.id === id)?.snoozedUntil,
+          );
+        // The store's clock is the test's, while the snooze is weighed on the database's, so ahead is far off and due is long past.
+        const ahead = new Date("2999-01-01T09:00:00Z");
+        const due = new Date("2001-01-01T09:00:00Z");
+
+        const snoozed = yield* snoozeInboxItem(agent.userId, id, ahead);
+        assert.match(snoozed === false ? "" : (snoozed.txid ?? ""), /^\d+$/u);
+        assert.deepEqual(
+          [yield* snoozedFor(agent.userId), yield* unreadFor(agent.userId, id)],
+          [ahead.getTime(), false],
+          "snoozing marks it read for its member",
+        );
+        assert.deepEqual(
+          [yield* snoozedFor(teammate), yield* unreadFor(teammate, id)],
+          [undefined, true],
+          "a teammate's item is neither snoozed nor read",
+        );
+        assert.deepEqual(yield* markInboxItemRead(agent.userId, id), {});
+        assert.equal(
+          yield* snoozedFor(agent.userId),
+          ahead.getTime(),
+          "opening a snoozed item nothing woke leaves it snoozed",
+        );
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* replyInboxItem(agent, SETTINGS.key, "Still needed.");
+        assert.equal(yield* unreadFor(agent.userId, id), true, "a change wakes it, unread");
+        yield* markInboxItemRead(agent.userId, id);
+        assert.equal(
+          yield* snoozedFor(agent.userId),
+          undefined,
+          "reading it then takes the snooze off",
+        );
+
+        yield* snoozeInboxItem(agent.userId, id, due);
+        const read = yield* markInboxItemRead(agent.userId, id);
+        assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
+        assert.equal(
+          yield* snoozedFor(agent.userId),
+          undefined,
+          "a read once it came due takes it off",
+        );
+        yield* snoozeInboxItem(agent.userId, id, due);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
+        assert.equal(yield* snoozedFor(agent.userId), undefined, "so does marking every item read");
+
+        yield* snoozeInboxItem(agent.userId, id, ahead);
+        yield* snoozeInboxItem(agent.userId, id, null);
+        assert.equal(yield* snoozedFor(agent.userId), undefined, "a snooze of none ends it");
+
+        assert.equal(
+          yield* snoozeInboxItem(outsider, id, ahead),
+          false,
+          "an outsider reaches no item",
+        );
+        assert.equal(yield* snoozeInboxItem(agent.userId, randomUUID(), ahead), false);
       }),
   );
 

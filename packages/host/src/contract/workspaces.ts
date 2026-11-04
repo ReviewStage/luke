@@ -3,7 +3,6 @@ import { workspaceTokenRepositorySchema } from "@repo/features/github-repositori
 import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire";
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
-  type TasksWorkspaceInvitationsAnswer,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
@@ -55,11 +54,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceRenameParamsSchema))
     .output(answersWorkspace),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_READ]: actProcedure(
-    "Could not read invitations on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(answersInvitations),
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: actProcedure(
     "Could not invite that address on this system.",
   )
@@ -153,11 +147,17 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actProcedure(
+  // Note that the hold's stream carries nothing, as the people's does.
+  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: actProcedure(
     "Could not follow that workspace's invitations on this system.",
   )
     .input(exactInput(workspacePeopleFollowSchema))
-    .output(eventIterator(type<TasksWorkspaceInvitationsAnswer>())),
+    .output(eventIterator(type<never>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_RETRY]: actProcedure(
+    "Could not read that workspace's invitations again on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(EffectSchema.Void),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actProcedure(
     "Could not remove that member on this system.",
   )

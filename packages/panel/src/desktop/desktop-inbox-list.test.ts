@@ -1109,7 +1109,7 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, after Copy link", async () => {
+test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, and H on the Snooze an open item offers, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
@@ -1134,6 +1134,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
     "Copy link",
     "—",
     "Mark as unreadU",
+    "SnoozeH",
     "—",
     "Resolve without answering",
   ]);
@@ -1191,7 +1192,7 @@ test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
-  assert.deepEqual(menuWords(), ["Open", "All", "—", "Addressed to"]);
+  assert.deepEqual(menuWords(), ["Open", "All", "Snoozed", "—", "Addressed to"]);
   act(() => options.click());
   act(() => {
     runAppCommand(APP_COMMAND.MARK_INBOX_READ);

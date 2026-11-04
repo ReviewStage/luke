@@ -168,9 +168,25 @@ function latest(rows: readonly TaskRow[]): number {
   return Math.max(...rows.map(taskRowTime));
 }
 
+/** What every surface calls the state of naming no repository: a task's, a group's, a filter's, a pick's. */
+export const NO_REPOSITORY = "No repository";
+
+/** A repository's two parts, `acme` and `relay` of `acme/relay`; a name with no owner is its name alone. */
+export interface RepositoryParts {
+  readonly owner: string | undefined;
+  readonly name: string;
+}
+
+/** A repository's owner and its name, split at the slash GitHub writes between them. */
+export function repositoryParts(repository: string): RepositoryParts {
+  const slash = repository.indexOf("/");
+  if (slash <= 0) return { owner: undefined, name: repository };
+  return { owner: repository.slice(0, slash), name: repository.slice(slash + 1) };
+}
+
 /** A repository's name without its owner: `relay` of `acme/relay`. */
 function nameOf(repository: string): string {
-  return repository.slice(repository.indexOf("/") + 1);
+  return repositoryParts(repository).name;
 }
 
 /**

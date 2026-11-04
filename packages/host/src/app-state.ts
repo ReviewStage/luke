@@ -44,6 +44,7 @@ import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceIntegrations } from "@repo/features/workspace-integrations-live";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
@@ -197,6 +198,8 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
+  /** Until when the developer snoozed it, while nothing has woken it since; absent where it is not snoozed. The window leaves it uncounted until then. */
+  snoozedUntil?: number;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -449,6 +452,17 @@ export interface AppDevicePresence {
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
 /**
+ * Each workspace's pending invitations the host holds for an owner's or an
+ * admin's windows (`workspace-invitations-read.ts`): those a window draws,
+ * and the few drawn lately, by the workspace's id, each as its own read
+ * stands, those not yet expired, soonest to expire first, once it answered.
+ * One absent is held by nobody.
+ */
+export type AppWorkspaceInvitations = Readonly<
+  Record<string, AppHostRead<readonly WorkspaceInvitation[]>>
+>;
+
+/**
  * This Mac as its host reads it (`compose-this-mac-host.ts`): the machine's
  * id in the keyed hash every host reports (`@repo/host/node`'s
  * `machine-identity.ts`), where it could be read, and the device of the
@@ -645,6 +659,7 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_VIEWED]: AgentPullRequestViewedAnswerView;
   [LIVE_READ.REVIEW_OPTIONS]: AgentReviewOptionsAnswerView;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_INTEGRATIONS]: WorkspaceIntegrations;
@@ -789,6 +804,8 @@ export interface AppState {
   [LIVE_READ.REVIEW_OPTIONS]: AppPullRequestPart<AgentReviewOptionsAnswerView>;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each workspace's pending invitations an owner's or an admin's windows draw, held while a window draws them and a while after: what Settings › Workspace lists under Invitations. */
+  [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
   /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
@@ -979,6 +996,11 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_INVITATIONS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof WorkspaceInvitation,
+  },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   // Note that a workspace's integrations cross whole, since a write moves one of a few rows.

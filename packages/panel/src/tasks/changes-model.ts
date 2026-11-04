@@ -18,6 +18,7 @@ import {
 } from "@repo/features/diff-hunks";
 import { pullRequestAddressOf } from "@repo/features/link-grammar";
 import { isSecretFile } from "@repo/features/task-wire";
+import { repositoryParts } from "@repo/ui/task-list-model";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -557,8 +558,7 @@ export function pullRequestPatch(files: readonly AgentChangedFile[]): string | u
 export function pullRequestPatchName(url: string): string {
   const address = pullRequestAddressOf(url);
   if (address === undefined) return "pull-request.patch";
-  const name = address.repository.slice(address.repository.indexOf("/") + 1);
-  return `${name}-pr-${address.number}.patch`;
+  return `${repositoryParts(address.repository).name}-pr-${address.number}.patch`;
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */

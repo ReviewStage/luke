@@ -904,11 +904,6 @@ function fakeService(tasks: Task[]): FakeService {
           );
           return { ok: true, answer: handedOver } as const;
         }),
-      invitations: (workspaceId) =>
-        Effect.sync(() => {
-          service.reads.push(`invitations:${workspaceId}`);
-          return { ok: true, answer: service.invitations[workspaceId] ?? [] } as const;
-        }),
       // The service answers the invitation it made, with its accept link.
       invite: (workspaceId, email, role) =>
         Effect.sync(() => {
@@ -3384,47 +3379,120 @@ it.effect(
     }),
 );
 
+/** Each workspace's pending invitations the host told the windows, the latest last. */
+function heldInvitations(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED ? [payload] : [],
+  );
+}
+
+/** A pending invitation's row as the invitations' live read carries it: the plugin's role text, and when it expires in epoch milliseconds. */
+function invitationRow(id: string, expiresAt: number) {
+  return { id, email: `${id}@example.com`, role: WORKSPACE_ROLE.MEMBER, expiresAt };
+}
+
+/** The invitation `invitationRow` carries, as the held read lists it: its expiry in ISO, and its accept link on the origin the service answered with. */
+function pendingInvitation(id: string, expiresAt: number): WorkspaceInvitation {
+  return {
+    id,
+    email: `${id}@example.com`,
+    role: WORKSPACE_ROLE.MEMBER,
+    expiresAt: new Date(expiresAt).toISOString(),
+    acceptUrl: `https://app.test/accept-invitation?id=${id}&email=${id}%40example.com`,
+  };
+}
+
+/** An hour, in the epoch milliseconds an invitation's expiry is counted in. */
+const HOUR = 3_600_000;
+
 it.effect(
-  "an invitation is made, read, and canceled on the service, and nothing else is read with any of them",
+  "an invitation made and one canceled stand from their answers until the held read carries them, through a poll answered before them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call } = yield* subject(service);
+      const { call, pushed, settled } = yield* subject(service);
+      const invitations = service.live.invitations;
+      const shown = () => heldInvitations(pushed).at(-1);
+      const standing = (rows: readonly WorkspaceInvitation[]) => ({ [ACME.id]: { rows } });
+      const graceRow = invitationRow("grace", HOUR);
+      const leeRow = invitationRow("lee", 2 * HOUR);
+      const grace = pendingInvitation("grace", HOUR);
+      const lee = pendingInvitation("lee", 2 * HOUR);
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      invitations.set({ invitations: [graceRow] });
+      yield* settled;
+      const before = service.reads.length;
 
+      // The invitation made is answered as the service made it, and stands from its answer, its link on the read's own origin.
       const made = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
         workspaceId: ACME.id,
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
       });
-      const pending = yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: ACME.id });
-      const left = yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
-        workspaceId: ACME.id,
-        invitationId: "inv-alan@example.com",
+      assert.deepEqual(made, {
+        invitation: {
+          id: "inv-alan@example.com",
+          email: "alan@example.com",
+          role: WORKSPACE_ROLE.MEMBER,
+          expiresAt: "2026-10-16T12:00:00.000Z",
+          acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
+        },
       });
-      service.notPermitted = true;
-      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
-        workspaceId: ACME.id,
-        email: "grace@example.com",
-        role: WORKSPACE_ROLE.ADMIN,
-      });
-
-      const invitation = {
+      const alan = {
         id: "inv-alan@example.com",
         email: "alan@example.com",
         role: WORKSPACE_ROLE.MEMBER,
         expiresAt: "2026-10-16T12:00:00.000Z",
-        acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-alan@example.com",
+        acceptUrl:
+          "https://app.test/accept-invitation?id=inv-alan%40example.com&email=alan%40example.com",
       };
-      assert.deepEqual(made, { invitation });
-      assert.deepEqual(pending, { invitations: [invitation] });
-      assert.deepEqual(left, { invitations: [] });
+      assert.deepEqual(shown(), standing([grace, alan]));
+      // A poll read before the invite and answered after it puts nothing back, and what it moved lands once the read carries the invitation.
+      invitations.set({ invitations: [graceRow, leeRow] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([grace, alan]));
+      invitations.set({
+        invitations: [
+          graceRow,
+          leeRow,
+          { ...invitationRow(alan.id, Date.parse(alan.expiresAt)), email: alan.email },
+        ],
+      });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([grace, lee, alan]));
+      // Once the read carries it, the read alone stands, so its acceptance elsewhere takes it away.
+      invitations.set({ invitations: [graceRow, leeRow] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([grace, lee]));
+
+      // A cancel stands from its answer until the read no longer carries the invitation, whatever list it answered.
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+        workspaceId: ACME.id,
+        invitationId: "lee",
+      });
+      assert.deepEqual(shown(), standing([grace]));
+      invitations.set({ invitations: [graceRow, leeRow] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([grace]));
+      invitations.set({ invitations: [graceRow] });
+      yield* nextPoll(settled);
+      assert.deepEqual(shown(), standing([grace]));
+
+      // A refused invite draws nothing.
+      service.notPermitted = true;
+      const refused = yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+        workspaceId: ACME.id,
+        email: "ada@example.com",
+        role: WORKSPACE_ROLE.ADMIN,
+      });
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
-      assert.deepEqual(service.reads, [
+      assert.deepEqual(shown(), standing([grace]));
+      assert.deepEqual(service.reads.slice(before), [
         `invite:${ACME.id}:alan@example.com`,
-        `invitations:${ACME.id}`,
-        `cancel:${ACME.id}:inv-alan@example.com`,
-        `invite:${ACME.id}:grace@example.com`,
+        `cancel:${ACME.id}:lee`,
+        `invite:${ACME.id}:ada@example.com`,
       ]);
     }),
 );
@@ -5327,51 +5395,66 @@ it.effect("a workspace the account is not in is told failed once, and not asked 
 );
 
 it.effect(
-  "a workspace's invitations are followed for an owner or an admin, the expired left out by the host's clock and each with its accept link, and a role that may not is told so once",
+  "a workspace's invitations held for an owner or an admin are laid on the app state soonest first, the expired left out by the host's clock and each with its accept link, and one the account may not manage is told failed once",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const { call, events, settled } = yield* subject(service);
-      const invitations = () =>
-        events
-          .filter((event) => event.kind === GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED)
-          .map((event) => event.payload);
+      const { call, pushed, settled } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
-      yield* settled;
-      const row = (id: string, expiresAt: number) => ({
-        id,
-        email: `${id}@example.com`,
-        role: WORKSPACE_ROLE.MEMBER,
-        expiresAt,
-      });
-      service.live.invitations.set({
-        invitations: [row("late", 9_000), row("spent", 0), row("soon", 5_000)],
-      });
-      yield* settled;
-      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, { workspaceId: ACME.id });
       service.notPermitted = true;
       yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: RELAY.id });
       yield* settled;
       yield* TestClock.adjust(Duration.minutes(1));
       yield* settled;
+      service.notPermitted = false;
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      service.live.invitations.set({
+        invitations: [
+          invitationRow("late", 2 * HOUR),
+          invitationRow("spent", 0),
+          invitationRow("soon", HOUR),
+        ],
+      });
+      yield* settled;
 
-      const accept = (id: string) =>
-        `https://app.test/accept-invitation?id=${id}&email=${id}%40example.com`;
-      assert.deepEqual(invitations(), [
+      assert.deepEqual(heldInvitations(pushed), [
+        { [RELAY.id]: { failed: true } },
         {
-          workspaceId: ACME.id,
-          view: {
-            invitations: ["soon", "late"].map((id) => ({
-              id,
-              email: `${id}@example.com`,
-              role: WORKSPACE_ROLE.MEMBER,
-              expiresAt: new Date(id === "soon" ? 5_000 : 9_000).toISOString(),
-              acceptUrl: accept(id),
-            })),
+          [RELAY.id]: { failed: true },
+          [ACME.id]: {
+            rows: [pendingInvitation("soon", HOUR), pendingInvitation("late", 2 * HOUR)],
           },
         },
-        { workspaceId: RELAY.id, view: { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } },
+      ]);
+      assert.deepEqual(service.reads, [
+        `invitations-live:${RELAY.id}`,
+        `invitations-live:${ACME.id}`,
       ]);
     }),
+);
+
+it.effect("an invitation leaves the held list at its expiry with no row moving", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call, pushed, settled } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+    yield* settled;
+    service.live.invitations.set({
+      invitations: [invitationRow("soon", HOUR), invitationRow("late", 2 * HOUR)],
+    });
+    yield* settled;
+    const soon = pendingInvitation("soon", HOUR);
+    const late = pendingInvitation("late", 2 * HOUR);
+
+    yield* TestClock.adjust(Duration.millis(HOUR - 1));
+    yield* settled;
+    assert.deepEqual(heldInvitations(pushed).at(-1), { [ACME.id]: { rows: [soon, late] } });
+    yield* TestClock.adjust(Duration.millis(1));
+    yield* settled;
+    assert.deepEqual(heldInvitations(pushed).at(-1), { [ACME.id]: { rows: [late] } });
+    yield* TestClock.adjust(Duration.millis(HOUR));
+    yield* settled;
+    assert.deepEqual(heldInvitations(pushed).at(-1), { [ACME.id]: { rows: [] } });
+  }),
 );

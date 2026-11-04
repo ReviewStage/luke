@@ -338,7 +338,8 @@ function digest(text: string): string {
 /**
  * The cursor of a live answer: a digest of what the held read's cursor
  * stamps, each item's id, revision, instant, read state, who it waits
- * on, so its task's assignee changing moves it, and whether it asks, and
+ * on, so its task's assignee changing moves it, whether it asks, and until
+ * when it is snoozed, and
  * each failed run, so an answer whose cursor is the last one's moved nothing
  * a reader announces or counts, as a held answer's does.
  */
@@ -350,6 +351,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     readonly unread?: boolean | undefined;
     readonly waitsOn?: string | undefined;
     readonly asking?: boolean | undefined;
+    readonly snoozedUntil?: number | null | undefined;
   }) => [
     item.id,
     item.revision,
@@ -357,6 +359,7 @@ function liveCursorOf(answer: Omit<AccountInboxAnswer, "cursor" | "readAt">): st
     item.unread ?? null,
     item.waitsOn ?? null,
     item.asking ?? null,
+    item.snoozedUntil ?? null,
   ];
   return digest(
     JSON.stringify([
@@ -692,6 +695,8 @@ const inboxLiveRowSchema = EffectSchema.Struct({
   openAskMessageId: EffectSchema.NullOr(EffectSchema.String),
   settledAt: EffectSchema.NullOr(countedNumber),
   unread: EffectSchema.Boolean,
+  /** Null where the reader did not snooze the item; absent from a service before snoozing. */
+  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
 /** A scope's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
@@ -792,6 +797,7 @@ function inboxItemOfLiveRow(
     closedByName,
     openAskMessageId,
     settledAt,
+    snoozedUntil,
     ...item
   } = row;
   const thread = threadOf(threads.get(row.id) ?? [], openAskMessageId);
@@ -818,6 +824,7 @@ function inboxItemOfLiveRow(
       : { closedBy: { userId: closedBy, name: closedByName } }),
     ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
     ...(settledAt === null ? undefined : { settledAt }),
+    ...(snoozedUntil === undefined || snoozedUntil === null ? undefined : { snoozedUntil }),
   };
 }
 
@@ -889,6 +896,8 @@ export const LIVE_READ = {
   REPOSITORY_LISTS: "repositoryLists",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
+  /** One workspace's pending invitations, by the workspace: the service's `workspaceInvitations` query, held for an owner's or an admin's windows that draw them and a few they drew lately. */
+  WORKSPACE_INVITATIONS: "workspaceInvitations",
   /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */
   THIS_MAC_HOST: "thisMacHost",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
@@ -989,6 +998,8 @@ const inboxItemStampRowSchema = EffectSchema.Struct({
   status: inboxItemSchema.fields.status,
   updatedAt: countedNumber,
   unread: EffectSchema.Boolean,
+  /** Until when the reader snoozed the item, which a snooze moves without moving `updatedAt`; null where they did not, absent from a service before snoozing. */
+  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   waitsOn: EffectSchema.String,
   messages: countedNumber,
 });

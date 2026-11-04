@@ -347,7 +347,8 @@ When a result reads better as something to look at or click through than as word
  * automation started with no task has none of them, so its instructions
  * leave them out, and shows its pages on itself.
  * An agent on a task keeps the agents it starts on that task; one on none
- * has no task of its own to start them on, so it names one.
+ * has no task of its own to start them on, so each it starts lands on a
+ * task made for it, unless it names one.
  */
 const TASK_PLACE_WORDS = {
   onTask: {
@@ -371,7 +372,7 @@ Members and agents leave comment threads on a plan's text, each beside the words
     olderLinks: " and `<scheme>://folder/<path>/`",
     comments: "",
     status: "",
-    startAgent: ` You work on no task, so leave its taskId out to start it beside you, in your own workspace and the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
+    startAgent: ` You work on no task, so leave its taskId out to start it on a new task made for it, in the repository you work in, if any, or name another repository, or null for none; name a task by its id only for work that belongs to that task, and make one first with \`${CODER_TOOL.CREATE_TASK}\` only for work that should stand as a task of its own`,
   },
 } as const;
 
