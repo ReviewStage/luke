@@ -1776,9 +1776,10 @@ function identityLine(workspace: Workspace): string {
  * while Escape, an empty name, or the same one renames nothing; an account's
  * first workspace is named by its owner's account name, so it offers no
  * Rename. Upload photo picks a PNG, JPEG, or WebP image and sends it drawn
- * square; Remove photo, where one is set, asks first. The new name or photo
- * arrives with the workspaces the host reads again after it; a refusal, or a
- * file that cannot be a photo, is said under the row until the next try.
+ * square; Remove photo, where one is set, asks first. The new name stands
+ * at once, as the host draws it on the press, and the photo once the
+ * service answers it; a refusal, its name back, or a file that cannot be a
+ * photo, is said under the row until the next try.
  * The row is `@repo/ui`'s `SettingsRow` led by the tile, through `MenuRow`,
  * and Rename its outline `Button`.
  */
@@ -1788,7 +1789,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const manages = managesWorkspace(workspace);
   const renamable = manages && workspace.personal !== true;
   const [editing, setEditing] = useState(false);
-  const [renaming, setRenaming] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const button = useRef<HTMLButtonElement | null>(null);
@@ -1802,20 +1802,15 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
       ),
     confirmFailure(FAILURE_SURFACE.WORKSPACE_WRITE),
   );
-  // Note that focus goes back to Rename once the rename has settled, because
-  // the button is disabled while it is out and a disabled one takes no focus.
-  const endedByKey = useRefocusAfterEdit(editing || renaming, button);
+  // Note that focus goes back to Rename once the edit ends, since the host draws the new name on the press.
+  const endedByKey = useRefocusAfterEdit(editing, button);
   const end = ({ value: name, byKey }: InlineEditEnd) => {
     endedByKey(byKey);
     setEditing(false);
     if (name === undefined) return;
-    setRenaming(true);
-    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name })
-      .then(
-        () => undefined,
-        (refused: Error) => setRefusal(refused.message),
-      )
-      .finally(() => setRenaming(false));
+    act(ACT_KIND.WORKSPACE_RENAME, { workspaceId, name }).catch((refused: Error) =>
+      setRefusal(refused.message),
+    );
   };
   const upload = (file: File) => {
     setRefusal(undefined);
@@ -1869,7 +1864,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
       <Button
         ref={button}
         variant={BUTTON_VARIANT.OUTLINE}
-        disabled={renaming}
         onClick={() => {
           setRefusal(undefined);
           setEditing(true);
@@ -1924,33 +1918,26 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
 /**
  * The workspace's link, which its owner alone changes: the slug every link
  * to the workspace is written under, typed in place, the address it makes
- * said under it as it is typed, and what is wrong with it said there too,
- * in the words the service refuses it with. Save sends it, and the new slug
- * arrives with the workspaces the host reads again after it; the slug it
+ * said under it as it is typed, and what is wrong with its shape said there
+ * too, in the words the service refuses it with. Save stands the new slug
+ * at once, as the host draws it on the press; one the service refuses, as
+ * one another workspace holds, goes back, its words in a toast. The slug it
  * leaves stays the workspace's, so no link written under it stops opening.
  */
 function WorkspaceLink({ workspace }: { workspace: Workspace }): React.JSX.Element {
-  const { act } = useAct();
+  const { press } = useAct();
   const standing = workspace.slug ?? "";
   const [slug, setSlug] = useState(standing);
-  const [saving, setSaving] = useState(false);
-  const [refusal, setRefusal] = useState<string>();
   const field = useRef<HTMLInputElement | null>(null);
   const problem = workspaceSlugProblemOf(slug);
-  const shown = refusal ?? (problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem]);
+  const shown = problem === undefined ? undefined : WORKSPACE_SLUG_REFUSAL[problem];
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     if (problem !== undefined) {
       field.current?.focus();
       return;
     }
-    setSaving(true);
-    act(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId: workspace.id, slug })
-      .then(
-        () => undefined,
-        (refused: Error) => setRefusal(refused.message),
-      )
-      .finally(() => setSaving(false));
+    void press(ACT_KIND.WORKSPACE_SLUG_SET, { workspaceId: workspace.id, slug });
   };
   return (
     <div
@@ -1972,19 +1959,15 @@ function WorkspaceLink({ workspace }: { workspace: Workspace }): React.JSX.Eleme
                 spellCheck={false}
                 autoCorrect={false}
                 value={slug}
-                disabled={saving}
                 // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
                 onEscape={() => field.current?.blur()}
-                onChange={(typed) => {
-                  setSlug(typed);
-                  setRefusal(undefined);
-                }}
+                onChange={setSlug}
               />
+              {/* Note that the host draws the slug on the press, so Save is never busy. */}
               <Button
                 type={BUTTON_TYPE.SUBMIT}
                 variant={BUTTON_VARIANT.PRIMARY}
-                busy={saving}
-                busyLabel="Saving"
+                busy={false}
                 disabled={slug === standing}
               >
                 Save

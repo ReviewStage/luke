@@ -28,7 +28,7 @@ import {
   SettingsRowMark,
   useConfirmDialog,
 } from "@repo/ui";
-import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
@@ -96,6 +96,8 @@ export interface TokenRepositories {
   readonly retry: () => void;
   /** Adds or removes one, answering what the service refused with, or nothing where it took it. */
   readonly change: (repository: string, added: boolean) => Promise<string | undefined>;
+  /** Removes one at once, as the host draws it on the press, a refusal said in a toast. */
+  readonly remove: (repository: string) => void;
 }
 
 /** Where the list stands, by where the host's read of it stands. */
@@ -115,7 +117,7 @@ const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
  * listing none, because a workspace with none is a list read.
  */
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
-  const { act } = useAct();
+  const { act, press } = useAct();
   const { rows, status, retry } = useHostRead(LIVE_READ.TOKEN_REPOSITORIES, workspaceId);
   const change = useCallback(
     (repository: string, added: boolean) =>
@@ -125,7 +127,22 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
       ),
     [act, workspaceId],
   );
-  return { read: TOKEN_REPOSITORIES_READ_OF[status], listed: rows ?? NONE_LISTED, retry, change };
+  const remove = useCallback(
+    (repository: string) =>
+      void press(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, {
+        workspaceId,
+        repository,
+        added: false,
+      }),
+    [press, workspaceId],
+  );
+  return {
+    read: TOKEN_REPOSITORIES_READ_OF[status],
+    listed: rows ?? NONE_LISTED,
+    retry,
+    change,
+    remove,
+  };
 }
 
 /** The repositories the reader's own token may push to that the workspace lists nowhere yet; nothing while unread, and why where the read failed. */
@@ -214,23 +231,26 @@ export function AddTokenRepository({
   );
 }
 
-/** One token repository's row, inset under GitHub's: its owner's picture, its name marked Token, and Remove where the reader may, asked first, its refusal said in the question. */
+/**
+ * One token repository's row, inset under GitHub's: its owner's picture,
+ * its name marked Token, and Remove where the reader may, asked first. The
+ * removal takes the row away at once, as the host draws it on the press, so
+ * the question lets go with it, and a refusal, its row back, is said in a
+ * toast.
+ */
 function TokenRepositoryRow({
   repository,
   onRemove,
 }: {
   repository: WorkspaceTokenRepository;
-  onRemove: () => Promise<string | undefined>;
+  onRemove: () => void;
 }): React.JSX.Element {
   const removal = useConfirmDialog(
     { subject: repository.removable, surfaceOpen: true },
-    () =>
-      onRemove().then(
-        (refused): ActionResult =>
-          refused === undefined
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
-            : { status: ACTION_RESULT_STATUS.REJECTED, reason: refused },
-      ),
+    () => {
+      onRemove();
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
   const pictures = useRepositoryPictures();
@@ -252,12 +272,7 @@ function TokenRepositoryRow({
       >
         {() =>
           repository.removable ? (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              busy={removal.busy}
-              busyLabel={WORDS.REMOVING}
-              onClick={removal.ask}
-            >
+            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={removal.ask}>
               {WORDS.REMOVE}
             </Button>
           ) : null
@@ -311,7 +326,7 @@ export function TokenRepositoryRows({
         <TokenRepositoryRow
           key={repository.fullName.toLowerCase()}
           repository={repository}
-          onRemove={() => repositories.change(repository.fullName, false)}
+          onRemove={() => repositories.remove(repository.fullName)}
         />
       ))}
     </>
