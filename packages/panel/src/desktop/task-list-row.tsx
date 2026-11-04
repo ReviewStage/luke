@@ -11,22 +11,38 @@ import {
   BLOCKED_WORDS,
   BlockedMark,
   CHIP_LOOK,
+  GLYPH_INK,
+  GlyphSlot,
   InlineEdit,
   type ListRowFold,
   type ListRowNest,
+  OneLine,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
+  RowHint,
+  RowHintOptions,
+  TASK_AGENTS_MARK_SIZE,
   TASK_ROW_CELL,
+  TaskAgentsMark,
   TaskRow,
   type TaskRowCell,
+  type TaskRowEdges,
+  Time,
   VisuallyHidden,
 } from "@repo/ui";
-import { type ChildTaskCount, repositoryLabel } from "@repo/ui/task-list-model";
+import { FolderXIcon, GLYPH, ICON_SIZE } from "@repo/ui/icons";
+import {
+  type ChildTaskCount,
+  repositoryLabel,
+  TASK_ORDER,
+  taskTime,
+} from "@repo/ui/task-list-model";
 import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { type ReactNode, useRef } from "react";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
+import { RepositoryPicture } from "../repository-picture.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
@@ -43,6 +59,7 @@ import {
   useTaskMenuItems,
 } from "./task-actions.js";
 import { AssigneeChip, PriorityChip, StatusChip, statusOf, taskSubject } from "./task-row-parts.js";
+import { NO_REPOSITORY } from "./tasks-page-options.js";
 import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
 
 /**
@@ -54,10 +71,11 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * (`task-row-parts.tsx`); its key; and each of its open pull requests as the
  * compact chip the plan's Agents list draws (`pull-request-chip.tsx`),
  * hanging the pull request's card and opening it as a link to it does
- * (`use-open-link.ts`). The rest of a list's cells are the list's own
- * (`content`): the Tasks page's what waits on the reader, its repository,
- * its creator, its agents, and its time; a related task's kind at its end.
- * Each cell stands only where the row's list draws it (`cells`). Beside its
+ * (`use-open-link.ts`); its repository, led by its owner's picture; how its
+ * agents stand (`TaskAgentsMark`); and when it last moved. The rest of a
+ * list's cells are the list's own (`content`): the Tasks page's what waits
+ * on the reader and its creator; a related task's kind at its end. Each
+ * cell stands only where the row's list draws it (`cells`). Beside its
  * name stands the stop sign of a task blocked by another (`BlockedMark`),
  * which the press says after the status, and in its own cell how many of
  * its sub-tasks are finished, "1/3", as a badge, as a Board card says it.
@@ -68,7 +86,11 @@ import { type ChosenTasks, chosenRowMenu } from "./tasks-selection.js";
  * offer the selection bar's acts on every task chosen, as a Mac's list
  * does, and one not chosen keeps its own menu. Its list may leave its ⋯
  * out (`more`), as both lists do for a finger, its menu then a long press,
- * a right-click, or the menu key away.
+ * a right-click, or the menu key away. A list that counts its rows unread
+ * as the sidebar does, Home's Recent, hands the row whether it is (`unread`),
+ * its name then in the heavier weight and its menu's Mark as read agreeing,
+ * and may hang the task's card beside it while the pointer rests on it
+ * (`card`).
  */
 
 /** A pull request still open on GitHub, a draft or one in its merge queue among them, whose page the service sent, which its chip links to. */
@@ -111,6 +133,39 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
   );
 }
 
+/** A task's repository as its row says it, led by its owner's picture, or No repository and its glyph. */
+function RepositoryCell({
+  repository,
+  name,
+  pictures,
+}: {
+  repository: string | null;
+  name: string;
+  /** Whether owners' pictures are drawn at all: not in a fixture run. */
+  pictures: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {repository === null ? (
+        <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+          <FolderXIcon />
+        </GlyphSlot>
+      ) : (
+        <RepositoryPicture
+          repository={repository}
+          pictures={pictures}
+          fallback={
+            <GlyphSlot ink={GLYPH_INK.INHERIT} size={ICON_SIZE.MEDIUM}>
+              <GLYPH.REPOSITORY />
+            </GlyphSlot>
+          }
+        />
+      )}
+      <OneLine>{name}</OneLine>
+    </>
+  );
+}
+
 /** One task's row, its cells those its list draws. */
 export function TaskListRow({
   tasks,
@@ -132,6 +187,9 @@ export function TaskListRow({
   menuGroups = [],
   unlisted = false,
   more = true,
+  edges,
+  unread,
+  card,
   place,
 }: {
   tasks: TaskRowTab;
@@ -167,16 +225,22 @@ export function TaskListRow({
   unlisted?: boolean | undefined;
   /** Whether it draws its menu's ⋯, as its list says (`TaskRows`'s `more`). */
   more?: boolean | undefined;
+  /** What room it keeps at its edges, as its list says (`TaskRows`'s `edges`). */
+  edges?: TaskRowEdges | undefined;
+  /** Whether its list counts it unread as the sidebar's row does, its name in the heavier weight; where its list counts none, its menu reads whether it is marked so and its name stands in the label's weight. */
+  unread?: boolean | undefined;
+  /** The task's card, hung beside the row while the pointer rests on its press; none where its list hangs none. */
+  card?: ReactNode;
   /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
-  const unread = useMarkedUnread(task.id);
+  const marked = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
-    unread,
+    unread: unread ?? marked,
     surface: TASK_MENU_SURFACE.ROW,
     opened,
   });
@@ -210,7 +274,7 @@ export function TaskListRow({
     .filter((each) => each !== undefined)
     .map((each) => `, ${each}`)
     .join("");
-  return (
+  const row = (
     <TaskRow
       taskId={task.id}
       name={task.name}
@@ -250,6 +314,19 @@ export function TaskListRow({
                     look={PROGRESS_COUNT_LOOK.BADGE}
                   />
                 ),
+              [TASK_ROW_CELL.REPOSITORY]: drawn(TASK_ROW_CELL.REPOSITORY) ? (
+                <RepositoryCell
+                  repository={task.repository}
+                  name={repository ?? NO_REPOSITORY}
+                  pictures={tasks.pictures}
+                />
+              ) : null,
+              [TASK_ROW_CELL.AGENTS]: drawn(TASK_ROW_CELL.AGENTS) ? (
+                <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
+              ) : null,
+              [TASK_ROW_CELL.UPDATED]: drawn(TASK_ROW_CELL.UPDATED) ? (
+                <Time at={taskTime(task, TASK_ORDER.UPDATED)} hint={false} />
+              ) : null,
               ...content,
             }
       }
@@ -270,6 +347,9 @@ export function TaskListRow({
       note={rename.refused ? RENAME_FAILED_NOTE : undefined}
       menu={menu}
       more={more}
+      edges={edges}
+      unread={unread === true}
+      hint={card === undefined || rename.editing ? undefined : { Hint: RowHint, label: task.name }}
       disabled={actions.deletion.busy}
       onOpen={onOpen}
       pressRef={press}
@@ -282,4 +362,6 @@ export function TaskListRow({
       {actions.dialog}
     </TaskRow>
   );
+  // Note that the card reaches the row's hint by its options, because the row takes its hint as a component, which must stay one across renders.
+  return card === undefined ? row : <RowHintOptions card={card}>{row}</RowHintOptions>;
 }
