@@ -183,7 +183,12 @@ it.layer(getTestDB())("the memories procedures", (it) => {
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_PERMITTED),
         );
         assert.deepEqual(wordsOf(ownForgotten), [TESTS_RUN]);
-        assert.deepEqual(again, ownForgotten);
+        // A forget retried after it landed answers the same memories, and no transaction, since it deleted nothing.
+        assert.ok(
+          memoriesOf(ownForgotten).txid !== undefined,
+          "the forget answered its transaction",
+        );
+        assert.deepEqual(memoriesOf(again), { memories: memoriesOf(ownForgotten).memories });
         assert.equal(recalled.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(recalled.memories, []);
         assert.deepEqual(wordsOf(byOwner), []);

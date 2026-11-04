@@ -23,7 +23,8 @@
  * chapters, the agent named by `?id=` and the pull request by `&number=`,
  * with whether the reader can generate them; and every integration row the
  * account holds, with the providers it is offered and those that take
- * several accounts. Each
+ * several accounts; and one workspace's memories, named by `?workspaceId=`,
+ * each with its keeper's name and whether the reader may forget it. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -59,6 +60,7 @@ import {
   taskPagesLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
+import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
 import { taskCommentsLiveAnswerSchema } from "../plan-comment-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -291,6 +293,10 @@ export const liveContract = {
     )
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
+  workspaceMemories: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(workspaceMemoriesLiveAnswerSchema)),
   pullRequestChapters: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_PULL_REQUEST_CHAPTERS }),

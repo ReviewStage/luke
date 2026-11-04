@@ -294,7 +294,7 @@ it.effect(
   },
 );
 it.effect(
-  "a read travels to the host naming its workspace and a forget its workspace and id, and the host's memories read with a key a newer host added dropped",
+  "a forget travels to the host naming its workspace and id, and its answer is read with its transaction kept and a key a newer host added dropped",
   () =>
     Effect.gen(function* () {
       const requests: RecordedCall[] = [];
@@ -311,22 +311,21 @@ it.effect(
         call: (method, params = {}) =>
           Effect.sync(() => {
             requests.push({ method, params });
-            return { ok: true, result: carried({ memories: [{ ...memory, pinned: true }] }) };
+            return {
+              ok: true,
+              result: carried({ memories: [{ ...memory, pinned: true }], txid: "41" }),
+            };
           }),
         on: () => () => undefined,
       };
       const operator = operatorOver(client);
 
-      const read = yield* operator.memoriesRead({ workspaceId });
-      yield* operator.memoryForget({ workspaceId, id: memory.id });
+      const forgot = yield* operator.memoryForget({ workspaceId, id: memory.id });
 
-      assert.deepEqual(read, { memories: [memory] });
+      assert.deepEqual(forgot, { memories: [memory], txid: "41" });
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
-        [
-          [GATEWAY_METHOD.MEMORIES_READ, { workspaceId }],
-          [GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId, id: memory.id }],
-        ],
+        [[GATEWAY_METHOD.MEMORIES_FORGET, { workspaceId, id: memory.id }]],
       );
     }),
 );

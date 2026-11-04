@@ -60,11 +60,15 @@ export const ACCOUNT_ASK_ACT_KIND = {
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * Settings › Memory: the facts and conventions the coding agents kept in
-   * the workspace Settings shows, shared by its members, read as the page
-   * opens, and one forgotten for good. Each answers the memories as the
-   * service then keeps them.
+   * the workspace Settings shows, shared by its members, held for the
+   * window while it holds the stream open, and one forgotten for good. The
+   * hold's stream carries nothing: what it holds reaches the panel on app
+   * state (`LIVE_READ.MEMORIES`), and a forget is drawn there the moment it
+   * is asked, answering the memories as the service then keeps them.
    */
-  MEMORIES_READ: "memories.read",
+  MEMORIES_FOLLOW: "memories.follow",
+  /** A workspace's held memories, which the panel reads on app state, asked again at once, as Try again asks. */
+  MEMORIES_RETRY: "memories.retry",
   MEMORIES_FORGET: "memories.forget",
   /**
    * A clip dictated into a message box, carried once from the panel that
@@ -698,7 +702,8 @@ export const PORT_ACT_USE = {
   GITHUB_TOKEN_READ: ACT_USE.READ,
   GITHUB_TOKEN_SAVE: ACT_USE.WRITE,
   GITHUB_TOKEN_REMOVE: ACT_USE.WRITE,
-  MEMORIES_READ: ACT_USE.READ,
+  MEMORIES_FOLLOW: ACT_USE.READ,
+  MEMORIES_RETRY: ACT_USE.READ,
   MEMORIES_FORGET: ACT_USE.WRITE,
   DICTATION_TRANSCRIBE: ACT_USE.FETCH,
 

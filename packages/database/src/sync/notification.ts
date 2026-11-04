@@ -41,6 +41,12 @@ export const TOPIC = {
    * chapter reads of that workspace and never its members' task lists.
    */
   WORKSPACE_CHAPTERS: "workspace-chapters",
+  /**
+   * A workspace's memories, by organization id: narrower than the
+   * workspace's own topic, so an agent's `save_memory` wakes the open memory
+   * reads of that workspace and never its members' task lists.
+   */
+  MEMORY: "memory",
   TASK: "task",
   AGENT: "agent",
   CONVERSATION: "conversation",
