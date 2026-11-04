@@ -291,9 +291,17 @@ export const installedSkillInstallRequestSchema = EffectSchema.Struct({
   description: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
 });
 
-/** The skills an install made, in the order asked. */
+/**
+ * The transaction a write committed in, which a reader following the skills
+ * waits for (`installed-skill-live.ts`); a service from before it answers
+ * none.
+ */
+const txid = EffectSchema.optionalKey(EffectSchema.String);
+
+/** The skills an install made, in the order asked, and the transaction they were made in. */
 export const installedSkillInstallAnswerSchema = EffectSchema.Struct({
   skills: EffectSchema.Array(installedSkillSummarySchema),
+  txid,
 });
 
 /** A skill turned on or off. */
@@ -301,9 +309,10 @@ export const installedSkillToggleRequestSchema = EffectSchema.Struct({
   enabled: EffectSchema.Boolean,
 });
 
-/** A skill as a write left it. */
+/** A skill as a toggle or a share left it, and the transaction it committed in. */
 export const installedSkillAnswerSchema = EffectSchema.Struct({
   skill: installedSkillSummarySchema,
+  txid,
 });
 
 /** An update, read in the workspace whose GitHub installation reaches the skill's repository. */
@@ -311,10 +320,11 @@ export const installedSkillUpdateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
 });
 
-/** A skill as an update left it, and whether its files changed. */
+/** A skill as an update left it, whether its files changed, and the transaction it committed in. */
 export const installedSkillUpdatedAnswerSchema = EffectSchema.Struct({
   skill: installedSkillSummarySchema,
   changed: EffectSchema.Boolean,
+  txid,
 });
 
 /** A personal skill shared with the workspace named, which it moves into. */
@@ -335,7 +345,8 @@ export const installedSkillUpdateCheckSchema = EffectSchema.Struct({
 
 export type InstalledSkillUpdateCheck = typeof installedSkillUpdateCheckSchema.Type;
 
-/** A skill removed. */
+/** A skill removed, and the transaction it was removed in. */
 export const installedSkillRemovedAnswerSchema = EffectSchema.Struct({
   id: EffectSchema.String,
+  txid,
 });

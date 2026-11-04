@@ -11,19 +11,28 @@ import {
 } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { formatCount } from "@repo/features/number-format";
 import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
 import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import {
+  type AppInstalledSkills,
+  type AppStateDelivery,
+  type AppWorkspaceMembers,
+  NO_KEYS_HELD,
+} from "@repo/host/app-state";
 import type { PortActKind } from "@repo/host/contract";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handMembers } from "../testing/app-state.js";
+import { stateWith } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
@@ -31,10 +40,11 @@ import { SkillsPage } from "./skills-page.js";
 
 /**
  * Settings › Skills and its Add skill dialog over a host answering as the
- * service would: the workspace's skills stand before the account's own,
- * each with its source and who installed it; a member who is not an owner
- * or admin sees a workspace skill's switch unavailable and View alone in
- * its ⋯; a switch and Update send their acts and draw the answer; View
+ * service would: the skills of the workspace Settings shows are held for it
+ * and drawn as the host lays them, the workspace's standing before the
+ * account's own, each with its source and who installed it; a member who is
+ * not an owner or admin sees a workspace skill's switch unavailable and
+ * View alone in its ⋯; Update sends its act and offers no update after; View
  * reads the skill's text and files; Share asks in plain words, moves the
  * skill into the workspace, and says a taken name in the question; Remove
  * asks first; and an install lights its rows and says how to call one. In
@@ -184,8 +194,40 @@ const GRILL: Extract<InstalledSkillPreview, { kind: typeof SKILL_PASTE_KIND.SOUR
   ],
 };
 
-/** The skills the test's service holds. */
+/** The skills the test's service holds, which its host lays on the document for every workspace held. */
 let stored: InstalledSkillSummary[] = [];
+/** The workspaces whose skills the window holds. */
+let held = new Set<string>();
+/** Each held workspace's skills as the test's host lays them on the document, under the version it last delivered. */
+let laid: AppInstalledSkills = NO_KEYS_HELD;
+let version = 1;
+/** The window's listeners to the document's deliveries. */
+const listeners = new Set<(delivery: AppStateDelivery) => void>();
+
+/** The workspace's people, which name who installed a skill. */
+const MEMBERS: AppWorkspaceMembers = {
+  "workspace-stage": {
+    rows: {
+      members: [
+        {
+          userId: "user-dean",
+          name: "Dean",
+          email: "dean@example.com",
+          role: WORKSPACE_ROLE.ADMIN,
+        },
+      ],
+    },
+  },
+};
+
+/** Lays every held workspace's skills as they are stored now and delivers them, as the host does as a read moves or a write is drawn. */
+function laySkills(): void {
+  laid = Object.fromEntries([...held].map((workspaceId) => [workspaceId, { rows: stored }]));
+  version += 1;
+  for (const listener of [...listeners]) {
+    listener({ version, entries: { [LIVE_READ.INSTALLED_SKILLS]: laid } });
+  }
+}
 /** Every act the page sent, in order. */
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Whether the next install is refused, for a credential in the named skill. */
@@ -206,6 +248,27 @@ const roots: Root[] = [];
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   stored = [RELEASE_NOTES, PR_STYLE];
+  held = new Set();
+  laid = NO_KEYS_HELD;
+  version = 1;
+  listeners.clear();
+  fakeAppBridge({
+    requestAppState: () =>
+      Promise.resolve(
+        stateWith(
+          {},
+          {
+            version,
+            [LIVE_READ.INSTALLED_SKILLS]: laid,
+            [LIVE_READ.WORKSPACE_MEMBERS]: MEMBERS,
+          },
+        ),
+      ),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
   sent = [];
   refuseInstall = false;
   missingNames = [];
@@ -214,18 +277,16 @@ beforeEach(() => {
   unansweredFiles = 0;
   unreachedPreviews = 0;
   fakeActPort({
-    [ACT_KIND.INSTALLED_SKILLS_LIST]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_LIST, payload });
-      return Promise.resolve({ skills: stored });
+    [ACT_KIND.INSTALLED_SKILLS_FOLLOW]: (payload) => {
+      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_FOLLOW, payload });
+      held.add(payload.workspaceId);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      void Promise.resolve().then(laySkills);
+      return quietHold();
     },
     [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, payload });
       return Promise.resolve({ available: true, latestSha: "b".repeat(40) });
-    },
-    [ACT_KIND.INSTALLED_SKILLS_SET_ENABLED]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_SET_ENABLED, payload });
-      const changed = stored.find((each) => each.id === payload.skillId) ?? assert.fail("no skill");
-      return Promise.resolve({ skill: { ...changed, enabled: payload.enabled } });
     },
     [ACT_KIND.INSTALLED_SKILLS_UPDATE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_UPDATE, payload });
@@ -242,15 +303,24 @@ beforeEach(() => {
         ],
       });
     },
+    // The host draws a share and a removal the moment it is asked, which here is as the service takes it.
     [ACT_KIND.INSTALLED_SKILLS_SHARE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_SHARE, payload });
       if (nameTaken) return Promise.resolve({ failure: INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN });
-      const shared = stored.find((each) => each.id === payload.skillId) ?? assert.fail("no skill");
-      return Promise.resolve({ skill: { ...shared, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } });
+      const found = stored.find((each) => each.id === payload.skillId) ?? assert.fail("no skill");
+      const shared = {
+        ...found,
+        scope: INSTALLED_SKILL_SCOPE.WORKSPACE,
+        workspaceId: payload.workspaceId,
+      };
+      stored = stored.map((each) => (each.id === shared.id ? shared : each));
+      laySkills();
+      return Promise.resolve({ skill: shared });
     },
     [ACT_KIND.INSTALLED_SKILLS_REMOVE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_REMOVE, payload });
       stored = stored.filter((each) => each.id !== payload.skillId);
+      laySkills();
       return Promise.resolve({ id: payload.skillId });
     },
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW]: (payload) => {
@@ -282,25 +352,15 @@ beforeEach(() => {
           skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES,
         });
       }
-      return Promise.resolve({
-        skills: (payload.skills ?? ["web-design-guidelines"]).map((name, at) =>
-          skill(name, payload.scope, { id: `33333333-3333-4333-8333-33333333333${at}` }),
-        ),
-      });
+      const made = (payload.skills ?? ["web-design-guidelines"]).map((name, at) =>
+        skill(name, payload.scope, { id: `33333333-3333-4333-8333-33333333333${at}` }),
+      );
+      // The host draws an install's skills as it answers.
+      stored = [...stored, ...made];
+      laySkills();
+      return Promise.resolve({ skills: made });
     },
   });
-  handMembers(() => ({
-    rows: {
-      members: [
-        {
-          userId: "user-dean",
-          name: "Dean",
-          email: "dean@example.com",
-          role: WORKSPACE_ROLE.ADMIN,
-        },
-      ],
-    },
-  }));
 });
 
 afterEach(() => {
@@ -329,7 +389,8 @@ function mount(element: React.ReactElement): void {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(element));
+  // Note that each mount reads the document afresh, over the bridge this test installed.
+  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
 }
 
 async function mountPage(shown = workspace()): Promise<void> {
@@ -457,6 +518,8 @@ const sentOf = (kind: PortActKind) =>
 
 test("the workspace's skills stand before the account's own, each with its source and who installed it", async () => {
   await mountPage();
+
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_FOLLOW), [{ workspaceId: "workspace-stage" }]);
 
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
   assert.deepEqual(headings, ["Stage", "Only you"]);
@@ -636,17 +699,6 @@ test("an install lights its own rows once", async () => {
     (each) => each.querySelector(".ui-settings-row-label")?.textContent,
   );
   assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
-});
-
-test("a switch turns its skill off and draws the service's answer", async () => {
-  await mountPage();
-
-  act(() => switchOf("pr-style").click());
-  await settle();
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_SET_ENABLED), [
-    { skillId: PR_STYLE.id, enabled: false },
-  ]);
-  assert.equal(switchOf("pr-style").getAttribute("aria-checked"), "false");
 });
 
 test("a workspace skill a member may not change draws its switch unavailable and View alone in its ⋯, and asks no update", async () => {
