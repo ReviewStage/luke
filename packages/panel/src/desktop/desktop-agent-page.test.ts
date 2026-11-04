@@ -21,7 +21,6 @@ import {
   type ListedAgent,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-  type PullRequestState,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
@@ -241,9 +240,6 @@ let earlier = 0;
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
 let workspace: readonly AgentSummary[] = [];
-/** The pull requests the workspace's GitHub App answers, by number; one it holds none for reads as none. */
-let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
-  new Map();
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -268,7 +264,6 @@ beforeEach(() => {
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
   workspace = [];
-  gitHub = new Map();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
@@ -331,12 +326,6 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
-      }
-      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-        const { number } = request.payload;
-        const held = gitHub.get(number);
-        const value = held === undefined ? null : { number, author: "octo-dev", ...held };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AGENTS_START) {
         const value = {
@@ -1475,8 +1464,12 @@ test("a GitHub event's run names its pull request beside the automation, which o
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
   const url = "https://github.com/acme/relay/pull/2905";
   const acme = { ...ACME, github: { login: "acme", active: true } };
-  gitHub = new Map([[2905, { title: "View commands", url, state: PULL_REQUEST_STATE.OPEN }]]);
-  const state = stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } });
+  const pullRequest = { number: 2905, title: "View commands", url, state: PULL_REQUEST_STATE.OPEN };
+  // The host holds the pull request's standing as the workspace's GitHub App reads it.
+  const state = {
+    ...stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } }),
+    [LIVE_READ.LINK_STANDINGS]: { [acme.id]: { [url]: { rows: { pullRequest } } } },
+  };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     onAppState: () => () => undefined,

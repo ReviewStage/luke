@@ -14,12 +14,17 @@ import type { IntegrationProviderParams } from "@repo/features/integration-view"
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
-import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
+import {
+  COMMENT_SUBJECT,
+  type TasksCommentsFollow,
+  type TasksLinkStandingParams,
+} from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppHostRead,
   type AppHostReads,
   type AppStateSnapshot,
+  EVERY_WORKSPACE,
   HOST_READ_SLICE,
   KEYS_ON,
   OWN_PULL_REQUEST,
@@ -74,6 +79,14 @@ export interface HostRead<Rows> extends HeldRead<Rows> {
 
 /** The holder whose own inbox a surface reads: a plan, or an agent, by its id. */
 export type InboxHolderKey = AgentInboxScope;
+
+/** The link whose standing a chip reads: the workspace it is read through, and the link's own address. */
+export type LinkStandingKey = TasksLinkStandingParams;
+
+/** A repository list's scope as its acts name it: its workspace, or nothing for every one (`EVERY_WORKSPACE`). */
+function repositoryScope(workspace: string): { readonly workspaceId?: string } {
+  return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
+}
 
 /** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
 export type CommentSubject = TasksCommentsFollow;
@@ -280,6 +293,13 @@ const HOST_READS = {
     hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
     retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
   }),
+  [LIVE_READ.LINK_STANDINGS]: hostRead(LIVE_READ.LINK_STANDINGS, {
+    slice: APP_SLICE.LINK_STANDINGS,
+    path: (link: LinkStandingKey) => [link.workspaceId, link.address],
+    hold: ({ workspaceId, address }) =>
+      askAct(ACT_KIND.TASKS_LINK_STANDING_FOLLOW, { workspaceId, address }),
+    retry: undefined,
+  }),
   [LIVE_READ.MEMORIES]: hostRead(LIVE_READ.MEMORIES, {
     slice: APP_SLICE.MEMORIES,
     path: (workspaceId: string) => [workspaceId],
@@ -319,6 +339,12 @@ const HOST_READS = {
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: hostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, {
     slice: APP_SLICE.PULL_REQUEST_PUBLISHED,
     ...pullRequestPartRead(PULL_REQUEST_PART.PUBLISHED),
+  }),
+  [LIVE_READ.REPOSITORY_LISTS]: hostRead(LIVE_READ.REPOSITORY_LISTS, {
+    slice: APP_SLICE.REPOSITORY_LISTS,
+    path: (workspace: string) => [workspace],
+    hold: (workspace) => askAct(ACT_KIND.TASKS_REPOSITORIES_FOLLOW, repositoryScope(workspace)),
+    retry: (workspace) => tellAct(ACT_KIND.TASKS_REPOSITORIES_RETRY, repositoryScope(workspace)),
   }),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
     slice: APP_SLICE.PULL_REQUEST_CHAPTERS,

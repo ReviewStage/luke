@@ -69,8 +69,10 @@ import {
   type AppMcpClients,
   type AppMemories,
   type AppProviderKeys,
+  type AppRepositoryLists,
   type AppStateSnapshot,
   type AppWorkspaceMembers,
+  EVERY_WORKSPACE,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
@@ -748,13 +750,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     acmeSlackBot = { ...acmeSlackBot, channels };
     return acmeSlackBot;
   },
-  [ACT_KIND.TASKS_REPOSITORIES]: ({ workspaceId }) => ({
-    repositories: {
-      installed: true,
-      repositories: workspaceId === WORKSPACE.ACME ? ACME_REPOSITORIES : [],
-      installationUrl: "https://github.com/apps/vespin-agent/installations/new",
-    },
-  }),
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
   [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: ({ skillId: id }) => ({
@@ -829,6 +824,20 @@ const STAGED_KEYS: AppProviderKeys = {
   },
 };
 
+/** Each staged workspace's repositories as the host holds them, Acme's its three and every other workspace's none. */
+const STAGED_REPOSITORIES: AppRepositoryLists = Object.fromEntries(
+  [WORKSPACE.PERSONAL, WORKSPACE.ACME, EVERY_WORKSPACE].map((workspace) => [
+    workspace,
+    {
+      rows: {
+        installed: true,
+        repositories: workspace === WORKSPACE.ACME ? ACME_REPOSITORIES : [],
+        installationUrl: "https://github.com/apps/vespin-agent/installations/new",
+      },
+    },
+  ]),
+);
+
 /** The staged workspace's memories, as the host holds them for Settings › Memory; one object across deliveries. */
 const STAGED_MEMORIES: AppMemories = { [WORKSPACE.ACME]: { rows: MEMORIES } };
 
@@ -887,6 +896,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.MEMORIES]: STAGED_MEMORIES,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
     [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,
+    [LIVE_READ.REPOSITORY_LISTS]: STAGED_REPOSITORIES,
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };
 }

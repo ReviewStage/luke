@@ -1,9 +1,10 @@
-import type { TasksRepositoriesAnswer } from "@repo/features/tasks-view";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { SETTINGS_SECTION_FRAME, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
 import { useEffect, useState } from "react";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import { MODELS_READ } from "../tasks/use-agents.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { GitHubSetup } from "./setup-github.js";
 
 /**
@@ -29,14 +30,9 @@ interface Missing {
   readonly github: boolean;
 }
 
-/** Whether a read answered a repository the workspace reaches; nothing for a read that failed. */
-function reachesOf(answer: TasksRepositoriesAnswer): boolean | undefined {
-  return "repositories" in answer ? answer.repositories.repositories.length > 0 : undefined;
-}
-
 /** Finish setting up, where an agent or GitHub is missing; nothing otherwise, or while either is still read. */
 export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
-  const { workspaceId, models, modelsRead, readModels, repositoriesIn } = tasks.newTask;
+  const { workspaceId, models, modelsRead, readModels } = tasks.newTask;
   const [missing, setMissing] = useState<Missing | undefined>(undefined);
   // The models are read on asking, so Home asks; a read that fails asks for no agent here, New task saying why instead.
   useEffect(() => {
@@ -49,24 +45,17 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
         ? false
         : undefined;
 
-  // What is missing is read once, as Home opens, so a part done here stays standing, ticked.
+  // What is missing is decided once, as Home opens, so a part done here stays standing, ticked; a read that never answered asks nothing of GitHub.
+  const reached = useHostRead(
+    LIVE_READ.REPOSITORY_LISTS,
+    missing === undefined ? workspaceId : undefined,
+  );
   useEffect(() => {
-    if (missing !== undefined || agentMissing === undefined || workspaceId === undefined) return;
-    let live = true;
-    repositoriesIn(workspaceId)
-      .read()
-      .then(
-        (answer) => {
-          if (live) setMissing({ agent: agentMissing, github: !(reachesOf(answer) ?? true) });
-        },
-        () => {
-          if (live) setMissing({ agent: agentMissing, github: false });
-        },
-      );
-    return () => {
-      live = false;
-    };
-  }, [missing, agentMissing, workspaceId, repositoriesIn]);
+    if (missing !== undefined || agentMissing === undefined) return;
+    if (reached.status === HOST_READ_STATUS.LOADING) return;
+    const github = reached.rows !== undefined && reached.rows.repositories.length === 0;
+    setMissing({ agent: agentMissing, github });
+  }, [missing, agentMissing, reached.rows, reached.status]);
 
   if (missing === undefined || workspaceId === undefined) return null;
   if (!missing.agent && !missing.github) return null;
@@ -85,12 +74,7 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
       ) : null}
       {missing.github ? (
         <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect GitHub">
-          <GitHubSetup
-            key={workspaceId}
-            workspaceId={workspaceId}
-            repositories={repositoriesIn(workspaceId)}
-            onReached={IGNORE_REACHED}
-          />
+          <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={IGNORE_REACHED} />
         </SettingsSection>
       ) : null}
     </section>

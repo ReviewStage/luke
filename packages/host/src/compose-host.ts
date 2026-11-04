@@ -254,6 +254,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         listed: tasks.listed,
         pullRequestListings: tasks.pullRequestListings,
         pool,
+        repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
     const automations = yield* served(
