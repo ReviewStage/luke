@@ -4,7 +4,9 @@
  * never construct a layer themselves — a caller with a runtime edge hands the
  * services in — and neither reads the bytes as settings: the record's shape
  * is `PersistedSettingsSchema` in `../settings-store.ts`, beside the store
- * that keeps it, so this module imports nothing of the store's.
+ * that keeps it, so this module imports nothing of the store's. Each reads
+ * and writes `settings.json` unless handed another file of the state root,
+ * as the sealed entity store's (`../entity-store.ts`).
  */
 import { Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -17,8 +19,8 @@ const SETTINGS_FILE_NAME = "settings.json";
  * never rename each other's bytes away, and one name otherwise, so a write
  * cut off midway leaves at most one file behind for the next to replace.
  */
-function temporaryFileName(writer: string | undefined): string {
-  return writer === undefined ? "settings.json.tmp" : `settings.json.${writer}.tmp`;
+function temporaryFileName(fileName: string, writer: string | undefined): string {
+  return writer === undefined ? `${fileName}.tmp` : `${fileName}.${writer}.tmp`;
 }
 /** Owner read/write only: a settings file carries a decryption key's ciphertext. */
 const SETTINGS_FILE_MODE = 0o600;
@@ -50,11 +52,12 @@ function isIgnorableReadFailure(error: PlatformError): boolean {
 export const readSettingsFileText = /* @__PURE__ */ Effect.fn("host/readSettingsFileText")(
   function* (
     directory: string,
+    fileName: string = SETTINGS_FILE_NAME,
   ): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem | Path.Path> {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     return yield* fileSystem
-      .readFileString(path.join(directory, SETTINGS_FILE_NAME))
+      .readFileString(path.join(directory, fileName))
       .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
   },
 );
@@ -76,11 +79,12 @@ export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSett
     directory: string,
     contents: string,
     writer?: string,
+    fileName: string = SETTINGS_FILE_NAME,
   ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem | Path.Path> {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-    const temporaryPath = path.join(directory, temporaryFileName(writer));
+    const settingsPath = path.join(directory, fileName);
+    const temporaryPath = path.join(directory, temporaryFileName(fileName, writer));
     yield* fileSystem.makeDirectory(directory, { recursive: true });
     yield* Effect.gen(function* () {
       yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
