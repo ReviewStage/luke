@@ -129,7 +129,7 @@ import {
 } from "./tasks-page-options.js";
 import { type ChosenTasks, useTasksSelection } from "./tasks-selection.js";
 import { useHeldTasks } from "./use-held-tasks.js";
-import { useRowDrag } from "./use-row-drag.js";
+import { useTaskDrag } from "./use-row-drag.js";
 
 /**
  * tasks-list.tsx -- the Tasks page's List: the listed workspace's tasks under their pins, the account's sections, and the grouping chosen, each group folding under its head, each row a line of columns that stand one under another down the page, changed where it stands and dragged from group to group.
@@ -453,10 +453,10 @@ function drawnEntries(tasks: TasksControl, group: TasksGroup, sectionId: string)
   );
 }
 
-/** What a group's drag does: its rows moved within it, where it keeps an order, and a row let go over another group's zone. */
+/** What a group's drag does, each row heard by its task's id: its rows moved within it, where it keeps an order, and a row let go over another group's zone. */
 interface ListDrops {
-  readonly move: (group: TasksGroup) => ((from: number, to: number) => void) | undefined;
-  readonly dropOut: (group: TasksGroup, from: number, zone: string, at: number) => void;
+  readonly move: (group: TasksGroup) => ((taskId: string, to: number) => void) | undefined;
+  readonly dropOut: (group: TasksGroup, taskId: string, zone: string, at: number) => void;
 }
 
 /**
@@ -478,13 +478,16 @@ function listDrops(
   const move = (group: TasksGroup) => {
     const { head } = group;
     if (head.kind === TASKS_GROUP.PINNED) {
-      return (from: number, to: number) =>
+      return (taskId: string, to: number) => {
+        const from = group.tasks.findIndex((each) => each.id === taskId);
+        if (from < 0) return;
         tasks.onMovePins(pinMoves(pinPositionsForMove(group.tasks, from, to, pinPlaceOf)));
+      };
     }
     if (head.kind === TASKS_GROUP.SECTION) {
-      return (from: number, to: number) => {
+      return (taskId: string, to: number) => {
         const entries = drawnEntries(tasks, group, head.sectionId);
-        const entry = entries[from];
+        const entry = entries.find((each) => each.taskId === taskId);
         if (entry === undefined) return;
         const member = { agent: false, id: entry.taskId };
         tasks.onWriteSections(placeWrites(entries, member, head.sectionId, to, Date.now()));
@@ -492,8 +495,8 @@ function listDrops(
     }
     return undefined;
   };
-  const dropOut = (group: TasksGroup, from: number, zone: string, at: number) => {
-    const task = group.tasks[from];
+  const dropOut = (group: TasksGroup, taskId: string, zone: string, at: number) => {
+    const task = group.tasks.find((each) => each.id === taskId);
     const onto = groups.find((each) => zoneOf(each.head) === zone)?.head;
     if (task === undefined || onto === undefined) return;
     // A task stands in one place, so one carried out of Pinned is unpinned, and one carried out of its section leaves it.
@@ -765,9 +768,9 @@ function TasksListGroup({
 }): React.JSX.Element {
   const drawn = useLeaving(group.tasks, taskIdOf);
   const move = folded ? undefined : drops.move(group);
-  const drag = useRowDrag(move, {
+  const drag = useTaskDrag(move, {
     handle: ROW_HANDLE,
-    onDropOut: (from, zone, at) => drops.dropOut(group, from, zone, at),
+    onDropOut: (taskId, zone, at) => drops.dropOut(group, taskId, zone, at),
   });
   const zone = zoneOf(group.head);
   const titled = group.head.kind !== TASKS_GROUP.ALL;

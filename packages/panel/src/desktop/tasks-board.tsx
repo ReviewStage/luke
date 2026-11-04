@@ -161,7 +161,7 @@ import {
 } from "./tasks-page-options.js";
 import { type ChosenTasks, chosenRowMenu, useTasksSelection } from "./tasks-selection.js";
 import { useHeldTasks } from "./use-held-tasks.js";
-import { useRowDrag } from "./use-row-drag.js";
+import { useTaskDrag } from "./use-row-drag.js";
 
 /**
  * tasks-board.tsx -- the Tasks page's Board: the listed workspace's tasks on a column for each status, or each priority, in the order work moves through them, or each assignee.
@@ -680,10 +680,10 @@ function TaskBoardColumnView({
   onShowOlder: () => void;
 }): React.JSX.Element {
   // Note that a card is carried by its press alone, so a press on one of its chips, its ⋯, or a menu they drop stays that control's.
-  const drag = useRowDrag(undefined, {
+  const drag = useTaskDrag(undefined, {
     handle: CARD_HANDLE,
-    onDropOut: (from, zone) => {
-      const task = column.tasks[from];
+    onDropOut: (taskId, zone) => {
+      const task = column.tasks.find((each) => each.id === taskId);
       const onto = columns.find((each) => columnValue(each.head) === zone);
       const standing = onto === undefined ? undefined : groupStanding(onto.head);
       if (task === undefined || standing === undefined || standsAt(task, standing)) return;
