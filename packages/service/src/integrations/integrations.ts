@@ -101,8 +101,9 @@ export interface IntegrationDefinition {
 /**
  * Every provider's definition, its `ACCOUNT_NAME` given exactly where the
  * wire says the provider answers whose account a token is
- * (`INTEGRATION_NAMES_ACCOUNT`), so the host's rule for an account still to
- * be named (`integrationLabelUnread`) is this table's.
+ * (`INTEGRATION_NAMES_ACCOUNT`, which `integrationLabelUnread` reads for
+ * the service and the host alike): a provider gains or loses its read in
+ * that map first, and this table is type-checked against it.
  */
 type IntegrationTable = {
   readonly [P in IntegrationProvider]: IntegrationDefinition &
