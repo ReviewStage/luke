@@ -299,6 +299,17 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
+  /**
+   * The outside MCP clients the account allowed, with the server's address,
+   * held for the window while it holds the stream open: what they hold
+   * reaches the panel on app state (`LIVE_READ.MCP_CLIENTS`), so the stream
+   * carries nothing.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The held outside MCP clients read again at once, as Try again asks. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked under the Mac's session, answering the clients as they then stand, or that the revoke did not finish. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
 } as const;
 
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
@@ -774,6 +785,9 @@ export const PORT_ACT_USE = {
   INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
   INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
+  MCP_CLIENTS_FOLLOW: ACT_USE.READ,
+  MCP_CLIENTS_RETRY: ACT_USE.READ,
+  MCP_CLIENTS_REVOKE: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 

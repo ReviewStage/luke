@@ -1709,11 +1709,25 @@ at an account route: `bearer.ts` resolves a bearer through the provider's
 userinfo, which refuses a token without `openid`, so `resolveHostedUserId`
 answers none and the route refuses the call.
 
-**What a later change reads.** A client the member allowed is an
-`oauth_client` row (its name, redirects, and `client_discovery_id` for a
-document-named one, `user_id` empty for both), its grant the member's
-`oauth_consent` row and the `oauth_refresh_token` rows under it, which is
-what Settings will list and revoke.
+**Listing and revoking.** A client the member allowed is an `oauth_client`
+row (its name, redirects, and `client_discovery_id` for a document-named
+one, `user_id` empty for both), its grant the member's `oauth_consent` row
+and the `oauth_refresh_token` rows under it. Settings › Integrations lists
+and revokes them through `src/member-mcp/clients-procedures.ts`, at
+`/api/account/mcp-clients`. The list reads the member's consents for every
+client but the desktop's through Drizzle on the account's bearer
+(`@repo/database/models/oauth-grants`), since every endpoint of the
+provider's that lists them takes a session, with the server's address a
+client is pointed at. A revoke runs under the Mac's Better Auth session: it
+deletes the member's access and refresh tokens for the client first, a
+store operation of our own since the provider exports none for one member
+and one client and a refresh never checks the consent, then the consent
+through the provider's own `get-consents` and `delete-consent`
+(`src/member-mcp/client-consents.ts`). A revoke that fails between the two
+answers a failure and leaves the consent, so the client stays listed with
+its Revoke rather than signing back in unasked. A JWT access token already
+minted is verified against the key set alone, so it keeps working for the
+rest of its fifteen minutes, which the row says.
 
 ## The agent routes
 

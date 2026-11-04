@@ -474,8 +474,7 @@ export function composeAgents(
     const followItems = (userId: string) =>
       followAccountItems(
         {
-          seal: (account, since, poll, after) =>
-            asked(client.accountInboxItemsLive(account, since, poll, after)),
+          seal: (account, sync) => asked(client.accountInboxItemsLive(account, sync)),
           pool: dependencies.pool,
           accountWide,
         },

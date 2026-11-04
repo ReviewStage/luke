@@ -7,6 +7,7 @@ import {
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
   HostedMacCommandClient,
+  HostedMcpClientsClient,
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
@@ -234,6 +235,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,
         }),
+        mcpClients: new HostedMcpClientsClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+          sessionCredential: account.sessionCredential,
+        }),
+        accountId,
         // Note that a refusal's reason is not reported, because it may carry the address.
         openExternal: (url) =>
           Effect.map(

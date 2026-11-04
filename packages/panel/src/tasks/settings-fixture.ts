@@ -63,6 +63,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppDevicePresences,
   type AppIntegrationTools,
+  type AppMcpClients,
   type AppProviderKeys,
   type AppRepositoryLists,
   type AppStateSnapshot,
@@ -782,6 +783,31 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
+/** The outside agents the account allowed: one on this computer that refreshed lately, one on the web that never has. */
+const STAGED_MCP_CLIENTS: AppMcpClients = {
+  [ACCOUNT_ID]: {
+    rows: {
+      serverUrl: "https://app.example.com/api/mcp",
+      clients: [
+        {
+          clientId: "https://claude.example/.well-known/oauth-client-metadata.json",
+          name: "Claude Code",
+          redirectUris: ["http://localhost:51703/callback"],
+          allowedAt: NOW - 2 * DAY,
+          lastRefreshedAt: NOW - 3 * HOUR,
+        },
+        {
+          clientId: "dcr-7f3a9c2e",
+          name: "ChatGPT",
+          redirectUris: ["https://chatgpt.example/connector/oauth/callback"],
+          allowedAt: NOW - 9 * DAY,
+          lastRefreshedAt: null,
+        },
+      ],
+    },
+  },
+};
+
 /** The account's staged credentials, as the host holds them: no API key, Claude's plan connected, and the ChatGPT sign-in OpenAI no longer honors. */
 const STAGED_KEYS: AppProviderKeys = {
   [ACCOUNT_ID]: {
@@ -857,6 +883,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
+    [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,
     [LIVE_READ.REPOSITORY_LISTS]: STAGED_REPOSITORIES,
     ...(state.settings === undefined ? undefined : { settings: stagedSettings(state.settings) }),
   };

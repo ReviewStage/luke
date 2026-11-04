@@ -40,6 +40,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_MEMORIES: "/api/account/memories",
   /**
+   * The outside MCP clients the account allowed: read them (GET), or revoke
+   * one by its client id in the query (DELETE). `mcp-client-wire.ts`
+   * declares both.
+   */
+  ACCOUNT_MCP_CLIENTS: "/api/account/mcp-clients",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.

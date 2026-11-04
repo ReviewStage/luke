@@ -869,6 +869,8 @@ export const LIVE_READ = {
   DEVICE_PRESENCE: "devicePresence",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
+  /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */
+  MCP_CLIENTS: "mcpClients",
   /** One workspace's automations, by the workspace: the service's `automations` query, held for the windows that draw them and a few they drew lately. */
   AUTOMATIONS: "automations",
   /** Every run of one workspace's automations the account reads, by the workspace: the service's `automationWorkspaceRuns` query, held as the automations are. */

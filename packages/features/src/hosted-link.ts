@@ -1,4 +1,5 @@
 import { LIVE_POLL } from "./live-wire.js";
+
 /**
  * hosted-link.ts -- the hosted contract's oRPC client, carried by the one account call.
  *
@@ -25,7 +26,6 @@ import { LIVE_POLL } from "./live-wire.js";
  * caller aborts the run.
  */
 
-import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
 import {
   type Client,
   createORPCClient,
@@ -36,6 +36,7 @@ import {
 import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
 import { createEffectClient, type EffectClient } from "@orpc/experimental-effect";
 import { OpenAPILink } from "@orpc/openapi/fetch";
+import { HTTP_METHOD, type HttpMethod, type UnparsedWireValue } from "@repo/wire";
 import { Cause, type Context, Data, Duration, Effect, Exit, Random, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -455,14 +456,16 @@ export function askHosted<Input, Output>(
 
 /**
  * A live read asked: sealed, or with `poll` its rows inline (`live-wire.ts`).
- * A poll past `after` is held by the service until the rows move, so it
- * travels under the held deadline.
+ * A poll past `after`, or one `held` otherwise, as one past a sync id, is
+ * held by the service until the rows move, so it travels under the held
+ * deadline.
  */
 export function askLive<Input extends LivePollInput, Output>(
   procedure: HostedProcedure<Input, Output>,
   input: Input,
   poll: boolean,
   after: string | undefined,
+  held = after !== undefined,
 ): Effect.Effect<Output, HostedFailure, HttpClient.HttpClient> {
   if (!poll) return askHosted(procedure, input);
   const polled: Input = {
@@ -470,11 +473,7 @@ export function askLive<Input extends LivePollInput, Output>(
     [LIVE_POLL.QUERY]: LIVE_POLL.ON,
     ...(after === undefined ? undefined : { [LIVE_POLL.AFTER]: after }),
   };
-  return askHosted(
-    procedure,
-    polled,
-    after === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.HELD,
-  );
+  return askHosted(procedure, polled, held ? HOSTED_DEADLINE.HELD : HOSTED_DEADLINE.USUAL);
 }
 
 /** What a live read's input may name of a poll. */

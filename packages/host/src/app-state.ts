@@ -20,6 +20,7 @@ import type {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
@@ -407,6 +408,8 @@ export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePr
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
+/** The outside MCP clients the account allowed, by the account, as the host's read of them stands. */
+export type AppMcpClients = Readonly<Record<string, AppHostRead<McpClientsAnswer>>>;
 /** Each integration server's tools the windows hold, by the server's name, as the host's read of them stands: its tools, or why it listed none. */
 export type AppIntegrationTools = Readonly<Record<string, AppHostRead<IntegrationToolsAnswer>>>;
 
@@ -490,6 +493,7 @@ export interface AppHostReads {
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
+  [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
@@ -604,6 +608,8 @@ export interface AppState {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
+  /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
+  [LIVE_READ.MCP_CLIENTS]: AppMcpClients;
   /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
   [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;
   /** Each workspace's runs the windows chose, by the workspace, newest fired first, held as the automations are: what the Runs tab and the sidebar's Automations row read. */
@@ -755,6 +761,7 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {
     keys: READ_KEYS.ONE,
     on: KEYS_ON.SLICE,
