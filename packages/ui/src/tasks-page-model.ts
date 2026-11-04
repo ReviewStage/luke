@@ -8,7 +8,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@repo/features/task-wire";
-import { TASK_ORDER, taskTime } from "./task-list-model.js";
+import { repositoryParts, TASK_ORDER, taskTime } from "./task-list-model.js";
 
 /**
  * tasks-page-model.ts -- how the Tasks page filters, groups, orders, and draws the workspace's tasks, in its List and on its Board.
@@ -589,11 +589,6 @@ function byOrder(order: TasksOrder): (a: TaskSummary, b: TaskSummary) => number 
   }
 }
 
-/** A repository's name without its owner: `relay` of `acme/relay`. */
-function repositoryNameOf(repository: string): string {
-  return repository.slice(repository.indexOf("/") + 1);
-}
-
 /** The values a grouping by a finite field may stand groups for, in order, the filter's own where it keeps any. */
 function finiteValues<T extends string>(
   order: readonly T[],
@@ -677,7 +672,7 @@ function groupingRule(grouping: TasksGrouping, context: GroupingContext): Groupi
         compare: (a, b) =>
           a === null || b === null
             ? Number(a === null) - Number(b === null)
-            : repositoryNameOf(a).localeCompare(repositoryNameOf(b)) || a.localeCompare(b),
+            : repositoryParts(a).name.localeCompare(repositoryParts(b).name) || a.localeCompare(b),
       };
     case TASKS_GROUPING.ASSIGNEE: {
       const kept = filterValues(filter, TASKS_FILTER_FIELD.ASSIGNEE);

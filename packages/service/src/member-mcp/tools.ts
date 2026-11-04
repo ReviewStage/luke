@@ -815,12 +815,12 @@ const MEMBER_DELETE_SECTION_TOOL = memberMcpTool({
     ),
 });
 
-/** A start names the task or the agent it starts from, or else the workspace it starts in on no task, and what the agents' own start names, bar pictures, since the member keeps no conversation here to hand them from. */
+/** A start names the task or the agent it starts from, or else the workspace of the task made for it, and what the agents' own start names, bar pictures, since the member keeps no conversation here to hand them from. */
 const StartAgentInputSchema = Schema.Struct({
   workspace: Schema.optionalKey(
     describeWire(
       Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(WORKSPACE_BOUNDS.MAX_SLUG_CHARS)),
-      "Where you name no taskId and no from, the workspace to start the agent in on no task, by " +
+      "Where you name no taskId and no from, the workspace of the task made for the agent, by " +
         `the slug ${MEMBER_MCP_TOOL.LIST_WORKSPACES} answered; leave it out where the member ` +
         "belongs to one workspace alone.",
     ),
@@ -829,15 +829,15 @@ const StartAgentInputSchema = Schema.Struct({
     describeWire(
       wireUuidSchema,
       `The task to start the agent on, by the id ${MEMBER_MCP_TOOL.LIST_TASKS} answered; leave ` +
-        "it out to start it on no task.",
+        "it out to start it on a new task made for it.",
     ),
   ),
   repository: Schema.optionalKey(
     describeWire(
       Schema.NullOr(githubRepositoryFullNameSchema),
-      "Where the agent starts on no task, the GitHub repository it works in, as owner/name, " +
-        "which the workspace's GitHub installation must reach; null or left out for none. A " +
-        "task's agent works in the task's own.",
+      "Where you name no taskId and no from, the GitHub repository of the task made for the " +
+        "agent, as owner/name, which the workspace's GitHub installation must reach; null or " +
+        "left out for none. A task's agent works in the task's own.",
     ),
   ),
   prompt: START_AGENT_TOOL.inputSchema.fields.prompt,
@@ -878,9 +878,10 @@ const MEMBER_START_AGENT_TOOL = memberMcpTool({
   description:
     "Start a new coding agent as the member, exactly as their own Start would: on a task " +
     "they can open by its taskId, on the task's plan itself with no prompt, or on the prompt " +
-    "given in the plan's place, with the note after either; or on no task, in the workspace " +
-    "named, in the repository named or none, where it needs a prompt, since there is no plan " +
-    "to hand it. This one call carries everything the agent is told as it starts, and the " +
+    "given in the plan's place, with the note after either; or on a new task made for it in " +
+    "the workspace named, named as its agent is, assigned to the member, in the repository " +
+    "named or none, and done by itself once its agents finish well, where it needs a prompt, " +
+    "since that task has no plan to hand it. This one call carries everything the agent is told as it starts, and the " +
     "agent sets to work on it at once. Its checkout is the repository's default branch, or " +
     "the branch named, which must already be on GitHub. It runs on the model and effort " +
     "named, as the member is offered them, or on the member's default with neither; " +

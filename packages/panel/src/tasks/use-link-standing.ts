@@ -18,6 +18,7 @@ import { MENTION_KIND, type Mention, type NumberedTaskIdOf } from "@repo/feature
 import type { TasksView } from "@repo/features/tasks-view";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import type { AppLinkStanding } from "@repo/host/app-state";
+import { repositoryParts } from "@repo/ui/task-list-model";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useMemo } from "react";
 import { APP_SLICE, appStateNow, useAppSlice } from "../use-app-state.js";
@@ -189,7 +190,7 @@ function askedOf(mention: Mention): Asked | undefined {
 
 /** The key a chip names an asked page by: the repository's name and the pull request's or the issue's number. */
 function keyOf(asked: Asked): string {
-  return `${asked.repository.split("/")[1] ?? asked.repository}#${asked.number}`;
+  return `${repositoryParts(asked.repository).name}#${asked.number}`;
 }
 
 /** What a chip draws of the page a link names, from what GitHub holds of it as the host last read it; none where GitHub holds no such page. */

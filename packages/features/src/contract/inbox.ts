@@ -28,6 +28,7 @@ import {
   inboxReadAllRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxSnoozeRequestSchema,
   inboxStartRequestSchema,
 } from "../inbox-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -55,6 +56,9 @@ const START_BODY_BYTES =
 /** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
 const READ_ALL_BODY_BYTES = 1_024;
 
+/** A snooze is one instant or none, so a few hundred bytes hold it. */
+const SNOOZE_BODY_BYTES = 1_024;
+
 /** The public paths that name a task, an agent, or an item by its id. */
 const INBOX_PROCEDURE_PATH = {
   TASK: "/api/plans/{id}/inbox",
@@ -63,6 +67,7 @@ const INBOX_PROCEDURE_PATH = {
   ITEM_CLOSE: "/api/inbox/{id}/close",
   ITEM_MESSAGES: "/api/inbox/{id}/messages",
   ITEM_READ: "/api/inbox/{id}/read",
+  ITEM_SNOOZE: "/api/inbox/{id}/snooze",
 } as const;
 
 /** The id a path names; one that is no UUID is answered as not found, so it is read as text here. */
@@ -144,6 +149,17 @@ export const inboxContract = {
   markItemUnread: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: INBOX_PROCEDURE_PATH.ITEM_READ }))
     .input(pathIdSchema)
+    .output(EffectSchema.flip(inboxReadStateSchema)),
+  snoozeItem: hostedProcedure
+    .meta(bodyCap(SNOOZE_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.PUT,
+        path: INBOX_PROCEDURE_PATH.ITEM_SNOOZE,
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(pathIdSchema, inboxSnoozeRequestSchema))
     .output(EffectSchema.flip(inboxReadStateSchema)),
   markAllRead: hostedProcedure
     .meta(bodyCap(READ_ALL_BODY_BYTES))

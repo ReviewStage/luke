@@ -19,6 +19,7 @@ import {
   type AgentInboxReadAllParams,
   type AgentInboxReadAllView,
   type AgentInboxReadStateParams,
+  type AgentInboxSnoozeParams,
   type AgentInboxReadStateView,
   type AgentListAnswer,
   type AgentMessagesAnswerView,
@@ -27,11 +28,9 @@ import {
   type AgentPartView,
   type AgentPinParams,
   type AgentPullRequestAnswerView,
-  type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentRenameParams,
-  type AgentReviewOptionsAnswerView,
   type AgentServersParams,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
@@ -47,6 +46,7 @@ import {
   agentInboxReadAllParamsSchema,
   agentInboxReadStateParamsSchema,
   agentInboxScopeSchema,
+  agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
   agentMessageParamsSchema,
@@ -319,6 +319,7 @@ export type AgentClient = Pick<
   | "messageInbox"
   | "startInboxThread"
   | "markInboxItemRead"
+  | "snoozeInboxItem"
   | "inboxItemHome"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -538,6 +539,8 @@ export function composeAgents(
         checks: (key) => asked(client.overviewChecks(key.agentId, key.number)),
         conversation: (key) => asked(client.overviewConversation(key.agentId, key.number)),
         published: (key) => asked(client.pullRequest(key.agentId, key.number)),
+        reviewOptions: (key) => asked(client.reviewOptions(key.agentId)),
+        viewed: (key) => asked(client.pullRequestViewed(key.agentId, key.number)),
       },
       listings: dependencies.pullRequestListings ?? Effect.succeed(Stream.empty),
       tell: (held) =>
@@ -988,6 +991,12 @@ function composed(
     ({ itemId, unread }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread }),
     ({ itemId, unread }) =>
       asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
+  );
+  /** An item snoozed until an instant, or its snooze ended. Note that snoozing marks it read, which is drawn at once, while the snooze itself arrives with the read its transaction reaches. */
+  const snoozed = inboxWrite<AgentInboxSnoozeParams, AgentInboxReadStateView>(
+    ({ itemId }) => [itemId],
+    ({ itemId }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }),
+    ({ itemId, until }) => asked(client.snoozeInboxItem(itemId, until)),
   );
   /** Every item the inbox lists marked read. */
   const markedAll = inboxWrite<AgentInboxReadAllParams, AgentInboxReadAllView>(
@@ -1561,16 +1570,6 @@ function composed(
         const answer = yield* asked(client.writeChaptersModel(model));
         return carried<ChaptersModelAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentPullRequestParamsSchema,
-          params,
-          "reading what an agent's pickers offer names one agent",
-        );
-        const answer = yield* asked(client.reviewOptions(agentId));
-        return carried<AgentReviewOptionsAnswerView>(answer);
-      }),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
     [GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -1616,16 +1615,6 @@ function composed(
         );
         const answer = yield* asked(client.pullRequestAction(agentId, request, number));
         return carried<AgentPullRequestWriteAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading which files of an agent's pull request were viewed names the agent",
-        );
-        const answer = yield* asked(client.pullRequestViewed(agentId, number));
-        return carried<AgentPullRequestViewedAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_GITHUB_IMAGE]: (params) =>
       Effect.gen(function* () {
@@ -1766,6 +1755,16 @@ function composed(
           agentInboxReadStateParamsSchema,
           params,
           "marking an inbox item names the item and whether it reads as unread",
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_INBOX_SNOOZE]: declaredMethod(
+      dependencies.pool,
+      snoozed,
+      (params: WireRecord) =>
+        readParams(
+          agentInboxSnoozeParamsSchema,
+          params,
+          "snoozing an inbox item names the item and until when, or none to end its snooze",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>

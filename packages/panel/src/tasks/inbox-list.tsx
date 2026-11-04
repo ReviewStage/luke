@@ -142,6 +142,7 @@ import {
   NEEDS_YOU,
 } from "./inbox-model.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
+import { type InboxSnoozer, useInboxSnoozing } from "./inbox-snooze.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
@@ -174,7 +175,8 @@ import { cardTitle } from "./tool-call-model.js";
  * until another is chosen (`use-held-inbox-list.ts`), and every such row All lists.
  * The head names the Inbox, whatever it lists, and, at its right, offers the view's
  * menu: first what the list shows, Open, every thread still open, a
- * question or an update not yet opened, or All, every item; then Addressed
+ * question or an update not yet opened, All, every item, each leaving out
+ * what the developer snoozed, or Snoozed, those items alone; then Addressed
  * to, the developer's own, anyone's, or one teammate's by face and name,
  * which a chip over the list then says, its × listing the developer's own
  * again. Open addressed to the developer is Needs you, the threads the
@@ -232,10 +234,15 @@ const SKELETON_TIME = "20px";
 const SCOPE_WORDS = {
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
+  [INBOX_SHOW.SNOOZED]: { label: "Snoozed", icon: <GLYPH.TIME /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
 /** The scopes the window's Inbox's view's menu offers, in its order. */
-const INBOX_SCOPES = [INBOX_SHOW.OPEN, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
+const INBOX_SCOPES = [
+  INBOX_SHOW.OPEN,
+  INBOX_SHOW.ALL,
+  INBOX_SHOW.SNOOZED,
+] as const satisfies readonly InboxShow[];
 
 /** The Inbox's name at its head, whatever it lists, the view's menu saying the rest. */
 const INBOX_TITLE = "Inbox";
@@ -278,6 +285,9 @@ function regionLabel(head: InboxListHead): string {
 /** What a task's own Inbox says holding nothing at all. */
 export const NOTHING_HERE = "Nothing here";
 
+/** What the Snoozed scope says holding nothing the reader snoozed. */
+const NOTHING_SNOOZED = "Nothing snoozed";
+
 /**
  * What the list says where its scope and Addressed to leave out every item
  * it holds, by whom Addressed to names: the reader's Open is Needs you, and
@@ -287,11 +297,17 @@ const SHOW_EMPTY = {
   [INBOX_WHOSE.MINE]: {
     [INBOX_SHOW.OPEN]: NEEDS_YOU.NONE,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
+    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
-  [INBOX_WHOSE.EVERYONE]: { [INBOX_SHOW.OPEN]: "Nothing open", [INBOX_SHOW.ALL]: NOTHING_HERE },
+  [INBOX_WHOSE.EVERYONE]: {
+    [INBOX_SHOW.OPEN]: "Nothing open",
+    [INBOX_SHOW.ALL]: NOTHING_HERE,
+    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
+  },
   [INBOX_WHOSE.PERSON]: {
     [INBOX_SHOW.OPEN]: "Nothing addressed to them",
     [INBOX_SHOW.ALL]: "Nothing addressed to them",
+    [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
 } as const satisfies Record<InboxWhose["kind"], Record<InboxShow, string>>;
 
@@ -417,6 +433,8 @@ export const InboxItemRow = memo(function InboxItemRow({
   onChoose,
   onMark,
   onAskClose,
+  onSnooze,
+  onPickSnooze,
   place,
 }: {
   listed: InboxListed;
@@ -447,6 +465,10 @@ export const InboxItemRow = memo(function InboxItemRow({
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
   /** Asks to close an open item without an answer, through the list's one question; none where the row offers no close. */
   onAskClose?: ((item: InboxItem) => void) | undefined;
+  /** Snoozes the item, or ends its snooze; none where the row offers no snooze. */
+  onSnooze?: InboxSnoozer | undefined;
+  /** Opens the date picker on the row for a snooze of the reader's own time, where the row offers a snooze. */
+  onPickSnooze?: ((item: InboxItem) => void) | undefined;
   /** Where the row stands in a run drawing only the rows near the view (`VirtualRows`); none where every row is drawn. */
   place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
@@ -462,11 +484,15 @@ export const InboxItemRow = memo(function InboxItemRow({
   const addressedTo = inboxAddressedTo(item);
   const addressee = usePerson(addressedTo);
   const coarse = useCoarsePointer();
-  // Note that U acts only on the chosen item, so only its row names the chord.
+  // Note that U and H act only on the chosen item, so only its row names their chords.
   const { groups } = useInboxItemActions(item, {
     onMark: onMark === undefined ? undefined : (_item, next) => onMark(listed, next),
     onAskClose,
     keyed: chosen,
+    snooze:
+      onSnooze === undefined || onPickSnooze === undefined
+        ? undefined
+        : { onSnooze, onPick: onPickSnooze },
   });
   return (
     <RowHintOptions card={<InboxItemCard listed={listed} models={models} readerId={readerId} />}>
@@ -553,7 +579,7 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Open or All, the one shown checked; then Addressed to, a
+ * it shows, Open, All, or Snoozed, the one shown checked; then Addressed to, a
  * submenu of Anyone, Me, or a teammate by face and name, its choice checked.
  */
 function ViewOptions({
@@ -1299,6 +1325,7 @@ export function InboxList({
   onChoose,
   onMark,
   onClose,
+  onSnooze,
   onPointing,
 }: {
   view: InboxListView;
@@ -1322,6 +1349,8 @@ export function InboxList({
   onMark?: InboxListMark | undefined;
   /** Closes an open item without an answer from its row or the selection's bar; none where the rows offer no close. */
   onClose?: InboxCloser | undefined;
+  /** Snoozes an item from its row's menu or H, or ends its snooze; none where the rows offer no snooze. */
+  onSnooze?: InboxSnoozer | undefined;
   /** Told as the pointer comes onto the list and leaves it, while which its rows hold their places (`use-held-inbox-list.ts`); none where nothing holds them. */
   onPointing?: ((pointing: boolean) => void) | undefined;
 }): React.JSX.Element {
@@ -1377,6 +1406,16 @@ export function InboxList({
   // because the page hands new ones on every draw and a row handed a new door draws again (`InboxItemRow`).
   const choose = useSteadyDoor(onChoose);
   const mark = useSteadyDoor(onMark);
+  const snooze = useSteadyDoor(onSnooze);
+  // Note that H snoozes the chosen item from its row, and a time of the reader's own is picked there, in the list's room.
+  const snoozing = useInboxSnoozing({
+    room: bodyRef,
+    rowOf: rows.find,
+    chosen: drawn.find(({ item }) => item.id === chosen)?.item,
+    active: head.shown,
+    onSnooze,
+  });
+  const pickSnooze = useSteadyDoor(snoozing.onPick);
   // Note that every row asks its close through the list's one question, rather than each drawing its own shut.
   const closing = useInboxCloseAsk(
     onClose,
@@ -1407,6 +1446,8 @@ export function InboxList({
       onChoose={choose}
       onMark={mark}
       onAskClose={onClose === undefined ? undefined : closing.ask}
+      onSnooze={onSnooze === undefined ? undefined : snooze}
+      onPickSnooze={onSnooze === undefined ? undefined : pickSnooze}
     />
   );
   const body = (
@@ -1456,6 +1497,7 @@ export function InboxList({
         onClose={onClose}
       />
       {closing.dialog}
+      {snoozing.popover}
       {columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );

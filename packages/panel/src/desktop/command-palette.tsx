@@ -754,9 +754,13 @@ function taskRows(
   const listedId = tasks.workspace?.id;
   const carded = { ...tasks, onShowAgent: showAgent };
   // Note that a repository's name is weighed against each repository listed once, not against each task, since many tasks share one.
-  const repositories = [...new Set(tasks.tasks.map((task) => task.repository))].map(
-    (repository) => ({ repository }),
-  );
+  const repositories = [
+    ...new Set([
+      ...tasks.tasks.map((task) => task.repository),
+      ...tasks.listedAgents.standing.map((agent) => agent.repository),
+      ...tasks.listedAgents.archived.map((agent) => agent.repository),
+    ]),
+  ].map((repository) => ({ repository }));
   // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
@@ -829,9 +833,10 @@ function taskRows(
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
     };
     return undrawnRow(words, () => {
-      const said = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
-        (word) => word !== null,
-      );
+      // Note that an agent's repository is named as a task's row names its own, by its name alone unless another listed shares it.
+      const repository =
+        agent.repository === null ? null : repositoryLabel(agent.repository, repositories);
+      const said = [repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
       return {
         icon: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
         detail: said.length === 0 ? undefined : said.join(" · "),

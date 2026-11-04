@@ -138,6 +138,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onHostsChanged((held) => {
         state.update({ [LIVE_READ.HOSTS]: held });
       }),
+      gateway.host.onWorkspaceInvitationsChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_INVITATIONS]: held });
+      }),
       gateway.host.onThisMacHostChanged((held) => {
         state.update({ [LIVE_READ.THIS_MAC_HOST]: held });
       }),
@@ -146,6 +149,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       gateway.host.onTokenRepositoriesChanged((held) => {
         state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
+      }),
+      gateway.host.onWorkspacePhotosChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_PHOTOS]: held });
       }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });

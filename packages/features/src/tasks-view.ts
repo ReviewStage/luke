@@ -81,7 +81,6 @@ import {
   workspaceMemberRoleSchema,
   workspaceMemberSchema,
   workspacePhotoSetRequestSchema,
-  workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
   workspaceSlugSetRequestSchema,
@@ -923,25 +922,6 @@ export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: wo
 
 export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
 
-/** A workspace's photo, as a window's tile asks for it: the workspace. */
-export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
-
-export type TasksWorkspacePhotoParams = typeof tasksWorkspacePhotoParamsSchema.Type;
-
-/**
- * A workspace's photo, as the window hears it: its bytes in base64 under
- * its media type, which the window draws from a `data:` URL of its own
- * making, or why there is none: not a member, no photo, or no answer. The
- * host fetched it under the account, so the window holds no bearer and no
- * address.
- */
-export const tasksWorkspacePhotoAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ contentType: workspacePhotoTypeSchema, base64: EffectSchema.String }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksWorkspacePhotoAnswer = typeof tasksWorkspacePhotoAnswerSchema.Type;
-
 /** A workspace's token repositories, as Settings › Workspace asks for them: the workspace. */
 export const tasksWorkspaceTokenRepositoriesParamsSchema = workspaceLeaveRequestSchema;
 
@@ -1002,19 +982,6 @@ export const tasksWorkspaceInvitationsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceInvitationsAnswer = typeof tasksWorkspaceInvitationsAnswerSchema.Type;
-
-/**
- * A followed workspace's pending invitations as they now stand, told by the
- * host to an owner's or an admin's windows each time they move, or why
- * there are none. A follow names the workspace as a people's follow does
- * (`workspacePeopleFollowSchema`).
- */
-export const workspaceInvitationsFollowedSchema = EffectSchema.Struct({
-  workspaceId: workspaceIdSchema,
-  view: tasksWorkspaceInvitationsAnswerSchema,
-});
-
-export type WorkspaceInvitationsFollowed = typeof workspaceInvitationsFollowedSchema.Type;
 
 /** A page about the account's GitHub connection, as the window hears it: the address to open in the browser, or that the service did not answer. */
 export const tasksGitHubPageAnswerSchema = EffectSchema.Union([

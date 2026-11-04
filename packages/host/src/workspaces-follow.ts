@@ -3,12 +3,8 @@ import {
   sidebarLiveRowsSchema,
   sidebarRowsOfLive,
 } from "@repo/features/sidebar-live";
-import type { TasksWorkspaceInvitationsAnswer } from "@repo/features/tasks-view";
 import {
-  type WorkspaceInvitationsLiveAnswer,
   type WorkspacesLiveAnswer,
-  workspaceInvitationsLiveRowsSchema,
-  workspaceInvitationsOfLiveRows,
   workspacesLiveRowsSchema,
   workspacesOfLiveRows,
 } from "@repo/features/workspace-live";
@@ -23,7 +19,7 @@ import {
 } from "./live-follow.js";
 
 /**
- * workspaces-follow.ts -- the account's workspaces and sidebar, and one workspace's pending invitations, followed by the host over the service's held poll.
+ * workspaces-follow.ts -- the account's workspaces and sidebar, followed by the host over the service's held poll.
  *
  * The service answers each read's statements (`workspacesLiveStatements` in
  * the database's workspace store, `workspaceMembersLiveStatements` in the
@@ -38,8 +34,6 @@ type Sealed<Answer> = Answer | { readonly failure: string; readonly gone?: boole
 export interface LiveReadDependencies<Answer> {
   /** The read's rows inline, held until they move past `after`; a failure where the service answered none. */
   readonly poll: (after: string | undefined) => Effect.Effect<Sealed<Answer>>;
-  /** Now, by the host's own clock, which an invitation's expiry is read against. */
-  readonly now: () => number;
   /** Hears the read's wait for a write's transaction where it has one, and none once let go (`live-follow.ts`). */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
@@ -69,22 +63,6 @@ export function workspacesMoves(
   first: WorkspacesLiveAnswer,
 ): Stream.Stream<readonly Workspace[], LiveBroken> {
   return liveMoves(dependencies, first, workspacesLiveRowsSchema, workspacesOfLiveRows);
-}
-
-/**
- * One workspace's pending invitations each time their rows change, as the
- * held read would answer them at the host's own `now`, each accept link on
- * the origin the service answered them with. Note that an invitation past its
- * expiry is left out as each change lands, since the statement keeps no
- * clock.
- */
-export function invitationsMoves(
-  dependencies: LiveReadDependencies<WorkspaceInvitationsLiveAnswer>,
-  first: WorkspaceInvitationsLiveAnswer,
-): Stream.Stream<TasksWorkspaceInvitationsAnswer, LiveBroken> {
-  return liveMoves(dependencies, first, workspaceInvitationsLiveRowsSchema, (rows) => ({
-    invitations: workspaceInvitationsOfLiveRows(rows, first.origin, dependencies.now()),
-  }));
 }
 
 /** The sidebar read's parts: its sections, the tasks and the agents in them, and its pinned repositories. */

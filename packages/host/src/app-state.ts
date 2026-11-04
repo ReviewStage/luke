@@ -10,6 +10,8 @@ import {
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentReviewOptionsAnswerView,
   INBOX_SCOPE_KIND,
   PULL_REQUEST_PART,
   type PullRequestPart,
@@ -41,6 +43,7 @@ import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import type { PlanRevisionsAnswer } from "@repo/features/task-wire";
 import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
@@ -194,6 +197,8 @@ export interface AppInboxWaitingItem {
   postedAt: number;
   /** Whether it holds an ask open rather than being a notice; absent from a service before it, which counts it as asking. */
   asking?: boolean;
+  /** Until when the developer snoozed it, while nothing has woken it since; absent where it is not snoozed. The window leaves it uncounted until then. */
+  snoozedUntil?: number;
 }
 
 /** One task with inbox items waiting on the developer: the task, and its open items, the latest changed first. */
@@ -418,6 +423,8 @@ export const PULL_REQUEST_PART_READ = {
   [PULL_REQUEST_PART.CHECKS]: LIVE_READ.PULL_REQUEST_CHECKS,
   [PULL_REQUEST_PART.CONVERSATION]: LIVE_READ.PULL_REQUEST_CONVERSATION,
   [PULL_REQUEST_PART.PUBLISHED]: LIVE_READ.PULL_REQUEST_PUBLISHED,
+  [PULL_REQUEST_PART.REVIEW_OPTIONS]: LIVE_READ.REVIEW_OPTIONS,
+  [PULL_REQUEST_PART.VIEWED]: LIVE_READ.PULL_REQUEST_VIEWED,
 } as const satisfies Record<PullRequestPart, LiveRead>;
 /** One of the account's own devices' last beat, at the host's instant: its age as the service answered it, taken from the host's clock as the answer landed. */
 interface AppDeviceBeat {
@@ -453,6 +460,17 @@ export interface AppHostsHeld {
 export type AppHosts = Readonly<Record<string, AppHostRead<AppHostsHeld>>>;
 
 /**
+ * Each workspace's pending invitations the host holds for an owner's or an
+ * admin's windows (`workspace-invitations-read.ts`): those a window draws,
+ * and the few drawn lately, by the workspace's id, each as its own read
+ * stands, those not yet expired, soonest to expire first, once it answered.
+ * One absent is held by nobody.
+ */
+export type AppWorkspaceInvitations = Readonly<
+  Record<string, AppHostRead<readonly WorkspaceInvitation[]>>
+>;
+
+/**
  * This Mac as its host reads it (`compose-this-mac-host.ts`): the machine's
  * id in the keyed hash every host reports (`@repo/host/node`'s
  * `machine-identity.ts`), where it could be read, and the device of the
@@ -477,6 +495,15 @@ export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
  * held by nobody.
  */
 export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
+
+/** One workspace's photo as the host last fetched it: the version the workspaces named it by, and its bytes as a `data:` URL. */
+export interface AppWorkspacePhoto {
+  version: string;
+  url: string;
+}
+
+/** Each listed workspace's photo the host holds, by the workspace; one with none, or not yet fetched, absent. */
+export type AppWorkspacePhotos = Readonly<Record<string, AppHostRead<AppWorkspacePhoto>>>;
 
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
@@ -625,11 +652,15 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHECKS]: AgentOverviewChecksAnswerView;
   [LIVE_READ.PULL_REQUEST_CONVERSATION]: AgentOverviewConversationAnswerView;
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: AgentPullRequestAnswerView;
+  [LIVE_READ.PULL_REQUEST_VIEWED]: AgentPullRequestViewedAnswerView;
+  [LIVE_READ.REVIEW_OPTIONS]: AgentReviewOptionsAnswerView;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.HOSTS]: AppHostsHeld;
+  [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.TOKEN_REPOSITORIES]: readonly WorkspaceTokenRepository[];
+  [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhoto;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
@@ -762,16 +793,24 @@ export interface AppState {
   [LIVE_READ.PULL_REQUEST_CONVERSATION]: AppPullRequestPart<AgentOverviewConversationAnswerView>;
   /** What each of those agents published, its pull request as the service last read it from GitHub, held as they are. */
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: AppPullRequestPart<AgentPullRequestAnswerView>;
+  /** Which of each of those pull requests' files the member marked viewed, held as they are, read on the member's own GitHub sign-in. */
+  [LIVE_READ.PULL_REQUEST_VIEWED]: AppPullRequestPart<AgentPullRequestViewedAnswerView>;
+  /** What each of those tabs' reviewer and label pickers offer, held as they are once a picker asks. */
+  [LIVE_READ.REVIEW_OPTIONS]: AppPullRequestPart<AgentReviewOptionsAnswerView>;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** The account's hosts, held while Settings › Hosts draws them and a while after: what that page lists. */
   [LIVE_READ.HOSTS]: AppHosts;
+  /** Each workspace's pending invitations an owner's or an admin's windows draw, held while a window draws them and a while after: what Settings › Workspace lists under Invitations. */
+  [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
   /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each workspace's token repositories the windows draw, held while a window draws them and a while after: what Settings › Workspace and onboarding's GitHub step list. */
   [LIVE_READ.TOKEN_REPOSITORIES]: AppTokenRepositories;
+  /** Each listed workspace's photo, held for the signed-in session and fetched again as its version moves: what every workspace's tile draws. */
+  [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhotos;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
   /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
@@ -928,6 +967,8 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.PULL_REQUEST_CHECKS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CONVERSATION]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST_VIEWED]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.REVIEW_OPTIONS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PLAN_COMMENTS]: {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.SLICE,
@@ -949,9 +990,15 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.HOSTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_INVITATIONS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof WorkspaceInvitation,
+  },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.TOKEN_REPOSITORIES]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_PHOTOS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {

@@ -267,6 +267,8 @@ export interface NewTask {
   readonly parentTaskId?: string;
   /** How the task is worked, fixed as it starts; by its agents where none is named. */
   readonly mode?: TaskMode;
+  /** Whether `start_agent` made it for the agent it started, its caller on no task; not where none is named. */
+  readonly madeByStart?: boolean;
 }
 
 /**
@@ -750,6 +752,7 @@ const TaskInsertSchema = Schema.Struct({
   parentTaskId: Schema.NullOr(Schema.String),
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
+  madeByStart: Schema.Boolean,
   now: Schema.Date,
 });
 
@@ -773,6 +776,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     assigneeId: write.assigneeId,
     creatorActor: write.creatorActor,
     creatorAgentId: write.creatorAgentId,
+    madeByStart: write.madeByStart,
     repository: write.repository,
     githubAccess: write.githubAccess,
     machine: write.machine,
@@ -1163,6 +1167,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       assigneeId: started.assigneeId ?? null,
       creatorActor: started.origin?.actor ?? PLAN_ACTOR.DEVELOPER,
       creatorAgentId: started.origin?.agentId ?? null,
+      madeByStart: started.madeByStart ?? false,
       number: yield* nextTaskNumber(started.organizationId),
       now,
     };
@@ -1982,6 +1987,24 @@ export function nameUntitledTask(
   const named = name.trim();
   if (named.length === 0) return Effect.succeed(false);
   return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
+}
+
+const findStartMadeTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ taskId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: task.id })
+        .from(task)
+        .where(and(eq(task.id, taskId), eq(task.madeByStart, true)))
+        .limit(1),
+    ),
+});
+
+/** Whether the task is one `start_agent` made for the agent it started, which finishes with no merge asked. */
+export function isStartTask(taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(findStartMadeTask({ taskId }), Option.isSome);
 }
 
 const assignUnassigned = SqlSchema.findOneOption({

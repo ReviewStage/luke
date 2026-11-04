@@ -73,13 +73,13 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       errors: [{ messageId: "newRead" }],
     },
     {
-      code: "actPort()[ACT_KIND.WORKSPACE_INVITATIONS]({ workspaceId });",
+      code: "actPort()[ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]({ workspaceId });",
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
     // A one-shot read, and a read kind kept in a local to send later.
     {
-      code: "askAct(ACT_KIND.HOSTS_LIST);",
+      code: "askAct(ACT_KIND.AGENTS_MODELS);",
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },

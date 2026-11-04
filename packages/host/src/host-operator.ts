@@ -32,6 +32,7 @@ import {
   type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
   type AgentInboxScope,
+  type AgentInboxSnoozeParams,
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
@@ -49,12 +50,10 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
-  type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentQueueParams,
   type AgentRenameParams,
-  type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
   type AgentServersParams,
   type AgentStartParams,
@@ -82,10 +81,8 @@ import {
   agentPageAnswerViewSchema,
   agentPartViewSchema,
   agentPullRequestAnswerViewSchema,
-  agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
-  agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
   type ChatGptSignInAnswerView,
@@ -260,8 +257,6 @@ import {
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceParams,
-  type TasksWorkspacePhotoAnswer,
-  type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
@@ -302,13 +297,10 @@ import {
   tasksWorkspaceInvitationsAnswerSchema,
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
-  tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
-  type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
-  workspaceInvitationsFollowedSchema,
 } from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -377,7 +369,9 @@ import type {
   AppRepositoryLists,
   AppThisMacHosts,
   AppTokenRepositories,
+  AppWorkspaceInvitations,
   AppWorkspaceMembers,
+  AppWorkspacePhotos,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -656,16 +650,16 @@ export interface HostOperator {
   workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
   /** Every workspace's people the host holds for the windows, whole, each time any of them moves. */
   onWorkspaceMembersChanged(listener: (held: AppWorkspaceMembers) => void): () => void;
-  /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+  /** One workspace's pending invitations held followed for an owner's or an admin's windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceInvitationsChanged`. */
   workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's invitations let go. */
+  /** One workspace's invitations let go by the windows: they stay followed among those let go lately until later ones push them out. */
   workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
-  onWorkspaceInvitationsChanged(
-    listener: (followed: WorkspaceInvitationsFollowed) => void,
-  ): () => void;
-  /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
-  workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
+  /** One workspace's held invitations read again at once, as Try again asks. */
+  workspaceInvitationsRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** Every workspace's pending invitations the host holds for the windows, whole, each time any of them moves or expires. */
+  onWorkspaceInvitationsChanged(listener: (held: AppWorkspaceInvitations) => void): () => void;
+  /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
+  onWorkspacePhotosChanged(listener: (held: AppWorkspacePhotos) => void): () => void;
   /** The repositories members added to a workspace on their own GitHub tokens, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onTokenRepositoriesChanged`. */
   workspaceTokenRepositoriesFollow(
     params: TasksWorkspaceTokenRepositoriesParams,
@@ -698,10 +692,6 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace left; or why it was not. */
   workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-  /** One workspace's pending invitations; or why there are none. */
-  workspaceInvitations(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** An invitation made; it with its accept link, or why none was. */
   workspaceInvite(
     params: TasksWorkspaceInviteParams,
@@ -863,12 +853,6 @@ export interface HostOperator {
   agentPullRequestAction(
     params: AgentPullRequestActionParams,
   ): Effect.Effect<AgentPullRequestWriteAnswerView>;
-  /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
-  agentPullRequestViewed(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentPullRequestViewedAnswerView>;
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
-  agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
   agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
   /** One agent's own tools let go by the windows. */
@@ -939,6 +923,7 @@ export interface HostOperator {
   agentInboxStart(params: AgentInboxStartParams): Effect.Effect<AgentInboxMessagedView>;
   /** One item marked read or unread for the account; its read state, or why there is no answer. */
   agentInboxReadState(params: AgentInboxReadStateParams): Effect.Effect<AgentInboxReadStateView>;
+  agentInboxSnooze(params: AgentInboxSnoozeParams): Effect.Effect<AgentInboxReadStateView>;
   /** Where one item the account may read stands, its agent, task, and workspace; or why there is no answer. */
   agentInboxItemHome(params: AgentInboxItemHomeParams): Effect.Effect<AgentInboxItemHomeView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
@@ -1734,22 +1719,36 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         listener,
       ),
     workspaceInvitationsFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, scope)),
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
     workspaceInvitationsUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, scope)),
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
+    workspaceInvitationsRetry: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
     onWorkspaceInvitationsChanged: (listener) =>
       on(
         GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(workspaceInvitationsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        // Note that the held invitations are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceInvitations>(payload) : undefined),
         listener,
       ),
-    workspacePhoto: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
+    onWorkspacePhotosChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED,
+        // Note that the held photos are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspacePhotos>(payload) : undefined),
+        listener,
       ),
     workspaceTokenRepositoriesFollow: (params) =>
       fire(
@@ -1814,11 +1813,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
         answerOf(tasksWorkspaceLeaveAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvitations: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceInvite: (params) =>
       Effect.map(
@@ -2255,16 +2249,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentPullRequestWriteAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentPullRequestViewed: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
-        answerOf(agentPullRequestViewedAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentReviewOptions: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
-        answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     agentWorkspaceToolsFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),
     agentWorkspaceToolsUnfollow: (params) =>
@@ -2437,6 +2421,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_INBOX_READ_STATE, {
           itemId: params.itemId,
           unread: params.unread,
+        }),
+        answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
+      ),
+    agentInboxSnooze: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_SNOOZE, {
+          itemId: params.itemId,
+          until: params.until,
         }),
         answerOf(agentInboxReadStateViewSchema, AGENT_UNANSWERED),
       ),

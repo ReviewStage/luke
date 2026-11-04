@@ -123,11 +123,16 @@ function holdHosts(hostsOf: () => readonly HostLine[]): (signedInAs?: string) =>
   });
   return (signedInAs) => {
     version += 1;
-    if (signedInAs !== undefined) {
-      account = { ...(account ?? assert.fail("a document is handed")), id: signedInAs };
-      accountId = signedInAs;
+    if (signedInAs === undefined) {
+      for (const listener of [...listeners]) listener({ version, entries: laid() });
+      return;
     }
-    const entries = signedInAs === undefined ? laid() : { ...laid(), account };
+    const standing = account ?? assert.fail("a document is handed");
+    if (standing.status !== ACCOUNT_STATUS.SIGNED_IN) assert.fail("the window is signed in");
+    const next = { ...standing, id: signedInAs };
+    account = next;
+    accountId = signedInAs;
+    const entries = { ...laid(), account: next };
     for (const listener of [...listeners]) listener({ version, entries });
   };
 }

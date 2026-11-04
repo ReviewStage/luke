@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { WORKSPACE_PHOTO_TYPE } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
+import { LIVE_READ } from "@repo/features/live-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref.js";
 
@@ -18,12 +17,20 @@ import { WORKSPACE_REF_SIZE, WorkspaceCard, WorkspaceRef } from "./workspace-ref
  * hung, and its card saying who shares it. Synthetic workspaces throughout.
  */
 
-const PHOTO = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
+const PHOTO_URL = "data:image/png;base64,iVBORw0KGgo=";
 
 const roots: Root[] = [];
 
 beforeEach(() => {
-  fakeActPort({ [ACT_KIND.WORKSPACE_PHOTO_READ]: () => Promise.resolve(PHOTO) });
+  // Note that the host holds the photo of the workspace a test draws with one.
+  handState(
+    {},
+    {
+      [LIVE_READ.WORKSPACE_PHOTOS]: {
+        "workspace-photo-ref": { rows: { version: "5a5a5a5a5a5a5a5a", url: PHOTO_URL } },
+      },
+    },
+  );
 });
 
 afterEach(() => {
@@ -31,7 +38,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Lets the photo's read, and the redraw it causes, land. */
+/** Lets the window's document, and the redraw it causes, land. */
 async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
@@ -77,7 +84,7 @@ test("a workspace with a photo is named by the photo once it loads, and the name
   const image = view.querySelector("img") ?? assert.fail("the photo is asked for");
   act(() => image.dispatchEvent(new Event("load")));
 
-  assert.equal(image.getAttribute("src"), `data:image/png;base64,${PHOTO.base64}`);
+  assert.equal(image.getAttribute("src"), PHOTO_URL);
   assert.equal(view.querySelector(".ui-avatar[data-shape='tile']")?.textContent, "");
   assert.equal(heard(view), "Stage");
 });

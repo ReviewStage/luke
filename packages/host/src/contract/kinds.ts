@@ -201,8 +201,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   AGENTS_CHANGES: "agents.changes",
-  /** What the reviewer and label pickers of an agent's Pull request tab offer. */
-  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
    * Our own tools one agent is offered, held for the window while it holds
    * the stream open and a while after among those let go lately, asked again
@@ -216,8 +214,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
-  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
-  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
 } as const;
 
 /**
@@ -250,6 +246,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
+  /** One item snoozed for the account until an instant, or its snooze ended; it marks the item read, and changes neither what it asks nor whether it waits. */
+  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
   /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
@@ -564,7 +562,7 @@ export const UPDATE_ACT_KIND = {
  * the account owns; one renamed by its owners and admins, answered under
  * its new name; one's photo set as a `data:` URL or removed with null by
  * its owners and admins, answered with the photo's new version or none;
- * one's pending invitations read, one made, answered
+ * one's pending invitations held, one made, answered
  * with its accept link, and one canceled, for its owners and admins; a GitHub
  * organization connected to one, our GitHub App's install address the
  * service answers opened in the browser, or disconnected from it; one
@@ -580,7 +578,6 @@ export const UPDATE_ACT_KIND = {
 export const WORKSPACE_ACT_KIND = {
   WORKSPACE_CREATE: "workspace.create",
   WORKSPACE_RENAME: "workspace.rename",
-  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
   WORKSPACE_INVITE: "workspace.invite",
   WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
   WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
@@ -604,16 +601,18 @@ export const WORKSPACE_ACT_KIND = {
   /** A held workspace's people read again at once, as Try again asks. */
   WORKSPACE_MEMBERS_RETRY: "workspace.membersRetry",
   /**
-   * A workspace's pending invitations, followed for an owner or an admin
-   * while the window holds the stream open: as they first stand, then each
-   * time they move, or why there are none.
+   * A workspace's pending invitations, held for an owner or an admin while
+   * the window holds the stream open; the stream carries nothing, and what
+   * they hold reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_INVITATIONS`).
    */
-  WORKSPACE_INVITATIONS: "workspace.invitations",
+  WORKSPACE_INVITATIONS_FOLLOW: "workspace.invitationsFollow",
+  /** A held workspace's invitations read again at once, as Try again asks. */
+  WORKSPACE_INVITATIONS_RETRY: "workspace.invitationsRetry",
   WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_LEAVE: "workspace.leave",
-  WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   WORKSPACE_SLUG_SET: "workspace.slugSet",
   /**
@@ -785,12 +784,10 @@ export const PORT_ACT_USE = {
   AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
   AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
-  AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
   AGENTS_PULL_REQUEST_ACTION: ACT_USE.WRITE,
-  AGENTS_PULL_REQUEST_VIEWED: ACT_USE.READ,
 
   AGENTS_INBOX_FOLLOW: ACT_USE.READ,
   AGENTS_INBOX_RETRY: ACT_USE.READ,
@@ -800,6 +797,7 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_MESSAGE: ACT_USE.WRITE,
   AGENTS_INBOX_START: ACT_USE.WRITE,
   AGENTS_INBOX_READ_STATE: ACT_USE.WRITE,
+  AGENTS_INBOX_SNOOZE: ACT_USE.WRITE,
   AGENTS_INBOX_ITEM_HOME: ACT_USE.FETCH,
   AGENTS_INBOX_READ_ALL: ACT_USE.WRITE,
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
@@ -934,7 +932,6 @@ export const PORT_ACT_USE = {
 
   WORKSPACE_CREATE: ACT_USE.WRITE,
   WORKSPACE_RENAME: ACT_USE.WRITE,
-  WORKSPACE_INVITATIONS_READ: ACT_USE.READ,
   WORKSPACE_INVITE: ACT_USE.WRITE,
   WORKSPACE_INVITATION_CANCEL: ACT_USE.WRITE,
   WORKSPACE_GITHUB_CONNECT: ACT_USE.WRITE,
@@ -950,12 +947,12 @@ export const PORT_ACT_USE = {
   WORKSPACE_SLACK_BOT_CHANNEL: ACT_USE.WRITE,
   WORKSPACE_MEMBERS_FOLLOW: ACT_USE.READ,
   WORKSPACE_MEMBERS_RETRY: ACT_USE.READ,
-  WORKSPACE_INVITATIONS: ACT_USE.READ,
+  WORKSPACE_INVITATIONS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_INVITATIONS_RETRY: ACT_USE.READ,
   WORKSPACE_MEMBER_REMOVE: ACT_USE.WRITE,
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,
   WORKSPACE_TRANSFER: ACT_USE.WRITE,
   WORKSPACE_LEAVE: ACT_USE.WRITE,
-  WORKSPACE_PHOTO_READ: ACT_USE.READ,
   WORKSPACE_PHOTO_SET: ACT_USE.WRITE,
   WORKSPACE_SLUG_SET: ACT_USE.WRITE,
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,

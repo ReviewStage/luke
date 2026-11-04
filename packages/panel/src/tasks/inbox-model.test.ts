@@ -43,6 +43,7 @@ import {
   type InboxListView,
   type InboxShow,
   type InboxWhose,
+  inboxAtNow,
   inboxBoard,
   inboxCommentFiles,
   inboxCounts,
@@ -667,6 +668,7 @@ test("Open addressed to the reader lists their own open items, read or not, neve
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId, MINE), {
     [INBOX_SHOW.OPEN]: 3,
     [INBOX_SHOW.ALL]: 4,
+    [INBOX_SHOW.SNOOZED]: 0,
   });
 });
 
@@ -709,7 +711,31 @@ test("Addressed to lists anyone's items, the reader's own, items whose starter t
   assert.deepEqual(inboxCounts(SHARED, ME.userId, dana), {
     [INBOX_SHOW.OPEN]: 1,
     [INBOX_SHOW.ALL]: 2,
+    [INBOX_SHOW.SNOOZED]: 0,
   });
+});
+
+test("an item the reader snoozed leaves Open and All for Snoozed until its snooze passes, then comes back unread at the top, and a change that made it unread ended its snooze early", () => {
+  const groups = [
+    {
+      holder: taskHolder(BILLING),
+      items: [
+        item({ id: "snoozed", updatedAt: 10, unread: false, snoozedUntil: 500 }),
+        item({ id: "woken", updatedAt: 20, unread: true, snoozedUntil: 500 }),
+        item({ id: "plain", updatedAt: 30 }),
+      ],
+    },
+  ];
+  const rows = (now: number, show: InboxShow) =>
+    drawn(inboxList(inboxAtNow(groups, now), { show, readerId: undefined, chosen: undefined }));
+  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain", "woken"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain", "woken"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.SNOOZED), ["snoozed"]);
+  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.SNOOZED], 1);
+  assert.deepEqual(rows(500, INBOX_SHOW.OPEN), ["snoozed", "plain", "woken"]);
+  assert.deepEqual(rows(500, INBOX_SHOW.SNOOZED), []);
+  const back = inboxAtNow(groups, 500)[0]?.items.find((each) => each.id === "snoozed");
+  assert.equal(back?.unread, true, "it comes back unread");
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {

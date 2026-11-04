@@ -70,6 +70,7 @@ import {
   pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
+import { countedNumber } from "./service-wire.js";
 import { workspaceToolsAnswerSchema } from "./workspace-tools-wire.js";
 
 /**
@@ -523,12 +524,14 @@ export const agentPullRequestReadParamsSchema = EffectSchema.Struct({
 
 export type AgentPullRequestReadParams = typeof agentPullRequestReadParamsSchema.Type;
 
-/** The parts of a pull request its Pull request tab holds, each a read of its own: the pull request itself, its checks, its conversation, and what the agent published. */
+/** The parts of a pull request its Pull request tab holds, each a read of its own: the pull request itself, its checks, its conversation, what the agent published, what its reviewer and label pickers offer, and which of its files the member marked viewed. */
 export const PULL_REQUEST_PART = {
   PULL_REQUEST: "pullRequest",
   CHECKS: "checks",
   CONVERSATION: "conversation",
   PUBLISHED: "published",
+  REVIEW_OPTIONS: "reviewOptions",
+  VIEWED: "viewed",
 } as const;
 
 export type PullRequestPart = (typeof PULL_REQUEST_PART)[keyof typeof PULL_REQUEST_PART];
@@ -711,6 +714,14 @@ export const agentInboxReadStateParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentInboxReadStateParams = typeof agentInboxReadStateParamsSchema.Type;
+
+/** One item snoozed for the account until an instant, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null. */
+export const agentInboxSnoozeParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  until: EffectSchema.NullOr(countedNumber),
+});
+
+export type AgentInboxSnoozeParams = typeof agentInboxSnoozeParamsSchema.Type;
 
 /** One item marked read or unread, as the window hears it: the item's id and its read state for the account, or why there is no answer. */
 export const agentInboxReadStateViewSchema = EffectSchema.Union([inboxReadStateSchema, failed]);

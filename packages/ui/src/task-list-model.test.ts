@@ -18,6 +18,7 @@ import {
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  repositoryParts,
   SHOWN_STATUSES,
   TASK_ORDER,
   type TaskRow,
@@ -88,6 +89,11 @@ test("two repositories sharing a name are told apart by their owners", () => {
   expect(repositoryLabel("labs/site", groupsByRepository([task("b", "labs/site", 1, 1)]))).toBe(
     "site",
   );
+});
+
+test("a repository splits into its owner and its name, and a name with no owner is its name alone", () => {
+  expect(repositoryParts("acme/relay")).toEqual({ owner: "acme", name: "relay" });
+  expect(repositoryParts("relay")).toEqual({ owner: undefined, name: "relay" });
 });
 
 test("filtered to one creator, the list holds only the tasks they created; filtered to nobody, every task", () => {
