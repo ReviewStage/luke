@@ -40,13 +40,15 @@
  * message names as `owner/name` where the workspace reaches it, else in the
  * channel's default repository, else in the workspace's, both as an owner
  * or admin named them in Settings, else in the repository of the writer's
- * latest agent in the workspace, else in none. The PNG,
- * JPEG, and WebP images the message shared are read from Slack on the bot's
- * token once the writer is found (`SlackBot.download`), sniffed by their
- * bytes and held to the bounds a Start holds a message's files to, a large
- * one read as Slack's own 1024-pixel thumbnail of it, and handed to the agent
- * as the message's files, a Start's or a steer's alike; any other file is
- * left out, and a message of images alone is acted on as one with words.
+ * latest agent in the workspace, else in none. The images the message
+ * shared are read from Slack on the bot's token once the writer is found
+ * (`SlackBot.download`), sniffed by their bytes and held to the bounds a
+ * Start holds a message's files to: a PNG, JPEG, or WebP within them read
+ * whole, and a larger one, or one of a type no model reads (a Mac's HEIC
+ * screenshot), read as the largest thumbnail Slack made of it, and handed to
+ * the agent as the message's files, a Start's or a steer's alike; any other
+ * file is left out, and a message of images alone is acted on as one with
+ * words.
  * Its prompt is the writer's words, the thread's earlier messages fenced as data, since anyone in the channel wrote them, and the
  * message's link; only the writer's own words hand it MCP servers. Its
  * first line, and each message sent on, says Slack carried it, with the
@@ -160,8 +162,11 @@ const SLACK_EVENT = { APP_MENTION: "app_mention", MESSAGE: "message" } as const;
 /** The one subtype of a message acted on: a member's message that shares files. */
 const SLACK_FILE_SHARE = "file_share";
 
-/** The image types a shared file is read as, Slack's own word for each the one a Start's file travels as. */
+/** The image types a shared file is read whole as, Slack's own word for each the one a Start's file travels as. */
 const SHARED_IMAGE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+
+/** The prefix of the type Slack names any image by, whose thumbnail is read where the file itself is not. */
+const IMAGE_TYPE_PREFIX = "image/";
 
 /** What a shared image is named where Slack names it nothing. */
 const SHARED_IMAGE_NAME = "image";
@@ -240,6 +245,11 @@ const EventCallbackSchema = Schema.Struct({
           size: Schema.optionalKey(Schema.Number),
           url_private_download: Schema.optionalKey(Schema.String),
           thumb_1024: Schema.optionalKey(Schema.String),
+          thumb_960: Schema.optionalKey(Schema.String),
+          thumb_800: Schema.optionalKey(Schema.String),
+          thumb_720: Schema.optionalKey(Schema.String),
+          thumb_480: Schema.optionalKey(Schema.String),
+          thumb_360: Schema.optionalKey(Schema.String),
         }),
       ),
     ),
@@ -262,7 +272,7 @@ interface SlackAddressed {
   readonly threadTs: string | undefined;
   /** The member's words, the bot's mention taken out; empty where the message shared images alone. */
   readonly text: string;
-  /** The images the message shared, by the type Slack names, as many as a message may carry; none where it shared none. */
+  /** The images the message shared, of any type Slack names an image, as many as a message may carry; none where it shared none. */
   readonly images: readonly SharedFile[];
 }
 
@@ -328,7 +338,7 @@ function addressedOf(callback: EventCallback): SlackAddressed | SlackDrop {
   }
   const text = withoutBotMention(event.text ?? "", botUserId);
   const images = (event.files ?? [])
-    .filter((file) => file.mimetype !== undefined && SHARED_IMAGE_TYPES.has(file.mimetype))
+    .filter((file) => file.mimetype?.startsWith(IMAGE_TYPE_PREFIX) === true)
     .slice(0, AGENT_BOUNDS.MAX_ATTACHMENTS);
   if (text === "" && images.length === 0) return SLACK_DROP.EMPTY;
   return {
@@ -353,11 +363,32 @@ function sharedImageName(file: SharedFile): string {
 }
 
 /**
+ * Where a shared image is read from: the file itself where it is of a type
+ * a model reads and Slack says it is within one image's bound, else the
+ * largest thumbnail Slack made of it; nothing where Slack made none.
+ */
+function sharedImageUrl(file: SharedFile): string | undefined {
+  const whole =
+    file.mimetype !== undefined &&
+    SHARED_IMAGE_TYPES.has(file.mimetype) &&
+    file.size !== undefined &&
+    file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES;
+  if (whole) return file.url_private_download;
+  return (
+    file.thumb_1024 ??
+    file.thumb_960 ??
+    file.thumb_800 ??
+    file.thumb_720 ??
+    file.thumb_480 ??
+    file.thumb_360
+  );
+}
+
+/**
  * The images the message shared, read from Slack and made the files a
- * message carries, in the order shared: each read whole where Slack says it
- * is within one image's bound, else as its 1024-pixel thumbnail, sniffed by
- * its bytes; one that failed, is no image, or would take the files past
- * their bytes together is left out.
+ * message carries, in the order shared, each from where `sharedImageUrl`
+ * says and sniffed by its bytes; one that failed, is no PNG, JPEG, or WebP,
+ * or would take the files past their bytes together is left out.
  */
 const sharedImages = Effect.fnUntraced(function* (
   bot: SlackBotService,
@@ -366,10 +397,7 @@ const sharedImages = Effect.fnUntraced(function* (
   const attachments: AgentAttachment[] = [];
   let bytesTogether = 0;
   for (const file of images) {
-    const url =
-      file.size !== undefined && file.size <= AGENT_BOUNDS.MAX_IMAGE_BYTES
-        ? file.url_private_download
-        : file.thumb_1024;
+    const url = sharedImageUrl(file);
     if (url === undefined) continue;
     const read = yield* bot.download(url, AGENT_BOUNDS.MAX_IMAGE_BYTES);
     if (Option.isNone(read)) continue;

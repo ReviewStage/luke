@@ -308,7 +308,7 @@ function threadMention(slackUserId: string, eventId: string, threadTs: string): 
   });
 }
 
-/** Slack's direct message to the bot by the Slack user given, sharing a screenshot and a PDF with no words, as Connect forwards it. */
+/** Slack's direct message to the bot by the Slack user given, sharing a PNG screenshot, a Mac's HEIC one, and a PDF with no words, as Connect forwards it. */
 function directShare(slackUserId: string, eventId: string): Request {
   const shared = (name: string, mimetype: string) => ({
     name,
@@ -329,7 +329,14 @@ function directShare(slackUserId: string, eventId: string): Request {
       text: "",
       ts: "1700000003.000400",
       channel: "D0002",
-      files: [shared("screen.png", "image/png"), shared("notes.pdf", "application/pdf")],
+      files: [
+        shared("screen.png", "image/png"),
+        {
+          ...shared("mac.heic", "image/heic"),
+          thumb_720: "https://files.slack.com/files-tmb/T0001-F0002/mac_720.png",
+        },
+        shared("notes.pdf", "application/pdf"),
+      ],
     },
   };
   return new Request(new URL(EVENTS, ORIGIN), {
@@ -768,7 +775,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
     },
   );
   it.effect(
-    "a direct message sharing an image and no words starts an agent handed the image, and leaves the PDF beside it out",
+    "a direct message sharing images and no words starts an agent handed them, a HEIC one as Slack's thumbnail, and leaves the PDF beside them out",
     () => {
       const calls: SlackCall[] = [];
       const read: string[] = [];
@@ -794,6 +801,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
         assert.deepEqual(read, [
           "https://files.slack.com/files-pri/T0001-F0001/download/screen.png",
+          "https://files.slack.com/files-tmb/T0001-F0002/mac_720.png",
         ]);
         const [first] = yield* (yield* Database)
           .select({ parts: messages.parts })
@@ -804,7 +812,10 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const files = (first?.parts ?? []).flatMap((part) =>
           part.type === "file" ? [{ filename: part.filename, mediaType: part.mediaType }] : [],
         );
-        assert.deepEqual(files, [{ filename: "screen.png", mediaType: "image/png" }]);
+        assert.deepEqual(files, [
+          { filename: "screen.png", mediaType: "image/png" },
+          { filename: "mac.heic", mediaType: "image/png" },
+        ]);
       });
     },
   );
