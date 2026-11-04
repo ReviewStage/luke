@@ -1,10 +1,13 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { utcDayKey } from "@repo/database/models/quota";
 import type {
+  AdminActionDay,
   AdminUserAccount,
+  AdminUserActions,
   AdminUserAllTime,
   AdminUserDetail,
 } from "@repo/features/admin-answer-wire";
+import { MEANINGFUL_ACTION, type MeaningfulAction } from "@repo/features/admin-overview-vocabulary";
 import {
   type AdminMetricsWindow,
   type AdminUserQuery,
@@ -22,16 +25,18 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
  * One account's own page behind the overview's table, answering the question
  * the aggregates cannot: is this person living in the app daily, or did one heavy
  * afternoon put them on the board? It reads the same rows the overview already
- * aggregates — the user row, its linked provider rows, and the hosted-usage
- * days — behind the same admin gate, and it widens no analytics event: the
- * day-level signal here is the row the hosted tier already writes to meter
- * itself, never anything read off the user's machine.
+ * aggregates — the user row, its linked provider rows, its meaningful actions,
+ * and the retired hosted-usage days — behind the same admin gate, and it
+ * widens no analytics event: every day-level signal here is a row the service
+ * already keeps, never anything read off the user's machine.
  */
 
 /** How many complete weeks the account calendar reaches back past the current one. */
 const CALENDAR_COMPLETE_WEEKS = 52;
 
 const DAYS_PER_WEEK = 7;
+
+const ACTION_KINDS = Object.values(MEANINGFUL_ACTION);
 
 /**
  * The account calendar's UTC day keys, oldest first: the last 52 complete
@@ -53,11 +58,66 @@ export function calendarDayKeys(now: number): string[] {
  */
 export interface AdminUserSource {
   account: AdminUserAccount;
+  /** Each UTC day of the calendar's trailing year with an action, by kind: the one series the activity folds. */
+  actionsByDay: ReadonlyMap<string, ReadonlyMap<MeaningfulAction, number>>;
   usage: {
     byDay: ReadonlyMap<string, number>;
     /** The calendar's own rows, read at the trailing-year bound. */
     calendarByDay: ReadonlyMap<string, number>;
     allTime: AdminUserAllTime;
+  };
+}
+
+/** Consecutive active days ending today or yesterday, since today may simply not have started yet. */
+function currentStreak(activeFlags: readonly boolean[]): number {
+  let streakEnd = activeFlags.length - 1;
+  if (!activeFlags[streakEnd]) streakEnd -= 1;
+  let streak = 0;
+  for (let index = streakEnd; index >= 0 && activeFlags[index]; index -= 1) streak += 1;
+  return streak;
+}
+
+function actionTotal(day: AdminActionDay): number {
+  return sum(ACTION_KINDS.map((kind) => day[kind]));
+}
+
+/**
+ * Folds the account's meaningful actions into the page's live activity. The
+ * trailing year is zero-filled once, and the window, the trends, the streak,
+ * and the first and last active days are all read off it; the widest window
+ * and both trend runs sit inside the year.
+ */
+function buildAdminUserActions(
+  actionsByDay: AdminUserSource["actionsByDay"],
+  now: number,
+  windowDays: AdminMetricsWindow,
+): AdminUserActions {
+  const year = calendarDayKeys(now).map((day): AdminActionDay => {
+    const counts = actionsByDay.get(day);
+    return {
+      day,
+      [MEANINGFUL_ACTION.TASKS_CREATED]: counts?.get(MEANINGFUL_ACTION.TASKS_CREATED) ?? 0,
+      [MEANINGFUL_ACTION.PLAN_REVISIONS]: counts?.get(MEANINGFUL_ACTION.PLAN_REVISIONS) ?? 0,
+      [MEANINGFUL_ACTION.AGENTS_STARTED]: counts?.get(MEANINGFUL_ACTION.AGENTS_STARTED) ?? 0,
+    };
+  });
+  const totals = year.map(actionTotal);
+  const trendTotals = totals.slice(-ADMIN_TREND_DAYS * 2);
+  const windowTotals = totals.slice(-windowDays);
+  const activeDays = year.filter((_, index) => (totals[index] ?? 0) > 0).map((day) => day.day);
+
+  return {
+    daily: year.slice(-windowDays),
+    calendarDaily: year.map((day, index) => ({ day: day.day, count: totals[index] ?? 0 })),
+    actionsTrend: trailingTrend(trendTotals, ADMIN_TREND_DAYS),
+    activeDaysWindow: windowTotals.filter((total) => total > 0).length,
+    activeDaysTrend: trailingTrend(
+      trendTotals.map((total) => (total > 0 ? 1 : 0)),
+      ADMIN_TREND_DAYS,
+    ),
+    currentStreakDays: currentStreak(totals.map((total) => total > 0)),
+    firstActiveDay: activeDays[0] ?? null,
+    lastActiveDay: activeDays.at(-1) ?? null,
   };
 }
 
@@ -85,17 +145,12 @@ export function buildAdminUserDetail(
   }));
 
   const activeFlags = daily.map((day) => day.calls > 0);
-  let streakEnd = activeFlags.length - 1;
-  if (!activeFlags[streakEnd]) streakEnd -= 1;
-  let currentStreakDays = 0;
-  for (let index = streakEnd; index >= 0 && activeFlags[index]; index -= 1) {
-    currentStreakDays += 1;
-  }
 
   return {
     generatedAt: now,
     windowDays,
     account: source.account,
+    actions: buildAdminUserActions(source.actionsByDay, now, windowDays),
     activity: {
       daily,
       calendarDaily,
@@ -105,7 +160,7 @@ export function buildAdminUserDetail(
         trendTotals.map((total) => (total > 0 ? 1 : 0)),
         ADMIN_TREND_DAYS,
       ),
-      currentStreakDays,
+      currentStreakDays: currentStreak(activeFlags),
       callsWindow: sum(daily.map((day) => day.calls)),
       allTime: source.usage.allTime,
     },
@@ -113,7 +168,6 @@ export function buildAdminUserDetail(
       support,
       now,
       dayStart(dayKeys[0] ?? utcDayKey(now)).getTime(),
-      source.usage.allTime.lastActiveDay,
     ),
   };
 }

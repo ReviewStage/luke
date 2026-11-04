@@ -109,3 +109,19 @@ export const RETENTION_BASIS = {
 } as const;
 
 export type RetentionBasis = (typeof RETENTION_BASIS)[keyof typeof RETENTION_BASIS];
+
+/**
+ * What a meaningful action was, the kinds `meaningfulActions` unions, in the
+ * order an account page's daily chart stacks them from its base. The values
+ * are the overview's own daily-count names for the same rows.
+ */
+export const MEANINGFUL_ACTION = {
+  /** A task created (`task.created_at`). */
+  TASKS_CREATED: "tasksCreated",
+  /** A plan revision written as the developer, under their user id. */
+  PLAN_REVISIONS: "planRevisions",
+  /** A coding agent started (`agent.created_at`), however it was started. */
+  AGENTS_STARTED: "agentsStarted",
+} as const;
+
+export type MeaningfulAction = (typeof MEANINGFUL_ACTION)[keyof typeof MEANINGFUL_ACTION];

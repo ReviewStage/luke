@@ -43,7 +43,6 @@ import type { AutomationRunReason } from "@repo/features/automation-wire";
 import { PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import { EXPERIMENTS, type ExperimentChoices } from "@repo/settings";
 import { agentFailureOf, agentStatusOf } from "../agents/coder-host/status.js";
-import { lastSeenInstant } from "./admin-users.js";
 
 /** How many of the account's newest coding agents the page lists. */
 export const ADMIN_RECENT_AGENTS_LIMIT = 10;
@@ -196,15 +195,13 @@ function credentialFailures(
 /**
  * Folds one account's queried rows into the page's support sections, read
  * at `now` over the window starting at `windowStart` (epoch milliseconds,
- * the window's first UTC day). The usage day `lastActiveDay` is the
- * account's newest hosted-usage day, which `lastSeenInstant` folds with the
- * session write as the roster does, so the two pages say the same.
+ * the window's first UTC day). Last seen is the newest sign-in session
+ * write alone, as the roster's is, so the two pages say the same.
  */
 export function buildAdminAccountSupport(
   source: AdminAccountSource,
   now: number,
   windowStart: number,
-  lastActiveDay: string | null,
 ): AdminAccountSupport {
   // The failed share is of the agents started in the window, as the count beside it is.
   const windowRead = source.windowAgents
@@ -227,7 +224,7 @@ export function buildAdminAccountSupport(
     .slice(0, ADMIN_ACCOUNT_FAILURES_LIMIT);
 
   return {
-    lastSeenAt: lastSeenInstant(source.sessionSeenAt, lastActiveDay),
+    lastSeenAt: source.sessionSeenAt?.getTime() ?? null,
     totals: {
       tasksCreated: source.totals.tasksCreated,
       agentsStarted: source.totals.agentsStarted,

@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { agentTable } from "@repo/database/schemas/agent";
 import { account, user } from "@repo/database/schemas/auth";
+import { planRevision } from "@repo/database/schemas/plan-revision";
 import { conversations } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { hostedUsage } from "@repo/database/schemas/usage";
@@ -14,16 +15,20 @@ import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
 } from "@repo/features/admin-wire";
+import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
-import { readAdminUsersSource } from "./admin-queries.js";
+import { readAdminAccountSource } from "./admin-account-queries.js";
+import { readAdminUserSource, readAdminUsersSource } from "./admin-queries.js";
+import { buildAdminUserDetail } from "./admin-user.js";
 
 /**
  * admin-queries.test.ts -- the Users read carries the sign-in methods the
  * Overview used to: every account the scope keeps, by each method it linked,
  * whatever the search narrowed the rows to, and an admin's own left out
  * while admins are hidden; and it ranks and counts accounts by meaningful
- * actions, never by hosted calls. Synthetic accounts throughout.
+ * actions, never by hosted calls, as one account's page reads its activity.
+ * Synthetic accounts throughout.
  *
  * The file has its database to itself (`getTestDB` opens a fresh PGlite, or
  * clones the migrated Postgres, per file), so a user id needs no random part
@@ -57,9 +62,10 @@ let taskNumbers = 0;
 const createTask = (userId: string, organizationId: string, createdAt: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
+    const id = randomUUID();
     taskNumbers += 1;
     yield* db.insert(task).values({
-      id: randomUUID(),
+      id,
       userId,
       organizationId,
       name: "Synthetic task",
@@ -67,7 +73,23 @@ const createTask = (userId: string, organizationId: string, createdAt: string) =
       document: "",
       createdAt: new Date(createdAt),
     });
+    return id;
   });
+
+/** A plan revision of `taskId`, numbered `seq`, written by `actor` as `userId`. */
+const revisePlan = (taskId: string, seq: number, actor: PlanActor, userId: string, at: string) =>
+  Database.use((db) =>
+    db.insert(planRevision).values({
+      taskId,
+      seq,
+      actor,
+      userId,
+      document: "",
+      changes: 1,
+      startedAt: new Date(at),
+      at: new Date(at),
+    }),
+  );
 
 const startAgent = (userId: string, organizationId: string, createdAt: string) =>
   Effect.gen(function* () {
@@ -159,6 +181,51 @@ it.layer(getTestDB())("the Users read", (it) => {
           [dictating, 0, null, null],
         ],
       );
+    }),
+  );
+
+  it.effect("reads an account's activity from its meaningful actions, with no hosted usage", () =>
+    Effect.gen(function* () {
+      const db = yield* Database;
+      const builder = yield* openAccount("page-builder", []);
+      const neighbor = yield* openAccount("page-neighbor", []);
+      const workspace = yield* openWorkspace(builder);
+      // Today and yesterday each hold a task or a revision and an agent, the
+      // day before is quiet, and one task stands before that.
+      const today = yield* createTask(builder, workspace, "2026-10-21T09:00:00Z");
+      yield* startAgent(builder, workspace, "2026-10-21T10:00:00Z");
+      yield* revisePlan(today, 1, PLAN_ACTOR.DEVELOPER, builder, "2026-10-20T09:00:00Z");
+      yield* startAgent(builder, workspace, "2026-10-20T08:00:00Z");
+      yield* createTask(builder, workspace, "2026-10-18T09:00:00Z");
+      // An agent's revision is the agent's, and a year and more ago is past the read.
+      yield* revisePlan(today, 2, PLAN_ACTOR.AGENT, builder, "2026-10-19T09:00:00Z");
+      yield* createTask(builder, workspace, "2025-09-01T09:00:00Z");
+      // A neighbor's task on the quiet day, and hosted calls of the neighbor's alone.
+      yield* createTask(neighbor, workspace, "2026-10-19T09:00:00Z");
+      yield* db.insert(hostedUsage).values({ userId: neighbor, day: "2026-10-19", calls: 40 });
+
+      const windowDays = ADMIN_METRICS_WINDOW.MONTH;
+      const [source, support] = yield* Effect.all([
+        readAdminUserSource({ userId: builder, now: NOW, windowDays }),
+        readAdminAccountSource({ userId: builder, now: NOW, windowDays }),
+      ]);
+      if (source === undefined) throw new Error("the account was not read");
+      const { actions, activity } = buildAdminUserDetail(source, support, NOW, windowDays);
+
+      assert.deepEqual(actions.daily.slice(-4), [
+        { day: "2026-10-18", tasksCreated: 1, planRevisions: 0, agentsStarted: 0 },
+        { day: "2026-10-19", tasksCreated: 0, planRevisions: 0, agentsStarted: 0 },
+        { day: "2026-10-20", tasksCreated: 0, planRevisions: 1, agentsStarted: 1 },
+        { day: "2026-10-21", tasksCreated: 1, planRevisions: 0, agentsStarted: 1 },
+      ]);
+      assert.equal(actions.activeDaysWindow, 3);
+      assert.deepEqual(actions.activeDaysTrend, { days: 7, recent: 3, prior: 0 });
+      assert.deepEqual(actions.actionsTrend, { days: 7, recent: 5, prior: 0 });
+      assert.equal(actions.currentStreakDays, 2);
+      assert.equal(actions.firstActiveDay, "2026-10-18");
+      assert.equal(actions.lastActiveDay, "2026-10-21");
+      assert.deepEqual(actions.calendarDaily.at(-1), { day: "2026-10-21", count: 2 });
+      assert.equal(activity.activeDaysWindow, 0);
     }),
   );
 });

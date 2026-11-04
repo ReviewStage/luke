@@ -98,6 +98,18 @@ export function AccountActivityNote(): React.JSX.Element {
   );
 }
 
+/** What the account page's live activity counts: the Overview's and the roster's active day. */
+export function AccountActionsNote(): React.JSX.Element {
+  return (
+    <SectionNote>
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      agent. Plan revisions count the account's own. The streak, Last active, and the calendar read
+      back a trailing year. A deleted task takes its agents and revisions with it, so past days can
+      empty.
+    </SectionNote>
+  );
+}
+
 export function RosterNote({
   truncatedTo,
   searched,
