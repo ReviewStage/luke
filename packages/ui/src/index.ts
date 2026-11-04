@@ -138,6 +138,7 @@ export * from "./components/selection/selection-menu.js";
 export * from "./components/selection/selection-region.js";
 export * from "./components/settings-page/settings-page.js";
 export * from "./components/settings-row/settings-row.js";
+export * from "./components/settings-row/settings-row-fold.js";
 export * from "./components/settings-section/settings-section.js";
 export * from "./components/shimmer/shimmer.js";
 export * from "./components/shortcut/shortcut.js";

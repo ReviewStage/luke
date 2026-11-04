@@ -5,6 +5,7 @@ import {
   MoreButton,
   moreLabel,
   opensMenu,
+  SettingsFoldRow,
   SettingsRow,
   type SettingsRowControl,
   type SettingsRowIndent,
@@ -33,8 +34,10 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
  *
  * Its acts may come in groups, a rule between each. The ⋯ is `@repo/ui`'s
  * quiet `IconButton`. A row given its words (`row`) stands in `@repo/ui`'s
- * `SettingsRow`, its control and the ⋯ at the row's end; one given
- * `children` still draws them in the window's own row, until its page moves.
+ * `SettingsRow`, its control and the ⋯ at the row's end, or, where it folds
+ * lines open under its words, in `SettingsFoldRow`, its ⋯ before the chevron;
+ * one given `children` still draws them in the window's own row, until its
+ * page moves.
  */
 
 /** A row's acts: one list, or lists drawn with a rule between each. */
@@ -59,6 +62,8 @@ interface MenuRowWords {
   landed?: boolean;
   /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
   indent?: SettingsRowIndent;
+  /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, the chevron's name, and whether it starts open. */
+  fold?: { lines: ReactNode; label: string; defaultOpen: boolean };
 }
 
 /** What the row draws: its words for the shared row, or its own children in the window's row. */
@@ -145,6 +150,18 @@ export function MenuRow({
             {children}
             {more}
           </>
+        ) : row.fold !== undefined ? (
+          <SettingsFoldRow
+            indent={row.indent}
+            leading={row.leading}
+            label={row.label}
+            description={row.description}
+            foldLabel={row.fold.label}
+            defaultOpen={row.fold.defaultOpen}
+            actions={() => more}
+          >
+            {row.fold.lines}
+          </SettingsFoldRow>
         ) : (
           <SettingsRow
             indent={row.indent}

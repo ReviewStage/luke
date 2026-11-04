@@ -84,6 +84,27 @@ export const GITHUB_REPOSITORIES_QUERY = {
   NUMBER: "number",
 } as const;
 
+/**
+ * Whether an installation was given every repository of its account, those
+ * created later among them, or a selection of them, as GitHub's
+ * `repository_selection` names it.
+ */
+export const GITHUB_REPOSITORY_SELECTION = {
+  ALL: "all",
+  SELECTED: "selected",
+} as const;
+
+export type GitHubRepositorySelection =
+  (typeof GITHUB_REPOSITORY_SELECTION)[keyof typeof GITHUB_REPOSITORY_SELECTION];
+
+/** One installation a workspace's listing read: GitHub's id for it, the login of its account as GitHub holds it now, and whether it was given all its account's repositories or a selection. */
+const githubListedInstallationSchema = EffectSchema.Struct({
+  installationId: EffectSchema.Number,
+  /** The account's login as GitHub answers it now, which a rename on GitHub moves before the workspace's stored one; absent for an account with none. */
+  login: EffectSchema.optionalKey(EffectSchema.String),
+  repositorySelection: EffectSchema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
+});
+
 /** The repositories (GET): every one the App reaches for the developer, or for the workspace named, most recently updated first. */
 export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
   /** Whether the developer reaches any installation of the App at all; false offers to install it on GitHub. */
@@ -95,6 +116,12 @@ export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
    * offers; absent from a service older than it.
    */
   addable: EffectSchema.optionalKey(EffectSchema.Array(githubRepositorySchema)),
+  /**
+   * Each installation of the workspace named that GitHub still runs, as the
+   * listing read it, the first linked first; absent from a service older
+   * than it, and empty where no workspace is named.
+   */
+  installations: EffectSchema.optionalKey(EffectSchema.Array(githubListedInstallationSchema)),
   /** Where to send the developer to install the App, or to change which repositories it reaches. */
   installationUrl: EffectSchema.String,
 });

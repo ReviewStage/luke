@@ -34,6 +34,7 @@ import {
 import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import {
   GITHUB_ACCESS,
+  GITHUB_REPOSITORY_SELECTION,
   ISSUE_STATE,
   workspaceTokenRepositoriesAnswerSchema,
 } from "@repo/features/github-repositories-wire";
@@ -355,13 +356,14 @@ function listed(answered: Answer) {
 
 it.layer(getTestDB())("the repositories route", (it) => {
   it.effect(
-    "a workspace lists its connected installation's repositories, most recently updated first",
+    "a workspace lists its connected installation's repositories, most recently updated first, and whether it was given all of them",
     () =>
       Effect.gen(function* () {
         const github = githubReaching([
           {
             id: 7101,
             login: "octocat",
+            repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
             repositories: [
               { owner: "octocat", name: "dotfiles", updatedAt: "2026-09-01T00:00:00Z" },
               { owner: "octocat", name: "relay", updatedAt: "2026-10-08T00:00:00Z", private: true },
@@ -402,6 +404,13 @@ it.layer(getTestDB())("the repositories route", (it) => {
             },
           ],
           addable: [],
+          installations: [
+            {
+              installationId: 7101,
+              login: "octocat",
+              repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
+            },
+          ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });
         // Note that neither the account's own token nor the App's are in the answer.

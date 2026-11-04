@@ -1,6 +1,7 @@
 /* settings-section.css -- what a settings group's utilities
    (`settings-section.tsx`) cannot say: the hairline between each row of its
-   card and the next, the rows a setting reveals ruled as the card's own, the
+   card and the next, an inset row's from its inset edge even inside a box
+   of its own, the rows a setting reveals ruled as the card's own, the
    rule between two groups of bare rows, and the placeholders' own boxes. The heading, the card's edge, corner, and
    ground, and a line in the rows' place are utilities; the rows' own padding
    is theirs (`settings-row.tsx`), and the room between sections the page's. */
@@ -11,6 +12,20 @@
      other components' boxes, whose own sheets a parent's child selector in
      the utilities layer would beat. */
   .ui-settings-section-card > * + * {
+    border-top: 1px solid var(--ui-color-border);
+  }
+
+  /* A row inset under the row above that stands inside a box of its own, as
+     a row with a menu of its own does, is ruled where its inset starts, as a
+     bare inset row is: the box draws no rule, and the row draws it from its
+     own inset edge. */
+  .ui-settings-section-card
+    > *
+    + *:not(.ui-settings-row):has(> .ui-settings-row[data-indent="mark"]) {
+    border-top: none;
+  }
+
+  .ui-settings-section-card > * + * > .ui-settings-row[data-indent="mark"] {
     border-top: 1px solid var(--ui-color-border);
   }
 

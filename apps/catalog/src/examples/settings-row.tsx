@@ -9,6 +9,7 @@ import {
   Inline,
   JUSTIFY,
   MARK_PROVIDER,
+  MoreButton,
   PlusIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -18,6 +19,9 @@ import {
   SettingsAttentionMark,
   SettingsChangedMark,
   SettingsFacts,
+  SettingsFoldFoot,
+  SettingsFoldLine,
+  SettingsFoldRow,
   SettingsRow,
   SettingsRowActSlot,
   type SettingsRowControl,
@@ -28,12 +32,14 @@ import {
   SettingsSection,
   Shortcut,
   Switch,
+  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextButton,
   TextField,
 } from "@repo/ui";
 import { ExternalLinkIcon } from "@repo/ui/icons";
@@ -53,7 +59,10 @@ import { CatalogSection } from "../section";
  * list rows, a reference list's lines in a card, each a command and its chord;
  * and the slots: a Modified word riding a label, a key's field grown under
  * its row with a refusal under that, and accounts indented under their
- * provider's row.
+ * provider's row; and accounts that fold their repositories open under
+ * their words, one open from the start with a long name among them, one
+ * folded with Show all at its foot, one with a ⋯ before its chevron, at a page's measure and
+ * narrower than 380px.
  */
 
 /** A switch holding its own state, named `label` and described and failed by its row. */
@@ -336,6 +345,58 @@ function ListRows(): React.JSX.Element {
   );
 }
 
+/** Accounts under their provider's row that fold their repositories open under their words. */
+function FoldRows(): React.JSX.Element {
+  return (
+    <SettingsSection>
+      <SettingsRow label="GitHub" leading={<Mark provider={MARK_PROVIDER.GITHUB} />}>
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Manage on GitHub</Button>}
+      </SettingsRow>
+      <SettingsFoldRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="ada-lovelace"
+        description="3 repositories"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+        foldLabel="ada-lovelace's repositories"
+        defaultOpen
+      >
+        <SettingsFoldLine>dotfiles</SettingsFoldLine>
+        <SettingsFoldLine>ada-lovelace.github.io</SettingsFoldLine>
+        <SettingsFoldLine>
+          notes-on-the-analytical-engine-and-the-sketch-of-its-operation
+        </SettingsFoldLine>
+      </SettingsFoldRow>
+      <SettingsFoldRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="analytical-engine"
+        description="All 24 repositories"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+        foldLabel="analytical-engine's repositories"
+      >
+        <SettingsFoldLine>mill</SettingsFoldLine>
+        <SettingsFoldLine>store</SettingsFoldLine>
+        <SettingsFoldFoot>
+          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => undefined}>
+            Show all 24
+          </TextButton>
+        </SettingsFoldFoot>
+      </SettingsFoldRow>
+      <SettingsFoldRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="byron"
+        description="2 repositories"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+        foldLabel="byron's repositories"
+        defaultOpen
+        actions={() => <MoreButton thing="byron" />}
+      >
+        <SettingsFoldLine>poems</SettingsFoldLine>
+        <SettingsFoldLine>letters</SettingsFoldLine>
+      </SettingsFoldRow>
+    </SettingsSection>
+  );
+}
+
 function SettingsRows(): React.JSX.Element {
   return (
     <>
@@ -362,6 +423,16 @@ function SettingsRows(): React.JSX.Element {
       <CatalogSection id="settings-row-slots-narrow" title="The slots narrower than 380px">
         <div className="catalog-settings catalog-settings-narrow">
           <SlottedRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-fold" title="Folding what a row owns">
+        <div className="catalog-settings">
+          <FoldRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-fold-narrow" title="Folding narrower than 380px">
+        <div className="catalog-settings catalog-settings-narrow">
+          <FoldRows />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-row-state" title="State, mark, and value">

@@ -117,7 +117,12 @@ import { readRepositoryFileWindow } from "../tasks/task-file.js";
 import { fileWindowOf } from "../tasks/task-files-procedures.js";
 import { readWorkspaceSkills } from "../tasks/task-skills.js";
 import { readRepositoryTree } from "../tasks/task-tree.js";
-import { GitHubApp, type GitHubWorkspaceReadFailure, markRefusedToken } from "./github-app.js";
+import {
+  GitHubApp,
+  type GitHubWorkspaceReadFailure,
+  markRefusedToken,
+  type WorkspaceListing,
+} from "./github-app.js";
 import {
   githubReachOrRefusal,
   githubReadOrRefusal,
@@ -400,8 +405,8 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       const [listed, installationUrl, own] = yield* githubReadOrRefusal(
         Effect.all([
           Option.match(workspace, {
-            onNone: () => Effect.succeed(Option.none<readonly GitHubRepository[]>()),
-            onSome: app.workspaceRepositories,
+            onNone: () => Effect.succeed(Option.none<WorkspaceListing>()),
+            onSome: app.workspaceListing,
           }),
           app.installUrl,
           app.memberRepositories(context.userId),
@@ -415,10 +420,14 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
       return {
         installed: Option.isSome(listed),
         ...pickedRepositories(
-          Option.getOrElse(listed, () => []),
+          Option.match(listed, { onNone: () => [], onSome: (listing) => listing.repositories }),
           Option.getOrElse(own, () => []),
           added,
         ),
+        installations: Option.match(listed, {
+          onNone: () => [],
+          onSome: (listing) => listing.installations,
+        }),
         installationUrl,
       };
     }),

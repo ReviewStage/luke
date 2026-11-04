@@ -252,10 +252,7 @@ function ChannelRow({
               valueLabel={named ?? WORDS.DEFAULT}
               valueIcon={
                 named === undefined ? undefined : (
-                  <RepositoryPicture
-                    repository={named}
-                    pictures={repositories.pictures}
-                  />
+                  <RepositoryPicture repository={named} pictures={repositories.pictures} />
                 )
               }
               rows={[
