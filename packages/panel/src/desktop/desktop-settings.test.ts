@@ -50,7 +50,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Integrations", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "MCP", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -397,6 +397,7 @@ test("the sidebar lists Hosts under Account after Agents, and its search finds i
     "Agents",
     "Hosts",
     "Integrations",
+    "MCP",
     "Experimental",
   ]);
   openPage(on, "Hosts");
@@ -757,10 +758,10 @@ test("a sidebar result that opens an integration hands its query to the page's s
   assert.equal(shownTitle(page), "Integrations");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "postgres");
 
-  // Note that "mcp" finds every integration's row in the sidebar but none by
-  // the page's own words, so it stays behind and the page's search is
-  // cleared, so the row the landing seeks is drawn.
-  typeInto(sidebar, "mcp");
+  // Note that "disconnect" finds every integration's row in the sidebar but
+  // none by the page's own words, so it stays behind and the page's search
+  // is cleared, so the row the landing seeks is drawn.
+  typeInto(sidebar, "disconnect");
   openIntegrationResult(page, "Linear");
   assert.equal(fieldNamed(page, PAGE_SEARCH)?.value, "");
 });

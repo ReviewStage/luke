@@ -266,6 +266,11 @@ test("skills and rename each find the row the page draws", () => {
 });
 
 test("mcp finds the MCP page's two groups and none of the integrations", () => {
+  const groups = searchSettings(settingsSearchEntries(FULL_INPUT), "mcp")?.groups ?? [];
+  assert.deepEqual(
+    groups.map((group) => group.page),
+    [SETTINGS_VIEW.MCP],
+  );
   assert.deepEqual(labelsFound("mcp"), ["Agents with access", "Connect an agent"]);
 });
 
