@@ -119,7 +119,7 @@ const outcomeAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /** A member's comment, as its mentions are read from it and handed over under its key. */
-interface MentioningComment {
+export interface MentioningComment {
   readonly userId: string;
   readonly taskId: string;
   readonly words: string;
@@ -128,22 +128,31 @@ interface MentioningComment {
   readonly isReply: boolean;
 }
 
+/** A write the store took, with what it answers. */
+type PlanCommentDone = Extract<
+  PlanCommentOutcome,
+  { readonly status: typeof PLAN_COMMENT_OUTCOME.DONE }
+>;
+
 /**
- * A comment's answer: its thread, its mentions handed over first, with the
- * ones asked who could not take it, so the member reads that they were not
- * asked. A comment the store refused, at its bound or under a key another
- * thread holds, posted nothing, so it hands nothing over; nor does a key
- * sent again with other words, which answers the comment first posted under
- * it, whose words, not the new ones, say whom it asks.
+ * A member's comment the store took, answered: its thread, its mentions
+ * handed over first, with the ones asked who could not take it, so the
+ * member reads that they were not asked. A comment the store refused, at its
+ * bound or under a key another thread holds, posted nothing, so it hands
+ * nothing over; nor does a key sent again with other words, which answers
+ * the comment first posted under it, whose words, not the new ones, say whom
+ * it asks. The desktop's start and reply answer through it, and so does a
+ * member's comment from the member MCP server (`../member-mcp/tools.ts`), so
+ * a comment wakes the same agents whichever way the member sent it.
  */
-const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  outcome: PlanCommentOutcome,
+export const memberCommentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  outcome: PlanCommentDone,
   comment: MentioningComment,
 ) {
-  const answer = yield* outcomeAnswer(outcome);
+  const { answer } = outcome;
   if (!("thread" in answer)) return answer;
   // Note that a retry under the key already taken wrote nothing, so it is not counted again.
-  if (outcome.status === PLAN_COMMENT_OUTCOME.DONE && outcome.repeated !== true) {
+  if (outcome.repeated !== true) {
     yield* recordServerEventIn(
       SERVER_EVENT.PLAN_COMMENT,
       comment.userId,
@@ -161,6 +170,17 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     ? yield* mentionsHandedOver(thread, comment)
     : [];
   return unsent.length === 0 ? answer : { thread, unsent };
+});
+
+/** A comment's answer as the procedure answers it: as `memberCommentAnswer`, a plan or thread not reached as not found. */
+const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  outcome: PlanCommentOutcome,
+  comment: MentioningComment,
+) {
+  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  return yield* memberCommentAnswer(outcome, comment);
 });
 
 /**
