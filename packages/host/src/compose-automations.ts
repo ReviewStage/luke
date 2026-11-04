@@ -12,6 +12,7 @@ import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
   type AutomationChangeParams,
+  type AutomationCreateParams,
   type AutomationDeletedView,
   type AutomationFollow,
   type AutomationIdParams,
@@ -41,6 +42,8 @@ import {
   AUTOMATION,
   type AutomationListCollections,
   type AutomationRow,
+  answeredRow,
+  askedRow,
   automationListCollections,
   changedFields,
   writtenFields,
@@ -66,10 +69,10 @@ import type { RunMode } from "./run-mode.js";
  * window draws, and told as `AUTOMATIONS_CHANGED`. A sign-out lets every
  * follow go and lays none, and the account gate opening follows the holds
  * anew (`open`). A held workspace's automations stand in the sync engine's
- * pool (`automation-collections.ts`). A change or a deletion of one is a
- * write declared here, which the pool draws over every read holding it the
- * moment it is asked, and a new one is drawn once the service has made it,
- * each answered once the list drawn shows it. Behind a closed account
+ * pool (`automation-collections.ts`). A new one, a change, or a deletion of
+ * one is a write declared here, which the pool draws over every read
+ * holding it the moment it is asked, a new one under the id the host minted
+ * for it, each answered once the list drawn shows it. Behind a closed account
  * gate, or on a run that sends nothing, every ask answers unanswered. A
  * webhook's secret is the one secret answered here, by root AGENTS.md's
  * carve-out: one the service minted as a webhook was made, or one minted
@@ -91,7 +94,7 @@ export type AutomationsClient = Pick<
 >;
 
 export interface AutomationsDependencies {
-  kernel: Pick<HostKernel, "emit" | "now" | "hostedServiceBaseUrl"> & {
+  kernel: Pick<HostKernel, "emit" | "now" | "createId" | "hostedServiceBaseUrl"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive">;
@@ -217,6 +220,7 @@ function automationFollows(
         Effect.gen(function* () {
           const list = yield* automationListCollections({
             pool: dependencies.pool,
+            workspaceId,
             draw: answers.answered,
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
             txWait: wait.handed,
@@ -342,7 +346,7 @@ function composed(
   asked: Asked,
   { slices, holds, waits, lists }: Held,
 ): AutomationsComposer {
-  const { client } = dependencies;
+  const { kernel, client } = dependencies;
 
   /** The held list that holds an automation, and the workspace it is of; none where no held list holds it. */
   const listShowing = (automationId: string) => {
@@ -386,6 +390,40 @@ function composed(
       ran ? waits[AUTOMATION_FOLLOW.RUNS].get(automationId) : undefined,
       ran && listed !== undefined ? waits[AUTOMATION_FOLLOW.WORKSPACE_RUNS].get(listed) : undefined,
     ];
+  };
+
+  /**
+   * An automation made, drawn the moment it is asked from what its create
+   * asks, under the id the host minted for it, on its workspace's held list,
+   * and taken back where the service refused it. Note that only its row
+   * reaches the list, so a webhook's secret the service minted is answered
+   * to the window alone; where the list hands no wait, or the service
+   * answers a create sent again with no transaction, the automation as the
+   * service answered it is taken in the list's place.
+   */
+  const made: WriteDeclaration<
+    AutomationRow,
+    FieldChange<AutomationRow>,
+    {
+      readonly request: AutomationCreateParams & { readonly id: string };
+      readonly row: AutomationRow | undefined;
+    },
+    WireValue
+  > = {
+    kind: AUTOMATION,
+    keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
+    // Note that a create that draws no row names no key, so its change is never drawn.
+    change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
+    send: ({ request }) =>
+      Effect.map(asked(client.create(request)), (answer) =>
+        "automation" in answer
+          ? {
+              answer: carried<AutomationView>(answer),
+              txid: answer.txid,
+              taken: { made: answeredRow(answer.automation) },
+            }
+          : { refused: carried<AutomationView>(answer) },
+      ),
   };
 
   /**
@@ -437,23 +475,30 @@ function composed(
   };
 
   const methods: HostMethodTable = {
-    [GATEWAY_METHOD.AUTOMATIONS_CREATE]: (params) =>
-      Effect.gen(function* () {
-        const made = yield* readParams(
-          automationCreateParamsSchema,
-          params,
-          "an automation names where it stands, a name, a trigger, and an action",
-        );
-        const answer = yield* asked(client.create(made));
-        // A new automation is drawn on its workspace's held list before its create answers, as the service answered it and never with its secret.
-        if ("automation" in answer) {
-          const { automation, txid } = answer;
-          const list =
-            automation.workspaceId === undefined ? undefined : lists.get(automation.workspaceId);
-          if (list !== undefined) yield* list.made(automation, txid);
-        }
-        return carried<AutomationView>(answer);
-      }),
+    [GATEWAY_METHOD.AUTOMATIONS_CREATE]: declaredMethod(
+      dependencies.pool,
+      made,
+      (params: WireRecord) =>
+        Effect.map(
+          readParams(
+            automationCreateParamsSchema,
+            params,
+            "an automation names where it stands, a name, a trigger, and an action",
+          ),
+          (asked) => {
+            const request = { ...asked, id: asked.id ?? kernel.createId() };
+            const userId = dependencies.accountId();
+            // Note that a create behind a closed gate, or for nobody, draws nothing, since it never reaches the service.
+            return {
+              request,
+              row:
+                gate() && userId !== undefined
+                  ? askedRow(request, { userId, at: kernel.now() })
+                  : undefined,
+            };
+          },
+        ),
+    ),
     [GATEWAY_METHOD.AUTOMATIONS_CHANGE]: declaredMethod(
       dependencies.pool,
       changed,

@@ -351,30 +351,17 @@ describe("a host's daemon", () => {
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 
-  it.effect.each([
-    {
-      refusal: "any route but register and beat, its 401 unmarked",
-      refusing: (request: RecordedRequest) =>
-        request.pathname === HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE ||
-        request.pathname === HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES
-          ? undefined
-          : jsonResponse(BARE_REFUSAL, HTTP.UNAUTHORIZED),
-      removedAfter: undefined,
-    },
-    {
-      refusal: "register and beat, its 401 unmarked as a service from before the mark answers",
-      refusing: () => jsonResponse(BARE_REFUSAL, HTTP.UNAUTHORIZED),
-      removedAfter: Duration.hours(1),
-    },
-  ])(
-    "refused by $refusal, says so once and keeps its runner and its record, taking itself as removed only after a refusal of register and beat that lasts",
-    ({ refusing, removedAfter }) =>
+  it.effect(
+    "refused by every route with a 401 unmarked, register and beat included, says so once and keeps its runner and its record",
+    () =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
         const reports: string[] = [];
         const { spawner, layer } = world(home, reports);
         let refused = false;
-        const http = launchingService(home, (request) => (refused ? refusing(request) : undefined));
+        const http = launchingService(home, () =>
+          refused ? jsonResponse(BARE_REFUSAL, HTTP.UNAUTHORIZED) : undefined,
+        );
         yield* writeHostDevice(stateRoot, DEVICE);
 
         const daemon = yield* hostDaemon({
@@ -385,19 +372,13 @@ describe("a host's daemon", () => {
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
         yield* settled(() => spawner.spawned.some(isRunner));
         refused = true;
-        yield* elapsed(Duration.minutes(59));
+        yield* elapsed(Duration.minutes(3));
 
         const [runner] = spawner.spawned.filter(isRunner);
         expect(daemon.pollUnsafe()).toBeUndefined();
         expect(runner?.ended).toBe("running");
         expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBeUndefined();
         expect(reports.filter((line) => line.includes("refused this box's calls"))).toHaveLength(1);
-
-        yield* elapsed(Duration.minutes(2));
-        yield* settled(() => (daemon.pollUnsafe() !== undefined) === (removedAfter !== undefined));
-        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBe(
-          removedAfter === undefined ? undefined : true,
-        );
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 

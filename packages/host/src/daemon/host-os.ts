@@ -19,7 +19,7 @@ import type { LocalAgentPlatformSeam } from "../effect/seams.js";
 import type { AgentCliPins } from "../local-agent-setup.js";
 import { macDeviceName } from "../node/mac-device-name.js";
 import { linuxMachine, macMachine } from "../node/machine-identity.js";
-import { agentSalvageScript, agentUnsavedWorkScript } from "../node/open-on-mac.js";
+import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
  * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, how it reads which machine it is, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders are its own alone.
@@ -50,8 +50,6 @@ export interface HostOs {
   readonly storesOwned: boolean;
   /** What says a discard would lose work from an agent's worktree (`LocalAgentPlatformSeam.unsavedWorkScript`), run on the box. */
   readonly unsavedWorkScript: NonNullable<LocalAgentPlatformSeam["unsavedWorkScript"]>;
-  /** What saves that work before a folder kept for it is removed (`LocalAgentPlatformSeam.salvageScript`), run on the box. */
-  readonly salvageScript: NonNullable<LocalAgentPlatformSeam["salvageScript"]>;
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
   readonly stateRoot: (home: string) => string;
 }
@@ -71,7 +69,6 @@ export const LINUX_HOST: HostOs = {
   formerlyDirect: false,
   storesOwned: true,
   unsavedWorkScript: agentUnsavedWorkScript,
-  salvageScript: agentSalvageScript,
   stateRoot: (home) => path.join(home, "state"),
 };
 
@@ -97,7 +94,6 @@ export const DARWIN_HOST: HostOs = {
   formerlyDirect: true,
   storesOwned: false,
   unsavedWorkScript: agentUnsavedWorkScript,
-  salvageScript: agentSalvageScript,
   stateRoot: (home) => path.join(home, ".local", "state", "vespin-host"),
 };
 

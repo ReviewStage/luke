@@ -4,6 +4,7 @@ import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { planSections } from "@repo/features/plan-document";
 import type { TaskSummary } from "@repo/features/task-wire";
+import { TASKS_READ } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   createContext,
@@ -30,6 +31,7 @@ import type {
 } from "./mention-picker.js";
 import type { AgentsControl } from "./use-agents.js";
 import { useOpenTask } from "./use-open-link.js";
+import { useWorkspaceAgents } from "./use-workspace-agents.js";
 
 /**
  * task-mentions.tsx -- what a task's page hands every place on it that picks or draws a mention: the task, its saved text, and what opening a mention does.
@@ -47,8 +49,9 @@ import { useOpenTask } from "./use-open-link.js";
  * skills, and the servers, with no plan's sections, since there is no task.
  * New task's composer hands the same for its workspace, its repository's
  * once one is chosen on its chip (`new-task-composer.tsx`). Each
- * hands the workspace's coding agents too, read as an `@` list opens
- * through `useMentionAgentsReader`, each named by its task.
+ * hands the workspace's coding agents too, the newest as the task list
+ * carries them and those words name as the service finds them, through
+ * `useMentionAgentsReader`, each named by its task.
  *
  * The Inbox's box on a thread of a task hands what the task's page does
  * (`heldTaskMentions`), off that page: the plan's sections as last saved
@@ -336,35 +339,58 @@ export function mentionableAgent(
 
 /**
  * Reads the workspace's coding agents as an `@` list offers them: the
- * newest, or those the words name, archived ones among them, each by its
- * tab's name, wearing its tile, with its task named from `tasks`, the
- * tasks the window lists, archived ones among them; none where no
- * workspace is known, and a rejection where the read failed, which a list
- * says it could not read rather than that no agent matches. The reader stands for as
- * long as what it reads by does, so a list keeps what it read.
+ * newest as the task list carries them (`useWorkspaceAgents`), archived
+ * ones left out, or those the service finds the words name, archived ones
+ * among them, each by its tab's name, wearing its tile, with its task
+ * named from `tasks`, the tasks the window lists, archived ones among
+ * them; none where no workspace is known, and a rejection where the list
+ * or the search failed, which a list says it could not read rather than
+ * that no agent matches. A read of the newest while the task list failed
+ * asks the host to read it again, as the list's own Try again does. The
+ * reader stands for as long as what it reads by does, so a list keeps what
+ * it read, and moves as the task list first carries the workspace's agents
+ * or fails, so a list open before then reads them again.
  */
 export function useMentionAgentsReader(
   workspaceId: string | undefined,
   tasks: readonly { readonly id: string; readonly name: string }[],
   models: readonly CatalogModel[] | undefined,
 ): MentionAgentsReader | undefined {
-  const { act } = useAct();
-  // Note that the names are read as each read answers, so the reader stands while the window's lists move.
-  const naming = useRef({ tasks, models });
-  naming.current = { tasks, models };
+  const { act, tell } = useAct();
+  const newest = useWorkspaceAgents(workspaceId, null);
+  const listFailed = newest !== undefined && "failed" in newest;
+  const carried = newest !== undefined && !listFailed;
+  // Note that the names and the newest are read as each read answers, so the reader stands while the window's lists move.
+  const naming = useRef({ tasks, models, newest: NO_AGENTS_HELD });
+  naming.current = {
+    tasks,
+    models,
+    newest: newest !== undefined && "agents" in newest ? newest.agents : NO_AGENTS_HELD,
+  };
   const read = useCallback<MentionAgentsReader>(
     (words) => {
       if (workspaceId === undefined) return Promise.resolve(NO_AGENTS);
+      const offered = (agents: readonly AgentSummary[]) => {
+        const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
+        return agents.map((agent) => mentionableAgent(agent, names, naming.current.models));
+      };
+      if (words === undefined) {
+        if (listFailed) {
+          tell(ACT_KIND.TASKS_REFRESH);
+          return Promise.reject(new Error(TASKS_READ.FAILED));
+        }
+        return Promise.resolve(carried ? offered(naming.current.newest) : NO_AGENTS);
+      }
       return act(ACT_KIND.AGENTS_WORKSPACE_LIST, {
         workspaceId,
-        ...(words === undefined ? undefined : { words, includeArchived: true }),
+        words,
+        includeArchived: true,
       }).then((answer) => {
         if ("failure" in answer) throw new Error(answer.failure);
-        const names = new Map(naming.current.tasks.map((task) => [task.id, task.name]));
-        return answer.agents.map((agent) => mentionableAgent(agent, names, naming.current.models));
+        return offered(answer.agents);
       });
     },
-    [act, workspaceId],
+    [act, tell, workspaceId, listFailed, carried],
   );
   return workspaceId === undefined ? undefined : read;
 }

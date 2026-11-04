@@ -14,10 +14,12 @@
  * A change or a deletion is a write the pool draws over its automation's
  * row at once (`compose-automations.ts` declares them), standing until the
  * list carries its transaction, through the wait the list's follow hands,
- * or taken back where the service refused it. A new automation is drawn once
- * the service has made it, since only the service names it. Where the list
- * hands no wait yet, the row as a write's own answer leaves it is taken in
- * the read's place, so a write never answers before the list drawn shows it.
+ * or taken back where the service refused it. A new automation is a row
+ * made on the pool under the id the host minted for it, drawn from what its
+ * create asks the moment it is asked, which the list of its workspace shows
+ * while the write stands. Where the list hands no wait yet, the row as a
+ * write's own answer leaves it is taken in the read's place, so a write
+ * never answers before the list drawn shows it.
  */
 
 import {
@@ -25,8 +27,12 @@ import {
   automationsGraceEdge,
   automationsOfLiveRows,
 } from "@repo/features/automation-live";
-import type { AutomationChangeParams } from "@repo/features/automation-view";
+import type {
+  AutomationChangeParams,
+  AutomationCreateParams,
+} from "@repo/features/automation-view";
 import {
+  AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   type AutomationSummary,
@@ -102,8 +108,42 @@ export function writtenFields(
   };
 }
 
+/**
+ * A new automation's row as its create asks it, under the id minted for it,
+ * before the service answers: what the create names, and a new automation's
+ * defaults as the service sets them where it names none. Its next run is
+ * the service's to say once it has made it.
+ */
+export function askedRow(
+  made: AutomationCreateParams & { readonly id: string },
+  maker: { readonly userId: string; readonly at: number },
+): AutomationRow {
+  return {
+    ...NO_RUN,
+    id: made.id,
+    userId: maker.userId,
+    taskId: made.planId ?? null,
+    taskName: null,
+    name: made.name,
+    enabled: true,
+    trigger: made.trigger,
+    action: made.action,
+    guards: made.guards ?? AUTOMATION_DEFAULT_GUARDS,
+    nextRunAt: null,
+    organizationId: made.workspaceId ?? null,
+    scope: made.scope ?? AUTOMATION_SCOPE.PERSONAL,
+    repositories: made.repositories ?? [],
+    taskRepository: null,
+    ...targetFields(made.target ?? { kind: AUTOMATION_TARGET.NEW_AGENT }),
+    archiveSuccessful: made.archiveSuccessful ?? false,
+    slackDelivery: made.slackDelivery ?? false,
+    createdAt: maker.at,
+    mine: true,
+  };
+}
+
 /** A new automation's row as the service answered it made, which has run nothing yet. */
-function madeRow(automation: AutomationSummary): AutomationRow {
+export function answeredRow(automation: AutomationSummary): AutomationRow {
   return {
     ...NO_RUN,
     id: automation.id,
@@ -127,6 +167,8 @@ function madeRow(automation: AutomationSummary): AutomationRow {
 export interface AutomationListDependencies {
   /** The pool the list's rows stand in. */
   readonly pool: EntityPool;
+  /** The workspace whose automations the list holds, which a new one of it is shown on while its write stands. */
+  readonly workspaceId: string;
   /** Draws the list as it now stands. */
   readonly draw: (automations: readonly AutomationSummary[]) => void;
   /** The service's origin, which a webhook automation's address is written on. */
@@ -141,8 +183,6 @@ export interface AutomationListCollections {
   readonly answer: (rows: AutomationsLiveRows) => Effect.Effect<void>;
   /** Whether the list holds an automation, which a write to it is drawn on. */
   readonly holds: (automationId: string) => boolean;
-  /** An automation the service made, drawn once the list carries its transaction, or as the service answered it where the list hands no wait. */
-  readonly made: (automation: AutomationSummary, txid: string | undefined) => Effect.Effect<void>;
 }
 
 /** A workspace's automations, drawn from the follow's first answer on. */
@@ -164,6 +204,7 @@ export function automationListCollections(
         const wait = dependencies.txWait();
         return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
       },
+      adopts: (row) => row.organizationId === dependencies.workspaceId,
     });
 
     /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
@@ -184,13 +225,6 @@ export function automationListCollections(
           }),
         ),
       holds: automations.holds,
-      made: (automation, txid) =>
-        Effect.suspend(() => {
-          const wait = dependencies.txWait();
-          if (wait !== undefined && txid !== undefined) return confirmWrite(wait, txid);
-          if (!answered) return Effect.void;
-          return Effect.andThen(automations.confirmNew(madeRow(automation)), drawn);
-        }),
     };
   });
 }

@@ -75,7 +75,6 @@ import {
 } from "./local-agent-box.js";
 import { LAUNCH_NOTE, notedFirstLines, sessionResumed } from "./local-agent-first-lines.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
-import { agentSalvaged, SALVAGE_MAX_BYTES, salvagesPruned } from "./local-agent-salvage.js";
 import {
   forgetOwnedAgent,
   keepOwnedAgent,
@@ -221,10 +220,10 @@ import type { RunMode } from "./run-mode.js";
  * agent `ORPHAN_AFTER` answered reads in a row left out is let go of as a
  * discard lets go of it, at most `ORPHANS_PER_PASS` a pass; one whose
  * folder the platform's check finds work in, or cannot say of, or on a
- * platform that names no check, is kept, and recorded so with when, so no
- * work is deleted before `KEPT_FOR` has passed, and then let go of whole,
- * the work the check finds saved first beside the host's state
- * (`local-agent-salvage.ts`), which passes prune once it is a month old.
+ * platform that names no check, is kept, and recorded so with when, so
+ * no pass checks it again before `KEPT_FOR` has passed, and then checked
+ * once more: let go of whole where its work is gone, and otherwise kept
+ * another `KEPT_FOR`, so no work is ever deleted on its own.
  * A read that was not answered lets go of no agent whole, and neither
  * does one that leaves out most of the agents with a folder here
  * (`MASS_LEFT_OUT`), which is said once: an empty or partial list from a
@@ -306,7 +305,7 @@ const NOT_STARTED = 1;
 const GITHUB_TOKEN_CHECK = Duration.minutes(1);
 /** How often a following device passes over the agents this machine made, letting go of what it keeps of those the service no longer lists. */
 const PASS_EVERY = Duration.minutes(5);
-/** How long a folder kept for work in it stands after it was first kept, while its agent stays unlisted, before a pass saves that work (`agentSalvaged`) and lets go of it whole regardless. */
+/** How long a folder kept for work in it stands, while its agent stays unlisted, before a pass checks it again, letting go of it whole where its work is gone and keeping it another `KEPT_FOR` where it is not. */
 const KEPT_FOR = Duration.days(7);
 /** How many successful reads in a row must leave an agent out before what the device holds of it is let go of. */
 const ORPHAN_AFTER = 2;
@@ -335,7 +334,7 @@ const CLEAR_END = {
   FAILED: "failed",
 } as const;
 
-/** What lets an agent go: its discard line, a sweep of it once the service no longer lists it, or a sweep of its folder kept `KEPT_FOR` since, which goes whatever it holds once its work is saved. */
+/** What lets an agent go: its discard line, a sweep of it once the service no longer lists it, or a sweep of its folder kept `KEPT_FOR` since, checked again for work in it. */
 const LET_GO = { LINE: "line", SWEEP: "sweep", KEPT_PAST: "kept-past" } as const;
 type LetGo = (typeof LET_GO)[keyof typeof LET_GO];
 
@@ -1256,10 +1255,10 @@ export function composeLocalAgents(
          * Otherwise a device whose platform names a check of the worktree
          * keeps the folder, and says why, where the check finds work in it
          * that is nowhere else, or cannot say, and records it kept, with when
-         * it first was, so no later pass checks it again (`swept`); but one
-         * kept `KEPT_FOR` since (`LET_GO.KEPT_PAST`) goes whatever it holds,
-         * once the work the check finds is saved beside the host's state
-         * (`agentSalvaged`), and stays, kept, where it could not be. A step
+         * it first was, so no pass checks it again before `KEPT_FOR` has
+         * passed (`swept`); one kept that long (`LET_GO.KEPT_PAST`) is
+         * checked again, and kept again, stamped now, where the work is still
+         * there, so no folder holding work is ever removed on its own. A step
          * that fails is reported, and tried again by a later pass, since the
          * agent still holds something here.
          */
@@ -1272,38 +1271,18 @@ export function composeLocalAgents(
               () => false,
             );
             const unsaved = stands ? yield* unsavedWork(layout) : Option.none<string>();
-            if (Option.isSome(unsaved) && by === LET_GO.KEPT_PAST) {
-              const script = platform.salvageScript;
-              const salvage =
-                script === undefined
-                  ? Option.none<string>()
-                  : yield* agentSalvaged({
-                      stateRoot: kernel.stateRoot,
-                      cwd: folder,
-                      agentId,
-                      reason: unsaved.value,
-                      script: (into) =>
-                        script({
-                          worktree: layout.checkoutPath,
-                          salvage: into,
-                          maxBytes: SALVAGE_MAX_BYTES,
-                        }),
-                    });
-              if (Option.isNone(salvage)) {
-                report(
-                  `a local agent's folder kept ${Duration.format(KEPT_FOR)} was kept again, since its work could not be saved: ${agentId}`,
-                );
-                return DISCARD_END.FAILED;
-              }
+            if (Option.isSome(unsaved)) {
+              const again = by === LET_GO.KEPT_PAST;
               report(
-                `a local agent's folder kept ${Duration.format(KEPT_FOR)} had its work saved in ${salvage.value}, since ${unsaved.value}: ${agentId}`,
+                again
+                  ? `a local agent's folder kept ${Duration.format(KEPT_FOR)} was kept again, since ${unsaved.value}: ${agentId}`
+                  : `a local agent's folder was kept, since ${unsaved.value}: ${agentId}`,
               );
-            } else if (Option.isSome(unsaved)) {
-              report(`a local agent's folder was kept, since ${unsaved.value}: ${agentId}`);
               const at = yield* Clock.currentTimeMillis;
+              // Note that a folder kept again is stamped now, so it is checked once more a `KEPT_FOR` later rather than every pass.
               yield* updateState((current) => ({
                 ...current,
-                kept: { ...current.kept, [agentId]: current.kept?.[agentId] ?? at },
+                kept: { ...current.kept, [agentId]: again ? at : (current.kept?.[agentId] ?? at) },
               }));
               return DISCARD_END.KEPT;
             }
@@ -1848,12 +1827,12 @@ export function composeLocalAgents(
          * (`whileIdle`). Their ids are read first, then the live agents, so
          * an agent named was made before the read was asked. Every agent left
          * out of `ORPHAN_AFTER` answered reads in a row, and not kept for work
-         * it holds, is let go of whole as a discard lets go of it, as is one
-         * kept `KEPT_FOR` since, up to `ORPHANS_PER_PASS`, those tried longest
-         * ago first; a read that was not answered lets go of no agent whole,
-         * nor does one held as a wrong one (`massHeld`). Then the folders of
-         * idle agents unused for `FOLDER_UNUSED_FOR` are cleared
-         * (`unusedCleared`).
+         * it holds, is let go of whole as a discard lets go of it, and one
+         * kept `KEPT_FOR` since is checked again, up to `ORPHANS_PER_PASS`,
+         * those tried longest ago first; a read that was not answered lets go
+         * of no agent whole, nor does one held as a wrong one (`massHeld`).
+         * Then the folders of idle agents unused for `FOLDER_UNUSED_FOR` are
+         * cleared (`unusedCleared`).
          */
         const swept = Effect.gen(function* () {
           passes += 1;
@@ -1861,7 +1840,6 @@ export function composeLocalAgents(
             .filter((id) => AGENT_UUID.test(id))
             .sort();
           const now = yield* Clock.currentTimeMillis;
-          yield* salvagesPruned(kernel.stateRoot, now, report);
           const live = yield* asked(client.liveAgents(deviceId));
           if (live === undefined) return;
           const mine = new Set(owned);

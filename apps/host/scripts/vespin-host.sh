@@ -27,8 +27,6 @@ MAC_LOG_FOLDER="Library/Logs/Vespin Host"
 OWNED_AGENTS="owned-agents"
 # Every agent's folder, one per agent under its id, under the home (DEVICE_AGENT_FOLDER.ROOT in packages/features/src/device-agent-wire.ts).
 AGENTS_FOLDER=".vespin/agents"
-# The work the daemon saved from agents' folders before it removed them, in its state root (SALVAGE_FOLDER in packages/host/src/local-agent-salvage.ts).
-SALVAGE="salvage"
 
 # The home of the account whose install this release is, where it is one: the
 # release stands in a version folder of that home's releases.
@@ -93,8 +91,7 @@ remove_launch_agent() {
 # anything it says that the agents' folders go, with any work in them that
 # was not pushed, and asks to go on where a person runs it at a terminal.
 # Note that ~/.vespin/clones stays, since every install for the account
-# shares it, and so does a Linux account's lingering, said where it is on, and
-# the work its daemon saved from agents' folders, said where it is.
+# shares it, and so does a Linux account's lingering, said where it is on.
 uninstall_account() {
   home="$1"
   if [ "$(readlink -f "${HOME:-/}")" != "$home" ]; then
@@ -133,18 +130,11 @@ uninstall_account() {
     printf 'Removed %s.\n' "$folder"
   done
   rmdir "${HOME:?}/$AGENTS_FOLDER" "${HOME:?}/.vespin" 2>/dev/null || true
-  state="${HOME:?}/$ACCOUNT_STATE"
-  if [ -n "$(ls -A "$state/$SALVAGE" 2>/dev/null)" ]; then
-    find "$state" -mindepth 1 -maxdepth 1 ! -name "$SALVAGE" -exec rm -rf {} +
-    printf 'Removed %s, but for %s, which keeps the work saved from agent folders before they were removed.\n' "$state" "$state/$SALVAGE"
-  elif [ -e "$state" ]; then
-    rm -rf "$state"
-    printf 'Removed %s.\n' "$state"
-  fi
-  if [ -e "${HOME:?}/$ACCOUNT_RELEASES" ]; then
-    rm -rf "${HOME:?}/$ACCOUNT_RELEASES"
-    printf 'Removed %s.\n' "$HOME/$ACCOUNT_RELEASES"
-  fi
+  for folder in "${HOME:?}/$ACCOUNT_STATE" "${HOME:?}/$ACCOUNT_RELEASES"; do
+    [ -e "$folder" ] || continue
+    rm -rf "$folder"
+    printf 'Removed %s.\n' "$folder"
+  done
   # Note that the link is read as the install wrote it, since its target is gone by now and a link to nothing resolves to nothing.
   link="$HOME/$ACCOUNT_LINK"
   case "$(readlink "$link" 2>/dev/null)" in

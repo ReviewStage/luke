@@ -99,6 +99,5 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         branch,
       }),
     unsavedWorkScript: options.os.unsavedWorkScript,
-    salvageScript: options.os.salvageScript,
   };
 }

@@ -1443,10 +1443,11 @@ export interface MentionablePullRequest
 }
 
 /**
- * Reads the workspace's coding agents: the newest where no words are given,
- * or, found by the service, those whose title or task's name holds the
- * words, the archived ones among them; rejects where the read failed, so
- * the list says it could not read them rather than that none match.
+ * Reads the workspace's coding agents: the newest the task list carries
+ * where no words are given, or, found by the service, those whose title or
+ * task's name holds the words, the archived ones among them; rejects where
+ * the read failed, so the list says it could not read them rather than
+ * that none match.
  */
 export type MentionAgentsReader = (
   words: string | undefined,
