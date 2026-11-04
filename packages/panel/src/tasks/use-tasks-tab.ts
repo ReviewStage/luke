@@ -2943,12 +2943,12 @@ export function useTasksTab(input: {
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
   };
 
-  // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
   // Whether the agent is archived, as the open task's list or the list followed live carries it.
   const archivedAgent = (agentId: string) =>
     agents.archived?.some((agent) => agent.id === agentId) === true ||
     liveAgents?.some((agent) => agent.id === agentId && agent.archivedAt !== undefined) === true;
 
+  // What stands in the plan's place for a link, a version history there giving way, as each one's own door does.
   const standInFor = (standing: StandIn) => {
     setHistoryFor(undefined);
     setStandIn(standing);

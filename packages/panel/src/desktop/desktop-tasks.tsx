@@ -561,11 +561,16 @@ function PlanDocument({
     mainTabs.onChoose(opened);
     setFocus(COLUMN.MAIN);
   };
-  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page instead, where it is read and brought back.
-  const openAgentColumn = (agent: string) =>
-    agents.archived?.some((each) => each.id === agent) === true
-      ? tasks.agentView.onOpen(agent)
-      : openColumnTab({ agent });
+  // An agent's tab is in this column, but an archived agent's, never drawn, opens on its own page
+  // instead, where it is read and brought back, a panel filling the window over it giving way too.
+  const openAgentColumn = (agent: string) => {
+    if (agents.archived?.some((each) => each.id === agent) !== true) {
+      openColumnTab({ agent });
+      return;
+    }
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    tasks.agentView.onOpen(agent);
+  };
   // The plan's document stands in the column's Overview, so a row that opens it chooses that tab.
   const openOverview = () => openColumnTab(MAIN_TAB.OVERVIEW);
   // A row that opens the comments, which stand in the side panel, shows the
