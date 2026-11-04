@@ -293,6 +293,30 @@ function KnownAutomationCard({
 }
 
 /**
+ * The automations of the workspace a link was written under, read around
+ * its chip as it is drawn, so the chip calls the automation by its name now
+ * and wears its tile as its row in the `@` list does; shared with a
+ * directory around it that already reads them. A link of a workspace the
+ * account holds none of reads nothing.
+ */
+export function LinkAutomations({
+  workspace: slug,
+  children,
+}: {
+  /** The slug of the workspace the link was written under. */
+  workspace: string;
+  children: ReactNode;
+}): ReactNode {
+  const workspace = useLinkWorkspace(slug);
+  if (workspace === undefined) return children;
+  return (
+    <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>
+      {children}
+    </AutomationDirectory>
+  );
+}
+
+/**
  * An automation's card, the workspace's automations read as it is first
  * hung where no directory around the chip reads them yet, and shared with
  * one that does (`AutomationDirectory`), of the workspace the link names,
