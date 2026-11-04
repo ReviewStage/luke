@@ -23,8 +23,8 @@
  * with `&sync=`, it is answered in delta mode (`liveDeltaParts`): the rows
  * that moved past the reader's sync id alone, with the ids of those that
  * stand no longer for it and the sync id to ask past next, held until
- * something moves; or whole, with that sync id, to a reader that names
- * none, is too far behind, or whose admission to the rows moved.
+ * something of the reader's moves; or whole, with that sync id, to a reader
+ * that names none, is too far behind, or whose admission to the rows moved.
  *
  * `GET /api/live/task-record?id=` answers one task's plan, pages, and calls
  * the same way, one statement a part that marks where it stands
@@ -608,27 +608,78 @@ function rowIds(sealed: SealedLiveQueryWire): ReadonlySet<string> {
   );
 }
 
+/** A delta read's parts narrowed to what a window moved, and the ids gone from each: its own rows a write the reader's topics reach moved that the narrowed read no longer finds. */
+interface DeltaNarrowed<Part extends string> {
+  readonly read: ReadParts<Part>;
+  readonly gone: ReadonlyMap<Part, readonly string[]>;
+}
+
+/** One look of a delta read: where it stands, and its parts narrowed to its window where that held a row and the reader is not answered whole. */
+interface DeltaLook<Part extends string> {
+  readonly standing: DeltaStanding;
+  readonly narrowed: Option.Option<DeltaNarrowed<Part>>;
+}
+
+/** Whether a narrowed read carries anything of its reader's: a row of one of its parts, or an id gone from one. */
+function carriesAny<Part extends string>({ read, gone }: DeltaNarrowed<Part>): boolean {
+  return (
+    Object.values<SealedLiveQueryWire>(read.queries).some(({ rows }) => (rows ?? []).length > 0) ||
+    [...gone.values()].some((ids) => ids.length > 0)
+  );
+}
+
+/** A delta read's parts narrowed to what the window's rows moved, with the ids gone from each; unavailable where its statements can't be built or read. */
+const narrowedParts = /* @__PURE__ */ Effect.fnUntraced(function* <
+  Param extends string,
+  Part extends string,
+>(
+  delta: NonNullable<LiveQuery<Param, Part>["delta"]>,
+  params: LiveParams<Param>,
+  rows: DeltaStanding["window"]["rows"],
+): Effect.fn.Return<DeltaNarrowed<Part>, HostedRefusal, SqlClient.SqlClient> {
+  const statements = delta.statements(params, syncMovedOf(rows));
+  if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  const read = yield* readParts(statements.value, (sealer) => sealer.seal);
+  const gone = new Map<Part, readonly string[]>();
+  for (const [part, keys] of ownMovedKeys(delta.own, rows)) {
+    const found = rowIds(read.queries[part]);
+    gone.set(part, [...keys].filter((key) => !found.has(key)).toSorted());
+  }
+  return { read, gone };
+});
+
 /**
  * A defined live read's parts in delta mode (`delta`), for a reader that
  * names the sync id it holds every row at. Each look reads the settled id
  * (`syncStanding`) and then the log's window from the reader's id up to it
  * (`readSyncWindow`), the rows the read's topics reach or that it takes
- * whatever they name, and the read is held, looking every second and on a
- * watch of its topics, until the window holds a row. Note that a look
+ * whatever they name, and where the window holds a row, the read's parts
+ * narrowed to what it moved (`narrowedParts`). The read is held, looking
+ * every second and on a watch of its topics, until a look finds a row of
+ * the reader's or one gone. Note that a look that finds the window empty
  * reads the log alone, so it is cheap at a second, and that a wake can come
  * before the settled id passes its write, which the next look then carries.
+ *
+ * Note too that a window whose rows moved nothing of the reader's, as
+ * another account's messages taken whatever they name, is held past rather
+ * than answered: the next look reads the log on from that window's settled
+ * id, so the reader is never answered no rows only to ask again, and no
+ * window is read twice. That holds every delta: every write below that id
+ * ended before the narrowed read's snapshot, so a later write that moves a
+ * row of the reader's stands at or past it, in a window still to be read.
  *
  * It is answered whole, each part with the settled id to ask past next, to
  * a reader that names no id, whose id is below the oldest the log kept or
  * past the settled one, that is more than `SYNC_LOG.MOST` rows behind, or
  * whose admission to the rows moved (a `whole` table's row naming its
  * account). Otherwise each part is its statement narrowed to what moved,
- * with the ids it was read past and is to read past next, the ids of its own
- * rows a write the reader's topics reach moved that the narrowed read no
- * longer finds (`gone`), and the txids of the writes it carries. At the
+ * with the reader's id it was read past and the id to read past next, the
+ * ids of its own rows a write the reader's topics reach moved that the
+ * narrowed read no longer finds (`gone`), and the txids of the writes its
+ * topics reach in every window held past and the one answered. At the
  * hold's end it looks once more and answers that look, its parts empty
- * where nothing moved. Unavailable where its statements can't be built or
- * the log read.
+ * where nothing of the reader's moved. Unavailable where its statements
+ * can't be built or the log read.
  */
 const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   Param extends string,
@@ -641,12 +692,16 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const reached = delta.reach === undefined ? topics : yield* topicsNamed(delta.reach(params));
   const accounts = new Set(reached.flatMap(([kind, id]) => (kind === TOPIC.ACCOUNT ? [id] : [])));
   const whole = new Set(delta.whole.map((table) => table.name));
+  /** The id the log is read past: the reader's, then the settled id of each window held past. */
+  let from = past;
+  /** The txids of the windows held past, which the answer carries, since it is read past them too. */
+  const passed = new Set<string>();
   const looked: Effect.Effect<DeltaStanding, HostedRefusal, DatabaseServices> =
     hostedStoreOrUnavailable(
       Effect.gen(function* () {
         const { settled } = yield* syncStanding();
         const window = yield* readSyncWindow({
-          past: past ?? settled,
+          past: from ?? settled,
           settled,
           tables: query.reads.map((table) => table.name),
           anyTopic: delta.anyTopic.map((table) => table.name),
@@ -659,19 +714,34 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
             row.topics.some(([kind, id]) => kind === TOPIC.ACCOUNT && accounts.has(id)),
         );
         const behind =
-          past === undefined ||
-          past > settled ||
-          (window.floor !== undefined && past < window.floor) ||
+          from === undefined ||
+          from > settled ||
+          (window.floor !== undefined && from < window.floor) ||
           window.rows.length > SYNC_LOG.MOST;
         return { settled, window, whole: behind || admissionMoved };
       }),
     );
-  const moved = (standing: DeltaStanding) => standing.whole || standing.window.rows.length > 0;
+  const look: Effect.Effect<DeltaLook<Part>, HostedRefusal, DatabaseServices> = Effect.gen(
+    function* () {
+      const standing = yield* looked;
+      if (standing.whole || standing.window.rows.length === 0) {
+        return { standing, narrowed: Option.none() };
+      }
+      const narrowed = yield* narrowedParts<Param, Part>(delta, params, standing.window.rows);
+      if (!carriesAny(narrowed)) {
+        from = standing.settled;
+        for (const txid of standing.window.txids) passed.add(txid);
+      }
+      return { standing, narrowed: Option.some(narrowed) };
+    },
+  );
+  const moved = ({ standing, narrowed }: DeltaLook<Part>) =>
+    standing.whole || Option.exists(narrowed, carriesAny);
   const held =
     past === undefined
       ? Option.none()
-      : yield* heldUntil(looked, moved, topics, LIVE_POLL_HOLD.WATCHED_LOOK, LIVE_POLL_HOLD.HOLD);
-  const standing = Option.isSome(held) ? held.value.read : yield* looked;
+      : yield* heldUntil(look, moved, topics, LIVE_POLL_HOLD.WATCHED_LOOK, LIVE_POLL_HOLD.HOLD);
+  const { standing, narrowed } = Option.isSome(held) ? held.value.read : yield* look;
   const next = String(standing.settled);
   if (standing.whole) {
     const statements = query.statements(params);
@@ -679,16 +749,14 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
     const read = yield* readParts(statements.value, (sealer) => sealer.seal);
     return { ...read, queries: syncedParts(read.queries, { next }, new Map()) };
   }
-  const statements = delta.statements(params, syncMovedOf(standing.window.rows));
-  if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const read = yield* readParts(statements.value, (sealer) => sealer.seal);
-  const gone = new Map<Part, readonly string[]>();
-  for (const [part, keys] of ownMovedKeys(delta.own, standing.window.rows)) {
-    const found = rowIds(read.queries[part]);
-    gone.set(part, [...keys].filter((key) => !found.has(key)).toSorted());
-  }
+  const { read, gone } = Option.isSome(narrowed)
+    ? narrowed.value
+    : yield* narrowedParts<Param, Part>(delta, params, standing.window.rows);
   const queries = syncedParts(read.queries, { past: String(past), next }, gone);
-  return { ...read, queries: wokenBy(queries, standing.window.txids) };
+  return {
+    ...read,
+    queries: wokenBy(queries, [...new Set([...passed, ...standing.window.txids])]),
+  };
 });
 
 /** A defined live read's parts in delta mode, under the read's span as `liveQueryParts` runs one. */
