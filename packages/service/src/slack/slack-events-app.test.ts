@@ -19,7 +19,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
-import { TASK_STATUS } from "@repo/features/task-wire";
+import { TASK_STATUS, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
@@ -526,7 +526,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names, on a task named for it in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank plan in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -570,6 +570,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const [startedAgent] = yield* (yield* Database)
           .select({
             taskId: agentTable.taskId,
+            prompt: agentTable.prompt,
             repository: agentTable.repository,
             source: agentTable.source,
             metadata: messages.metadata,
@@ -589,13 +590,17 @@ it.layer(getTestDB())("our Slack route", (it) => {
             plan: made.text,
           },
           {
-            name: "Find the flakiest test and fix it",
+            name: UNTITLED_TASK_NAME,
             assignee: owner,
             repository: "Acme/Relay",
             status: TASK_STATUS.IN_PROGRESS,
-            plan: "find the flakiest test and fix it",
+            plan: "",
           },
-          "the agent works on a task the message made, named for it and assigned to its writer",
+          "the agent works on a task the message made, left for its title to name and assigned to its writer",
+        );
+        assert.ok(
+          startedAgent?.prompt?.startsWith("find the flakiest test and fix it"),
+          "the message is the agent's prompt",
         );
         // The agent keeps where it came from, which the lists mark it by.
         assert.deepEqual(startedAgent?.source, {

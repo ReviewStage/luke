@@ -34,8 +34,9 @@
  * before its starts made tasks; any other
  * makes a task and starts an agent as the writer on it, on the one path a
  * Start takes (`coder-host/start.ts`), both keyed by Slack's event id. The
- * task is named for the first line of the writer's words, assigned to
- * them, in progress, its plan their words, and works in the repository the
+ * task starts untitled, for its agent's title to name it, with a blank
+ * plan, since the message is the agent's prompt, assigned to the writer and
+ * in progress, and works in the repository the
  * message names as `owner/name` where the workspace reaches it, else in the
  * channel's default repository, else in the workspace's, both as an owner
  * or admin named them in Settings, else in the repository of the writer's
@@ -179,9 +180,6 @@ const USER_MENTION = /<@([A-Z0-9]+)>/gu;
 
 /** A repository named in a message as `owner/name`, standing alone as a word. */
 const NAMED_REPOSITORY = /(?:^|\s)([A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+)(?=$|\s|[,;:!?)])/u;
-
-/** The most characters of the writer's first line a task is named with, cut at a word where one ends near it. */
-const TASK_NAME_CHARS = 80;
 
 /** The most the agent's prompt spells, the bound a message to an agent is held to. */
 const PROMPT_BOUND = AGENT_BOUNDS.MAX_MESSAGE_CHARS;
@@ -689,31 +687,13 @@ const sendToAgent = Effect.fnUntraced(function* (
 });
 
 /**
- * What the task is named: the first line of the writer's words with any,
- * its spaces collapsed and its first letter raised, as a sentence-case title
- * opens, cut to the bound at the last word that fits; empty where they wrote
- * none, which leaves the task untitled until its agent's title names it.
- */
-function taskNameOf(text: string): string {
-  const line =
-    text
-      .split("\n")
-      .map((each) => each.replace(/\s+/gu, " ").trim())
-      .find((each) => each !== "") ?? "";
-  const raised = `${line.charAt(0).toUpperCase()}${line.slice(1)}`;
-  if (raised.length <= TASK_NAME_CHARS) return raised;
-  const cut = raised.slice(0, TASK_NAME_CHARS - 1);
-  const word = cut.lastIndexOf(" ");
-  return `${(word > TASK_NAME_CHARS / 2 ? cut.slice(0, word) : cut).trimEnd()}…`;
-}
-
-/**
- * The task the message's agent starts on, made for it: named for the
- * writer's first line (`taskNameOf`), assigned to them, in the repository
- * the start resolved or in none, in progress, its plan the writer's own
- * words, never the thread's other messages. Note that it is made under an
- * id drawn from Slack's event id, as the agent is keyed by it, because a
- * start run again must find the task it made rather than make a second.
+ * The task the message's agent starts on, made for it: untitled, so the
+ * agent's title names it as it names any untitled task (`title.ts`),
+ * assigned to the writer, in the repository the start resolved or in none,
+ * in progress, and with a blank plan, since the message is handed to the
+ * agent as its prompt. Note that it is made under an id drawn from Slack's
+ * event id, as the agent is keyed by it, because a start run again must find
+ * the task it made rather than make a second.
  */
 const slackTaskOf = Effect.fnUntraced(function* (
   addressed: SlackAddressed,
@@ -726,11 +706,10 @@ const slackTaskOf = Effect.fnUntraced(function* (
   yield* createTaskOnce(userId, {
     id,
     organizationId,
-    name: taskNameOf(addressed.text),
     repository,
     status: TASK_STATUS.IN_PROGRESS,
     assigneeId: userId,
-    text: addressed.text,
+    text: "",
   });
   return id;
 });
