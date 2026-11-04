@@ -1,12 +1,11 @@
-import { PAGE_EMBED_HEIGHT, PageEmbed, PageEmbedViewer } from "@repo/ui";
-import { useState } from "react";
+import { PAGE_EMBED_HEIGHT, PageEmbed } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * page-embeds.tsx -- a page drawn live in written words: at a stand-in's
  * height until it says how tall it is, at its whole height once it has, at a
- * screenful where it fills its frame, and opened full screen from its corner.
+ * screenful where it fills its frame.
  */
 
 const PAGE = `data:text/html,${encodeURIComponent(
@@ -16,7 +15,6 @@ const PAGE = `data:text/html,${encodeURIComponent(
 const FRAME = { title: "Cold start by release", src: PAGE, sandbox: "allow-scripts" };
 
 function PageEmbeds(): React.JSX.Element {
-  const [fullScreen, setFullScreen] = useState(false);
   return (
     <>
       <CatalogSection id="page-embed-stand-in" title="Before the page says how tall it is">
@@ -24,17 +22,9 @@ function PageEmbeds(): React.JSX.Element {
           <PageEmbed frame={FRAME} height={{ kind: PAGE_EMBED_HEIGHT.STAND_IN }} />
         </div>
       </CatalogSection>
-      <CatalogSection
-        id="page-embed-measured"
-        title="As tall as the page, its corner under the pointer"
-      >
+      <CatalogSection id="page-embed-measured" title="As tall as the page">
         <div className="catalog-column">
-          <PageEmbed
-            frame={FRAME}
-            height={{ kind: PAGE_EMBED_HEIGHT.CONTENT, height: 96 }}
-            onFullScreen={() => setFullScreen(true)}
-            onOpenInPanel={() => undefined}
-          />
+          <PageEmbed frame={FRAME} height={{ kind: PAGE_EMBED_HEIGHT.CONTENT, height: 96 }} />
         </div>
       </CatalogSection>
       <CatalogSection id="page-embed-fill" title="A page that fills whatever frame holds it">
@@ -42,13 +32,6 @@ function PageEmbeds(): React.JSX.Element {
           <PageEmbed frame={FRAME} height={{ kind: PAGE_EMBED_HEIGHT.FILL }} />
         </div>
       </CatalogSection>
-      {fullScreen ? (
-        <PageEmbedViewer
-          frame={FRAME}
-          onOpenInPanel={() => setFullScreen(false)}
-          onClose={() => setFullScreen(false)}
-        />
-      ) : null}
     </>
   );
 }
