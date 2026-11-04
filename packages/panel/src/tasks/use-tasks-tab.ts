@@ -3002,10 +3002,11 @@ export function useTasksTab(input: {
   };
 
   // An archived agent's transcript place on its own page, a side panel filling the window giving way, as a column tab shown has it give way.
-  const openArchived = (place: AgentPlace) => {
+  // Note that a read answering late calls it too, so it is a steady door reading the panel as it stands then.
+  const openArchived = useSteadyDoor((place: AgentPlace) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
     openOnAgentPage(place);
-  };
+  });
 
   // An agent's place on its task, its tab among the column's, read as standing.
   const showOnTask = (planId: string, place: AgentPlace) => {
