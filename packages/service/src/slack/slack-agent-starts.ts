@@ -1,5 +1,5 @@
 /**
- * slack-agent-starts.ts -- a member's @mention of our Slack bot, or a direct message to it, starts a coding agent as them, and its every settled turn is posted back in the Slack thread.
+ * slack-agent-starts.ts -- a member's @mention of our Slack bot, or a direct message to it, starts a coding agent as them or reaches the agent its thread speaks for, and every settled turn bound for Slack is posted there.
  *
  * Our Slack route hands each event Connect forwarded here
  * (`slack-events-app.ts`): an `app_mention` in a channel, or a `message.im`
@@ -23,10 +23,11 @@
  * member the DM went to, found as a press finds them (`SlackBot.memberOf`),
  * may reply there; anyone else is told so and nothing is posted.
  *
- * A message in a thread an agent was started from (`slack_agent_thread`) is
- * sent to that agent as the writer's own message (`steer.ts`), the agent
- * brought back first where it stands archived, as a chat tool reopens a
- * conversation. Where its session has ended for good (`AGENT_RETIRED`), a new
+ * A message in a thread that speaks for an agent (`slack_agent_thread`), one
+ * it was started from or its automation run's result was sent in, is sent to
+ * that agent as the writer's own message (`steer.ts`), the thread made the
+ * agent's current one, and the agent brought back first where it stands
+ * archived, as a chat tool reopens a conversation. Where its session has ended for good (`AGENT_RETIRED`), a new
  * agent continues it as Continue does, handed its work, a summary of its
  * transcript, and the message, and the thread moves to it, with one line in
  * the thread linking it, the new agent on the ended one's own task, as
@@ -56,15 +57,23 @@
  * replying, and the thread is kept as the agent's; a message sent on to an
  * agent is marked the same way.
  *
- * Every turn of such an agent that settles is posted in its thread once
- * (`claimSlackThreadTurn`): its final message in a `markdown` block, which
+ * Every settled turn bound for Slack is posted once, in one place
+ * (`postTurnToSlack`): a turn that ends an automation run delivering to
+ * Slack as a new DM to the run's owner (`claimRunSlackDelivery`,
+ * `../automations/automation-slack-delivery.ts`), which is then kept as the
+ * agent's current thread, and any other turn of an agent a thread speaks
+ * for in its current thread, the one kept, moved, or written in latest
+ * (`claimSlackThreadTurn`), never in every thread it was ever kept for. A
+ * thread's post is its final message in a `markdown` block, which
  * Slack draws as standard Markdown, or that it failed
- * or was stopped, each with the agent's link, and after it the pictures and
+ * or was stopped, each with the agent's link, and after either the pictures and
  * recordings the agent showed with `show_image` in that turn, shared as
- * files under the thread (`SlackBot.upload`). A turn that finished well then
+ * files under the thread (`SlackBot.upload`). A turn of an agent started
+ * from Slack that finished well then
  * archives the agent under the rule an automation's "Archive finished runs"
  * archives by (`archiveFinishedAgents`), so one with a pull request or an
- * inbox item open stands, and the thread's next message brings it back. Its
+ * inbox item open stands, and the thread's next message brings it back; an
+ * automation run's agent is left to its own automation's rule. Its
  * task finishes as the turn's end settles it, as a run's does, with no
  * merge asked (`tasks/task-finish.ts`): once its agents finished well and
  * nothing waits on the writer, a pull request open among it, which its
@@ -81,6 +90,10 @@ import {
   readVisibleAgent,
   unarchiveAgentFrom,
 } from "@repo/database/models/agent-store";
+import {
+  claimRunSlackDelivery,
+  type RunSlackDelivery,
+} from "@repo/database/models/automation-store";
 import { readConversationPicture } from "@repo/database/models/conversation-pictures";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
@@ -89,11 +102,13 @@ import {
   moveSlackAgentThread,
   recordSlackAgentThread,
   recordSlackMemberLookup,
+  type SlackThread,
   slackAgentThreadAt,
   slackMemberByEmail,
   slackStartRepositories,
   slackStartRepository,
   slackTeamWorkspaces,
+  touchSlackAgentThread,
 } from "@repo/database/models/slack-installation-store";
 import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
@@ -139,6 +154,7 @@ import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
+import { runResultContent } from "../automations/automation-slack-delivery.js";
 import { archiveFinishedAgents } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
@@ -644,6 +660,12 @@ const sendToAgent = Effect.fnUntraced(function* (
     yield* bot.reply(addressed.channel, threadOf(addressed), plainReply("That agent is gone."));
     return;
   }
+  // Note that the thread written in becomes the agent's current one first, because the turn it starts is posted there.
+  yield* touchSlackAgentThread({
+    organizationId,
+    channelId: addressed.channel,
+    threadTs: threadOf(addressed),
+  });
   const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
   const attachments = yield* sharedImages(bot, addressed.images);
   const sent = yield* Effect.result(
@@ -953,14 +975,32 @@ const archivedWhenFinished = (agent: Agent) =>
     ),
   );
 
+/** Where a settled turn is posted: as the result of the automation run it ends, or in a thread kept for its agent. */
+type TurnPlace = { readonly run: RunSlackDelivery } | { readonly thread: SlackThread };
+
 /**
- * Posts the settled turn in each Slack thread its agent was started from,
- * once per turn, with the agent's link, the pictures it showed shared
- * after it, then archives the agent where the turn finished well; nothing
- * for an agent no thread started. A failure is logged by its kind alone,
- * never answered.
+ * Where the settled turn is posted, claimed for it as it is read: a new DM
+ * to the owner of the automation run it ends, where the run delivers to
+ * Slack, or else the agent's current thread; nothing for a turn neither
+ * claims.
  */
-export function postTurnToSlackThreads(
+const turnPlace = Effect.fnUntraced(function* (agent: Agent, turnId: string) {
+  const run = yield* claimRunSlackDelivery(agent.id);
+  if (Option.isSome(run)) return Option.some<TurnPlace>({ run: run.value });
+  const thread = yield* claimSlackThreadTurn(agent.id, turnId);
+  return Option.map(thread, (kept): TurnPlace => ({ thread: kept }));
+});
+
+/**
+ * Posts the settled turn once where it belongs (`turnPlace`), with the
+ * agent's link and the pictures it showed shared after it. A run's result
+ * DM is kept as the agent's current thread, with this turn posted in it, so
+ * a reply there reaches the agent and the turn it starts is answered there.
+ * An agent started from Slack is then archived where the turn finished
+ * well; an automation run's agent is left to its automation's rule. A
+ * failure is logged by its kind alone, never answered.
+ */
+export function postTurnToSlack(
   turn: SettledAgentTurn,
 ): Effect.Effect<void, never, DatabaseServices | SlackBot> {
   return Effect.gen(function* () {
@@ -968,8 +1008,8 @@ export function postTurnToSlackThreads(
     if (!bot.configured) return;
     const agent = yield* readAgentOfConversation(turn.userId, turn.conversationId);
     if (Option.isNone(agent)) return;
-    const threads = yield* claimSlackThreadTurn(agent.value.id, turn.turnId);
-    if (threads.length === 0) return;
+    const place = yield* turnPlace(agent.value, turn.turnId);
+    if (Option.isNone(place)) return;
     const journal = yield* readMessageByClientId(
       turn.userId,
       turn.conversationId,
@@ -977,9 +1017,32 @@ export function postTurnToSlackThreads(
       turn.turnId,
     );
     const [newest] = journal.ok ? journal.value : [];
-    const outcome = turnOutcome(turn, newest === undefined ? undefined : lastSaid(newest.message));
+    const words = newest === undefined ? undefined : lastSaid(newest.message);
     const link = yield* agentLink(turn.userId, agent.value.organizationId, agent.value.id);
-    const content: SlackMessageContent = {
+    const uploads =
+      newest === undefined ? [] : yield* shownUploads(turn.conversationId, newest.message);
+    if ("run" in place.value) {
+      const { userId, organizationId, automationName } = place.value.run;
+      const dm = yield* bot.dm(
+        organizationId,
+        userId,
+        runResultContent(automationName, link, turn, words),
+      );
+      if (Option.isNone(dm)) return;
+      yield* recordSlackAgentThread({
+        organizationId,
+        channelId: dm.value.channel,
+        threadTs: dm.value.ts,
+        agentId: agent.value.id,
+        userId,
+        postedTurnId: turn.turnId,
+      });
+      yield* bot.upload(dm.value.channel, dm.value.ts, uploads);
+      return;
+    }
+    const { channelId, threadTs } = place.value.thread;
+    const outcome = turnOutcome(turn, words);
+    yield* bot.reply(channelId, threadTs, {
       text: outcome.text,
       blocks: [
         ...outcome.blocks,
@@ -988,19 +1051,11 @@ export function postTurnToSlackThreads(
           elements: [{ type: "mrkdwn", text: `<${link}|Open in ${PRODUCT_NAME}>` }],
         },
       ],
-    };
-    const uploads =
-      newest === undefined ? [] : yield* shownUploads(turn.conversationId, newest.message);
-    yield* Effect.forEach(
-      threads,
-      (thread) =>
-        Effect.andThen(
-          bot.reply(thread.channelId, thread.threadTs, content),
-          bot.upload(thread.channelId, thread.threadTs, uploads),
-        ),
-      { discard: true },
-    );
-    if (turn.status === TURN_STATUS.SETTLED) yield* archivedWhenFinished(agent.value);
+    });
+    yield* bot.upload(channelId, threadTs, uploads);
+    if (turn.status === TURN_STATUS.SETTLED && agent.value.automationRunId === null) {
+      yield* archivedWhenFinished(agent.value);
+    }
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("an agent's turn was not posted in Slack", { failure: causeKind(cause) }),

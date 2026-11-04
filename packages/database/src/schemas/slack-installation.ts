@@ -64,7 +64,7 @@ export const slackMember = pgTable(
   (t) => [primaryKey({ columns: [t.organizationId, t.userId] })],
 );
 
-/** A Slack thread an agent was started from, which its later mentions are sent to and its final messages are posted in. */
+/** A Slack thread that speaks for an agent, one it was started from or its automation run's result was sent in, which its later messages are sent to and its settled turns posted in. */
 export const slackAgentThread = pgTable(
   "slack_agent_thread",
   {
@@ -85,6 +85,8 @@ export const slackAgentThread = pgTable(
     /** The agent's latest turn whose outcome was posted in the thread; null before the first. */
     postedTurnId: text("posted_turn_id"),
     createdAt: timestamptz("created_at").notNull(),
+    /** When the thread last became its agent's current one, kept for it or written in by a member; a settled turn is posted in the agent's latest. */
+    activeAt: timestamptz("active_at").notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.organizationId, t.channelId, t.threadTs] }),

@@ -1,0 +1,1 @@
+ALTER TABLE "slack_agent_thread" ADD COLUMN "active_at" timestamp with time zone DEFAULT now() NOT NULL;

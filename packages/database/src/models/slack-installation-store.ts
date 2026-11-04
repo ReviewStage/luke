@@ -39,11 +39,14 @@ import { workspaceReachableBy } from "./workspace-store.js";
  * team, oldest connection first, and its writer found as a member by the
  * email Slack holds for them (`slackMemberByEmail`); an agent it starts
  * works in the repository the member's latest agent in the workspace worked
- * in (`slackStartRepository`) unless the message names one. A thread an agent was
- * started from is kept against it (`slackAgentThread`), and moved to the
- * agent that continues it where that one ended (`moveSlackAgentThread`), and
- * each of the agent's settled turns is claimed there once (`claimSlackThreadTurn`);
- * the task such an agent stands on is the one its message made (`isSlackTask`).
+ * in (`slackStartRepository`) unless the message names one. A thread that
+ * speaks for an agent, one it was started from or its automation run's result
+ * was sent in, is kept against it (`slackAgentThread`), and moved to the
+ * agent that continues it where that one ended (`moveSlackAgentThread`). The
+ * thread kept, moved, or written in latest is the agent's current one
+ * (`touchSlackAgentThread`), and each of the agent's settled turns is claimed
+ * there once (`claimSlackThreadTurn`); the task an agent started from Slack
+ * stands on is the one its message made (`isSlackTask`).
  * An owner or admin names the repository Slack starts default to, for the
  * workspace and for each channel (`slackStartRepositories`); a channel's is
  * forgotten when the bot leaves it.
@@ -321,8 +324,11 @@ const SlackThreadSchema = Schema.Struct({
   threadTs: Schema.String,
 });
 
-/** A Slack thread an agent was started from: where it is, and the agent and member it was started for. */
-export type SlackAgentThread = typeof SlackThreadSchema.Type & {
+/** Where a Slack thread is: its workspace, its conversation, and its first message's timestamp. */
+export type SlackThread = typeof SlackThreadSchema.Type;
+
+/** A Slack thread that speaks for an agent: where it is, and the agent and member it was kept for. */
+export type SlackAgentThread = SlackThread & {
   readonly agentId: string;
   readonly userId: string;
 };
@@ -334,6 +340,7 @@ const insertAgentThread = SqlSchema.void({
     threadTs: Schema.String,
     agentId: Schema.String,
     userId: Schema.String,
+    postedTurnId: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   execute: (row) =>
@@ -346,7 +353,9 @@ const insertAgentThread = SqlSchema.void({
           threadTs: row.threadTs,
           agentId: row.agentId,
           userId: row.userId,
+          postedTurnId: row.postedTurnId,
           createdAt: row.now,
+          activeAt: row.now,
         })
         .onConflictDoNothing(),
     ),
@@ -358,12 +367,13 @@ const updateAgentThread = SqlSchema.void({
     fromAgentId: Schema.String,
     agentId: Schema.String,
     userId: Schema.String,
+    now: Schema.Date,
   }),
   execute: (row) =>
     Database.use((db) =>
       db
         .update(slackAgentThread)
-        .set({ agentId: row.agentId, userId: row.userId, postedTurnId: null })
+        .set({ agentId: row.agentId, userId: row.userId, postedTurnId: null, activeAt: row.now })
         .where(
           and(
             eq(slackAgentThread.organizationId, row.organizationId),
@@ -393,8 +403,29 @@ const findAgentThread = SqlSchema.findOneOption({
     ),
 });
 
-/** The agent's threads whose last posted turn is not this one, each marked as posting it, so a turn is posted once however often its settle is heard. */
-const claimThreadTurn = SqlSchema.findAll({
+const touchAgentThread = SqlSchema.void({
+  Request: Schema.Struct({ ...SlackThreadSchema.fields, now: Schema.Date }),
+  execute: (row) =>
+    Database.use((db) =>
+      db
+        .update(slackAgentThread)
+        .set({ activeAt: row.now })
+        .where(
+          and(
+            eq(slackAgentThread.organizationId, row.organizationId),
+            eq(slackAgentThread.channelId, row.channelId),
+            eq(slackAgentThread.threadTs, row.threadTs),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The agent's current thread, the one active latest, where its last posted
+ * turn is not this one, marked as posting it in the same statement, so a
+ * turn is posted once however often its settle is heard.
+ */
+const claimThreadTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ agentId: Schema.String, turnId: Schema.String }),
   Result: SlackThreadSchema,
   execute: ({ agentId, turnId }) =>
@@ -404,7 +435,16 @@ const claimThreadTurn = SqlSchema.findAll({
         .set({ postedTurnId: turnId })
         .where(
           and(
-            eq(slackAgentThread.agentId, agentId),
+            sql`(${slackAgentThread.organizationId}, ${slackAgentThread.channelId}, ${slackAgentThread.threadTs}) = (${db
+              .select({
+                organizationId: slackAgentThread.organizationId,
+                channelId: slackAgentThread.channelId,
+                threadTs: slackAgentThread.threadTs,
+              })
+              .from(slackAgentThread)
+              .where(eq(slackAgentThread.agentId, agentId))
+              .orderBy(desc(slackAgentThread.activeAt), desc(slackAgentThread.threadTs))
+              .limit(1)})`,
             sql`${slackAgentThread.postedTurnId} is distinct from ${turnId}`,
           ),
         )
@@ -425,7 +465,7 @@ const findSlackMadeTask = SqlSchema.findOneOption({
         .select({ agentId: slackAgentThread.agentId })
         .from(slackAgentThread)
         .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
-        .where(eq(agentTable.taskId, taskId))
+        .where(and(eq(agentTable.taskId, taskId), isNull(agentTable.automationRunId)))
         .limit(1),
     ),
 });
@@ -683,16 +723,29 @@ export function slackStartRepository(
   );
 }
 
-/** Keeps the thread as the one the agent was started from; a thread already kept keeps its first agent. */
-export function recordSlackAgentThread(thread: SlackAgentThread): TaskStoreEffect<void> {
-  return Effect.flatMap(DateTime.nowAsDate, (now) => insertAgentThread({ ...thread, now }));
+/**
+ * Keeps the thread as one that speaks for the agent, made its current one,
+ * with the turn already posted in it where its first message posted one; a
+ * thread already kept keeps its first agent.
+ */
+export function recordSlackAgentThread(
+  thread: SlackAgentThread & { readonly postedTurnId?: string },
+): TaskStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    insertAgentThread({ ...thread, postedTurnId: thread.postedTurnId ?? null, now }),
+  );
 }
 
-/** Moves the thread from the agent it was kept for to the one that continues it, started by the member named, so its later messages and settled turns go there; a thread moved to another agent since stands. */
+/** Moves the thread from the agent it was kept for to the one that continues it, started by the member named, as that agent's current thread, so its later messages and settled turns go there; a thread moved to another agent since stands. */
 export function moveSlackAgentThread(
   thread: SlackAgentThread & { readonly fromAgentId: string },
 ): TaskStoreEffect<void> {
-  return updateAgentThread(thread);
+  return Effect.flatMap(DateTime.nowAsDate, (now) => updateAgentThread({ ...thread, now }));
+}
+
+/** Makes the thread its agent's current one, as a member's message in it does, so the turn it starts is posted there. */
+export function touchSlackAgentThread(thread: SlackThread): TaskStoreEffect<void> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) => touchAgentThread({ ...thread, now }));
 }
 
 /** The agent the thread was started from, and the member who started it; nothing for a thread no agent was started from. */
@@ -704,19 +757,19 @@ export function slackAgentThreadAt(
   return findAgentThread({ organizationId, channelId, threadTs });
 }
 
-/** The threads the agent was started from that have not yet been posted this turn, each claimed for it as it is read. */
+/** The agent's current thread where this turn has not yet been posted in it, claimed for the turn as it is read; nothing for an agent no thread speaks for, or a turn posted already. */
 export function claimSlackThreadTurn(
   agentId: string,
   turnId: string,
-): TaskStoreEffect<readonly (typeof SlackThreadSchema.Type)[]> {
+): TaskStoreEffect<Option.Option<SlackThread>> {
   return claimThreadTurn({ agentId, turnId });
 }
 
 /**
  * Whether the task is one a Slack message made for the agent it started,
- * which is an agent a thread is kept for standing on it; a Slack start makes
- * its agent's task, and its continue lands on that same task, so no other
- * task holds a thread's agent.
+ * which is an agent a thread is kept for standing on it that no automation
+ * run started; a Slack start makes its agent's task, and its continue lands
+ * on that same task, so no other task holds such an agent.
  */
 export function isSlackTask(taskId: string): TaskStoreEffect<boolean> {
   return Effect.map(findSlackMadeTask({ taskId }), Option.isSome);
