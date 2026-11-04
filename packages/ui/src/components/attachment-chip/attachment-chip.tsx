@@ -15,7 +15,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * held between a narrow and a wide bound past which it is cropped, so a tall
  * phone capture stands narrow beside a wide one, as a filmstrip draws them;
  * any other file is the glyph its caller
- * draws for its type, its name fading out at the chip's end, and what more
+ * draws for its type, its name ending in an ellipsis at the chip's end, and what more
  * the caller says of it (its size). The chip's face is the press that opens
  * the file where `onOpen` is given, named "Open <name>"; a file with nothing
  * to open is drawn the same, pressing nothing. Where `onRemove` is given the
@@ -149,7 +149,7 @@ function ChipFace({
         <ClippedLine
           className="ui-attachment-chip-name overflow-hidden whitespace-nowrap text-foreground"
           as={ONE_LINE_ELEMENT.SPAN}
-          end={ONE_LINE_END.FADE}
+          end={ONE_LINE_END.ELLIPSIS}
           words={words}
         >
           {words}
