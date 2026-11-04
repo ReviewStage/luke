@@ -90,7 +90,10 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const written = yield* writeAccountPreferences(userId, { preferences: {} });
+      // Note that a write answers the transaction it committed in beside the snapshot, which a read carries none of.
+      const { txid: _committedIn, ...written } = yield* writeAccountPreferences(userId, {
+        preferences: {},
+      });
 
       const read = yield* readAccountPreferences(userId);
       assert.ok(read?.updatedAt instanceof Date);
