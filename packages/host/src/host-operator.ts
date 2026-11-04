@@ -219,8 +219,7 @@ import {
   type TasksCommentActParams,
   type TasksCommentAnswer,
   type TasksCommentStartParams,
-  type TasksCommentsAnswer,
-  type TasksCommentsParams,
+  type TasksCommentsFollow,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -299,7 +298,6 @@ import {
   tasksBrowserTabsAnswerSchema,
   tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
-  tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksFindAnswerSchema,
@@ -383,6 +381,7 @@ import type {
   AppHostRead,
   AppInboxItems,
   AppPages,
+  AppPlanComments,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -536,8 +535,14 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
-  /** One task's comment threads past a cursor, held by the service while nothing changed; or why there are none. */
-  tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+  /** One task's plan's or page's comments held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onPlanCommentsChanged`. */
+  tasksCommentsFollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One plan's or page's comments let go by the windows: they stay followed among those let go lately until later ones push them out. */
+  tasksCommentsUnfollow(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** One held plan's or page's comments read again at once, as Try again asks. */
+  tasksCommentsRetry(scope: TasksCommentsFollow): Effect.Effect<void>;
+  /** Every plan's or page's comments the host holds for the windows, whole, each time any of them moves. */
+  onPlanCommentsChanged(listener: (held: AppPlanComments) => void): () => void;
   /** A comment thread started on one task's plan, answered as it stands, or why not. */
   tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
   /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
@@ -1007,6 +1012,13 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 
 /** What a coding-agent call the host could not answer is drawn as. */
 /** A followed transcript as the gateway's params carry it. */
+/** The comments a window holds, as the gateway names them: the task, and the page where it holds one's. */
+function commentsFollowParams(scope: TasksCommentsFollow): WireRecord {
+  return scope.pageId === undefined
+    ? { taskId: scope.taskId }
+    : { taskId: scope.taskId, pageId: scope.pageId };
+}
+
 function transcriptParams(transcript: AgentTranscriptKey): WireRecord {
   const { kind, agentId, callId } = transcript;
   return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
@@ -1345,14 +1357,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_REVISION, { taskId: params.taskId, seq: params.seq }),
         answerOf(tasksRevisionAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksComments: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
-          planId: params.planId,
-          ...(params.pageId === undefined ? undefined : { pageId: params.pageId }),
-          after: params.after,
-        }),
-        answerOf(tasksCommentsAnswerSchema, TASK_UNANSWERED),
+    tasksCommentsFollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_FOLLOW, commentsFollowParams(scope))),
+    tasksCommentsUnfollow: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_UNFOLLOW, commentsFollowParams(scope))),
+    tasksCommentsRetry: (scope) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_COMMENTS_RETRY, commentsFollowParams(scope))),
+    onPlanCommentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLAN_COMMENTS_CHANGED,
+        // Note that the held comments are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppPlanComments>(payload) : undefined),
+        listener,
       ),
     tasksCommentStart: (params) =>
       Effect.map(

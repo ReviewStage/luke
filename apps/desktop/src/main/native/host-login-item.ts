@@ -23,8 +23,8 @@ import { app } from "electron";
 /** The account install's LaunchAgent, by its label (`MAC_LABEL` in the install script). */
 const LABEL = "dev.vespin.host.standalone";
 
-/** The oldest macOS the install script installs on (`MAC_MIN_VERSION` in the install script). */
-const MAC_MIN_VERSION = [12, 3] as const;
+/** The oldest macOS the install script installs on (`MAC_MIN_VERSION` in the install script): the release's Node needs 13.5. */
+const MAC_MIN_VERSION = [13, 5] as const;
 
 /** How long launchd may take to answer; the install script, which downloads a release, longer. */
 const ANSWER_WITHIN = {

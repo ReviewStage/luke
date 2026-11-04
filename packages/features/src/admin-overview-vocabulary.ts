@@ -68,6 +68,20 @@ export const AGENT_ORIGIN = {
 
 export type AgentOrigin = (typeof AGENT_ORIGIN)[keyof typeof AGENT_ORIGIN];
 
+/**
+ * The daily counts the Day page counts per account, one column each: the
+ * chart's features, and the tasks a feature reach row folds in beside them.
+ */
+export const DAY_ACCOUNT_COUNT = {
+  TASKS_CREATED: DAILY_COUNT.TASKS_CREATED,
+  PLAN_REVISIONS: DAILY_COUNT.PLAN_REVISIONS,
+  AGENTS_STARTED: DAILY_COUNT.AGENTS_STARTED,
+  INBOX_ANSWERED: DAILY_COUNT.INBOX_ANSWERED,
+  AUTOMATION_RUNS: DAILY_COUNT.AUTOMATION_RUNS,
+} as const;
+
+export type DayAccountCount = (typeof DAY_ACCOUNT_COUNT)[keyof typeof DAY_ACCOUNT_COUNT];
+
 /** The activation funnel's steps, in the order a new account is expected to take them. */
 export const FUNNEL_STEP = {
   SIGNED_UP: "signedUp",
@@ -109,3 +123,19 @@ export const RETENTION_BASIS = {
 } as const;
 
 export type RetentionBasis = (typeof RETENTION_BASIS)[keyof typeof RETENTION_BASIS];
+
+/**
+ * What a meaningful action was, the kinds `meaningfulActions` unions, in the
+ * order an account page's daily chart stacks them from its base. The values
+ * are the overview's own daily-count names for the same rows.
+ */
+export const MEANINGFUL_ACTION = {
+  /** A task created (`task.created_at`). */
+  TASKS_CREATED: "tasksCreated",
+  /** A plan revision written as the developer, under their user id. */
+  PLAN_REVISIONS: "planRevisions",
+  /** A coding agent started (`agent.created_at`), however it was started. */
+  AGENTS_STARTED: "agentsStarted",
+} as const;
+
+export type MeaningfulAction = (typeof MEANINGFUL_ACTION)[keyof typeof MEANINGFUL_ACTION];

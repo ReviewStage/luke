@@ -339,6 +339,13 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     })?.words,
     "This agent ran on Ada Lovelace's Mac before Vespin gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.vespin/agents/agent-1/repository there. Continue in a new agent to carry on.",
   );
+  // Note that an agent whose host stopped beating names the host and a message as the way on, rather than reading as the run's own failure.
+  assert.equal(
+    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.OTHER, undefined, true, undefined, {
+      host: "Studio",
+    })?.words,
+    "Studio went offline during this turn. Send a message to carry on once it's back.",
+  );
   for (const status of [AGENT_STATUS.STARTING, AGENT_STATUS.RUNNING, AGENT_STATUS.COMPLETED]) {
     assert.equal(endLineParts(status, undefined), undefined, status);
   }

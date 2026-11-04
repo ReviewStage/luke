@@ -35,9 +35,52 @@ export function cloneFolder(stateRoot: string, repository: string): string {
   return path.join(stateRoot, CLONES_FOLDER, ...repositoryFolders(repository));
 }
 
+/**
+ * How long a stalled step may stand before the script gives it up, and how
+ * long a launch waits on a clone another holds alive before it gives up.
+ * Note that the lock wait is the host's own deadline for the whole script
+ * (`compose-local-agents.ts`'s `WORKTREE_DEADLINE`), which a first clone of a
+ * large repository over a slow link has to fit in; a transfer that has
+ * stopped is cut off far sooner, by `STALL`, and a dead network by `CONNECT`.
+ */
+const WORKTREE_TIMING = {
+  /** Seconds a transfer may move under `LOW_SPEED_BYTES` a second before Git, over HTTPS, fails it. */
+  STALL_SECONDS: 60,
+  LOW_SPEED_BYTES: 1000,
+  /** Seconds a connection over SSH may take to open. */
+  CONNECT_SECONDS: 20,
+  LOCK_WAIT_SECONDS: 25 * 60,
+} as const;
+
+/** The exit code of a script whose launch gave up waiting on a clone another held alive (`EX_TEMPFAIL`). */
+export const WORKTREE_LOCK_BUSY = 75;
+
 /** A word quoted for a POSIX shell. */
 function shellQuoted(word: string): string {
   return `'${word.replaceAll("'", `'\\''`)}'`;
+}
+
+/**
+ * The lines that make every Git step of a script non-interactive and bounded,
+ * run after `PATH` is the login shell's. Nothing prompts: Git's terminal
+ * prompt is off and its askpass is a program that answers nothing, so a
+ * credential Git cannot read from its helper fails the step; SSH never asks
+ * for a password or a host key (`BatchMode`), takes only so long to connect,
+ * and drops a connection that has stopped answering. Over HTTPS, a transfer
+ * under `LOW_SPEED_BYTES` a second for `STALL_SECONDS` fails. Note that the
+ * developer's own `GIT_SSH_COMMAND`, or `core.sshCommand`, is the command the
+ * options are added to, never replaced; and that `git` is a function of the
+ * script so the HTTPS limits reach every call, whatever the developer's own
+ * Git configuration says.
+ */
+function nonInteractiveGit(stallSeconds: number): string[] {
+  return [
+    "export GIT_TERMINAL_PROMPT=0",
+    "export GIT_ASKPASS=/usr/bin/true",
+    `git() { command git -c http.lowSpeedLimit=${WORKTREE_TIMING.LOW_SPEED_BYTES} -c http.lowSpeedTime=${stallSeconds} "$@"; }`,
+    'ssh_command="${GIT_SSH_COMMAND:-$(git config --get core.sshCommand 2>/dev/null)}"',
+    `export GIT_SSH_COMMAND="\${ssh_command:-ssh} -o BatchMode=yes -o ConnectTimeout=${WORKTREE_TIMING.CONNECT_SECONDS} -o ServerAliveInterval=15 -o ServerAliveCountMax=4"`,
+  ];
 }
 
 /**
@@ -46,13 +89,15 @@ function shellQuoted(word: string): string {
  * time, over HTTPS and over SSH where that fails, checking nothing out. Every
  * install shares the clone, so the whole of bringing a branch in, its
  * clone, fetch, worktree and config, is done under the lock. A script defines
- * `brought_in`, and sets `clone`, `https`, and `ssh`, before it calls `opened`.
+ * `brought_in`, and sets `clone`, `https`, `ssh`, and `lock_wait`, before it calls
+ * `opened`.
  */
 const SHARED_CLONE = [
   "opened() {",
   '  mkdir -p "$(dirname "$clone")" || return 1',
   '  lock="$clone.lock"',
   "  waited=0",
+  "  blocked=0",
   '  until mkdir "$lock" 2>/dev/null; do',
   '    holder="$(cat "$lock/pid" 2>/dev/null)"',
   // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
@@ -67,8 +112,14 @@ const SHARED_CLONE = [
   '      rm -rf "$lock"',
   "      continue",
   "    fi",
+  // Note that a live holder's lock is never taken, but a launch waits on it only so long, so one stalled holder cannot hold every other launch of the repository.
+  '    if [ "$blocked" -ge "$lock_wait" ]; then',
+  '      echo "▸ Gave up waiting on another launch of ${https%.git} to finish making its clone." >&2',
+  `      return ${WORKTREE_LOCK_BUSY}`,
+  "    fi",
   "    sleep 1",
   "    waited=$((waited + 1))",
+  "    blocked=$((blocked + 1))",
   "  done",
   '  echo "$$" > "$lock/pid"',
   "  brought_in",
@@ -131,7 +182,13 @@ export function agentWorktreeScript(input: {
   readonly branch: string | null;
   /** Where the repository is cloned from, by protocol; GitHub's own unless a test names its own. */
   readonly remotes?: { readonly https: string; readonly ssh: string } | undefined;
+  /** The seconds a stalled transfer and a wait on a live holder of the clone's lock last; `WORKTREE_TIMING`'s unless a test names its own. */
+  readonly seconds?: { readonly stall: number; readonly lockWait: number } | undefined;
 }): string {
+  const seconds = input.seconds ?? {
+    stall: WORKTREE_TIMING.STALL_SECONDS,
+    lockWait: WORKTREE_TIMING.LOCK_WAIT_SECONDS,
+  };
   const remotes = input.remotes ?? {
     https: `https://github.com/${input.repository}.git`,
     ssh: `git@github.com:${input.repository}.git`,
@@ -140,6 +197,8 @@ export function agentWorktreeScript(input: {
     // An app opened from the Dock has a bare PATH; the login shell's is the one the developer's Git and tools live on.
     'PATH="$("${SHELL:-/bin/zsh}" -l -c \'printf %s "$PATH"\' 2>/dev/null || printf %s "$PATH")"',
     "export PATH",
+    ...nonInteractiveGit(Math.max(1, Math.trunc(seconds.stall))),
+    `lock_wait=${Math.max(1, Math.trunc(seconds.lockWait))}`,
     `clone=${shellQuoted(input.clone)}`,
     `worktree=${shellQuoted(input.worktree)}`,
     `branch=${shellQuoted(input.branch ?? "")}`,
@@ -168,9 +227,11 @@ export function agentWorktreeScript(input: {
     "}",
     ...OWN_REPOSITORY,
     '[ -e "$worktree/.git" ] && exit 0',
-    "if ! ( opened ); then",
+    "( opened )",
+    "status=$?",
+    'if [ "$status" -ne 0 ]; then',
     '  echo "▸ Could not make the agent\'s worktree of ${branch:-the default branch}." >&2',
-    "  exit 1",
+    '  exit "$status"',
     "fi",
     "",
   ].join("\n");

@@ -129,19 +129,26 @@ async function drawDockIcon(
  * The app always stands in the Dock, as an ordinary app does; this keeps its
  * tile matched to the theme, drawn now and again as the desktop changes mode.
  * A development build's tile carries its band (`badge`), so builds running
- * side by side are told apart in the Dock and the app switcher.
+ * side by side are told apart in the Dock and the app switcher. What it
+ * answers draws the tile again with another band, or none, as the menu bar
+ * hides a build's label for a demo.
  */
 export function followDockIcon(
   iconDirectory: string,
   badge: DevBuildBadge | undefined,
   report: (message: string) => void,
-): void {
+): (badge: DevBuildBadge | undefined) => void {
+  let band = badge;
   let draws = 0;
   const draw = (): void => {
     draws += 1;
     const mine = draws;
-    void drawDockIcon(iconDirectory, badge, report, () => mine === draws);
+    void drawDockIcon(iconDirectory, band, report, () => mine === draws);
   };
   draw();
   nativeTheme.on("updated", draw);
+  return (next) => {
+    band = next;
+    draw();
+  };
 }

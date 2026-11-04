@@ -14,7 +14,6 @@ import {
 } from "@repo/features/admin-wire";
 import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
-import { dayStart } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -69,25 +68,6 @@ export interface AdminUserListSource {
   total: number;
   signIn: AdminSignIn;
   rows: readonly AdminUserListRow[];
-}
-
-/**
- * When one account last touched the service at all: its freshest auth-session
- * write or, when later, the start of its most recent hosted-usage day. The
- * session write alone cannot say it — the desktop spends the hosted tier over
- * OAuth bearer tokens that never touch a session row, so an account can be
- * active every day while its sessions age. Null only when there is neither:
- * every session pruned and no hosted use ever. The Account page's support
- * card folds it; the roster's Last seen is the session write alone.
- */
-export function lastSeenInstant(
-  sessionSeenAt: Date | null,
-  lastUsageDay: string | null,
-): number | null {
-  const usageDayStart = lastUsageDay === null ? null : dayStart(lastUsageDay).getTime();
-  if (sessionSeenAt === null) return usageDayStart;
-  if (usageDayStart === null) return sessionSeenAt.getTime();
-  return Math.max(sessionSeenAt.getTime(), usageDayStart);
 }
 
 /** Stamps the queried roster with the window its aggregates cover and the search that scoped it. */

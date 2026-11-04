@@ -493,6 +493,18 @@ test("a Todo card dragged onto In progress is sent in progress, and one let go i
   assert.deepEqual(opened, [], "a drag opens no task");
 });
 
+test("with a draft standing over its column's cards, the card dragged onto another column is the one sent there", async () => {
+  const board = await mountBoard();
+  act(() =>
+    board.querySelector<HTMLButtonElement>('button[aria-label="New task in Todo"]')?.click(),
+  );
+  layCardsOut(board);
+
+  dragCard(board, "t-40", { x: 750, y: 120 });
+
+  assert.deepEqual(sent, [["t-40", { status: TASK_STATUS.IN_PROGRESS }]]);
+});
+
 test("a column's + opens a draft there whose chips change it, and Return adds it with no agent and opens the next draft", async () => {
   const added: [string, unknown][] = [];
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, DEFAULT_BOARD_DISPLAY, {

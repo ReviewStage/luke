@@ -43,6 +43,7 @@ import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
+import { hostAwayDetail } from "../agents/coder-host/status.js";
 import { queuedUnopenedTurn } from "../agents/device-agent.js";
 
 const DEVICE_LEASE_SWEEP = {
@@ -55,11 +56,6 @@ export interface DeviceLeaseSweepOutcome {
   readonly lapsed: number;
   readonly busy: number;
   readonly failed: number;
-}
-
-/** What the turn of a run its device lost says it failed of. */
-function deviceAwayDetail(deviceName: string): string {
-  return `${deviceName} went away during this turn. Send a message to carry on once it's back.`;
 }
 
 /**
@@ -92,7 +88,7 @@ const lapsedOne = (
             writer,
             agent.value.conversationId,
             now,
-            deviceAwayDetail(launch.deviceName),
+            hostAwayDetail(launch.deviceName),
           );
         }
         if (!newest.value.stopped) {

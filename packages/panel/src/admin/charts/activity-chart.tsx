@@ -80,6 +80,11 @@ function ActivityLegend(): React.JSX.Element {
  * partial-day fade on every band. Where a day has a roster to open, a click
  * anywhere in its column opens it, read from the chart's own axis datum.
  */
+/** A feature's name as the chart's legend writes it, for a figure that stands for one of its bands. */
+export function activityFeatureLabel(feature: ActivityFeature): string {
+  return ACTIVITY_CHART[feature].label;
+}
+
 export function ActivityChart({
   activity,
   generatedAt,

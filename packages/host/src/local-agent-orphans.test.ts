@@ -426,13 +426,52 @@ it.effect("a pass lets go of five agents at most, and the next pass of the rest"
   Effect.scoped(
     Effect.gen(function* () {
       const agents = Array.from({ length: 7 }, (_, index) => agentNumbered(index + 1));
-      const device = yield* following({ held: agents, reads: [[], [], []] });
+      // Note that as many agents again stay listed, so the reads leave out no more than half.
+      const listed = Array.from({ length: 7 }, (_, index) => agentNumbered(index + 8));
+      const device = yield* following({
+        held: [...agents, ...listed],
+        reads: [listed, listed, listed],
+      });
       yield* device.passed(2);
 
       assert.equal(agents.filter(device.folderStands).length, 2);
       yield* device.passed(3);
 
       assert.equal(agents.filter(device.folderStands).length, 0);
+      assert.equal(listed.filter(device.folderStands).length, listed.length);
+    }),
+  ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect(
+  "answered reads that leave out most of the agents with a folder here let go of none, and say so once",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
+        const device = yield* following({ held: agents, reads: [[], [], []] });
+        yield* device.passed(3);
+
+        assert.equal(agents.filter(device.folderStands).length, agents.length);
+        assert.deepEqual(device.ownedRecorded(), agents);
+        assert.equal(device.reported.filter((line) => line.includes("leaves out")).length, 1);
+      }),
+    ).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.effect("one agent of many left out of two reads in a row is still removed", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const agents = Array.from({ length: 6 }, (_, index) => agentNumbered(index + 1));
+      const [orphan, ...listed] = agents;
+      const device = yield* following({ held: agents, reads: [listed, listed] });
+      yield* device.passed(1);
+
+      assert.equal(device.folderStands(orphan ?? ""), true);
+      yield* device.passed(2);
+
+      assert.equal(device.folderStands(orphan ?? ""), false);
+      assert.equal(listed.filter(device.folderStands).length, listed.length);
     }),
   ).pipe(Effect.provide(NodeFileSystem.layer)),
 );
