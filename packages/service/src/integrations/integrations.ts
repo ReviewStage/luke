@@ -22,6 +22,7 @@
 
 import {
   INTEGRATION_NAME,
+  type INTEGRATION_NAMES_ACCOUNT,
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   type IntegrationProvider,
@@ -96,6 +97,19 @@ export interface IntegrationDefinition {
   /** What the model is told of the connection, so it can choose which one to search. */
   readonly DESCRIPTION: string;
 }
+
+/**
+ * Every provider's definition, its `ACCOUNT_NAME` given exactly where the
+ * wire says the provider answers whose account a token is
+ * (`INTEGRATION_NAMES_ACCOUNT`), so the host's rule for an account still to
+ * be named (`integrationLabelUnread`) is this table's.
+ */
+type IntegrationTable = {
+  readonly [P in IntegrationProvider]: IntegrationDefinition &
+    ((typeof INTEGRATION_NAMES_ACCOUNT)[P] extends true
+      ? { readonly ACCOUNT_NAME: AccountNameRead }
+      : { readonly ACCOUNT_NAME?: never });
+};
 
 const decodeGmailProfile = Schema.decodeUnknownOption(
   Schema.Struct({ emailAddress: Schema.String }),
@@ -436,7 +450,7 @@ export const INTEGRATION = {
     DESCRIPTION:
       "Y Combinator's Bookface, as the developer's own YC account sees it: search YC companies, founders, investors, forum posts, launches, and the startup library, and work with the company's hiring, fundraising, launches, office hours, and profile.",
   },
-} as const satisfies Record<IntegrationProvider, IntegrationDefinition>;
+} as const satisfies IntegrationTable;
 
 /**
  * What an agent is told of one integration's connection: its description and,

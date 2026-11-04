@@ -115,6 +115,32 @@ export const INTEGRATION_GRANT_OF = {
 } as const satisfies Record<IntegrationProvider, IntegrationGrant>;
 
 /**
+ * Whether each provider answers whose account a token is, so an account
+ * whose grant named nothing is still called by its name there; the
+ * service's table gives a provider its read (`integrations.ts`'s
+ * `ACCOUNT_NAME`) exactly where this says so.
+ */
+export const INTEGRATION_NAMES_ACCOUNT = {
+  [INTEGRATION_PROVIDER.EXECUTOR]: false,
+  [INTEGRATION_PROVIDER.GITHUB]: false,
+  [INTEGRATION_PROVIDER.GMAIL]: true,
+  [INTEGRATION_PROVIDER.GOOGLE_CALENDAR]: true,
+  [INTEGRATION_PROVIDER.GOOGLE_DRIVE]: true,
+  [INTEGRATION_PROVIDER.GRANOLA]: true,
+  [INTEGRATION_PROVIDER.LINEAR]: false,
+  [INTEGRATION_PROVIDER.MERCURY]: true,
+  [INTEGRATION_PROVIDER.NEON]: true,
+  [INTEGRATION_PROVIDER.NOTION]: true,
+  [INTEGRATION_PROVIDER.POSTHOG]: true,
+  [INTEGRATION_PROVIDER.SENTRY]: true,
+  [INTEGRATION_PROVIDER.SLACK]: false,
+  [INTEGRATION_PROVIDER.STRIPE]: false,
+  [INTEGRATION_PROVIDER.SUPABASE]: true,
+  [INTEGRATION_PROVIDER.VERCEL]: true,
+  [INTEGRATION_PROVIDER.YCOMBINATOR]: true,
+} as const satisfies Record<IntegrationProvider, boolean>;
+
+/**
  * The web hosts each provider's own pages stand on, which a link is known to
  * be the provider's by: the host itself or any host under it
  * (`acme.slack.com`, `us.posthog.com`). A provider whose pages have no host
@@ -299,6 +325,23 @@ export const INTEGRATION_ACCOUNTS_MAX = 5;
 
 /** The longest label an account may carry, in characters. */
 export const INTEGRATION_LABEL_MAX = 64;
+
+/**
+ * Whether an account's label is still to be read from its grant or its
+ * provider: one never read, or one a grant that named nothing left empty at
+ * a provider that answers whose account a token is
+ * (`INTEGRATION_NAMES_ACCOUNT`). The service reads such a label on every
+ * read that settles (`integrations-procedures.ts`'s `labeledRow`), and the
+ * host asks for one.
+ */
+export function integrationLabelUnread(
+  provider: IntegrationProvider,
+  label: string | null | undefined,
+): boolean {
+  return (
+    label === null || label === undefined || (label === "" && INTEGRATION_NAMES_ACCOUNT[provider])
+  );
+}
 
 /** One account the user account holds at a provider, as the statuses read answers it. */
 const integrationAccountSchema = EffectSchema.Struct({

@@ -10,7 +10,11 @@ import type {
   IntegrationRenameParams,
   IntegrationStatusView,
 } from "@repo/features/integration-view";
-import { INTEGRATION_STATUS, type IntegrationStatus } from "@repo/features/integration-wire";
+import {
+  INTEGRATION_STATUS,
+  type IntegrationStatus,
+  integrationLabelUnread,
+} from "@repo/features/integration-wire";
 import { type LIVE_READ, LIVE_SIGNED_OUT } from "@repo/features/live-wire";
 import { carried } from "@repo/gateway";
 import {
@@ -46,8 +50,11 @@ import type { WindowFocus } from "./window-focus.js";
  * nothing, so while a row stands pending the host asks the service to
  * settle every sign-in under way, every `INTEGRATION_SETTLE_EVERY`, and asks
  * nothing while none does; what it settles arrives on the rows. A settle
- * also labels a connected account that carries no label, from its grant or
- * its provider, so one is asked once for each such row a follow meets.
+ * also names a connected account still to be named, from its grant or its
+ * provider, under the service's own rule (`integrationLabelUnread`): one is
+ * asked once for each such row a follow meets, and again as a window comes
+ * forward, since a settle that could not read a name leaves its row as it
+ * was.
  *
  * Each account is one row of the pool (`@repo/sync`), by its id, taken the
  * moment each poll answers, before the follow carries the answer's txids
@@ -145,7 +152,8 @@ const LiveRowsSchema = Schema.Struct({ connections: Schema.Array(Schema.Unknown)
  * providers beside them and GitHub's standing once both have answered;
  * GitHub's asked again as each window comes forward, and as `followed`'s
  * own ask is run; and the service asked to settle while a row stands
- * pending, and once for each connected row it meets with no label. A read
+ * pending, and once for each connected row it meets still to be named,
+ * again as a window comes forward. A read
  * the service did not answer is followed again after `LIVE_RESTART`, and
  * one refused as signed out, the session another account's now, no more.
  */
@@ -158,12 +166,24 @@ function followIntegrations(
   return Effect.gen(function* () {
     const pending = yield* Queue.sliding<boolean>(1);
     const unlabeled = yield* Queue.sliding<void>(1);
-    /** The connected rows with no label a settle was asked for, by their ids, so each is asked once. */
+    /** The connected rows still to be named a settle was asked for, by their ids, so each is asked once until a window comes forward. */
     const labelAsked = new Set<string>();
     let beside: Beside | undefined;
     let github: IntegrationStatus | undefined;
     let taken = false;
     let txWait: TxWait | undefined;
+    const askLabels = () => {
+      const unnamed = connections
+        .rows()
+        .filter(
+          (row) =>
+            row.status === INTEGRATION_STATUS.CONNECTED &&
+            integrationLabelUnread(row.provider, row.label) &&
+            !labelAsked.has(row.id),
+        );
+      for (const row of unnamed) labelAsked.add(row.id);
+      if (unnamed.length > 0) Queue.offerUnsafe(unlabeled, undefined);
+    };
     const draw = () => {
       if (!taken || beside === undefined || github === undefined) return;
       const rows = connections.rows();
@@ -172,14 +192,7 @@ function followIntegrations(
         pending,
         rows.some((row) => row.status === INTEGRATION_STATUS.PENDING),
       );
-      const unnamed = rows.filter(
-        (row) =>
-          row.status === INTEGRATION_STATUS.CONNECTED &&
-          row.label === null &&
-          !labelAsked.has(row.id),
-      );
-      for (const row of unnamed) labelAsked.add(row.id);
-      if (unnamed.length > 0) Queue.offerUnsafe(unlabeled, undefined);
+      askLabels();
     };
     const connections: HeldRows<IntegrationLiveRow> = yield* dependencies.pool.stand(INTEGRATION, {
       redraw: () => Effect.sync(draw),
@@ -200,10 +213,15 @@ function followIntegrations(
       txWait: () => txWait,
       github: askGithub,
     });
+    // Note that a window come forward asks again for every account still to be named, as the statuses read did on focus before the rows were followed.
+    const askAgain = Effect.sync(() => {
+      labelAsked.clear();
+      if (taken) askLabels();
+    });
     yield* Effect.forkScoped(
       Stream.make(undefined).pipe(
         Stream.concat(yield* dependencies.focus.heard),
-        Stream.runForEach(() => askGithub),
+        Stream.runForEach(() => Effect.andThen(askAgain, askGithub)),
       ),
     );
     // Note that the schedule starts anew only as the rows turn pending, so a draw that changes nothing of it keeps its spacing.
