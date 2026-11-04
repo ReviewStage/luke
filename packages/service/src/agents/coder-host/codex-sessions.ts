@@ -87,7 +87,6 @@ export interface CodexSessionsOptions extends RunnerSessionsOptions {
 /** Where the image keeps Codex (`agent-runtime/sandbox-image.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
 const CODEX_PATH = { EXECUTABLE: CODEX_PIN.LINK, HOME: CODEX_PIN.HOME } as const;
 
-/** The variable Codex reads its home from. */
 const CODEX_HOME_ENV = "CODEX_HOME";
 
 /**

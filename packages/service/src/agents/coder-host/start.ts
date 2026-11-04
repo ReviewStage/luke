@@ -156,14 +156,14 @@ import { canceledTurn, summaryOf } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
- * start.ts -- an agent started on a task, or in a workspace with no task: the one path a start takes, from New task, an agent's draft, or the terminal picker, from another agent's `start_agent`, from the app's voice, or from an automation's run.
+ * start.ts -- an agent started on a task, or in a workspace with no task: the one path a start takes, from New task, an agent's draft, or the terminal picker, from another agent's `start_agent`, or from an automation's run.
  *
  * The model, effort, and context window are the ask's own where it names a
  * model, the account's stored default otherwise, either checked against the
  * catalog, which also
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
- * the voice tool can say which choices there are. The task must name a
+ * a caller can say which choices there are. The task must name a
  * repository the account still reaches through our GitHub App, and
  * through its workspace's installation where it has one, read now rather
  * than when the task named it (`packages/service/src/github/workspace-repository.ts`). The
@@ -242,7 +242,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
  * Settings writes. Who reaches the agent is the caller's: the route holds the developer's
- * own bearer, and the voice brain's and a coding agent's tool act as the
+ * own bearer, and a coding agent's tool acts as the
  * deployment for the account; the agent's harness answers the opening, and
  * the cancel that stops a continue's source, either way
  * (`runtime-sessions.ts`).
@@ -596,7 +596,6 @@ function noteFilesOf(files: readonly AgentAttachment[]): NoteFiles {
   return { text, other: files.length - text };
 }
 
-/** The bytes of a text in UTF-8. */
 function utf8Bytes(text: string): number {
   return new TextEncoder().encode(text).byteLength;
 }
@@ -1179,7 +1178,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
           }),
         );
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
-  // A blank agent on a task with no repository reaches none.
   // Note that a task started with its agent reached the repository a moment ago, in the same
   // request and as the same member, so that reach stands rather than a second round of GitHub reads.
   const member = ask.automationOrigin === undefined ? userId : undefined;
@@ -1193,7 +1191,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : ask.reached !== undefined && ask.reached.repository === landing.repository
         ? Effect.succeed(ask.reached)
         : workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
-  // An agent started from another goes on from the branch that one was started on.
   const branchOf = startBranchOf(userId, ask, from?.source.startBranch ?? null, landing, member);
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
@@ -1274,9 +1271,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
-  // The session opens with the plan or the prompt as its first message; an eve that did not take
-  // it leaves no agent behind, so the retry under the same key starts afresh. A blank agent opens
-  // none: its first words open its session as they reach it (`steer.ts`).
+  // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     // Every line the opening says names the agent, the runtime's own past the answer included. Note
@@ -1299,7 +1294,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         ),
       );
       // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
-      // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
+      // store could not keep goes unnamed rather than failing a Start whose agent already stands.
       const files = yield* keptHandedImages(
         { userId: agent.userId, conversationId: agent.conversationId },
         attachments,
@@ -1308,9 +1303,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
         words === undefined ? undefined : mentionedContext(words, landing.task, reads);
       // The first message is written here, awaiting its turn, on every runtime, so it says what it is and
       // who sent it: a native harness's runner names the line back as it takes it (`native-events/`).
-      // A launch refused discards the agent, line and all. A line that could not be written discards the
-      // agent, as a refused launch does, so a retry under the same key starts it afresh rather than
-      // finding an agent that was never launched.
       const line = yield* openingLine(
         agent,
         handed,
@@ -1404,9 +1396,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;
-  // Work on the task has begun, so one in the backlog or to do moves into progress, and one
-  // further along stands; a move that fails is logged, never the Start's failure. A blank agent
-  // was handed no work, so its task stands where it is.
   // The Start answers the last transaction it committed in, which Realtime delivers after every
   // one before it, so a client waiting on it sees the agent and its task's standing alike.
   let committed = txid;
@@ -1417,6 +1406,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     if (Option.isSome(archived)) committed = archived.value;
   }
   if (landing.task !== undefined) {
+    // A blank agent was handed no work, so its task stands where it is.
     if (handed !== null) {
       const begun = yield* beginTaskWorkCommitted(userId, landing.task.id).pipe(
         Effect.catch((failure) => Effect.as(logStoreFailure(failure), Option.none())),
@@ -1445,7 +1435,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
             ? SERVER_AGENT_START_KIND.CONTINUE
             : SERVER_AGENT_START_KIND.FORK,
       is_from_automation: automationRun(ask) !== undefined,
-      // An agent's `start_agent` names its starter, an automation's run names its run, and a member's Start neither.
       started_by: starterOf(ask),
       has_task: ask.taskId !== null,
       agent_kind: agent.kind,
@@ -1462,18 +1451,6 @@ export interface RequestedStart {
   readonly txid?: string;
 }
 
-/**
- * The account's agent started on the task, or in the workspace with no
- * task, as a request asks it, through `startAgent`: the agent's own
- * Start (`POST /api/plans/{id}/agents`), a Start from an agent in its own
- * place (`POST /api/agents/{id}/agents`), and a task's start that names an
- * agent (`POST /api/plans`) all take it, so they refuse and answer alike.
- * A choice is one thing, so a model
- * without its effort, the reverse, or a window without a model is refused
- * as invalid, as is a choice the catalog refuses; an empty note is none,
- * its files carrying it alone. A new agent's summary is read as it was just
- * made, with no turn; one a retry found under its key, as it stands now.
- */
 /**
  * The choice a Start request names, or none: a model without its effort,
  * the reverse, or a window without a model is refused as invalid, since a
@@ -1495,6 +1472,16 @@ export const requestedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     : undefined;
 });
 
+/**
+ * The account's agent started on the task, or in the workspace with no
+ * task, as a request asks it, through `startAgent`: the agent's own
+ * Start (`POST /api/plans/{id}/agents`), a Start from an agent in its own
+ * place (`POST /api/agents/{id}/agents`), and a task's start that names an
+ * agent (`POST /api/plans`) all take it, so they refuse and answer alike.
+ * A choice the catalog refuses is refused as invalid; an empty note is none,
+ * its files carrying it alone. A new agent's summary is read as it was just
+ * made, with no turn; one a retry found under its key, as it stands now.
+ */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   eve: Effect.Effect<
     AgentSessions<EveTypedTurn>,

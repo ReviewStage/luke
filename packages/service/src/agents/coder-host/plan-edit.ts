@@ -75,9 +75,7 @@ import { type InboxSandboxDoor, readSandboxMedia } from "./inbox-image.js";
 const PLAN_EDIT = {
   /** The most notes one turn may take on the plan, across its calls, each picture one of them. */
   MAX_NOTES_PER_TURN: 40,
-  /** The most pictures one call may add. */
   MAX_PICTURES_PER_CALL: 4,
-  /** The most characters a picture's path in the agent's sandbox may spell. */
   MAX_PATH_CHARS: 1_024,
   /** The most characters a picture's alt text may spell: what it shows, in a sentence or two. */
   MAX_ALT_CHARS: 300,
@@ -116,7 +114,6 @@ const picturesSchema = Schema.Array(pictureSchema).check(
 
 const readPictures = readEither(picturesSchema);
 
-/** The task a call names, whose plan it edits. */
 const editedTaskSchema = Schema.Struct({ taskId: wireUuidSchema });
 
 // The call's notes and pictures stand beside its task, and are read on their own.
@@ -188,7 +185,7 @@ export const TASK_PICTURE_FILE_REFUSAL = {
   TOO_LARGE: `Not saved: a picture names an image larger than ${PICTURE_BOUNDS.MAX_BYTES / 1_000_000} MB, or a video larger than ${PICTURE_BOUNDS.MAX_VIDEO_BYTES / 1_000_000} MB; take it smaller, or at one screen scale, or record a shorter flow:`,
   UNREADABLE: "Not saved: a picture's file could not be read from your sandbox:",
 } as const;
-/** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
+/** How many notes a turn has taken: the turn and its count. */
 export interface NotesTaken {
   readonly turnId?: string;
   readonly count: number;
@@ -253,7 +250,7 @@ export function requestedNotes(input: UnparsedWireValue): number {
 }
 
 /**
- * What a call answers, as the model and the authored file read it: how many
+ * What a call answers, as the model reads it: how many
  * notes it took, or why nothing was saved, with the note that missed and the
  * plan as it stands where the plan no longer holds what a note names.
  */
@@ -270,7 +267,6 @@ export function planEditRejected(reason: string): PlanEditResult {
   return refused(reason);
 }
 
-/** A refusal with nothing but its reason. */
 function refused(
   reason: string,
 ): Extract<PlanEditResult, { status: typeof ACTION_RESULT_STATUS.REJECTED }> {
@@ -359,10 +355,8 @@ function picturesInSandbox(
 
 /**
  * The pictures read kept on the plan as the binding's account, each written
- * as an added point, its picture's line under its section; refused where the
- * plan holds its bound of pictures, or was archived or deleted since it was
- * read. Note that this runs inside the call's transaction, so a refusal
- * keeps none of them.
+ * as an added point, its picture's line under its section. Note that this
+ * runs inside the call's transaction, so a refusal keeps none of them.
  */
 function keptAsNotes(
   binding: PlanDocumentBinding,
@@ -398,9 +392,8 @@ function keptAsNotes(
 /**
  * The call's notes, and the pictures read for it kept and added after them,
  * saved in one transaction under the writer given, or the refusal the save
- * answered: the plan's bound of pictures, a plan gone, or a note that missed,
- * with the plan as it stands. Note that a refusal anywhere keeps no picture,
- * so none holds a place in the plan's bound.
+ * answered. Note that a refusal anywhere keeps no picture, so none holds a
+ * place in the plan's bound.
  */
 function savedEdit(
   binding: PlanDocumentBinding,
@@ -432,13 +425,11 @@ function savedEdit(
 }
 
 /**
- * Runs one call: the notes taken into the plan the binding names, its
- * pictures read from the sandbox, kept, and added after them, or the refusal
- * for notes or pictures that do not read, a turn past its cap, a picture to
- * mend, or a plan the save refused. Every file is read before the store is
- * written (`savedEdit`). Note that `takenInTurn` is the caller's count of
- * this turn's notes, because the count lives in eve's session state, which
- * only the authored file can read.
+ * Runs one call: the notes taken into the plan the binding names, and its
+ * pictures read from the sandbox, kept, and added after them. Every file is
+ * read before the store is written (`savedEdit`). Note that `takenInTurn` is
+ * the caller's count of this turn's notes, because the turn's row keeps it
+ * (`reserveTurnPlanNotes`).
  */
 export function recordPlanEdit(
   binding: PlanDocumentBinding,
