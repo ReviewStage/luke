@@ -93,6 +93,8 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Until when the reader snoozed the item, in epoch milliseconds, which marked it read for them; null where they did not, and absent from a service before snoozing. */
+  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
@@ -147,6 +149,8 @@ export const accountTasklessEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, as a task's item says it, and on the same terms. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /** Until when the reader snoozed the item, as a task's item says it, and on the same terms. */
+  snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 
 export type AccountTasklessEntry = typeof accountTasklessEntrySchema.Type;

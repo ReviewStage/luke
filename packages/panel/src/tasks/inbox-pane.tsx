@@ -140,6 +140,7 @@ import {
   sentStamp,
 } from "./inbox-model.js";
 import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
+import type { InboxSnoozer } from "./inbox-snooze.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
@@ -1096,7 +1097,7 @@ const ITEM_THING = "Inbox item";
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs, offering what the item's row's menu offers in the
  * same order (`inbox-item-actions.tsx`): Copy link, the item's link under its
- * agent; Mark as read or unread, naming U; and, while the
+ * agent; Mark as read or unread, naming U, and Snooze, naming H; and, while the
  * item is open, Resolve without answering, asked first. It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
@@ -1106,12 +1107,14 @@ function InboxItemMenu({
   shown,
   onMark,
   onClose,
+  onSnooze,
   lead = NO_LEAD,
   heading,
 }: {
   item: InboxItem;
   shown: boolean;
   onMark: InboxPaneDoors["onMark"];
+  onSnooze?: InboxSnoozer | undefined;
   onClose: InboxCloser | undefined;
   /** Groups over the item's own, as a phone's head leads its ⋯ with what its bar drew as buttons (`phoneItemGroups`); none elsewhere. */
   lead?: readonly MenuAction[][];
@@ -1120,10 +1123,12 @@ function InboxItemMenu({
 }): React.JSX.Element | null {
   const menu = useMenu(shown);
   const close = useInboxClose(item, onClose, shown);
+  // Note that a time of the reader's own is picked from the item's row, whose list holds the picker, so this menu offers the times alone.
   const { groups: itemGroups } = useInboxItemActions(item, {
     onMark,
     onAskClose: close.ask,
     keyed: true,
+    snooze: onSnooze === undefined ? undefined : { onSnooze },
   });
   // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read here as the menu is drawn rather than as the lead was made.
   const groups = itemGroups(lead === NO_LEAD ? lead : [...lead, ...phoneFindGroups()]);
@@ -1281,6 +1286,8 @@ export interface InboxPaneDoors {
   readonly code: InboxCodeDoors;
   /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
+  /** Snoozes the item from its ⋯ menu, or ends its snooze; none where the pane offers no snooze. */
+  readonly onSnooze?: InboxSnoozer | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
   readonly onClose?: InboxCloser | undefined;
 }
@@ -1608,6 +1615,7 @@ export function InboxPane({
               item={item}
               shown={!hidden}
               onMark={doors.onMark}
+              onSnooze={doors.onSnooze}
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
@@ -1647,6 +1655,7 @@ export function InboxPane({
                 item={item}
                 shown={!hidden}
                 onMark={doors.onMark}
+                onSnooze={doors.onSnooze}
                 onClose={doors.onClose}
               />
             </>

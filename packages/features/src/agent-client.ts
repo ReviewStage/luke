@@ -1576,6 +1576,17 @@ export class HostedAgentClient {
     return hostedAnswer(askHosted(this.#hosted.inbox.markItemUnread, { id: itemId }), ROW_REFUSALS);
   }
 
+  /** One item snoozed for the account until `until`, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null: its id and its read state; not found where the item is not one the account reaches. */
+  snoozeInboxItem(
+    itemId: string,
+    until: number | null,
+  ): Effect.Effect<AgentInboxReadStateView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.snoozeItem, { params: { id: itemId }, body: { until } }),
+      ROW_REFUSALS,
+    );
+  }
+
   /**
    * Every item the account's Inbox lists marked read for it, open or
    * settled, in the one workspace the request names or in all of its

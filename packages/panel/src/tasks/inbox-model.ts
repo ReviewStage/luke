@@ -1396,8 +1396,9 @@ export function agentGroups(
 /**
  * Which items an Inbox lists, as its view's menu chooses: Open, every
  * thread still open, a question not yet answered or a notice nobody has
- * opened yet, which Addressed to then narrows; or All, every item, open and
- * settled. Note that Open keeps the value To do was kept by, so a scope
+ * opened yet, which Addressed to then narrows; All, every item, open and
+ * settled; or Snoozed, the items the reader snoozed, which the other two
+ * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
  * kept before it reads as Open. Note too that no scope asks where the
  * item's task stands: an item of a task done or canceled is listed and
  * counted as any other, the Inbox being a feed of what the agents got done.
@@ -1405,6 +1406,7 @@ export function agentGroups(
 export const INBOX_SHOW = {
   OPEN: "to-do",
   ALL: "all",
+  SNOOZED: "snoozed",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
@@ -1431,6 +1433,7 @@ export const MINE: InboxWhose = { kind: INBOX_WHOSE.MINE };
 export interface InboxCounts {
   readonly [INBOX_SHOW.OPEN]: number;
   readonly [INBOX_SHOW.ALL]: number;
+  readonly [INBOX_SHOW.SNOOZED]: number;
 }
 
 /** One holder, a task or an agent, and every item it holds, as the list is handed them. */
@@ -1665,6 +1668,35 @@ export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
+/** Whether the reader snoozed the item and it has not come back, as `inboxAtNow` leaves its snooze on it. */
+export function isSnoozed(item: InboxItem): boolean {
+  return item.snoozedUntil !== undefined;
+}
+
+/**
+ * An item as it stands for the reader at `now`: snoozed while it is read
+ * and its snooze is ahead; back where its snooze has passed, unread and as
+ * changed then, so it lists at the top; and no longer snoozed where a
+ * change made it unread, which ends a snooze early. Only a snoozed item
+ * keeps `snoozedUntil` (`isSnoozed`), and an item it leaves as it was is the
+ * very one handed in.
+ */
+function itemAtNow(item: InboxItem, now: number): InboxItem {
+  const { snoozedUntil, ...rest } = item;
+  if (snoozedUntil === undefined) return item;
+  if (isUnread(item)) return rest;
+  if (snoozedUntil > now) return item;
+  return { ...rest, unread: true, updatedAt: Math.max(item.updatedAt, snoozedUntil) };
+}
+
+/** Every holder's items as they stand for the reader at `now` (`itemAtNow`), each group handed in kept where none of its items moved. */
+export function inboxAtNow(groups: readonly InboxGroup[], now: number): readonly InboxGroup[] {
+  return groups.map((group) => {
+    const items = group.items.map((item) => itemAtNow(item, now));
+    return items.every((item, index) => item === group.items[index]) ? group : { ...group, items };
+  });
+}
+
 /** Whether the reader is done with an item, as its row is drawn gray: settled, answered or closed, and read since. */
 export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
@@ -1675,15 +1707,18 @@ export function isDone(item: InboxItem): boolean {
  * Whether a scope lists the item: Open every open thread, a question or an
  * update not yet opened, which narrowed to the reader's own (`needsYou`)
  * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
- * all of them. Note that a thread of theirs settled and unread is left to
+ * all of them, each leaving out what the reader snoozed (`isSnoozed`),
+ * which Snoozed alone lists. Note that a thread of theirs settled and unread is left to
  * All, because main counts no settled item.
  */
 function showsItem(show: InboxShow, item: InboxItem): boolean {
   switch (show) {
     case INBOX_SHOW.OPEN:
-      return item.status === INBOX_STATUS.OPEN;
+      return item.status === INBOX_STATUS.OPEN && !isSnoozed(item);
     case INBOX_SHOW.ALL:
-      return true;
+      return !isSnoozed(item);
+    case INBOX_SHOW.SNOOZED:
+      return isSnoozed(item);
   }
 }
 
@@ -1700,6 +1735,7 @@ export function inboxCounts(
   return {
     [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
+    [INBOX_SHOW.SNOOZED]: count(INBOX_SHOW.SNOOZED),
   };
 }
 

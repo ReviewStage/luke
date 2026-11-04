@@ -90,6 +90,7 @@ import {
   readInboxItemHome,
   retitleInboxThread,
   type StoredInboxItem,
+  snoozeInboxItem,
   startInboxThread,
   withdrawInboxAnswer,
   withdrawInboxClose,
@@ -778,6 +779,15 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       const marked = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };
+    }),
+    snoozeItem: signedIn.snoozeItem.effect(function* ({ input, context }) {
+      const itemId = yield* pathUuid(input.params.id);
+      const { until } = input.body;
+      const marked = yield* hostedStoreOrUnavailable(
+        snoozeInboxItem(context.userId, itemId, until === null ? null : new Date(until)),
+      );
+      if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { id: itemId, unread: false, ...marked };
     }),
     markAllRead: hosted.inbox
       .use(accountMiddleware(seams.resolveUserId))

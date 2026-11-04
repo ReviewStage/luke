@@ -4,7 +4,7 @@ import { user } from "./auth.js";
 import { inboxItem } from "./inbox.js";
 
 /**
- * inbox-item-read.ts -- one member's read marker on one inbox item: how far they have read it, and whether they marked it unread.
+ * inbox-item-read.ts -- one member's read marker on one inbox item: how far they have read it, whether they marked it unread, and until when they snoozed it.
  *
  * An item is unread for a member while it changed after the last change
  * they read through, or while they marked it unread and have not read it
@@ -33,6 +33,14 @@ export const inboxItemRead = pgTable(
     readThrough: timestamptz("read_through"),
     /** Whether the member marked the item unread and has not read it since; any change leaves it standing. */
     markedUnread: boolean("marked_unread").notNull().default(false),
+    /**
+     * Until when the member snoozed the item, which snoozing marks read: it
+     * stays out of their Inbox while it is read and this is still ahead,
+     * so a change that makes it unread ends the snooze early. Null where it
+     * is not snoozed; reading it once it came back, or once a change woke
+     * it, clears it.
+     */
+    snoozedUntil: timestamptz("snoozed_until"),
   },
   (table) => [
     // One marker per member per item, which every read of an item's unread state looks up.

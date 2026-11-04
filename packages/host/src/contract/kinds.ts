@@ -241,6 +241,8 @@ export const AGENT_INBOX_ACT_KIND = {
   AGENTS_INBOX_START: "agents.inboxStart",
   /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
   AGENTS_INBOX_READ_STATE: "agents.inboxReadState",
+  /** One item snoozed for the account until an instant, or its snooze ended; it marks the item read, and changes neither what it asks nor whether it waits. */
+  AGENTS_INBOX_SNOOZE: "agents.inboxSnooze",
   /** Where one item stands, its agent, task, and workspace, as a link by its id alone is opened; it reads, and changes nothing. */
   AGENTS_INBOX_ITEM_HOME: "agents.inboxItemHome",
   /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
@@ -786,6 +788,7 @@ export const PORT_ACT_USE = {
   AGENTS_INBOX_MESSAGE: ACT_USE.WRITE,
   AGENTS_INBOX_START: ACT_USE.WRITE,
   AGENTS_INBOX_READ_STATE: ACT_USE.WRITE,
+  AGENTS_INBOX_SNOOZE: ACT_USE.WRITE,
   AGENTS_INBOX_ITEM_HOME: ACT_USE.FETCH,
   AGENTS_INBOX_READ_ALL: ACT_USE.WRITE,
   AGENTS_INBOX_ATTACHMENT: ACT_USE.FETCH,
