@@ -66,9 +66,11 @@ export type ToldPage = AgentMessagesAnswerView | AgentTranscriptPage;
 
 /**
  * A transcript as a test's host holds it once `pages` were told on it in
- * turn: each readable page's messages joined on by id, its word on the agent
- * the last's, and each counted; a page that could not be read standing
- * beside what was held, and one the account does not reach in its place.
+ * turn: each readable page's messages joined on by id, or a newest page
+ * that does not meet them, or was read at another rewind, in their place;
+ * its word on the agent the last's, and each counted; a page that could not
+ * be read standing beside what was held, and one the account does not reach
+ * in its place.
  */
 export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTranscript> {
   let held: AppTranscript = { messages: [], pages: 0 };
@@ -80,12 +82,20 @@ export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTrans
           : { ...held, failure: page };
       continue;
     }
-    const { messages, cursor, before, newest: _newest, ...word } = page;
-    const { failure: _failure, ...standing } = held;
+    const { messages, cursor, before, newest, ...word } = page;
+    const ids = new Set(messages.map((message) => message.id));
+    const meets = before === undefined || held.messages.some((message) => ids.has(message.id));
+    const replaces =
+      newest === true &&
+      (held.messages.length === 0 || !meets || word.rewound !== held.word?.rewound);
+    const { failure: _failure, before: heldBefore, ...standing } = held;
+    // Note that a newest page naming no older page holds the whole transcript, so nothing stands below it.
+    const below =
+      replaces || (newest === true && before === undefined) ? before : (heldBefore ?? before);
     held = {
       ...standing,
-      messages: applyMessagesPage(held.messages, messages),
-      ...(before === undefined ? undefined : { before }),
+      messages: replaces ? messages : applyMessagesPage(held.messages, messages),
+      ...(below === undefined ? undefined : { before: below }),
       cursor,
       word,
       pages: held.pages + 1,
@@ -99,8 +109,8 @@ export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTrans
  * document and acts handed by now: the pages `pagesOf` names for a
  * transcript, told on it in turn and laid once it is held; or, where `held`
  * names one of them, the pages before it, and the rest once its release
- * lands. Answers with how the test's host lays a transcript anew, and the
- * holds asked.
+ * lands, where a window still holds it. Answers with how the test's host
+ * lays a transcript anew, and the holds asked and let go.
  */
 export function pushedTranscripts(
   pagesOf: (transcript: AgentTranscriptKey) => readonly ToldPage[],
@@ -111,13 +121,23 @@ export function pushedTranscripts(
     (transcript) => {
       const pages = pagesOf(transcript);
       if (held !== undefined) {
-        void held.release.then(() => told.lay(transcript, transcriptTold(pages)));
+        // Note that a transcript let go reads nothing more, so the rest lands only while a window holds it.
+        void held.release.then(() => {
+          if (heldNow(told, transcript)) told.lay(transcript, transcriptTold(pages));
+        });
       }
       const first = pages.slice(0, held?.page ?? pages.length);
       return first.length === 0 ? undefined : transcriptTold(first);
     },
   );
   return told;
+}
+
+/** Whether a window holds `transcript` now: it asked for it more often than it let it go. */
+function heldNow(held: TranscriptsHeld, transcript: AgentTranscriptKey): boolean {
+  const same = (other: AgentTranscriptKey) =>
+    other.agentId === transcript.agentId && other.callId === transcript.callId;
+  return held.asked.filter(same).length > held.closed.filter(same).length;
 }
 
 /** A test's host telling a transcript's pages as it reads them, and the holds the window asked of it, in order. */
@@ -156,7 +176,7 @@ function heldOf({ pages, older }: Told): AppHostRead<AppTranscript> {
  * Answers the window's holds on transcripts as the host would, beside the
  * document and acts handed by now, laying only what the test told: each
  * page told on what the host holds of its transcript, laid as the window
- * holds it, and at once once it has, as a page the host read lands.
+ * holds it, and at once while it does, as a page the host read lands.
  */
 export function tellingTranscripts(): TranscriptsTelling {
   /** What was told of each transcript, by its agent and then its worker's call or the agent's own. */
@@ -171,10 +191,7 @@ export function tellingTranscripts(): TranscriptsTelling {
     const ofAgent = told.get(transcript.agentId) ?? new Map<string | undefined, Told>();
     const next = more(ofAgent.get(transcript.callId) ?? { pages: [], older: [] });
     told.set(transcript.agentId, ofAgent.set(transcript.callId, next));
-    const asked = held.asked.some(
-      (other) => other.agentId === transcript.agentId && other.callId === transcript.callId,
-    );
-    if (asked) held.lay(transcript, heldOf(next));
+    if (heldNow(held, transcript)) held.lay(transcript, heldOf(next));
   };
   return {
     asked: held.asked,

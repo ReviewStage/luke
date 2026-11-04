@@ -609,7 +609,11 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
       held: reads.held,
       retry: (key) => Effect.andThen(Effect.sync(answers(key).retried), reads.reopen(key)),
       rowsOf: (key) => answers(key).rows(),
-      lay: (key, rows) => lay(key, { rows }),
+      // Note that rows laid apart from a follow move what a key let go comes to, so it is measured anew.
+      lay: (key, rows) => {
+        MutableHashMap.remove(sizes, key);
+        lay(key, { rows });
+      },
       open: reads.reopenHeld,
       drop: reads.drop,
       end: reads.end,

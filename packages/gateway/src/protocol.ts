@@ -336,7 +336,7 @@ export const GATEWAY_METHOD = {
   AGENTS_TRANSCRIPT_UNFOLLOW: "agents.transcriptUnfollow",
   /** One held transcript read again at once, as Try again asks; never answered. */
   AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
-  /** The page of a held transcript below the oldest message it holds, read at once and laid before them while they still begin where it was asked: whether it landed. */
+  /** The page of a held transcript below the oldest message it holds, read at once and laid before them while they still begin where it was asked: whether it landed, or why it was not read. */
   AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   AGENTS_MESSAGE: "agents.message",

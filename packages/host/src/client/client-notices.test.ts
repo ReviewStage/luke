@@ -18,8 +18,8 @@ import { linkClientNotices } from "./client-notices.js";
  * defect rather than losing it; and a command an agent asked to run on this
  * Mac is announced once while the panel is behind, its click bringing the
  * window forward, and never while the panel is in front, where the prompt
- * itself stands; and an agent's end its own transcript a window holds
- * says is noted, where no worker's transcript says anything of the agent.
+ * itself stands; and an agent's own transcript, as a window holds it, notes
+ * the agent's end, where no worker's transcript says anything of the agent.
  */
 
 const RUN = {

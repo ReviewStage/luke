@@ -329,7 +329,7 @@ function isRecord(value: WireValue | undefined): value is WireRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** How many steps the newest turn has taken, which its tab's hold moves on (`longRunHold`). */
+/** How many steps the newest turn has taken, which every hold of its tab moves on (`longRunHold`): one run for the whole fixture run, which keeps writing while a tab holds it, as a running agent does, rather than starting over as a tab opens again. */
 let step = 1;
 
 /** The run's transcript at the step it last reached, so a document staged again at it holds the very one. */

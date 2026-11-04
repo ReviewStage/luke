@@ -754,7 +754,7 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * whenever it is shown and nothing keeps it, as is `AGENTS_MESSAGES`, Copy
  * transcript's read on its press; `AGENTS_TRANSCRIPT_OLDER` is a WRITE,
  * because it lays an older page on the held transcript and answers only
- * whether it landed; and `HOSTS_PAIRING_READ` is a FETCH, read once as a
+ * whether it landed, or why it was not read; and `HOSTS_PAIRING_READ` is a FETCH, read once as a
  * pairing's link opens, and again on its Retry.
  */
 export const PORT_ACT_USE = {

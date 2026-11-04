@@ -391,7 +391,8 @@ export type AgentTranscriptKey = typeof agentTranscriptKeySchema.Type;
  * the transcript's `newest` page, which carries `before`, where the next
  * older page is read below (absent where nothing older stands), and each
  * later page is what moved past the last. `caughtUp` says the page came
- * back short, so every message written by then is told.
+ * back short, so every message written by then is told; the newest page is
+ * told not caught up, since what was written past its cursor is read next.
  */
 const agentTranscriptPageSchema = EffectSchema.Union([
   EffectSchema.Struct({

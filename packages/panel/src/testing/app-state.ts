@@ -297,8 +297,8 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 /**
  * Lays the host's reads as given, the account's feed of every item, the
  * holders' own inboxes, the pull requests' chapters, the servers' tools, the
- * signed-in account's keys, preferences, and models, and the workspaces' people and token
- * repositories, over whatever document the window was handed, its
+ * signed-in account's keys, preferences, and models, the workspaces' people and token
+ * repositories, and the agents' transcripts, over whatever document the window was handed, its
  * experiments and the reads handed before among it, and answers with how
  * each is delivered again as it moves, as the host tells it; what the bridge
  * delivered before still reaches the window. The account is given an id
@@ -799,7 +799,7 @@ export interface TranscriptsHeld {
  * Answers the window's holds on an agent's or a worker's transcript as the
  * host does, beside whatever acts the test answers by now: where
  * `transcriptOf` names a transcript's read, laid on the document through
- * `deliver` as it is first held, and staying there once let go. Answers
+ * `deliver` each time it is held, and staying there once let go. Answers
  * with how the test's host lays a transcript anew, and the holds asked and
  * let go.
  */
@@ -821,11 +821,8 @@ export function holdTranscripts(
     [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: (transcript) => {
       asked.push(transcript);
       const read = transcriptOf(transcript);
-      const id = transcript.callId ?? OWN_TRANSCRIPT;
       // Note that the host lays what it read once the hold is taken, never inside it.
-      if (read !== undefined && held[transcript.agentId]?.[id] === undefined) {
-        void Promise.resolve().then(() => lay(transcript, read));
-      }
+      if (read !== undefined) void Promise.resolve().then(() => lay(transcript, read));
       return heldUntilClosed(() => closed.push(transcript));
     },
   });

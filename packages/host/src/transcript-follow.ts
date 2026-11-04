@@ -408,7 +408,8 @@ export function toldTranscript(
   const replaces =
     newest === true &&
     (held.length === 0 || !meets(held, page) || said.rewound !== was?.word?.rewound);
-  const below = replaces ? before : was?.before;
+  // Note that a newest page naming no older page holds the whole transcript, so nothing stands below it.
+  const below = replaces || (newest === true && before === undefined) ? before : was?.before;
   return {
     messages: replaces ? messages : applyMessagesPage(held, messages),
     ...(below === undefined ? undefined : { before: below }),
