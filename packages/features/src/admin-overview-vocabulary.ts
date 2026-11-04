@@ -33,13 +33,40 @@ export type ActivityFeature = (typeof ACTIVITY_FEATURE)[keyof typeof ACTIVITY_FE
 export const DAILY_COUNT = {
   ...ACTIVITY_FEATURE,
   TASKS_CREATED: "tasksCreated",
-  /** Coding agents an automation started, a subset of `AGENTS_STARTED`. */
+  /** Coding agents an automation started, a subset of `AGENTS_STARTED`: `AGENT_ORIGIN.AUTOMATION`'s. */
   AGENTS_FROM_AUTOMATIONS: "agentsFromAutomations",
+  /** Coding agents the Slack bot started and no automation did: `AGENT_ORIGIN.SLACK`'s. */
+  AGENTS_FROM_SLACK: "agentsFromSlack",
+  /** Coding agents another agent started, and neither an automation nor Slack: `AGENT_ORIGIN.AGENT`'s. */
+  AGENTS_FROM_AGENTS: "agentsFromAgents",
+  /** Task pilots started, whatever started them, a subset of `AGENTS_STARTED` and no origin of its own. */
+  PILOTS_STARTED: "pilotsStarted",
   /** Pull requests merged, dated by `agent.published.mergedAt`. */
   PRS_MERGED: "prsMerged",
 } as const;
 
 export type DailyCount = (typeof DAILY_COUNT)[keyof typeof DAILY_COUNT];
+
+/**
+ * How a coding agent started, each agent counted under exactly one so the
+ * origins sum to every agent started. Where an agent fits more than one, the
+ * first in this order wins: an automation, then Slack, then another agent,
+ * then by hand, which is every agent the others leave. A task's pilot is what
+ * an agent is, not how it started, so it is counted beside the origins
+ * (`DAILY_COUNT.PILOTS_STARTED`) rather than as one.
+ */
+export const AGENT_ORIGIN = {
+  /** An automation's run started it (`automation_origin`, or `automation_id` on a row from before that column). */
+  AUTOMATION: "automation",
+  /** A member's message to the Slack bot started it (`source`'s kind `slack`). */
+  SLACK: "slack",
+  /** Another coding agent's `start_agent` started it, a pilot's coders among them (`started_by_agent_id`). */
+  AGENT: "agent",
+  /** A member started it in the app: every agent the origins above leave. */
+  HAND: "hand",
+} as const;
+
+export type AgentOrigin = (typeof AGENT_ORIGIN)[keyof typeof AGENT_ORIGIN];
 
 /** The activation funnel's steps, in the order a new account is expected to take them. */
 export const FUNNEL_STEP = {

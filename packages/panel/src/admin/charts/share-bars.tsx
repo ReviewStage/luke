@@ -1,6 +1,6 @@
 /**
- * share-bars.tsx -- the Overview's activation funnel and feature reach, each a
- * column of rows that read as a share of one base.
+ * share-bars.tsx -- the Overview's activation funnel, feature reach, and agents
+ * by origin, each a column of rows that read as a share of one base.
  *
  * A row is a name, a bar filled to its share of the base, the count, and the
  * share as a percentage. The bar is a plain track and fill rather than a chart
@@ -11,6 +11,8 @@
 
 import type { AdminFunnelStep, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
+  AGENT_ORIGIN,
+  type AgentOrigin,
   FUNNEL_STEP,
   type FunnelStep,
   REACH_FEATURE,
@@ -39,6 +41,22 @@ const REACH_LABEL = {
 } as const satisfies Record<ReachFeature, string>;
 
 const REACH_TITLE = "Feature reach · this week";
+
+/** What each origin is called, by who or what started the agent. */
+const ORIGIN_LABEL = {
+  [AGENT_ORIGIN.AUTOMATION]: "Automation",
+  [AGENT_ORIGIN.SLACK]: "Slack",
+  [AGENT_ORIGIN.AGENT]: "Another agent",
+  [AGENT_ORIGIN.HAND]: "By hand",
+} as const satisfies Record<AgentOrigin, string>;
+
+const ORIGINS_TITLE = "Agents started by origin · this week";
+
+/** The origins' aside: the base every share is of, and the pilots among it. */
+function originsAside(origins: AdminOverview["agentOrigins"]): string {
+  const pilots = origins.pilots === 1 ? "1 pilot" : `${formatCount(origins.pilots)} pilots`;
+  return `of ${formatCount(origins.agentsStarted)} agents started · ${pilots}`;
+}
 
 /** The funnel's heading, which names the window its accounts were created in. */
 function funnelTitle(windowDays: number): string {
@@ -219,6 +237,53 @@ export function ReachChartSkeleton(): React.JSX.Element {
       <ShareList label="Feature reach">
         {Object.values(REACH_FEATURE).map((feature) => (
           <ShareRowSkeleton key={feature} label={REACH_LABEL[feature]} />
+        ))}
+      </ShareList>
+    </ChartFrame>
+  );
+}
+
+/**
+ * The week's agents started by how each started, every agent under one origin,
+ * so the rows sum to the base; the pilots among them, whatever started them,
+ * stand in the aside, since a pilot is what an agent is rather than an origin.
+ */
+export function AgentOriginsChart({
+  origins,
+}: {
+  origins: AdminOverview["agentOrigins"];
+}): React.JSX.Element {
+  const aside = originsAside(origins);
+  if (origins.agentsStarted === 0) {
+    return (
+      <ChartFrame title={ORIGINS_TITLE} aside={aside}>
+        <ChartEmpty>No agents started this week yet.</ChartEmpty>
+      </ChartFrame>
+    );
+  }
+  return (
+    <ChartFrame title={ORIGINS_TITLE} aside={aside}>
+      <ShareList label="Agents by origin">
+        {origins.origins.map((row) => (
+          <ShareRow
+            key={row.origin}
+            label={ORIGIN_LABEL[row.origin]}
+            count={row.agents}
+            share={row.share}
+          />
+        ))}
+      </ShareList>
+    </ChartFrame>
+  );
+}
+
+/** The origins while the week is read: a row for every origin, by its name, with bones for its figures. */
+export function AgentOriginsChartSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrame title={ORIGINS_TITLE} aside={<AsideSkeleton />}>
+      <ShareList label="Agents by origin">
+        {Object.values(AGENT_ORIGIN).map((origin) => (
+          <ShareRowSkeleton key={origin} label={ORIGIN_LABEL[origin]} />
         ))}
       </ShareList>
     </ChartFrame>

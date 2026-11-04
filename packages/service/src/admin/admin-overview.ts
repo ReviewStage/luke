@@ -24,6 +24,8 @@ import type {
 import {
   ACTIVITY_FEATURE,
   type ActivityFeature,
+  AGENT_ORIGIN,
+  type AgentOrigin,
   DAILY_COUNT,
   type DailyCount,
   FUNNEL_STEP,
@@ -130,6 +132,37 @@ function activityTotals(daily: AdminOverviewSource["daily"], days: readonly stri
   return days.map((day) => sum(features.map((feature) => daily.get(feature)?.get(day) ?? 0)));
 }
 
+/** The daily count each origin but by hand is read under; by hand is what they leave. */
+const ORIGIN_COUNT = {
+  [AGENT_ORIGIN.AUTOMATION]: DAILY_COUNT.AGENTS_FROM_AUTOMATIONS,
+  [AGENT_ORIGIN.SLACK]: DAILY_COUNT.AGENTS_FROM_SLACK,
+  [AGENT_ORIGIN.AGENT]: DAILY_COUNT.AGENTS_FROM_AGENTS,
+} as const satisfies Record<Exclude<AgentOrigin, typeof AGENT_ORIGIN.HAND>, DailyCount>;
+
+/**
+ * The recent run's agents started, split by origin. The queries count each
+ * origin but by hand with the ones before it left out, so by hand is the rest
+ * of every agent started, and the origins sum to the whole by construction.
+ */
+function buildAgentOrigins(
+  daily: AdminOverviewSource["daily"],
+  recentKeys: readonly string[],
+): AdminOverview["agentOrigins"] {
+  const over = (count: DailyCount) => sum(countsOn(daily, count, recentKeys));
+  const agentsStarted = over(DAILY_COUNT.AGENTS_STARTED);
+  const startedElsewhere = sum(Object.values(ORIGIN_COUNT).map(over));
+  const agentsOf = (origin: AgentOrigin) =>
+    origin === AGENT_ORIGIN.HAND ? agentsStarted - startedElsewhere : over(ORIGIN_COUNT[origin]);
+  return {
+    agentsStarted,
+    origins: Object.values(AGENT_ORIGIN).map((origin) => {
+      const agents = agentsOf(origin);
+      return { origin, agents, share: shareOf(agents, agentsStarted) };
+    }),
+    pilots: over(DAILY_COUNT.PILOTS_STARTED),
+  };
+}
+
 /** The ranked accounts with their counts joined, in the rank the query read them in. */
 function buildTopAccounts(source: AdminOverviewSource): AdminOverviewAccount[] {
   const counts = source.accountCounts;
@@ -167,12 +200,10 @@ export function buildAdminOverview(
       activeDevelopers: { days: ADMIN_TREND_DAYS, ...source.activeDevelopers },
       tasksCreated: trendOf(DAILY_COUNT.TASKS_CREATED),
       agentsStarted: trendOf(DAILY_COUNT.AGENTS_STARTED),
-      agentsFromAutomations: sum(
-        countsOn(source.daily, DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, recentKeys),
-      ),
       prsMerged: trendOf(DAILY_COUNT.PRS_MERGED),
       prsOpened: { ...source.prsOpened },
     },
+    agentOrigins: buildAgentOrigins(source.daily, recentKeys),
     activity: {
       daily: buildActivityDays(source.daily, dayKeys),
       trend: trailingTrend(activityTotals(source.daily, trendKeys), ADMIN_TREND_DAYS),

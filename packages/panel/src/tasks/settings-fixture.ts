@@ -20,6 +20,7 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@repo/cr
 import type { AdminMetrics, AdminRetentionCohort } from "@repo/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
+  AGENT_ORIGIN,
   FUNNEL_STEP,
   REACH_FEATURE,
 } from "@repo/features/admin-overview-vocabulary";
@@ -513,9 +514,20 @@ function adminMetrics(query: Readonly<Record<string, string>>): AdminMetrics {
         activeDevelopers: { days: 7, recent: activeDevelopers, prior: 37 },
         tasksCreated: { days: 7, recent: 96, prior: 81 },
         agentsStarted: { days: 7, recent: 214, prior: 188 },
-        agentsFromAutomations: 37,
         prsMerged: { days: 7, recent: 71, prior: 66 },
         prsOpened: { opened: 102, merged: 64 },
+      },
+      agentOrigins: {
+        agentsStarted: 214,
+        origins: (
+          [
+            [AGENT_ORIGIN.AUTOMATION, 37],
+            [AGENT_ORIGIN.SLACK, 18],
+            [AGENT_ORIGIN.AGENT, 63],
+            [AGENT_ORIGIN.HAND, 96],
+          ] as const
+        ).map(([origin, agents]) => ({ origin, agents, share: agents / 214 })),
+        pilots: 11,
       },
       activity: {
         daily: days.map((day, index) => ({
