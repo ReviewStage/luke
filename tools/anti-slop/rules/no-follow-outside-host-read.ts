@@ -4,10 +4,12 @@ import { defineRule } from "@oxlint/plugins";
 import { repositoryPathOf } from "../shared/effect-edges.ts";
 import {
   FOLLOW_OPENERS,
+  isHoldDoor,
   isReadKind,
   isWatchedSource,
-  UNMIGRATED_READS,
+  namesHoldDoor,
 } from "../shared/host-read-guard.ts";
+import { literalText } from "../shared/test-guard.ts";
 
 /**
  * Server data reaches a surface only through `useHostRead`
@@ -16,9 +18,9 @@ import {
  * system's code reads none of its own: no call of `streamFrom` or
  * `followStream`, no act kind `@repo/host`'s `PORT_ACT_USE` declares a READ,
  * however it is spelled, but as a fixture's answer or a comparison, and no
- * poll of a promise. The files not yet moved are named in
- * `reads-unmigrated.json` with the children that move each, and one that
- * reads nothing fails, so the list only shrinks.
+ * poll of a promise. The hook holds its reads open through one door,
+ * `act-stream.ts`, which opens and polls on the hook's behalf and so is
+ * excused all three; no module but the hook imports it, in any form.
  */
 
 /** The Effect and Stream members that run an effect again and again: a poll, where what they run is a promise. */
@@ -62,22 +64,28 @@ export const noFollowOutsideHostReadRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow reading data a surface shows outside useHostRead; the files not yet moved are named with the children that move them.",
+        "Disallow reading data a surface shows outside useHostRead, and importing the door it holds its reads open by anywhere else.",
     },
     messages: {
       newRead:
         "`{{what}}` reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) over the app-state slice the host fills for the read (`@repo/host`'s `live-collection.ts`).",
       newPoll:
         "`{{what}}` polls a promise, which reads server data outside `useHostRead`. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`), which the host keeps current, rather than asking again on a timer.",
-      staleListed:
-        "This file is named in `tools/anti-slop/reads-unmigrated.json` but reads nothing outside `useHostRead`. Delete its row.",
+      doorImport:
+        "`{{source}}` is the door `useHostRead` holds its reads open by, which no other module imports. Read server data through `useHostRead` (`packages/panel/src/use-host-read.ts`) instead.",
     },
   },
   createOnce(context) {
     let reads: { node: ESTree.Node; what: string }[] = [];
     let repeats: { node: ESTree.Node; what: string }[] = [];
     let runsPromise = false;
-    let listed = false;
+    let door = false;
+
+    function noteImport(node: ESTree.Node, source: string | undefined): void {
+      if (source !== undefined && namesHoldDoor(source)) {
+        context.report({ node, messageId: "doorImport", data: { source } });
+      }
+    }
 
     return {
       before() {
@@ -86,8 +94,20 @@ export const noFollowOutsideHostReadRule = defineRule({
         reads = [];
         repeats = [];
         runsPromise = false;
-        listed = UNMIGRATED_READS[file] !== undefined;
+        door = isHoldDoor(file);
         return true;
+      },
+      ImportDeclaration(node) {
+        noteImport(node, node.source.value);
+      },
+      ExportAllDeclaration(node) {
+        noteImport(node, node.source.value);
+      },
+      ExportNamedDeclaration(node) {
+        if (node.source) noteImport(node, node.source.value);
+      },
+      ImportExpression(node) {
+        noteImport(node, literalText(node.source));
       },
       CallExpression(node) {
         const { callee } = node;
@@ -105,15 +125,10 @@ export const noFollowOutsideHostReadRule = defineRule({
         if (REPEATERS.get(object)?.has(name)) repeats.push({ node, what: `${object}.${name}` });
         if (PROMISE_RUNNERS.get(object)?.has(name)) runsPromise = true;
       },
-      "Program:exit"(program) {
+      "Program:exit"() {
+        if (door) return;
         // Note that a repeat counts only beside a promise, because a clock's tick repeats too.
         const polls = runsPromise ? repeats : [];
-        if (listed) {
-          if (reads.length === 0 && polls.length === 0) {
-            context.report({ node: program, messageId: "staleListed" });
-          }
-          return;
-        }
         for (const { node, what } of reads) {
           context.report({ node, messageId: "newRead", data: { what } });
         }

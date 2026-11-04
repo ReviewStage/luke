@@ -47,8 +47,8 @@ import {
  * `no-document-press-listener` or, where it names the window's storage or
  * its helpers, `no-direct-view-storage`, whose baselines are the only way past
  * them, on any of the panel's or the design system's own TypeScript files
- * holding one that would silence `no-follow-outside-host-read`, whose list of
- * files not yet moved is the only way past it, on any TypeScript file that spells
+ * holding one that would silence `no-follow-outside-host-read`, which has no
+ * way past it, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
  * file's baseline is the only way past it, on a vendored shadcn component
  * holding one that would silence `no-shadcn-focus-ring`, on any test file
@@ -172,8 +172,7 @@ const GUARDS = [
     rule: HOST_READ_GUARD_RULE,
     sources: TYPESCRIPT_SOURCE,
     watches: (absolute: string) => isWatchedSource(path.relative(REPOSITORY_ROOT, absolute)),
-    remedy:
-      "Read server data through useHostRead over the app-state slice the host fills, or name a file not yet moved in tools/anti-slop/reads-unmigrated.json with the children that move it",
+    remedy: "Read server data through useHostRead over the app-state slice the host fills",
   },
   {
     rule: RETIRED_GUARD_RULE,
