@@ -1,23 +1,23 @@
 /**
- * automation-collections.ts -- a workspace's automations held in a TanStack DB collection: fed by the list's follow, built at the host's own instant, and changed by a write to one automation the moment it is asked.
+ * automation-collections.ts -- a workspace's automations, each one row of the sync engine's pool: fed by the list's follow, built at the host's own instant, and changed by a write to one automation the moment it is asked.
  *
- * The list's rows are a collection of their own (`live-collection.ts`), as
- * the service answers them. The list is built from them as the held read
- * built it (`@repo/features/automation-live`), at the host's own instant,
- * because a run's agent's status moves with the clock alone and a live
- * query reads no clock. So it is built again each time the rows move, and
- * at the nearest instant the clock alone moves it (`automationsGraceEdge`).
- * Nothing is drawn until the follow first answers, so a write asked before
- * then never draws a list that holds nothing else.
+ * An automation is a kind of the pool (`@repo/sync`), one row however many
+ * reads hold it, and a workspace's list stands on the rows its follow
+ * answers. The list is built from them as the held read built it
+ * (`@repo/features/automation-live`), at the host's own instant, because a
+ * run's agent's status moves with the clock alone and a live query reads no
+ * clock. So it is built again each time the rows move, and at the nearest
+ * instant the clock alone moves it (`automationsGraceEdge`). Nothing is
+ * drawn until the follow first answers, so a write asked before then never
+ * draws a list that holds nothing else.
  *
- * A change or a deletion is drawn over its automation's row at once and
- * stands while the service writes it: kept once the followed list carries
- * its transaction, and taken back where the service refused it; writes to
- * one automation go to the service in the order asked. A new automation is
- * drawn once the service has made it, since only the service names it.
- * Where the list hands no wait yet, the row as a write's own answer leaves
- * it is taken in the read's place, so a write never answers before the list
- * drawn shows it.
+ * A change or a deletion is a write the pool draws over its automation's
+ * row at once (`compose-automations.ts` declares them), standing until the
+ * list carries its transaction, through the wait the list's follow hands,
+ * or taken back where the service refused it. A new automation is drawn once
+ * the service has made it, since only the service names it. Where the list
+ * hands no wait yet, the row as a write's own answer leaves it is taken in
+ * the read's place, so a write never answers before the list drawn shows it.
  */
 
 import {
@@ -31,18 +31,16 @@ import {
   AUTOMATION_TARGET,
   type AutomationSummary,
 } from "@repo/features/automation-wire";
+import { type EntityPool, fieldKind, type HeldRows } from "@repo/sync";
 import { Effect, type Scope } from "effect";
-import {
-  answeredCollection,
-  drawnAtEdges,
-  type RowWrite,
-  rowsOf,
-  rowWrites,
-} from "./live-collection.js";
+import { drawnAtEdges } from "./live-collection.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** An automation's row as the list's statement answers it, its newest run's columns beside it. */
 export type AutomationRow = AutomationsLiveRows["automations"][number];
+
+/** An automation as the pool holds it, by its id, every write to it a change of its fields or its deletion. */
+export const AUTOMATION = fieldKind((row: AutomationRow) => row.id);
 
 /** The newest run's columns of an automation that has run none. */
 const NO_RUN = {
@@ -127,6 +125,8 @@ function madeRow(automation: AutomationSummary): AutomationRow {
 }
 
 export interface AutomationListDependencies {
+  /** The pool the list's rows stand in. */
+  readonly pool: EntityPool;
   /** Draws the list as it now stands. */
   readonly draw: (automations: readonly AutomationSummary[]) => void;
   /** The service's origin, which a webhook automation's address is written on. */
@@ -135,14 +135,12 @@ export interface AutomationListDependencies {
   readonly txWait: () => TxWait | undefined;
 }
 
-/** A workspace's automations in a collection, for as long as its scope stands. */
+/** A workspace's automations standing in the pool, for as long as its scope stands. */
 export interface AutomationListCollections {
   /** Takes one answer of the list's follow and draws it. */
   readonly answer: (rows: AutomationsLiveRows) => Effect.Effect<void>;
   /** Whether the list holds an automation, which a write to it is drawn on. */
   readonly holds: (automationId: string) => boolean;
-  /** A change to an automation's row, or its deletion: drawn at once, kept or taken back as the service answers it. */
-  readonly write: RowWrite<AutomationRow>;
   /** An automation the service made, drawn once the list carries its transaction, or as the service answered it where the list hands no wait. */
   readonly made: (automation: AutomationSummary, txid: string | undefined) => Effect.Effect<void>;
 }
@@ -152,7 +150,6 @@ export function automationListCollections(
   dependencies: AutomationListDependencies,
 ): Effect.Effect<AutomationListCollections, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const automations = yield* answeredCollection({ getKey: (row: AutomationRow) => row.id });
     // Note that nothing is drawn before the follow first answers, nor once the scope closed, since a follow let go draws for no window.
     let answered = false;
     let open = true;
@@ -161,31 +158,38 @@ export function automationListCollections(
         open = false;
       }),
     );
+    const automations: HeldRows<AutomationRow> = yield* dependencies.pool.stand(AUTOMATION, {
+      redraw: Effect.suspend(() => drawn),
+      confirmation: () => {
+        const wait = dependencies.txWait();
+        return wait === undefined ? undefined : (txid) => confirmWrite(wait, txid);
+      },
+    });
 
     /** Draws the list as it stands now, what every standing write drew among it, and arms its next edge. */
-    const drawn = yield* drawnAtEdges((at) => {
+    const drawn: Effect.Effect<void> = yield* drawnAtEdges((at) => {
       if (!answered || !open) return undefined;
-      const rows = { automations: rowsOf(automations.collection) };
+      const rows = { automations: automations.rows() };
       dependencies.draw(automationsOfLiveRows(rows, at, dependencies.serviceBaseUrl));
       return automationsGraceEdge(rows, at);
     });
 
     return {
       answer: (rows) =>
-        Effect.suspend(() => {
-          automations.answer(rows.automations);
-          answered = true;
-          return drawn;
-        }),
-      holds: (automationId) => automations.collection.has(automationId),
-      write: rowWrites(automations, { drawn, txWait: dependencies.txWait }),
+        Effect.andThen(
+          automations.answer(rows.automations),
+          Effect.suspend(() => {
+            answered = true;
+            return drawn;
+          }),
+        ),
+      holds: automations.holds,
       made: (automation, txid) =>
         Effect.suspend(() => {
           const wait = dependencies.txWait();
           if (wait !== undefined && txid !== undefined) return confirmWrite(wait, txid);
           if (!answered) return Effect.void;
-          automations.confirmNew(madeRow(automation));
-          return drawn;
+          return Effect.andThen(automations.confirmNew(madeRow(automation)), drawn);
         }),
     };
   });

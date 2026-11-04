@@ -712,6 +712,9 @@ importers:
       '@repo/settings':
         specifier: workspace:*
         version: link:../settings
+      '@repo/sync':
+        specifier: workspace:*
+        version: link:../sync
       '@repo/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1071,6 +1074,28 @@ importers:
         specifier: 'catalog:'
         version: 4.0.4
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.2.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/browser-playwright@5.0.0)(@vitest/ui@5.0.0)(jsdom@30.0.1)(vite@7.3.1)
+
+  packages/sync:
+    dependencies:
+      '@tanstack/db':
+        specifier: 0.15.2
+        version: 0.15.2(typescript@7.0.2)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0

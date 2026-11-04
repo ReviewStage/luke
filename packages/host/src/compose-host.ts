@@ -20,6 +20,7 @@ import {
   NODE_CAPABILITY_STATUS,
 } from "@repo/gateway";
 import { APP_SETTING_SCHEMA, experimentOn, MAC_COMMAND_MODE, NO_EXPERIMENTS } from "@repo/settings";
+import { entityPool } from "@repo/sync";
 import { Effect, Layer, Option } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -163,6 +164,8 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const kept = yield* keptContent(KEPT_CONTENT_CHARACTERS);
     /** A window coming forward, raised by the workspaces' refresh it already sends and heard by every read the host asks again on focus. */
     const focus = yield* windowFocus;
+    /** Every row the composers' reads hold, once, and the writes drawn over them (`@repo/sync`). */
+    const pool = yield* entityPool();
     const tasks = yield* served(
       composeTasks({
         kernel,
@@ -213,6 +216,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         kernel,
         account,
         accountId,
+        pool,
         client: new HostedAutomationClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,

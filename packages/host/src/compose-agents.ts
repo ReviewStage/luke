@@ -143,6 +143,7 @@ import {
 import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import { type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
@@ -694,7 +695,7 @@ function composed(
         );
   });
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
       Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
     [GATEWAY_METHOD.AGENTS_DEFAULT_READ]: () =>

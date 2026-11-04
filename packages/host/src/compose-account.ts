@@ -7,14 +7,7 @@ import {
 import type { AccountToken, CallCredential } from "@repo/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@repo/features/analytics";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-  RefusedRefusal,
-} from "@repo/gateway";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, invalid, RefusedRefusal } from "@repo/gateway";
 import { Effect, FiberSet, type Scope, Stream } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
@@ -23,6 +16,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AccountSource } from "./effect/seams.js";
+import type { HostMethodTable } from "./gateway-door.js";
 
 /** What a refused account step says, worded by the step alone. */
 const SIGN_IN_REFUSED = "the sign-in did not finish";
@@ -270,7 +264,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     }
   };
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
       Effect.succeed({ account: carried(session.snapshot()) }),
     [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>

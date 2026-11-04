@@ -1,10 +1,11 @@
 import type { GatewayMethod, GatewayMethodTable } from "@repo/gateway";
 import { Data, type Effect, Result, type Scope } from "effect";
+import type { HostMethodTable } from "./gateway-door.js";
 
 /** One concern of the host: the Gateway methods it answers, and its own lifecycle. */
 export interface Composer {
-  /** The methods this concern answers. Disjoint from every other composer's. */
-  readonly methods: GatewayMethodTable;
+  /** The methods this concern answers, a row write's only from its write declaration. Disjoint from every other composer's. */
+  readonly methods: HostMethodTable;
   /**
    * What this concern begins — timers, subscriptions, loops, stores — in the
    * scope its lifetime is: running it is the concern started, and the

@@ -4,9 +4,8 @@
  * A read the host follows answers every row it shows each time any moves
  * (`live-follow.ts`). Its collection takes each answer by key, one sync
  * transaction writing an insert, an update, or a delete for each row that
- * moved and nothing for the rest, so a reader of it hears only what moved.
- * Note that it never truncates, because TanStack's truncate deletes every
- * row and inserts it again, moved or not.
+ * moved and nothing for the rest, so a reader of it hears only what moved
+ * (`@repo/sync`'s `syncedCollection`, which never truncates).
  *
  * A write is drawn over the collections it changes the moment it is asked,
  * as an optimistic transaction, and stands until its work settles: kept
@@ -18,26 +17,19 @@
  * caller's own fiber, and the promise TanStack holds is only the wait for
  * it to settle, run on the services the caller handed it.
  *
- * Every collection here lives for as long as the scope that made it,
- * never by TanStack's own timer: `gcTime` 0 turns that timer off and the
- * scope's close cleans the collection up, so a test's clock stays its own.
- * How long a read's scope stands is its lifetime class, declared here once
- * rather than by each read: an account read (`accountReads`) stands for the
- * signed-in session, and a read a window holds (`heldReads`) stands while
- * any window holds it and among the few let go latest after. A read a
- * window holds by key is laid on its app-state slice by `heldSlice`, at
- * the path its slice declares (`HOST_READ_SLICE`).
+ * Every collection here lives for as long as the scope that made it, never
+ * by TanStack's own timer (`@repo/sync`'s `KEPT_BY_SCOPE`). How long a
+ * read's scope stands is its lifetime class, declared here once rather than
+ * by each read: an account read (`accountReads`) stands for the signed-in
+ * session, and a read a window holds (`heldReads`) stands while any window
+ * holds it and among the few let go latest after. A read a window holds by
+ * key is laid on its app-state slice by `heldSlice`, at the path its slice
+ * declares (`HOST_READ_SLICE`).
  */
 
 import type { LiveRead } from "@repo/features/live-wire";
-import {
-  type Collection,
-  createCollection,
-  createTransaction,
-  type SyncConfig,
-  type UtilsRecord,
-  type WithoutVirtualProps,
-} from "@tanstack/db";
+import { ROW_GONE, type RowCollection, rowChanges, rowOf, syncedCollection } from "@repo/sync";
+import { createTransaction, type WithoutVirtualProps } from "@tanstack/db";
 import {
   Cause,
   Clock,
@@ -66,72 +58,6 @@ import {
   UNREAD,
 } from "./app-state.js";
 import { confirmWrite, type TxWait } from "./live-follow.js";
-
-/** TanStack's own garbage collection turned off, so a collection, or a live query, lives as long as the scope that made it. */
-export const KEPT_BY_SCOPE = 0;
-
-/** A collection of `Row`s keyed by `Key`, made with no schema of TanStack's, since a row is decoded by Effect's at the boundary. */
-type RowCollection<Row extends object, Key extends string> = Collection<
-  Row,
-  Key,
-  UtilsRecord,
-  never
->;
-
-/** One change to a row: a new row, a row replaced whole, or a row gone by its key. */
-type RowChange<Row extends object, Key extends string> =
-  | { readonly type: "insert"; readonly value: Row }
-  | { readonly type: "update"; readonly value: Row }
-  | { readonly type: "delete"; readonly key: Key };
-
-/** What a sync config is handed to write a collection's synced rows with. */
-type SyncWriter<Row extends object, Key extends string> = Parameters<
-  SyncConfig<Row, Key>["sync"]
->[0];
-
-/**
- * The changes that take `held` to `next`: a delete for each key gone, an
- * insert for each new one, and an update, the row whole, for each that
- * moved; none for a row that did not.
- */
-function rowChanges<Row extends object, Key extends string>(
-  held: ReadonlyMap<Key, Row>,
-  next: ReadonlyMap<Key, Row>,
-): RowChange<Row, Key>[] {
-  const gone = [...held.keys()]
-    .filter((key) => !next.has(key))
-    .map((key) => ({ type: "delete" as const, key }));
-  const moved = [...next].flatMap(([key, row]): RowChange<Row, Key>[] => {
-    const was = held.get(key);
-    if (was === undefined) return [{ type: "insert", value: row }];
-    return Equal.equals(was, row) ? [] : [{ type: "update", value: row }];
-  });
-  return [...gone, ...moved];
-}
-
-/** Each row `rowOf` read, by the stored row TanStack handed out, which it hands out again until the row moves. */
-const readRows = new WeakMap<object, object>();
-
-/**
- * A row as the collection holds it, without the virtual fields TanStack
- * reads it out with (`$synced`, `$origin`, and the rest) and without a key a
- * whole-row change left undefined, so it is the row as the read answered it.
- * Note that a row read again while it stands is the very object read
- * before, so a reader of a row that did not move holds the same object.
- */
-function rowOf<Row extends object>(stored: object): Row {
-  let read = readRows.get(stored);
-  if (read === undefined) {
-    read = Object.fromEntries(
-      Object.entries(stored).filter(
-        ([name, value]) => !name.startsWith("$") && value !== undefined,
-      ),
-    );
-    readRows.set(stored, read);
-  }
-  // SAFETY: only the virtual fields and keys left undefined are dropped, neither of which a row of ours carries.
-  return read as Row;
-}
 
 /** Every row a collection, or a live query, shows now, what a standing write drew among them. */
 export function rowsOf<Row extends object>(collection: {
@@ -173,13 +99,6 @@ export function drawRows<Row extends object, Key extends string>(
         Object.assign(draft, change.value);
       });
   }
-}
-
-/** `make`'s collection, or live query, kept until the scope closes, which cleans it up. */
-export function scopedCollection<Made extends { cleanup(): Promise<void> }>(
-  make: () => Made,
-): Effect.Effect<Made, never, Scope.Scope> {
-  return Effect.acquireRelease(Effect.sync(make), (made) => Effect.promise(() => made.cleanup()));
 }
 
 /**
@@ -246,59 +165,24 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
 export function answeredCollection<Row extends object, Key extends string>(options: {
   readonly getKey: (row: Row) => Key;
 }): Effect.Effect<AnsweredCollection<Row, Key>, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    let writer: SyncWriter<Row, Key> | undefined;
-    let held: ReadonlyMap<Key, Row> = new Map();
-    const collection = yield* scopedCollection(() =>
-      createCollection<Row, Key>({
-        getKey: options.getKey,
-        gcTime: KEPT_BY_SCOPE,
-        startSync: true,
-        sync: {
-          rowUpdateMode: "full",
-          sync: (handed) => {
-            writer = handed;
-            handed.begin();
-            handed.commit();
-            handed.markReady();
-            return () => {
-              writer = undefined;
-            };
-          },
-        },
-      }),
-    );
-    const answer = (rows: readonly Row[]) =>
-      taken(new Map(rows.map((row) => [options.getKey(row), row])));
-    const confirmRow = (key: Key, fields: (row: Row) => Partial<Row>) => {
-      const row = held.get(key);
-      if (row !== undefined) taken(new Map(held).set(key, { ...row, ...fields(row) }));
-    };
-    const confirmGone = (key: Key) => {
-      if (!held.has(key)) return;
-      const next = new Map(held);
+  return Effect.map(syncedCollection(options.getKey), ({ collection, held, take }) => ({
+    collection,
+    answer: (rows) => take(new Map(rows.map((row) => [options.getKey(row), row]))),
+    confirmRow: (key, fields) => {
+      const row = held().get(key);
+      if (row !== undefined) take(new Map(held()).set(key, { ...row, ...fields(row) }));
+    },
+    confirmGone: (key) => {
+      if (!held().has(key)) return;
+      const next = new Map(held());
       next.delete(key);
-      taken(next);
-    };
-    const confirmNew = (row: Row) => {
+      take(next);
+    },
+    confirmNew: (row) => {
       const key = options.getKey(row);
-      if (!held.has(key)) taken(new Map(held).set(key, row));
-    };
-    /** Takes the rows `next` holds as the synced ones, one transaction writing each that moved, answering their keys. */
-    function taken(next: ReadonlyMap<Key, Row>): readonly Key[] {
-      const changes = rowChanges(held, next);
-      if (writer === undefined || changes.length === 0) return [];
-      writer.begin();
-      for (const change of changes) writer.write(change);
-      // Note that the receipt is never awaited, since a commit held behind a standing write lands only once that write settles.
-      writer.commit();
-      held = next;
-      return changes.map((change) =>
-        change.type === "delete" ? change.key : options.getKey(change.value),
-      );
-    }
-    return { collection, answer, confirmRow, confirmGone, confirmNew };
-  });
+      if (!held().has(key)) take(new Map(held()).set(key, row));
+    },
+  }));
 }
 
 /**
@@ -357,9 +241,6 @@ export interface RowWritten<Row, Answer> {
   readonly txid: string | undefined;
   readonly fields?: Partial<Row> | typeof ROW_GONE;
 }
-
-/** What a write leaves of a row that it takes out of the read, as a task deleted is. */
-export const ROW_GONE: unique symbol = Symbol("the row is gone");
 
 /** A write the service refused, which takes back what it drew, and what the caller answers for it. */
 export interface RowRefused<Answer> {

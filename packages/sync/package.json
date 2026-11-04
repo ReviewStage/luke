@@ -1,0 +1,25 @@
+{
+  "name": "@repo/sync",
+  "version": "0.24.0",
+  "private": true,
+  "type": "module",
+  "description": "The client half of our sync engine: the pool of rows every read draws from, the writes drawn over it, and the door a row write's method is served through; it names no entity kind",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "test:vitest": "vitest run",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "@tanstack/db": "0.15.2",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

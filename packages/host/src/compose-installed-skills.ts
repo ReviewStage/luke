@@ -23,11 +23,12 @@ import {
   installedSkillToggleParamsSchema,
   installedSkillUpdateParamsSchema,
 } from "@repo/features/installed-skill-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@repo/gateway";
+import { carried, GATEWAY_METHOD, readParams } from "@repo/gateway";
 import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostMethodTable } from "./gateway-door.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -105,7 +106,7 @@ function composed(
         )
       : Effect.succeed(UNANSWERED);
 
-  const methods: GatewayMethodTable = {
+  const methods: HostMethodTable = {
     [GATEWAY_METHOD.INSTALLED_SKILLS_LIST]: (params) =>
       Effect.gen(function* () {
         const { workspaceId } = yield* readParams(
