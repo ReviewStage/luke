@@ -1,7 +1,7 @@
 /**
  * integrations-procedures.ts -- the account's integrations: its connections read, begun, ended, and settled.
  *
- * Seven procedures the signed-in desktop calls with its bearer, or a page of
+ * Eight procedures the signed-in desktop calls with its bearer, or a page of
  * the deployment's own with its session cookie; the browser's return from a
  * sign-in is `integrations-app.ts`'s. A user account may hold more than
  * one account at a provider, each its own row and grant under its own
@@ -26,7 +26,12 @@
  *   not settle the account's sign-in.
  * - `POST /api/account/integrations/settle` is that read with its settling,
  *   for any caller; a POST a cookie carries is held to the deployment's own
- *   pages by the origin guard before it gets here.
+ *   pages by the origin guard before it gets here. A desktop that follows
+ *   the account's rows live (`live-procedures.ts`'s `integrationStatuses`)
+ *   asks it while a sign-in stands pending.
+ * - `GET /api/account/integrations/github` answers where GitHub alone
+ *   stands, which comes from the account's GitHub sign-in rather than a row,
+ *   so a desktop following the rows live reads it beside them.
  * - `POST /api/account/integrations/{provider}/connect` asks Vercel Connect
  *   to begin a browser sign-in to the provider for the account, records the
  *   sign-in's one-time state, and answers the address the desktop opens and
@@ -788,6 +793,10 @@ export function integrationsProcedures(seams: IntegrationsProcedureSeams) {
      */
     settle: integrations.settle.effect(function* ({ context }) {
       return yield* statusesAnswer(seams, unnamed, context.userId, true);
+    }),
+    /** GET: where GitHub stands for the caller, as the statuses read answers it. */
+    github: integrations.github.effect(function* ({ context }) {
+      return { status: yield* githubIntegrationStatus(context.userId) };
     }),
     /**
      * POST: begins a browser sign-in to one account at a provider. Connect is

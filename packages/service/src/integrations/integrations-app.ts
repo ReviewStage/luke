@@ -116,6 +116,11 @@ export function mintIntegrationSubject(): string {
   return `app_acct_${randomBytes(SUBJECT_BYTES).toString("base64url")}`;
 }
 
+/** The earliest instant a sign-in may have begun at and still settle at `now`, as a live read, which reads no clock, is bound by it. */
+export function signInIssuedSince(now: number): number {
+  return now - INTEGRATION_SIGN_IN_WINDOW_MS;
+}
+
 /** Whether a sign-in begun at this instant may still settle. */
 export function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undefined): boolean {
   return (
