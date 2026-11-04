@@ -726,6 +726,8 @@ function HeirChip({
           menu={menu.drawn}
           groups={[
             memberRows(admins, undefined).map((row) => ({
+              // Note that an admin is keyed by their id, because two may share a name.
+              key: row.member.userId,
               label: row.label,
               detail: row.detail,
               detailPlace: MENU_DETAIL.BESIDE,

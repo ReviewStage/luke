@@ -131,10 +131,16 @@ beforeEach(() => {
     switch (request.kind) {
       case ACT_KIND.TERMINAL_LIST:
         return main.listRefused === undefined ? main.listed : { refused: main.listRefused };
-      case ACT_KIND.TERMINAL_CREATE:
+      case ACT_KIND.TERMINAL_CREATE: {
         if (main.createRefused !== undefined) return { refused: main.createRefused };
-        main.listed = { ...main.listed, terminals: [...main.listed.terminals, shell(MADE, "zsh")] };
-        return { terminal: shell(MADE, "zsh") };
+        // Note that each shell made has an id of its own, as the service mints one per shell, the first of them MADE.
+        const made = shell(
+          main.listed.terminals.some((each) => each.id === MADE) ? crypto.randomUUID() : MADE,
+          "zsh",
+        );
+        main.listed = { ...main.listed, terminals: [...main.listed.terminals, made] };
+        return { terminal: made };
+      }
       case ACT_KIND.TERMINAL_RENAME:
         main.listed = {
           ...main.listed,

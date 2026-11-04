@@ -289,6 +289,8 @@ function historyGroups(
   let page: HistoryPage | undefined;
   for (const step of steps) {
     const item: MenuAction = {
+      // Note that a step is keyed by its place on the trail, because two steps of one page may be called alike, as a task's Plan and Code are.
+      key: step.at,
       label: step.title?.label ?? UNNAMED_STEP,
       detail: step.title?.detail,
       onSelect: () => onGoTo(step.at),
