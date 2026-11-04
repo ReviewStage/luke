@@ -167,6 +167,11 @@ export const windowSurfaceActsContract = {
   )
     .input(exactInput(EffectSchema.Struct({ holding: EffectSchema.Boolean })))
     .output(EffectSchema.Void),
+  [WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL]: actProcedure(
+    "Could not show or hide this build's label.",
+  )
+    .input(exactInput(EffectSchema.Struct({ shown: EffectSchema.Boolean })))
+    .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: actProcedure("Could not send that on this system.")
     .input(exactInput(EffectSchema.Struct({ submission: feedbackSubmissionSchema })))
     .output(feedbackResultSchema),

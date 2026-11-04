@@ -35,6 +35,7 @@ import {
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import {
+  EyeOffIcon,
   LifeBuoyIcon,
   LightbulbIcon,
   LogOutIcon,
@@ -162,20 +163,34 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
 /**
  * A development build's chip over the account's row: its color, the one its
  * Dock band wears, and where it was cut, which a press copies, so builds run
- * side by side are told apart without opening Settings. A release, the web,
+ * side by side are told apart without opening Settings. A right-click or a
+ * long press offers Hide, which hides it and the Dock band for a demo until
+ * View > Developer > Show Build Label brings them back. A release, the web,
  * and a fixture run, whose captures are the product's pictures, draw none,
- * nor does a build whose label the menu bar hid for a demo.
+ * nor does a build whose label was hidden.
  */
 function SidebarBuild(): React.JSX.Element | null {
   const run = useAppSlice(APP_SLICE.RUN);
   const facts = useAppSlice(APP_SLICE.WINDOW);
+  const { press } = useAct();
+  const menu = useMenu(true);
   if (run === undefined || run.packaged || run.fixtureMode) return null;
   if (facts?.buildLabelHidden === true) return null;
   const badge = devBuildBadge({ instance: run.instance, commit: run.commit });
+  const hide: MenuEntry = {
+    label: "Hide build label",
+    icon: <EyeOffIcon />,
+    onSelect: () => void press(ACT_KIND.WINDOW_SHOW_BUILD_LABEL, { shown: false }),
+  };
   return (
-    <div className="flex min-w-0 pb-ui-4">
-      <BuildChip detail={badge.detail} color={badge.color} copy={copyThroughShell} />
-    </div>
+    <>
+      <div className="flex min-w-0 pb-ui-4" {...menu.contextMenu()}>
+        <BuildChip detail={badge.detail} color={badge.color} copy={copyThroughShell} />
+      </div>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label="Build" menu={menu.drawn} groups={[[hide]]} onClose={menu.close} />
+      )}
+    </>
   );
 }
 

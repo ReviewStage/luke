@@ -94,6 +94,12 @@ export interface WindowService extends DesktopService {
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
+  /**
+   * Draws or hides a development build's label, the sidebar's chip and the
+   * Dock tile's band, as the menu bar's Show Build Label does; answers false
+   * in a build that draws none, or before the start has drawn the Dock tile.
+   */
+  showBuildLabel: (shown: boolean) => boolean;
 }
 
 /**
@@ -147,6 +153,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   let stopRendererErrors = (): void => undefined;
   /** Whether the menu bar hid this development build's label for a demo, for as long as the run lasts. */
   let buildLabelHidden = false;
+  /** Draws or hides the build's label; refuses until the start has drawn a band to hide. */
+  let showBuildLabel = (_shown: boolean): boolean => false;
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -275,6 +283,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       return url === rendererUrl;
     },
     applyLoginItem,
+    showBuildLabel: (shown) => showBuildLabel(shown),
     start: async () => {
       // A development build bands its tile, so builds side by side are told apart.
       const badge = config.packaged
@@ -285,17 +294,22 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         badge,
         config.report,
       );
-      // Developer's Show Build Label hides the band and the sidebar's chip
-      // together, and brings both back, so a demo shows no branch.
+      // Developer's Show Build Label, and the chip's own Hide, hide the band
+      // and the sidebar's chip together, and the menu brings both back, so a
+      // demo shows no branch.
       const buildLabelMenu = (shown: boolean): BuildLabelMenu => ({
         shown,
-        onShow: (next) => {
+        onShow: (next) => void showBuildLabel(next),
+      });
+      if (badge !== undefined) {
+        showBuildLabel = (next) => {
           buildLabelHidden = !next;
           bandDockIcon(next ? badge : undefined);
           config.showMenuBar({ buildLabel: buildLabelMenu(next) });
           publishAppState();
-        },
-      });
+          return true;
+        };
+      }
       const settings = await run(operator.ensureSettings());
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits
