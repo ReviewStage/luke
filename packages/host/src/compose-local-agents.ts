@@ -21,7 +21,6 @@ import {
   type DeviceAgentRelease,
   type DeviceAgentRequest,
   type DeviceLaunchStep,
-  type DeviceSignedIn,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
@@ -93,12 +92,11 @@ import {
  * registers why and beats, so it is listed as not set up rather than not at
  * all, and is tried again after `SETUP_RETRY`'s wait, doubling from try to
  * try, for as long as the gate stands. Once it has them it registers with
- * its home folder, the Claude Code and Codex its agents run on
- * (`LocalAgentPlatformSeam.tools`), and no harness signed in by itself,
- * since no login of the device's is what its agents run on, so every launch
- * carries the sign-in saved in the account; then it beats every `BEAT_EVERY` from
- * then on, while it recovers what the run before left and while it follows,
- * each beat given `BEAT_DEADLINE` and sent again as `BEAT_RETRY` says where
+ * its home folder and the Claude Code and Codex its agents run on
+ * (`LocalAgentPlatformSeam.tools`); no login of the device's is what its
+ * agents run on, so every launch carries the sign-in saved in the account.
+ * Then it beats every `BEAT_EVERY` from then on, while it recovers what the
+ * run before left and while it follows, each beat given `BEAT_DEADLINE` and sent again as `BEAT_RETRY` says where
  * it went unanswered, on a fiber of its own, so nothing the device does
  * with an answer holds up the next beat. It holds one read for its lines and one for its requests,
  * each answered by the service as soon as one waits, and claims each by its
@@ -138,10 +136,9 @@ import {
  * forgets it, so an uninstall removes this machine's agents and no other
  * install's beside it.
  *
- * Every host runs its agents straight on the box
- * (`DEVICE_ISOLATION.DIRECT`): the runner is a child of the host's own
- * process, the leader of a process group of its own, on the host's own
- * Node and the CLIs it keeps, as its user, in the agent's folder, with the
+ * Every host runs its agents straight on the box: the runner is a child of
+ * the host's own process, the leader of a process group of its own, on the
+ * host's own Node and the CLIs it keeps, as its user, in the agent's folder, with the
  * agent's home and caches there (`local-agent-box.ts`). Stopping it signals
  * its group alone, and kills the group once `KILL_GRACE` has passed, so
  * nothing of the host's or of any other agent's is stopped with it. Its
@@ -328,9 +325,6 @@ const HANDED_ON = [VARIABLE.HOME, VARIABLE.SHELL, VARIABLE.USER, VARIABLE.LOGNAM
 
 /** Where a device's setup stands as it registers: nothing once it is ready, else preparing, or failed and why. */
 type DeviceSetupRegister = Pick<DeviceAgentDevice, "setup" | "setupFailure">;
-
-/** What a device says of the harnesses signed in on it by itself: none, since its agents run on the sign-ins saved in the account, never the device's own. */
-const NOT_SIGNED_IN: DeviceSignedIn = { claudeCode: false, codex: false };
 
 const decodeLaunch = Schema.decodeUnknownOption(deviceAgentLaunchPayloadSchema);
 const decodeStdin = Schema.decodeUnknownOption(deviceAgentStdinPayloadSchema);
@@ -562,7 +556,7 @@ export function composeLocalAgents(
     /** A beat, saying where the host's update stands while one is under way. */
     const beat = Effect.flatMap(
       dependencies.update?.beating ?? Effect.succeed(undefined),
-      (updating) => asked(client.beat(deviceId, NOT_SIGNED_IN, updating)),
+      (updating) => asked(client.beat(deviceId, updating)),
     );
 
     /**
@@ -1878,12 +1872,10 @@ export function composeLocalAgents(
             platform: platform.devicePlatform,
             arch: platform.deviceArch,
             ...platform.deviceMachine,
-            isolation: platform.deviceIsolation,
             home: folder,
             agentsFolder: deviceAgentsFolder(folder),
             claudeExecutable: tools.claude,
             codexExecutable: tools.codex,
-            signedIn: NOT_SIGNED_IN,
             capabilities: platform.deviceCapabilities,
             ...setup,
           });

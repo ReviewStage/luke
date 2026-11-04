@@ -30,12 +30,10 @@ import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
-  DEVICE_ISOLATION,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceAgentLine,
   type DeviceAgentRelease,
-  type DeviceSignedIn,
   deviceAgentLayout,
   HOST_UPDATE,
 } from "@repo/features/device-agent-wire";
@@ -198,7 +196,7 @@ const followingDevice = (
         Effect.sync(() => registered.push(device)).pipe(
           Effect.as(options.refusesSetup !== true || device.setup === undefined),
         ),
-      beat: (_deviceId: string, _signedIn: DeviceSignedIn, updating?: DeviceAgentUpdate) =>
+      beat: (_deviceId: string, updating?: DeviceAgentUpdate) =>
         Effect.gen(function* () {
           beats.push(registered.length);
           said.push(updating);
@@ -314,7 +312,6 @@ const followingDevice = (
         deviceMachine: {},
         devicePlatform: DEVICE_PLATFORM.DARWIN,
         deviceArch: DEVICE_ARCH.ARM64,
-        deviceIsolation: DEVICE_ISOLATION.DIRECT,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
       }),
@@ -346,29 +343,19 @@ const followingDevice = (
   });
 
 it.effect(
-  "a device registers as direct on the CLIs it keeps, signed in to nothing, and launches its agent on the box with a GitHub token from Vespin in gh's config, its commit identity and gh's helper set in its repository first, keeping the agent as one it made",
+  "a device registers on the CLIs it keeps and launches its agent on the box with a GitHub token from Vespin in gh's config, its commit identity and gh's helper set in its repository first, keeping the agent as one it made",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { registered, spawned, asked, files } = yield* followingDevice(() => Effect.void);
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 
-        // Note that no login of the device's is what its agents run on, so the service pays with the sign-in saved in the account, or refuses.
         assert.deepEqual(
           registered.map((each) => ({
-            isolation: each.isolation,
             claudeExecutable: each.claudeExecutable,
             codexExecutable: each.codexExecutable,
-            signedIn: each.signedIn,
           })),
-          [
-            {
-              isolation: DEVICE_ISOLATION.DIRECT,
-              claudeExecutable: CLIS.paths.claude,
-              codexExecutable: CLIS.paths.codex,
-              signedIn: { claudeCode: false, codex: false },
-            },
-          ],
+          [{ claudeExecutable: CLIS.paths.claude, codexExecutable: CLIS.paths.codex }],
         );
         assert.deepEqual(asked, [AGENT_ID]);
         assert.ok(files.get(GH_HOSTS)?.includes('oauth_token: "ghs_fixture_1"'));

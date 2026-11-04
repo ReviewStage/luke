@@ -286,10 +286,8 @@ describe("a host's daemon", () => {
           arch: "x64",
           ...machine,
           home: home,
-          isolation: "direct",
           claudeExecutable: fakeClis().paths.claude,
           codexExecutable: fakeClis().paths.codex,
-          signedIn: { claudeCode: false, codex: false },
         });
         expect(new Set(http.requests.map((request) => request.authorization))).toEqual(
           new Set([`Bearer ${DEVICE_SECRET}`]),
