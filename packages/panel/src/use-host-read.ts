@@ -5,6 +5,7 @@ import {
 } from "@repo/features/agent-browser-tab-wire";
 import type { AgentInboxScope } from "@repo/features/agent-view";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { IntegrationProviderParams } from "@repo/features/integration-view";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine, type PagePlace } from "@repo/features/page-wire";
 import type { PullRequestChaptersReadParams } from "@repo/features/pull-request-chapters-view";
@@ -74,6 +75,9 @@ function commentsFollowOf({ taskId, pageId }: CommentSubject): TasksCommentsFoll
   return pageId === undefined ? { taskId } : { taskId, pageId };
 }
 
+/** The integration server whose tools a surface reads: its provider, and its account where the server is not the provider's own. */
+export type IntegrationServer = Pick<IntegrationProviderParams, "provider" | "connection">;
+
 /** A read the host holds for the panel, by its name (`AppHostReads`). */
 type HostReadName = keyof AppHostReads;
 
@@ -123,6 +127,8 @@ function atomsAt(
 
 /** One read as `HOST_READS` holds it, by its name, the key a surface names it by, and its Try again. */
 interface HostReadEntry<Read extends HostReadName, Key, Retry> {
+  /** The read's slice whole, for a surface reading several of its keys at once. */
+  readonly slice: Atom.Atom<AppStateSnapshot[Read] | undefined>;
   /** The read at a key's path in its slice, told to its readers only as that read moves. */
   readonly at: (path: readonly string[]) => Atom.Atom<AppHostRead<AppHostReads[Read]> | undefined>;
   /** The path `key` stands at in the read's slice; none for a read held for the session, which takes no key. */
@@ -160,6 +166,7 @@ function hostRead<
   return {
     // SAFETY: what a read's slice holds at a key's whole path is that key's read (`HOST_READ_SLICE`).
     at: (path) => at(path) as Atom.Atom<AppHostRead<AppHostReads[Read]> | undefined>,
+    slice: declared.slice,
     path: declared.path,
     hold: declared.hold,
     retry: declared.retry,
@@ -185,8 +192,11 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * every one of its agents', or one agent's, which a side panel listing them
  * holds; the account's devices' beats, by the account, which every surface
  * drawing a device's standing holds; one agent's own tools, which its
- * servers popover holds; one workspace's automations, one workspace's runs,
- * or one automation's runs, by its id; and one plan's comments, or one
+ * servers popover holds; one integration server's tools, by the account it
+ * stands for, which a list of the servers holds; the account's provider
+ * keys, by the account, which the window holds while signed in and
+ * Settings › Agents draws; one workspace's automations, one workspace's
+ * runs, or one automation's runs, by its id; and one plan's comments, or one
  * page's, which the open task's plan and a page's tab each hold. Pages and
  * Browser tabs offer no Try again, because the host reads those that did
  * not answer again on its own, and those it was refused, a plan's or an
@@ -209,6 +219,12 @@ const HOST_READS = {
     hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
     retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
   }),
+  [LIVE_READ.INTEGRATION_TOOLS]: hostRead(LIVE_READ.INTEGRATION_TOOLS, {
+    slice: APP_SLICE.INTEGRATION_TOOLS,
+    path: (server: IntegrationServer) => [server.connection ?? server.provider],
+    hold: (server) => askAct(ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW, server),
+    retry: (server) => tellAct(ACT_KIND.INTEGRATIONS_TOOLS_RETRY, server),
+  }),
   [LIVE_READ.PAGES]: hostRead(LIVE_READ.PAGES, {
     slice: APP_SLICE.PAGES,
     path: (place: PagePlace) =>
@@ -219,6 +235,13 @@ const HOST_READS = {
         "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
       ),
     retry: undefined,
+  }),
+  [LIVE_READ.PROVIDER_KEYS]: hostRead(LIVE_READ.PROVIDER_KEYS, {
+    slice: APP_SLICE.PROVIDER_KEYS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the keys of whoever is signed in, so neither act names an account.
+    hold: () => askAct(ACT_KIND.PROVIDER_KEYS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.PROVIDER_KEYS_RETRY),
   }),
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: hostRead(LIVE_READ.PULL_REQUEST_CHAPTERS, {
     slice: APP_SLICE.PULL_REQUEST_CHAPTERS,
@@ -282,6 +305,10 @@ type HostReadKey<Read extends HostReadName> =
       : [key: Key | undefined]
     : never;
 
+/** What a surface names one of `Read`'s keys by. */
+type HostReadKeyOf<Read extends HostReadName> =
+  HostReads[Read] extends HostReadEntry<Read, infer Key, infer _Retry> ? Key : never;
+
 /** `Read` as a surface draws it: with Try again where its entry offers one. */
 type HostReadOf<Read extends HostReadName> = HostReads[Read]["retry"] extends undefined
   ? HeldRead<AppHostReads[Read]>
@@ -330,41 +357,71 @@ export function useHostRead<Read extends HostReadName>(
   return (entry.retry === undefined ? drawn : { ...drawn, retry }) as HostReadOf<Read>;
 }
 
-/** No place's pages, for a surface whose tabs stand on none beside its own. */
-const NO_PAGES_SLICE: Atom.Atom<undefined> = Atom.make(undefined);
+/** No slice, for a surface reading no key of a read. */
+const NO_SLICE: Atom.Atom<undefined> = Atom.make(undefined);
+
+/** Several keys of one read as a surface draws them: each key's read, and Try again on one. */
+export interface HeldKeys<Key, Rows> {
+  readonly readOf: (key: Key) => HeldRead<Rows>;
+  readonly retry: (key: Key) => void;
+}
 
 /**
- * The pages of each place given, a task's or an agent's on no task, held by
- * this surface while it names them, each on the pages' entry of
- * `HOST_READS` as `useHostRead` holds one: what a side panel reads of the
- * places its page tabs stand on beside the one it stands for. Answers each
- * place's pages, none until they are read.
+ * Each of `keys`' reads of `read`, held by this surface while it names them,
+ * each on the read's entry of `HOST_READS` as `useHostRead` holds one: what a
+ * surface drawing a list of them reads, a side panel's places' pages or each
+ * connected server's tools. Note that the holds move with the keys' list,
+ * which the caller hands as one array while it names the same keys.
  */
-export function usePlacesPages(
-  places: readonly PagePlace[],
-): (place: PagePlace) => readonly PageLine[] | undefined {
-  const pages = HOST_READS[LIVE_READ.PAGES];
-  const held = useAppSlice(places.length === 0 ? NO_PAGES_SLICE : APP_SLICE.PAGES);
+export function useHostReads<Read extends HostReadName>(
+  read: Read,
+  keys: readonly HostReadKeyOf<Read>[],
+): HeldKeys<HostReadKeyOf<Read>, AppHostReads[Read]> {
+  const entry = HOST_READS[read];
+  const held = useAppSlice<unknown>(keys.length === 0 ? NO_SLICE : entry.slice);
   useEffect(() => {
-    const hold = pages.hold;
+    const hold = entry.hold;
     if (hold === undefined) return;
-    const holds = places.map((place) =>
+    const holds = keys.map((key) =>
       streamFrom(
-        () => hold(place),
+        // SAFETY: each key a surface hands is the one its read's entry takes (`HostReadKeyOf`).
+        () => hold(key as never),
         () => undefined,
       ),
     );
     return () => {
       for (const release of holds) release();
     };
-  }, [pages, places]);
-  return useCallback(
-    (place) => {
-      const path = pages.path?.(place);
-      // SAFETY: what the pages' slice holds at a place's path is that place's read (`HOST_READ_SLICE`).
-      const read = path === undefined ? undefined : valueAt(held, path);
-      return (read as AppHostRead<readonly PageLine[]> | undefined)?.rows;
+  }, [entry, keys]);
+  const readOf = useCallback(
+    (key: HostReadKeyOf<Read>) => {
+      // SAFETY: the key a surface hands is the one its read's entry takes (`HostReadKeyOf`).
+      const path = entry.path?.(key as never);
+      // SAFETY: what a read's slice holds at a key's whole path is that key's read (`HOST_READ_SLICE`).
+      const at = (path === undefined ? undefined : valueAt(held, path)) as
+        | AppHostRead<AppHostReads[Read]>
+        | undefined;
+      return { rows: at?.rows, status: statusOf(at) };
     },
-    [pages, held],
+    [entry, held],
   );
+  const retry = useCallback(
+    // SAFETY: the key a surface hands is the one its read's entry takes (`HostReadKeyOf`).
+    (key: HostReadKeyOf<Read>) => entry.retry?.(key as never),
+    [entry],
+  );
+  return { readOf, retry };
+}
+
+/**
+ * The pages of each place given, a task's or an agent's on no task, held by
+ * this surface while it names them: what a side panel reads of the places
+ * its page tabs stand on beside the one it stands for. Answers each place's
+ * pages, none until they are read.
+ */
+export function usePlacesPages(
+  places: readonly PagePlace[],
+): (place: PagePlace) => readonly PageLine[] | undefined {
+  const { readOf } = useHostReads(LIVE_READ.PAGES, places);
+  return useCallback((place) => readOf(place).rows, [readOf]);
 }

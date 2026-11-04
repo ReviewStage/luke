@@ -187,7 +187,7 @@ const EDITOR = {
 
 /** A head that folds is pressed as a row is, so it wears a row's hover; and it gives the one press cursor, the Mac's arrow on the desktop as a Mac's list does, the hand on the web. */
 const PRESSED_AS_ROW = {
-  HEAD: "[&:hover]:bg-muted",
+  HEAD: "hover:bg-muted",
   LEAD: "cursor-press",
 } as const;
 

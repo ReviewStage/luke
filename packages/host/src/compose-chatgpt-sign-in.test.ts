@@ -96,6 +96,7 @@ function harness(
       credential: fixedBearer("account-bearer"),
     }),
     openConsent: loopbackConsent,
+    keysAnswered: () => Effect.void,
   });
   return { composer, server, saves, opened };
 }

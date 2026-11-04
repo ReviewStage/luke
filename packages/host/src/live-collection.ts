@@ -28,13 +28,21 @@
  */
 
 import type { LiveRead } from "@repo/features/live-wire";
-import { ROW_GONE, type RowCollection, rowChanges, rowOf, syncedCollection } from "@repo/sync";
+import {
+  type EntityKind,
+  type EntityPool,
+  type FieldChange,
+  type ROW_GONE,
+  type RowCollection,
+  rowChanges,
+  rowOf,
+  syncedCollection,
+} from "@repo/sync";
 import { createTransaction, type WithoutVirtualProps } from "@tanstack/db";
 import {
   Cause,
   Clock,
   type Context,
-  Data,
   Deferred,
   Duration,
   Effect,
@@ -57,7 +65,6 @@ import {
   type KEYS_ON,
   UNREAD,
 } from "./app-state.js";
-import { confirmWrite, type TxWait } from "./live-follow.js";
 
 /** Every row a collection, or a live query, shows now, what a standing write drew among them. */
 export function rowsOf<Row extends object>(collection: {
@@ -247,9 +254,6 @@ export interface RowRefused<Answer> {
   readonly refused: Answer;
 }
 
-/** A write the service did not answer, which takes back what it drew. */
-class Unwritten extends Data.TaggedError("Unwritten") {}
-
 /**
  * A write to one row: what the row's fields become, from the row as it is
  * drawn now, or that it is gone, and the service call that writes it,
@@ -262,84 +266,36 @@ export type RowWrite<Row> = <Answer>(
 ) => Effect.Effect<Answer>;
 
 /**
- * The writes to one collection's rows, each drawn at once and standing
- * while the service writes it: kept once the followed read carries its
- * transaction, and taken back where the service refused it. Where the read
- * hands no wait yet, the row as the write's own answer leaves it is taken
- * in the read's place. Either lands with the drop of what was drawn, so
- * nothing flickers back between the two. Writes to one row go to the
- * service in the order asked, each row's newest settling the next write to
- * it waits on, since each was drawn over the ones before. `drawn` draws the
- * read as it stands, as each write begins and once it settles.
+ * A write to one row of `kind`, declared for the one call and written on
+ * `pool`: drawn at once over every read that holds the row, standing until
+ * those reads carry it, and taken back where the service refused it. It
+ * serves the row writes still served by hand (`gateway-door.ts`), and a
+ * write the service already answered, held over its row until the reads
+ * carry it.
  */
-export function rowWrites<Row extends object>(
-  collection: AnsweredCollection<Row, string>,
-  options: {
-    readonly drawn: Effect.Effect<void>;
-    /** The followed read's wait for a write's transaction; none while the follow hands none. */
-    readonly txWait: () => TxWait | undefined;
-  },
+export function rowWriteOn<Row extends object>(
+  pool: EntityPool,
+  kind: EntityKind<Row, FieldChange<Row>>,
 ): RowWrite<Row> {
-  const { drawn } = options;
-  const lastWrites = new Map<string, Deferred.Deferred<void>>();
-  /** Confirms a write on the followed read where it hands a wait, or takes the write's own answer in its place where it does not. */
-  const confirmed = (txid: string | undefined, answered: () => void) => {
-    const wait = options.txWait();
-    return wait === undefined || txid === undefined
-      ? Effect.sync(answered)
-      : confirmWrite(wait, txid);
-  };
-  return <Answer>(
-    key: string,
-    change: (row: Row) => Partial<Row> | typeof ROW_GONE,
-    written: Effect.Effect<RowWritten<Row, Answer> | RowRefused<Answer>>,
-  ) =>
-    Effect.gen(function* () {
-      const before = lastWrites.get(key);
-      const settled = yield* Deferred.make<void>();
-      lastWrites.set(key, settled);
-      const answered: { value?: Answer } = {};
-      const draw = () => {
-        const row = collection.collection.get(key);
-        if (row === undefined) return;
-        const fields = change(row);
-        if (fields === ROW_GONE) collection.collection.delete(key);
-        else collection.collection.update(key, (draft) => Object.assign(draft, fields));
-      };
-      const work = Effect.gen(function* () {
-        yield* drawn;
-        if (before !== undefined) yield* Deferred.await(before);
-        const result = yield* written;
-        if ("refused" in result) {
-          answered.value = result.refused;
-          return yield* new Unwritten();
-        }
-        answered.value = result.answer;
-        yield* confirmed(result.txid, () => {
-          const { fields } = result;
-          if (fields === ROW_GONE) collection.confirmGone(key);
-          else
-            collection.confirmRow(key, (row) => {
-              const drawnFields = fields ?? change(row);
-              return drawnFields === ROW_GONE ? {} : drawnFields;
-            });
-        });
-      });
-      yield* optimistically(draw, work).pipe(
-        Effect.catchTag("Unwritten", () => Effect.void),
-        Effect.ensuring(drawn),
-        Effect.ensuring(
-          Effect.andThen(
-            Deferred.succeed(settled, undefined),
-            Effect.sync(() => {
-              if (lastWrites.get(key) === settled) lastWrites.delete(key);
-            }),
-          ),
-        ),
-      );
-      // SAFETY: the work sets the answer before it settles, whether the service wrote or refused the row.
-      return answered.value as Answer;
-    });
+  return (key, change, written) =>
+    pool.write(
+      {
+        kind,
+        keys: () => [key],
+        change: () => change,
+        send: () =>
+          Effect.map(written, (result) => {
+            if ("refused" in result) return result;
+            const { answer, txid, fields } = result;
+            return {
+              answer,
+              txid,
+              ...(fields === undefined ? undefined : { taken: () => fields }),
+            };
+          }),
+      },
+      undefined,
+    );
 }
 
 /** One account read, for the account it is opened for, until its fiber is let go. */

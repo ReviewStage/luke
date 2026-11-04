@@ -1233,8 +1233,10 @@ body,
   color: var(--ui-color-text-muted);
 }
 
-.task-summary-archived-agent:hover > .task-summary-row {
-  background: var(--ui-color-fill-hover);
+@media (hover: hover) {
+  .task-summary-archived-agent:hover > .task-summary-row {
+    background: var(--ui-color-fill-hover);
+  }
 }
 
 /* The marks stay while the row's menu stands open from its ⋯, as a list row's acts do. */

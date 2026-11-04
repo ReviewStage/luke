@@ -1,22 +1,13 @@
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { agentKeyLink } from "@repo/settings/settings-views";
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useAct } from "./act.js";
+import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
 import { useOpenSettings } from "./open-settings.js";
+import { useHostRead } from "./use-host-read.js";
 
 /**
  * openai-key.tsx -- whether the signed-in account has an OpenAI API key saved, which its calls and dictation run on, as every surface offering them reads it.
@@ -24,12 +15,12 @@ import { useOpenSettings } from "./open-settings.js";
  * Calls and dictated clips run on the account's own OpenAI key and never on
  * ours, so with none saved the Call and Dictate buttons say where to add
  * one and open Codex's row in Settings › Agents rather than starting
- * something the service would refuse. The window reads the account's keys
- * once it is signed in, again whenever it is focused, which is how the
- * developer comes back from saving one elsewhere, and Settings hands over
- * every answer its own key reads and writes, so a key saved or removed there
- * turns the buttons at once.
- * Until a read has answered, and whenever one fails, nothing is known, and
+ * something the service would refuse. The window holds the account's keys
+ * (`LIVE_READ.PROVIDER_KEYS`) while it is signed in, which the host asks
+ * again whenever a window comes forward, which is how the developer comes
+ * back from saving one elsewhere, and lays from each save's and remove's own
+ * answer, so a key saved or removed in Settings turns the buttons at once.
+ * Until a read has answered, and where none ever has, nothing is known, and
  * nothing is turned away on a guess. Outside the window, as in a test of one
  * surface, nothing is known either.
  */
@@ -44,18 +35,7 @@ const OPENAI_KEY = {
 
 type OpenAiKey = (typeof OPENAI_KEY)[keyof typeof OPENAI_KEY];
 
-interface OpenAiKeyStanding {
-  readonly key: OpenAiKey;
-  /** The account's API keys as an answer of the service's left them. */
-  readonly settle: (keys: readonly ProviderKeySummary[]) => void;
-}
-
-const UNKNOWN_STANDING: OpenAiKeyStanding = {
-  key: OPENAI_KEY.UNKNOWN,
-  settle: () => undefined,
-};
-
-const OpenAiKeyContext = createContext<OpenAiKeyStanding>(UNKNOWN_STANDING);
+const OpenAiKeyContext = createContext<OpenAiKey>(OPENAI_KEY.UNKNOWN);
 
 /**
  * Whether the keys hold an OpenAI API key the service can open, which is all
@@ -69,69 +49,23 @@ function keyOf(keys: readonly ProviderKeySummary[]): OpenAiKey {
     : OPENAI_KEY.SAVED;
 }
 
-/** Reads the signed-in account's keys and hands whether it has an OpenAI one to everything under it. */
+/** Holds the signed-in account's keys and hands whether it has an OpenAI one to everything under it. */
 export function OpenAiKeyProvider({
   account,
   children,
 }: {
-  /** Who is signed in, by the key the window holds the account under; nothing while no one is. */
+  /** Who is signed in, by the id the host holds the account's keys under; nothing while no one is. */
   account: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const { act } = useAct();
-  const [key, setKey] = useState<OpenAiKey>(OPENAI_KEY.UNKNOWN);
-  // Note that only the newest word is kept, a read or a settle alike, because
-  // reads overlap, and one answered after a later word is from before it.
-  const words = useRef(0);
-
-  const read = useCallback(() => {
-    words.current += 1;
-    const sentAs = words.current;
-    act(ACT_KIND.PROVIDER_KEYS_READ).then(
-      (answer) => {
-        if (sentAs !== words.current) return;
-        setKey("failure" in answer ? OPENAI_KEY.UNKNOWN : keyOf(answer.keys));
-      },
-      () => {
-        if (sentAs === words.current) setKey(OPENAI_KEY.UNKNOWN);
-      },
-    );
-  }, [act]);
-
-  // An account signed in is read at once, and nothing of an earlier account's stands meanwhile.
-  useEffect(() => {
-    words.current += 1;
-    setKey(OPENAI_KEY.UNKNOWN);
-    if (account !== undefined) read();
-  }, [account, read]);
-
-  // The focus is the developer back from wherever a key may have been saved or removed.
-  useEffect(() => {
-    if (account === undefined) return;
-    window.addEventListener("focus", read);
-    return () => window.removeEventListener("focus", read);
-  }, [account, read]);
-
-  const settle = useCallback((keys: readonly ProviderKeySummary[]) => {
-    words.current += 1;
-    setKey(keyOf(keys));
-  }, []);
-
-  const standing = useMemo(
-    () => (account === undefined ? UNKNOWN_STANDING : { key, settle }),
-    [account, key, settle],
-  );
-  return <OpenAiKeyContext.Provider value={standing}>{children}</OpenAiKeyContext.Provider>;
+  const { rows } = useHostRead(LIVE_READ.PROVIDER_KEYS, account);
+  const key = useMemo(() => (rows === undefined ? OPENAI_KEY.UNKNOWN : keyOf(rows.keys)), [rows]);
+  return <OpenAiKeyContext.Provider value={key}>{children}</OpenAiKeyContext.Provider>;
 }
 
 /** Whether the account is known to have no OpenAI API key; false while nothing is known. */
 export function useOpenAiKeyMissing(): boolean {
-  return useContext(OpenAiKeyContext).key === OPENAI_KEY.MISSING;
-}
-
-/** How Settings hands the window the account's keys as each of its answers leaves them. */
-export function useSettleOpenAiKey(): OpenAiKeyStanding["settle"] {
-  return useContext(OpenAiKeyContext).settle;
+  return useContext(OpenAiKeyContext) === OPENAI_KEY.MISSING;
 }
 
 /** Opens Settings › Agents at Codex's row, where the account's OpenAI key is saved. */

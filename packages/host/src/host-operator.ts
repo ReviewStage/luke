@@ -183,12 +183,10 @@ import {
   type IntegrationRenameParams,
   type IntegrationStatusesView,
   type IntegrationStatusView,
-  type IntegrationToolsView,
   integrationAccountViewSchema,
   integrationConnectViewSchema,
   integrationStatusesViewSchema,
   integrationStatusViewSchema,
-  integrationToolsViewSchema,
 } from "@repo/features/integration-view";
 import type { ModelChoice } from "@repo/features/models-wire";
 import {
@@ -376,8 +374,10 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppIntegrationTools,
   AppPages,
   AppPlanComments,
+  AppProviderKeys,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -545,8 +545,14 @@ export interface HostOperator {
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
   integrationsConnect(params: IntegrationProviderParams): Effect.Effect<IntegrationConnectView>;
-  /** The tools one provider's server offers the account's agents; or why there is no answer. */
-  integrationsTools(params: IntegrationProviderParams): Effect.Effect<IntegrationToolsView>;
+  /** The tools one server offers the account's agents, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onIntegrationToolsChanged`. */
+  integrationsToolsFollow(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** One server's tools let go by the windows. */
+  integrationsToolsUnfollow(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** One server's held tools asked again at once, as Try again asks; done once the ask has landed. */
+  integrationsToolsRetry(params: IntegrationProviderParams): Effect.Effect<void>;
+  /** Every server's tools the host holds for the windows, whole, each time any of them moves. */
+  onIntegrationToolsChanged(listener: (held: AppIntegrationTools) => void): () => void;
   /** The account's sign-in to one provider under way ended, revoking nothing; where it then stands, or why there is no answer. */
   integrationsCancel(params: IntegrationProviderParams): Effect.Effect<IntegrationStatusView>;
   /** The account's connection to one account at a provider ended; where it then stands, or why there is no answer. */
@@ -810,8 +816,14 @@ export interface HostOperator {
   agentOverviewConversation(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentOverviewConversationAnswerView>;
-  /** The account's own provider keys as hints and statuses; or why there are none. */
-  providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
+  /** The account's own provider keys as hints and statuses, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onProviderKeysChanged`. */
+  providerKeysFollow(): Effect.Effect<void>;
+  /** The account's provider keys let go by the windows. */
+  providerKeysUnfollow(): Effect.Effect<void>;
+  /** The account's held provider keys asked again at once, as Try again asks; done once the ask has landed. */
+  providerKeysRetry(): Effect.Effect<void>;
+  /** The account's provider keys the host holds for the windows, whole, each time any of them moves. */
+  onProviderKeysChanged(listener: (held: AppProviderKeys) => void): () => void;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
@@ -1098,10 +1110,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INTEGRATIONS_CONNECT, integrationTarget(params)),
         answerOf(integrationConnectViewSchema, INTEGRATION_UNANSWERED),
       ),
-    integrationsTools: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS, integrationTarget(params)),
-        answerOf(integrationToolsViewSchema, INTEGRATION_UNANSWERED),
+    integrationsToolsFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_FOLLOW, integrationTarget(params))),
+    integrationsToolsUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_UNFOLLOW, integrationTarget(params))),
+    integrationsToolsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.INTEGRATIONS_TOOLS_RETRY, integrationTarget(params))),
+    onIntegrationToolsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INTEGRATION_TOOLS_CHANGED,
+        // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppIntegrationTools>(payload) : undefined),
+        listener,
       ),
     integrationsCancel: (params) =>
       Effect.map(
@@ -2080,10 +2100,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
         answerOf(agentOverviewConversationAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    providerKeysRead: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
-        answerOf(providerKeysAnswerViewSchema, AGENT_UNANSWERED),
+    providerKeysFollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW, {})),
+    providerKeysUnfollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW, {})),
+    providerKeysRetry: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_RETRY, {})),
+    onProviderKeysChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PROVIDER_KEYS_CHANGED,
+        // Note that the held keys are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppProviderKeys>(payload) : undefined),
+        listener,
       ),
     providerKeySave: (params) =>
       Effect.map(

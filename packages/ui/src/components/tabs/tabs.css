@@ -167,9 +167,11 @@
     -webkit-app-region: no-drag;
   }
 
-  .ui-tab:hover {
-    background: var(--ui-color-fill-hover);
-    color: var(--ui-color-text);
+  @media (hover: hover) {
+    .ui-tab:hover {
+      background: var(--ui-color-fill-hover);
+      color: var(--ui-color-text);
+    }
   }
 
   /* The tab holding the keyboard stands over its neighbors, so the chosen

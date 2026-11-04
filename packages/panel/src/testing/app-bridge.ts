@@ -5,6 +5,7 @@
 import { ORPCError } from "@orpc/client";
 import type { AppBridge } from "@repo/host/bridge";
 import {
+  ACCOUNT_ASK_ACT_KIND,
   ACT_ERROR,
   type ActPortClient,
   AGENT_ACT_KIND,
@@ -12,6 +13,7 @@ import {
   AUTOMATION_ACT_KIND,
   actContract,
   CHAPTERS_ACT_KIND,
+  INTEGRATION_ACT_KIND,
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -35,7 +37,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, an agent's own tools, the automations' lists and histories, and a plan's or a page's comments. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the automations' lists and histories, and a plan's or a page's comments. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
@@ -43,8 +45,24 @@ type HoldKind =
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
+  | typeof INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW
+  | typeof ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW;
+
+/** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
+const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
+  AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW,
+  TASKS_ACT_KIND.TASKS_PAGES_FOLLOW,
+  TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
+  CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW,
+  AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW,
+  AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW,
+  INTEGRATION_ACT_KIND.INTEGRATIONS_TOOLS_FOLLOW,
+  ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW,
+  AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
+  TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
+]);
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */
 export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>> {
@@ -79,23 +97,16 @@ export function heldUntilClosed<Kind extends HoldKind>(
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A hold it does not answer, on a
  * task's or an agent's inbox or pages, a pull request's chapters, the
- * account's beats, an agent's own tools, the automations' lists and
- * histories, or a plan's or a page's comments, is held quietly, and an
- * automations' Try again taken, since what the hold reads reaches the
- * window on app state.
+ * account's beats or provider keys, an agent's or a server's tools, the
+ * automations' lists and histories, or a plan's or a page's comments, is
+ * held quietly, and an automations' Try again taken, since what the hold
+ * reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
   const answered: Partial<FakeActPort> = {
-    [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
-    [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
-    [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: quietHold,
-    [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
-    [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: quietHold,
-    [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: quietHold,
-    [AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW]: quietHold,
+    ...Object.fromEntries([...QUIET_HOLDS].map((kind) => [kind, quietHold])),
     [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: () => Promise.resolve(),
-    [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: quietHold,
     ...procedures,
   };
   answeringPort = answered;
@@ -228,11 +239,11 @@ export function fakeActs(
       [kind]: async (payload: WireBoundaryInput) => {
         // SAFETY: the window paired this payload with this kind, as its own procedure takes it.
         const request = (payload === undefined ? { kind } : { kind, payload }) as PortAct;
-        if (request.kind !== AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW) return answered(request);
-        // A hold on the automations the switch does not answer is held quietly, as the host holds one, its read laid on app state.
+        if (!QUIET_HOLDS.has(request.kind)) return answered(request);
+        // A hold the switch does not answer is held quietly, as the host holds one, its read laid on app state.
         const outcome = await answer(request);
         if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
-        return quietHold<typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW>();
+        return quietHold();
       },
     });
   }

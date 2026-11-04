@@ -3,7 +3,9 @@ import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
   type AgentAgentAnswer,
+  type AgentArchiveParams,
   type AgentChangesAnswerView,
+  type AgentChooseParams,
   type AgentDefaultAnswer,
   type AgentDeleteAnswerView,
   type AgentGitHubImageView,
@@ -21,11 +23,14 @@ import {
   type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
+  type AgentPinParams,
   type AgentPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
+  type AgentRenameParams,
   type AgentReviewOptionsAnswerView,
+  type AgentServersParams,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
   ARCHIVE_DRAWN,
@@ -61,6 +66,7 @@ import {
   agentTranscriptKeySchema,
   agentTranscriptOlderParamsSchema,
   agentWorkspaceListParamsSchema,
+  type ChatGptSignInAnswerView,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
   type GitHubTokenAnswerView,
@@ -97,6 +103,7 @@ import {
 } from "@repo/features/inbox-writes";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
+import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import {
   type ChaptersModelAnswerView,
   chaptersModelWriteParamsSchema,
@@ -105,6 +112,7 @@ import {
   pullRequestChaptersReadParamsSchema,
 } from "@repo/features/pull-request-chapters-view";
 import { commitShaSchema } from "@repo/features/task-wire";
+import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -113,6 +121,13 @@ import {
   invalid,
   readParams,
 } from "@repo/gateway";
+import {
+  declaredMethod,
+  type EntityPool,
+  type FieldChange,
+  type WriteDeclaration,
+} from "@repo/sync";
+import type { WireRecord, WireValue } from "@repo/wire";
 import {
   Clock,
   Duration,
@@ -135,6 +150,8 @@ import {
   type AppHolderInboxes,
   type AppHostRead,
   type AppInboxItems,
+  type AppProviderKeyList,
+  type AppProviderKeys,
   type AppWorkspaceTools,
   NO_KEYS_HELD,
   UNREAD,
@@ -143,7 +160,7 @@ import { ChaptersKey, heldChapters } from "./chapters-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostMethodTable } from "./gateway-door.js";
-import { type HeldFetch, heldFetch } from "./held-fetch.js";
+import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
   INBOX_CHANGE,
@@ -160,14 +177,7 @@ import {
   type KeptKey,
   keptOfAgent,
 } from "./kept-content.js";
-import {
-  type AccountReads,
-  accountReads,
-  type HeldSlice,
-  type RowRefused,
-  type RowWrite,
-  type RowWritten,
-} from "./live-collection.js";
+import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -175,7 +185,7 @@ import {
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
-import type { AgentRow } from "./task-list-collections.js";
+import { AGENT, type AgentRow } from "./task-list-collections.js";
 import {
   followTranscript,
   type TranscriptFollows,
@@ -310,17 +320,20 @@ export interface AgentsDependencies {
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
   /**
-   * A change to an agent's row of the task list, drawn at once and kept or
-   * taken back as the service answers it (`TasksComposer.writeAgent`): a
-   * rename, an archive, a pin, a change of model, or a switch of MCP
-   * servers. None writes alone, drawing nothing.
+   * The sync engine's pool, which an agent's row of the task list stands in
+   * and a rename, an archive, a pin, a change of model, or a switch of MCP
+   * servers is drawn over (`task-list-collections.ts`).
    */
-  writeAgent?: RowWrite<AgentRow>;
+  pool: EntityPool;
 }
 
 export interface AgentsComposer extends Composer {
   /** The session's account reads opened for the account signed in, as the gate opening opens them. */
   readonly open: Effect.Effect<void>;
+  /** The account's keys as an answer of the service's leaves them, as a ChatGPT sign-in answers them, laid where the windows hold them; nothing where it carries none. */
+  readonly keysAnswered: (
+    answer: ProviderKeysAnswerView | ChatGptSignInAnswerView,
+  ) => Effect.Effect<void>;
   /** Every transcript's, every plan's and agent's inbox's, the account inbox's, and the account's items' subscription let go, as a sign-out lets them go. */
   readonly reset: Effect.Effect<void>;
 }
@@ -501,13 +514,24 @@ interface ChapterFollows {
 /** The reads the host fetches for the windows that hold them, and the windows' holds on them. */
 interface FetchedReads {
   /** When the account's own devices last beat, by the account. */
-  readonly presence: HeldFetch<string>;
-  /** The windows' hold on the beats, one fiber standing until let go, under the account signed in as it was taken. */
-  readonly presenceHold: FiberHandle.FiberHandle<void>;
+  readonly presence: HeldFetch<string, AppDevicePresence>;
+  /** The windows' hold on the beats, under the account signed in. */
+  readonly presenceHold: AccountHeld;
   /** Our own tools each agent is offered, by the agent. */
-  readonly tools: HeldFetch<string>;
+  readonly tools: HeldFetch<string, WorkspaceToolsAnswer>;
   /** The windows' hold on each agent's tools, one fiber standing until let go. */
   readonly toolsHolds: FiberMap.FiberMap<string>;
+  /** The account's own provider keys, by the account. */
+  readonly keys: HeldFetch<string, AppProviderKeyList>;
+  /** The windows' hold on the keys, under the account signed in. */
+  readonly keysHold: AccountHeld;
+}
+
+/** The keys and plans an answer of the service's says the account holds, without what it says of the one write. */
+function keyListOf(answer: ProviderKeysAnswer): AppProviderKeyList {
+  return answer.subscriptions === undefined
+    ? { keys: answer.keys }
+    : { keys: answer.keys, subscriptions: answer.subscriptions };
 }
 
 /** The beats as the service answered them, each aged at `askedAt`, the host's instant as the answer landed. */
@@ -520,18 +544,18 @@ function presenceOf(answer: DevicePresenceAnswer, askedAt: number): AppDevicePre
 
 /**
  * The fetched reads behind the gate, each told whole on its slice. Note
- * that the beats are asked for the account signed in now alone, since the
- * service answers that account's devices, and that an ask which fails, or
- * runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one answered keeps the
- * beats it answered, marked stale, under the new instant, so a window says it
- * cannot check rather than that a device left.
+ * that the beats and the keys are asked for the account signed in now
+ * alone, since the service answers that account's, and that an ask of the
+ * beats which fails, or runs past `MAC_PRESENCE.READ_TIMEOUT_MS`, after one
+ * answered keeps the beats it answered, marked stale, under the new instant,
+ * so a window says it cannot check rather than that a device left.
  */
 function fetchedReads(
   dependencies: AgentsDependencies,
   asked: ReturnType<typeof askedOf>,
 ): Effect.Effect<FetchedReads, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const { client, kernel, focus } = dependencies;
+    const { client, kernel, focus, accountId } = dependencies;
     const gate = gateOf(dependencies);
     const presence = yield* heldFetch<typeof LIVE_READ.DEVICE_PRESENCE, string>({
       empty: NO_KEYS_HELD,
@@ -541,7 +565,7 @@ function fetchedReads(
       every: Duration.millis(MAC_PRESENCE.POLL_MS),
       fetch: (userId, held) =>
         Effect.gen(function* () {
-          if (userId !== dependencies.accountId()) return Option.none();
+          if (userId !== accountId()) return Option.none();
           // Note that a read past its bound counts as one that failed, so a window says it cannot check rather than letting every device age away while it hangs.
           const answer = yield* Effect.timeoutOption(
             asked(client.devicePresence()),
@@ -570,11 +594,27 @@ function fetchedReads(
       tell: (held: AppWorkspaceTools) =>
         kernel.emit(GATEWAY_EVENT.WORKSPACE_TOOLS_CHANGED, carried(held)),
     });
+    const keys = yield* heldFetch<typeof LIVE_READ.PROVIDER_KEYS, string>({
+      empty: NO_KEYS_HELD,
+      path: (userId) => [userId],
+      gate,
+      focus,
+      fetch: (userId) =>
+        userId === accountId()
+          ? Effect.map(asked(client.readProviderKeys()), (answer) =>
+              "failure" in answer ? Option.none() : Option.some(keyListOf(answer)),
+            )
+          : Effect.succeed(Option.none()),
+      tell: (held: AppProviderKeys) =>
+        kernel.emit(GATEWAY_EVENT.PROVIDER_KEYS_CHANGED, carried(held)),
+    });
     return {
       presence,
-      presenceHold: yield* FiberHandle.make<void>(),
+      presenceHold: yield* accountHeld(presence, accountId),
       tools,
       toolsHolds: yield* FiberMap.make<string>(),
+      keys,
+      keysHold: yield* accountHeld(keys, accountId),
     };
   });
 }
@@ -591,7 +631,7 @@ function composed(
   { reads: sessionReads, followItems }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
-  { presence, presenceHold, tools, toolsHolds }: FetchedReads,
+  { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -605,17 +645,92 @@ function composed(
     carries: (answer: Answer | GateClosed) => KeptAnswer<Key> | undefined,
   ) => (gate() ? kept.answer(key, dependencies.accountId, asked(call), carries) : asked(call));
   const listed = dependencies.listed ?? (() => Effect.void);
-  const writeAgent: RowWrite<AgentRow> =
-    dependencies.writeAgent ??
-    ((_agentId, _change, written) =>
-      Effect.map(written, (result) => ("refused" in result ? result.refused : result.answer)));
-  /** An agent's row written as the service answers it: kept on the transaction it names, or refused. */
-  const agentWritten = (call: Effect.Effect<AgentAgentAnswer>) =>
-    Effect.map(
-      call,
-      (answered): RowWritten<AgentRow, AgentAgentAnswer> | RowRefused<AgentAgentAnswer> =>
-        "agent" in answered ? { answer: answered, txid: answered.txid } : { refused: answered },
-    );
+  /**
+   * A write to an agent's row of the task list, as the agents' own writes
+   * declare it: drawn at once over the row, sent as `send` asks, and kept on
+   * the transaction the service names, or refused.
+   */
+  const agentWrite = <Input extends { readonly agentId: string }>(
+    change: (input: Input) => FieldChange<AgentRow>,
+    send: (input: Input) => Effect.Effect<AgentAgentAnswer>,
+  ): WriteDeclaration<AgentRow, FieldChange<AgentRow>, Input, WireValue> => ({
+    kind: AGENT,
+    keys: ({ agentId }) => [agentId],
+    change,
+    send: (input) =>
+      Effect.map(send(input), (answered) =>
+        "agent" in answered
+          ? { answer: carried<AgentAgentAnswer>(answered), txid: answered.txid }
+          : { refused: carried<AgentAgentAnswer>(answered) },
+      ),
+  });
+  /** A change of model, drawn on the agent's row at once, on the model's whole window where it names none. */
+  const chosen = agentWrite<AgentChooseParams>(
+    (choice) => () => ({
+      model: choice.model,
+      effort: choice.effort,
+      contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+    }),
+    ({ agentId, ...choice }) => asked(client.choose(agentId, choice)),
+  );
+  /** A rename, drawn on the agent's row at once, an empty title clearing it. */
+  const renamed = agentWrite<AgentRenameParams>(
+    (request) => () => ({ title: request.title.length === 0 ? null : request.title }),
+    ({ agentId, ...request }) => asked(client.rename(agentId, request)),
+  );
+  /** A switch of MCP servers, drawn on the agent's row at once, the whole list of those off. */
+  const switched = agentWrite<AgentServersParams>(
+    (request) => () => ({ disabledServers: request.disabledServers }),
+    ({ agentId, ...request }) => asked(client.switchServers(agentId, request)),
+  );
+  /**
+   * An archive, drawn on the agent's row at once, stamped now by the member,
+   * unless a dialog that asked waits on the answer, which then draws nothing
+   * and comes once the list carries it. Note that an agent archived lets go
+   * of what this host held of its transcript and its workers', and of their
+   * content kept.
+   */
+  const archived = agentWrite<AgentArchiveParams>(
+    ({ drawn, archived: archive }) => {
+      if (drawn === ARCHIVE_DRAWN.ON_ANSWER) return () => ({});
+      const archiver = reader();
+      const at = kernel.now();
+      return () =>
+        archive
+          ? {
+              archivedAt: at,
+              archivedBy:
+                archiver === undefined
+                  ? null
+                  : { by: AGENT_ARCHIVER.MEMBER, userId: archiver.userId },
+              archiverName: archiver?.name ?? null,
+            }
+          : { archivedAt: null, archivedBy: null, archiverName: null };
+    },
+    ({ agentId, drawn, ...request }) =>
+      Effect.tap(asked(client.archive(agentId, request)), (answer) =>
+        "agent" in answer
+          ? Effect.andThen(
+              Effect.andThen(
+                held.forget((key) => key.agentId === agentId),
+                kept.forget(keptOfAgent(agentId)),
+              ),
+              drawn === ARCHIVE_DRAWN.ON_ANSWER ? listed(answer.txid) : Effect.void,
+            )
+          : Effect.void,
+      ),
+  );
+  /** A pin, drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it. */
+  const pinned = agentWrite<AgentPinParams>(
+    (request) => (row) =>
+      request.pinned
+        ? {
+            pinnedAt: row.pinnedAt ?? kernel.now(),
+            pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
+          }
+        : { pinnedAt: null, pinPosition: null },
+    ({ agentId, ...request }) => asked(client.pin(agentId, request)),
+  );
 
   /** What this host holds of one transcript for the account signed in as the follow opens; nothing is held while nobody is. */
   const memoryOf = (key: TranscriptKey): TranscriptMemory => {
@@ -661,18 +776,17 @@ function composed(
       };
     });
 
-  /** Whether any window holds the beats, so the gate opening for another account holds them anew under it. */
-  let presenceHeld = false;
-  /** The windows' hold on the beats taken under the account signed in now, in place of any taken before; none while nobody is. */
-  const holdPresence = Effect.suspend(() => {
-    const userId = dependencies.accountId();
-    return userId === undefined
-      ? FiberHandle.clear(presenceHold)
-      : FiberHandle.run(
-          presenceHold,
-          Effect.scoped(Effect.andThen(presence.hold(userId), Effect.never)),
-        );
-  });
+  /** A write's answer of the account's keys, laid as the keys stand where it carries them, and answered whole to the window that asked. */
+  const keysWritten = (answer: ProviderKeysAnswerView) =>
+    Effect.as(keysAnswered(answer), carried<ProviderKeysAnswerView>(answer));
+  /** The keys as an answer of the service's leaves them, laid for the account signed in where it carries them. */
+  const keysAnswered = (answer: ProviderKeysAnswerView | ChatGptSignInAnswerView) =>
+    Effect.suspend(() => {
+      const userId = dependencies.accountId();
+      return userId === undefined || !("keys" in answer)
+        ? Effect.void
+        : keys.answered(userId, keyListOf(answer));
+    });
 
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
@@ -692,18 +806,8 @@ function composed(
     [GATEWAY_METHOD.HOSTS_LIST]: () =>
       Effect.map(asked(client.hosts()), (answer) => carried<HostsAnswerView>(answer)),
     // The beats are held for the windows while any draws a device's standing, under the account signed in, and told only on the app state (`DEVICE_PRESENCE_CHANGED`).
-    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () =>
-      Effect.gen(function* () {
-        presenceHeld = true;
-        yield* holdPresence;
-        return {};
-      }),
-    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () =>
-      Effect.gen(function* () {
-        presenceHeld = false;
-        yield* FiberHandle.clear(presenceHold);
-        return {};
-      }),
+    [GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW]: () => Effect.as(presenceHold.follow, {}),
+    [GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW]: () => Effect.as(presenceHold.unfollow, {}),
     // Note that the beats are asked again only where a window holds them, as a window coming forward asks them.
     [GATEWAY_METHOD.HOSTS_PRESENCE_REFRESH]: () =>
       Effect.gen(function* () {
@@ -734,10 +838,14 @@ function composed(
         const { code } = yield* readParams(hostPairingParamsSchema, params, "a deny names a code");
         return carried<HostPairingDenyView>(yield* asked(client.denyHostPairing(code)));
       }),
-    [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
-      Effect.map(asked(client.readProviderKeys()), (answer) =>
-        carried<ProviderKeysAnswerView>(answer),
-      ),
+    // The keys are held for the windows while any draws them, under the account signed in, and told only on the app state (`PROVIDER_KEYS_CHANGED`); each write's own answer is laid there too.
+    [GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW]: () => Effect.as(keysHold.follow, {}),
+    [GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW]: () => Effect.as(keysHold.unfollow, {}),
+    [GATEWAY_METHOD.PROVIDER_KEYS_RETRY]: () =>
+      Effect.suspend(() => {
+        const userId = dependencies.accountId();
+        return Effect.as(userId === undefined ? Effect.void : keys.retry(userId), {});
+      }),
     [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a key.
@@ -746,8 +854,7 @@ function composed(
           params,
           "a save names a provider and a key",
         );
-        const answer = yield* asked(client.saveProviderKey(save));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.saveProviderKey(save)));
       }),
     [GATEWAY_METHOD.MEMORIES_READ]: (params) =>
       Effect.gen(function* () {
@@ -787,8 +894,7 @@ function composed(
           params,
           "a removal names a provider",
         );
-        const answer = yield* asked(client.removeProviderKey(removal));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.removeProviderKey(removal)));
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_FOR_AGENTS]: (params) =>
       Effect.gen(function* () {
@@ -797,8 +903,7 @@ function composed(
           params,
           "a default names a provider, a plan, and on or off",
         );
-        const answer = yield* asked(client.setProviderKeyForAgents(change));
-        return carried<ProviderKeysAnswerView>(answer);
+        return yield* keysWritten(yield* asked(client.setProviderKeyForAgents(change)));
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_READ]: () =>
       Effect.map(asked(client.readGitHubToken()), (answer) =>
@@ -914,56 +1019,36 @@ function composed(
         // before the write can take it away, and the next send waits on this answer.
         return carried<AgentAgentAnswer>({ agent: answer.agent });
       }),
-    [GATEWAY_METHOD.AGENTS_CHOOSE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...choice } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_CHOOSE]: declaredMethod(
+      dependencies.pool,
+      chosen,
+      (params: WireRecord) =>
+        readParams(
           agentChooseParamsSchema,
           params,
           "changing an agent's model names the agent, a model, and its effort",
-        );
-        // A change of model is drawn on the agent's row at once, on the model's whole window where it names none.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({
-            model: choice.model,
-            effort: choice.effort,
-            contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
-          }),
-          agentWritten(asked(client.choose(agentId, choice))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_RENAME]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_RENAME]: declaredMethod(
+      dependencies.pool,
+      renamed,
+      (params: WireRecord) =>
+        readParams(
           agentRenameParamsSchema,
           params,
           "renaming an agent names the agent and its title",
-        );
-        // A rename is drawn on the agent's row at once, an empty title clearing it.
-        const title = request.title.length === 0 ? null : request.title;
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({ title }),
-          agentWritten(asked(client.rename(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_SERVERS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_SERVERS]: declaredMethod(
+      dependencies.pool,
+      switched,
+      (params: WireRecord) =>
+        readParams(
           agentServersParamsSchema,
           params,
           "switching an agent's MCP servers names the agent and the servers off",
-        );
-        // A switch is drawn on the agent's row at once, the whole list of those off.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () => ({ disabledServers: request.disabledServers }),
-          agentWritten(asked(client.switchServers(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.AGENTS_QUEUE]: (params) =>
       Effect.gen(function* () {
         const { agentId, change } = yield* readParams(
@@ -974,69 +1059,23 @@ function composed(
         const answer = yield* asked(client.changeQueue(agentId, change));
         return carried<AgentQueueAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_ARCHIVE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, drawn, ...request } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_ARCHIVE]: declaredMethod(
+      dependencies.pool,
+      archived,
+      (params: WireRecord) =>
+        readParams(
           agentArchiveParamsSchema,
           params,
           "archiving an agent names the agent and whether it is archived",
-        );
-        // Note that an agent archived lets go of what this host held of its transcript and its workers', and of their content kept.
-        const written = Effect.tap(asked(client.archive(agentId, request)), (answer) =>
-          "agent" in answer
-            ? Effect.andThen(
-                held.forget((key) => key.agentId === agentId),
-                kept.forget(keptOfAgent(agentId)),
-              )
-            : Effect.void,
-        );
-        // An archive is drawn on the agent's row at once, stamped now by the member, unless a dialog
-        // that asked waits on the answer, which then comes once the list carries it.
-        if (drawn === ARCHIVE_DRAWN.ON_ANSWER) {
-          const answer = yield* written;
-          if ("txid" in answer) yield* listed(answer.txid);
-          return carried<AgentAgentAnswer>(answer);
-        }
-        const archiver = reader();
-        const at = kernel.now();
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          () =>
-            request.archived
-              ? {
-                  archivedAt: at,
-                  archivedBy:
-                    archiver === undefined
-                      ? null
-                      : { by: AGENT_ARCHIVER.MEMBER, userId: archiver.userId },
-                  archiverName: archiver?.name ?? null,
-                }
-              : { archivedAt: null, archivedBy: null, archiverName: null },
-          agentWritten(written),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_PIN]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, ...request } = yield* readParams(
-          agentPinParamsSchema,
-          params,
-          "pinning an agent names the agent and whether it is pinned",
-        );
-        // A pin is drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it.
-        const answer = yield* writeAgent<AgentAgentAnswer>(
-          agentId,
-          (row) =>
-            request.pinned
-              ? {
-                  pinnedAt: row.pinnedAt ?? kernel.now(),
-                  pinPosition: request.position ?? (row.pinnedAt === null ? null : row.pinPosition),
-                }
-              : { pinnedAt: null, pinPosition: null },
-          agentWritten(asked(client.pin(agentId, request))),
-        );
-        return carried<AgentAgentAnswer>(answer);
-      }),
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
+      readParams(
+        agentPinParamsSchema,
+        params,
+        "pinning an agent names the agent and whether it is pinned",
+      ),
+    ),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
@@ -1488,16 +1527,18 @@ function composed(
     yield* sessionReads.end;
     yield* presence.end;
     yield* tools.end;
+    yield* keys.end;
   });
 
-  // Note that the beats are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
+  // Note that the beats and the keys are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
   const open = Effect.gen(function* () {
     yield* sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems);
     yield* holders.open;
     yield* chapters.open;
-    if (presenceHeld) yield* holdPresence;
+    yield* presenceHold.open;
+    yield* keysHold.open;
     yield* tools.open;
   });
 
-  return { methods, lifetime: Effect.void, open, reset };
+  return { methods, lifetime: Effect.void, open, reset, keysAnswered };
 }

@@ -59,14 +59,14 @@ import {
   type GatewayEventKind,
   type GatewayMethod,
 } from "@repo/gateway";
+import { type EntityPool, entityPool } from "@repo/sync";
 import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
-import type { RowWrite } from "./live-collection.js";
-import { type AgentRow, taskListCollections } from "./task-list-collections.js";
+import { taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
 import { HELD_TRANSCRIPTS } from "./transcript-held.js";
@@ -800,7 +800,7 @@ function subject(
     sendsNetwork?: boolean;
     accountId?: () => string | undefined;
     listed?: (txid: string | undefined) => Effect.Effect<void>;
-    writeAgent?: RowWrite<AgentRow>;
+    pool?: EntityPool;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -819,7 +819,7 @@ function subject(
       focus: yield* windowFocus,
       client: service.client,
       ...(options.listed === undefined ? undefined : { listed: options.listed }),
-      ...(options.writeAgent === undefined ? undefined : { writeAgent: options.writeAgent }),
+      pool: options.pool ?? (yield* entityPool()),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
@@ -865,6 +865,11 @@ function subject(
       accountItems: () =>
         events.flatMap((event) =>
           event.kind === GATEWAY_EVENT.INBOX_ITEMS_CHANGED ? [event.payload] : [],
+        ),
+      /** Every telling of the provider keys the host holds for the windows, whole, in order. */
+      providerKeys: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.PROVIDER_KEYS_CHANGED ? [event.payload] : [],
         ),
       /** Every telling of the beats the host holds for the windows, whole, in order. */
       beats: () =>
@@ -1271,12 +1276,14 @@ it.effect(
 );
 
 it.effect(
-  "a provider key passes through to the service once and is answered back as its hint alone, and a save the schema refuses is refused in words that hold no key",
+  "a provider key passes through to the service once and is answered back, and held for the windows, as its hint alone, each write's answer laid where the keys are held, and a save the schema refuses is refused in words that hold no key",
   () =>
     Effect.gen(function* () {
-      const { call, asked } = yield* subject();
+      const { call, asked, providerKeys } = yield* subject();
 
-      const read = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_READ);
+      yield* call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW);
+      yield* settled;
+      const read = providerKeys().at(-1);
       const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key: PROVIDER_KEY,
@@ -1288,10 +1295,11 @@ it.effect(
         call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
       );
 
-      assert.deepEqual(read, { keys: [KEPT] });
+      assert.deepEqual(read, { "user-dana": { rows: { keys: [KEPT] } } });
       assert.deepEqual(saved, { keys: [KEPT] });
       assert.deepEqual(removed, { keys: [] });
-      assert.ok(!JSON.stringify([read, saved, removed]).includes(PROVIDER_KEY));
+      assert.deepEqual(providerKeys().at(-1), { "user-dana": { rows: { keys: [] } } });
+      assert.ok(!JSON.stringify([providerKeys(), saved, removed]).includes(PROVIDER_KEY));
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
       assert.deepEqual(asked, [
@@ -2942,13 +2950,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const drawn: (readonly AgentSummary[])[] = [];
+      const pool = yield* entityPool();
       const list = yield* taskListCollections({
+        pool,
         draw: ({ taskAgents }) => void drawn.push(taskAgents),
         txWait: () => undefined,
       });
       yield* list.answer({ plans: [], agents: [{ ...agentListRow(TASK_ID, NOW), id: AGENT_ID }] });
       const answered = yield* Deferred.make<void>();
-      const { call, holdChanges } = yield* subject({ writeAgent: list.writeAgent });
+      const { call, holdChanges } = yield* subject({ pool });
       holdChanges(Deferred.await(answered));
       const standing = () => drawn.at(-1)?.[0];
 

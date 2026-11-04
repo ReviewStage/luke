@@ -11,9 +11,11 @@ import {
   type ProviderKeySummary,
 } from "@repo/features/provider-key-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import type { AppHostRead, AppProviderKeyList } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -21,6 +23,7 @@ import { OpenSettingsProvider } from "../open-settings.js";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handHostReads } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import {
   focusedSegment,
@@ -110,13 +113,13 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         return Promise.resolve(done({ failure: AGENT_CALL_FAILURE.UNANSWERED }));
       }
       return Promise.resolve(done({ model: request.payload.model }));
-    case ACT_KIND.PROVIDER_KEYS_READ:
-      return Promise.resolve(done({ keys }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
       // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
       // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
       keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
       models = [OPUS, OPUS_FAST];
+      // The host lays the save's own answer where it holds the keys before it answers.
+      deliverKeys({ rows: { keys } });
       return Promise.resolve(done({ keys }));
     case ACT_KIND.AGENTS_DEFAULT_WRITE:
       if (refuseWrite) {
@@ -161,7 +164,16 @@ async function settle(): Promise<void> {
 /** Where the page opened Settings, as the window's opener heard it. */
 let opened: SettingsLink[] = [];
 
+/** How the keys the host holds are delivered to the window again, as a save's own answer lays them. */
+let deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void = () => undefined;
+
+/** The account's keys as they stand, laid where the host holds them. */
+function holdKeys(): void {
+  deliverKeys = handHostReads({ keys: { rows: { keys } } }).deliverKeys;
+}
+
 async function mount(): Promise<HTMLElement> {
+  holdKeys();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -174,7 +186,7 @@ async function mount(): Promise<HTMLElement> {
         createElement(
           Fragment,
           null,
-          createElement(AgentsPage, { signedIn: true }),
+          onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true })),
           onRegistry(rendererRegistry, createElement(ToastHost)),
         ),
       ),
@@ -226,11 +238,14 @@ const placeholders = (page: HTMLElement) =>
   ]);
 
 test("while the default and the keys are read, placeholder rows stand in each group's place, and the rows land in theirs", async () => {
+  holdKeys();
   const page = document.createElement("div");
   document.body.append(page);
   const root = createRoot(page);
   roots.push(root);
-  act(() => root.render(createElement(AgentsPage, { signedIn: true })));
+  act(() =>
+    root.render(onRegistry(AtomRegistry.make(), createElement(AgentsPage, { signedIn: true }))),
+  );
 
   assert.deepEqual(placeholders(page), [
     ["Reading your keys", 2],
