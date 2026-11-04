@@ -197,6 +197,7 @@ function openMenuOn(
 ): {
   models: string[];
   foot: string;
+  line: string;
   menu: Element;
 } {
   const view = document.createElement("div");
@@ -226,10 +227,11 @@ function openMenuOn(
   const menu = view.querySelector('[role="dialog"]');
   assert.ok(menu, "the menu is open");
   const foot = menu.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
+  const line = menu.querySelector(".ui-searchable-menu-last-line")?.textContent ?? "";
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );
-  return { models: listed, foot, menu };
+  return { models: listed, foot, line, menu };
 }
 
 test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither but a Speed choice of Standard, Fast, and Ultrafast in Fast's place where its API key pays, while an eve agent's offers every model with both", () => {
@@ -266,33 +268,31 @@ test("on a Claude Code agent the menu offers Claude models alone with Fast and n
   assert.match(eve.foot, /Fast/u);
 });
 
-test("a Codex agent's menu ends on \"Using ChatGPT subscription · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
+test("a Codex agent's menu ends on \"Using ChatGPT plan\" and Manage usage, before its first turn settles too, the link opening ChatGPT's usage settings, while a Claude Code agent's says its Claude plan and an eve agent's names no payer", () => {
   const opened: string[] = [];
   fakeAppPlatform({ assetBase: () => "https://app.test/", openWeb: (href) => opened.push(href) });
   const codex = openMenuOn(AGENT_RUNTIME.CODEX, {
     model: "openai/gpt-6.1-sol",
     effort: "low",
   });
-  assert.match(codex.foot, /Using ChatGPT subscription · Manage usage$/u);
+  assert.equal(codex.line, "Using ChatGPT planManage usage");
   const link = [...codex.menu.querySelectorAll("a")].find((a) => a.textContent === "Manage usage");
   assert.ok(link, "Manage usage is a link");
   act(() => link.click());
   assert.deepEqual(opened, ["https://chatgpt.com/settings/usage"]);
 
-  for (const runtime of [AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
-    assert.doesNotMatch(openMenuOn(runtime).foot, /plan|Manage usage/u);
-  }
+  assert.equal(openMenuOn(AGENT_RUNTIME.CLAUDE_CODE).line, "Using Claude plan");
+  assert.equal(openMenuOn(undefined).line, "");
 });
 
-test("a Codex agent its OpenAI API key pays for names no plan, before its first turn settles too, and its menu ends on what it cost", () => {
+test("a Codex agent its OpenAI API key pays for names the key rather than a plan, before its first turn settles too, and what it has cost once one has", () => {
   const onKey = openMenuOn(
     AGENT_RUNTIME.CODEX,
     { model: "openai/gpt-6.1-sol", effort: "low" },
     RUNTIME_MODELS,
     { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: AGENT_PAYER.API_KEY },
   );
-  assert.doesNotMatch(onKey.foot, /plan|Manage usage/u);
-  assert.match(onKey.foot, /\$0\.42/u);
+  assert.equal(onKey.line, "OpenAI API key · $0.42 so far");
   // Before its first turn settles, the payer the page names says the same.
   const first = openMenuOn(
     AGENT_RUNTIME.CODEX,
@@ -301,7 +301,7 @@ test("a Codex agent its OpenAI API key pays for names no plan, before its first 
     undefined,
     AGENT_PAYER.API_KEY,
   );
-  assert.doesNotMatch(first.foot, /plan|Manage usage/u);
+  assert.equal(first.line, "OpenAI API key");
 });
 
 test("an automation's chip, whose choice a new agent starts on, says a model nothing of the reader's pays for cannot run, while a running agent's chip says nothing of it", () => {
@@ -330,9 +330,11 @@ test("an automation's chip, whose choice a new agent starts on, says a model not
     const chip = view.querySelector<HTMLButtonElement>(".agent-model-chip button");
     assert.ok(chip);
     act(() => chip.click());
-    const foot = view.querySelector(".ui-searchable-menu-foot")?.textContent ?? "";
+    const foot = [
+      ...view.querySelectorAll(".ui-searchable-menu-foot, .ui-searchable-menu-last-line"),
+    ].map((block) => block.textContent ?? "");
     act(() => chip.click());
-    return foot;
+    return foot.join("");
   };
 
   assert.match(

@@ -481,12 +481,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       );
       return streamed(yield* Stream.toAsyncIterableEffect(tabs));
     }),
-    [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOR_CODE].effect(
-      function* ({ input, context, errors }) {
-        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-        return yield* dependencies.colorCode(input.language, input.code);
-      },
-    ),
+    [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOR_CODE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* dependencies.colorCode(input.language, input.code);
+    }),
     [TASKS_ACT_KIND.TASKS_FIND]: actPort[TASKS_ACT_KIND.TASKS_FIND].effect(function* ({
       input,
       context,
@@ -519,7 +521,7 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksRestore(input);
     }),
-    // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
+    // The version is read as its frame reads it, kept in the host's memory by its version (`kept-content.ts`) and never in app state, so its HTML reaches the tab that asked alone.
     [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: actPort[TASKS_ACT_KIND.TASKS_PAGE_SOURCE].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

@@ -5,6 +5,7 @@ import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-
 import {
   AGENT_BRIEF,
   AGENT_FAILURE,
+  AGENT_PAYER,
   AGENT_STATUS,
   type AgentAttachment,
   type AgentFailure,
@@ -348,7 +349,13 @@ test("a failed turn's end line names no price, even from a service that sent the
     status: AGENT_STATUS.FAILED,
     failure: AGENT_FAILURE.SANDBOX,
     usage: {
-      usage: { inputTokens: 1_200_000, outputTokens: 30_000, cachedInputTokens: 0, costUsd: 2.41 },
+      usage: {
+        inputTokens: 1_200_000,
+        outputTokens: 30_000,
+        cachedInputTokens: 0,
+        costUsd: 2.41,
+        payer: AGENT_PAYER.API_KEY,
+      },
       turnUsage: { inputTokens: 40_000, outputTokens: 900, cachedInputTokens: 0, costUsd: 0.08 },
     },
   });
@@ -362,7 +369,7 @@ test("a failed turn's end line names no price, even from a service that sent the
   act(() => chip.click());
   await settle();
   const menu = tab.container.querySelector(".ui-searchable-menu") ?? assert.fail("the menu opens");
-  assert.match(menu.textContent ?? "", /This agent: 1\.2M tokens · \$2\.41/);
+  assert.match(menu.textContent ?? "", /API key · \$2\.41 so far/);
   assert.doesNotMatch(menu.textContent ?? "", /\$0\.08/);
 });
 

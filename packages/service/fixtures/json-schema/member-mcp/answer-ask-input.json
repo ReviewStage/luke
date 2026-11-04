@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "properties": {
+    "threadId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The thread's id, as read_inbox answered it."
+    },
+    "askId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The id of the message whose ask you answer: the thread's askId, as read_inbox answered it."
+    },
+    "reply": {
+      "type": "string",
+      "enum": [
+        "chose",
+        "answered",
+        "submitted",
+        "done",
+        "not-done"
+      ],
+      "description": "How the member answers: chose, with choices, for a decide; answered, with their words in note, where no option of a decide fits or an answer asks no fields; submitted, with values, for an answer's fields; and done or not-done for a do."
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6,
+      "description": "The labels of the options the member picks, for chose: one, or several where the ask lets several be picked."
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 8,
+      "description": "The fields the member fills, for submitted: each by its field's label, with words, a number, one of a select's options, or true or false, as its type asks; every required field filled."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxItems": 8,
+      "description": "The steps of a do the member did, by their places from 0: every one for done."
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 8000,
+      "description": "The member's words with the answer, in Markdown: the answer itself for answered, and otherwise anything they add."
+    }
+  },
+  "required": [
+    "threadId",
+    "askId",
+    "reply"
+  ],
+  "additionalProperties": false
+}

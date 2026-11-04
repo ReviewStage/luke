@@ -14,7 +14,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "../core.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { type AgentCall, callerUserId, callerWorkspace } from "./agent-tools.js";
+import { type AgentCall, callerAgent, callerUserId, callerWorkspace } from "./agent-tools.js";
 import { rememberRefusal } from "./memory-provenance.js";
 
 /**
@@ -331,7 +331,10 @@ function agentMemory(
     Effect.gen(function* () {
       const userId = callerUserId(call.caller);
       if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
-      const refused = refusal === undefined ? undefined : yield* refusal(call.caller.agent);
+      // A refusal reads the calling agent's turn; a member's call is their own words, and has none.
+      const agent = callerAgent(call.caller);
+      const refused =
+        refusal === undefined || agent === undefined ? undefined : yield* refusal(agent);
       if (refused !== undefined) return rejected(refused);
       const workspace = yield* callerWorkspace(call.caller);
       if (Option.isNone(workspace)) return rejected(MEMORY_REFUSAL.UNAVAILABLE);

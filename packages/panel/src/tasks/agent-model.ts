@@ -30,7 +30,6 @@ import {
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
-  type AgentUsage,
   CONTEXT_WINDOW,
   type ContextWindow,
   LOCAL_AGENT_REFUSAL,
@@ -142,28 +141,51 @@ import {
 /** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
-/** The plans an agent may be paid for by, each as its usage line names it; a key is billed by the token and names none. */
-const PLAN_USAGE: Partial<Record<AgentPayer, string>> = {
-  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Claude subscription",
-  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "ChatGPT subscription",
-};
+/** Each payer as the model menu's last line names it; a key's line goes on to what the agent has cost. */
+const PAYER_WORDS = {
+  [AGENT_PAYER.CLAUDE_SUBSCRIPTION]: "Using Claude plan",
+  [AGENT_PAYER.CHATGPT_SUBSCRIPTION]: "Using ChatGPT plan",
+  [AGENT_PAYER.APP]: `${PRODUCT_NAME}'s API key`,
+  [AGENT_PAYER.MAC_SIGN_IN]: "Using your Mac's sign-in",
+} as const satisfies Record<Exclude<AgentPayer, typeof AGENT_PAYER.API_KEY>, string>;
+
+/** The member's own API key, named by the provider it is for. */
+const API_KEY_WORDS = {
+  [MODEL_PROVIDER.ANTHROPIC]: "Anthropic API key",
+  [MODEL_PROVIDER.OPENAI]: "OpenAI API key",
+} as const satisfies Record<ModelProvider, string>;
+
+/** A key whose provider the choice does not say. */
+const ANY_API_KEY = "API key";
+
+/** The payers billed by the token, whose line says what the agent has cost so far. */
+const PRICED_PAYERS: ReadonlySet<AgentPayer> = new Set([AGENT_PAYER.API_KEY, AGENT_PAYER.APP]);
 
 /**
- * What the agent has cost, for the model menu's foot: "This agent: 1.2M
- * tokens · $0.42", the dollars left off where the service could not price
- * every step; nothing before a turn settled. An agent paid for by a plan
- * says the plan in the dollars' place, "This agent: 1.2M tokens · Claude
- * plan", since a subscription has no bill per token. Note that this is the
- * one place the window draws a price, and it is the whole run's, the agent's
- * own turns and its workers', at the catalog's list prices.
+ * Who pays for the agent, for the model menu's last line: "Using ChatGPT
+ * plan", "Using Claude plan", or a key by its provider and what the run has
+ * cost on it, "OpenAI API key · $0.42 so far", the key alone where the
+ * service could not price every step; nothing where no payer is named.
+ * Note that a plan's line names no tokens, since the composer's context
+ * ring already says how full the window is and a subscription has no bill
+ * per token, and that the price is the whole run's, the agent's own turns
+ * and its workers', at the catalog's list prices.
  */
-export function agentUsageLine(usage: AgentUsage | undefined): string | undefined {
-  if (usage === undefined) return undefined;
-  const tokens = `${formatCompact(usage.inputTokens + usage.outputTokens)} tokens`;
-  const paid =
-    (usage.payer === undefined ? undefined : PLAN_USAGE[usage.payer]) ??
-    (usage.costUsd === undefined ? undefined : formatUsd(usage.costUsd));
-  return `This agent: ${paid === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${paid}`}`;
+export function agentPayerLine(
+  payer: AgentPayer | undefined,
+  provider: ModelProvider | undefined,
+  costUsd: number | undefined,
+): string | undefined {
+  if (payer === undefined) return undefined;
+  const words =
+    payer === AGENT_PAYER.API_KEY
+      ? provider === undefined
+        ? ANY_API_KEY
+        : API_KEY_WORDS[provider]
+      : PAYER_WORDS[payer];
+  return PRICED_PAYERS.has(payer) && costUsd !== undefined
+    ? `${words}${LINE_SEPARATOR}${formatUsd(costUsd)} so far`
+    : words;
 }
 
 /**
@@ -379,7 +401,7 @@ export interface EndLineParts {
  * its Mac, which refused to start it in a VM (`ranDirectly`), says so and
  * where its work still is, in place of its failure's words.
  * Note that it names no price, because a price in the window means the
- * whole run's, which the model menu's foot says (`agentUsageLine`).
+ * whole run's, which the model menu's last line says (`agentPayerLine`).
  */
 export function endLineParts(
   status: AgentStatus,

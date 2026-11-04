@@ -1,4 +1,4 @@
-import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { Option, Schema } from "effect";
 
 /**
@@ -69,6 +69,19 @@ export const LIVE_COUNT: SQL<number> = sql<number>`count(*)::int`;
 /** When a group's latest row changed, as epoch milliseconds, read at UTC as `epochMillis` reads one. */
 export function liveLatest(column: SQLWrapper): SQL<number> {
   return epochMillis(sql`max(${column})`);
+}
+
+/**
+ * That the column, or a text expression, is one of the keys: false where
+ * there are none, and otherwise one membership test whose keys bind as one
+ * JSON text, so a delta read's statement holds any number of them in a
+ * single placeholder. A column's keys are cast to its own type, so an index
+ * on it still serves the test.
+ */
+export function liveKeysIn(expression: SQLWrapper, keys: readonly string[]): SQL {
+  if (keys.length === 0) return sql`false`;
+  const type = is(expression, Column) ? expression.getSQLType() : "text";
+  return sql`${expression} in (select jsonb_array_elements_text(${JSON.stringify([...new Set(keys)])}::jsonb)::${sql.raw(type)})`;
 }
 
 /** The values a live statement binds as they are, and an instant, which it binds as the text Postgres reads one from. */

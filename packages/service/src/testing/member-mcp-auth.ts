@@ -9,7 +9,9 @@
  * rows a deployment's seeder writes are seeded, and a test client linked to
  * the resource beside them. The key set the admission verifies against is
  * fetched from the auth service over HTTP, as on a deployment: here the
- * in-process handler, and nothing else answers. Synthetic accounts.
+ * in-process handler, and nothing else answers. GitHub is reached by no
+ * call here, no agent's session is, and the model catalog offers nothing.
+ * Synthetic accounts.
  */
 
 import assert from "node:assert/strict";
@@ -45,6 +47,7 @@ import {
   type OAuthClient,
   oauthClientRecord,
 } from "../auth/oauth-clients.js";
+import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { memberMcpApp, memberMcpAuth } from "../member-mcp/app.js";
 import {
@@ -53,6 +56,8 @@ import {
   memberMcpResourceUrl,
   oauthResourceRecord,
 } from "../member-mcp/resource.js";
+import { modelCatalogOf } from "../providers/model-catalog.js";
+import { NO_GITHUB } from "./github-app-fake.js";
 
 /** The deployment the test stands at: its origin, the resource and the auth service under it. */
 export const MEMBER_MCP_TEST = {
@@ -86,6 +91,18 @@ export const MCP_CLIENT: OAuthClient = {
   grantTypes: ["authorization_code", "refresh_token"],
   responseTypes: ["code"],
   type: "web",
+};
+
+/** The deployment's environment with no key of its own, which no call here reads. */
+const NO_ENVIRONMENT: HostedEnvironmentValues = {
+  posthogPersonalApiKey: undefined,
+  posthogProjectId: undefined,
+  posthogApiHost: undefined,
+  posthogProjectApiKey: undefined,
+  posthogIngestHost: undefined,
+  cronSecret: undefined,
+  githubWebhookSecret: undefined,
+  providerKeyEncryptionKeys: undefined,
 };
 
 /** The protocol revisions the server serves, as the SDK's client is told to speak each. */
@@ -175,7 +192,12 @@ export function memberMcpStanding(fetchClientMetadataResource?: ClientMetadataRe
       Effect.promise(() => opened.close()),
     );
     const auth = memberMcpTestAuth(client, fetchClientMetadataResource);
-    const services = Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client)));
+    const services = Layer.mergeAll(
+      Layer.succeedContext(yield* Layer.build(sqlClientOverPglite(client))),
+      NO_GITHUB,
+      modelCatalogOf([]),
+      Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+    );
     yield* seedRows.pipe(Effect.provide(services));
     // The key set is fetched from the auth service over HTTP, as on a deployment: here the in-process handler, and nothing else answers.
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {

@@ -20,7 +20,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { APP_SLICE, appStateNow, useAppSlice } from "../use-app-state.js";
 import { PULL_REQUEST_STATE_LABEL, QUEUED_LABEL } from "./agent-model.js";
 
 /**
@@ -344,6 +344,10 @@ function numberedTaskIdIn(
   if (named === undefined) return undefined;
   return planning.tasks.find((task) => task.workspaceId === named.id && task.number === number)?.id;
 }
+
+/** The id of the task a link names by its number among the tasks the window lists as it stands now (`useNumberedTaskId`), for a press that cannot wait a render; nothing redraws for it. */
+export const numberedTaskIdNow: NumberedTaskIdOf = (task) =>
+  numberedTaskIdIn(appStateNow()?.tasks, task);
 
 /** How the id of the task a link names by its number is found among the tasks the window lists (`useNumberedTaskId`), for words pasted. */
 export function useNumberedTaskIdOf(): NumberedTaskIdOf {

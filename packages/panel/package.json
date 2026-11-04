@@ -44,6 +44,7 @@
     "./shell-room": "./src/shell-room.js",
     "./sources.css": "./src/sources.css",
     "./stage-room": "./src/stage-room.js",
+    "./styles/attachment-viewer.css": "./src/styles/attachment-viewer.css",
     "./styles/base.css": "./src/styles/base.css",
     "./styles/desktop.css": "./src/styles/desktop.css",
     "./styles/index.css": "./src/styles/index.css",

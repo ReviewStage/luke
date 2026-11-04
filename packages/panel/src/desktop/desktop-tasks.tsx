@@ -77,7 +77,7 @@ import type { TaskRepositoryDoor, TaskStandingDoor } from "../tasks/task-standin
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { placeOfTaskTarget, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { isOverviewTab, MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
-import { OpenHereProvider, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
+import { OpenAddressesHere, openPullRequestsHere, useOpenPlace } from "../tasks/use-open-link.js";
 import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
@@ -1210,7 +1210,7 @@ function PlanDocument({
               onOpen={openAutomation}
             >
               <TaskMentions value={mentions}>
-                <OpenHereProvider value={openHere}>
+                <OpenAddressesHere value={openHere}>
                   {/* The task's menu, its shortcuts, and the questions its items ask, keyed by the task so none outlives it; drawn ahead of the panel, which reads the items. */}
                   <TaskActions
                     key={task.id}
@@ -1380,7 +1380,7 @@ function PlanDocument({
                     ) : null}
                     {stranded.dialog}
                   </TaskPage>
-                </OpenHereProvider>
+                </OpenAddressesHere>
               </TaskMentions>
             </AutomationDirectory>
           </MemberDirectory>

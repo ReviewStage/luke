@@ -472,14 +472,13 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   act(() => row.click());
   act(() =>
     (
-      document.querySelector<HTMLButtonElement>('[aria-label="Edit key"]') ??
-      assert.fail("no Edit key")
+      document.querySelector<HTMLButtonElement>('[aria-label="Replace Anthropic API key"]') ??
+      assert.fail("no Replace")
     ).click(),
   );
   const label =
-    [...document.querySelectorAll("label")].find(
-      (each) => each.textContent === "Anthropic API key",
-    ) ?? assert.fail("no Anthropic field");
+    [...document.querySelectorAll("label")].find((each) => each.textContent === "New key") ??
+    assert.fail("no New key field");
   const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(

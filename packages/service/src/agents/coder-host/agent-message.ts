@@ -26,6 +26,7 @@ import {
   type AgentCall,
   type AgentToolServices,
   agentToolRejected,
+  callerAgent,
   callerTask,
   callerUserId,
   callerWorkspace,
@@ -82,6 +83,8 @@ export const MESSAGE_AGENT_REFUSAL = {
     `Not sent: the text is ${length} characters, over the ${MAX_MESSAGE_WORDS_CHARS} one message ` +
     "may spell; cut it to fit, or send it in parts.",
   SELF: "Not sent: that id is your own; message another agent.",
+  /** A member's words reach an agent as their own line, which this tool, one agent's message to another, does not send. */
+  NOT_AGENT: "Not sent: only a coding agent messages another agent.",
   NO_AGENT: `Not sent: no agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   ARCHIVED:
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
@@ -172,7 +175,7 @@ export const MESSAGE_AGENT_TOOL = {
 } as const;
 
 /** A steer's refusal in the model's words, with when a plan's reached limit resets where the provider said. */
-function refusalWords(refusal: HostedRefusal): string {
+export function messageRefusalWords(refusal: HostedRefusal): string {
   const words = REFUSAL_WORDS.get(refusal.error) ?? MESSAGE_AGENT_REFUSAL.UNAVAILABLE;
   return refusal.resetsAt === undefined
     ? words
@@ -213,7 +216,10 @@ export function runMessageAgent(
   if (Result.isFailure(asked)) return Effect.succeed(agentToolRejected(asked.failure));
   const { agentId, text } = asked.success;
   const { caller } = call;
-  const sender = caller.agent;
+  const sender = callerAgent(caller);
+  if (sender === undefined) {
+    return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.NOT_AGENT));
+  }
   if (agentId === sender.id) return Effect.succeed(agentToolRejected(MESSAGE_AGENT_REFUSAL.SELF));
   return orStoreRefusal(
     Effect.gen(function* () {
@@ -243,7 +249,7 @@ export function runMessageAgent(
         sender: agentLineSender(sender),
         metadata: { channel: MESSAGE_CHANNEL.AGENT_MESSAGE },
       }).pipe(Effect.result);
-      if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
+      if (Result.isFailure(sent)) return agentToolRejected(messageRefusalWords(sent.failure));
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         delivery: sent.success,
