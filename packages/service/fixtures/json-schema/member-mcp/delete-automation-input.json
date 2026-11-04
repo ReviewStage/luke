@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "automationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The automation's id, as list_automations or create_automation answered it."
+    }
+  },
+  "required": [
+    "automationId"
+  ],
+  "additionalProperties": false
+}

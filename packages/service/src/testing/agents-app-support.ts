@@ -100,6 +100,7 @@ import {
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
+import { SentryApp, sentryAppService } from "../triggers/sentry/sentry-app-config.js";
 
 export const ORIGIN = "https://app.test";
 export const TASK_AGENTS = "/api/plans/agents";
@@ -429,6 +430,7 @@ export const standing = (
       github.layer,
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+      Layer.succeed(SentryApp, sentryAppService(undefined, [])),
       ANALYTICS.layer,
     );
     // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
