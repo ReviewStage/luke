@@ -293,7 +293,8 @@ function chipClasses(
     LOOK_CORNER[look],
     ...face,
     inset,
-    look === CHIP_LOOK.FIELD ? "justify-start" : "justify-center",
+    // Note that a mark alone stands centered in its square whatever the look, since a field's words are what lead from its edge.
+    look === CHIP_LOOK.FIELD && !iconOnly ? "justify-start" : "justify-center",
     width === CHIP_WIDTH.MIN_FIELD ? "" : "min-w-0",
     WIDTH_BOX[width],
     compact
@@ -318,7 +319,7 @@ function faceClasses(
   return [
     FACE_BASE,
     smallGlyphs ? "[&>:is(svg,img)]:size-chip-chevron" : "[&>:is(svg,img)]:size-control-icon",
-    look === CHIP_LOOK.FIELD ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
+    look === CHIP_LOOK.FIELD && !iconOnly ? "flex-1 [&>.settings-chevron]:ml-auto" : "flex-initial",
     iconOnly ? "[&>.settings-chevron]:hidden" : "",
     // Note that a busy chip's face pulses whole rather than standing faded, so only an idle one fades.
     busy ? "" : "group-disabled/chip:opacity-disabled group-aria-disabled/chip:opacity-disabled",
