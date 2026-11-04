@@ -875,6 +875,8 @@ export const LIVE_READ = {
   THIS_MAC_HOST: "thisMacHost",
   /** One workspace's members and who its work names but left, by the workspace: the service's `workspaceMembers` query, held for the windows that draw its people and a few they drew lately. */
   WORKSPACE_MEMBERS: "workspaceMembers",
+  /** Each listed workspace's photo as a `data:` URL under the version the workspaces carry, by the workspace: fetched by the host once per version as the version it lists moves, held for the session. */
+  WORKSPACE_PHOTOS: "workspacePhotos",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
   /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */

@@ -431,6 +431,15 @@ export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
  */
 export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
 
+/** One workspace's photo as the host last fetched it: the version the workspaces named it by, and its bytes as a `data:` URL. */
+export interface AppWorkspacePhoto {
+  version: string;
+  url: string;
+}
+
+/** Each listed workspace's photo the host holds, by the workspace; one with none, or not yet fetched, absent. */
+export type AppWorkspacePhotos = Readonly<Record<string, AppHostRead<AppWorkspacePhoto>>>;
+
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
@@ -535,6 +544,7 @@ export interface AppHostReads {
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
+  [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhoto;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
@@ -657,6 +667,8 @@ export interface AppState {
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHosts;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
+  /** Each listed workspace's photo, held for the signed-in session and fetched again as its version moves: what every workspace's tile draws. */
+  [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhotos;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
   /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
@@ -828,6 +840,7 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.THIS_MAC_HOST]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_PHOTOS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {

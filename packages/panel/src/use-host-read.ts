@@ -207,7 +207,9 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * page's tab each hold; one task's plan history, which its version history
  * holds while it shows; the run that started one agent, which its page
  * holds; one workspace's people, its members and who its work names but
- * left, which every surface naming them holds; and one task's plan, which
+ * left, which every surface naming them holds; each listed workspace's
+ * photo, which the host fetches as its version moves and holds for the
+ * session; and one task's plan, which
  * the window's open task holds. Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
@@ -216,7 +218,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * every `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer
  * theirs to the window coming back online (`device-presence.ts`), never to
  * a press. This Mac's host offers none, since the host reads it again every
- * few seconds on its own (`compose-this-mac-host.ts`).
+ * few seconds on its own (`compose-this-mac-host.ts`), and a workspace's
+ * photo none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -314,6 +317,12 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_MEMBERS_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_MEMBERS_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.WORKSPACE_PHOTOS]: hostRead(LIVE_READ.WORKSPACE_PHOTOS, {
+    slice: APP_SLICE.WORKSPACE_PHOTOS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: undefined,
+    retry: undefined,
   }),
   [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
     slice: APP_SLICE.WORKSPACE_TOOLS,

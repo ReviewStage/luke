@@ -126,6 +126,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onWorkspaceMembersChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
       }),
+      gateway.host.onWorkspacePhotosChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_PHOTOS]: held });
+      }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
       }),

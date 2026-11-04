@@ -189,8 +189,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
   /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
   WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
-  /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
-  WORKSPACES_PHOTO: "workspaces.photo",
   /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_TOKEN_REPOSITORIES: "workspaces.tokenRepositories",
   /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand. */
@@ -680,6 +678,8 @@ export const GATEWAY_EVENT = {
   AUTOMATIONS_CHANGED: "automations.changed",
   /** Every workspace's people the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   WORKSPACE_MEMBERS_CHANGED: "workspaceMembers.changed",
+  /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
+  WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

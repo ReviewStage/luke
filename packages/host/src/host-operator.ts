@@ -271,8 +271,6 @@ import {
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceParams,
-  type TasksWorkspacePhotoAnswer,
-  type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
@@ -316,7 +314,6 @@ import {
   tasksWorkspaceInvitationsAnswerSchema,
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
-  tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
@@ -385,6 +382,7 @@ import type {
   AppProviderKeys,
   AppThisMacHosts,
   AppWorkspaceMembers,
+  AppWorkspacePhotos,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -661,8 +659,8 @@ export interface HostOperator {
   onWorkspaceInvitationsChanged(
     listener: (followed: WorkspaceInvitationsFollowed) => void,
   ): () => void;
-  /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
-  workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
+  /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
+  onWorkspacePhotosChanged(listener: (held: AppWorkspacePhotos) => void): () => void;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
   workspaceTokenRepositories(
     params: TasksWorkspaceTokenRepositoriesParams,
@@ -1705,10 +1703,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    workspacePhoto: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
+    onWorkspacePhotosChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED,
+        // Note that the held photos are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspacePhotos>(payload) : undefined),
+        listener,
       ),
     workspaceTokenRepositories: (params) =>
       Effect.map(

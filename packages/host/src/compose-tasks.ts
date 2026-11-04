@@ -98,7 +98,6 @@ import {
   type TasksWorkspaceInvitationsAnswer,
   type TasksWorkspaceLeaveAnswer,
   type TasksWorkspaceMembersAnswer,
-  type TasksWorkspacePhotoAnswer,
   type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceSlackBotAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
@@ -140,7 +139,6 @@ import {
   tasksWorkspaceMemberRemoveParamsSchema,
   tasksWorkspaceMemberRoleParamsSchema,
   tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
@@ -184,7 +182,7 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
+import { type AppWorkspacePhotos, NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
@@ -1138,6 +1136,59 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   const workspaceMoves = new Map<string, number>();
 
   /**
+   * Each listed workspace's photo, by the workspace, told on the app state
+   * every window draws its tiles from (`LIVE_READ.WORKSPACE_PHOTOS`): its
+   * bytes as a `data:` URL under the version the workspaces carry, fetched
+   * once per version as the version the view lists moves, a newer version's
+   * fetch taking the place of one still out, and let go where a workspace
+   * lists another version, none, or leaves the list. A fetch that did not
+   * land is asked again as the workspaces next move.
+   */
+  let photos: AppWorkspacePhotos = NO_KEYS_HELD;
+  /** Each workspace's photo fetch out, by the workspace. */
+  const photoFetches = yield* FiberMap.make<string>();
+  /** The version each photo fetch out asks for, by the workspace. */
+  const photosAsked = new Map<string, string>();
+  const tellPhotos = (next: AppWorkspacePhotos) => {
+    photos = next;
+    kernel.emit(GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED, carried(photos));
+  };
+  /** `workspaceId`'s photo at `version` fetched and laid; nothing is laid where it did not land. */
+  const photoFetched = (workspaceId: string, version: string) =>
+    Effect.gen(function* () {
+      const photo = yield* served(client.workspaces.photo(workspaceId));
+      if (photosAsked.get(workspaceId) === version) photosAsked.delete(workspaceId);
+      if (!photo.ok) return;
+      const url = `data:${photo.answer.contentType};base64,${photo.answer.base64}`;
+      tellPhotos({ ...photos, [workspaceId]: { rows: { version, url } } });
+    });
+  /** The photos of the workspaces the view lists now: each version neither held nor asked for fetched, and each no workspace lists at its version let go. */
+  const photosListed = Effect.suspend(() => {
+    if (!gate()) return Effect.void;
+    const listed = new Map<string, string>();
+    for (const each of view.workspaces) {
+      if (each.photoVersion !== undefined) listed.set(each.id, each.photoVersion);
+    }
+    const held = Object.entries(photos).filter(
+      ([workspaceId, read]) => listed.get(workspaceId) === read.rows?.version,
+    );
+    if (held.length !== Object.keys(photos).length) tellPhotos(Object.fromEntries(held));
+    return Effect.gen(function* () {
+      for (const workspaceId of [...photosAsked.keys()]) {
+        if (listed.has(workspaceId)) continue;
+        photosAsked.delete(workspaceId);
+        yield* FiberMap.remove(photoFetches, workspaceId);
+      }
+      for (const [workspaceId, version] of listed) {
+        if (photos[workspaceId]?.rows?.version === version) continue;
+        if (photosAsked.get(workspaceId) === version) continue;
+        photosAsked.set(workspaceId, version);
+        yield* FiberMap.run(photoFetches, workspaceId, photoFetched(workspaceId, version));
+      }
+    });
+  });
+
+  /**
    * Follows the account's workspaces over Realtime where nothing follows
    * them yet (`workspaces-follow.ts`), polled while Realtime fails them, and
    * draws each change as it lands, a teammate's and the browser's among
@@ -1177,6 +1228,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             workspaceMoves.set(each.id, (workspaceMoves.get(each.id) ?? 0) + 1);
           }
           write({ workspaces, workspacesStatus: TASKS_READ.READY });
+          yield* photosListed;
           yield* dependencies.entities()?.keep(KEPT_READ.WORKSPACES, workspaces) ?? Effect.void;
         }),
       ).pipe(
@@ -1464,6 +1516,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const workspaces = entities.stored(KEPT_READ.WORKSPACES);
     if (workspaces !== undefined && view.workspacesStatus !== TASKS_READ.READY) {
       write({ workspaces, workspacesStatus: TASKS_READ.READY });
+      yield* photosListed;
     }
   });
 
@@ -1781,6 +1834,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({
           workspaces: view.workspaces.map((each) => (each.id === answered.id ? answered : each)),
         });
+        yield* photosListed;
       }
       return { workspace: answered };
     });
@@ -2981,8 +3035,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // A photo moves no task either, so it is a rename's twin: the answered
-    // workspace, its photo's new version or none, lands; the window's tiles
-    // read the photo by it.
+    // workspace, its photo's new version or none, lands, and the photo at
+    // that version is fetched for the windows' tiles (`photosListed`).
     [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -3221,22 +3275,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(invitationFollows, read.workspaceId);
         return {};
       }),
-    // A photo is answered to the window that asked and held nowhere: the
-    // window keeps it under the version the list named, and the list itself
-    // never carries its bytes.
-    [GATEWAY_METHOD.WORKSPACES_PHOTO]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksWorkspacePhotoParamsSchema,
-          params,
-          "reading a photo names a workspace",
-        );
-        if (!gate()) return carried<TasksWorkspacePhotoAnswer>(WORKSPACE_UNANSWERED);
-        const photo = yield* served(client.workspaces.photo(read.workspaceId));
-        return carried<TasksWorkspacePhotoAnswer>(
-          photo.ok ? photo.answer : { failure: photo.failure },
-        );
-      }),
     // A workspace's token repositories, and each change of them, are
     // answered to the page that asked and held nowhere, as a photo is: they
     // move no task and no workspace the view holds.
@@ -3437,6 +3475,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldHistories.end;
       yield* comments.end;
       yield* membersReads.held.end;
+      yield* FiberMap.clear(photoFetches);
+      photosAsked.clear();
+      tellPhotos(NO_KEYS_HELD);
       yield* FiberMap.clear(editWaits);
       yield* documents.end;
       yield* FiberHandle.clear(listFollow);
