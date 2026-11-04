@@ -1,5 +1,6 @@
 import {
   AGENT_MACHINE,
+  AGENT_SOURCE,
   type AgentAttachment,
   type AgentBrief,
   type AgentSummary,
@@ -10,6 +11,7 @@ import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
 import { pressAct } from "../act.js";
+import { appPlatform } from "../app-platform.js";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useSteadyDoor } from "../steady-door.js";
@@ -46,8 +48,9 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * none, and its tab keeps Pin tab among its tab's keeping); Show terminal,
  * where the platform runs one, and none for an archived agent, whose sandbox
  * takes no shell, which for a local agent opens the Mac's own Terminal in
- * its worktree instead of the relayed tab; Archive, asked first while a
- * teammate's agent works (`agent-archive.tsx`), or Unarchive once it is
+ * its worktree instead of the relayed tab; Open in Slack, for an agent
+ * started from a Slack message, which opens that message; Archive, asked
+ * first while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is
  * archived; and last and alone, Permanently delete, always asked first
  * (`agent-delete.tsx`), which closes the surface once it landed. A row
  * leaves out only what `NOT_ON_A_ROW` names, and nothing of its own is
@@ -93,6 +96,8 @@ export interface AgentMenuDoors {
   onOpenBrowser?: (() => void) | undefined;
   /** Opens the agent in its full place, its tab on its task, from where it stands apart from it: beside the Inbox. */
   onOpenInTask?: (() => void) | undefined;
+  /** Opens the Slack message the agent was started from, for an agent started from Slack whose link Slack answered. */
+  onOpenInSlack?: (() => void) | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
@@ -105,9 +110,9 @@ export interface AgentMenuDoors {
  * The agent's menu, built once for every surface that draws it, in the
  * groups every menu of the window keeps: Copy link and the transcript's two
  * copies; Rename and the read mark; Pin and Move to section; Show terminal,
- * Show browser where a phone offers it, and Open in task, for an agent drawn
- * apart from its task; Archive or
- * Unarchive; and last and alone, Permanently delete. The copies, Show
+ * Show browser where a phone offers it, Open in task, for an agent drawn
+ * apart from its task, and Open in Slack, for one started from Slack;
+ * Archive or Unarchive; and last and alone, Permanently delete. The copies, Show
  * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
  * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
  * since each chord acts on that agent; the read mark and Pin print U and P
@@ -118,7 +123,7 @@ export interface AgentMenuDoors {
 export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
   const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
     doors;
-  const { onOpenBrowser } = doors;
+  const { onOpenBrowser, onOpenInSlack } = doors;
   const { archive, deletion } = doors;
   const chosen = doors.chosen === true;
   const lettered = chosen || doors.rowKeys === true;
@@ -165,6 +170,9 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
     ...(onOpenInTask === undefined
       ? []
       : [commandAction(PANEL_COMMAND.OPEN_IN_TASK, onOpenInTask, chosen)]),
+    ...(onOpenInSlack === undefined
+      ? []
+      : [commandAction(PANEL_COMMAND.OPEN_IN_SLACK, onOpenInSlack, false)]),
   ];
   return [
     copies,
@@ -181,7 +189,14 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
 /** What an agent offers on itself wherever it is drawn: the doors of its menu that are the agent's own, which a surface adds its own to (`read`, `agentPin`, `section`). */
 export type AgentDoors = Pick<
   AgentMenuDoors,
-  "onCopy" | "onRename" | "onOpenTerminal" | "onOpenBrowser" | "archive" | "deletion" | "copyLink"
+  | "onCopy"
+  | "onRename"
+  | "onOpenTerminal"
+  | "onOpenBrowser"
+  | "onOpenInSlack"
+  | "archive"
+  | "deletion"
+  | "copyLink"
 >;
 
 /**
@@ -298,6 +313,7 @@ export function useAgentActions(
     | "brief"
     | "machine"
     | "startedBy"
+    | "source"
   >,
   agents: AgentsControl,
   input: {
@@ -336,6 +352,7 @@ export function useAgentActions(
       ? undefined
       : () => onOpenTerminal(agent.id);
   const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
+  const slackUrl = agent.source?.kind === AGENT_SOURCE.SLACK ? agent.source.url : undefined;
   return {
     doors: {
       onCopy: copied(read),
@@ -347,6 +364,7 @@ export function useAgentActions(
         agent.archivedAt !== undefined || local || onOpenBrowser === undefined
           ? undefined
           : () => onOpenBrowser(agent.id),
+      onOpenInSlack: slackUrl === undefined ? undefined : () => appPlatform().openWeb(slackUrl),
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
       deletion: deletion.action,
       copyLink,
