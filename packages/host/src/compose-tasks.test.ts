@@ -2922,11 +2922,14 @@ it.effect(
       assert.deepEqual(removed, { workspace: ACME });
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-      assert.deepEqual(service.reads.slice(before), [
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-        `photoSet:${ACME.id}:none`,
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-      ]);
+      assert.deepEqual(
+        service.reads.slice(before).filter((read) => read.startsWith("photoSet:")),
+        [
+          `photoSet:${ACME.id}:${PHOTO_URL}`,
+          `photoSet:${ACME.id}:none`,
+          `photoSet:${ACME.id}:${PHOTO_URL}`,
+        ],
+      );
     }),
 );
 
@@ -3129,22 +3132,40 @@ it.effect(
     }),
 );
 
+/** Every telling of the workspaces' photos the host holds for the windows, whole, in order. */
+function heldPhotos(pushed: readonly (readonly [GatewayEventKind, WireValue])[]): WireValue[] {
+  return pushed.flatMap(([kind, payload]) =>
+    kind === GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED ? [payload] : [],
+  );
+}
+
 it.effect(
-  "a workspace's photo is read on the service with nothing else, answered as its bytes or as none where it has none",
+  "a listed workspace's photo is fetched once per version, laid under it, and fetched again as the version moves",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
+      service.memberships = [PERSONAL, { ...ACME, photoVersion: "v1" }];
       const photo = { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" };
       service.photos[ACME.id] = photo;
-      const { call } = yield* subject(service);
+      const { call, pushed, settled } = yield* subject(service);
+      const fetches = () => service.reads.filter((read) => read.startsWith("photo:"));
 
-      const read = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: ACME.id });
-      const none = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: PERSONAL.id });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const first = heldPhotos(pushed).at(-1);
+      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* nextPoll(settled);
+      const renamed = fetches().length;
+      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
+      yield* settled;
 
-      assert.deepEqual(read, photo);
-      assert.deepEqual(none, { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND });
-      assert.deepEqual(service.reads, [`photo:${ACME.id}`, `photo:${PERSONAL.id}`]);
+      const url = "data:image/png;base64,iVBORw0KGgo=";
+      assert.deepEqual(first, { [ACME.id]: { rows: { version: "v1", url } } });
+      assert.equal(renamed, 1, "a move that leaves the version fetches nothing");
+      assert.deepEqual(fetches(), [`photo:${ACME.id}`, `photo:${ACME.id}`]);
+      assert.deepEqual(heldPhotos(pushed).at(-1), {
+        [ACME.id]: { rows: { version: PHOTO_URL, url } },
+      });
     }),
 );
 

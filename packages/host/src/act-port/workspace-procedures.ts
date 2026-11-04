@@ -13,8 +13,6 @@ import type {
   TasksWorkspaceMemberRoleParams,
   TasksWorkspaceMembersAnswer,
   TasksWorkspaceParams,
-  TasksWorkspacePhotoAnswer,
-  TasksWorkspacePhotoParams,
   TasksWorkspacePhotoSetParams,
   TasksWorkspaceRenameParams,
   TasksWorkspaceSentryAnswer,
@@ -109,7 +107,6 @@ export interface WorkspaceProceduresDependencies {
     onWorkspaceInvitationsChanged(
       listener: (followed: WorkspaceInvitationsFollowed) => void,
     ): () => void;
-    workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
     workspaceMemberRemove(
       params: TasksWorkspaceMemberRemoveParams,
     ): Effect.Effect<TasksWorkspaceMembersAnswer>;
@@ -408,15 +405,6 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
           refollowedStream(invitations, openInvitations, input.workspaceId, input),
         ),
       );
-    }),
-    // Note that the photo's answer, a failure among them, is the panel's to
-    // read, as an inbox image's is, because a tile that hears none draws its
-    // letter rather than a refusal.
-    [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ
-    ].effect(function* ({ input, context, errors }) {
-      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      return yield* host.workspacePhoto(input);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE

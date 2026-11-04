@@ -891,6 +891,8 @@ export const LIVE_READ = {
   WORKSPACE_MEMBERS: "workspaceMembers",
   /** The repositories members added to one workspace on their own GitHub tokens, those its App reaches left out, by the workspace: fetched by the host while a window holds it, and laid from each addition's and removal's own answer. */
   TOKEN_REPOSITORIES: "tokenRepositories",
+  /** Each listed workspace's photo as a `data:` URL under the version the workspaces carry, by the workspace: fetched by the host once per version as the version it lists moves, held for the session. */
+  WORKSPACE_PHOTOS: "workspacePhotos",
   /** Our own tools one agent is offered, and whether its `run_on_mac` is on, by the agent: fetched by the host while a window holds it. */
   WORKSPACE_TOOLS: "workspaceTools",
   /** The outside MCP clients the account allowed, with the server's address, by the account: fetched by the host while Settings › Integrations holds it. */

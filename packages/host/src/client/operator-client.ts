@@ -144,6 +144,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onTokenRepositoriesChanged((held) => {
         state.update({ [LIVE_READ.TOKEN_REPOSITORIES]: held });
       }),
+      gateway.host.onWorkspacePhotosChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_PHOTOS]: held });
+      }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
       }),
