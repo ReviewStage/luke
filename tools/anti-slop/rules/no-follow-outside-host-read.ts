@@ -32,7 +32,7 @@ const PROMISE_RUNNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["Effect", new Set(["tryPromise", "promise"])],
 ]);
 
-/** The object and member a member expression spells, as `ACT_KIND.TASKS_COMMENTS` or `Effect.forever`, where it spells both by name. */
+/** The object and member a member expression spells, as `ACT_KIND.TASKS_COMMENTS_FOLLOW` or `Effect.forever`, where it spells both by name. */
 function memberNamed(
   node: ESTree.MemberExpression,
 ): { readonly object: string; readonly name: string } | undefined {

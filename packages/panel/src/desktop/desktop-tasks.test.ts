@@ -21,12 +21,19 @@ import {
 } from "@repo/features/inbox-wire";
 import type { ReadLink } from "@repo/features/link-grammar";
 import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+} from "@repo/features/plan-comment-wire";
+import {
   PLAN_ACTOR,
   TASK_PRIORITY,
   TASK_STATUS,
   type Task,
   type TaskStanding,
 } from "@repo/features/task-wire";
+import { COMMENT_SUBJECT, type TasksCommentsFollow } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -36,6 +43,7 @@ import {
   type AppInboxItems,
   UNREAD,
 } from "@repo/host/app-state";
+import { TASKS_ACT_KIND } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
@@ -55,7 +63,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -123,6 +131,80 @@ test("a task the service will not hand the reader, as a link to another workspac
   const frame = container.querySelector("section[aria-label='Not found']");
   assert.equal(frame?.firstElementChild?.tagName, "HEADER");
   assert.deepEqual(left, [TASK.id]);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a task's comments are held from its open, so its first ready frame marks them", async () => {
+  const body = "## Goal\n\nAn invite lands as a single-use link that expires in seven days.\n";
+  const from = body.indexOf("seven days");
+  const thread = {
+    id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "seven days",
+    anchor: { from, to: from + "seven days".length },
+    section: "Goal",
+    status: PLAN_COMMENT_STATUS.OPEN,
+    entries: [
+      {
+        id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        kind: PLAN_COMMENT_ENTRY.COMMENT,
+        writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u-lee", name: "Lee Park" } },
+        words: "Should this be a setting?",
+        at: 1,
+      },
+    ],
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+  };
+  const held: TasksCommentsFollow[] = [];
+  fakeAppBridge({});
+  const reads = handHostReads({});
+  fakeActPort({
+    [TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW]: (subject) => {
+      held.push(subject);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      void Promise.resolve().then(() =>
+        reads.deliverComments({
+          [COMMENT_SUBJECT.PLAN]: { [TASK.id]: { rows: [thread] } },
+          [COMMENT_SUBJECT.PAGE]: {},
+        }),
+      );
+      return quietHold();
+    },
+  });
+  const opened = (region: TasksControl["region"]) =>
+    onRegistry(
+      registry,
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK.id, region }),
+      }),
+    );
+  const registry = AtomRegistry.make();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+
+  act(() => root.render(opened({ kind: DOCUMENT_REGION.READING })));
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.deepEqual(held, [{ taskId: TASK.id }], "held while the plan is still being read");
+
+  act(() =>
+    root.render(
+      opened({
+        kind: DOCUMENT_REGION.READY,
+        task: { ...TASK, document: { body, assumptions: [] } },
+      }),
+    ),
+  );
+  assert.equal(
+    container.querySelector(`mark.plan-comment-mark[data-threads~="${thread.id}"]`)?.textContent,
+    "seven days",
+  );
   act(() => root.unmount());
   container.remove();
 });

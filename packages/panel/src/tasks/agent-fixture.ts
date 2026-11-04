@@ -875,7 +875,7 @@ const AGENT_STAGES: ReadonlyMap<string, AgentStage> = new Map<string, AgentStage
   ],
   [RUN_PROFILE.AGENT_TERMINAL_UNREACHABLE, { terminal: { kind: TERMINAL_STAGE.REFUSED } }],
   [RUN_PROFILE.AGENT_PAGE, { page: FIXTURE_PAGE.id }],
-  // The plan's threads are the tasks fixture's to answer (`tasks-fixture.ts`); one of them is this agent's.
+  // The plan's threads are the tasks fixture's to hold (`tasks-fixture.ts`); one of them is this agent's.
   [RUN_PROFILE.TASKS_COMMENTS, { plan: true }],
 ]);
 
