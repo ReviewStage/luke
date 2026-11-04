@@ -108,7 +108,6 @@ import {
   type TaskCallFailure,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
-  type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
   type TasksPictureAnswer,
@@ -806,20 +805,6 @@ export class HostedTaskClient {
         }),
       },
     );
-  }
-
-  /** The Browser tabs open in one agent's browser, or in every one of a task's agents', the oldest first; or that the service did not answer. */
-  readBrowserTabs(
-    place: BrowserTabsPlace,
-  ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
-    const asked =
-      "taskId" in place
-        ? askHosted(this.#hosted.agentBrowserTabs.list, { id: place.taskId })
-        : askHosted(this.#hosted.agentBrowserTabs.agentList, { id: place.agentId });
-    return Effect.match(asked, {
-      onSuccess: (answer): TasksBrowserTabsAnswer => answer,
-      onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-    });
   }
 
   /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */

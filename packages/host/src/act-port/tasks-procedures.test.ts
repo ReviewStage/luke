@@ -12,6 +12,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { ORPCError } from "@orpc/client";
 import {
   ADMIN_QUERY,
   ADMIN_READ,
@@ -34,14 +35,12 @@ import {
   BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
-  type TaskBrowserTabsFollowed,
   type TaskHistoryFollowed,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@repo/features/tasks-view";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { vi } from "vitest";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
@@ -96,7 +95,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
   [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
   [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
-  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: "Could not read the task's Browser tabs.",
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]:
     "Could not open a tab in that agent's browser on this system.",
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: "Could not color that code on this system.",
@@ -159,9 +157,6 @@ const ISSUE = {
   state: ISSUE_STATE.CLOSED,
 };
 const ISSUE_NONE = 8;
-
-/** A task whose service answers no Browser tabs list. */
-const TASK_UNANSWERED = "0c9e2f4a-5b6d-4e7f-8a9b-1c2d3e4f5a6b";
 
 /** One Browser tab in a coding agent's browser on the task. */
 const BROWSER_TAB = {
@@ -230,7 +225,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_SKILLS, payload: PLAN },
   { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
   { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
-  { kind: TASKS_ACT_KIND.TASKS_BROWSER_TABS, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN, payload: BROWSER_TAB_OPEN },
   { kind: TASKS_ACT_KIND.TASKS_COLOR_CODE, payload: { language: "ts", code: "const a = 1;" } },
   { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
@@ -280,7 +274,6 @@ function windowPort(
   const asked: string[] = [];
   const browsed: string[] = [];
   const historyListeners = new Set<(followed: TaskHistoryFollowed) => void>();
-  const browserTabsListeners = new Set<(followed: TaskBrowserTabsFollowed) => void>();
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
     connectPage: CONNECT_PAGE,
@@ -388,12 +381,6 @@ function windowPort(
         if (params.number === ISSUE_NONE) return { issue: null };
         return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
       }),
-    tasksBrowserTabs: (params) =>
-      ask(`browserTabs:${browserTabsPlaceId(params)}`, () =>
-        browserTabsPlaceId(params) === TASK_UNANSWERED
-          ? ({ failure: TASK_CALL_FAILURE.UNANSWERED } as const)
-          : { tabs: [BROWSER_TAB] },
-      ),
     tasksBrowserTabOpen: (params) =>
       ask(`browserTabOpen:${params.agentId}`, () =>
         params.agentId === AGENT_UNREACHABLE
@@ -440,10 +427,6 @@ function windowPort(
       ask(`tabs-follow:${browserTabsPlaceId(scope)}`, () => undefined),
     tasksBrowserTabsUnfollow: (scope) =>
       ask(`tabs-unfollow:${browserTabsPlaceId(scope)}`, () => undefined),
-    onTaskBrowserTabsChanged: (listener) => {
-      browserTabsListeners.add(listener);
-      return () => browserTabsListeners.delete(listener);
-    },
     tasksHistoryFollow: (scope) => ask(`history-follow:${scope.taskId}`, () => undefined),
     tasksHistoryUnfollow: (scope) => ask(`history-unfollow:${scope.taskId}`, () => undefined),
     onTaskHistoryChanged: (listener) => {
@@ -468,11 +451,7 @@ function windowPort(
   const historyMoved = (followed: TaskHistoryFollowed) => {
     for (const listener of historyListeners) listener(followed);
   };
-  /** A task's Browser tabs as the host tells them moved. */
-  const browserTabsMoved = (followed: TaskBrowserTabsFollowed) => {
-    for (const listener of browserTabsListeners) listener(followed);
-  };
-  return { client, asked, browsed, script, historyMoved, browserTabsMoved };
+  return { client, asked, browsed, script, historyMoved };
 }
 
 /** Any port kind's procedure, erased to the union of what every one takes and answers. */
@@ -917,17 +896,6 @@ it("an issue is answered to a panel as the host read it, or as none, and a servi
   ]);
 });
 
-it("a task's Browser tabs are answered to a panel as the host read them, and a service that did not answer is refused in the kind's own words", async () => {
-  const { client, asked } = windowPort(PANEL);
-  const ask = (taskId: string) => settled(client, TASKS_ACT_KIND.TASKS_BROWSER_TABS, { taskId });
-
-  assert.deepEqual(await ask(TASK_ID), { answer: { tabs: [BROWSER_TAB] } });
-  assert.deepEqual(await ask(TASK_UNANSWERED), {
-    refused: REFUSAL[TASKS_ACT_KIND.TASKS_BROWSER_TABS],
-  });
-  assert.deepEqual(asked, [`browserTabs:${TASK_ID}`, `browserTabs:${TASK_UNANSWERED}`]);
-});
-
 it("a tab opened in an agent's browser is answered to a panel as the host read it, why none opened among it, for the panel's words", async () => {
   const { client, asked } = windowPort(PANEL);
   const open = (agentId: string) =>
@@ -984,29 +952,52 @@ it("a content act's payload carrying a key its schema does not name, or past its
   assert.deepEqual(asked, []);
 });
 
-it("a panel's hold on a plan's pages follows them at the host once for every stream of them, and the last one closed lets them go", async () => {
-  const { client, asked } = windowPort(PANEL);
+/** A window's act port as `windowPort` opens it. */
+type WindowClient = ReturnType<typeof windowPort>["client"];
 
-  const one = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
-  const other = await client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK);
-  // Note that a stream is read so its hold opens, though nothing is ever heard down it.
-  void one.next();
-  void other.next();
-  await vi.waitFor(() => assert.deepEqual(asked, [`pages-follow:${TASK_ID}`]));
+/** The holds a panel keeps on a plan's reads the host lays on app state, each opened as the window opens its stream, and the line the fake host notes it by. */
+const HOLDS = [
+  {
+    what: "pages",
+    line: "pages",
+    hold: (client: WindowClient) => client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK),
+  },
+  {
+    what: "Browser tabs",
+    line: "tabs",
+    hold: (client: WindowClient) => client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK),
+  },
+] as const;
 
-  await one.return?.(undefined);
-  await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));
-  await other.return?.(undefined);
-  await vi.waitFor(() =>
-    assert.deepEqual(asked, [`pages-follow:${TASK_ID}`, `pages-unfollow:${TASK_ID}`]),
-  );
-});
+it.each(HOLDS)(
+  "a panel's hold on a plan's $what follows them at the host once for every stream of them, and the last one closed lets them go",
+  async ({ line, hold }) => {
+    const { client, asked } = windowPort(PANEL);
 
-it("a window that is not a panel is refused a plan's pages, and the host follows nothing", async () => {
-  const { client, asked } = windowPort(OTHER_WINDOW);
-  await assert.rejects(client[TASKS_ACT_KIND.TASKS_PAGES_FOLLOW](TASK));
-  assert.deepEqual(asked, []);
-});
+    const one = await hold(client);
+    const other = await hold(client);
+    // Note that a stream is read so its hold opens, though nothing is ever heard down it.
+    void one.next();
+    void other.next();
+    await vi.waitFor(() => assert.deepEqual(asked, [`${line}-follow:${TASK_ID}`]));
+
+    await one.return?.(undefined);
+    await vi.waitFor(() => assert.equal(asked.length, 1, "the other stream still holds it"));
+    await other.return?.(undefined);
+    await vi.waitFor(() =>
+      assert.deepEqual(asked, [`${line}-follow:${TASK_ID}`, `${line}-unfollow:${TASK_ID}`]),
+    );
+  },
+);
+
+it.each(HOLDS)(
+  "a window that is not a panel is refused a plan's $what, and the host follows nothing",
+  async ({ hold }) => {
+    const { client, asked } = windowPort(OTHER_WINDOW);
+    await assert.rejects(hold(client));
+    assert.deepEqual(asked, []);
+  },
+);
 
 it("a plan's newest page of history is streamed to a panel as the host tells it, and let go as the stream closes", async () => {
   const { client, asked, historyMoved } = windowPort(PANEL);
@@ -1021,26 +1012,4 @@ it("a plan's newest page of history is streamed to a panel as the host tells it,
   await vi.waitFor(() =>
     assert.deepEqual(asked, [`history-follow:${TASK_ID}`, `history-unfollow:${TASK_ID}`]),
   );
-});
-
-it("a task's Browser tabs are streamed to a panel as the host tells them, and let go as the stream closes; a window that is not a panel is refused them", async () => {
-  const { client, asked, browserTabsMoved } = windowPort(PANEL);
-  const stream = await client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK);
-  const heard = stream.next();
-  await vi.waitFor(() => assert.deepEqual(asked, [`tabs-follow:${TASK_ID}`]));
-
-  browserTabsMoved({ taskId: "another-task", view: { tabs: [] } });
-  browserTabsMoved({ taskId: TASK_ID, view: { failure: TASK_CALL_FAILURE.UNANSWERED } });
-  assert.deepEqual(await heard, {
-    done: false,
-    value: { failure: TASK_CALL_FAILURE.UNANSWERED },
-  });
-  await stream.return?.(undefined);
-  await vi.waitFor(() =>
-    assert.deepEqual(asked, [`tabs-follow:${TASK_ID}`, `tabs-unfollow:${TASK_ID}`]),
-  );
-
-  const other = windowPort(OTHER_WINDOW);
-  await assert.rejects(other.client[TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW](TASK));
-  assert.deepEqual(other.asked, []);
 });

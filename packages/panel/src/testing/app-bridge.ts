@@ -35,10 +35,11 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, the account's beats, an agent's own tools, and the automations' lists and histories. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats, an agent's own tools, and the automations' lists and histories. */
 type HoldKind =
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
+  | typeof TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW
   | typeof AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW
   | typeof AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW
@@ -86,6 +87,7 @@ export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const answered: Partial<FakeActPort> = {
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
+    [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: quietHold,
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: quietHold,
     [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: quietHold,

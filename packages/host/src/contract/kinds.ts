@@ -352,15 +352,15 @@ export const TASKS_ACT_KIND = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
   TASKS_ISSUE: "tasks.issue",
-  /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
-  TASKS_BROWSER_TABS: "tasks.browserTabs",
   /** A Browser tab opened at an address in a task's coding agent's cloud browser through the service, taken over by the member at once, as the side panel's "+" opens one; answered to the panel, never on the document. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /**
-   * A task's agents' Browser tabs, followed while the window holds the
-   * stream open for the side panel's cloud Browser tabs: each time one
-   * moves, the agent's pointer among it, or a takeover lapses, over Neon
-   * Realtime, never on the document.
+   * A task's agents' Browser tabs, or one agent's, held followed while the
+   * window holds the stream open for the side panel's cloud Browser tabs,
+   * and a while after among those let go lately: what they hold, each time
+   * one moves, the agent's pointer among it, or a takeover lapses, reaches
+   * the panel on app state (`LIVE_READ.BROWSER_TABS`), so the stream
+   * carries nothing.
    */
   TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
   /** A fenced block of a transcript's markdown, colored by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
@@ -770,7 +770,6 @@ export const PORT_ACT_USE = {
   TASKS_SKILLS: ACT_USE.FETCH,
   TASKS_PULL_REQUEST: ACT_USE.READ,
   TASKS_ISSUE: ACT_USE.READ,
-  TASKS_BROWSER_TABS: ACT_USE.READ,
   TASKS_BROWSER_TAB_OPEN: ACT_USE.WRITE,
   TASKS_BROWSER_TABS_FOLLOW: ACT_USE.READ,
   TASKS_COLOR_CODE: ACT_USE.FETCH,

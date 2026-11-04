@@ -1,9 +1,5 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  agentBrowserTabAnswerSchema,
-  agentBrowserTabsAnswerSchema,
-  browserTabsPlaceSchema,
-} from "./agent-browser-tab-wire.js";
+import { agentBrowserTabAnswerSchema, browserTabsPlaceSchema } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
   type AgentSummary,
@@ -663,19 +659,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-/** Browser tabs, as a side panel asks the host for them: one coding agent's, as its page names it, or a task's agents' together. */
-export const tasksBrowserTabsParamsSchema = browserTabsPlaceSchema;
-
-export type TasksBrowserTabsParams = typeof tasksBrowserTabsParamsSchema.Type;
-
-/** An agent's or a task's Browser tabs as the window hears them, the oldest first, or that the service did not answer. */
-export const tasksBrowserTabsAnswerSchema = EffectSchema.Union([
-  agentBrowserTabsAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksBrowserTabsAnswer = typeof tasksBrowserTabsAnswerSchema.Type;
-
 /**
  * Why a Browser tab a member asked for did not open in a coding agent's
  * browser, as the side panel says it: the service did not answer, the task
@@ -714,22 +697,10 @@ export const tasksBrowserTabOpenAnswerSchema = EffectSchema.Union([
 
 export type TasksBrowserTabOpenAnswer = typeof tasksBrowserTabOpenAnswerSchema.Type;
 
-/** An agent's or a task's Browser tabs, followed by a window while its side panel lists them. */
+/** An agent's or a task's Browser tabs, held by a window while its side panel lists them. */
 export const taskBrowserTabsFollowSchema = browserTabsPlaceSchema;
 
 export type TaskBrowserTabsFollow = typeof taskBrowserTabsFollowSchema.Type;
-
-/**
- * A followed agent's or task's Browser tabs as they now stand, the agent's
- * pointer on each among them, told each time one moves or a takeover lapses
- * while followed, or why there are none.
- */
-export const taskBrowserTabsFollowedSchema = EffectSchema.Union([
-  EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
-  EffectSchema.Struct({ agentId: EffectSchema.NonEmptyString, view: tasksBrowserTabsAnswerSchema }),
-]);
-
-export type TaskBrowserTabsFollowed = typeof taskBrowserTabsFollowedSchema.Type;
 
 /** A task a link names by its number, as the window asks the host to find it: the link's workspace, by the slug or the id it spells, and the number. */
 export const tasksFindParamsSchema = EffectSchema.Struct({

@@ -27,8 +27,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
-import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { handHostReads, holdBrowserTabs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
@@ -36,7 +37,6 @@ import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
   CLOUD_BROWSER_AGENT_RECENT,
-  CLOUD_BROWSER_TABS_AGAIN,
   noteOpenedCloudTab,
   useCloudBrowserTabs,
 } from "./cloud-browser-tabs.js";
@@ -49,10 +49,9 @@ import {
 } from "./use-side-panel.js";
 
 /**
- * The side panel's cloud Browser tabs: the task's tabs as the service lists
- * them, read only while a panel lists them; each drawn in the
- * strip, kept chosen while the list is on its way, and closed in this window
- * alone; and one tab's pane, which waits quietly for the page, draws it once
+ * The side panel's cloud Browser tabs: a tab opened here listed until the
+ * host's held list names it; each drawn in the strip, kept chosen while the
+ * list is on its way, and closed in this window alone; and one tab's pane, which waits quietly for the page, draws it once
  * a frame arrives, takes the tab over and hands it back, and steers it from
  * its bar; and a draft, which opens nothing until its bar's Enter. A
  * synthetic task and tab throughout, the live view over a fake door.
@@ -110,140 +109,6 @@ const USED: OpenTask = {
   id: TASK,
   holds: Object.fromEntries(SIDE_PANEL_TABS.map((tab) => [tab, true])),
 };
-
-/** A follow the test pushes changes through, as the host's stream tells them, and which it sees closed. */
-function pushedFollow<View>(): {
-  stream: AsyncIteratorObject<View, undefined, unknown>;
-  push: (view: View) => void;
-  closed: () => boolean;
-} {
-  const waiting: ((result: IteratorResult<View, undefined>) => void)[] = [];
-  const queued: View[] = [];
-  let ended = false;
-  const close = () => {
-    ended = true;
-    for (const resolve of waiting.splice(0)) resolve({ done: true, value: undefined });
-  };
-  const stream: AsyncIteratorObject<View, undefined, unknown> = {
-    next: () => {
-      const view = queued.shift();
-      if (view !== undefined) return Promise.resolve({ done: false, value: view });
-      if (ended) return Promise.resolve({ done: true, value: undefined });
-      return new Promise((resolve) => waiting.push(resolve));
-    },
-    return: async () => {
-      close();
-      return { done: true, value: undefined };
-    },
-    [Symbol.asyncIterator]: () => stream,
-    [Symbol.asyncDispose]: async () => close(),
-  };
-  return {
-    stream,
-    push: (view) => {
-      const resolve = waiting.shift();
-      if (resolve === undefined) queued.push(view);
-      else resolve({ done: false, value: view });
-    },
-    closed: () => ended,
-  };
-}
-
-test("the task's cloud Browser tabs are read once and then followed live, the agent's pointer moving with them, let go as no reader stands, and not read at all while nothing lists them", async () => {
-  const asked: SentPortAct[] = [];
-  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
-  fakeActPortAnswering((request) => {
-    asked.push(request);
-    if (request.kind === ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
-      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-      return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
-    }
-    return Promise.resolve({ tabs: [LISTED] });
-  });
-  let read: readonly AgentBrowserTab[] | undefined;
-  function Probe({ listing }: { listing: boolean }) {
-    read = useCloudBrowserTabs({ taskId: TASK }, listing);
-    return null;
-  }
-
-  const panel = draw(createElement(Probe, { listing: false }));
-  await settle();
-  assert.deepEqual(read, []);
-  assert.deepEqual([...asked], []);
-
-  panel.rerender(createElement(Probe, { listing: true }));
-  await settle();
-  assert.deepEqual(read, [LISTED]);
-  assert.deepEqual(
-    [...asked],
-    [
-      { kind: ACT_KIND.TASKS_BROWSER_TABS, payload: { taskId: TASK } },
-      { kind: ACT_KIND.TASKS_BROWSER_TABS_FOLLOW, payload: { taskId: TASK } },
-    ],
-  );
-
-  const pointed: AgentBrowserTab = {
-    ...LISTED,
-    lastActedAt: 3_000,
-    cursor: { x: 640, y: 400, kind: "click", viewport: { width: 1280, height: 800 }, at: 3_000 },
-  };
-  await act(async () => follow.push({ tabs: [pointed] }));
-  await settle();
-  assert.deepEqual(read, [pointed], "a move the follow tells is drawn without another read");
-  await act(async () => follow.push({ failure: "unanswered" }));
-  await settle();
-  assert.deepEqual(read, [pointed], "a change the host could not read keeps the list");
-  assert.equal(
-    asked.filter((each) => each.kind === ACT_KIND.TASKS_BROWSER_TABS).length,
-    1,
-    "the tabs are never read again on a beat",
-  );
-
-  panel.rerender(createElement(Probe, { listing: false }));
-  await settle();
-  assert.ok(follow.closed(), "the follow is let go once no reader stands");
-});
-
-test("a follow the host refused is read and followed again on the beat, so the tabs still move", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const asked: SentPortAct[] = [];
-  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] }>();
-  let follows = 0;
-  fakeActPortAnswering((request) => {
-    asked.push(request);
-    if (request.kind !== ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
-      return Promise.resolve({ tabs: [LISTED] });
-    }
-    follows += 1;
-    // The first follow is refused, as a host the window lost a moment would.
-    if (follows === 1) return Promise.reject(new Error("The host is not answering."));
-    // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-    return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
-  });
-  let read: readonly AgentBrowserTab[] | undefined;
-  function Probe() {
-    read = useCloudBrowserTabs({ taskId: TASK }, true);
-    return null;
-  }
-  try {
-    draw(createElement(Probe));
-    await settle();
-    assert.deepEqual(read, [LISTED]);
-    assert.equal(follows, 1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(Duration.toMillis(CLOUD_BROWSER_TABS_AGAIN));
-    });
-    await settle();
-    assert.equal(follows, 2, "followed again on the beat");
-    const moved: AgentBrowserTab = { ...LISTED, lastActedAt: 4_000 };
-    await act(async () => follow.push({ tabs: [moved] }));
-    await settle();
-    assert.deepEqual(read, [moved]);
-  } finally {
-    vi.useRealTimers();
-  }
-});
 
 test("a listed cloud Browser tab stands in the strip only once opened in this window, stays chosen while the list is on its way, and closes in this window alone", () => {
   let control: SidePanelControl | undefined;
@@ -567,14 +432,7 @@ test("a tab the member opened here is listed before the service lists it, and le
     openedBy: { kind: "member", userId: "user-dean" },
     driver: { userId: "user-dean", heldUntil: 60_000 },
   };
-  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
-  fakeActPortAnswering((request) => {
-    if (request.kind === ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
-      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-      return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
-    }
-    return Promise.resolve({ tabs: [LISTED] });
-  });
+  const lay = holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [LISTED]);
   let read: readonly AgentBrowserTab[] | undefined;
   function Probe() {
     read = useCloudBrowserTabs({ taskId: TASK }, true);
@@ -591,9 +449,9 @@ test("a tab the member opened here is listed before the service lists it, and le
   );
 
   // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
-  await act(async () => follow.push({ tabs: [LISTED, opened] }));
+  act(() => lay({ taskId: TASK }, [LISTED, opened]));
   await settle();
-  await act(async () => follow.push({ tabs: [LISTED] }));
+  act(() => lay({ taskId: TASK }, [LISTED]));
   await settle();
   assert.deepEqual(
     read?.map((tab) => tab.id),

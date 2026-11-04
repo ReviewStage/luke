@@ -10,7 +10,7 @@ import {
   type TaskWritten,
   WORKSPACE_CALL_FAILURE,
 } from "@repo/features";
-import { browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import { BROWSER_TABS_PLACE, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import { AGENT_STATUS, PULL_REQUEST_STATE, type TasklessAgent } from "@repo/features/agent-wire";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -865,7 +865,6 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
-    readBrowserTabs: () => Effect.succeed({ tabs: [] }),
     openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
     historyLive: (taskId, _userId, poll, after) =>
       Effect.suspend((): ReturnType<TasksClient["historyLive"]> => {
@@ -3661,10 +3660,10 @@ it.effect(
       yield* tasks.reset;
       yield* followSettled;
       assert.equal(pages.held(), 0);
-      assert.deepEqual(pushed.at(-1), [
-        GATEWAY_EVENT.PAGES_CHANGED,
-        { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} },
-      ]);
+      assert.deepEqual(
+        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.PAGES_CHANGED),
+        [GATEWAY_EVENT.PAGES_CHANGED, { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} }],
+      );
     }),
 );
 
@@ -3725,14 +3724,14 @@ const SIGN_IN_TAB = {
 } as const;
 
 it.effect(
-  "a task's Browser tabs followed for the side panel are told as they move, the agent's pointer among them, told again as a takeover lapses, and let go they stop",
+  "a task's Browser tabs held for the side panel are laid on the app state by kind and id as they move, the agent's pointer among them, laid again as a takeover lapses though let go, never in the view, and dropped with the session",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
-      const { call, told, pushed } = yield* subject(service);
-      const changed = (view: WireValue) => [
-        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
-        { taskId: INVITES, view },
+      const { tasks, call, told, pushed } = yield* subject(service);
+      const held = (read: WireValue) => [
+        GATEWAY_EVENT.BROWSER_TABS_CHANGED,
+        { [BROWSER_TABS_PLACE.TASK]: { [INVITES]: read }, [BROWSER_TABS_PLACE.AGENT]: {} },
       ];
       const tab = {
         id: SIGN_IN_TAB.id,
@@ -3753,28 +3752,39 @@ it.effect(
 
       yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, { taskId: INVITES });
       yield* followSettled;
-      assert.deepEqual(pushed, [changed({ failure: TASK_CALL_FAILURE.UNANSWERED })]);
+      assert.deepEqual(pushed, [held({ failed: true })]);
 
       const tabs = polledLive<"tabs", typeof NOT_FOUND_LIVE>(["tabs"]);
       service.browserTabLives[INVITES] = tabs;
       yield* TestClock.adjust(Duration.seconds(2));
       yield* followSettled;
       // Dana takes the tab over until ten seconds in.
-      tabs.set({ tabs: [{ ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 }] });
-      yield* followSettled;
+      yield* answered(() =>
+        tabs.set({ tabs: [{ ...SIGN_IN_TAB, driverUserId: "user-dana", heldUntil: 10_000 }] }),
+      );
       assert.deepEqual(pushed.slice(1), [
-        changed({ tabs: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
+        held({ rows: [{ ...tab, driver: { userId: "user-dana", heldUntil: 10_000 } }] }),
       ]);
 
-      // Her window goes away, so the takeover lapses with no row moving.
-      yield* TestClock.adjust(Duration.seconds(8));
-      yield* followSettled;
-      assert.deepEqual(pushed.slice(2), [changed({ tabs: [{ ...tab, driver: null }] })]);
-      assert.equal(told.length, 0, "a task's Browser tabs are never told in the view");
-
+      // Let go, the tabs stay followed among those let go lately; her window goes away, so the takeover lapses with no row moving.
       yield* call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, { taskId: INVITES });
       yield* followSettled;
+      assert.equal(tabs.held(), 1);
+      yield* TestClock.adjust(Duration.seconds(8));
+      yield* followSettled;
+      assert.deepEqual(pushed.slice(2), [held({ rows: [{ ...tab, driver: null }] })]);
+      assert.equal(told.length, 0, "a task's Browser tabs are never told in the view");
+
+      yield* tasks.reset;
+      yield* followSettled;
       assert.equal(tabs.held(), 0);
+      assert.deepEqual(
+        pushed.findLast(([kind]) => kind === GATEWAY_EVENT.BROWSER_TABS_CHANGED),
+        [
+          GATEWAY_EVENT.BROWSER_TABS_CHANGED,
+          { [BROWSER_TABS_PLACE.TASK]: {}, [BROWSER_TABS_PLACE.AGENT]: {} },
+        ],
+      );
     }),
 );
 

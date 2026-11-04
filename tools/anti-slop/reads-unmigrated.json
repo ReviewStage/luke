@@ -21,7 +21,6 @@
   "packages/panel/src/settings/slack-bot-channels.tsx": "P19: repositories",
   "packages/panel/src/settings/workspace-page.tsx": "P13, P14: invitations, Sentry and Slack bot settings",
   "packages/panel/src/settings/workspace-token-repositories.tsx": "P18, P19: GitHub token set, token repositories, repositories",
-  "packages/panel/src/tasks/cloud-browser-tabs.ts": "P12: Cloud Browser tabs",
   "packages/panel/src/tasks/task-mentions.tsx": "P18: agents for mentions",
   "packages/panel/src/tasks/use-agent-transcript.ts": "P6: transcript",
   "packages/panel/src/tasks/use-agents.ts": "P6, P8, P19, P28: transcript, agent page, pull request tab, models and default",

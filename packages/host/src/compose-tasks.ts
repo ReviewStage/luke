@@ -15,7 +15,14 @@ import {
   adminFavoriteParamsSchema,
   adminReadParamsSchema,
 } from "@repo/features/admin-wire";
-import { type BrowserTabsPlace, browserTabsPlaceId } from "@repo/features/agent-browser-tab-wire";
+import {
+  type AgentBrowserTab,
+  BROWSER_TABS_PLACE,
+  type BrowserTabsPlace,
+  type BrowserTabsPlaceKind,
+  browserTabsPlaceId,
+  browserTabsPlaceKind,
+} from "@repo/features/agent-browser-tab-wire";
 import {
   browserTabsOfLiveRows,
   type LIVE_READ,
@@ -42,7 +49,6 @@ import {
   type TaskCallFailure,
   type TasksBlockAnswer,
   type TasksBrowserTabOpenAnswer,
-  type TasksBrowserTabsAnswer,
   type TasksChangeRelationAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
@@ -82,7 +88,6 @@ import {
   taskPagesFollowSchema,
   tasksBlockParamsSchema,
   tasksBrowserTabOpenParamsSchema,
-  tasksBrowserTabsParamsSchema,
   tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentStartParamsSchema,
@@ -160,7 +165,7 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { NO_PAGES } from "./app-state.js";
+import { NO_BROWSER_TABS, NO_PAGES } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { fixturePage } from "./fixture-stage.js";
@@ -289,7 +294,7 @@ function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
     : LINK_READ_KEPT.UNANSWERED;
 }
 
-/** A call on a task's Browser tabs behind a closed gate, or of a service that did not answer. */
+/** A Browser tab opened behind a closed gate, or on a service that did not answer. */
 const BROWSER_TABS_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
 /** A plan's skills, by its id and the workspace and repository the list names it in, so a plan moved to another of either is another key, its workspace's installed skills among what is read. */
@@ -326,6 +331,25 @@ function pagePlaceOf(owner: PageOwnerKey): PagePlace {
   return owner.kind === PAGE_OWNER.TASK ? { taskId: owner.id } : { agentId: owner.id };
 }
 
+/** Whose Browser tabs: a task's agents' together, or one agent's, by what they are listed for and then its id. */
+class BrowserTabsOwnerKey extends Data.Class<{
+  readonly kind: BrowserTabsPlaceKind;
+  readonly id: string;
+}> {}
+
+/** The place a window lists tabs for, as their key. */
+function browserTabsOwnerOf(place: BrowserTabsPlace): BrowserTabsOwnerKey {
+  return new BrowserTabsOwnerKey({
+    kind: browserTabsPlaceKind(place),
+    id: browserTabsPlaceId(place),
+  });
+}
+
+/** The place the service names an owner's tabs by. */
+function browserTabsPlaceOf(owner: BrowserTabsOwnerKey): BrowserTabsPlace {
+  return owner.kind === BROWSER_TABS_PLACE.TASK ? { taskId: owner.id } : { agentId: owner.id };
+}
+
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
@@ -359,7 +383,6 @@ export type TasksClient = Pick<
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
   | "readRepositoryIssue"
-  | "readBrowserTabs"
   | "openBrowserTab"
   | "find"
   | "readRevisions"
@@ -660,38 +683,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
-  /** The Browser tabs of each agent or task a window's side panel follows, by the agent's or the task's id, which never collide. */
-  const browserTabsFollows = yield* FiberMap.make<string>();
   const decodeBrowserTabs = Schema.decodeUnknownOption(taskBrowserTabsLiveRowsSchema);
 
   /**
-   * Follows the Browser tabs of `place`, one agent's or a task's agents',
-   * live until let go, each change emitted as
-   * `TASKS_BROWSER_TABS_CHANGED`. A takeover lapses with no row moving, so
-   * the rows last delivered are told again at each instant one lapses, until
-   * the next delivery takes their place.
+   * Follows the Browser tabs of `owner`, one agent's or a task's agents',
+   * live until let go, each change told through `answers`. A takeover lapses
+   * with no row moving, so the rows last delivered are told again at each
+   * instant one lapses, until the next delivery takes their place; the wait
+   * for the next lapse is this follow's own, so it ends as the key closes.
    */
-  function followBrowserTabs(place: BrowserTabsPlace) {
+  function followBrowserTabs(
+    owner: BrowserTabsOwnerKey,
+    answers: HeldAnswers<readonly AgentBrowserTab[]>,
+  ) {
     type Rows = typeof taskBrowserTabsLiveRowsSchema.Type;
+    const place = browserTabsPlaceOf(owner);
     // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
     const userId = dependencies.accountId();
-    const tell = (rows: Rows | undefined, now: number) =>
-      kernel.emit(
-        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
-        carried({
-          ...place,
-          view:
-            rows === undefined
-              ? { failure: TASK_CALL_FAILURE.UNANSWERED }
-              : { tabs: browserTabsOfLiveRows(rows, now) },
-        }),
-      );
+    const tell = (rows: Rows, now: number) => answers.answered(browserTabsOfLiveRows(rows, now));
     // The rows told as they arrive, then again at each takeover's lapse in turn.
-    const toldUntilMoved = (rows: Rows | undefined) =>
+    const toldUntilMoved = (rows: Rows) =>
       Effect.gen(function* () {
         let now = yield* Clock.currentTimeMillis;
         tell(rows, now);
-        if (rows === undefined) return;
         let lapse = nextBrowserTabLapse(rows, now);
         while (lapse !== undefined) {
           yield* Effect.sleep(Duration.millis(lapse - now));
@@ -702,7 +716,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       });
     return Effect.scoped(
       Effect.gen(function* () {
-        const delivered = yield* Queue.sliding<Rows | undefined>(1);
+        const delivered = yield* Queue.sliding<Rows>(1);
         yield* Effect.forkScoped(
           Stream.runDrain(
             Stream.switchMap(Stream.fromQueue(delivered), (rows) =>
@@ -725,8 +739,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 )
               : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
           decode: decodeBrowserTabs,
+          // Note that a read that stops answering keeps its rows, and their lapses, until the next delivery.
           publish: (rows) => {
-            Queue.offerUnsafe(delivered, rows);
+            if (rows === undefined) answers.unanswered();
+            else Queue.offerUnsafe(delivered, rows);
           },
         });
       }),
@@ -778,6 +794,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   });
   /** The windows' hold on each owner's pages, one fiber standing until let go. */
   const pageHolds = yield* FiberMap.make<PageOwnerKey>();
+
+  /**
+   * The Browser tabs each window's side panel lists, a task's agents' or one
+   * agent's, and the few let go latest, each as its read stands, told whole
+   * on the app state every window draws (`LIVE_READ.BROWSER_TABS`): followed
+   * from the first window's hold (`heldSlice`), on the terms the pages are.
+   * Note that the slice lives in memory alone, since a tab's address and
+   * title reach only this member's windows.
+   */
+  const heldBrowserTabs = yield* heldSlice<typeof LIVE_READ.BROWSER_TABS, BrowserTabsOwnerKey>({
+    empty: NO_BROWSER_TABS,
+    path: (owner) => [owner.kind, owner.id],
+    gate,
+    follow: followBrowserTabs,
+    tell: (tabs) => kernel.emit(GATEWAY_EVENT.BROWSER_TABS_CHANGED, carried(tabs)),
+  });
+  /** The windows' hold on each place's Browser tabs, one fiber standing until let go. */
+  const browserTabsHolds = yield* FiberMap.make<BrowserTabsOwnerKey>();
 
   /** The document of `taskId` as held now, if the held one is that task's. */
   function heldTaskOf(taskId: string): TasksDocument["task"] {
@@ -1852,21 +1886,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* Cache.get(issueReads, linkReadKey(read));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // An agent's or a task's agents' Browser tabs are answered to the side
-    // panel that asked and held nowhere, since each carries a page's address and title:
-    // the panel draws what it was answered, and reads again while it stands.
-    [GATEWAY_METHOD.TASKS_BROWSER_TABS]: (params) =>
-      Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksBrowserTabsParamsSchema,
-          params,
-          "reading Browser tabs names the agent or the task",
-        );
-        if (!gate()) return carried<TasksBrowserTabsAnswer>(BROWSER_TABS_UNANSWERED);
-        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read)));
-      }),
     // A tab a member opens in an agent's browser is answered to the panel
-    // that asked and held nowhere, as the task's tabs are.
+    // that asked and held nowhere; the held list names it once it moves.
     [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1980,9 +2001,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberMap.remove(historyFollows, read.taskId);
         return {};
       }),
-    // An agent's or a task's Browser tabs are followed for a window's side
-    // panel while it lists them, and told only as `TASKS_BROWSER_TABS_CHANGED`; a follow of
-    // what is already followed does nothing.
+    // An agent's or a task's agents' Browser tabs are held for a window's
+    // side panel while it lists them, and told only on the app state
+    // (`BROWSER_TABS_CHANGED`), as the pages are.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
       Effect.gen(function* () {
         const read = yield* readParams(
@@ -1990,10 +2011,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "following Browser tabs names the agent or the task",
         );
-        if (!gate()) return {};
-        yield* FiberMap.run(browserTabsFollows, browserTabsPlaceId(read), followBrowserTabs(read), {
-          onlyIfMissing: true,
-        });
+        const owner = browserTabsOwnerOf(read);
+        yield* FiberMap.run(
+          browserTabsHolds,
+          owner,
+          Effect.scoped(Effect.andThen(heldBrowserTabs.hold(owner), Effect.never)),
+          { onlyIfMissing: true },
+        );
         return {};
       }),
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
@@ -2003,7 +2027,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           params,
           "letting Browser tabs go names the agent or the task",
         );
-        yield* FiberMap.remove(browserTabsFollows, browserTabsPlaceId(read));
+        yield* FiberMap.remove(browserTabsHolds, browserTabsOwnerOf(read));
         return {};
       }),
     // A plan's pages are held for a window while it draws them, the open
@@ -3103,6 +3127,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // asking; GitHub's connection is read beside them where the last read is stale.
     open: Effect.gen(function* () {
       yield* heldPageReads.open;
+      yield* heldBrowserTabs.open;
       if (!gate()) return;
       yield* followAccount;
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
@@ -3116,9 +3141,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberMap.clear(skillsReads);
       MutableHashMap.clear(heldSkills);
       yield* FiberHandle.clear(openedRead);
-      // Note that the windows' holds on pages stand through a sign-out, so a session signing in follows them anew (`open`).
+      // Note that the windows' holds on pages and tabs stand through a sign-out, so a session signing in follows them anew (`open`).
       yield* heldPageReads.end;
-      yield* FiberMap.clear(browserTabsFollows);
+      yield* heldBrowserTabs.end;
       yield* FiberMap.clear(historyFollows);
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
