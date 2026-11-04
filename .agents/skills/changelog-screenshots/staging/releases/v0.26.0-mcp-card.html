@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+/* The address is set in JetBrains Mono, the woff2 apps/web installs (run ./scripts/bootstrap.sh first); monospace stands in where it is missing. */
+@font-face{font-family:Mono;src:url(../../../../../apps/web/node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2) format("woff2"),local("JetBrains Mono");font-weight:100 800}
+html,body{margin:0}#c{display:block}
+</style></head><body><canvas id="c" width="2400" height="1592"></canvas><script>
+// The landing's field (packages/ui/src/components/landing/landing-field.tsx), drawn at the card's scale.
+const BAYER=[0,32,8,40,2,34,10,42,48,16,56,24,50,18,58,26,12,44,4,36,14,46,6,38,60,28,52,20,62,30,54,22,3,35,11,43,1,33,9,41,51,19,59,27,49,17,57,25,15,47,7,39,13,45,5,37,63,31,55,23,61,29,53,21].map(r=>(r+.5)/64);
+const bayer=(i,j)=>BAYER[(j%8)*8+(i%8)];
+const S=3; // landing CSS px -> card px
+const P={
+ flow:(x,y,t)=>0.17+0.16*Math.sin(x*0.011+t*0.3+Math.sin(y*0.012-t*0.2)*2.2)*Math.cos(y*0.008+t*0.22),
+ rings:(x,y,t,w,h)=>{const r=Math.hypot(x-w/2,y-h*1.05);const f=Math.max(0,1-r/(h*1.4));return 0.22*(0.5+0.5*Math.sin(r*0.04-t*0.7))*f+0.06;},
+ waves:(x,y,t)=>0.16+0.14*Math.sin(y*0.03+Math.sin(x*0.006+t*0.35)*3),
+};
+const q=new URLSearchParams(location.search);
+const pattern=q.get('p'),ground=q.get('g'),dots=q.get('d'),ink=q.get('i'),accent=q.get('a'),mode=q.get('m')||'plate',boost=+(q.get('b')||1);
+const edge=q.get('e')||'none',dens=+(q.get('k')||1);
+const sm=(a,b,v)=>{const t=Math.min(1,Math.max(0,(v-a)/(b-a)));return t*t*(3-2*t);};
+function edgeAt(px,py){
+ if(edge==='oval'){const d=Math.hypot((px-1200)/1200,(py-796)/796);return sm(0.55,1.15,d);}
+ if(edge==='corners'){const a=Math.hypot(px/2400,py/1592),b=Math.hypot((2400-px)/2400,(1592-py)/1592);return Math.max(sm(0.55,0.05,a),sm(0.55,0.05,b));}
+ if(edge==='corner'){const b=Math.hypot((2400-px)/2400,(1592-py)/1592);return sm(0.6,0.05,b);}
+ if(edge==='bottom'){return sm(0.62,1.0,py/1592);}
+ if(edge==='sides'){const d=Math.abs(px-1200)/1200;return sm(0.5,1.0,d);}
+
+ if(edge==='soft2'){const a=Math.hypot(px/2400,py/1592*0.8),b=Math.hypot((2400-px)/2400,(1592-py)/1592*0.8);return Math.max(sm(0.62,0.0,a),sm(0.62,0.0,b))**1.6;}
+ if(edge==='four'){const cs=[[0,0],[2400,0],[0,1592],[2400,1592]];let m=0;for(const [ax,ay] of cs){const d=Math.hypot((px-ax)/2400,(py-ay)/1592*0.8);m=Math.max(m,sm(0.45,0.0,d));}return m**1.5;}
+ if(edge==='diag'){const v=(px/2400*0.6+py/1592*0.4);return sm(0.45,1.0,v)**1.4;}
+ if(edge==='horizon'){return sm(0.55,1.05,py/1592)**1.3;}
+ if(edge==='right'){return sm(0.5,1.0,px/2400)**1.2;}
+ return 1;}
+const c=document.getElementById('c'),x=c.getContext('2d');const W=2400,H=1592;
+x.fillStyle=ground;x.fillRect(0,0,W,H);
+const cell=7*S,dot=cell*0.42;const w=W/S,h=H/S;
+// The address, laid out once, for both the plate and the dotted lettering.
+const word1='vespin.dev/api/',word2='mcp';x.font='120px Mono, monospace';
+document.fonts.load('120px Mono, monospace').then(()=>{
+ x.font='120px Mono, monospace';const w1=x.measureText(word1).width,w2=x.measureText(word2).width;const tw=w1+w2,tx=q.get('tx')?+q.get('tx'):(W-tw)/2,ty=q.get('ty')?+q.get('ty'):H/2+42;
+ let mask=null;
+ if(mode==='dotted'){const m=document.createElement('canvas');m.width=W;m.height=H;const mx=m.getContext('2d');mx.font='bold 200px Mono, monospace';const a1=mx.measureText(word1).width,a2=mx.measureText(word2).width;const sx=(W-a1-a2)/2;mx.fillStyle='#fff';mx.fillText(word1,sx,H/2+70);mx.fillStyle='#f00';mx.fillText(word2,sx+a1,H/2+70);mask=mx.getImageData(0,0,W,H).data;}
+ const t=+(q.get('t')||8);
+ for(let j=0,y=cell/2;y<H;y+=cell,j++)for(let i=0,xx=cell/2;xx<W;xx+=cell,i++){
+  let col=null;
+  const inWord=mask&&(()=>{const k=(Math.floor(y)*W+Math.floor(xx))*4;return mask[k+3]>0;})();
+  if(!inWord&&(mode!=='dotted'||q.get('field')==='1')){if(!(mode==='bare'&&xx>tx-90&&xx<tx+tw+90&&y>ty-200&&y<ty+110)&&P[pattern](xx/S,y/S,t,w,h)*boost*dens*edgeAt(xx,y)>bayer(i,j))col=(q.get('sp')&&((i*7+j*13)%97===0))?accent:dots;}
+  if(col){x.fillStyle=col;x.fillRect(xx-dot/2,y-dot/2,dot,dot);}
+ }
+ if(mask){const fc=11,fd=fc*0.62;for(let y=fc/2;y<H;y+=fc)for(let xx=fc/2;xx<W;xx+=fc){const k=(Math.floor(y)*W+Math.floor(xx))*4;if(mask[k+3]>128){x.fillStyle=mask[k+1]>128?ink:accent;x.fillRect(xx-fd/2,y-fd/2,fd,fd);}}}
+ if(mode==='bare'){x.fillStyle=ink;x.fillText(word1,tx,ty);x.fillStyle=accent;x.fillText(word2,tx+w1,ty);}
+ if(mode==='plate'){const px=56,py=40;x.fillStyle=ground;const r=24;const bx=tx-px,by=ty-120+10-py+12,bw=tw+2*px,bh=120+2*py;x.beginPath();x.roundRect(bx,by,bw,bh,r);x.fill();x.fillStyle=ink;x.fillText(word1,tx,ty);x.fillStyle=accent;x.fillText(word2,tx+w1,ty);}
+ document.title='done';
+});
+</script></body></html>
