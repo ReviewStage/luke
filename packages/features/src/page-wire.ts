@@ -22,7 +22,7 @@ export const PAGE_BOUNDS = {
   /** The most characters a page's title may spell. */
   MAX_TITLE_CHARS: 80,
   /** The most characters one version's HTML may spell: a document with its scripts and styles inline. */
-  MAX_HTML_CHARS: 256 * 1024,
+  MAX_HTML_CHARS: 1024 * 1024,
 } as const;
 
 export const pageTitleSchema = EffectSchema.String.check(
