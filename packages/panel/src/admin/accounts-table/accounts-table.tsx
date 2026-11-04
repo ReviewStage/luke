@@ -1,5 +1,4 @@
 import { formatCount } from "@repo/features/number-format";
-import { formatDayTick } from "@repo/features/time-format";
 import {
   Badge,
   DATA_TABLE_COLUMN_KIND,
@@ -197,10 +196,8 @@ interface AccountsTableShape<Row extends AccountsTableRow> {
   minWidth: AccountsTableMinWidth;
   onOpen: (id: string) => void;
   detailColumns?: readonly AccountsDetailColumn<Row>[] | undefined;
-  /** Columns after Active days and, where drawn, the hosted-tier pair. */
+  /** Columns after Active days. */
   trailingColumns?: readonly AccountsDetailColumn<Row>[] | undefined;
-  /** Draws Last active and Calls, the hosted-tier columns the roster's rows carry. */
-  hostedColumns?: boolean | undefined;
   /** Sorts by any header's press, remembering the order chosen. */
   sortable?: boolean | undefined;
   /** Draws the leading star column. */
@@ -213,7 +210,6 @@ function accountsColumns<Row extends AccountsTableRow>({
   onOpen,
   detailColumns = [],
   trailingColumns = [],
-  hostedColumns = true,
   sortable = false,
   favorite,
 }: AccountsTableShape<Row>): DataTableColumn<Row, AccountsColumnKey>[] {
@@ -224,22 +220,6 @@ function accountsColumns<Row extends AccountsTableRow>({
     sortable,
     cell: column.cell,
   });
-  const hosted: DataTableColumn<Row, AccountsColumnKey>[] = [
-    {
-      key: ACCOUNTS_SORT_KEY.LAST_ACTIVE,
-      label: "Last active",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: (row) => (row.lastActiveDay == null ? "—" : formatDayTick(row.lastActiveDay)),
-    },
-    {
-      key: ACCOUNTS_SORT_KEY.CALLS,
-      label: "Calls",
-      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      sortable,
-      cell: (row) => (row.calls === undefined ? "—" : formatCount(row.calls)),
-    },
-  ];
   return [
     ...(favorite ? [favoriteColumn(favorite)] : []),
     {
@@ -264,7 +244,6 @@ function accountsColumns<Row extends AccountsTableRow>({
         </>
       ),
     },
-    ...(hostedColumns ? hosted : []),
     ...trailingColumns.map(numericColumn),
   ];
 }
@@ -278,9 +257,8 @@ const ACCOUNTS_TABLE_LABEL = "Accounts";
  * shared columns cannot drift apart. Every row opens the account's own page:
  * the row for the pointer, and the anchor on its name for a keyboard. What
  * belongs to one surface is opted into — the roster's star column, sortable
- * headers, and detail columns before the shared ones; the overview's
- * trailing columns after Active days, in place of the hosted-tier pair it
- * leaves out.
+ * headers, and detail columns before the shared ones; each surface's
+ * trailing columns after Active days.
  */
 export function AccountsTable<Row extends AccountsTableRow>({
   rows,

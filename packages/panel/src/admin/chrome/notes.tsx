@@ -95,9 +95,9 @@ export function RosterNote({
 }): React.JSX.Element {
   return (
     <SectionNote>
-      Active days, Last active, and Calls count the retired hosted tier's calls, and the roster is
-      ranked by them; only dictation still makes one. Last seen is the account's latest sign-in
-      session, which a sign-in moves without any hosted use.
+      An active day is a UTC day the account created a task, wrote a plan revision, or started an
+      agent. Last active is the latest such day in the past year, and the roster is ranked by it.
+      Last seen is the account's latest sign-in session.
       {truncatedTo !== undefined
         ? searched
           ? ` Only the ${formatCount(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`

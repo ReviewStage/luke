@@ -37,7 +37,6 @@ import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import {
-  type AnyColumn,
   and,
   asc,
   count,
@@ -58,6 +57,7 @@ import { unionAll } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole } from "./admin-access.js";
+import { atOf, meaningfulActions, userIdOf, utcDay } from "./admin-activity-queries.js";
 import {
   ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,
@@ -86,11 +86,6 @@ import {
 const DailyCountSchema = Schema.Literals(Object.values(DAILY_COUNT));
 const ReachFeatureSchema = Schema.Literals(Object.values(REACH_FEATURE));
 
-/** The UTC day an instant falls on, as the YYYY-MM-DD key the builder zero-fills by. */
-function utcDay(instant: SQL | SQL.Aliased): SQL<string> {
-  return sql<string>`to_char(${instant} at time zone 'UTC', 'YYYY-MM-DD')`;
-}
-
 /** An instant a union's column is compared to, cast because the union's columns carry no codec. */
 function instant(at: Date): SQL {
   return sql`${at.toISOString()}::timestamptz`;
@@ -99,16 +94,6 @@ function instant(at: Date): SQL {
 /** A fixed name riding a union's rows, cast so Postgres knows the parameter's type. */
 function tag(name: string): SQL.Aliased<string> {
   return sql<string>`${name}::text`.as("tag");
-}
-
-/** The account a union's row is attributed to, under the one name every member selects it as. */
-function userIdOf(column: AnyColumn | SQL): SQL.Aliased<string> {
-  return sql<string>`${column}`.as("user_id");
-}
-
-/** The instant a union's row is dated by, under the one name every member selects it as. */
-function atOf(column: AnyColumn | SQL): SQL.Aliased<Date> {
-  return sql<Date>`${column}`.as("at");
 }
 
 /** When an agent's pull request merged, as an instant; null where it has not. */
@@ -122,37 +107,6 @@ const PR_MERGED = or(
 
 /** Whether an automation started the agent, as every query asks it. */
 const STARTED_BY_AUTOMATION = agentAutomationRunSql(agentTable);
-
-/**
- * Every meaningful action since `since`, one row per action: the account that
- * took it and when. This is the one definition of "active" on the Overview:
- * the active-developer tiles, feature reach's base, the most active accounts,
- * and the meaningful retention grid all count through it. A plan revision
- * counts only as the developer's own, under their user id; the app's notes are
- * the app's, and an agent's revisions are the agent.
- */
-function meaningfulActions(since: Date) {
-  return unionAll(
-    queryBuilder
-      .select({ userId: userIdOf(task.userId), at: atOf(task.createdAt) })
-      .from(task)
-      .where(gte(task.createdAt, since)),
-    queryBuilder
-      .select({ userId: userIdOf(planRevision.userId), at: atOf(planRevision.at) })
-      .from(planRevision)
-      .where(
-        and(
-          eq(planRevision.actor, PLAN_ACTOR.DEVELOPER),
-          isNotNull(planRevision.userId),
-          gte(planRevision.at, since),
-        ),
-      ),
-    queryBuilder
-      .select({ userId: userIdOf(agentTable.userId), at: atOf(agentTable.createdAt) })
-      .from(agentTable)
-      .where(gte(agentTable.createdAt, since)),
-  ).as("meaningful_action");
-}
 
 /**
  * Every row a daily count counts since `since`, tagged with the count it
