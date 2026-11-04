@@ -329,8 +329,11 @@ function isRecord(value: WireValue | undefined): value is WireRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** How many steps the newest turn has taken, which every hold of its tab moves on (`longRunHold`): one run for the whole fixture run, which keeps writing while a tab holds it, as a running agent does, rather than starting over as a tab opens again. */
+/** How many steps the newest turn has taken, which the holds on its transcript move on (`longRunHold`): one run for the whole fixture run, which keeps writing while a tab holds it, as a running agent does, rather than starting over as a tab opens again. */
 let step = 1;
+
+/** The holds open on the run's transcript, the first opened first: the one that writes it on. */
+const holds = new Set<object>();
 
 /** The run's transcript at the step it last reached, so a document staged again at it holds the very one. */
 let staged: { readonly step: number; readonly transcript: AppTranscript } | undefined;
@@ -361,15 +364,19 @@ export function longRunTranscript(): AppTranscript {
  * The run's hold, as main holds a running agent's for its tab: its newest
  * journal written a step longer every `LONG_RUN.STEP_MS`, the window's
  * document staged again on each (`fixture-moves.ts`), until the tab lets it
- * go. It carries nothing, as a hold does.
+ * go. It carries nothing, as a hold does. Note that the hold opened first
+ * among those open writes the run on, so two tabs holding it at once grow
+ * it no faster than one.
  */
 export function longRunHold(): AsyncIteratorClass<never, void> {
+  const hold = {};
+  holds.add(hold);
   let closed = false;
   return new AsyncIteratorClass<never, void>(
     async () => {
       while (!closed) {
         await rendererPause(LONG_RUN.STEP_MS);
-        if (closed) break;
+        if (closed || holds.values().next().value !== hold) continue;
         step += 1;
         fixtureMoved();
       }
@@ -377,6 +384,7 @@ export function longRunHold(): AsyncIteratorClass<never, void> {
     },
     async () => {
       closed = true;
+      holds.delete(hold);
     },
   );
 }

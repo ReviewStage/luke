@@ -185,10 +185,10 @@ const TASKLESS: TasklessAgent = {
   activityAt: 1,
 };
 
-/** A transcript as the host holds it once a page said the agent, or the worker, stands at `status`. */
-function transcriptAt(status: AgentStatus): AppHostRead<AppTranscript> {
+/** A transcript as the host holds it once `pages` pages were read, the last saying the agent, or the worker, stands at `status`. */
+function transcriptAt(status: AgentStatus, pages = 1): AppHostRead<AppTranscript> {
   return {
-    rows: { messages: [], cursor: "1:0", word: { status, title: null, caughtUp: true }, pages: 1 },
+    rows: { messages: [], cursor: "1:0", word: { status, title: null, caughtUp: true }, pages },
   };
 }
 
@@ -219,8 +219,47 @@ it.effect(
       state.update({ [LIVE_READ.TRANSCRIPT]: held(AGENT_STATUS.COMPLETED, AGENT_STATUS.RUNNING) });
       yield* settled;
       state.update({
-        [LIVE_READ.TRANSCRIPT]: held(AGENT_STATUS.COMPLETED, AGENT_STATUS.COMPLETED),
+        [LIVE_READ.TRANSCRIPT]: {
+          [TASKLESS.id]: { [OWN_TRANSCRIPT]: transcriptAt(AGENT_STATUS.COMPLETED, 2) },
+        },
       });
+      yield* settled;
+      assert.deepEqual(state.snapshot().agents.unseen, [TASKLESS.id]);
+
+      yield* Scope.close(scope, Exit.void);
+    }),
+);
+
+it.effect(
+  "an agent's own transcript held again as it was let go says nothing of the turn now running, and a page read since does",
+  () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const { state } = yield* linked(scope, () => Effect.void, []);
+      const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+      const own = (read: AppHostRead<AppTranscript>) => ({
+        [LIVE_READ.TRANSCRIPT]: { [TASKLESS.id]: { [OWN_TRANSCRIPT]: read } },
+      });
+
+      // Read as the agent's last turn ended, and let go before its next began.
+      const ended = transcriptAt(AGENT_STATUS.COMPLETED, 2);
+      state.update(own(ended));
+      yield* settled;
+      state.update({
+        tasks: { ...state.snapshot().tasks, tasklessAgents: [{ ...TASKLESS, turnId: "turn-2" }] },
+      });
+      yield* settled;
+      // Held again, the host lays what it held anew, not yet caught up, as many pages read as before.
+      const word = { status: AGENT_STATUS.COMPLETED, title: null, caughtUp: false };
+      state.update(own({ rows: { messages: [], cursor: "1:0", word, pages: 2 } }));
+      yield* settled;
+      assert.deepEqual(
+        state.snapshot().agents.unseen,
+        [],
+        "the last turn's end does not close the turn now running",
+      );
+
+      state.update(own(transcriptAt(AGENT_STATUS.COMPLETED, 3)));
       yield* settled;
       assert.deepEqual(state.snapshot().agents.unseen, [TASKLESS.id]);
 

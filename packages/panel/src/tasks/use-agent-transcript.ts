@@ -152,7 +152,7 @@ function endHoldSpan(
     endedAt: Date.now(),
     attributes: () => ({
       [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: held.messages.length,
-      [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(held),
+      [PANEL_SPAN_ATTRIBUTE.HELD_BYTES]: jsonBytes(held),
       [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: timing.held ? 1 : 0,
     }),
   });
