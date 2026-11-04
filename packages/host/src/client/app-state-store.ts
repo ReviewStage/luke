@@ -13,6 +13,7 @@ import { type Context, Effect, type Scope, Stream, SubscriptionRef } from "effec
 import {
   type AppState,
   NO_ACCESS,
+  NO_BROWSER_TABS,
   NO_CHAPTERS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
@@ -237,6 +238,7 @@ export function initialAppState(
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
+    [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,

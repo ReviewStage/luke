@@ -202,7 +202,6 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TaskBrowserTabsFollow,
-  type TaskBrowserTabsFollowed,
   type TaskHistoryFollow,
   type TaskHistoryFollowed,
   type TaskPagesFollow,
@@ -210,8 +209,6 @@ import {
   type TasksBlockParams,
   type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabOpenParams,
-  type TasksBrowserTabsAnswer,
-  type TasksBrowserTabsParams,
   type TasksChangeRelationAnswer,
   type TasksChangeRelationParams,
   type TasksCommentActParams,
@@ -289,11 +286,9 @@ import {
   type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
-  taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   tasksBlockAnswerSchema,
   tasksBrowserTabOpenAnswerSchema,
-  tasksBrowserTabsAnswerSchema,
   tasksChangeRelationAnswerSchema,
   tasksCommentAnswerSchema,
   tasksEditAnswerSchema,
@@ -373,6 +368,7 @@ import { Base64 } from "effect/encoding";
 import type {
   AppAccessSlice,
   AppAutomationReads,
+  AppBrowserTabs,
   AppChapters,
   AppDevicePresences,
   AppHolderInboxes,
@@ -499,8 +495,6 @@ export interface HostOperator {
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
-  /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
-  tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
@@ -519,12 +513,12 @@ export interface HostOperator {
   tasksPagesUnfollow(scope: TaskPagesFollow): Effect.Effect<void>;
   /** Every plan's or agent's pages the host holds for the windows, whole, each time any of them moves. */
   onPagesChanged(listener: (held: AppPages) => void): () => void;
-  /** One task's cloud Browser tabs followed from now until let go, heard through `onTaskBrowserTabsChanged`. */
+  /** One task's or agent's cloud Browser tabs held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onBrowserTabsChanged`. */
   tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** A followed task's Browser tabs let go: nothing more is heard of them until they are followed again. */
+  /** One task's or agent's Browser tabs let go by the windows: they stay followed among those let go lately until later ones push them out. */
   tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
-  /** A followed task's Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
-  onTaskBrowserTabsChanged(listener: (followed: TaskBrowserTabsFollowed) => void): () => void;
+  /** Every task's or agent's Browser tabs the host holds for the windows, whole, each time one moves or a takeover lapses. */
+  onBrowserTabsChanged(listener: (held: AppBrowserTabs) => void): () => void;
   /** One plan's newest page of history followed from now until let go, heard through `onTaskHistoryChanged`. */
   tasksHistoryFollow(scope: TaskHistoryFollow): Effect.Effect<void>;
   /** A followed plan's history let go: nothing more is heard of it until it is followed again. */
@@ -1345,11 +1339,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksBrowserTabs: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, params),
-        answerOf(tasksBrowserTabsAnswerSchema, TASK_UNANSWERED),
-      ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
@@ -1447,13 +1436,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW, scope)),
     tasksBrowserTabsUnfollow: (scope) =>
       fire(client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW, scope)),
-    onTaskBrowserTabsChanged: (listener) =>
+    onBrowserTabsChanged: (listener) =>
       on(
-        GATEWAY_EVENT.TASKS_BROWSER_TABS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(taskBrowserTabsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        GATEWAY_EVENT.BROWSER_TABS_CHANGED,
+        // Note that the held tabs are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) => (isRecord(payload) ? answered<AppBrowserTabs>(payload) : undefined),
         listener,
       ),
     tasksHistoryFollow: (scope) => fire(client.call(GATEWAY_METHOD.TASKS_HISTORY_FOLLOW, scope)),

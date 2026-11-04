@@ -12,7 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
+import { handHostReads, handState, holdBrowserTabs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -232,21 +232,9 @@ const SIGN_IN = {
   lastActedAt: 5,
 } as const;
 
-/** The service listing the agents' cloud browsers as holding `SIGN_IN`, its follow pushing nothing more. */
+/** The host holding the agents' cloud browsers as holding `SIGN_IN`, as it lays them for the panel that holds them. */
 function listSignIn(): void {
-  const held = {
-    next: () => new Promise<never>(() => undefined),
-    return: async () => ({ done: true, value: undefined }) as const,
-    [Symbol.asyncIterator]() {
-      return held;
-    },
-    [Symbol.asyncDispose]: async () => undefined,
-  };
-  fakeActPort({
-    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [SIGN_IN] }),
-    // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
-    [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(held as never),
-  });
+  holdBrowserTabs(handHostReads({}).deliverBrowserTabs, () => [SIGN_IN]);
 }
 
 test("a tab an agent's cloud browser holds is offered under the panel's + Browser, before New browser tab, and its pick opens it", async () => {

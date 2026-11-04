@@ -196,5 +196,18 @@ export function browserTabsPlaceId(place: BrowserTabsPlace): string {
   return "taskId" in place ? place.taskId : place.agentId;
 }
 
+/** What a list of Browser tabs is read for, by kind: a task's agents' together, or one agent's. */
+export const BROWSER_TABS_PLACE = {
+  TASK: "task",
+  AGENT: "agent",
+} as const;
+
+export type BrowserTabsPlaceKind = (typeof BROWSER_TABS_PLACE)[keyof typeof BROWSER_TABS_PLACE];
+
+/** The kind of what `place` lists the tabs of, as the host holds them by it and then its id. */
+export function browserTabsPlaceKind(place: BrowserTabsPlace): BrowserTabsPlaceKind {
+  return "taskId" in place ? BROWSER_TABS_PLACE.TASK : BROWSER_TABS_PLACE.AGENT;
+}
+
 /** One tab as it stands after it opened, a takeover, a renewal, or a hand-back (POST, DELETE). */
 export const agentBrowserTabAnswerSchema = EffectSchema.Struct({ tab: agentBrowserTabSchema });

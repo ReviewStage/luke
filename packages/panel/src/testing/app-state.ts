@@ -3,6 +3,12 @@
  */
 
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import {
+  type AgentBrowserTab,
+  type BrowserTabsPlace,
+  browserTabsPlaceId,
+  browserTabsPlaceKind,
+} from "@repo/features/agent-browser-tab-wire";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
@@ -11,6 +17,7 @@ import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import {
   type AppAutomationReads,
+  type AppBrowserTabs,
   type AppChapters,
   type AppDevicePresence,
   type AppHolderInboxes,
@@ -23,6 +30,7 @@ import {
   type AppProviderKeyList,
   type AppStateDelivery,
   type AppStateSnapshot,
+  NO_BROWSER_TABS,
   NO_CHAPTERS,
   NO_HOLDER_INBOXES,
   NO_KEYS_HELD,
@@ -94,6 +102,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
+    [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
@@ -191,6 +200,7 @@ export interface HostReadsHanded {
   readonly deliverHolders: (next: AppHolderInboxes) => void;
   readonly deliverPages: (next: AppPages) => void;
   readonly deliverChapters: (next: AppChapters) => void;
+  readonly deliverBrowserTabs: (next: AppBrowserTabs) => void;
   readonly deliverAutomations: (next: Partial<AppAutomationReads>) => void;
   readonly deliverComments: (next: AppPlanComments) => void;
   readonly deliverTools: (next: AppIntegrationTools) => void;
@@ -263,6 +273,7 @@ export function handHostReads(first: {
     deliverHolders: (next) => deliver({ [LIVE_READ.HOLDER_INBOX]: next }),
     deliverPages: (next) => deliver({ [LIVE_READ.PAGES]: next }),
     deliverChapters: (next) => deliver({ [LIVE_READ.PULL_REQUEST_CHAPTERS]: next }),
+    deliverBrowserTabs: (next) => deliver({ [LIVE_READ.BROWSER_TABS]: next }),
     deliverAutomations: (next) => deliver(next),
     deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
@@ -440,6 +451,35 @@ export function holdPages(
     },
   });
   return asked;
+}
+
+/**
+ * Answers the window's holds on a task's or an agent's cloud Browser tabs
+ * as the host does, beside whatever acts the test answers by now: where
+ * `tabsOf` names a place's tabs, laid on the document through `deliver` as
+ * it is first held, and staying there once let go. Answers with how the
+ * test's host lays a place's tabs anew, as the host does when they move.
+ */
+export function holdBrowserTabs(
+  deliver: HostReadsHanded["deliverBrowserTabs"],
+  tabsOf: (place: BrowserTabsPlace) => readonly AgentBrowserTab[],
+): (place: BrowserTabsPlace, tabs: readonly AgentBrowserTab[]) => void {
+  let held: AppBrowserTabs = NO_BROWSER_TABS;
+  const lay = (place: BrowserTabsPlace, tabs: readonly AgentBrowserTab[]) => {
+    const kind = browserTabsPlaceKind(place);
+    held = { ...held, [kind]: { ...held[kind], [browserTabsPlaceId(place)]: { rows: tabs } } };
+    deliver(held);
+  };
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: (place) => {
+      const tabs = tabsOf(place);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      void Promise.resolve().then(() => lay(place, tabs));
+      return quietHold();
+    },
+  });
+  return lay;
 }
 
 /** Lays the account's feed of every item as given over the window's document, and answers with how it is delivered again as it moves. */

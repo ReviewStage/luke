@@ -1,5 +1,10 @@
 import type { AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
+import {
+  type AgentBrowserTab,
+  BROWSER_TABS_PLACE,
+  type BrowserTabsPlaceKind,
+} from "@repo/features/agent-browser-tab-wire";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type {
   AutomationRunSummary,
@@ -322,6 +327,25 @@ export type AppPages = {
 /** No pages held, as the host stands before any window chooses a task or an agent and after the session ends. */
 export const NO_PAGES: AppPages = { [PAGE_OWNER.TASK]: {}, [PAGE_OWNER.AGENT]: {} };
 
+/**
+ * Each task's or agent's cloud Browser tabs the host holds for the windows
+ * (`compose-tasks.ts`): those a window's side panel lists, and the few let
+ * go lately, by what they are listed for and then its id, each as its own
+ * read stands, the oldest tab first, every takeover as it stands at the
+ * host's instant. One absent is held by nobody.
+ */
+export type AppBrowserTabs = {
+  readonly [Kind in BrowserTabsPlaceKind]: Readonly<
+    Record<string, AppHostRead<readonly AgentBrowserTab[]>>
+  >;
+};
+
+/** No tabs held, as the host stands before any window's side panel lists them and after the session ends. */
+export const NO_BROWSER_TABS: AppBrowserTabs = {
+  [BROWSER_TABS_PLACE.TASK]: {},
+  [BROWSER_TABS_PLACE.AGENT]: {},
+};
+
 /** One agent's pull request's newest chapters, as the host's read of them stands: with whether the reader can generate them, once it answered. */
 export type AppPullRequestChapters = AppHostRead<PullRequestChaptersAnswer>;
 
@@ -427,6 +451,7 @@ export interface AppHostReads {
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
+  [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
@@ -531,6 +556,8 @@ export interface AppState {
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeys;
   /** Each agent's pull request's chapters the windows chose, held while a Pull request tab holds them and a while after: what its Chapters tab draws. */
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
+  /** Each task's or agent's cloud Browser tabs the windows' side panels list, held while one lists them and a while after: what the side panel's Browser tabs draw. Never written to disk. */
+  [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
@@ -680,6 +707,7 @@ export const HOST_READ_SLICE = {
       agentPullRequests: "agentId" satisfies keyof TasksRows<"agentPullRequests">[number],
     } satisfies { readonly [Part in keyof TasksView]?: string },
   },
+  [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {
