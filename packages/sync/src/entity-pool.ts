@@ -191,7 +191,8 @@ export interface Written<Change, Answer> {
    * only then is what the service answered taken in a read's place. A write
    * that can answer a transaction answers it instead. Nothing waits on it:
    * the caller is answered, and the next write to the keys sent, as the
-   * service answers.
+   * service answers. Its answer is taken once every write to its keys asked
+   * before it stood down, so one taken late never lands over a newer one.
    */
   readonly carried?: Effect.Effect<void>;
 }
@@ -592,19 +593,23 @@ function takenInPlace<Row extends object, Change>(
 /**
  * A kept write confirmed on one read showing its keys by the read's own
  * wait, or, where it hands none or the write committed no transaction, what
- * the service answered taken in its place, once the write's own wait for
- * its reads settles where it has one.
+ * the service answered taken in its place. A write with its own wait for its
+ * reads (`Written.carried`) is taken once that settles and every write to
+ * its keys asked before it (`earlier`) has stood down, so an answer taken
+ * late, as where the wait gave up, never lands over a newer write's.
  */
 function confirmedOn<Row extends object, Change, Answer>(
   rows: KindRows<Row, Change>,
   holding: Holding<Row, Change>,
   write: Standing<Change>,
   written: Written<Change, Answer>,
+  earlier: Effect.Effect<void>,
 ): Effect.Effect<void> {
   const wait = holding.read.confirmation();
   if (wait !== undefined && written.txid !== undefined) return wait(written.txid);
   const taken = takenInPlace(rows, [holding], write.keys, written.taken ?? write.change);
-  return written.carried === undefined ? taken : Effect.andThen(written.carried, taken);
+  if (written.carried === undefined) return taken;
+  return Effect.andThen(written.carried, Effect.andThen(earlier, taken));
 }
 
 /**
@@ -692,7 +697,14 @@ function written<Row extends object, Change, Input, Answer>(
         if (kept.settled !== true) {
           yield* Effect.forEach(
             holdersOf(rows.reads, keys),
-            (holding) => confirmedOn(rows, holding, write, kept),
+            (holding) =>
+              confirmedOn(
+                rows,
+                holding,
+                write,
+                kept,
+                awaitEach(before, (each) => each.dropped),
+              ),
             { concurrency: "unbounded", discard: true },
           );
         }

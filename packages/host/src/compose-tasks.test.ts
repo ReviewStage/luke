@@ -3320,6 +3320,35 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an invitation canceled while its invite still waits on the read stays gone once that wait gives up",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, pushed, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, { workspaceId: ACME.id });
+      yield* settled;
+      service.live.invitations.set({ invitations: [] });
+      yield* settled;
+
+      // The read never carries the invitation, so the invite stands until its wait gives up, past the cancel that answered after it.
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITE, {
+        workspaceId: ACME.id,
+        email: "alan@example.com",
+        role: WORKSPACE_ROLE.MEMBER,
+      });
+      yield* call(GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL, {
+        workspaceId: ACME.id,
+        invitationId: "inv-alan@example.com",
+      });
+      yield* TestClock.adjust(Duration.seconds(11));
+      yield* settled;
+
+      assert.deepEqual(heldInvitations(pushed).at(-1), { [ACME.id]: { rows: [] } });
+    }),
+);
+
 it.effect("the workspaces land on the view while the GitHub connection read is still out", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
