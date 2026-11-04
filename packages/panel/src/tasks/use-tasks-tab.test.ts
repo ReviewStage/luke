@@ -1090,17 +1090,19 @@ test("a Vespin link to another plan's section opens that plan and asks its page 
   });
 });
 
-test("a Vespin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page", async () => {
+test("a Vespin link keyed by the agent alone opens on the agent's task where it has one, else on the agent's page, as an archived agent's does", async () => {
   const ELSEWHERE = "5e3b6f1d-2a10-4c7a-9a55-7b0f5f3e2c1d";
   const TASKLESS = "2b7c9e4d-1f3a-4b6e-8d2c-9a1e5f7b3c40";
   const UNREAD = "6d4e2c1b-9a8f-4e7d-b6c5-3a2f1e0d9c8b";
   const SLOW = "1a9b8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d";
+  const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
   let answerSlow: () => void = () => undefined;
   const read = (agentId: unknown) => ({
     agent: {
       ...RUNNING_AGENT,
       id: String(agentId),
-      planId: agentId === ELSEWHERE ? OTHER_TASK_ID : null,
+      planId: agentId === ELSEWHERE || agentId === ARCHIVED ? OTHER_TASK_ID : null,
+      ...(agentId === ARCHIVED ? { archivedAt: 3 } : undefined),
       automationId: null,
       workspaceId: "acme",
       repository: null,
@@ -1150,6 +1152,14 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   assert.equal(tab.control().agentView.agentId, undefined);
   assert.equal(tab.told.at(-1), ACT_KIND.TASKS_SELECT, "an agent on another task opens that task");
 
+  open({ kind: LINK_PLACE.AGENT, agentId: ARCHIVED });
+  await settle();
+  assert.equal(
+    tab.control().agentView.agentId,
+    ARCHIVED,
+    "an archived agent of a task, whose tab is never drawn, opens on its page",
+  );
+
   // A link opened at once, to the open task's own agent, wins over an earlier read answering late.
   open({ kind: LINK_PLACE.AGENT, agentId: SLOW });
   open({ kind: LINK_PLACE.AGENT, agentId: AGENT_ID });
@@ -1158,6 +1168,36 @@ test("a Vespin link keyed by the agent alone opens on the agent's task where it 
   await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.equal(tab.told.length, told, "the late read opens no other task");
+});
+
+test("a Vespin link naming an archived agent's task, opened before the list followed live lands, reads the agent and opens its page", async () => {
+  const ARCHIVED = "8f7e6d5c-4b3a-4c2d-9e1f-0a9b8c7d6e5f";
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
+    {
+      [ACT_KIND.AGENTS_PAGE]: () =>
+        Promise.resolve({
+          agent: {
+            ...RUNNING_AGENT,
+            id: ARCHIVED,
+            planId: OTHER_TASK_ID,
+            archivedAt: 3,
+            automationId: null,
+            workspaceId: "acme",
+            repository: null,
+          },
+        }),
+    },
+  );
+  await settle();
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.AGENT, planId: OTHER_TASK_ID, agentId: ARCHIVED },
+    }),
+  );
+  await settle();
+  assert.equal(tab.control().agentView.agentId, ARCHIVED);
 });
 
 test("a Vespin link to a page an agent on no task showed opens that agent's page, its panel on the page's tab, the agent's own pages held for it", async () => {

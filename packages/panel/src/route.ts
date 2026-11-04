@@ -46,9 +46,9 @@ import {
  *   agent's Changes, one of its task's agents' transcripts, at a message of
  *   it where the link names one, a review thread of one of its agents' pull
  *   requests, and a pull request as `pullRequestBeside` opens it. An agent
- *   of its task the panel does not draw, an archived one, goes to the task
- *   on its tab; any other agent is the window's, which opens it in the
- *   middle. Another Inbox item is chosen in the Inbox the item stands in,
+ *   of its task the panel does not draw, an archived one, is the window's,
+ *   which opens it on its own page; any other agent is the window's too,
+ *   which opens it in the middle. Another Inbox item is chosen in the Inbox the item stands in,
  *   rather than in its task's Inbox tab.
  * - A task's page and an agent's page preview a pull request one of their
  *   agents opened, an archived one's among them, in its Pull request tab, and
@@ -355,7 +355,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
             view: at.view,
           })
         : NOTHING;
-    // A message of an agent of the item's own task the panel draws reads beside it, at the message; an archived one's, which its task alone draws, is the window's to open.
+    // A message of an agent of the item's own task the panel draws reads beside it, at the message; an archived one's, drawn on its own page, is the window's to open.
     case LINK_PLACE.MESSAGE:
       return here.taskId !== undefined &&
         holdsAgent(at, here.taskId, here.agentIds) &&
@@ -367,7 +367,7 @@ function itemPlace(link: ReadLink, here: InboxItemHere): Route {
     // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
     case LINK_PLACE.AGENT: {
       if (here.taskId === undefined || !holdsAgent(at, here.taskId, here.agentIds)) return NOTHING;
-      // An archived one, which its task alone draws, goes to the task on its tab.
+      // An archived one, whose tab is never drawn, is the window's, which opens it on its own page.
       return here.agentIds?.includes(at.agentId) === true
         ? preview({ kind: THING.TRANSCRIPT, agentId: at.agentId })
         : go({

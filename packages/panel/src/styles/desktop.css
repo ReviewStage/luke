@@ -1234,66 +1234,6 @@ body,
   margin-right: calc(var(--ui-control-height) + var(--ui-tight-gap));
 }
 
-.task-summary-archived-agent > .task-summary-row {
-  color: var(--ui-color-text-muted);
-}
-
-@media (hover: hover) {
-  .task-summary-archived-agent:hover > .task-summary-row {
-    background: var(--ui-color-fill-hover);
-  }
-}
-
-/* The marks stay while the row's menu stands open from its ⋯, as a list row's acts do. */
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-row,
-.task-summary-archived-agent[data-menu-open="true"] > .task-summary-row {
-  padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
-}
-
-.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks,
-.task-summary-archived-agent[data-menu-open="true"] > .task-summary-marks {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.task-summary-archived-agent:has(:focus-visible) .failed-mark,
-.task-summary-archived-agent[data-menu-open="true"] .failed-mark {
-  display: none;
-}
-
-@media (hover: hover) {
-  .task-summary-archived-agent:hover > .task-summary-row {
-    padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
-  }
-
-  .task-summary-archived-agent:hover > .task-summary-marks {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .task-summary-archived-agent:hover .failed-mark {
-    display: none;
-  }
-}
-
-/* A screen with no hover shows each archived agent's Unarchive at rest, in
-   place of its failed mark and in the room it takes while hovered, rather
-   than leaving a press nobody can see. */
-@media (hover: none) {
-  .task-summary-archived-agent > .task-summary-row {
-    padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
-  }
-
-  .task-summary-archived-agent > .task-summary-marks {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .task-summary-archived-agent .failed-mark {
-    display: none;
-  }
-}
-
 /* Full screen, the panel covers the document as well as its own room. */
 .side-panel[data-full-screen="true"] {
   position: absolute;

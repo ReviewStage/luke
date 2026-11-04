@@ -16,31 +16,21 @@ import { ArchivedAgents } from "./agent-archive.js";
 /**
  * agent-archive.test.ts -- an archived agent's row under the summary's
  * Archived fold hangs the agent's tab's card, saying it was archived, and
- * by whom and why where the service said; and its Unarchive takes no room
- * at rest with a mouse, coming in over the row's end in its failed mark's
- * place only while the row is hovered or reached from the keyboard, as the
- * sidebar task rows' Pin and Archive do, while a touch screen shows it at
- * rest. jsdom matches no `:hover` and lays nothing out, so the sheets are
- * laid for the device (`testing/container-width.ts`) with a hover read off
- * a `data-hovered` mark and `:focus-visible` read as `:focus`, which jsdom
- * never matches either, and the room the row gives up is read off its
- * right padding.
+ * by whom and why where the service said; a press on it opens the agent,
+ * whose tab is gone; and its Unarchive is busy while the service answers.
  */
 
 const roots: Root[] = [];
-let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
-  laid?.remove();
-  laid = undefined;
   document.body.innerHTML = "";
   // Note that the fold is kept in the window's storage, so each test starts with it folded.
   window.localStorage.clear();
 });
 
-/** A summary's Archived fold, its one archived agent drawn over a registry of its own. */
-function drawArchived(): HTMLElement {
+/** A summary's Archived fold, its one archived agent drawn over a registry of its own, `onOpen` hearing a row opened. */
+function drawArchived(onOpen: (agentId: string) => void = () => undefined): HTMLElement {
   const agents = agentsControl({
     archived: [
       {
@@ -62,7 +52,10 @@ function drawArchived(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ArchivedAgents, { agents, shown: true, onOpen }),
+      ),
     ),
   );
   return container;
@@ -92,13 +85,25 @@ test("an archived agent's row hangs its tab's card beside it, its name and when 
   const fold = container.querySelector<HTMLButtonElement>("button[aria-expanded]");
   act(() => fold?.click());
   const row = container.querySelector<HTMLElement>(
-    ".task-summary-archived-agent .task-summary-row",
+    '[aria-label="Archived agents"] .ui-list-row-main',
   );
   assert.ok(row, "the archived agent is listed");
   restOn(row);
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "Retry audit");
   assert.match(card?.querySelector(".ui-hover-card-corner")?.textContent ?? "", /^Archived · /u);
+});
+
+test("a press on an archived agent's row opens it, whose tab is gone", () => {
+  const opened: string[] = [];
+  const container = drawArchived((agentId) => opened.push(agentId));
+  act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
+  const row =
+    container.querySelector<HTMLButtonElement>(
+      '[aria-label="Archived agents"] .ui-list-row-main',
+    ) ?? assert.fail("the archived agent is listed");
+  act(() => row.click());
+  assert.deepEqual(opened, ["agent-8"]);
 });
 
 /** The notes the card hung over the archived agent's row says, with the reader and who archived it given. */
@@ -130,12 +135,15 @@ function archivedCardNotes(me: string | undefined, archivedBy: AgentArchivedBy):
   roots.push(root);
   act(() =>
     root.render(
-      onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(ArchivedAgents, { agents, shown: true, onOpen: () => undefined }),
+      ),
     ),
   );
   act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
   const row = container.querySelector<HTMLElement>(
-    ".task-summary-archived-agent .task-summary-row",
+    '[aria-label="Archived agents"] .ui-list-row-main',
   );
   restOn(row ?? assert.fail("the row is drawn"));
   return [
@@ -206,12 +214,15 @@ test("an archived agent's Unarchive is named Unarchiving while the service answe
     roots.push(root);
     act(() =>
       root.render(
-        onRegistry(AtomRegistry.make(), createElement(ArchivedAgents, { agents, shown: true })),
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(ArchivedAgents, { agents, shown: true, onOpen: () => undefined }),
+        ),
       ),
     );
     act(() => container.querySelector<HTMLButtonElement>("button[aria-expanded]")?.click());
     const unarchive =
-      container.querySelector<HTMLButtonElement>(".task-summary-marks button") ??
+      container.querySelector<HTMLButtonElement>(".ui-list-row-actions button") ??
       assert.fail("the Unarchive");
     const ring = () => unarchive.querySelector(".ui-spinner-ring") !== null;
 

@@ -91,6 +91,7 @@ test("the summary's archived agents fold under a group header that counts them f
         ],
       }),
       shown: true,
+      onOpen: () => undefined,
     }),
   );
 
