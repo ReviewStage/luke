@@ -20,6 +20,8 @@ ORIGIN="http://127.0.0.1:$PORT"
 DEMO_EMAIL="dean@example.com"
 TSX_BINS=(node_modules/.bin/tsx apps/web/node_modules/.bin/tsx)
 
+# Note that a run folder used before keeps its last run's quit.js and answers, so each run starts on an empty queue.
+rm -rf "$RUN/queue"
 mkdir -p "$RUN/queue/in" "$RUN/queue/running" "$RUN/queue/out" "$RUN/shots" "$RUN/home"
 RUN=$(CDPATH= cd -- "$RUN" && pwd)
 cd "$REPO"
