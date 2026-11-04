@@ -91,6 +91,7 @@ export type HostedRefusal = {
   readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
   readonly heldUntil?: number;
+  readonly hostRemoved?: true;
 };
 
 /**
@@ -219,6 +220,12 @@ export function localAgentRefused(
 export function hostUpgradeNeeded(minimumVersion: string): HostedRefusal {
   return { ...HOSTED_REFUSAL.HOST_UPGRADE_NEEDED, minimumVersion };
 }
+
+/** A device secret no standing host holds refused: still the 401 every released host reads as removed, marked so a host tells it from any other 401 on its origin. */
+export const HOST_REMOVED_REFUSAL: HostedRefusal = {
+  ...HOSTED_REFUSAL.INVALID_TOKEN,
+  hostRemoved: true,
+};
 
 /** An account's pairing guesses held until the instant given, in epoch milliseconds, named so the words can say when to try again. */
 export function hostPairingHeld(heldUntil: number): HostedRefusal {

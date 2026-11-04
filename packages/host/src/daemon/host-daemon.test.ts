@@ -1,6 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { DEVICE_BEAT } from "@repo/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND, DEVICE_ARCH } from "@repo/features/device-agent-wire";
 import { HOST_TARGET } from "@repo/features/host-release";
 import {
@@ -19,10 +20,10 @@ import { ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { TestClock } from "effect/testing";
 import { Environment, reporterLayer } from "../effect/seams.js";
-import { readHostDevice } from "../host-device-record.js";
+import { readHostDevice, writeHostDevice } from "../host-device-record.js";
 import { fakeClis } from "../testing/fake-clis.js";
 import { scriptedSpawner } from "../testing/scripted-spawner.js";
-import { hostDaemon } from "./host-daemon.js";
+import { hostDaemon, hostRefusedRest } from "./host-daemon.js";
 import { DARWIN_HOST, type HostOs, hostRuntime, LINUX_HOST } from "./host-os.js";
 import { connectHostDevice, HOST_CONNECT_OUTCOME, type HostPairingCode } from "./host-pairing.js";
 import { hostPlatform } from "./host-platform.js";
@@ -65,6 +66,17 @@ const HTTP = {
   SERVER_ERROR: 500,
 } as const;
 
+/** What the service answers a secret no standing host holds: the 401 every host reads, marked as the host removed. */
+const HOST_REMOVED = { error: "invalid-token", hostRemoved: true } as const;
+/** What anything else on the service's origin may answer: a 401 that says nothing of the host. */
+const BARE_REFUSAL = { error: "invalid-token" } as const;
+/** The box's device, as its record keeps it. */
+const DEVICE = {
+  deviceId: DEVICE_ID,
+  deviceSecret: DEVICE_SECRET,
+  serviceOrigin: SERVICE,
+} as const;
+
 /** Which machine fra-01 is, as its host reports it: a Linux box names no model. */
 const FRA_01_MACHINE = { machineId: "e".repeat(64) } as const;
 /** Which machine Studio is, as its host reports it. */
@@ -96,6 +108,18 @@ const settled = (done: () => boolean) =>
     Effect.andThen(Effect.sync(() => expect(done()).toBe(true))),
   );
 
+/** The clock moved on by `total`, a beat at a time, each step's fibers and file writes let run before the next. */
+const elapsed = (total: Duration.Duration) =>
+  Effect.forEach(
+    Array.from({ length: Math.ceil(Duration.toMillis(total) / DEVICE_BEAT.EVERY_MS) }),
+    () =>
+      Effect.andThen(
+        TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)),
+        Effect.yieldNow.pipe(Effect.repeat({ times: 200 })),
+      ),
+    { discard: true },
+  );
+
 /** A box's state root and its home, under a folder of its own. */
 const box = Effect.gen(function* () {
   const root = yield* temporaryDirectoryScoped("host-daemon-");
@@ -124,6 +148,51 @@ const world = (home: string, reports: string[]) => {
   return { spawner, layer };
 };
 
+/** A service that hands the box one launch, then answers each call as `refusing` says where it says, and takes it otherwise. */
+const launchingService = (
+  home: string,
+  refusing: (request: RecordedRequest) => Response | undefined,
+) => {
+  let linesRead = 0;
+  return recordingHttpClient((request) => {
+    switch (`${request.method} ${request.pathname}`) {
+      case `GET ${HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES}`:
+        linesRead += 1;
+        if (linesRead === 1) {
+          return jsonResponse({
+            lines: [
+              {
+                id: LINE_ID,
+                agentId: AGENT_ID,
+                seq: 1,
+                kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+                payload: {},
+              },
+            ],
+          });
+        }
+        break;
+      case `POST ${HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM}`:
+        return jsonResponse({
+          line: {
+            id: LINE_ID,
+            agentId: AGENT_ID,
+            seq: 1,
+            kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
+            payload: {
+              checkoutPath: `${home}/.vespin/agents/${AGENT_ID}/repository`,
+              repository: null,
+              startBranch: null,
+              firstSequence: 1,
+            },
+          },
+          secrets: { env: { CLAUDE_CODE_OAUTH_TOKEN: RUNNER_TOKEN }, stdin: "{}\n" },
+        });
+    }
+    return refusing(request) ?? jsonResponse({ done: true });
+  });
+};
+
 describe("a host's daemon", () => {
   it.effect.each([
     {
@@ -145,7 +214,7 @@ describe("a host's daemon", () => {
       pnpmConfig: "Library/Preferences/pnpm",
     },
   ])(
-    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group and ends once Vespin refuses its secret",
+    "registers as its OS ($platform) and machine on its device secret with its version on every call, runs a launch straight on the box in its agent's folder on its own Node, telling Claude Code it may skip its permissions as root (uid $uid), with the claim's secrets and the box's one pnpm store and npm cache named in its agent's home, takes no notice of a newer release with no releases of an account install to update, and stops its runner's group, marks its record refused, and ends once its beat hears it was removed and hears it again",
     ({ os, name, machine, platform: devicePlatform, uid, sandboxed, pnpmConfig }) =>
       Effect.gen(function* () {
         const { home, stateRoot } = yield* box;
@@ -154,7 +223,7 @@ describe("a host's daemon", () => {
         let linesRead = 0;
         let removed = false;
         const http = recordingHttpClient((request) => {
-          if (removed) return jsonResponse({ error: "invalid-token" }, HTTP.UNAUTHORIZED);
+          if (removed) return jsonResponse(HOST_REMOVED, HTTP.UNAUTHORIZED);
           switch (`${request.method} ${request.pathname}`) {
             case `GET ${HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES}`:
               linesRead += 1;
@@ -196,10 +265,11 @@ describe("a host's daemon", () => {
           }
         });
         const platform = platformOn(os, stateRoot, uid);
+        yield* writeHostDevice(stateRoot, DEVICE);
 
         const daemon = yield* hostDaemon({
           stateRoot,
-          device: { deviceId: DEVICE_ID, deviceSecret: DEVICE_SECRET, serviceOrigin: SERVICE },
+          device: DEVICE,
           version: VERSION,
           platform,
         }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
@@ -260,7 +330,13 @@ describe("a host's daemon", () => {
 
         removed = true;
         yield* TestClock.adjust(Duration.seconds(20));
+        yield* settled(() => reports.some((line) => line.includes("refused this box's calls")));
+        // Note that one answer saying the host was removed is not yet taken as the removal.
+        expect(daemon.pollUnsafe()).toBeUndefined();
+        expect(runner?.ended).toBe("running");
+        yield* elapsed(Duration.minutes(1));
         yield* Fiber.join(daemon);
+        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBe(true);
         // Note that a daemon handed no releases, as a development run, neither fetches the release named nor says it updates.
         expect(http.requests.filter((request) => new URL(request.url).origin !== SERVICE)).toEqual(
           [],
@@ -272,6 +348,56 @@ describe("a host's daemon", () => {
         ).toBe(false);
         // Note that the runner, which never exits here, has its group ended under the grace it was started with.
         expect(runner?.ended).toEqual({ killSignal: "SIGTERM", forceKillAfterMillis: 3_000 });
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+
+  it.effect.each([
+    {
+      refusal: "any route but register and beat, its 401 unmarked",
+      refusing: (request: RecordedRequest) =>
+        request.pathname === HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE ||
+        request.pathname === HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES
+          ? undefined
+          : jsonResponse(BARE_REFUSAL, HTTP.UNAUTHORIZED),
+      removedAfter: undefined,
+    },
+    {
+      refusal: "register and beat, its 401 unmarked as a service from before the mark answers",
+      refusing: () => jsonResponse(BARE_REFUSAL, HTTP.UNAUTHORIZED),
+      removedAfter: Duration.hours(1),
+    },
+  ])(
+    "refused by $refusal, says so once and keeps its runner and its record, taking itself as removed only after a refusal of register and beat that lasts",
+    ({ refusing, removedAfter }) =>
+      Effect.gen(function* () {
+        const { home, stateRoot } = yield* box;
+        const reports: string[] = [];
+        const { spawner, layer } = world(home, reports);
+        let refused = false;
+        const http = launchingService(home, (request) => (refused ? refusing(request) : undefined));
+        yield* writeHostDevice(stateRoot, DEVICE);
+
+        const daemon = yield* hostDaemon({
+          stateRoot,
+          device: DEVICE,
+          version: VERSION,
+          platform: platformOn(FRA_01, stateRoot),
+        }).pipe(Effect.provide(Layer.merge(layer, http.layer)), Effect.forkScoped);
+        yield* settled(() => spawner.spawned.some(isRunner));
+        refused = true;
+        yield* elapsed(Duration.minutes(59));
+
+        const [runner] = spawner.spawned.filter(isRunner);
+        expect(daemon.pollUnsafe()).toBeUndefined();
+        expect(runner?.ended).toBe("running");
+        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBeUndefined();
+        expect(reports.filter((line) => line.includes("refused this box's calls"))).toHaveLength(1);
+
+        yield* elapsed(Duration.minutes(2));
+        yield* settled(() => (daemon.pollUnsafe() !== undefined) === (removedAfter !== undefined));
+        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))?.refused).toBe(
+          removedAfter === undefined ? undefined : true,
+        );
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 
@@ -309,6 +435,56 @@ describe("a host's daemon", () => {
         expect(upgrade).toEqual([
           `Vespin host: upgrade needed: Vespin no longer accepts this version. Rerun the install command to upgrade in place: curl -fsSL ${SERVICE}/install.sh | sh`,
         ]);
+      }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+  );
+});
+
+describe("a refused host's rest", () => {
+  it.effect(
+    "says so once, asks Vespin on its secret every twenty minutes, and takes back its record's refusal once Vespin takes the secret again",
+    () =>
+      Effect.gen(function* () {
+        const { stateRoot } = yield* box;
+        const reports: string[] = [];
+        let accepting = false;
+        const http = recordingHttpClient(() =>
+          accepting
+            ? jsonResponse({ agentIds: [] })
+            : jsonResponse(HOST_REMOVED, HTTP.UNAUTHORIZED),
+        );
+        const asks = () => at(http.requests, "GET", HOSTED_SERVICE_PATH.DEVICE_AGENT_LIVE_AGENTS);
+        const device = { ...DEVICE, refused: true as const };
+        yield* writeHostDevice(stateRoot, device);
+
+        const resting = yield* hostRefusedRest({ stateRoot, device, version: VERSION }).pipe(
+          Effect.provide(
+            Layer.merge(
+              reporterLayer((line) => reports.push(line)),
+              http.layer,
+            ),
+          ),
+          Effect.forkScoped,
+        );
+        yield* settled(() => reports.length === 1);
+        yield* elapsed(Duration.minutes(1));
+        yield* settled(() => asks().length === 1);
+        yield* elapsed(Duration.minutes(19));
+        expect(asks()).toHaveLength(1);
+        accepting = true;
+        // Note that each minute's read of the record is real file work, which may land a step late, so the clock moves on until the next ask rather than by exactly a minute.
+        yield* TestClock.adjust(Duration.millis(DEVICE_BEAT.EVERY_MS)).pipe(
+          Effect.andThen(Effect.yieldNow.pipe(Effect.repeat({ times: 200 }))),
+          Effect.repeat({ until: () => asks().length === 2, times: 40 }),
+        );
+        yield* Fiber.join(resting);
+
+        expect(asks()).toHaveLength(2);
+        expect(new Set(asks().map((ask) => ask.authorization))).toEqual(
+          new Set([`Bearer ${DEVICE_SECRET}`]),
+        );
+        expect(asks()[1]?.headers.get(HOST_WIRE.VERSION_HEADER)).toBe(VERSION);
+        expect(Option.getOrUndefined(yield* readHostDevice(stateRoot))).toEqual(DEVICE);
+        expect(reports).toHaveLength(2);
       }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
   );
 });

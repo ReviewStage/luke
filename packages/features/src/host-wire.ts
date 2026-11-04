@@ -298,6 +298,17 @@ export const hostPairingHeldDataSchema = EffectSchema.Struct({
   heldUntil: EffectSchema.optionalKey(EffectSchema.Number),
 });
 
+/**
+ * What a refused bearer carries beside its slug where it was a device secret
+ * no standing host holds: the host was removed, or the service never knew
+ * the secret. A host reads it on its own register or beat as the one answer
+ * that says it was removed (`daemon/host-standing.ts`); every other refused
+ * bearer carries nothing, and a released host reads the 401 alone.
+ */
+export const hostRemovedDataSchema = EffectSchema.Struct({
+  hostRemoved: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+});
+
 /** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes. */
 export const hostUpgradeNeededDataSchema = EffectSchema.Struct({
   minimumVersion: EffectSchema.optionalKey(EffectSchema.String),
