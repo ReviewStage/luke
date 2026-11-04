@@ -23,7 +23,7 @@ import {
 import { entityPool } from "@repo/sync";
 import type { WireRecord, WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Duration, Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import type { AppIntegrations } from "./app-state.js";
 import {
@@ -80,6 +80,8 @@ interface ServiceScript {
   revokeFails?: boolean;
   /** Whether a rename is refused, as one the service did not answer is. */
   renameRefused?: boolean;
+  /** Where given, a rename is answered only once the test opens it. */
+  renameAnswered?: Deferred.Deferred<void>;
 }
 
 /** The member MCP server's address, as the service answers it. */
@@ -138,14 +140,17 @@ function fakeService(script: ServiceScript) {
         return { status: script.status, txid: DISCONNECT_TXID };
       }),
     rename: (provider, connection, label) =>
-      Effect.sync(() => {
-        asked.push(provider);
-        if (script.renameRefused) return { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
-        return {
-          account: { provider, connection, label, primary: false, status: script.status },
-          txid: RENAME_TXID,
-        };
-      }),
+      Effect.andThen(
+        script.renameAnswered === undefined ? Effect.void : Deferred.await(script.renameAnswered),
+        Effect.sync(() => {
+          asked.push(provider);
+          if (script.renameRefused) return { failure: INTEGRATION_CALL_FAILURE.UNANSWERED };
+          return {
+            account: { provider, connection, label, primary: false, status: script.status },
+            txid: RENAME_TXID,
+          };
+        }),
+      ),
   };
   const mcpClients: McpClientsClient = {
     list: () =>
@@ -339,8 +344,13 @@ it.effect(
       assert.equal(label(), "linear");
 
       const rename = { ...LINEAR, connection: "linear", label: "Work" };
-      yield* call(GATEWAY_METHOD.INTEGRATIONS_RENAME, rename);
-      assert.equal(label(), "Work", "the new label is drawn as the rename answers");
+      const answered = yield* Deferred.make<void>();
+      script.renameAnswered = answered;
+      const renaming = yield* Effect.forkChild(call(GATEWAY_METHOD.INTEGRATIONS_RENAME, rename));
+      yield* settled;
+      assert.equal(label(), "Work", "the new label is drawn before the service answers");
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(renaming);
       // A poll the rename's transaction did not wake answers the old label.
       live.set({ connections: [row("linear", INTEGRATION_PROVIDER.LINEAR, "connected")] });
       yield* after(Duration.millis(500));
