@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { Effect, Exit, Layer, Path, Result, Scope } from "effect";
 import { Base64 } from "effect/encoding";
@@ -108,5 +109,29 @@ it.effect("what moved is written within two seconds, sealed, while the store sta
     assert.deepEqual(JSON.parse(yield* openedText(directory)).reads, {
       [KEPT_READ.TASK_LIST]: LIST,
     });
+  }).pipe(Effect.provide(files)),
+);
+
+it.effect("a workspace the kept list no longer names leaves with its people", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("entity-store-");
+    const { store } = yield* opened(directory, DANA);
+    const people = { members: [], former: [] };
+    yield* store.keepIn(KEPT_READ.MEMBERS, "workspace-acme", people);
+    yield* store.keepIn(KEPT_READ.MEMBERS, "workspace-relay", people);
+
+    yield* store.keep(KEPT_READ.WORKSPACES, [
+      {
+        id: "workspace-acme",
+        name: "acme",
+        role: WORKSPACE_ROLE.MEMBER,
+        github: null,
+        githubInstallations: [],
+        memberCount: 2,
+      },
+    ]);
+
+    assert.deepEqual(store.storedIn(KEPT_READ.MEMBERS, "workspace-acme"), people);
+    assert.equal(store.storedIn(KEPT_READ.MEMBERS, "workspace-relay"), undefined);
   }).pipe(Effect.provide(files)),
 );

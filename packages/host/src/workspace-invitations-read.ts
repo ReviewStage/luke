@@ -46,6 +46,7 @@ import {
 } from "@repo/sync";
 import { Effect, Equal, MutableHashMap, Option, type Scope } from "effect";
 import { type AppWorkspaceInvitations, NO_KEYS_HELD } from "./app-state.js";
+import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import {
   type CarriedWaits,
   carriedWaits,
@@ -87,6 +88,8 @@ export interface WorkspaceInvitationsDependencies {
   readonly tell: (held: AppWorkspaceInvitations) => void;
   /** The sync engine's pool, which each held workspace's invitations stand in while it is followed. */
   readonly pool: EntityPool;
+  /** The signed-in account's lists kept on disk, which a workspace's invitations are drawn from before its read first answers, and each answer is kept in; none where nothing keeps them. */
+  readonly entities?: () => EntityStore | undefined;
 }
 
 /** The workspaces' invitations the windows hold, and the invitation writes drawn over them. */
@@ -130,7 +133,7 @@ function rowOfInvitation(workspaceId: string, made: WorkspaceInvitation): Pooled
 function followInvitations(
   workspaceId: string,
   answers: HeldAnswers<readonly WorkspaceInvitation[]>,
-  dependencies: Pick<WorkspaceInvitationsDependencies, "seal" | "pool"> & {
+  dependencies: Pick<WorkspaceInvitationsDependencies, "seal" | "pool" | "entities"> & {
     readonly stand: (
       waits: CarriedWaits<PooledInvitation>,
     ) => Effect.Effect<void, never, Scope.Scope>;
@@ -164,6 +167,13 @@ function followInvitations(
       );
       const waits = yield* carriedWaits(() => invitations.synced());
       yield* dependencies.stand(waits);
+      // Note that the invitations kept on disk are drawn as the service last answered them, on the origin it answered, until the read answers anew.
+      const kept = dependencies.entities?.()?.storedIn(KEPT_READ.INVITATIONS, workspaceId);
+      if (kept !== undefined) {
+        yield* invitations.answer(kept.invitations.map((row) => ({ workspaceId, ...row })));
+        origin = kept.origin;
+        yield* drawn;
+      }
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           open = false;
@@ -184,6 +194,10 @@ function followInvitations(
             Effect.gen(function* () {
               yield* invitations.answer(rows.invitations.map((row) => ({ workspaceId, ...row })));
               origin = first.origin;
+              yield* dependencies.entities?.()?.keepIn(KEPT_READ.INVITATIONS, workspaceId, {
+                origin: first.origin,
+                invitations: rows.invitations,
+              }) ?? Effect.void;
               yield* waits.answered;
               yield* drawn;
             }),
@@ -225,6 +239,9 @@ export function workspaceInvitationsReads(
         followInvitations(workspaceId, answers, {
           seal: dependencies.seal,
           pool: dependencies.pool,
+          ...(dependencies.entities === undefined
+            ? undefined
+            : { entities: dependencies.entities }),
           stand: stand(workspaceId),
         }),
     });

@@ -51,6 +51,7 @@ import {
 import { followAutomationRead, historyAtEdges } from "./automation-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { type EntityStore, KEPT_READ } from "./entity-store.js";
 import type { HostMethodTable } from "./gateway-door.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type HeldAnswers, type HeldSlice, heldSlice } from "./live-collection.js";
@@ -103,6 +104,8 @@ export interface AutomationsDependencies {
   client: AutomationsClient;
   /** The sync engine's pool, which a held workspace's automations stand in. */
   pool: EntityPool;
+  /** The signed-in account's lists kept on disk, which a workspace's automations are drawn from before its read first answers, and each answer is kept in; none where nothing keeps them. */
+  entities?: () => EntityStore | undefined;
 }
 
 export interface AutomationsComposer extends Composer {
@@ -226,6 +229,9 @@ function automationFollows(
             txWait: wait.handed,
           });
           lists.set(workspaceId, list);
+          // Note that the automations kept on disk are drawn as the service last answered them, until the read answers anew.
+          const kept = dependencies.entities?.()?.storedIn(KEPT_READ.AUTOMATIONS, workspaceId);
+          if (kept !== undefined) yield* list.answer(kept);
           // Note that a follow lets go only of its own list, since one started over may stand first.
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {
@@ -235,7 +241,15 @@ function automationFollows(
           yield* followAutomationRead(automationsLiveRowsSchema, {
             live: (poll, after) =>
               sealed(userId, (user) => client.listLive(workspaceId, user, poll, after)),
-            take: list.answer,
+            take: (rows) =>
+              Effect.andThen(
+                list.answer(rows),
+                Effect.suspend(
+                  () =>
+                    dependencies.entities?.()?.keepIn(KEPT_READ.AUTOMATIONS, workspaceId, rows) ??
+                    Effect.void,
+                ),
+              ),
             unanswered: answers.unanswered,
             onTxWait: wait.onTxWait,
           });

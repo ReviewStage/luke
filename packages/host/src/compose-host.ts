@@ -294,6 +294,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         account,
         accountId,
         pool,
+        entities: () => entities?.store,
         client: new HostedAutomationClient({
           serviceBaseUrl: kernel.hostedServiceBaseUrl,
           credential: account.credential,

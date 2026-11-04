@@ -5,8 +5,11 @@
  * answered it, never with a write drawn over it: the task list's plans and
  * agents with the sync id they were read at, which its follow reads past,
  * the sidebar's sections, the tasks and agents in them, and its pinned
- * repositories, and the account's workspaces with their GitHub
- * installations. None of them holds a credential. Every other read the host
+ * repositories, the account's workspaces with their GitHub installations,
+ * and, for each workspace a window followed them in, its members and those
+ * who left, its pending invitations with the origin their accept links are
+ * built on, and its automations with their latest runs. None of them holds
+ * a credential, and an automation's row holds no webhook's body or secret. Every other read the host
  * holds stays in memory, among them transcripts, the inbox, plans, pages,
  * comments, browser tabs, Mac commands, Terminal bytes, pictures, devices,
  * and every credential's standing.
@@ -29,6 +32,7 @@
  * the file at a sign-out.
  */
 
+import { automationsLiveRowsSchema } from "@repo/features/automation-live";
 import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   agentSectionEntrySchema,
@@ -36,6 +40,10 @@ import {
   taskSectionSchema,
 } from "@repo/features/task-section-wire";
 import { repositoryPinSchema } from "@repo/features/task-wire";
+import {
+  workspaceInvitationsLiveRowsSchema,
+  workspaceMembersLiveRowsSchema,
+} from "@repo/features/workspace-live";
 import { workspaceSchema } from "@repo/features/workspace-wire";
 import type { QueuedEntry } from "@repo/sync";
 import { Duration, Effect, Path, Result, Schedule, Schema, type Scope, Semaphore } from "effect";
@@ -55,9 +63,18 @@ export const KEPT_READ = {
   TASK_LIST: "taskList",
   SIDEBAR: "sidebar",
   WORKSPACES: "workspaces",
+  MEMBERS: "members",
+  INVITATIONS: "invitations",
+  AUTOMATIONS: "automations",
 } as const;
 
 export type KeptRead = (typeof KEPT_READ)[keyof typeof KEPT_READ];
+
+/** The kept reads held per workspace, each workspace's rows under its id. */
+type KeptByWorkspace =
+  | typeof KEPT_READ.MEMBERS
+  | typeof KEPT_READ.INVITATIONS
+  | typeof KEPT_READ.AUTOMATIONS;
 
 /** Each kept read's rows as the file keeps them: what its follow last answered, the task list's with the sync id it was read at. */
 const keptRowsSchema = Schema.Struct({
@@ -69,6 +86,15 @@ const keptRowsSchema = Schema.Struct({
     pins: Schema.Array(repositoryPinSchema),
   }),
   [KEPT_READ.WORKSPACES]: Schema.Array(workspaceSchema),
+  [KEPT_READ.MEMBERS]: Schema.Record(Schema.String, workspaceMembersLiveRowsSchema),
+  [KEPT_READ.INVITATIONS]: Schema.Record(
+    Schema.String,
+    Schema.Struct({
+      origin: Schema.String,
+      invitations: workspaceInvitationsLiveRowsSchema.fields.invitations,
+    }),
+  ),
+  [KEPT_READ.AUTOMATIONS]: Schema.Record(Schema.String, automationsLiveRowsSchema),
 });
 
 /** Each kept read's rows, as a read hands them to the store and takes them back. */
@@ -86,6 +112,9 @@ const keptReadsSchema = Schema.Struct({
   [KEPT_READ.TASK_LIST]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.TASK_LIST]),
   [KEPT_READ.SIDEBAR]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.SIDEBAR]),
   [KEPT_READ.WORKSPACES]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.WORKSPACES]),
+  [KEPT_READ.MEMBERS]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.MEMBERS]),
+  [KEPT_READ.INVITATIONS]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.INVITATIONS]),
+  [KEPT_READ.AUTOMATIONS]: Schema.optionalKey(keptRowsSchema.fields[KEPT_READ.AUTOMATIONS]),
 });
 
 /** What the file holds once opened: whose it is, the shapes its rows were kept at, the rows, and the writes waiting. */
@@ -114,8 +143,19 @@ const encodeKept = Schema.encodeEffect(Schema.fromJsonString(keptSchema));
 export interface EntityStore {
   /** What the file held of `read` as the store opened, for this account and these row shapes; none where it held none. */
   readonly stored: <Read extends KeptRead>(read: Read) => KeptRows[Read] | undefined;
-  /** `read`'s rows as the service answered them now, written within `SAVE_EVERY` and as the store closes. */
+  /** `read`'s rows as the service answered them now, written within `SAVE_EVERY` and as the store closes; the workspaces' leave with them every read kept per workspace of one they no longer name. */
   readonly keep: <Read extends KeptRead>(read: Read, rows: KeptRows[Read]) => Effect.Effect<void>;
+  /** What the store holds of one workspace's `read` now: as the file held it, or as it was kept since; none where it holds none. */
+  readonly storedIn: <Read extends KeptByWorkspace>(
+    read: Read,
+    workspaceId: string,
+  ) => KeptRows[Read][string] | undefined;
+  /** One workspace's `read` as the service answered it now, kept beside the other workspaces' as `keep` keeps a read. */
+  readonly keepIn: <Read extends KeptByWorkspace>(
+    read: Read,
+    workspaceId: string,
+    rows: KeptRows[Read][string],
+  ) => Effect.Effect<void>;
   /** The row writes waiting for the service as the file held them when the store opened, oldest first. */
   readonly queue: readonly QueuedEntry[];
   /** Deletes the file and keeps nothing more, as a sign-out does. */
@@ -144,6 +184,35 @@ const shapesHash: Effect.Effect<string> = Effect.map(
   (digest) =>
     [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
 );
+
+/** The record of each workspace's rows `read` holds in `reads`; none where it holds none. */
+function byWorkspaceOf<Read extends KeptByWorkspace>(
+  reads: Partial<KeptRows>,
+  read: Read,
+): Readonly<Record<string, KeptRows[Read][string]>> | undefined {
+  // SAFETY: a read kept per workspace is a record of its rows by workspace, so what `reads` holds of `read` is one.
+  return reads[read] as Readonly<Record<string, KeptRows[Read][string]>> | undefined;
+}
+
+/** `reads` with every read kept per workspace cut to the workspaces the kept list names, where it names any. */
+function withinWorkspaces(reads: Partial<KeptRows>): Partial<KeptRows> {
+  const listed = reads[KEPT_READ.WORKSPACES];
+  if (listed === undefined) return reads;
+  const named = new Set(listed.map((workspace) => workspace.id));
+  const cut = <Rows>(byWorkspace: Readonly<Record<string, Rows>>) =>
+    Object.fromEntries(Object.entries(byWorkspace).filter(([id]) => named.has(id)));
+  const {
+    [KEPT_READ.MEMBERS]: members,
+    [KEPT_READ.INVITATIONS]: invitations,
+    [KEPT_READ.AUTOMATIONS]: automations,
+  } = reads;
+  return {
+    ...reads,
+    ...(members === undefined ? undefined : { [KEPT_READ.MEMBERS]: cut(members) }),
+    ...(invitations === undefined ? undefined : { [KEPT_READ.INVITATIONS]: cut(invitations) }),
+    ...(automations === undefined ? undefined : { [KEPT_READ.AUTOMATIONS]: cut(automations) }),
+  };
+}
 
 /** The file's text opened and read as far as its account and its waiting writes, or none where it will not open or is not a store's. */
 function opened(cipher: SecretCipher, text: string): Envelope | undefined {
@@ -230,6 +299,20 @@ export function openEntityStore(
       keep: (kept, rows) =>
         Effect.sync(() => {
           reads = { ...reads, [kept]: rows };
+          if (kept === KEPT_READ.WORKSPACES) reads = withinWorkspaces(reads);
+          dirty = true;
+        }),
+      storedIn: <Read extends KeptByWorkspace>(kept: Read, workspaceId: string) =>
+        byWorkspaceOf<Read>(reads, kept)?.[workspaceId],
+      keepIn: <Read extends KeptByWorkspace>(
+        kept: Read,
+        workspaceId: string,
+        rows: KeptRows[Read][string],
+      ) =>
+        Effect.sync(() => {
+          const byWorkspace = { ...byWorkspaceOf<Read>(reads, kept), [workspaceId]: rows };
+          // SAFETY: the read `kept` names is set to a record of its own rows, each workspace's `KeptRows[Read][string]`.
+          reads = { ...reads, [kept]: byWorkspace } as Partial<KeptRows>;
           dirty = true;
         }),
       forget: lock.withPermits(1)(
