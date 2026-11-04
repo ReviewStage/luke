@@ -321,6 +321,29 @@
   pointer-events: none;
 }
 
+/* Home has no row of its own: its strip holds only the title bar's buttons,
+   which stand over the work beside the folded sidebar alone. Beside the open
+   sidebar, whose own strip holds them, and on a phone, it keeps no empty
+   strip, and its sheet starts a gap in from the window's top as Settings'
+   page does. */
+.desktop-shell:not([data-room="wide"][data-sidebar-collapsed="true"])
+  > .desktop-main
+  > .desktop-drag-strip:has(+ .page-find > .home) {
+  display: none;
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="false"]
+  > .desktop-main:has(> .page-find > .home) {
+  margin-top: var(--sheet-gap);
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="false"]
+  > .desktop-main:has(> .page-find > .home)::before {
+  top: 0;
+}
+
 :where(:root):not([data-ui-room="narrow"])
   .desktop-shell
   > .desktop-main
