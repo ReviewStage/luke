@@ -39,6 +39,7 @@ import {
 } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { CheckIcon, GLYPH, Undo2Icon } from "@repo/ui/icons";
+import { useEffect, useRef } from "react";
 import { copyThroughShell } from "../copy-feedback.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { INBOX_MISSING, type InboxMissing } from "./inbox-ask-words.js";
@@ -907,9 +908,22 @@ const UNDO_RESOLVE = "Undo";
  * The strip that stands in the open question's place once its × staged
  * resolving the item without an answer (`InboxDraft`'s `resolving`): its
  * words and Undo, which brings the question back as it was left, picks
- * and all, since nothing goes until the box's Send.
+ * and all, since nothing goes until the box's Send. Undo takes the focus
+ * the × had where the strip came of its press (`takesFocus`).
  */
-export function DraftResolving({ onUndo }: { onUndo: () => void }): React.JSX.Element {
+export function DraftResolving({
+  takesFocus,
+  onUndo,
+}: {
+  takesFocus: boolean;
+  onUndo: () => void;
+}): React.JSX.Element {
+  const undo = useRef<HTMLButtonElement>(null);
+  // Note that only the mount reads it, so a strip drawn from a kept draft takes no focus from where the reader stands.
+  const focused = useRef(takesFocus);
+  useEffect(() => {
+    if (focused.current) undo.current?.focus();
+  }, []);
   return (
     <div
       className="inbox-draft-resolving flex min-w-0 items-center justify-between gap-tight-gap px-list-inset pt-list-inset pb-tight-gap"
@@ -921,7 +935,7 @@ export function DraftResolving({ onUndo }: { onUndo: () => void }): React.JSX.El
           {RESOLVING}
         </span>
       </Text>
-      <Button variant={BUTTON_VARIANT.QUIET} size={BUTTON_SIZE.COMPACT} onClick={onUndo}>
+      <Button ref={undo} variant={BUTTON_VARIANT.QUIET} size={BUTTON_SIZE.COMPACT} onClick={onUndo}>
         {UNDO_RESOLVE}
       </Button>
     </div>

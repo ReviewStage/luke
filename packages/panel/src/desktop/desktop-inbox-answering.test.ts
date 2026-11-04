@@ -211,6 +211,7 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "the × asks nothing");
   assert.deepEqual(closes, [], "and resolves nothing until Send");
   assert.equal(sendWords(pane), "Resolve", "Send with nothing written resolves alone");
+  assert.equal(document.activeElement?.textContent, "Undo", "Undo takes the ×'s focus");
   const undo =
     [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
       (button) => button.textContent === "Undo",
@@ -221,6 +222,7 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
     ["Retry once"],
     "Undo brings the question back, picks and all",
   );
+  assert.equal(document.activeElement, cross(), "and the × takes Undo's focus back");
 
   act(() => cross().click());
   typeInComposer(pane, "Hold off until the backfill lands");
@@ -235,6 +237,72 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
     "the words go as a plain reply, never as an answer",
   );
   assert.deepEqual(closes, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
+});
+
+test("a staged resolve outlasts a reload of the window while its ask stands, and lapses once the agent changes the item", async () => {
+  const before = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  act(() =>
+    (
+      itemPane(before.page).querySelector<HTMLButtonElement>(
+        '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
+      ) ?? assert.fail("the open question's card offers its ×")
+    ).click(),
+  );
+  await settle();
+  const reload = async () => {
+    act(() => world.root?.unmount());
+    world.root = undefined;
+    const { page } = mount([], { chosen: ON_THRESHOLD });
+    await settle();
+    return itemPane(page);
+  };
+
+  assert.equal(sendWords(await reload()), "Resolve", "the reloaded box still resolves");
+  world.inboxes.set(
+    BILLING.id,
+    (world.inboxes.get(BILLING.id) ?? []).map((each) =>
+      each.id === THRESHOLD.id ? { ...each, revision: THRESHOLD.revision + 1 } : each,
+    ),
+  );
+  const changed = await reload();
+  assert.ok(
+    changed.querySelector('[data-inbox-draft-ask] button[aria-label="Resolve without answering"]'),
+    "the question stands again over the changed item",
+  );
+});
+
+test("a resolve the service did not take once its reply went stands staged again, so it can be sent again or undone", async () => {
+  const { page } = mount([], { chosen: ON_THRESHOLD });
+  await settle();
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
+      request.kind === ACT_KIND.AGENTS_INBOX_CLOSE
+        ? Promise.resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: AGENT_CALL_FAILURE.UNANSWERED },
+          })
+        : previous(request),
+  });
+  const sent = heldMessages(writtenOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000095"));
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>(
+        '[data-inbox-draft-ask] button[aria-label="Resolve without answering"]',
+      ) ?? assert.fail("the open question's card offers its ×")
+    ).click(),
+  );
+  typeInComposer(pane, "Hold off until the backfill lands");
+  await settle();
+  await act(async () => answerSend(pane).click());
+  await settle();
+
+  assert.equal(sent.length, 1, "the reply went");
+  assert.equal(sendWords(pane), "Resolve", "the resolve stands staged again");
 });
 
 test("an open item's row offers Resolve without answering last in its menu, asking first; a settled item's row offers none", async () => {

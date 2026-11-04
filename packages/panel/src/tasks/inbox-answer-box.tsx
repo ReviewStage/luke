@@ -600,8 +600,11 @@ function AnswerCard({
       void closer(item);
       return;
     }
+    // Note that a close refused once the reply went stages the resolve again on what the box holds now, so it can be sent again or undone; one the agent's change refused lapses with the revision it was staged on.
     control.onMessage(item, { ...draft, ...UNPICKED }, () => {
-      void closer(item);
+      void closer(item).then((closed) => {
+        if (!closed.kept) control.onDraft(item, { ...standing.current, resolving: true });
+      });
     });
   };
   const acknowledge = () => {

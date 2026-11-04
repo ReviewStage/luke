@@ -458,6 +458,11 @@ function keptDraft(draft: InboxDraft, revision: number): Draft {
   };
 }
 
+/** Whether a draft holds picks of an answer, a resolve staged aside, which answers nothing and so never stands for the picks that went. */
+function holdsAnswer(draft: Draft): boolean {
+  return holdsPicks({ ...draft, resolving: undefined });
+}
+
 /**
  * What a box holds once a reply carrying an answer is refused: the words and
  * files that went, then any written on the thread while the answer stood
@@ -466,7 +471,8 @@ function keptDraft(draft: InboxDraft, revision: number): Draft {
 function withRefused(now: Draft, went: Draft): Draft {
   if (holdsNothing(now)) return went;
   return {
-    ...(holdsPicks(now) ? now : went),
+    ...(holdsAnswer(now) ? now : went),
+    resolving: now.resolving ?? went.resolving,
     text: [went.text, now.text].filter((words) => words !== "").join("\n"),
     attachments: [...went.attachments, ...now.attachments],
   };
@@ -481,7 +487,8 @@ function withRefused(now: Draft, went: Draft): Draft {
 function carriedBack(first: Draft, behind: readonly Draft[]): Draft {
   return behind.reduce(
     (joined, went) => ({
-      ...(holdsPicks(went) ? went : joined),
+      ...(holdsAnswer(went) ? went : joined),
+      resolving: went.resolving ?? joined.resolving,
       text: [joined.text, went.text].filter((words) => words !== "").join("\n"),
       attachments: [...joined.attachments, ...went.attachments],
     }),

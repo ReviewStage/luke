@@ -1153,25 +1153,35 @@ function InboxItemMenu({
 
 /**
  * The open question's ×, at its card's top end: Resolve without answering,
- * asked first, as the item's ⋯ offers it (`inbox-close.tsx`). It is keyed by
- * its item where it is drawn, so a question asked on one item never closes
- * the next.
+ * which asks nothing and only stages the resolve on the item's draft, the
+ * box's Send doing it (`DraftResolving`), so the item's ⋯ keeps its own
+ * close and the question it asks (`inbox-close.tsx`). It is keyed by its
+ * item where it is drawn, so a resolve staged on one item never lands on
+ * the next, and takes back the focus Undo had where it came of Undo's press.
  */
 function QuestionClose({
   item,
   closer,
+  takesFocus,
   onStage,
 }: {
   item: InboxItem;
   closer: InboxCloser | undefined;
+  takesFocus: boolean;
   /** Stages the resolve on the item's draft. */
   onStage: () => void;
 }): React.JSX.Element | null {
-  // Note that the × asks nothing: it only stages the resolve, which goes with the box's Send, so the menu's own close and its question stand apart.
+  const cross = useRef<HTMLButtonElement>(null);
+  // Note that only the mount reads it, so a question drawn as the item opens takes no focus from where the reader stands.
+  const focused = useRef(takesFocus);
+  useEffect(() => {
+    if (focused.current) cross.current?.focus();
+  }, []);
   const close = closeAction(item, closer === undefined ? undefined : onStage);
   return close === undefined ? null : (
     <Tooltip label={close.label}>
       <IconButton
+        ref={cross}
         icon={close.icon}
         label={close.label}
         size={BUTTON_SIZE.COMPACT}
@@ -1551,9 +1561,17 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   // Note that a resolve staged by the question's × stands in its place until Send or Undo, the picks kept beneath it.
   const resolving = open && draft.resolving === true && doors.onClose !== undefined;
+  // Which of the × and Undo was pressed last here, so the one that takes its place takes its focus.
+  const [pressed, setPressed] = useState<"close" | "undo" | undefined>(undefined);
   const question =
     openAsk === undefined || wordsAlone ? undefined : resolving ? (
-      <DraftResolving onUndo={() => onDraft({ ...draft, resolving: undefined })} />
+      <DraftResolving
+        takesFocus={pressed === "close"}
+        onUndo={() => {
+          setPressed("undo");
+          onDraft({ ...draft, resolving: undefined });
+        }}
+      />
     ) : (
       <DraftQuestion
         pane={pane}
@@ -1562,7 +1580,11 @@ export function InboxPane({
             key={item.id}
             item={item}
             closer={doors.onClose}
-            onStage={() => onDraft({ ...draft, resolving: true })}
+            takesFocus={pressed === "undo"}
+            onStage={() => {
+              setPressed("close");
+              onDraft({ ...draft, resolving: true });
+            }}
           />
         }
       >
