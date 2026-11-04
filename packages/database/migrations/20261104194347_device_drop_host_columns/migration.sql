@@ -38,6 +38,7 @@ ALTER TABLE "device" DROP COLUMN IF EXISTS "kind";
 --> statement-breakpoint
 ALTER TABLE "device" DROP COLUMN IF EXISTS "signed_in";
 --> statement-breakpoint
-RESET lock_timeout;
---> statement-breakpoint
-RESET statement_timeout;
+-- Note that the settings go back with SET LOCAL rather than RESET, because RESET sets the session's value to the
+-- server's default, which outlives this transaction and takes away the runner's own lock_timeout (migrator.ts's
+-- MIGRATION_LOCK_TIMEOUT) from every later migration of the run. The 5s above is that bound already, so it stands.
+SET LOCAL statement_timeout TO DEFAULT;
