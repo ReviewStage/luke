@@ -25,6 +25,7 @@ import {
 } from "@repo/features/admin-wire";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { describe, test } from "vitest";
 import { USER_ROLE } from "./admin-access.js";
@@ -485,13 +486,26 @@ inSeededWorld(
 
 it.layer(getTestDB())("one workspace's page", (it) => {
   it.effect(
-    "lists its own members, owner first, and its own installations, and no other workspace's",
+    "lists its own members, an owner of several roles first, and its own installations, and no other workspace's",
     () =>
       Effect.gen(function* () {
         yield* insertAccount("grace", "Grace Hopper");
         yield* insertAccount("linus", "Linus Torvalds");
         yield* insertAccount("margaret", "Margaret Hamilton");
-        const feldspar = yield* insertWorkspace("Feldspar", ["linus", "grace"]);
+        const feldspar = yield* insertWorkspace("Feldspar", ["grace", "linus"]);
+        // The plugin's role text may list several roles; here the owner joined second.
+        yield* Database.use((db) =>
+          db
+            .update(member)
+            .set({ role: `${WORKSPACE_ROLE.ADMIN},${WORKSPACE_ROLE.OWNER}` })
+            .where(and(eq(member.organizationId, feldspar), eq(member.userId, "linus"))),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(member)
+            .set({ role: WORKSPACE_ROLE.MEMBER })
+            .where(and(eq(member.organizationId, feldspar), eq(member.userId, "grace"))),
+        );
         yield* insertInstallation(feldspar, "feldspar-io", GITHUB_INSTALLATION_STATUS.SUSPENDED);
         const northwind = yield* insertWorkspace("Northwind", ["margaret", "grace"]);
         yield* insertInstallation(northwind, "northwind", GITHUB_INSTALLATION_STATUS.ACTIVE);

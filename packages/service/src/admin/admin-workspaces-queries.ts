@@ -30,7 +30,7 @@ import {
   type AdminMetricsScope,
   type AdminWorkspacesKind,
 } from "@repo/features/admin-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { roleOf, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import {
   and,
   asc,
@@ -342,10 +342,16 @@ function activitySince(now: number): Date {
   return new Date(`${sinceDay}T00:00:00.000Z`);
 }
 
-/** One workspace, by its id, with the counts a row of the table carries, whatever the scope and the kind. */
+const { revisionsWeek: _revisionsWeek, ...WORKSPACE_DETAIL_FIELDS } = WorkspaceRowSchema.fields;
+
+/**
+ * One workspace, by its id, with the counts a row of the table carries,
+ * whatever the scope and the kind; the revisions the table ranks by are
+ * not read, since nothing here is ranked.
+ */
 const findWorkspaceRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ id: Schema.String, ...ActivityWindowSchema.fields }),
-  Result: WorkspaceRowSchema,
+  Result: Schema.Struct(WORKSPACE_DETAIL_FIELDS),
   execute: (request) =>
     Database.use((db) =>
       db
@@ -356,7 +362,6 @@ const findWorkspaceRow = SqlSchema.findOneOption({
           members: sql<number>`${MEMBER_COUNT}`,
           tasksWeek: tasksSince(request.since),
           agentsWeek: agentsSince(request.since),
-          revisionsWeek: revisionsSince(request.since),
           prsMergedWeek: prsMergedSince(request.sinceMs),
           createdAt: organization.createdAt,
         })
@@ -365,7 +370,7 @@ const findWorkspaceRow = SqlSchema.findOneOption({
     ),
 });
 
-/** Every member of one workspace, owners first, then the earliest to join. */
+/** Every member of one workspace, the earliest to join first. */
 const findMembers = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -384,11 +389,7 @@ const findMembers = SqlSchema.findAll({
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
         .where(eq(member.organizationId, organizationId))
-        .orderBy(
-          desc(sql`${member.role} = ${WORKSPACE_ROLE.OWNER}`),
-          asc(member.createdAt),
-          asc(member.id),
-        ),
+        .orderBy(asc(member.createdAt), asc(member.id)),
     ),
 });
 
@@ -413,14 +414,19 @@ export function readAdminWorkspaceSource(input: {
       { concurrency: "unbounded" },
     );
     if (Option.isNone(found)) return undefined;
-    const { revisionsWeek: _revisionsWeek, createdAt, ...row } = found.value;
+    const { createdAt, ...row } = found.value;
+    // Note that the plugin's role text may name several roles, so each is
+    // read as the highest it names, and the owners are moved first after,
+    // keeping the order they joined in.
+    const read = members.map(({ memberRole, joinedAt, role, ...account }) => ({
+      account: { ...account, admin: isAdminRole(role) },
+      role: roleOf(memberRole),
+      joinedAt: joinedAt.getTime(),
+    }));
+    const owning = (each: (typeof read)[number]) => each.role === WORKSPACE_ROLE.OWNER;
     return {
       row: { ...row, createdAt: createdAt.getTime() },
-      members: members.map(({ memberRole, joinedAt, role, ...account }) => ({
-        account: { ...account, admin: isAdminRole(role) },
-        role: memberRole,
-        joinedAt: joinedAt.getTime(),
-      })),
+      members: [...read.filter(owning), ...read.filter((each) => !owning(each))],
       installations: installations.map(
         ({ organizationId: _organizationId, ...installation }) => installation,
       ),

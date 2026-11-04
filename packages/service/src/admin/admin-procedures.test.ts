@@ -20,6 +20,7 @@ import type {
   AdminMetrics,
   AdminReliability,
   AdminUserDetail,
+  AdminWorkspaceDetail,
   AdminWorkspaceList,
 } from "@repo/features/admin-answer-wire";
 import type { AdminCost } from "@repo/features/admin-cost-wire";
@@ -55,6 +56,7 @@ const COST = answerOf<AdminCost>({ generatedAt: 2 });
 const RELIABILITY = answerOf<AdminReliability>({ generatedAt: 3 });
 const WORKSPACES = answerOf<AdminWorkspaceList>({ generatedAt: 4 });
 const USER = answerOf<AdminUserDetail>({ generatedAt: 5 });
+const WORKSPACE = answerOf<AdminWorkspaceDetail>({ generatedAt: 6 });
 
 /** No signed-in browser session. */
 const SIGNED_OUT = null;
@@ -109,7 +111,7 @@ function seams(asked: string[], viewer: AdminViewer | null = ADMIN): AdminProced
       ),
     readWorkspaces: (_now, scope, kind, search) =>
       record(`workspaces ${scope} ${kind} ${search}`, WORKSPACES),
-    readWorkspace: (id) => record(`workspace ${id}`, undefined),
+    readWorkspace: (id) => record(`workspace ${id}`, id === "workspace-2" ? WORKSPACE : undefined),
     readReliability: (_now, scope, windowDays) =>
       record(`reliability ${scope} ${windowDays}`, RELIABILITY),
     writeFavorite: (adminId, userId, favorite) =>
@@ -303,12 +305,17 @@ it.effect(
         yield* send(handed, request("/api/admin/user?id=%20user-2%20&window=90")),
         read(USER),
       );
+      assert.deepEqual(
+        yield* send(handed, request("/api/admin/workspace?id=%20workspace-2%20")),
+        read(WORKSPACE),
+      );
       assert.deepEqual(asked, [
         "metrics non-admins 30",
         "cost all 7",
         "reliability non-admins 7",
         "workspaces non-admins all north",
         "user user-2 90",
+        "workspace workspace-2",
       ]);
     }),
 );
