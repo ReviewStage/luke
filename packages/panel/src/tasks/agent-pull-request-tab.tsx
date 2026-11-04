@@ -1712,7 +1712,7 @@ function PullRequestHead({
         )}
         {lines === undefined ? null : <HeaderLines lines={lines} />}
       </span>
-      {opened === undefined && merged === undefined ? null : (
+      {author === undefined && opened === undefined && merged === undefined ? null : (
         <OpenedLine
           person={author}
           opened={opened === undefined ? null : <Time at={opened} now={now} look={TIME_LOOK.AGO} />}

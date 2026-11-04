@@ -390,7 +390,7 @@ export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStandin
   return useStandingAt(workspace, githubAddressOf(mention));
 }
 
-/** What GitHub holds of the page `address` names, as a link to it on the task given, or in the workspace named where it is on none, draws it (`useStandingAt`). */
+/** What GitHub holds of the page `address` names, read through the workspace of the task given, or else the workspace named where the place names none (`useStandingAt`). */
 export function usePlaceStanding(
   place: { readonly taskId: string | null; readonly workspaceId?: string | undefined },
   address: string | undefined,
