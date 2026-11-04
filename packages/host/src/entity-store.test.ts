@@ -117,7 +117,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped("entity-store-");
-      const { store } = yield* opened(directory, DANA);
+      const { store, closed } = yield* opened(directory, DANA);
       const people = {
         members: [
           { userId: "user-ada", name: "Ada", email: "ada@app.test", role: "owner", image: null },
@@ -138,6 +138,8 @@ it.effect(
         },
       ]);
       yield* store.keepIn(KEPT_READ.MEMBERS, "workspace-relay", people);
+      // Note that the store is closed before the folder is removed, so a save its open forked late, after the keeps above, is not still writing into it.
+      yield* closed;
 
       assert.deepEqual(store.storedIn(KEPT_READ.MEMBERS, "workspace-acme"), people);
       assert.equal(store.storedIn(KEPT_READ.MEMBERS, "workspace-relay"), undefined);
