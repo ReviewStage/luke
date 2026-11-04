@@ -27,7 +27,11 @@
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. The config line and the first message are its first lines.
+ * or a record. A credential the harness holds at the place's firewall
+ * (`HarnessLaunch`'s `held`) is set there before the runner starts, its
+ * placeholder in the environment in its place, and is taken off with every
+ * other at the place's stop, or alone at a launch's end a Terminal keeps the
+ * place up through. The config line and the first message are its first lines.
  * The machine records the runner and the first event number of its launch
  * beside its place, which is how a later call finds the runner it writes to.
  *
@@ -120,7 +124,18 @@ import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { causeKind, failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
-import { Cause, Clock, Context, Data, DateTime, Duration, Effect, Option, Ref } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Data,
+  DateTime,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Ref,
+} from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import {
@@ -163,7 +178,13 @@ import {
 import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { IMAGE_READY } from "../machine/vercel-machine.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import { FIREWALL_SLOT, githubEntry } from "../sandbox-firewall.js";
+import {
+  FIREWALL_SLOT,
+  type FirewallEntry,
+  type FirewallSlot,
+  githubEntry,
+  RUNNER_SLOTS,
+} from "../sandbox-firewall.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -215,9 +236,17 @@ export interface RunnerSessionsOptions {
 }
 
 /** What a launch's command is started with of the harness's own. */
-interface HarnessLaunch {
+export interface HarnessLaunch {
   /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
+  /** The credential held at the place's firewall rather than handed to the command: the variables carrying the launch's placeholder, the swap set in its slot before the runner starts, and what a fingerprint reads in the placeholder's place. */
+  readonly held?: {
+    readonly env: Readonly<Record<string, string>>;
+    readonly slot: FirewallSlot;
+    readonly entry: FirewallEntry;
+    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches; none where the service renews the swap itself. */
+    readonly fingerprint?: Redacted.Redacted;
+  };
 }
 
 /** The lines a message to a running runner goes behind. */
@@ -428,7 +457,10 @@ function stopLine(launch: number): InputLine {
  * credential, and the integrations it was handed, as a digest. A warm
  * runner whose fingerprint no longer matches is relaunched rather than
  * handed the next message (`sendHolding`). The digest is one-way and
- * truncated, so the record carries nothing of the credential.
+ * truncated, so the record carries nothing of the credential. Note that a
+ * credential held at the firewall is read by its slot and its real value,
+ * never its placeholder, which every launch mints afresh; and that a launch
+ * holding none digests what it did before any was held.
  */
 function launchFingerprint(
   credential: HarnessLaunch,
@@ -436,8 +468,16 @@ function launchFingerprint(
 ): string {
   const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
   const names = integrations.map((each) => each.name).sort();
+  const { held } = credential;
+  const swapped =
+    held === undefined
+      ? undefined
+      : {
+          slot: held.slot,
+          credential: held.fingerprint === undefined ? undefined : Redacted.value(held.fingerprint),
+        };
   return createHash("sha256")
-    .update(JSON.stringify({ env, names }))
+    .update(JSON.stringify({ env, names, held: swapped }))
     .digest("hex")
     .slice(0, FINGERPRINT_CHARS);
 }
@@ -762,6 +802,15 @@ export const runnerSessions = <
             // An earlier launch's lines go but its untaken messages in the window, which this launch is handed.
             layout.linesRead ? clearedForLaunch(userId, agent.id) : Effect.void,
             recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer)),
+            // The held credential's swap stands before the runner starts, so its first request carries the real value.
+            credential.held === undefined
+              ? Effect.void
+              : machine.firewall.set(
+                  place.running,
+                  agent.userId,
+                  credential.held.slot,
+                  credential.held.entry,
+                ),
             alongside,
           ],
           { concurrency: "unbounded" },
@@ -770,7 +819,7 @@ export const runnerSessions = <
           handle,
           ready: { firstSequence, rewind, opening },
         } = yield* machine.launchRunner(place.running, {
-          env: { ...credential.env, [RUNNER_ENV.BEARER]: bearer },
+          env: { ...credential.env, ...credential.held?.env, [RUNNER_ENV.BEARER]: bearer },
           agentId: agent.id,
           name: place.name,
           ready,
@@ -2006,9 +2055,16 @@ const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
   ) {
     return RUNNER_ENDED.LINES_WAITING;
   }
-  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place.
-  if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate))
+  // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the place,
+  // less the credentials only the ended runner sent.
+  if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate)) {
+    yield* Effect.forEach(
+      RUNNER_SLOTS,
+      (slot) => machine.firewall.withdraw(running, ending.target.userId, slot),
+      { discard: true },
+    );
     return RUNNER_ENDED.HELD;
+  }
   // Every credential comes off first, and a place they would not come off is left up rather than
   // stopped with them: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
   yield* machine.firewall.clear(running);

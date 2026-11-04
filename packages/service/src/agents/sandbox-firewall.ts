@@ -77,9 +77,14 @@ export const FIREWALL_SLOT = {
   GITHUB: "github",
   /** A clone's or a fetch's read token, on the repository's git endpoint alone, for that run alone. */
   GITHUB_CLONE: "github-clone",
+  /** The Claude Code CLI's credential, swapped in on Anthropic's API for its launch's placeholder. */
+  CLAUDE: "claude",
 } as const;
 
 export type FirewallSlot = (typeof FIREWALL_SLOT)[keyof typeof FIREWALL_SLOT];
+
+/** The slots a runner's launch sets and its end takes off a place left up: each a credential its runner alone sends. */
+export const RUNNER_SLOTS: readonly FirewallSlot[] = [FIREWALL_SLOT.CLAUDE];
 
 const SLOT_ORDER: readonly FirewallSlot[] = Object.values(FIREWALL_SLOT);
 

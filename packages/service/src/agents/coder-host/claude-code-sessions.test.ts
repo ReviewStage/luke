@@ -129,7 +129,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * A coding agent's sessions on Claude Code, against a fake of Vercel
  * Sandbox's REST API that keeps every sandbox, command, stdin, and upload
  * it was asked for, over a real store: the runner launched as root and
- * dropped to `agent` with its secrets in its environment alone, its config
+ * dropped to `agent` with its secrets in its environment alone, the CLI's
+ * credential a placeholder there that its firewall swaps, its config
  * and messages written to its stdin, a stop, a relaunch on the CLI's session
  * after the sandbox stopped, a launch's end stopping the sandbox unless a
  * Terminal holds it, and a reset deleting the sandbox and retiring the
@@ -507,9 +508,34 @@ const repositorySnapshots = (api: ReturnType<typeof runnerSandboxApi>) =>
 const sandboxOfAgent = (api: ReturnType<typeof runnerSandboxApi>, agent: Agent) =>
   api.sandboxes.find((each) => !each.deleted && each.tags[RUNNER_TAG.AGENT] === agent.id);
 
+/** A host's rule in a policy the fake took, as far as a swap reads it. */
+interface SentRule {
+  readonly match?: {
+    readonly headers?: readonly {
+      readonly key: { readonly exact: string };
+      readonly value: { readonly exact: string };
+    }[];
+  };
+  readonly transform?: readonly { readonly headers: Readonly<Record<string, string>> }[];
+}
+
+/** The swaps on Anthropic's API in the last policy sent to the sandbox session given: the header each matches, the value it matches at, and what it sets there. */
+const anthropicSwaps = (api: ReturnType<typeof runnerSandboxApi>, session: string | undefined) => {
+  const sent = api.policies.filter((each) => each.session === session).at(-1)?.policy as
+    | { readonly allow?: Readonly<Record<string, readonly SentRule[]>> }
+    | undefined;
+  return (sent?.allow?.["api.anthropic.com"] ?? []).flatMap((rule) =>
+    (rule.match?.headers ?? []).map(({ key, value }) => ({
+      header: key.exact,
+      at: value.exact,
+      sets: rule.transform?.[0]?.headers[key.exact],
+    })),
+  );
+};
+
 it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   it.effect(
-    "open launches the runner as root dropped to agent, its secrets in its environment alone, and writes its config and first message to its stdin",
+    "open launches the runner as root dropped to agent, its bearer and the plan's placeholder in its environment alone and the plan's token at its firewall, and writes its config and first message to its stdin",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -552,7 +578,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
-        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
+        // The CLI reads a placeholder where the plan's token would stand, which the firewall swaps for the token on Anthropic's API.
+        const placeholder = command.env[RUNNER_ENV.CLAUDE_TOKEN];
+        assert.ok(
+          placeholder !== undefined && placeholder.length > 20 && placeholder !== PLAN_TOKEN,
+        );
+        assert.deepEqual(anthropicSwaps(api, sandbox.currentSessionId), [
+          { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
+        ]);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
@@ -577,7 +610,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.equal(first.uuid, lineId);
         assert.deepEqual(developerContent(first), [{ type: "text", text: "Fix the invitations." }]);
-        // No secret in argv, the config, a tag, or anything uploaded.
+        // No secret in argv, the config, a tag, or anything uploaded, and the plan's token in no command's environment either.
         const visible = JSON.stringify([
           command.args,
           yield* launchLines(command),
@@ -585,6 +618,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [...(api.uploads[0]?.values() ?? [])],
         ]);
         for (const secret of [PLAN_TOKEN, bearer]) assert.equal(visible.includes(secret), false);
+        const environments = JSON.stringify(
+          [api.commands, api.runs].flat().map((each) => each.env),
+        );
+        assert.equal(environments.includes(PLAN_TOKEN), false);
       }),
   );
 
@@ -768,7 +805,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const live = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(reset)));
         const reopened = yield* live.open(message(agent, "Go."));
         assert.ok(reopened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-        assert.equal(reset.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
+        assert.deepEqual(
+          anthropicSwaps(reset, reset.sandboxes[0]?.currentSessionId).map((swap) => swap.sets),
+          [`Bearer ${PLAN_TOKEN}`],
+        );
 
         // Another agent's turn finds the plan refused: a message to this live runner is refused too, and nothing is written to it.
         yield* markPlan(PROVIDER_KEY_STATUS.INVALID);
@@ -854,8 +894,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const onKey = runnerSandboxApi();
         const keyed = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(onKey)));
         assert.equal((yield* keyed.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        // A Mac has no firewall of ours, so its CLI is handed the key itself, and no swap is set.
         assert.equal(onKey.commands[0]?.env[RUNNER_ENV.API_KEY], API_KEY);
         assert.equal(onKey.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.deepEqual(onKey.policies, []);
       }),
   );
 
@@ -919,9 +961,19 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        assert.equal(command.env[RUNNER_ENV.API_KEY], API_KEY);
+        // The CLI reads a placeholder where the key would stand, which the firewall swaps for the key in Anthropic's own header.
+        const placeholder = command.env[RUNNER_ENV.API_KEY];
+        assert.ok(placeholder !== undefined && placeholder !== API_KEY);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
-        const visible = JSON.stringify([command.args, yield* launchLines(command), api.sandboxes]);
+        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), [
+          { header: "x-api-key", at: placeholder, sets: API_KEY },
+        ]);
+        const visible = JSON.stringify([
+          command.args,
+          command.env,
+          yield* launchLines(command),
+          api.sandboxes,
+        ]);
         assert.equal(visible.includes(API_KEY), false);
 
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
@@ -1255,6 +1307,12 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
+        // A fresh placeholder too, swapped for the plan's token at the resumed session's firewall.
+        const placeholder = relaunch?.env[RUNNER_ENV.CLAUDE_TOKEN];
+        assert.ok(placeholder !== api.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN]);
+        assert.deepEqual(anthropicSwaps(api, relaunch?.sandboxSessionId), [
+          { header: "authorization", at: `Bearer ${placeholder}`, sets: `Bearer ${PLAN_TOKEN}` },
+        ]);
 
         // The first launch's END, arriving late, stops nothing of the second's.
         yield* runnerTook(agent.id);
@@ -2316,26 +2374,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       }),
   );
 
-  it.effect("a launch's end leaves the sandbox up while a developer's Terminal holds it", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent } = yield* openAgent;
-      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
-      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-      yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
+  it.effect(
+    "a launch's end leaves the sandbox up while a developer's Terminal holds it, less the swap only its runner sent",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
 
-      yield* runnerTook(agent.id);
-      const ended = yield* runnerEnded({
-        target: { userId, conversationId: agent.conversationId },
-        sessionId: opened.sessionId,
-        sequence: 5,
-      }).pipe(Effect.provide(api.layer));
+        yield* runnerTook(agent.id);
+        const ended = yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 5,
+        }).pipe(
+          // The events route's services, the deployment's key ring among them, which the withdraw seals its record under.
+          Effect.provide(Layer.merge(api.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
+        );
 
-      assert.equal(ended, RUNNER_ENDED.HELD);
-      assert.equal(api.sandboxes[0]?.status, "running");
-    }),
+        assert.equal(ended, RUNNER_ENDED.HELD);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.deepEqual(anthropicSwaps(api, api.sandboxes[0]?.currentSessionId), []);
+      }),
   );
 
   it.effect(
