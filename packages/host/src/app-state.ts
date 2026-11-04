@@ -5,7 +5,15 @@ import {
   BROWSER_TABS_PLACE,
   type BrowserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
-import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import {
+  type AgentOverviewChecksAnswerView,
+  type AgentOverviewConversationAnswerView,
+  type AgentOverviewPullRequestAnswerView,
+  type AgentPullRequestAnswerView,
+  INBOX_SCOPE_KIND,
+  PULL_REQUEST_PART,
+  type PullRequestPart,
+} from "@repo/features/agent-view";
 import type { AgentOrigin } from "@repo/features/agent-wire";
 import type {
   AutomationRunSummary,
@@ -15,7 +23,7 @@ import type {
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
+import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
@@ -378,6 +386,28 @@ export type AppChapters = Readonly<
 
 /** No chapters held, as the host stands before any window shows a pull request's and after the session ends. */
 export const NO_CHAPTERS: AppChapters = {};
+
+/**
+ * One part of each agent's pull request the windows hold for their Pull
+ * request tabs (`pull-request-parts.ts`), by the agent's id and then the
+ * pull request's number, or `OWN_PULL_REQUEST` for the agent's own, each as
+ * the host's read of it stands: the part, or why there is none. One absent
+ * is held by nobody.
+ */
+export type AppPullRequestPart<Part> = Readonly<
+  Record<string, Readonly<Record<string, AppHostRead<Part>>>>
+>;
+
+/** The key the agent's own pull request's parts stand under, beside those of the pull requests its tabs name by number; no number's. */
+export const OWN_PULL_REQUEST = "own";
+
+/** The read each part of a Pull request tab's pull request is held as, by the part. */
+export const PULL_REQUEST_PART_READ = {
+  [PULL_REQUEST_PART.PULL_REQUEST]: LIVE_READ.PULL_REQUEST,
+  [PULL_REQUEST_PART.CHECKS]: LIVE_READ.PULL_REQUEST_CHECKS,
+  [PULL_REQUEST_PART.CONVERSATION]: LIVE_READ.PULL_REQUEST_CONVERSATION,
+  [PULL_REQUEST_PART.PUBLISHED]: LIVE_READ.PULL_REQUEST_PUBLISHED,
+} as const satisfies Record<PullRequestPart, LiveRead>;
 /** One of the account's own devices' last beat, at the host's instant: its age as the service answered it, taken from the host's clock as the answer landed. */
 interface AppDeviceBeat {
   deviceId: string;
@@ -464,6 +494,12 @@ export type AppAutomationReads = Pick<
   | typeof LIVE_READ.AUTOMATION_RUNS
 >;
 
+/** Every part of the Pull request tabs' pull requests the windows hold, by the part's read. */
+export type AppPullRequestParts = Pick<
+  AppState,
+  (typeof PULL_REQUEST_PART_READ)[keyof typeof PULL_REQUEST_PART_READ]
+>;
+
 /** What a task's comment threads stand on: its plan, or one of its pages. */
 type CommentSubjectKind = (typeof COMMENT_SUBJECT)[keyof typeof COMMENT_SUBJECT];
 
@@ -496,8 +532,12 @@ export interface AppHostReads {
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
+  [LIVE_READ.PULL_REQUEST]: AgentOverviewPullRequestAnswerView;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
+  [LIVE_READ.PULL_REQUEST_CHECKS]: AgentOverviewChecksAnswerView;
+  [LIVE_READ.PULL_REQUEST_CONVERSATION]: AgentOverviewConversationAnswerView;
+  [LIVE_READ.PULL_REQUEST_PUBLISHED]: AgentPullRequestAnswerView;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
@@ -611,6 +651,14 @@ export interface AppState {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: AppChapters;
   /** Each task's or agent's cloud Browser tabs the windows' side panels list, held while one lists them and a while after: what the side panel's Browser tabs draw. Never written to disk. */
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
+  /** Each agent's pull request the windows' Pull request tabs chose, held while a tab shows it and a while after: its description, branches, mergeability, and people. */
+  [LIVE_READ.PULL_REQUEST]: AppPullRequestPart<AgentOverviewPullRequestAnswerView>;
+  /** The checks on each of those pull requests' heads, held as they are. */
+  [LIVE_READ.PULL_REQUEST_CHECKS]: AppPullRequestPart<AgentOverviewChecksAnswerView>;
+  /** Each of those pull requests' conversation and where its reviewers stand, held as they are. */
+  [LIVE_READ.PULL_REQUEST_CONVERSATION]: AppPullRequestPart<AgentOverviewConversationAnswerView>;
+  /** What each of those agents published, its pull request as the service last read it from GitHub, held as they are. */
+  [LIVE_READ.PULL_REQUEST_PUBLISHED]: AppPullRequestPart<AgentPullRequestAnswerView>;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
@@ -752,6 +800,10 @@ export const HOST_READ_SLICE = {
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST_CHECKS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST_CONVERSATION]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
+  [LIVE_READ.PULL_REQUEST_PUBLISHED]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PLAN_COMMENTS]: {
     keys: READ_KEYS.TWO,
     on: KEYS_ON.SLICE,

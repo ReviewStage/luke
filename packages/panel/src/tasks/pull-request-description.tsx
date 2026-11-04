@@ -97,6 +97,8 @@ type Editing =
       readonly kind: typeof EDITING.RELOADING;
       /** The read standing when Reload was chosen, which a newer read opens the editor after. */
       readonly read: AgentOverviewPullRequest;
+      /** Whether Reload's own read has landed, which opens the editor on what stands though it moved nothing, as where an earlier read already brought GitHub's words. */
+      readonly landed: boolean;
       readonly generation: number;
     };
 
@@ -273,7 +275,8 @@ export function PullRequestDescription({
       else setEditing({ ...editing, written: undefined });
       return;
     }
-    if (editing.kind !== EDITING.RELOADING || pullRequest === editing.read) return;
+    if (editing.kind !== EDITING.RELOADING) return;
+    if (pullRequest === editing.read && !editing.landed) return;
     draft.current = undefined;
     setEditing({
       kind: EDITING.OPEN,
@@ -326,8 +329,15 @@ export function PullRequestDescription({
       if (editing.kind === EDITING.OPEN) {
         draft.current = undefined;
         dismiss();
-        setEditing({ kind: EDITING.RELOADING, read: pullRequest, generation: editing.generation });
-        onRead();
+        const { generation } = editing;
+        setEditing({ kind: EDITING.RELOADING, read: pullRequest, landed: false, generation });
+        void Promise.resolve(onRead()).then(() =>
+          setEditing((was) =>
+            was.kind === EDITING.RELOADING && was.generation === generation
+              ? { ...was, landed: true }
+              : was,
+          ),
+        );
       }
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },

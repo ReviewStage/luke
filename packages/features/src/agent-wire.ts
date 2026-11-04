@@ -1241,6 +1241,10 @@ export const agentPullRequestSchema = EffectSchema.Struct({
   changedFiles: countedNumber,
   /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
   queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+  /** The commit its branch stands on, as the service last read it, which a push moves; absent from a row written before it was kept. */
+  headSha: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_COMMIT_CHARS)),
+  ),
   /** The login of who opened it, their avatar where GitHub's avatar host serves it, and whether they are an App's bot; absent where GitHub named no one, and from a row read before they were kept. */
   author: EffectSchema.optionalKey(EffectSchema.String),
   authorAvatarUrl: EffectSchema.optionalKey(EffectSchema.String),

@@ -174,10 +174,20 @@ export const AGENT_ACT_KIND = {
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
+  /**
+   * One part of one agent's pull request, which its Pull request tab draws:
+   * the pull request itself, its checks, its conversation, or what the agent
+   * published, held for the window while it holds the stream open and a
+   * while after among those let go lately, and asked again as a window comes
+   * forward, as the agent ends, and as its listed pull request moves. What
+   * it holds reaches the panel on app state (`PULL_REQUEST_PART_READ`), so
+   * the stream carries nothing.
+   */
+  AGENTS_PULL_REQUEST_PART_FOLLOW: "agents.pullRequestPartFollow",
+  /** One pull request's held part, which the panel reads on app state, asked again at once, as Try again and Refresh ask. */
+  AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   AGENTS_CHANGES: "agents.changes",
-  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
@@ -189,10 +199,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
   /** One agent's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
@@ -735,13 +741,12 @@ export const PORT_ACT_USE = {
   AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
   AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
-  AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
   AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
-  AGENTS_OVERVIEW_CHECKS: ACT_USE.READ,
-  AGENTS_OVERVIEW_CONVERSATION: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
   AGENTS_PULL_REQUEST_ACTION: ACT_USE.WRITE,
   AGENTS_PULL_REQUEST_VIEWED: ACT_USE.READ,
