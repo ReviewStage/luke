@@ -107,14 +107,19 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  position: absolute;
+  position: fixed;
   /* The stage stands over what is seen of the window: from where a phone
      panned it to, down to where the on-screen keyboard begins, so what
      stands at its foot, a composer first of all, stays above the keyboard.
      The panel writes the top, the inset, and the visible height on the root
      (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
      window and what is measured by the stage's height is measured by
-     `100vh` (`@repo/ui`'s `tokens/viewport.css`). It keeps off a phone's
+     `100vh` (`@repo/ui`'s `tokens/viewport.css`). It is fixed, as the
+     dialog's backdrop is, because the top and the inset are measured in the
+     layout viewport, which a fixed box is placed in, and because an editor's
+     reveal of its caret (ProseMirror's) scrolls every box up to the first
+     fixed one, and past an absolute stage it would scroll the window, by a
+     window it measures without the pan, on every key. It keeps off a phone's
      notch and home indicator too, where its page is drawn under them
      (`viewport-fit=cover`); everywhere else those insets are zero. */
   top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px));
