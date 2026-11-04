@@ -5,13 +5,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 48,
-      "description": "Where you name no taskId and no from, the workspace to start the agent in on no task, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+      "description": "Where you name no taskId and no from, the workspace of the task made for the agent, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
     },
     "taskId": {
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "The task to start the agent on, by the id list_tasks answered; leave it out to start it on no task."
+      "description": "The task to start the agent on, by the id list_tasks answered; leave it out to start it on a new task made for it."
     },
     "repository": {
       "anyOf": [
@@ -23,7 +23,7 @@
           "type": "null"
         }
       ],
-      "description": "Where the agent starts on no task, the GitHub repository it works in, as owner/name, which the workspace's GitHub installation must reach; null or left out for none. A task's agent works in the task's own."
+      "description": "Where you name no taskId and no from, the GitHub repository of the task made for the agent, as owner/name, which the workspace's GitHub installation must reach; null or left out for none. A task's agent works in the task's own."
     },
     "prompt": {
       "type": "string",
