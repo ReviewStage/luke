@@ -179,8 +179,6 @@ let refusePhoto = false;
 let refuseRole = false;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
-/** The repositories GitHub holds public, by full name; every other is private. */
-let publicRepositories: string[] = [];
 /** What the listing says each installation was given; absent, as from a service older than it. */
 let listedInstallations: GitHubRepositoriesAnswer["installations"];
 /** Whether the workspace's repositories' read never answers, as one still out on the wire. */
@@ -190,8 +188,7 @@ let repositoriesReadFails = false;
 /** A repository as the picker's listing answers it, by its full name and what reaches it. */
 function listedRepository(fullName: string, access: GitHubAccess) {
   const [owner = "", name = ""] = fullName.split("/");
-  const shut = !publicRepositories.includes(fullName);
-  return { owner, name, fullName, defaultBranch: "main", private: shut, updatedAt: 1, access };
+  return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
 }
 
 /** The repositories the workspace's picker lists, as the service answers them: the App's, and the reader's token's as addable, or among them from a service older than `addable`. */
@@ -524,7 +521,6 @@ beforeEach(() => {
   refuseRole = false;
   automations = undefined;
   githubRepositories = [];
-  publicRepositories = [];
   listedInstallations = undefined;
   repositoriesReadHeld = false;
   repositoriesReadFails = false;
@@ -1631,21 +1627,16 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
   }
 });
 
-/** What each line folded open under an account's row says, a lock's name before a private one's. */
+/** What each line folded open under an account's row says. */
 const foldLines = (row: HTMLElement) =>
-  [...row.querySelectorAll("li")].map((line) =>
-    [line.querySelector('[role="img"]')?.getAttribute("aria-label"), line.textContent]
-      .filter((part) => part !== undefined)
-      .join(" "),
-  );
+  [...row.querySelectorAll("li")].map((line) => line.textContent);
 
 /** The chevron that folds an account's repositories open under its row. */
 const foldOn = (row: HTMLElement) =>
   row.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? assert.fail("no fold");
 
-test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it, a lock before a private one, and a suspended account shows neither", async () => {
+test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it by name, and a suspended account shows neither", async () => {
   githubRepositories = ["acme-org/relay", "ACME-ORG/site", "acme-labs/old", "other/thing"];
-  publicRepositories = ["ACME-ORG/site"];
   tokenReach = ["acme-org/forked"];
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const group = githubGroup(page);
@@ -1657,13 +1648,13 @@ test("an active account counts the App's repositories whose owner is its login i
   ]);
   assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
   assert.equal(foldOn(org).getAttribute("aria-expanded"), "true");
-  assert.deepEqual(foldLines(org), ["Private relay", "site"]);
+  assert.deepEqual(foldLines(org), ["relay", "site"]);
   const labs = rowNamed(group, "acme-labs");
   assert.deepEqual(foldLines(labs), []);
   assert.equal(labs.querySelector("button"), null);
 });
 
-test("an account given every repository says All N and opens on the note that later ones are among them, six lines before Show all, one given a selection says N selected, named and found by the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
+test("an account given every repository says All N and opens on six lines before Show all, one given a selection says N selected, named and found by the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
   const shown = Array.from({ length: 8 }, (_, at) => `acme-org/r${at + 1}`);
   githubRepositories = [...shown, "acme-labs-renamed/one", "acme-tools/a", "acme-tools/b"];
   listedInstallations = [
@@ -1699,15 +1690,14 @@ test("an account given every repository says All N and opens on the note that la
   assert.deepEqual(foldLines(org), [], "more than five start folded");
   act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), [
-    "All repositories, including ones created later.",
-    ...shown.slice(0, 6).map((fullName) => `Private ${fullName.split("/")[1]}`),
+    ...shown.slice(0, 6).map((fullName) => fullName.split("/")[1]),
     "Show all 8",
   ]);
   act(() => button(org, "Show all 8").click());
-  assert.deepEqual(foldLines(org), [
-    "All repositories, including ones created later.",
-    ...shown.map((fullName) => `Private ${fullName.split("/")[1]}`),
-  ]);
+  assert.deepEqual(
+    foldLines(org),
+    shown.map((fullName) => fullName.split("/")[1]),
+  );
 });
 
 test("while the repositories are read each active account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {

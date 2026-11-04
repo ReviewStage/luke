@@ -28,7 +28,6 @@ import {
   Text,
   TextButton,
 } from "@repo/ui";
-import { GLYPH } from "@repo/ui/icons";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import { useState } from "react";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
@@ -47,11 +46,9 @@ import { FACT_BREAK } from "./github-dialog.js";
  * suspended or removed it, which says no count and folds nothing open,
  * since agents reach none of it. A chevron at the end of an active
  * account's row folds its repositories open under its words, one line each,
- * named as GitHub names it under its owner and led by the repository's
- * glyph, or a lock for a private one; an account given every repository
- * says first that those created later are among them. An account with few
- * enough repositories starts open, and a long list shows its first lines
- * and then Show all.
+ * named as GitHub names it under its owner and nothing more. An account
+ * with few enough repositories starts open, and a long list shows its first
+ * lines and then Show all.
  *
  * The repositories are the App's from the list the repository picker reads
  * for the workspace (`LIVE_READ.REPOSITORY_LISTS`), grouped by owner, which
@@ -73,8 +70,6 @@ const WORDS = {
   SUSPENDED: "Suspended or removed on GitHub.",
   READING: readingWords(TERM.REPOSITORY.many),
   NOT_READ: readFailedWords(TERM.REPOSITORY.many),
-  ALL_NOTE: "All repositories, including ones created later.",
-  PRIVATE: "Private",
 } as const;
 
 /** The repositories counted on an account's line, by what its installation was given; just the count where the service did not say. */
@@ -192,17 +187,6 @@ function AccountRow({
   );
 }
 
-/** One repository's line in its account's fold: a lock for a private one, the repository's glyph otherwise, then its name. */
-function RepositoryLine({ repository }: { repository: GitHubRepository }): React.JSX.Element {
-  return repository.private ? (
-    <SettingsFoldLine glyph={<GLYPH.PRIVATE />} glyphLabel={WORDS.PRIVATE}>
-      {repository.name}
-    </SettingsFoldLine>
-  ) : (
-    <SettingsFoldLine glyph={<GLYPH.REPOSITORY />}>{repository.name}</SettingsFoldLine>
-  );
-}
-
 /**
  * An active account's row once its repositories are read: their count on
  * its line, and its chevron folding them open, open from the start where
@@ -249,11 +233,10 @@ function AccountFoldRow({
       foldLabel={`${connection.login}'s repositories`}
       defaultOpen={count <= OPEN_MOST}
     >
-      {selection === GITHUB_REPOSITORY_SELECTION.ALL ? (
-        <SettingsFoldLine>{WORDS.ALL_NOTE}</SettingsFoldLine>
-      ) : null}
       {shown.map((repository) => (
-        <RepositoryLine key={repository.fullName.toLowerCase()} repository={repository} />
+        <SettingsFoldLine key={repository.fullName.toLowerCase()}>
+          {repository.name}
+        </SettingsFoldLine>
       ))}
       {cut ? (
         <SettingsFoldFoot>

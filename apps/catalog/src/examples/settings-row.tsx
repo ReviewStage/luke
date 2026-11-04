@@ -41,7 +41,7 @@ import {
   TextButton,
   TextField,
 } from "@repo/ui";
-import { ExternalLinkIcon, GLYPH } from "@repo/ui/icons";
+import { ExternalLinkIcon } from "@repo/ui/icons";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -60,7 +60,7 @@ import { CatalogSection } from "../section";
  * its row with a refusal under that, and accounts indented under their
  * provider's row; and accounts that fold their repositories open under
  * their words, one open from the start with a long name among them, one
- * folded with a note and Show all at its foot, at a page's measure and
+ * folded with Show all at its foot, at a page's measure and
  * narrower than 380px.
  */
 
@@ -369,11 +369,9 @@ function FoldRows(): React.JSX.Element {
         foldLabel="ada-lovelace's repositories"
         defaultOpen
       >
-        <SettingsFoldLine glyph={<GLYPH.PRIVATE />} glyphLabel="Private">
-          dotfiles
-        </SettingsFoldLine>
-        <SettingsFoldLine glyph={<GLYPH.REPOSITORY />}>ada-lovelace.github.io</SettingsFoldLine>
-        <SettingsFoldLine glyph={<GLYPH.PRIVATE />} glyphLabel="Private">
+        <SettingsFoldLine>dotfiles</SettingsFoldLine>
+        <SettingsFoldLine>ada-lovelace.github.io</SettingsFoldLine>
+        <SettingsFoldLine>
           notes-on-the-analytical-engine-and-the-sketch-of-its-operation
         </SettingsFoldLine>
       </SettingsFoldRow>
@@ -384,11 +382,8 @@ function FoldRows(): React.JSX.Element {
         leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
         foldLabel="analytical-engine's repositories"
       >
-        <SettingsFoldLine>All repositories, including ones created later.</SettingsFoldLine>
-        <SettingsFoldLine glyph={<GLYPH.REPOSITORY />}>mill</SettingsFoldLine>
-        <SettingsFoldLine glyph={<GLYPH.PRIVATE />} glyphLabel="Private">
-          store
-        </SettingsFoldLine>
+        <SettingsFoldLine>mill</SettingsFoldLine>
+        <SettingsFoldLine>store</SettingsFoldLine>
         <SettingsFoldFoot>
           <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => undefined}>
             Show all 24

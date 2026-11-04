@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { ICON_SIZE, type IconSize } from "../../icons/icon-size.js";
 import { IconButton } from "../button/button.js";
 import {
   DISCLOSURE_BODY,
@@ -8,7 +7,6 @@ import {
   DisclosureScope,
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
-import { GLYPH_INK, GlyphSlot } from "../glyph-slot/glyph-slot.js";
 import { OneLine } from "../one-line/one-line.js";
 import { SettingsRow, type SettingsRowIndent } from "./settings-row.js";
 
@@ -26,16 +24,10 @@ import { SettingsRow, type SettingsRowIndent } from "./settings-row.js";
  * fold drawn open from the start replays nothing.
  *
  * Its lines (`SettingsFoldLine`) are the row's description's type and tone,
- * the muted caption, each led by one muted glyph in a slot of one size, so
- * every line's words start on one edge whatever glyph leads them, and held
- * to one line as a row's name is (`OneLine`). A line with no glyph is a note
- * about the rest, a sentence, which wraps in a narrow column rather than
- * fading; a press at the foot, such as Show all, stands on a line of its own
- * (`SettingsFoldFoot`).
+ * the muted caption, each a name alone, starting where the row's words do
+ * and held to one line as a row's name is (`OneLine`); a press at the foot,
+ * such as Show all, stands on a line of its own (`SettingsFoldFoot`).
  */
-
-/** The size every line's glyph stands at, the caption's. */
-const LINE_GLYPH: IconSize = ICON_SIZE.SMALL;
 
 /**
  * A row named `label` that folds `children` open under its words, its
@@ -101,36 +93,12 @@ export function SettingsFoldRow({
 
 /** The type and tone of every line of a fold: the row description's muted caption. */
 const LINE =
-  "ui-settings-fold-line flex min-w-0 items-center gap-ui-6 font-sans text-caption font-caption text-muted-foreground";
+  "ui-settings-fold-line flex min-w-0 items-center font-sans text-caption font-caption text-muted-foreground";
 
-/**
- * One line of a fold: its glyph, muted in a slot of one size, named by
- * `glyphLabel` where it says what the words do not (a lock's "Private"),
- * then its words on one line, read whole in the window's tooltip while they
- * are cut short; with no glyph, a note about the lines, wrapping where it
- * must.
- */
-export function SettingsFoldLine({
-  glyph,
-  glyphLabel,
-  children,
-}: {
-  glyph?: ReactNode;
-  glyphLabel?: string | undefined;
-  children: string;
-}): React.JSX.Element {
-  if (glyph === undefined) {
-    return (
-      <li className={LINE}>
-        <span className="ui-settings-fold-note min-w-0">{children}</span>
-      </li>
-    );
-  }
+/** One line of a fold: its words on one line, read whole in the window's tooltip while they are cut short. */
+export function SettingsFoldLine({ children }: { children: string }): React.JSX.Element {
   return (
     <li className={LINE}>
-      <GlyphSlot ink={GLYPH_INK.MUTED} size={LINE_GLYPH} label={glyphLabel}>
-        {glyph}
-      </GlyphSlot>
       <OneLine>{children}</OneLine>
     </li>
   );
