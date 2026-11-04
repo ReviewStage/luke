@@ -667,6 +667,7 @@ export function runCreateAutomation(
       const written = yield* createAutomationAs(
         userId,
         {
+          id,
           workspaceId: workspace.value,
           repositories,
           name: made.name,
@@ -681,7 +682,6 @@ export function runCreateAutomation(
           ...(made.slackDelivery === undefined ? undefined : { slackDelivery: made.slackDelivery }),
         },
         SERVER_AUTOMATION_SOURCE.AGENT,
-        id,
       ).pipe(Effect.result);
       if (Result.isFailure(written)) {
         const refusal = written.failure;

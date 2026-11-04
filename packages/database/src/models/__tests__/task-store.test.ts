@@ -34,6 +34,7 @@ import {
   assignUnassignedTask,
   beginTaskWork,
   createTask,
+  createTaskCommittedOnce,
   createTaskOnce,
   deleteTask,
   finishTaskWork,
@@ -47,6 +48,7 @@ import {
   setTaskParent,
   TASK_RUNS_IN_CLOUD,
   TaskAssigneeNotMember,
+  TaskIdTaken,
   TaskParentRepositoryDiffers,
   type TaskStandingAgent,
   updateTask,
@@ -264,6 +266,56 @@ it.layer(getTestDB())("a task made under an id its maker chose", (it) => {
         const stored = Option.getOrThrow(yield* readTask(owner, id));
         assert.equal(stored.text, "## Goal\n\nBulk invites.");
         assert.ok(Option.isNone(yield* make("Later")), "a make under a taken id makes nothing");
+      }),
+  );
+
+  it.effect(
+    "a start sent again under its id, even at once, makes one task and answers it with no transaction",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const organizationId = yield* openWorkspace(owner);
+        const id = randomUUID();
+        const start = (name: string) =>
+          createTaskCommittedOnce(owner, { id, organizationId, name });
+
+        const answers = yield* Effect.all([start("Bulk invites"), start("Again")], {
+          concurrency: "unbounded",
+        });
+        const made = answers.filter((answer) => answer.made);
+        const found = answers.filter((answer) => !answer.made);
+
+        assert.deepEqual([made.length, found.length], [1, 1], "one start made the task");
+        assert.equal(typeof made[0]?.txid, "string");
+        assert.equal(found[0]?.txid, undefined);
+        assert.deepEqual(
+          answers.map((answer) => answer.task.task.id),
+          [id, id],
+        );
+        assert.deepEqual(
+          (yield* listTasks(owner)).map((listed) => listed.id),
+          [id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a start under the id of another account's task is refused carrying nothing of it, and writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const eli = yield* openAccount;
+        const deans = yield* openWorkspace(dean);
+        const elis = yield* openWorkspace(eli);
+        const { id } = yield* createTask(dean, { organizationId: deans, name: "Acquisition" });
+
+        const refused = yield* Effect.flip(
+          createTaskCommittedOnce(eli, { id, organizationId: elis, name: "Mine" }),
+        );
+
+        assert.deepEqual(refused, new TaskIdTaken());
+        assert.deepEqual(yield* listTasks(eli), []);
+        assert.equal(Option.getOrUndefined(yield* readTaskPlan(dean, id))?.name, "Acquisition");
       }),
   );
 });

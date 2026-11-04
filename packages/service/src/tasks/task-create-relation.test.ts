@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { readTaskBlocks } from "@repo/database/models/task-block-store";
@@ -208,6 +209,41 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
   );
 
   it.effect(
+    "a start sent again under its id answers the plan it made with no transaction, its relation written once",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openTokenMember();
+        const workspace = yield* openWorkspace(owner);
+        const { id: below } = yield* createTask(owner, {
+          organizationId: workspace,
+          name: "B",
+          repository: SIDE_REPOSITORY,
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const send = yield* starting(new Map([["Bearer owner", owner]]));
+        const id = randomUUID();
+        const start = () =>
+          send("Bearer owner", {
+            id,
+            name: "Parent",
+            workspaceId: workspace,
+            relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: below },
+          });
+
+        const first = yield* start();
+        const again = yield* start();
+
+        assert.equal(first.status, 201, JSON.stringify(first.body));
+        assert.equal(again.status, 201, JSON.stringify(again.body));
+        assert.match(first.body.txid, /^\d+$/u);
+        assert.equal(again.body.txid, undefined);
+        assert.deepEqual([first.body.plan.id, again.body.plan.id], [id, id]);
+        assert.equal(yield* parentOf(owner, below), id);
+        assert.deepEqual(yield* listedIds(owner), [below, id].sort());
+      }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
+  it.effect(
     "a start naming two parents, one plan twice, or both relation doors is refused by its shape, and nothing is made",
     () =>
       Effect.gen(function* () {
@@ -328,7 +364,7 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
   );
 
   it.effect(
-    "a start related to a plan its member does not reach, or of another workspace, is not found, and nothing is made",
+    "a start related to a plan its member does not reach, or of another workspace, or under its id, is not found, and nothing is made",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
@@ -362,9 +398,18 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
           workspaceId: elsewhere,
           relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: side },
         });
+        // An id the owner's plan holds is refused in the same words, so the answer names nothing of it.
+        const underItsId = yield* send("Bearer stranger", {
+          id: side,
+          name: "Taken",
+          workspaceId: strangerWorkspace,
+        });
 
         const notFound = { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } };
-        assert.deepEqual([byStranger, acrossWorkspaces], [notFound, notFound]);
+        assert.deepEqual(
+          [byStranger, acrossWorkspaces, underItsId],
+          [notFound, notFound, notFound],
+        );
         assert.deepEqual(yield* listedIds(owner), [side]);
         assert.deepEqual(yield* listedIds(stranger), [own]);
         assert.deepEqual(

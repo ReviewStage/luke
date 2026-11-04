@@ -580,6 +580,11 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * shares, and one started blocking or blocked by others takes nothing of
      * them (`relationsAsked`), and every relation is written in the plan's
      * own transaction (`createTaskRelated`), so one refused makes nothing.
+     * A start naming an `id` makes the plan under it; sent again, it answers
+     * the plan it made, with no transaction, and starts the agent it names
+     * under that agent's own key, so never a second. An id a plan the
+     * account does not reach stands under is refused as a workspace it is
+     * not in is, so the answer names nothing of that plan.
      */
     create: plans.create.effect(function* ({ input, context }) {
       const { userId } = context;
@@ -637,9 +642,14 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
       const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
-      const { task: stored, txid } = yield* createTaskRelated(
+      const {
+        task: stored,
+        txid,
+        made,
+      } = yield* createTaskRelated(
         userId,
         {
+          ...(input.id === undefined ? undefined : { id: input.id }),
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
           repository: reached.repository,
@@ -655,11 +665,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         },
         beside,
       ).pipe(
-        Effect.catch((failure) =>
-          failure._tag === "TaskAssigneeNotMember"
-            ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
-            : relationRefused(failure),
-        ),
+        Effect.catch((failure) => {
+          switch (failure._tag) {
+            case "TaskAssigneeNotMember":
+              return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+            case "TaskIdTaken":
+              return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+            default:
+              return relationRefused(failure);
+          }
+        }),
       );
       // Where the task runs is kept as the member's last pick, which a task an agent makes for them starts on
       // (`agentMadeRunsOn`), though a child's is its parent's rather than a pick. Note that a pick that fails
@@ -672,13 +687,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ),
         );
       }
-      yield* recordServerEvent(
-        SERVER_EVENT.TASK_CREATE,
-        { userId, workspaceId: organizationId },
-        {
-          source: SERVER_TASK_SOURCE.SIDEBAR,
-        },
-      );
+      // A start sent again under its id made no plan, so it counts none.
+      if (made) {
+        yield* recordServerEvent(
+          SERVER_EVENT.TASK_CREATE,
+          { userId, workspaceId: organizationId },
+          {
+            source: SERVER_TASK_SOURCE.SIDEBAR,
+          },
+        );
+      }
       const answer: TaskStartAnswer =
         agent === undefined
           ? { plan: stored.task }
