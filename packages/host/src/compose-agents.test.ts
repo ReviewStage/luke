@@ -614,6 +614,7 @@ function fakeService() {
               },
             ],
           },
+          ...committedIn,
         };
       }),
     startInboxThread: (request) =>
@@ -2898,6 +2899,44 @@ it.effect(
         clientKey: "reply-1",
       });
       yield* settled;
+      assert.deepEqual(bothHold(harness, replied), [true, true]);
+    }),
+);
+
+it.effect(
+  "a plain reply the service answers with a transaction stands on its thread as the service answered it in every inbox holding it until each carries it",
+  () =>
+    Effect.gen(function* () {
+      const harness = yield* subject();
+      const { call, sealScope, sealItems, live, commitIn } = harness;
+      sealScope(LIVE_ANSWERED);
+      sealItems(LIVE_ANSWERED);
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_FOLLOW, PLAN_SCOPE);
+      yield* harness.open;
+      yield* settled;
+      // Each read is woken by a write once, so each hands a wait for the reply.
+      live.scope.set({ items: [ITEM_ROW], messages: [], files: [] }, ["9100"]);
+      live.items.set(
+        {
+          stamps: [stampOf(HELD_ITEM, TASK_ID)],
+          items: [{ ...ITEM_ROW, ...HELD_ITEM }],
+          messages: [],
+          files: [],
+        },
+        ["9100"],
+      );
+      yield* toldTimes(harness.told, 1);
+      yield* toldTimes(harness.accountItems, 1);
+      const replied = (item: InboxItem) => JSON.stringify(item).includes(MESSAGE_ID);
+
+      commitIn("9400");
+      yield* call(GATEWAY_METHOD.AGENTS_INBOX_MESSAGE, {
+        itemId: ITEM.id,
+        text: "Push it after the tests pass.",
+        clientKey: "reply-1",
+      });
+      yield* settled;
+
       assert.deepEqual(bothHold(harness, replied), [true, true]);
     }),
 );
