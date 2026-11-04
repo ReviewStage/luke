@@ -155,14 +155,21 @@ function hostRead<
  * every item the account reaches, held for the session; one holder's own
  * inbox; one task's pages, or one agent's on no task, which the open
  * task's page, the panel beside an Inbox item, an agent's page, and a
- * page's card or frame each hold; and one agent's pull request's chapters,
- * by the number its Pull request tab's own read of it found. Pages offer no Try again, because the
+ * page's card or frame each hold; one agent's pull request's chapters,
+ * by the number its Pull request tab's own read of it found; and the run
+ * that started one agent, which its page holds. Pages offer no Try again, because the
  * host reads pages that did not answer again on its own, and pages it was
  * refused, a plan's or an agent's the reader cannot reach, stand failed
  * until every surface lets them go and one holds them anew (`@repo/host`'s
  * `live-push.ts`).
  */
 const HOST_READS = {
+  [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
+    slice: APP_SLICE.AGENT_ORIGINS,
+    path: (agentId: string) => [agentId],
+    hold: (agentId) => askAct(ACT_KIND.AGENTS_ORIGIN_FOLLOW, { agentId }),
+    retry: (agentId) => tellAct(ACT_KIND.AGENTS_ORIGIN_RETRY, { agentId }),
+  }),
   [LIVE_READ.INBOX_ITEMS]: hostRead(LIVE_READ.INBOX_ITEMS, {
     slice: APP_SLICE.INBOX_ITEMS,
     path: undefined,

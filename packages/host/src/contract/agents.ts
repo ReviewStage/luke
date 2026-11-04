@@ -11,6 +11,7 @@
  * here too, by the code its link named, as Settings › Hosts asks.
  */
 
+import { eventIterator, type } from "@orpc/contract";
 import {
   type AgentTranscriptPage,
   agentAgentAnswerSchema,
@@ -67,7 +68,6 @@ import {
   hostPairingViewSchema,
 } from "@repo/features/host-pairing-view";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { eventIterator, type } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { AGENT_ACT_KIND } from "./kinds.js";
@@ -191,6 +191,17 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.flip(agentPageAnswerViewSchema)),
+  // Note that the hold's stream carries nothing: the held origin reaches the panel on app state, and the stream is the window's hold on it.
+  [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: actProcedure(
+    "Could not follow the run that started the agent on this system.",
+  )
+    .input(exactInput(agentPageParamsSchema))
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY]: actProcedure(
+    "Could not read the run that started the agent again on this system.",
+  )
+    .input(exactInput(agentPageParamsSchema))
+    .output(EffectSchema.Void),
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actProcedure(
     "Could not read the agent's pull request on this system.",
   )

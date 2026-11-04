@@ -6,8 +6,8 @@ import {
 } from "./agent-browser-tab-wire.js";
 import { agentAgentAnswerSchema } from "./agent-view.js";
 import {
-  type AgentSummary,
-  agentSummarySchema,
+  type ListedAgent,
+  listedAgentSchema,
   localAgentRefusalSchema,
   type TasklessAgent,
   tasklessAgentSchema,
@@ -191,12 +191,13 @@ export const tasksViewSchema = EffectSchema.Struct({
   tasklessAgents: EffectSchema.optionalKey(EffectSchema.Array(tasklessAgentSchema)),
   /**
    * Every agent on a plan, the archived ones among them, each as its plan's
-   * own list names it, the first started first: present only while the list
+   * own list names it, with the workspace and repository its own row names,
+   * the first started first: present only while the list
    * is followed live over Neon Realtime, when it is what the open plan's
-   * tabs draw, and what the notices' ledger reads, the archived left out, in
+   * tabs draw, and an agent's page, and what the notices' ledger reads, the archived left out, in
    * place of listing each plan's agents again on a clock.
    */
-  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(agentSummarySchema)),
+  taskAgents: EffectSchema.optionalKey(EffectSchema.Array(listedAgentSchema)),
   /**
    * Every pull request of each plan that has one, uncapped, as its row names
    * the first few: present only while the list is followed live, when the
@@ -250,8 +251,8 @@ export const IDLE_TASKS_VIEW: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** An agent with no plan as a plan's agents are named, which names an automation only where one started it. */
-export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): AgentSummary {
+/** An agent with no plan as a plan's agents are named, with its workspace and repository, which names an automation only where one started it. */
+export function summaryOfTaskless({ automationId, ...agent }: TasklessAgent): ListedAgent {
   return automationId === null ? agent : { ...agent, automationId };
 }
 

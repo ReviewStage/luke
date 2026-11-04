@@ -58,7 +58,7 @@ import { AGENT_INBOX_ACT_KIND, type PortActResult } from "@repo/host/contract";
 import { isTranscriptTab } from "@repo/ui/tab-strip-model";
 import type { TaskMark } from "@repo/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, Fragment, useState } from "react";
+import { act, createElement, Fragment, useMemo, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, assert, beforeEach, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
@@ -98,7 +98,7 @@ import { restOn } from "./hint-rest.js";
 import { relayout } from "./resize-observer.js";
 import { installScrollIntoView } from "./scroll-into-view.js";
 import { onSideBundles } from "./side-bundles.js";
-import { agentHoldingsOf, tasksControl, waitingOf } from "./tasks-control.js";
+import { agentHoldingsOf, listedAgent, tasksControl, waitingOf } from "./tasks-control.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -339,8 +339,8 @@ class InboxWorld {
   automations: readonly AutomationSummary[] = [];
   /** What the window copied, in order. */
   copied: string[] = [];
-  /** Each agent with no plan as a read of its own page answers it. */
-  pageAgents = new Map<string, AgentSummary>();
+  /** Each agent with no plan the task list carries, in the workspace and repository its row names. */
+  tasklessAgents = new Map<string, AgentSummary>();
   /** The host's held inboxes for the window, each pushed as it is held, as the knobs above say. */
   main = heldInboxes();
   /** The reads of an item's images, each held until the test lands it with a PNG's first bytes. */
@@ -569,7 +569,7 @@ beforeEach(() => {
   world.automations = [];
   world.copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(world.copied), ...DESKTOP_LINKS, pageFrameUrl });
-  world.pageAgents = new Map();
+  world.tasklessAgents = new Map();
   world.imageReads = [];
   world.readMarks = [];
   world.readMarkRefused = false;
@@ -600,30 +600,6 @@ beforeEach(() => {
         return world.agentListHeld
           ? Promise.withResolvers<never>().promise
           : done({ agents: world.listedAgents });
-      }
-      if (request.kind === ACT_KIND.AGENTS_PAGE) {
-        const agent = world.pageAgents.get(request.payload.agentId);
-        return Promise.resolve({
-          status: FAKE_ANSWER.DONE,
-          value:
-            agent === undefined
-              ? { failure: AGENT_CALL_FAILURE.NOT_FOUND }
-              : {
-                  agent: {
-                    id: agent.id,
-                    planId: null,
-                    model: agent.model,
-                    effort: agent.effort,
-                    title: agent.title,
-                    createdAt: agent.createdAt,
-                    status: agent.status,
-                    turnId: null,
-                    automationId: null,
-                    workspaceId: "workspace-acme",
-                    repository: "acme/relay",
-                  },
-                },
-        });
       }
       if (request.kind === ACT_KIND.TASKS_TREE) {
         return Promise.resolve({
@@ -817,12 +793,24 @@ export function mount(
       pushAgain();
     };
     world.setTasks = setListed;
+    // The agents the task list carries, each in Acme's workspace and repository: the task's, and each with no task not among them.
+    const { listedAgents, tasklessAgents } = world;
+    const liveAgents = useMemo(
+      () =>
+        [
+          ...listedAgents,
+          ...[...tasklessAgents.values()]
+            .filter((agent) => !listedAgents.some((each) => each.id === agent.id))
+            .map((agent) => ({ ...agent, planId: null })),
+        ].map((agent) => listedAgent(agent, { workspaceId: ACME.id, repository: "acme/relay" })),
+      [listedAgents, tasklessAgents],
+    );
     const control = tasksControl({
       ...(readerKnown ? { me: READER.userId } : {}),
       workspace: world.listedWorkspace,
       tasks: listed,
       // The agents the task list followed live carries, none while it has carried none yet.
-      liveAgents: world.agentListHeld ? undefined : world.listedAgents,
+      liveAgents: world.agentListHeld ? undefined : liveAgents,
       listRead,
       sidePanel: sidePanel ?? {
         ...tasksControl().sidePanel,

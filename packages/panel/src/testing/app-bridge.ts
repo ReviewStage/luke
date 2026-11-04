@@ -8,6 +8,7 @@ import type { AppBridge } from "@repo/host/bridge";
 import {
   ACT_ERROR,
   type ActPortClient,
+  AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   actContract,
@@ -90,8 +91,9 @@ function followedFromReads(
     );
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, and a pull request's chapters. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages, a pull request's chapters, and the run that started an agent. */
 type HoldKind =
+  | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_PAGES_FOLLOW
   | typeof CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW;
@@ -119,15 +121,16 @@ export function quietHold<Kind extends HoldKind>(): Promise<PortActResult<Kind>>
  * Installs an act port answering only the procedures given, each by its
  * kind, as a test's window calls them. A follow of the automations it does
  * not answer is answered from the list's or the runs' read where it answers
- * that, and a hold on a task's or an agent's inbox or pages, or a pull
- * request's chapters, it does not answer is held quietly, since what the
- * hold reads reaches the window on app state.
+ * that, and a hold on a task's or an agent's inbox or pages, a pull
+ * request's chapters, or the run that started an agent, it does not answer
+ * is held quietly, since what the hold reads reaches the window on app state.
  */
 export function fakeActPort(procedures: Partial<FakeActPort>): void {
   const list = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_LIST];
   const runs = procedures[AUTOMATION_ACT_KIND.AUTOMATIONS_RUNS];
   // Note that the host's holds are answered quietly unless the test answers them, since their reads arrive on app state.
   const held: Partial<FakeActPort> = {
+    [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: quietHold,
     [AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW]: quietHold,
     [TASKS_ACT_KIND.TASKS_PAGES_FOLLOW]: quietHold,
     [CHAPTERS_ACT_KIND.CHAPTERS_FOLLOW]: quietHold,

@@ -1244,6 +1244,20 @@ export const agentPullRequestAnswerSchema = EffectSchema.Struct({
 export type AgentPullRequestAnswer = typeof agentPullRequestAnswerSchema.Type;
 
 /**
+ * One agent as the task list carries it, on a plan or with none: the agent
+ * as the tabs draw it, with the workspace it belongs to and the repository
+ * it works in, its own, which its plan's no longer names once the plan's
+ * repository moved, so its page reads its files and skills where it works.
+ */
+export const listedAgentSchema = EffectSchema.Struct({
+  ...agentSummarySchema.fields,
+  workspaceId: agentPageSchema.fields.workspaceId,
+  repository: agentPageSchema.fields.repository,
+});
+
+export type ListedAgent = typeof listedAgentSchema.Type;
+
+/**
  * One agent with no plan as the plan list carries it beside the plans, so
  * the sidebar lists it among them: the agent as the tabs draw it, its
  * automation's name among them, the automation, workspace, and repository

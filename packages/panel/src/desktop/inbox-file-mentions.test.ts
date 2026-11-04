@@ -34,7 +34,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handInboxItems, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { tasksControl, waitingOf } from "../testing/tasks-control.js";
+import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 
 /**
@@ -140,7 +140,12 @@ async function inbox() {
   fakeActPort({ ...fakeActPortCalls() });
   // The task list carries the item's agent, as it carries every task's agents once it answers live.
   handState(NO_EXPERIMENTS, {
-    tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], taskAgents: [AGENT], workspaces: [ACME] },
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      tasks: [TASK],
+      taskAgents: [listedAgent(AGENT)],
+      workspaces: [ACME],
+    },
   });
   // The account's feed holds the task's one item, which the Inbox draws from.
   handInboxItems({

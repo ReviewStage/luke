@@ -72,7 +72,7 @@ import { Data, Effect, Equal, MutableHashMap, Option, Queue, Stream } from "effe
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
-import { streamed } from "./followed-stream.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {
@@ -108,6 +108,11 @@ export interface AgentProceduresDependencies {
     agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
     agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
+    /** One agent's origin held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
+    agentOriginFollow(params: AgentPageParams): Effect.Effect<void>;
+    agentOriginUnfollow(params: AgentPageParams): Effect.Effect<void>;
+    /** One agent's held origin read again at once, as Try again asks. */
+    agentOriginRetry(params: AgentPageParams): Effect.Effect<void>;
     agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
     agentChanges(params: AgentPullRequestReadParams): Effect.Effect<AgentChangesAnswerView>;
     agentOverviewPullRequest(
@@ -220,6 +225,8 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
   const { host, notices } = dependencies;
   /** How many streams stand open of each transcript, so the host lets one go only with the last. */
   const openTranscripts = MutableHashMap.empty<TranscriptStreamKey, number>();
+  /** Every agent's origin a window holds a stream open of, so the host lets one go only with the last. */
+  const openOrigins: OpenFollows<never> = MutableHashMap.empty();
   const notedAgent = (answer: Effect.Effect<AgentAgentAnswer>) =>
     noted(answer, (value) => {
       if ("agent" in value) notices.observeAgents([value.agent]);
@@ -460,6 +467,30 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.agentPage(input);
     }),
+    [AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW]: actPort[AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        // Note that nothing is heard down the hold, since the held origin reaches the panel on app state.
+        const hold = followedStream(
+          {
+            keyOf: (params: AgentPageParams) => params.agentId,
+            follow: host.agentOriginFollow,
+            unfollow: host.agentOriginUnfollow,
+            onChanged: () => () => undefined,
+            valueOf: () => Option.none<never>(),
+          },
+          openOrigins,
+          input,
+        );
+        return streamed(yield* Stream.toAsyncIterableEffect(hold));
+      },
+    ),
+    [AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY]: actPort[AGENT_ACT_KIND.AGENTS_ORIGIN_RETRY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.agentOriginRetry(input);
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actPort[AGENT_ACT_KIND.AGENTS_PULL_REQUEST].effect(
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());

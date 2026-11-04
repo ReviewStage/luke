@@ -119,6 +119,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
 import { followAccountItems } from "./account-items-follow.js";
 import {
+  type AppAgentOrigins,
   type AppChapters,
   type AppHolderInboxes,
   type AppHostRead,
@@ -152,6 +153,7 @@ import {
   type RowWrite,
   type RowWritten,
 } from "./live-collection.js";
+import { heldAgentOrigins } from "./origin-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
   holderInboxes,
@@ -202,6 +204,7 @@ import { type TranscriptHeld, transcriptHeld } from "./transcript-held.js";
 export type AgentClient = Pick<
   HostedAgentClient,
   | "pullRequestChaptersLive"
+  | "agentOriginLive"
   | "generateChapters"
   | "readChaptersModel"
   | "writeChaptersModel"
@@ -410,6 +413,14 @@ export function composeAgents(
       tell: (held: AppChapters) =>
         dependencies.kernel.emit(GATEWAY_EVENT.CHAPTERS_CHANGED, carried(held)),
     });
+    const origins = yield* heldAgentOrigins({
+      seal: (agentId, poll, userId, after) =>
+        asked(client.agentOriginLive(agentId, userId, poll, after)),
+      accountId: dependencies.accountId,
+      gate,
+      tell: (held: AppAgentOrigins) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.AGENT_ORIGINS_CHANGED, carried(held)),
+    });
     // Note that a session's reads close before the window is told it holds none, so nothing the last account drew lands after.
     const sessionReads = yield* accountReads<LiveRead>(
       () => (gate() ? dependencies.accountId() : undefined),
@@ -427,6 +438,7 @@ export function composeAgents(
       );
     const inboxHolds = yield* FiberMap.make<InboxScopeKey>();
     const chapterHolds = yield* FiberMap.make<ChaptersKey>();
+    const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     return composed(
       dependencies,
@@ -436,6 +448,7 @@ export function composeAgents(
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
       { chapters, holds: chapterHolds },
+      { origins, holds: originHolds },
     );
   });
 }
@@ -474,6 +487,12 @@ interface ChapterFollows {
   readonly holds: FiberMap.FiberMap<ChaptersKey>;
 }
 
+/** The held lifetime over every agent's origin the windows hold, and the windows' holds, one fiber per agent held. */
+interface OriginFollows {
+  readonly origins: HeldSlice<string>;
+  readonly holds: FiberMap.FiberMap<string>;
+}
+
 /** The composer's one table, built from its seams; nothing here starts anything but a transcript's or a scope's inbox subscription, while a window reads it. */
 function composed(
   dependencies: AgentsDependencies,
@@ -486,6 +505,8 @@ function composed(
   { reads: sessionReads, followItems }: SessionReads,
   /** The pull requests' chapters the windows hold. */
   { chapters, holds: chapterHolds }: ChapterFollows,
+  /** The agents' origins the windows hold. */
+  { origins, holds: originHolds }: OriginFollows,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -946,6 +967,42 @@ function composed(
         const answer = yield* asked(client.agent(agentId));
         return carried<AgentPageAnswerView>(answer);
       }),
+    // An agent's origin is held for a window while its page shows it, and told only on the app state (`AGENT_ORIGINS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.AGENTS_ORIGIN_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "following the run that started an agent names one agent",
+        );
+        yield* FiberMap.run(
+          originHolds,
+          agentId,
+          Effect.scoped(Effect.andThen(origins.hold(agentId), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_ORIGIN_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "letting the run that started an agent go names one agent",
+        );
+        yield* FiberMap.remove(originHolds, agentId);
+        return {};
+      }),
+    [GATEWAY_METHOD.AGENTS_ORIGIN_RETRY]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* readParams(
+          agentPageParamsSchema,
+          params,
+          "reading the run that started an agent again names one agent",
+        );
+        yield* origins.retry(agentId);
+        return {};
+      }),
     [GATEWAY_METHOD.AGENTS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
@@ -1319,6 +1376,7 @@ function composed(
     yield* FiberMap.clear(followed);
     yield* holders.end;
     yield* chapters.end;
+    yield* origins.end;
     yield* FiberHandle.clear(accountFollow);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
     yield* held.clear;
@@ -1333,7 +1391,7 @@ function composed(
     lifetime: Effect.void,
     open: Effect.andThen(
       sessionReads.open(LIVE_READ.INBOX_ITEMS, followItems),
-      Effect.andThen(holders.open, chapters.open),
+      Effect.andThen(holders.open, Effect.andThen(chapters.open, origins.open)),
     ),
     reset,
   };

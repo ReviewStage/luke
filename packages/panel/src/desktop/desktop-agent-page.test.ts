@@ -17,6 +17,7 @@ import {
   type AgentPullRequestAnswer,
   type AgentSummary,
   CHECK_SUMMARY,
+  type ListedAgent,
   MERGE_STATE,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -29,6 +30,7 @@ import {
   type AutomationSummary,
 } from "@repo/features/automation-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
 import type { Task } from "@repo/features/task-wire";
@@ -60,6 +62,7 @@ import {
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
+  quietHold,
 } from "../testing/app-bridge.js";
 import {
   copyingInto,
@@ -169,18 +172,31 @@ const ACME = {
 
 let root: Root | undefined;
 
+/** Where the task list's read stands, which the page draws the agent from. */
+const LIST_STATUS = { READ: "read", READING: "reading", FAILED: "failed" } as const;
+
+type ListStatus = (typeof LIST_STATUS)[keyof typeof LIST_STATUS];
+
+/** The agent as the task list carries it: its own workspace and repository beside it, and no run, which the host holds apart. */
+function listedOf(agent: AgentPage): ListedAgent {
+  const { automationId, origin: _origin, ...row } = agent;
+  return automationId === null ? row : { ...row, automationId };
+}
+
 // A message is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 /** Every address handed to GitHub, in order. */
 let openedOnGitHub: string[] = [];
-/** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
-let pages: AgentPageAnswerView[] = [];
-/** Every agent whose page was read, in order. */
+/** The agent as the task list carries it, with the run that started it, which the host holds apart; none where the list carries it not. */
+let listed: AgentPage | undefined;
+/** Where the task list's read stands: read, not read yet, or failed. */
+let listStatus: ListStatus = LIST_STATUS.READ;
+/** Reads the task list again, as its Retry asks. */
+let retryList: () => void = () => undefined;
+/** Every agent read fresh by its id, as the archive confirm reads it, in order. */
 let read: string[] = [];
-/** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
-let holdPage = false;
-/** Answers the read of the agent's page held open last. */
-let answerHeld: () => void = () => undefined;
+/** Every agent whose origin the page held, in order. */
+let originHolds: string[] = [];
 /** Every archive or Unarchive asked, as the act carried it. */
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Whether an archive or Unarchive is refused, as an unanswered service refuses it. */
@@ -226,10 +242,11 @@ let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequest
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
-  pages = [{ agent: PAGE }];
+  listed = PAGE;
+  listStatus = LIST_STATUS.READ;
+  retryList = () => undefined;
   read = [];
-  holdPage = false;
-  answerHeld = () => undefined;
+  originHolds = [];
   archives = [];
   archiveRefused = false;
   deletes = [];
@@ -287,12 +304,11 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_ARCHIVE) {
         archives.push(request.payload);
-        // The agent answered is the one the page read, archived or brought back as asked.
-        const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
-        const { archivedAt: _archived, ...back } = shown;
+        // The agent answered is the one the list carries, archived or brought back as asked.
+        const { archivedAt: _archived, ...back } = listed ?? PAGE;
         const answered = request.payload.archived ? { ...back, archivedAt: 3 } : back;
         // Archived or brought back, the agent is read so from then on.
-        if (!archiveRefused) pages = [{ agent: answered }];
+        if (!archiveRefused) listed = answered;
         const value = archiveRefused
           ? { failure: AGENT_CALL_FAILURE.UNANSWERED }
           : { agent: answered };
@@ -305,8 +321,7 @@ beforeEach(() => {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AGENTS_RENAME) {
-        const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
-        const value = { agent: { ...shown, title: request.payload.title } };
+        const value = { agent: { ...(listed ?? PAGE), title: request.payload.title } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AGENTS_MESSAGES && transcript !== undefined) {
@@ -366,13 +381,16 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.AGENTS_PAGE) {
         read.push(request.payload.agentId);
-        const value = pages.length > 1 ? pages.shift() : pages[0];
-        if (holdPage) {
-          return new Promise((resolve) => {
-            answerHeld = () => resolve({ status: FAKE_ANSWER.DONE, value });
-          });
-        }
+        const value: AgentPageAnswerView =
+          listed === undefined ? { failure: AGENT_CALL_FAILURE.NOT_FOUND } : { agent: listed };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AGENTS_ORIGIN_FOLLOW) {
+        originHolds.push(request.payload.agentId);
+        return quietHold<typeof ACT_KIND.AGENTS_ORIGIN_FOLLOW>().then((value) => ({
+          status: FAKE_ANSWER.DONE,
+          value,
+        }));
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
@@ -387,22 +405,59 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The page of the agent, standing in the task's place, as the window's tasks control holds it, its atoms held by `registry`. */
+/** The window's tasks control with the task list carrying `listed` as `listStatus` says. */
+function withList(tasks: TasksControl): TasksControl {
+  const read = listStatus === LIST_STATUS.READ;
+  return {
+    ...tasks,
+    liveAgents: read ? (listed === undefined ? [] : [listedOf(listed)]) : undefined,
+    listRead: read,
+    listFailed: listStatus === LIST_STATUS.FAILED,
+    onRetryList: () => retryList(),
+  };
+}
+
+/** Hands the window main's document with the host holding the agent's origin as `listed` names it, where it names one, beside whatever else the bridge already holds. */
+function handOrigin(): void {
+  const origin = listed?.origin;
+  if (origin === undefined) return;
+  const calls = fakeAppBridgeCalls();
+  const handed = calls.requestAppState ?? (() => Promise.resolve(stateWith({}, {})));
+  fakeAppBridge({
+    ...calls,
+    requestAppState: async () => ({
+      ...(await handed()),
+      [LIVE_READ.AGENT_ORIGINS]: { [AGENT_ID]: { rows: origin } },
+    }),
+  });
+}
+
+/**
+ * The page of the agent, standing in the task's place, as the window's
+ * tasks control holds it, the task list carrying `listed` as `listStatus`
+ * says and the host holding its origin, its atoms held by `registry`.
+ * Answers the page's container, and `relist`, which draws it again as the
+ * list now stands.
+ */
 function mount(
   tasks: TasksControl = tasksControl({}),
   openLink?: (link: ReadLink) => void,
   away?: { label: string; onPress: () => void },
   registry = AtomRegistry.make(),
-): HTMLElement {
+): HTMLElement & { relist: () => void } {
+  handOrigin();
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  const page = createElement(DesktopAgentPage, {
-    tasks: { ...tasks, listedPullRequests: tasks.listedPullRequests ?? listedPublished() },
-    agentId: AGENT_ID,
-    away,
-  });
-  act(() =>
+  const draw = () => {
+    const page = createElement(DesktopAgentPage, {
+      tasks: withList({
+        ...tasks,
+        listedPullRequests: tasks.listedPullRequests ?? listedPublished(),
+      }),
+      agentId: AGENT_ID,
+      away,
+    });
     root?.render(
       onRegistry(
         registry,
@@ -415,9 +470,10 @@ function mount(
           createElement(ToastHost),
         ),
       ),
-    ),
-  );
-  return container;
+    );
+  };
+  act(draw);
+  return Object.assign(container, { relist: () => act(draw) });
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -427,12 +483,28 @@ async function settle(): Promise<void> {
   });
 }
 
-test("the page reads the agent by its id and titles it as its tab would", async () => {
+test("an agent the task list carries draws in the page's first frame, titled as its tab would be, reading nothing of it", async () => {
   const page = mount();
+  assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
   await settle();
 
-  assert.deepEqual(read, [AGENT_ID]);
-  assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
+  assert.deepEqual(read, [], "the agent is not read by its id");
+});
+
+test("an agent no automation started draws no run and holds none, and an automation's agent holds its run once", async () => {
+  listed = { ...PAGE, automationId: null };
+  transcript = handedTranscript();
+  const page = mount();
+  await settle();
+  assert.doesNotMatch(page.textContent ?? "", /Flaky-test sweep/u, "no run is drawn");
+  assert.deepEqual(originHolds, []);
+  act(() => root?.unmount());
+
+  listed = RUN_PAGE;
+  transcript = handedTranscript();
+  mount(tasksControl({ workspaces: [ACME] }));
+  await settle();
+  assert.deepEqual(originHolds, [AGENT_ID]);
 });
 
 test("the page draws the task column's agent pane, at its reading width, and ⌘F finds in the agent's transcript", async () => {
@@ -547,16 +619,12 @@ test("a fork's draft on the page names its source's message, whose press opens i
 });
 
 test("an agent forked at one of its messages names the fork under it, which opens the fork's own page", async () => {
-  pages = [
-    {
-      agent: {
-        ...PAGE,
-        continuedBy: [
-          { agentId: STARTED_ID, title: "Try the cron", forked: true, messageId: "answer" },
-        ],
-      },
-    },
-  ];
+  listed = {
+    ...PAGE,
+    continuedBy: [
+      { agentId: STARTED_ID, title: "Try the cron", forked: true, messageId: "answer" },
+    ],
+  };
   transcript = {
     messages: [
       {
@@ -595,7 +663,7 @@ function PanelPage(): React.JSX.Element {
   const sidePanel = useSidePanel(undefined, { id: AGENT_ID, holds: {} }, agents, [], [], agents);
   drawnPanel = sidePanel;
   return createElement(DesktopAgentPage, {
-    tasks: { ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() },
+    tasks: withList({ ...tasksControl({}), sidePanel, listedPullRequests: listedPublished() }),
     agentId: AGENT_ID,
   });
 }
@@ -676,11 +744,11 @@ function PagesPage(): React.JSX.Element {
   drawnPanel = sidePanel;
   const base = tasksControl({});
   return createElement(DesktopAgentPage, {
-    tasks: {
+    tasks: withList({
       ...base,
       sidePanel,
       agentView: { ...base.agentView, agentId: AGENT_ID, pages: [FUNNEL] },
-    },
+    }),
     agentId: AGENT_ID,
   });
 }
@@ -736,7 +804,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
 });
 
 test("the chip of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
-  pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
+  listed = { ...PAGE, planId: PAGE_TASK };
   transcript = {
     messages: [
       {
@@ -882,7 +950,7 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
 });
 
 test("an archived agent's pull request, picked from the panel's +, opens in a Pull request tab standing beside its page", async () => {
-  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  listed = { ...PAGE, archivedAt: 2 };
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -1001,7 +1069,7 @@ test("a chip in the agent's words naming the pull request it opened opens its Pu
 });
 
 test("the agent's pull request is a row pinned over its box while it still works, never in its transcript nor a chip in the box's foot, and a press opens its Pull request tab beside the page", async () => {
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
+  listed = { ...PAGE, status: AGENT_STATUS.RUNNING };
   published = {
     repository: "acme/relay",
     branch: "luke/flaky-sweep",
@@ -1101,8 +1169,8 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md in a
   assert.deepEqual(openedOnGitHub, [], "nothing opened on GitHub");
 });
 
-test("until the agent is read, the page stands in an agent tab's own shape saying Reading, and gives way to the agent once read", async () => {
-  holdPage = true;
+test("until the task list is read, the page stands in an agent tab's own shape saying Reading, and gives way to the agent once the list carries it", async () => {
+  listStatus = LIST_STATUS.READING;
   const page = mount();
   await settle();
 
@@ -1115,14 +1183,19 @@ test("until the agent is read, the page stands in an agent tab's own shape sayin
   );
   assert.equal(page.querySelector(".agent-page .ui-spinner-region"), null);
   assert.equal(page.querySelector("h1"), null);
-  answerHeld();
+  listStatus = LIST_STATUS.READ;
+  page.relist();
   await settle();
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
-test("a read that did not land says so, and Retry reads the agent again and draws it", async () => {
-  pages = [{ failure: AGENT_CALL_FAILURE.UNANSWERED }, { agent: PAGE }];
+test("a task list whose read did not land says so, and Retry reads the list again, the agent drawn once it carries it", async () => {
+  listStatus = LIST_STATUS.FAILED;
   const page = mount();
+  retryList = () => {
+    listStatus = LIST_STATUS.READ;
+    page.relist();
+  };
   await settle();
 
   assert.match(page.textContent ?? "", /This agent could not be read\./u);
@@ -1133,12 +1206,12 @@ test("a read that did not land says so, and Retry reads the agent again and draw
   act(() => retry.click());
   await settle();
 
-  assert.deepEqual(read, [AGENT_ID, AGENT_ID]);
+  assert.deepEqual(read, [], "the agent is not read by its id");
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the flaky tests");
 });
 
-test("an agent the service will not hand the reader, as a link to another workspace's may name, is not found, and nothing of it is drawn", async () => {
-  pages = [{ failure: AGENT_CALL_FAILURE.NOT_FOUND }];
+test("an agent the task list does not carry, as a link to another workspace's may name, or one it dropped, is not found, and nothing of it is drawn", async () => {
+  listed = undefined;
   const page = mount();
   await settle();
 
@@ -1159,7 +1232,7 @@ test("an agent the service will not hand the reader, as a link to another worksp
 });
 
 test("on a phone an agent that is not found still leads with its way back", async () => {
-  pages = [{ failure: AGENT_CALL_FAILURE.NOT_FOUND }];
+  listed = undefined;
   const left: string[] = [];
   const page = mount(tasksControl({}), undefined, {
     label: "Inbox",
@@ -1176,7 +1249,7 @@ test("on a phone an agent that is not found still leads with its way back", asyn
 });
 
 test("an archived agent's page offers Unarchive in its composer's place, which brings the agent back", async () => {
-  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  listed = { ...PAGE, archivedAt: 2 };
   const page = mount();
   await settle();
 
@@ -1191,20 +1264,16 @@ test("an archived agent's page offers Unarchive in its composer's place, which b
 });
 
 test("an agent another agent archived says on its page who archived it, for which member, and why, over its Unarchive", async () => {
-  pages = [
-    {
-      agent: {
-        ...PAGE,
-        archivedAt: 2,
-        archivedBy: {
-          by: AGENT_ARCHIVER.AGENT,
-          member: { userId: "user-dean", name: "Dean Stratakos" },
-          agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
-          reason: "Its pull request merged.",
-        },
-      },
+  listed = {
+    ...PAGE,
+    archivedAt: 2,
+    archivedBy: {
+      by: AGENT_ARCHIVER.AGENT,
+      member: { userId: "user-dean", name: "Dean Stratakos" },
+      agent: { id: "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b", name: "Bill by seat" },
+      reason: "Its pull request merged.",
     },
-  ];
+  };
   const page = mount();
   await settle();
 
@@ -1219,7 +1288,7 @@ test("an agent another agent archived says on its page who archived it, for whic
 });
 
 test("an Unarchive the service refuses says why, and the agent stays archived", async () => {
-  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  listed = { ...PAGE, archivedAt: 2 };
   archiveRefused = true;
   const page = mount();
   await settle();
@@ -1328,7 +1397,7 @@ function origin(page: HTMLElement): OpenedOrigin {
 }
 
 test("an automation's agent opens on the automation's prompt alone, sent by the automation, whose name opens its page", async () => {
-  pages = [{ agent: RUN_PAGE }];
+  listed = RUN_PAGE;
   transcript = handedTranscript();
   const opened: unknown[] = [];
   const tasks = tasksControl({ workspaces: [ACME] });
@@ -1349,7 +1418,7 @@ test("an automation's agent opens on the automation's prompt alone, sent by the 
 });
 
 test("a deleted automation's agent still names it, plainly, with nothing to open", async () => {
-  pages = [{ agent: { ...RUN_PAGE, automationId: null } }];
+  listed = { ...RUN_PAGE, automationId: null };
   transcript = handedTranscript();
   const page = mount(tasksControl({ workspaces: [ACME] }));
   await settle();
@@ -1361,18 +1430,14 @@ test("a deleted automation's agent still names it, plainly, with nothing to open
 
 test("a GitHub event's run names its pull request beside the automation, which opens in a Pull request tab beside the page by its number, and a run now names who ran it", async () => {
   const url = "https://github.com/acme/relay/pull/2905";
-  pages = [
-    {
-      agent: {
-        ...RUN_PAGE,
-        origin: {
-          prompt: "Review it.",
-          subject: { number: 2905, title: "View commands", url },
-          runBy: { userId: "user-dean", name: "Dean Stratakos" },
-        },
-      },
+  listed = {
+    ...RUN_PAGE,
+    origin: {
+      prompt: "Review it.",
+      subject: { number: 2905, title: "View commands", url },
+      runBy: { userId: "user-dean", name: "Dean Stratakos" },
     },
-  ];
+  };
   transcript = handedTranscript();
   const chosen: unknown[] = [];
   const base = tasksControl({ me: "user-dean" });
@@ -1400,14 +1465,10 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
   });
-  pages = [
-    {
-      agent: {
-        ...RUN_PAGE,
-        origin: { prompt: "Review it.", subject: { number: 2905, title: "View commands", url } },
-      },
-    },
-  ];
+  listed = {
+    ...RUN_PAGE,
+    origin: { prompt: "Review it.", subject: { number: 2905, title: "View commands", url } },
+  };
   transcript = handedTranscript();
   const page = mount(tasksControl({ workspaces: [acme] }));
   await settle();
@@ -1425,7 +1486,7 @@ test("a GitHub event's pull request is its chip, saying where it stands and wear
 
 test("a webhook's body stands folded inside the card under the prompt, and nowhere in the line naming who sent it", async () => {
   const body = '{"release":"v2.4.0"}';
-  pages = [{ agent: { ...RUN_PAGE, origin: { prompt: "Write the notes.", body } } }];
+  listed = { ...RUN_PAGE, origin: { prompt: "Write the notes.", body } };
   transcript = handedTranscript();
   const page = mount();
   await settle();
@@ -1441,7 +1502,7 @@ test("a webhook's body stands folded inside the card under the prompt, and nowhe
 });
 
 test("an automation's agent the model has not named yet is titled by its automation, not its model", async () => {
-  pages = [{ agent: RUN_PAGE }];
+  listed = RUN_PAGE;
   const page = mount();
   await settle();
 
@@ -1513,14 +1574,14 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
 
 test("a taskless agent the sidebar lists gains its row's own items on its page's ⋯: Mark as unread beside Rename, then Pin and Move to section, and Pin pins it", async () => {
   const pins: { agentId: string; pinned: boolean }[] = [];
-  const listed = {
+  const row = {
     ...PAGE,
     automationName: "Flaky sweep",
     activityAt: 2,
   };
   const page = mount(
     tasksControl({
-      listedAgents: { standing: [listed], archived: [] },
+      listedAgents: { standing: [row], archived: [] },
       onPinAgent: (agentId, pinned) => {
         pins.push({ agentId, pinned });
       },
@@ -1582,7 +1643,7 @@ test("Show terminal on the page's ⋯, and ⌘J, show the agent's own Terminal t
 });
 
 test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its sandbox taking no shell", async () => {
-  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  listed = { ...PAGE, archivedAt: 2 };
   const { page, chosen } = mountHearingPanel();
   await settle();
   const more =
@@ -1615,7 +1676,7 @@ test("Archive on the page's ⋯ reads an agent at rest again and archives it una
 });
 
 test("Archive on the page's ⋯ archives the reader's own agent at once while it works, asking nothing", async () => {
-  pages = [{ agent: { ...PAGE, status: AGENT_STATUS.RUNNING } }];
+  listed = { ...PAGE, status: AGENT_STATUS.RUNNING };
   const page = mount();
   await settle();
   const archive = pageMenuItem(page, "Archive");
@@ -1627,7 +1688,7 @@ test("Archive on the page's ⋯ archives the reader's own agent at once while it
 });
 
 test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename", async () => {
-  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  listed = { ...PAGE, archivedAt: 2 };
   const page = mount();
   await settle();
   const unarchive = pageMenuItem(page, "Unarchive");
@@ -1643,7 +1704,7 @@ test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename
 });
 
 test("an archive the service refuses says why and leaves the automation's prompt standing over the agent's transcript", async () => {
-  pages = [{ agent: RUN_PAGE }];
+  listed = RUN_PAGE;
   transcript = handedTranscript();
   archiveRefused = true;
   const page = mount(tasksControl({ workspaces: [ACME] }));
@@ -1748,7 +1809,7 @@ it.effect(
     Effect.gen(function* () {
       installEditorLayout();
       installScrollIntoView();
-      pages = [{ agent: { ...PAGE, repository: null } }];
+      listed = { ...PAGE, repository: null };
       workspace = [
         {
           id: "3c3c3c3c-0000-4000-8000-000000000000",
@@ -1783,7 +1844,7 @@ it.effect(
 );
 
 test("on the page of an agent working in no repository, a GitHub page of a file or a folder in its words is that file's or folder's chip, of the repository its address names, and opens on GitHub", async () => {
-  pages = [{ agent: { ...PAGE, repository: null } }];
+  listed = { ...PAGE, repository: null };
   const file = "https://github.com/acme/relay/blob/HEAD/src/store.ts";
   const folder = "https://github.com/acme/relay/tree/HEAD/src";
   transcript = {

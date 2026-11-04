@@ -20,7 +20,7 @@
  * stands in the list before the follow carries it.
  */
 
-import type { AgentSummary } from "@repo/features/agent-wire";
+import type { ListedAgent } from "@repo/features/agent-wire";
 import {
   agentPullRequestsOfLiveRows,
   type TaskListLiveRows,
@@ -56,7 +56,7 @@ export type AgentRow = TaskListLiveRows["agents"][number];
 /** The list as the rows make it at one instant, every agent on a plan beside it, and the plans a write stands over. */
 export interface LiveTaskList {
   readonly list: TaskListAnswer;
-  readonly taskAgents: readonly AgentSummary[];
+  readonly taskAgents: readonly ListedAgent[];
   readonly taskPullRequests: readonly TaskPullRequests[];
   readonly agentPullRequests: readonly ListedPullRequest[];
   readonly taskAgentPins: readonly TaskAgentPin[];

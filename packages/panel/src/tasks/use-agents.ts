@@ -2,7 +2,6 @@ import {
   AGENT_CALL_FAILURE,
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
-  type AgentListAnswer,
   type AgentModelsAnswer,
   type AgentOverviewChecksAnswerView,
   type AgentOverviewConversationAnswerView,
@@ -203,21 +202,21 @@ export interface AgentsControl {
   archived: readonly AgentSummary[] | undefined;
   /** Every agent the followed task list carries, on any task or none, the archived ones among them, which names an agent of another task that wrote on the open task's plan; none where the list is not followed or does not list the open task. */
   listed?: readonly AgentSummary[] | undefined;
-  /** The workspace the one agent read as its page belongs to; none on a task, where the task says it, and before the page's read lands. */
+  /** The workspace the page's one agent belongs to, as the task list carries it; none on a task, where the task says it, and before the list carries the agent. */
   workspaceId?: string | undefined;
-  /** The repository of the one agent read as its page, `owner/name`, on the same terms as its workspace. */
+  /** The repository of the page's one agent, `owner/name`, on the same terms as its workspace. */
   agentRepository?: string | undefined;
-  /** The automation's run that started the one agent read as its page; none on a plan, for an agent started by hand, and before the page's read lands. */
+  /** The automation's run that started the page's one agent, which its page holds (`LIVE_READ.AGENT_ORIGINS`); none on a plan, for an agent started by hand, and before the run is read. */
   origin?: AgentOrigin | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the task list carries the task. */
   agentIds: readonly string[] | undefined;
   /** Every agent of the task by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the task list carries the task. */
   heldIds: readonly string[] | undefined;
-  /** Whether the last read of the page's agent did not land, and the task list carries it not either. */
+  /** Whether the task list's read failed and it carries no row of the page's agent. */
   listFailed: boolean;
-  /** Whether the last read answered that the agent read by its id is not there for the reader: deleted, or of a workspace they are not in. */
+  /** Whether the task list, read, carries no row of the page's agent, which is then not there for the reader: deleted, or of a workspace they are not in. */
   listMissing: boolean;
-  /** Reads the page's agent again after a read that failed; a task's agents are the task list's, which follows itself. */
+  /** Reads the task list again where its read failed while it carries no row of the page's agent; the list follows itself otherwise, a task's agents among it. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
@@ -569,31 +568,6 @@ function startReason(taskId: string | undefined, starts: boolean): string | unde
   return starts ? undefined : START_NEEDS_REPOSITORY;
 }
 
-/** A list as read: the plan's agents, or the one agent read as its page, with its workspace, its repository, and the run that started it. */
-type PageList = AgentListAnswer & {
-  readonly workspaceId?: string;
-  readonly repository?: string;
-  readonly origin?: AgentOrigin;
-};
-
-/**
- * The one agent named, read as its page and held as a list of one, with the
- * workspace it belongs to, its repository, and the run that started it.
- */
-function pageRead(act: ActHandle["act"], agentId: string): Promise<PageList> {
-  // Note that a page names no automation by null where a summary leaves the key out.
-  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then((answer): PageList => {
-    if ("failure" in answer) return answer;
-    const { automationId, origin, ...agent } = answer.agent;
-    return {
-      agents: [automationId === null ? agent : { ...agent, automationId }],
-      workspaceId: answer.agent.workspaceId,
-      ...(answer.agent.repository === null ? undefined : { repository: answer.agent.repository }),
-      ...(origin === undefined ? undefined : { origin }),
-    };
-  });
-}
-
 /**
  * One agent read by its id as its own page reads it, wherever it stands,
  * on a task or on none; nothing where it could not be read. A surface that
@@ -604,8 +578,19 @@ export function readAgentById(
   act: ActHandle["act"],
   agentId: string,
 ): Promise<AgentSummary | undefined> {
-  return pageRead(act, agentId).then(
-    (answer) => ("failure" in answer ? undefined : answer.agents[0]),
+  // Note that a page names no automation by null where a summary leaves the key out.
+  return act(ACT_KIND.AGENTS_PAGE, { agentId }).then(
+    (answer) => {
+      if ("failure" in answer) return undefined;
+      const {
+        automationId,
+        origin: _origin,
+        workspaceId: _workspaceId,
+        repository: _repository,
+        ...agent
+      } = answer.agent;
+      return automationId === null ? agent : { ...agent, automationId };
+    },
     () => undefined,
   );
 }
@@ -646,9 +631,9 @@ export function useAgents(input: {
   /** The open task, or none. */
   taskId: string | undefined;
   /**
-   * The one agent read by its id where no task is open, as the agent page
-   * reads an agent with no task: the list holds that agent alone, so every
-   * answer that moves it moves the page's agent too.
+   * The one agent drawn by its id where no task is open, as the agent page
+   * draws an agent: the task list's row of it alone, so every change the
+   * list carries moves the page's agent too.
    */
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
@@ -668,12 +653,12 @@ export function useAgents(input: {
    * does not list the open task.
    */
   listedAgents?: readonly AgentSummary[] | undefined;
-  /**
-   * The page's agent as the task list carries it, with its workspace and
-   * its repository, where the caller draws nothing of the run that started
-   * it, which the agent's own read alone carries: the page is then not read.
-   */
+  /** The page's agent as the task list carries it, with its workspace and its repository. */
   listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository"> | undefined;
+  /** Where the task list's read stands, which the page's agent is drawn from: read, failed, and its Try again; none on a task, whose agents the task's own tab waits on. */
+  list?:
+    | { readonly read: boolean; readonly failed: boolean; readonly onRetry: () => void }
+    | undefined;
   /**
    * The pull request of every agent the task list followed live carries,
    * on a task or with none, the archived ones among them; none where it is
@@ -700,22 +685,10 @@ export function useAgents(input: {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
-  // The page's one agent as read, held under the agent, so another agent's page holds nothing of the last.
-  const [list, setList] = useState<{
-    agentId: string | undefined;
-    agents: readonly AgentSummary[] | undefined;
-    failed: boolean;
-    missing?: boolean;
-    workspaceId?: string | undefined;
-    repository?: string | undefined;
-    origin?: AgentOrigin | undefined;
-  }>({ agentId: undefined, agents: undefined, failed: false });
-  // Note that an agent the list carries with its workspace and repository is not read as a page, so choosing it reads nothing.
+  // Note that the page's agent is drawn from the task list's row of it, its workspace and repository among it, so choosing it reads nothing.
   const listedPage =
     taskId === undefined && input.listedPage?.id === agentId ? input.listedPage : undefined;
-  const listOf = taskId === undefined && listedPage === undefined ? agentId : undefined;
-  const ours = (was: { agentId: string | undefined }) =>
-    listOf !== undefined && was.agentId === listOf;
+  const onPage = taskId === undefined && agentId !== undefined;
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [macs, setMacs] = useState<readonly MacOffer[] | undefined>(undefined);
   const [modelsRead, setModelsRead] = useState<ModelsRead>({
@@ -739,7 +712,6 @@ export function useAgents(input: {
   const keptDraft = useNewAgentDraft(startsOn, heldDraft?.id);
   const writer = useDraftWriter();
   const draft = startsOn === undefined ? undefined : taskDraft(heldDraft, keptDraft);
-  const [reads, setReads] = useState(0);
   // The agent New task last started, its task, and the line it was started on.
   const [started, setStarted] = useState<
     { taskId: string; agent: AgentSummary; line: SentLine } | undefined
@@ -763,11 +735,9 @@ export function useAgents(input: {
   const latest = useRef(input);
   latest.current = input;
 
-  // The page's read, or the agent New task just started on the open task, which stands until the
-  // list carries it, so its tab draws at once.
-  const read = ours(list) ? list.agents : undefined;
+  // The agent New task just started on the open task, which stands until the list carries it, so its tab draws at once.
   const seed = useMemo(() => (started === undefined ? undefined : [started.agent]), [started]);
-  const held = read ?? (taskId !== undefined && started?.taskId === taskId ? seed : undefined);
+  const held = taskId !== undefined && started?.taskId === taskId ? seed : undefined;
   const opening = useMemo(
     () => (started === undefined ? undefined : { agentId: started.agent.id, line: started.line }),
     [started],
@@ -779,8 +749,8 @@ export function useAgents(input: {
     const page = listedAgents?.filter((agent) => agent.id === agentId);
     return page?.length === 0 ? undefined : page;
   }, [listedAgents, taskId, agentId]);
-  // Note that an agent the page's read or New task holds stands beside the list's until the list
-  // first carries it, and leaves with it once it no longer does, so a tab never leaves between the two.
+  // Note that an agent New task holds stands beside the list's until the list first carries it,
+  // and leaves with it once it no longer does, so a tab never leaves between the two.
   const subject = taskId ?? agentId;
   const carried = useRef({ subject, ids: new Set<string>() });
   if (carried.current.subject !== subject) carried.current = { subject, ids: new Set() };
@@ -805,58 +775,20 @@ export function useAgents(input: {
     () => standing?.filter((agent) => agent.archivedAt !== undefined),
     [standing],
   );
-  // The task the agents stand on: the open one, or the page's agent's as the list or the page's own read names it.
+  // The task the agents stand on: the open one, or the page's agent's as the list names it.
   const modeTask = taskId ?? standing?.[0]?.planId ?? undefined;
   const mode = modeTask === undefined ? undefined : input.modeOf?.(modeTask);
-  const listFailed = ours(list) && list.failed && listedHere === undefined;
-  const listMissing = ours(list) && list.missing === true;
+  // Note that the page's agent stands or falls with the task list's row of it, so an agent deleted turns to Not found as the list drops it.
+  const { list } = input;
+  const listFailed = onPage && list?.failed === true && listedHere === undefined;
+  const listMissing =
+    onPage && list?.read === true && listedAgents !== undefined && listedHere === undefined;
+  const retryList = list?.onRetry;
+  const onRetryList = useCallback(() => {
+    if (listFailed) retryList?.();
+  }, [listFailed, retryList]);
   // The archives asked here and still out.
   const [archivesOut, setArchivesOut] = useState(0);
-
-  // The page's agent read as the page opens, where no task is, and again when a delete or a Retry asks (`reads`).
-  useEffect(() => {
-    if (listOf === undefined) return;
-    let live = true;
-    const kept = (was: typeof list) => (was.agentId === listOf ? was : undefined);
-    pageRead(latest.current.acts.act, listOf).then(
-      (answer) => {
-        if (!live) return;
-        setList((was) =>
-          "failure" in answer
-            ? {
-                ...kept(was),
-                agentId: listOf,
-                agents: kept(was)?.agents,
-                failed: true,
-                missing: answer.failure === AGENT_CALL_FAILURE.NOT_FOUND,
-              }
-            : {
-                agentId: listOf,
-                agents: answer.agents,
-                failed: false,
-                workspaceId: answer.workspaceId,
-                repository: answer.repository,
-                origin: answer.origin,
-              },
-        );
-      },
-      () => {
-        // A read that failed keeps the agent already drawn: its tab stands until a read lands.
-        if (live)
-          setList((was) => ({
-            ...kept(was),
-            agentId: listOf,
-            agents: kept(was)?.agents,
-            failed: true,
-          }));
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [listOf, reads]);
-
-  const readAgain = useCallback(() => setReads((count) => count + 1), []);
 
   /**
    * Reads the models, stamping the read with a generation of its own. Note
@@ -1404,8 +1336,7 @@ export function useAgents(input: {
         cause: answer,
       };
     }
-    // Note that a page's agent is read again, which drops a read already out that still holds it.
-    readAgain();
+    // Note that the delete answers once the task list carries it, so the page's agent leaves with its row.
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const sayRefusal = (result: ActionResult, agentId: string) => {
@@ -1554,10 +1485,10 @@ export function useAgents(input: {
   // stand, and the host keeps each one's for the session (`compose-tasks.ts`),
   // so choosing the plan again reads none; another plan, or the plan moved to
   // another repository, is another one. An agent no plan holds reads its
-  // repository's through the workspace it belongs to, once the list or the
-  // read of it has named that workspace.
-  const workspaceId = ours(list) ? list.workspaceId : listedPage?.workspaceId;
-  const agentRepository = ours(list) ? list.repository : (listedPage?.repository ?? undefined);
+  // repository's through the workspace it belongs to, once the list has
+  // named that workspace.
+  const workspaceId = listedPage?.workspaceId;
+  const agentRepository = listedPage?.repository ?? undefined;
   // Note that a plan or an agent with no repository still reads its member's installed skills, and
   // that the plan's repository stays a dependency, so a plan moved to another repository reads afresh.
   // While the Skills experiment is off, no box offers a skill and no sent message draws one.
@@ -1595,7 +1526,6 @@ export function useAgents(input: {
     listed: listedAgents,
     workspaceId,
     agentRepository,
-    origin: ours(list) ? list.origin : undefined,
     agentIds,
     heldIds: standing?.map((agent) => agent.id),
     mode,
@@ -1614,7 +1544,7 @@ export function useAgents(input: {
     startFork: steadyStartFork,
     listFailed,
     listMissing,
-    onRetryList: readAgain,
+    onRetryList,
     models,
     modelsFailed: modelsRead.state === MODELS_READ.FAILED,
     modelsRead,

@@ -7,7 +7,7 @@ import {
 import {
   AGENT_MACHINE,
   type AgentAttachment,
-  type AgentSummary,
+  type ListedAgent,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
@@ -886,8 +886,8 @@ export interface TasksControl {
   onPinAgent: (agentId: string, pinned: boolean) => void;
   /** The account's pins of agents on a plan, the archived ones left out, which the sidebar's Pinned section draws beside the pinned plans; none while the list is not followed live. */
   taskAgentPins: readonly TaskAgentPin[];
-  /** Every agent the list followed live carries, on a plan or with none, the archived ones among them; none while it is not. */
-  liveAgents: readonly AgentSummary[] | undefined;
+  /** Every agent the list followed live carries, on a plan or with none, the archived ones among them, each with its own workspace and repository; none while it is not. */
+  liveAgents: readonly ListedAgent[] | undefined;
   /** The pull request of every agent the list followed live carries that opened one, as its row keeps it; none while it is not. */
   listedPullRequests: readonly ListedPullRequest[] | undefined;
   /**

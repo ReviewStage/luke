@@ -843,6 +843,8 @@ export function inboxOfLiveRows(rows: InboxLiveRows): readonly InboxItem[] {
  * panel's `useHostRead`.
  */
 export const LIVE_READ = {
+  /** The run of an automation that started one agent, by the agent: the service's `agentOriginLive` query, held for the windows that show the agent's page and a few they showed lately. */
+  AGENT_ORIGINS: "agentOrigins",
   /** Every inbox item the account reaches. */
   INBOX_ITEMS: "inboxItems",
   /** One plan's inbox, or one agent's, by its holder: the service's `taskInbox` or `agentInbox` query, by the holder's kind, held for the windows that chose it and a few they chose lately. */

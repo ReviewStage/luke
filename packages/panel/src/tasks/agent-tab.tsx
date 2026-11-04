@@ -117,7 +117,6 @@ import {
   type AgentPart,
   type AgentPartCut,
   agentLines,
-  agentListCallIds,
   agentMessageOf,
   agentName,
   agentPart,
@@ -3091,17 +3090,6 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
     const status = pageStatus;
     onHeld(agentId, { messages, status, runStartedAt, title: undefined, subagentTitles });
   }, [onHeld, agentId, messages, pageStatus, runStartedAt, subagentTitles]);
-  // An agent this one started, archived, or brought back moves in the plan's agents only once
-  // they are read again, so a call that answered after the tab opened has them read; those
-  // already there were read with the plan.
-  const listCalls = useMemo(() => agentListCallIds(transcript.messages), [transcript.messages]);
-  const seenListCalls = useRef<ReadonlySet<string>>(new Set(listCalls));
-  const readAgents = control.onRetryList;
-  useEffect(() => {
-    const landed = listCalls.some((id) => !seenListCalls.current.has(id));
-    seenListCalls.current = new Set(listCalls);
-    if (landed) readAgents();
-  }, [listCalls, readAgents]);
   // The tab stands in its own shape until the agent is here; its log stands the same lines until its first page is (`TranscriptSkeleton`).
   if (agent === undefined) return <AgentTabSkeleton />;
   return (

@@ -16,14 +16,13 @@ import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@repo/features/repository-reach-wire";
 import { TASK_MODE } from "@repo/features/task-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
-import { MESSAGE_ROLE, type WireRecord } from "@repo/wire";
+import { MESSAGE_ROLE } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import {
   AGENT_PART,
   agentLines,
-  agentListCallIds,
   agentParts,
   agentWorkingPhase,
   agentWorkingSince,
@@ -448,35 +447,6 @@ test("an effort carried to a model that lacks it falls to the nearest the model 
     "names off the scale are passed over",
   );
   assert.equal(effortFor([], "high"), undefined);
-});
-
-test("the calls that move a task's agents are its starts, archives, and unarchives once answered, by call id, under a start's earlier name too; a call still out or of another tool names none", () => {
-  const call = (callId: string, tool: string, state: string, output?: WireRecord) => ({
-    type: `tool-${tool}`,
-    toolCallId: callId,
-    state,
-    input: { agentId: "agent-2" },
-    ...(output === undefined ? undefined : { output }),
-  });
-  const accepted = { status: "accepted", agent: { id: "agent-2" } };
-  const messages: AgentTranscriptMessage[] = [
-    {
-      id: "m1",
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        call("c1", "start_agent", "output-available", accepted),
-        call("c2", "archive_agent", "output-available", accepted),
-        call("c3", "unarchive_agent", "input-available"),
-        call("c4", "message_agent", "output-available", accepted),
-        call("c5", "start_coding_agent", "output-available", accepted),
-        call("c6", "unarchive_agent", "output-available", accepted),
-        call("c7", "update_agent", "output-available", accepted),
-      ],
-    },
-  ];
-
-  assert.deepEqual(agentListCallIds(messages), ["c1", "c2", "c5", "c6", "c7"]);
-  assert.deepEqual(agentListCallIds([]), []);
 });
 
 test("a working agent is starting until its turn opens, saying what a host's launch waits on, thinking until the turn draws a row, and working after, a steering line leaving the turn under way as it was and a closing turn ending as working", () => {

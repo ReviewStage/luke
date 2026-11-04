@@ -1083,10 +1083,14 @@ export function agentTasksView(profile: string, open: TasksView): TasksView | un
       },
     ],
   };
+  // Note that the agent works where its task does, as the task list carries its row.
+  const task = open.tasks.find((each) => each.id === taskId);
   return {
     ...open,
-    tasks: open.tasks.map((task) => (task.id === taskId ? { ...task, agents } : task)),
-    taskAgents: [agent],
+    tasks: open.tasks.map((each) => (each.id === taskId ? { ...each, agents } : each)),
+    taskAgents: [
+      { ...agent, workspaceId: task?.workspaceId ?? "", repository: task?.repository ?? null },
+    ],
   };
 }
 

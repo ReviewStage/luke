@@ -149,6 +149,15 @@ export const AGENT_ACT_KIND = {
   /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
   AGENTS_SEEN: "agents.seen",
   AGENTS_PAGE: "agents.page",
+  /**
+   * The run of an automation that started one agent, held followed while the
+   * window holds the stream open, and a while after among those let go
+   * lately: what it holds reaches the panel on app state
+   * (`LIVE_READ.AGENT_ORIGINS`), so the stream carries nothing.
+   */
+  AGENTS_ORIGIN_FOLLOW: "agents.originFollow",
+  /** A held agent's origin, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
@@ -658,6 +667,8 @@ export const PORT_ACT_USE = {
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
   AGENTS_PAGE: ACT_USE.READ,
+  AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
+  AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
   AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
