@@ -16,6 +16,7 @@ import { installActPort, installAppBridge } from "@repo/panel/app-bridge";
 import { HOST_CAPABILITY, THEME } from "@repo/settings";
 import { ACTION_RESULT_STATUS, isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { Context, Effect, Layer } from "effect";
+import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
 import {
@@ -85,21 +86,39 @@ it.effect(
 );
 
 it.effect(
-  "an act goes through the tab's act port to the service and back, settling a cookie's pending sign-in",
+  "the tab's host holds the account's integrations and settles a cookie session's pending sign-in, which they then draw connected",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        const service = fakeService({ signedIn: true });
+        const { bridge, actPort } = yield* standingHost(service);
         installAppBridge(bridge);
         installActPort(actPort);
-
-        const statuses = yield* Effect.promise(() => askAct(ACT_KIND.INTEGRATIONS_STATUS));
-
-        assert.ok(!("failure" in statuses));
-        assert.equal(
-          statuses.integrations[INTEGRATION_PROVIDER.SLACK],
-          INTEGRATION_STATUS.CONNECTED,
+        const slack = Effect.map(
+          Effect.promise(() => bridge.requestAppState()),
+          (state) =>
+            Object.values(state[LIVE_READ.INTEGRATIONS])[0]?.rows?.integrations[
+              INTEGRATION_PROVIDER.SLACK
+            ],
         );
+        /** Gives the host's fibers turns, the clock a second on before each, until the tab's state draws Slack as `status`. */
+        const drawsSlack = (status: string) =>
+          Effect.gen(function* () {
+            for (let second = 0; second < 60 && (yield* slack) !== status; second += 1) {
+              yield* TestClock.adjust("1 second");
+              for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+            }
+            assert.equal(yield* slack, status);
+          });
+
+        const hold = yield* Effect.promise(() => askAct(ACT_KIND.INTEGRATIONS_FOLLOW));
+        yield* drawsSlack(INTEGRATION_STATUS.PENDING);
+        assert.equal(service.settled(), false, "nothing is settled before its interval");
+        yield* drawsSlack(INTEGRATION_STATUS.CONNECTED);
+        assert.equal(service.settled(), true, "the host settled it, with no panel drawn");
+        yield* Effect.promise(async () => {
+          await hold.return?.(undefined);
+        });
       }),
     ),
 );

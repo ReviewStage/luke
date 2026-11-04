@@ -45,6 +45,7 @@ import {
   planRevisionsAnswerSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
+  type Task,
   taskAgentPinSchema,
   taskAssigneeIdSchema,
   taskBlockRequestSchema,
@@ -58,7 +59,6 @@ import {
   taskPullRequestsSchema,
   taskRelationChangeRequestSchema,
   taskRenameRequestSchema,
-  taskSchema,
   taskSkillsSchema,
   taskStatusSchema,
   taskSummarySchema,
@@ -90,7 +90,7 @@ import {
 } from "./workspace-wire.js";
 
 /**
- * tasks-view.ts -- the named tasks as one Mac holds them for its panel's Tasks tab: the list, the one active task, and its saved document.
+ * tasks-view.ts -- the named tasks as one Mac holds them for its panel's Tasks tab: the list and the one active task.
  *
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the tasks
@@ -113,8 +113,6 @@ export const TASKS_READ = {
   READY: "ready",
   /** The last read did not land; the window offers to try again. */
   FAILED: "failed",
-  /** The active task is not one the account holds any more. */
-  MISSING: "missing",
 } as const;
 
 const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
@@ -134,16 +132,11 @@ export const HOST_LIVE = {
 export type HostLive = (typeof HOST_LIVE)[keyof typeof HOST_LIVE];
 
 /**
- * The active task's document as last read: the plan whole while a read has
- * landed, kept through a later read that failed, so the window never draws a
- * document it did not read and never drops one it did.
+ * One task's plan as the host holds it for the windows that opened it
+ * (`LIVE_READ.PLAN_DOCUMENT`): the task with its text as last read or
+ * written, or that the account no longer reaches it.
  */
-const tasksDocumentSchema = EffectSchema.Struct({
-  status: tasksReadSchema,
-  task: EffectSchema.optionalKey(taskSchema),
-});
-
-export type TasksDocument = typeof tasksDocumentSchema.Type;
+export type HeldPlanDocument = { readonly task: Task } | { readonly gone: true };
 
 /** One run of a line in one color per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
@@ -225,9 +218,8 @@ export const tasksViewSchema = EffectSchema.Struct({
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The sections the account made in its sidebars and the tasks it keeps in them, as last read or written; absent before the first read lands. */
   taskSections: EffectSchema.optionalKey(taskSectionsAnswerSchema),
-  /** The one active task, absent while the window has none open. */
+  /** The one active task, absent while the window has none open; its plan is held apart (`LIVE_READ.PLAN_DOCUMENT`). */
   activeTaskId: EffectSchema.optionalKey(EffectSchema.String),
-  document: tasksDocumentSchema,
 });
 
 export type TasksView = typeof tasksViewSchema.Type;
@@ -237,7 +229,6 @@ export const IDLE_TASKS_VIEW: TasksView = {
   tasks: [],
   listStatus: TASKS_READ.IDLE,
   workspaces: [],
-  document: { status: TASKS_READ.IDLE },
 };
 
 /** An agent with no plan as a plan's agents are named, with its workspace and repository, which names an automation only where one started it. */
@@ -695,6 +686,13 @@ export const tasksRevisionsAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksRevisionsAnswer = typeof tasksRevisionsAnswerSchema.Type;
+
+/** One task's plan, held by a window while it has the task open (`LIVE_READ.PLAN_DOCUMENT`), and read again at once on its Try again. */
+export const taskDocumentFollowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+});
+
+export type TaskDocumentFollow = typeof taskDocumentFollowSchema.Type;
 
 /** One plan's newest page of history, followed by a window while its version history stands. */
 export const taskHistoryFollowSchema = EffectSchema.Struct({ taskId: EffectSchema.NonEmptyString });

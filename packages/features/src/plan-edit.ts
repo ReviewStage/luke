@@ -1,7 +1,7 @@
 import { applyPatch, structuredPatch } from "diff";
 import { Schema as EffectSchema } from "effect";
 import { planCommentAnchorsSchema } from "./plan-comment-wire.js";
-import { planLastEditSchema, TASK_BOUNDS, taskSchema } from "./task-wire.js";
+import { planLastEditSchema, TASK_BOUNDS, taskSchema, taskTxidSchema } from "./task-wire.js";
 
 /**
  * plan-edit.ts -- the developer's own edit of a plan's text: what the window sends, what the service answers, and how the edit is taken into the text.
@@ -67,9 +67,15 @@ export const PLAN_EDIT_REFUSAL = {
   TOO_LONG: "too-long",
 } as const;
 
-/** What an edit answers: the plan as saved, the text as it now stands and who wrote it where the edit conflicts with it, or why it was refused. */
+/**
+ * What an edit answers: the plan as saved, with the transaction it was saved
+ * in where it moved the text, the text as it now stands and who wrote it
+ * where the edit conflicts with it, or why it was refused. Note that a
+ * service before the transaction answers none, and a released desktop's
+ * read drops it.
+ */
 export const planEditAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ plan: taskSchema }),
+  EffectSchema.Struct({ plan: taskSchema, txid: EffectSchema.optionalKey(taskTxidSchema) }),
   EffectSchema.Struct({ conflict: planEditConflictSchema }),
   EffectSchema.Struct({ refused: EffectSchema.Literals(Object.values(PLAN_EDIT_REFUSAL)) }),
 ]);

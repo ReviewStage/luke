@@ -165,15 +165,13 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * eve's cancel of the agent's turn under way, over the eve given, then the
- * row's stamp, and whether eve took the cancel; nothing, and false, where no
- * turn runs that a Stop has to stop, a turn already stamped among them, so a
- * second Stop asks eve nothing. A turn eve says ended meanwhile is stamped
- * all the same but answered false, since this Stop stopped nothing. eve is
- * composed only once there is a turn to cancel. A tool call's Stop names its
- * key, written beside the stamp where eve took the cancel, so the call run
- * again finds the turn it stopped, and one that stopped nothing is run
- * again as it first ran; who made the Stop is written beside it as `stop`
- * names it.
+ * row's stamp, and whether eve took the cancel; false where no turn runs
+ * that a Stop has to stop, a turn already stamped among them, so a second
+ * Stop asks eve nothing. A turn eve says ended meanwhile is stamped all the
+ * same but answered false, since this Stop stopped nothing. A tool call's
+ * key is written beside the stamp only where eve took the cancel, so the
+ * call run again finds the turn it stopped, and one that stopped nothing is
+ * run again as it first ran.
  */
 export const canceledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   eveOf: Effect.Effect<

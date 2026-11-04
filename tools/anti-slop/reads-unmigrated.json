@@ -3,7 +3,6 @@
   "packages/panel/src/desktop/automations-page.tsx": "P14: Sentry and Slack bot settings",
   "packages/panel/src/desktop/use-run-choices.ts": "P18, P28: a workspace's agents, the default agent and models",
   "packages/panel/src/desktop/workspace-tile.tsx": "P18: workspace photo",
-  "packages/panel/src/integration-statuses.ts": "P15: integration statuses",
   "packages/panel/src/machine-name.ts": "P18: this Mac's host",
   "packages/panel/src/onboarding/setup-github.tsx": "P18: GitHub token set",
   "packages/panel/src/settings/account-section.tsx": "P18: GitHub token set",

@@ -21,7 +21,7 @@ export const CODER = {
   /**
    * How long a Vercel Sandbox session lives past its last sign of use: the
    * timeout it opens with, and how far ahead of now each keep-alive puts its
-   * end (`sandbox-lifetime.ts`). An idle sandbox is stopped by what knows it
+   * end (`sandbox-keep-alive.ts`). An idle sandbox is stopped by what knows it
    * idle rather than by this: a native runner keeps its sandbox
    * alive by its heartbeat for as long as it runs, and its end stops it,
    * which comes the sandbox's `RUNNER_WARM` after the agent's turn is over,

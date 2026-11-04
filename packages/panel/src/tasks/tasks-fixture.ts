@@ -28,6 +28,7 @@ import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
   type AppPlanComments,
+  type AppPlanDocuments,
   type AppRepositoryLists,
   type AppStateSnapshot,
   EVERY_WORKSPACE,
@@ -408,16 +409,14 @@ const FIXTURE_TASK_LIST: TasksView = {
   listStatus: TASKS_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
   github: { connected: true, login: null },
-  document: { status: TASKS_READ.IDLE },
   // Every task's agents as the list followed live carries them: none, where no profile stages one.
   taskAgents: [],
 };
 
-/** The open task, its document read. */
+/** The open task, whose plan main's document holds as read (`fixtureAppState`). */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
-  document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
 };
 
 /** One thread's comment, written by `writer` at `at`. */
@@ -672,8 +671,29 @@ export function fixtureActAnswer(
   );
 }
 
+/** Main's held plans with the fixture's task's plan held, one object for each of main's. */
+const STAGED_PLANS = new WeakMap<AppPlanDocuments, AppPlanDocuments>();
+
 /**
- * Main's document as a fixture run draws it (`use-app-state.ts`): with the
+ * Main's document with the fixture's task's plan held as the window's read
+ * of it holds one (`LIVE_READ.PLAN_DOCUMENT`), under the profiles that open
+ * the task (`fixtureTasksView`), so it opens on its plan; the very document
+ * under any other.
+ */
+function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
+  if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
+  const held = state[LIVE_READ.PLAN_DOCUMENT];
+  let staged = STAGED_PLANS.get(held);
+  if (staged === undefined) {
+    staged = { ...held, [FIXTURE_TASK_ID]: { rows: { task: FIXTURE_TASK } } };
+    STAGED_PLANS.set(held, staged);
+  }
+  return { ...state, [LIVE_READ.PLAN_DOCUMENT]: staged };
+}
+
+/**
+ * Main's document as a fixture run draws it (`use-app-state.ts`): the
+ * fixture's task's plan held under the profiles that open it, with the
  * fixture workspaces' members held under every profile, and the synthetic
  * account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
@@ -687,7 +707,7 @@ export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
   return repositoriesAppState(
     commentsAppState(
       automationsAppState(
-        agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID),
+        agentAppState(settingsAppState(state.run.profile, plannedAppState(state)), FIXTURE_TASK_ID),
         FIXTURE_WORKSPACE_IDS,
       ),
     ),

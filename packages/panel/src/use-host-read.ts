@@ -199,7 +199,8 @@ function automationsRead(kind: AutomationFollow["kind"]) {
 /**
  * Every read a surface reads through `useHostRead`, by its name: the feed of
  * every item the account reaches, held for the session; one holder's own
- * inbox; one task's pages, or one agent's on no task, which the open task's
+ * inbox; where the account's integrations stand, by the account, which every
+ * surface drawing an integration holds; one task's pages, or one agent's on no task, which the open task's
  * page, the panel beside an Inbox item, an agent's page, and a page's card
  * or frame each hold; one agent's pull request's chapters, by the number its
  * Pull request tab's own read of it found; one task's cloud Browser tabs,
@@ -214,14 +215,16 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * automations, one workspace's runs, or one automation's runs, by its id;
  * one plan's comments, or one page's, which the open task's plan and a
  * page's tab each hold; the run that started one agent, which its page
- * holds; and one workspace's people, its members and who its work names but
- * left, which every surface naming them holds. Pages and Browser tabs offer no Try again, because the host reads those that did
- * not answer again on its own, and those it was refused, a plan's or an
- * agent's the reader cannot reach, stand failed until every surface lets
- * them go and one holds them anew (`@repo/host`'s `live-push.ts`). The
- * beats, which the host asks for again every `MAC_PRESENCE.POLL_MS` while
- * they are held (`held-fetch.ts`), offer theirs to the window coming back
- * online (`device-presence.ts`), never to a press.
+ * holds; one workspace's people, its members and who its work names but
+ * left, which every surface naming them holds; and one task's plan, which
+ * the window's open task holds. Pages and Browser tabs offer no Try again,
+ * because the host reads those that did not answer again on its own, and
+ * those it was refused, a plan's or an agent's the reader cannot reach,
+ * stand failed until every surface lets them go and one holds them anew
+ * (`@repo/host`'s `live-push.ts`). The beats, which the host asks for again
+ * every `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer
+ * theirs to the window coming back online (`device-presence.ts`), never to
+ * a press.
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -241,6 +244,13 @@ const HOST_READS = {
     path: (key: InboxHolderKey) => [key.kind, key.id],
     hold: ({ kind, id }) => askAct(ACT_KIND.AGENTS_INBOX_FOLLOW, { kind, id }),
     retry: ({ kind, id }) => tellAct(ACT_KIND.AGENTS_INBOX_RETRY, { kind, id }),
+  }),
+  [LIVE_READ.INTEGRATIONS]: hostRead(LIVE_READ.INTEGRATIONS, {
+    slice: APP_SLICE.INTEGRATIONS,
+    path: (accountId: string) => [accountId],
+    // Note that the host holds the integrations of whoever is signed in, so the hold and its Try again name no account.
+    hold: () => askAct(ACT_KIND.INTEGRATIONS_FOLLOW),
+    retry: () => tellAct(ACT_KIND.INTEGRATIONS_RETRY),
   }),
   [LIVE_READ.INTEGRATION_TOOLS]: hostRead(LIVE_READ.INTEGRATION_TOOLS, {
     slice: APP_SLICE.INTEGRATION_TOOLS,
@@ -342,6 +352,12 @@ const HOST_READS = {
     hold: (subject) => askAct(ACT_KIND.TASKS_COMMENTS_FOLLOW, commentsFollowOf(subject)),
     retry: (subject) => tellAct(ACT_KIND.TASKS_COMMENTS_RETRY, commentsFollowOf(subject)),
   }),
+  [LIVE_READ.PLAN_DOCUMENT]: hostRead(LIVE_READ.PLAN_DOCUMENT, {
+    slice: APP_SLICE.PLAN_DOCUMENT,
+    path: (taskId: string) => [taskId],
+    hold: (taskId) => askAct(ACT_KIND.TASKS_DOCUMENT_FOLLOW, { taskId }),
+    retry: (taskId) => tellAct(ACT_KIND.TASKS_DOCUMENT_RETRY, { taskId }),
+  }),
 } as const satisfies { readonly [Read in HostReadName]: HostReadEntry<Read, never, unknown> };
 
 type HostReads = typeof HOST_READS;
@@ -404,6 +420,31 @@ export function useHostRead<Read extends HostReadName>(
   const drawn = { rows: held?.rows, status: statusOf(held) };
   // SAFETY: a read's rows are its entry's (`AppHostReads`), and Try again stands where its entry offers one (`HostReadOf`).
   return (entry.retry === undefined ? drawn : { ...drawn, retry }) as HostReadOf<Read>;
+}
+
+/**
+ * What `read` holds at `key` as the host holds it now, without holding it:
+ * what a surface beside the one that holds a read draws from it, as a
+ * section's chip names a heading in a plan the window holds; none until it
+ * is read, or where no surface holds it.
+ */
+export function useHeldRows<Read extends HostReadName>(
+  read: Read,
+  ...[key]: HostReadKey<Read>
+): AppHostReads[Read] | undefined {
+  const entry = HOST_READS[read];
+  // SAFETY: the key a surface hands is the one its read's entry takes (`HostReadKey`).
+  const path =
+    entry.path === undefined
+      ? WHOLE_SLICE
+      : key === undefined
+        ? undefined
+        : entry.path(key as never);
+  const held = useAppSlice<AppHostRead<unknown> | undefined>(
+    path === undefined ? NO_READ : entry.at(path),
+  );
+  // SAFETY: a read's rows are its entry's (`AppHostReads`).
+  return held?.rows as AppHostReads[Read] | undefined;
 }
 
 /** No slice, for a surface reading no key of a read. */
