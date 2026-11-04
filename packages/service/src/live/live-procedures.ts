@@ -660,13 +660,13 @@ const narrowedParts = /* @__PURE__ */ Effect.fnUntraced(function* <
  * reads the log alone, so it is cheap at a second, and that a wake can come
  * before the settled id passes its write, which the next look then carries.
  *
- * Note too that a window whose rows moved nothing of the reader's, as
- * another account's messages taken whatever they name, is held past rather
- * than answered: the next look reads the log on from that window's settled
- * id, so the reader is never answered no rows only to ask again, and no
- * window is read twice. That holds every delta: every write below that id
- * ended before the narrowed read's snapshot, so a later write that moves a
- * row of the reader's stands at or past it, in a window still to be read.
+ * Note too that a window that moved nothing of the reader's, one empty or
+ * one of another account's messages taken whatever they name, is held past
+ * rather than answered: the next look reads the log on from that window's
+ * settled id, so the reader is never answered no rows only to ask again, and
+ * no window is read twice. That holds every delta: every write below that id
+ * ended before the look, so a later write that moves a row of the reader's
+ * stands at or past it, in a window still to be read.
  *
  * It is answered whole, each part with the settled id to ask past next, to
  * a reader that names no id, whose id is below the oldest the log kept or
@@ -724,15 +724,16 @@ const deltaParts = /* @__PURE__ */ Effect.fnUntraced(function* <
   const look: Effect.Effect<DeltaLook<Part>, HostedRefusal, DatabaseServices> = Effect.gen(
     function* () {
       const standing = yield* looked;
-      if (standing.whole || standing.window.rows.length === 0) {
-        return { standing, narrowed: Option.none() };
-      }
-      const narrowed = yield* narrowedParts<Param, Part>(delta, params, standing.window.rows);
-      if (!carriesAny(narrowed)) {
+      if (standing.whole) return { standing, narrowed: Option.none() };
+      const narrowed =
+        standing.window.rows.length === 0
+          ? Option.none()
+          : Option.some(yield* narrowedParts<Param, Part>(delta, params, standing.window.rows));
+      if (!Option.exists(narrowed, carriesAny)) {
         from = standing.settled;
         for (const txid of standing.window.txids) passed.add(txid);
       }
-      return { standing, narrowed: Option.some(narrowed) };
+      return { standing, narrowed };
     },
   );
   const moved = ({ standing, narrowed }: DeltaLook<Part>) =>
