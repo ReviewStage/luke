@@ -46,7 +46,6 @@ import {
   LightbulbIcon,
   LogOutIcon,
   MailIcon,
-  MessageSquareIcon,
   NewspaperIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -64,12 +63,14 @@ import { OfflineMark } from "./offline-mark.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
 /**
- * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, and Settings' gear.
+ * sidebar-foot.tsx -- the sidebar's last row: who is signed in and their menu, the Mac offline, a release on its way in, Send feedback, and Settings' gear.
  *
  * The row every desktop devtool keeps at the foot of its sidebar, the way
  * Cursor keeps it: the account's face and name at its start, which opens the
  * account's menu upward over the column, and the gear at its end, which goes
- * to Settings at once. The Mac offline, and a newer release, each stand
+ * to Settings at once. Send feedback stands just before the gear, always in
+ * sight, so word back to the people who make the app is one press away
+ * rather than a menu deep. The Mac offline, and a newer release, each stand
  * between them as a small pill while they hold, and take no room while they
  * do not. The menu offers what the menu bar's Help menu offers, by the same
  * commands, with Settings at its head, the ways to reach the people who make
@@ -292,7 +293,7 @@ function accountMenuGroups(
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
       {
         label: "Send feedback",
-        icon: <MessageSquareIcon />,
+        icon: <GLYPH.FEEDBACK />,
         onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
       },
       {
@@ -384,8 +385,9 @@ function AccountMenu({
 
 /**
  * The foot of the column: the account, which opens its menu; a release on
- * its way in, and the Mac offline, while they hold; and the gear, the one
- * press to Settings.
+ * its way in, and the Mac offline, while they hold; Send feedback, which
+ * opens the dialog the menu's own item does; and the gear, the one press to
+ * Settings.
  */
 export function SidebarFoot({
   account,
@@ -416,6 +418,13 @@ export function SidebarFoot({
         />
         <OfflineMark />
         <SidebarUpdate updates={updates} />
+        <Tooltip label="Send feedback">
+          <IconButton
+            icon={<GLYPH.FEEDBACK />}
+            label="Send feedback"
+            onClick={() => runAppCommand(APP_COMMAND.SEND_FEEDBACK)}
+          />
+        </Tooltip>
         <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
           <IconButton
             icon={<GearIcon />}

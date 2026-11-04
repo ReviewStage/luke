@@ -388,6 +388,19 @@ test("in the window, the account's menu opens with the reader's own profile, onc
   assert.deepEqual(opened, ["user-dean"]);
 });
 
+test("Send feedback beside the gear runs the Help menu's Send feedback, with no menu to open first", async () => {
+  const ran: string[] = [];
+  mount(DEAN, { ran });
+  await stateArrived();
+  const feedback =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Send feedback"]') ??
+    assert.fail("the foot draws Send feedback");
+  act(() => feedback.click());
+
+  assert.deepEqual(ran, [APP_COMMAND.SEND_FEEDBACK]);
+  assert.equal(accountMenu(), null);
+});
+
 test("the gear goes to Settings, and marks itself the page while Settings shows", () => {
   let opened = 0;
   mount(DEAN, { onSettings: () => opened++ });
