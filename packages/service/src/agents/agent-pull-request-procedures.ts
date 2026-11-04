@@ -425,6 +425,46 @@ export function actionWrite(
   };
 }
 
+/**
+ * One change to the pull request asked about of an agent the member
+ * reached, made as the member on their own GitHub sign-in
+ * (`pull-request-write.ts`), and how GitHub took it; not found where the
+ * agent names no pull request yet. Whatever GitHub answered, the kept
+ * answers are let go, so the reads after it ask GitHub afresh. The tab's
+ * change runs it, and so does the member MCP server's
+ * (`member-mcp/tools.ts`), so a change made either way is the same change.
+ */
+export const agentPullRequestAction = /* @__PURE__ */ Effect.fnUntraced(function* (
+  published: Effect.Effect<PublishedCache>,
+  userId: string,
+  agent: Agent,
+  number: number | undefined,
+  request: PullRequestActionRequest,
+) {
+  const pullRequest = yield* askedPullRequest(yield* published, userId, agent, number);
+  if (pullRequest === null || !hasRepository(agent)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  }
+  const written = yield* memberPullRequestWrite(
+    userId,
+    agent,
+    pullRequest.number,
+    actionWrite(request),
+  ).pipe(
+    Effect.ensuring(Effect.flatMap(published, (kept) => forgetPublished(kept, userId, agent.id))),
+  );
+  // Counted only where GitHub made the change, and under the member: an agent's own pull request work never comes through here.
+  const counted = countedAction(request);
+  if (counted !== undefined && written.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
+    yield* recordServerEvent(
+      SERVER_EVENT.PULL_REQUEST_ACTION,
+      { userId, workspaceId: agent.organizationId },
+      { action: counted },
+    );
+  }
+  return writeAnswerOf(written);
+});
+
 /** Which of the pull request's files the member marked viewed, read as a write is made, on their own token. */
 export const viewedRead = (member: MemberPullRequest) =>
   pullRequestViewedStates(member.token, member.repository, member.number);
@@ -449,45 +489,11 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
       const number = yield* numberNamed(input.number);
       return yield* askedPublished(yield* published, context.userId, agent, number);
     }),
-    /**
-     * One change to the pull request asked about, as the asking member on
-     * their own GitHub sign-in (`pull-request-write.ts`), and how GitHub took
-     * it; not found where the agent names no pull request yet. Whatever
-     * GitHub answered, the kept answer is let go, so the reads after it ask
-     * GitHub afresh.
-     */
+    /** One change to the pull request asked about, as the asking member (`agentPullRequestAction`). */
     action: signedIn.action.effect(function* ({ input, context }) {
-      const { agent, pullRequest } = yield* askedOfAgent(
-        published,
-        context.userId,
-        input.params.id,
-        input.query?.number,
-      );
-      if (pullRequest === null || !hasRepository(agent)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      }
-      const written = yield* memberPullRequestWrite(
-        context.userId,
-        agent,
-        pullRequest.number,
-        actionWrite(input.body),
-      ).pipe(
-        Effect.ensuring(
-          Effect.flatMap(published, (kept) => forgetPublished(kept, context.userId, agent.id)),
-        ),
-      );
-      // Counted only where GitHub made the change, and under the member: an agent's own pull request work never comes through here.
-      const counted = countedAction(input.body);
-      if (counted !== undefined && written.outcome === PULL_REQUEST_WRITE_OUTCOME.DONE) {
-        yield* recordServerEvent(
-          SERVER_EVENT.PULL_REQUEST_ACTION,
-          { userId: context.userId, workspaceId: agent.organizationId },
-          {
-            action: counted,
-          },
-        );
-      }
-      return writeAnswerOf(written);
+      const { agent } = yield* reachedAgentById(context.userId, input.params.id);
+      const number = yield* numberNamed(input.query?.number);
+      return yield* agentPullRequestAction(published, context.userId, agent, number, input.body);
     }),
     /**
      * Which of the pull request's files the asking member marked viewed on

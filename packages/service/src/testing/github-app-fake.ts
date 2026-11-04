@@ -424,10 +424,18 @@ export const standingGithubRow = (now: number): GitHubAccountRow => ({
 export const openGithubUser = (standing?: GitHubAccountRow) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    const now = yield* Clock.currentTimeMillis;
-    const row = standing ?? standingGithubRow(now);
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
+    yield* signInWithGitHub(userId, standing);
+    return userId;
+  });
+
+/** The GitHub account row a sign-in through the App leaves on a user who already stands, as `openGithubUser` leaves it. */
+export const signInWithGitHub = (userId: string, standing?: GitHubAccountRow) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const now = yield* Clock.currentTimeMillis;
+    const row = standing ?? standingGithubRow(now);
     yield* db.insert(account).values({
       id: `account-${randomUUID()}`,
       accountId: GITHUB_FIXTURE_MEMBER.ID,
@@ -440,7 +448,6 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
       scope: "",
       updatedAt: new Date(now - GITHUB_FIXTURE.HOUR_MS),
     });
-    return userId;
   });
 
 /**

@@ -24,7 +24,6 @@ import type { WireBoundaryInput } from "@repo/wire";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { SERVER_EVENT } from "../events/server-events.js";
-import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   AGENT_CHANGES,
@@ -36,6 +35,9 @@ import {
   type Answer,
   countedFor,
   countedWith,
+  type GraphqlCall,
+  graphqlAnswering,
+  mutationOf,
   openTask,
   PUBLISHED,
   PULL_REQUEST_NODE_ID,
@@ -54,42 +56,6 @@ import {
   type SentToGitHub,
 } from "../testing/github-app-fake.js";
 import { CODER } from "./coder-host/bounds.js";
-
-/** One GraphQL call as GitHub saw it: the bearer it came under, and its document's words. */
-interface GraphqlCall {
-  readonly authorization: string | null;
-  readonly query: string;
-  readonly variables: Readonly<Record<string, string | number>>;
-}
-
-/**
- * The repository answering the published pull request's reads as
- * `publishedPullRequest` does, and GitHub's GraphQL endpoint answering each
- * call as `answer` says, every call written down: by default the pull
- * request's id for its read and an empty answer for any mutation.
- */
-function graphqlAnswering(
-  calls: GraphqlCall[],
-  answer: (call: GraphqlCall) => Response = (call) =>
-    Response.json({
-      data: call.query.includes("mutation")
-        ? {}
-        : { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
-    }),
-  repository: RepositoryScript = publishedPullRequest,
-): RepositoryScript {
-  return (sent) => {
-    if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
-    const { query, variables } = JSON.parse(sent.body);
-    // The published read's merge-queue ask rides with its REST reads on the App's token, as they do, and is no call the member made.
-    if (query.includes(PULL_REQUEST_QUEUED_OPERATION)) {
-      return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry: null } } } });
-    }
-    const call = { authorization: sent.headers.get("authorization"), query, variables };
-    calls.push(call);
-    return answer(call);
-  };
-}
 
 /** A change to the agent's pull request as the bearer given, with the fields beside its action given. */
 function actionAs(
@@ -124,11 +90,6 @@ const MERGING_ANSWER = {
     },
   },
 } as const;
-
-/** The mutation a GraphQL call made, by the field it named; none for a read. */
-function mutationOf(call: GraphqlCall): string | undefined {
-  return /mutation[^{]*\{\s*(\w+)/u.exec(call.query)?.[1];
-}
 
 /** A review submitted on the agent's pull request as the bearer given. */
 function reviewAs(
