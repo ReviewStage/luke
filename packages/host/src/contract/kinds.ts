@@ -178,10 +178,20 @@ export const AGENT_ACT_KIND = {
   AGENTS_ORIGIN_RETRY: "agents.originRetry",
   /** What one agent published: its branch and pull request as GitHub holds them. */
   AGENTS_PULL_REQUEST: "agents.pullRequest",
+  /**
+   * One part of one agent's pull request, which its Pull request tab draws:
+   * the pull request itself, its checks, its conversation, or what the agent
+   * published, held for the window while it holds the stream open and a
+   * while after among those let go lately, and asked again as a window comes
+   * forward, as the agent ends, and as its listed pull request moves. What
+   * it holds reaches the panel on app state (`PULL_REQUEST_PART_READ`), so
+   * the stream carries nothing.
+   */
+  AGENTS_PULL_REQUEST_PART_FOLLOW: "agents.pullRequestPartFollow",
+  /** One pull request's held part, which the panel reads on app state, asked again at once, as Try again and Refresh ask. */
+  AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   AGENTS_CHANGES: "agents.changes",
-  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   /** What the reviewer and label pickers of an agent's Pull request tab offer. */
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
@@ -193,10 +203,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_WORKSPACE_TOOLS_FOLLOW: "agents.workspaceToolsFollow",
   /** One agent's held tools, which the panel reads on app state, asked again at once, as Try again asks. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
-  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
@@ -365,8 +371,15 @@ export const TASKS_ACT_KIND = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repository chip's read: the repositories the account reaches through our GitHub App, as the service answers them now. */
-  TASKS_REPOSITORIES: "tasks.repositories",
+  /**
+   * The repositories the account reaches in one workspace, or in every one,
+   * held for the window while it holds the stream open and a while after
+   * among those let go lately: what it holds reaches the panel on app state
+   * (`LIVE_READ.REPOSITORY_LISTS`), so the stream carries nothing.
+   */
+  TASKS_REPOSITORIES_FOLLOW: "tasks.repositoriesFollow",
+  /** One workspace's held repositories, which the panel reads on app state, asked again at once, as Try again asks. */
+  TASKS_REPOSITORIES_RETRY: "tasks.repositoriesRetry",
   /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
@@ -401,10 +414,13 @@ export const TASKS_ACT_KIND = {
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
   TASKS_SKILLS: "tasks.skills",
-  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_PULL_REQUEST: "tasks.pullRequest",
-  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_ISSUE: "tasks.issue",
+  /**
+   * What GitHub holds of the pull request or issue a link names, held for
+   * the window while it holds the stream open and a while after among those
+   * let go lately: what it holds reaches the panel on app state
+   * (`LIVE_READ.LINK_STANDINGS`), so the stream carries nothing.
+   */
+  TASKS_LINK_STANDING_FOLLOW: "tasks.linkStandingFollow",
   /** A Browser tab opened at an address in a task's coding agent's cloud browser through the service, taken over by the member at once, as the side panel's "+" opens one; answered to the panel, never on the document. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /**
@@ -763,13 +779,12 @@ export const PORT_ACT_USE = {
   AGENTS_ORIGIN_FOLLOW: ACT_USE.READ,
   AGENTS_ORIGIN_RETRY: ACT_USE.READ,
   AGENTS_PULL_REQUEST: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
+  AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
-  AGENTS_OVERVIEW_PULL_REQUEST: ACT_USE.READ,
   AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
-  AGENTS_OVERVIEW_CHECKS: ACT_USE.READ,
-  AGENTS_OVERVIEW_CONVERSATION: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
   AGENTS_PULL_REQUEST_ACTION: ACT_USE.WRITE,
   AGENTS_PULL_REQUEST_VIEWED: ACT_USE.READ,
@@ -845,7 +860,8 @@ export const PORT_ACT_USE = {
   TASKS_PIN: ACT_USE.WRITE,
   TASKS_PIN_REPOSITORY: ACT_USE.WRITE,
   TASKS_WRITE_SECTION: ACT_USE.WRITE,
-  TASKS_REPOSITORIES: ACT_USE.READ,
+  TASKS_REPOSITORIES_FOLLOW: ACT_USE.READ,
+  TASKS_REPOSITORIES_RETRY: ACT_USE.READ,
   TASKS_SET_REPOSITORY: ACT_USE.WRITE,
   TASKS_MOVE: ACT_USE.WRITE,
   TASKS_BLOCK: ACT_USE.WRITE,
@@ -863,8 +879,7 @@ export const PORT_ACT_USE = {
   TASKS_FILE: ACT_USE.FETCH,
   TASKS_TREE: ACT_USE.FETCH,
   TASKS_SKILLS: ACT_USE.FETCH,
-  TASKS_PULL_REQUEST: ACT_USE.READ,
-  TASKS_ISSUE: ACT_USE.READ,
+  TASKS_LINK_STANDING_FOLLOW: ACT_USE.READ,
   TASKS_BROWSER_TAB_OPEN: ACT_USE.WRITE,
   TASKS_BROWSER_TABS_FOLLOW: ACT_USE.READ,
   TASKS_COLOR_CODE: ACT_USE.FETCH,

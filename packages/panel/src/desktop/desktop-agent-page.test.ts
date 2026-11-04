@@ -7,6 +7,7 @@ import {
   type AgentCallFailure,
   type AgentMessagesAnswerView,
   type AgentPageAnswerView,
+  PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
 import {
   AGENT_ARCHIVER,
@@ -20,7 +21,6 @@ import {
   type ListedAgent,
   MERGE_STATE,
   PULL_REQUEST_STATE,
-  type PullRequestState,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
 import {
@@ -79,6 +79,7 @@ import {
   handState,
   holdAutomations,
   holdPages,
+  holdPullRequestParts,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -239,9 +240,6 @@ let earlier = 0;
 let copied: string[] = [];
 /** What the workspace's list of agents answers, whatever it was asked. */
 let workspace: readonly AgentSummary[] = [];
-/** The pull requests the workspace's GitHub App answers, by number; one it holds none for reads as none. */
-let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequestState }> =
-  new Map();
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -266,7 +264,6 @@ beforeEach(() => {
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied), ...DESKTOP_LINKS, pageFrameUrl });
   workspace = [];
-  gitHub = new Map();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
@@ -323,45 +320,12 @@ beforeEach(() => {
         transcript = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
-        const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      if (
-        request.kind === ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST &&
-        published?.pullRequest != null
-      ) {
-        // Note that the overview is read from what the agent published, as the service reads both from one pull request.
-        const { number, title, url, state } = published.pullRequest;
-        const value = {
-          pullRequest: {
-            number,
-            title,
-            url,
-            state,
-            html: "",
-            base: "main",
-            head: published.branch ?? "main",
-            createdAt: 1,
-            mergedAt: null,
-            merge: MERGE_STATE.CLEAN,
-            requested: [],
-          },
-        };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
       if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
-      }
-      if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
-        const { number } = request.payload;
-        const held = gitHub.get(number);
-        const value = held === undefined ? null : { number, author: "octo-dev", ...held };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AGENTS_START) {
         const value = {
@@ -391,6 +355,34 @@ beforeEach(() => {
   // Note that the agent's workspace's people are laid on the document as the page holds them, refused where the test names none.
   handMembers(() => (members === undefined ? { failed: true } : { rows: { members } }));
   handCapabilities(DESKTOP_CAPABILITIES);
+  // The host holds a Pull request tab's parts, read from what the agent published, as the service reads both from one pull request; refused where the test names none.
+  const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: () => {
+      const pullRequest = published?.pullRequest;
+      if (pullRequest == null) return Promise.resolve(unanswered);
+      const { number, title, url, state } = pullRequest;
+      return Promise.resolve({
+        pullRequest: {
+          number,
+          title,
+          url,
+          state,
+          html: "",
+          base: "main",
+          head: published?.branch ?? "main",
+          createdAt: 1,
+          mergedAt: null,
+          merge: MERGE_STATE.CLEAN,
+          requested: [],
+        },
+      });
+    },
+    [PULL_REQUEST_PART.CONVERSATION]: () =>
+      Promise.resolve(
+        earlier > 0 ? { pullRequest: { reviewers: [], conversation: [], earlier } } : unanswered,
+      ),
+  });
 });
 
 afterEach(() => {
@@ -1472,8 +1464,12 @@ test("a GitHub event's run names its pull request beside the automation, which o
 test("a GitHub event's pull request is its chip, saying where it stands and wearing GitHub's mark for it, where the workspace's GitHub App reads it, a workspace with no slug among them", async () => {
   const url = "https://github.com/acme/relay/pull/2905";
   const acme = { ...ACME, github: { login: "acme", active: true } };
-  gitHub = new Map([[2905, { title: "View commands", url, state: PULL_REQUEST_STATE.OPEN }]]);
-  const state = stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } });
+  const pullRequest = { number: 2905, title: "View commands", url, state: PULL_REQUEST_STATE.OPEN };
+  // The host holds the pull request's standing as the workspace's GitHub App reads it.
+  const state = {
+    ...stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme] } }),
+    [LIVE_READ.LINK_STANDINGS]: { [acme.id]: { [url]: { rows: { pullRequest } } } },
+  };
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     onAppState: () => () => undefined,

@@ -39,9 +39,6 @@ import {
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPageParams,
   type AgentPartParams,
@@ -82,9 +79,6 @@ import {
   agentListAnswerViewSchema,
   agentMessagesAnswerViewSchema,
   agentModelsAnswerSchema,
-  agentOverviewChecksAnswerViewSchema,
-  agentOverviewConversationAnswerViewSchema,
-  agentOverviewPullRequestAnswerViewSchema,
   agentPageAnswerViewSchema,
   agentPartViewSchema,
   agentPullRequestAnswerViewSchema,
@@ -114,6 +108,7 @@ import {
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
+  type PullRequestPartParams,
   providerKeysAnswerViewSchema,
 } from "@repo/features/agent-view";
 import type { ProductEventName, ProductEventPropertiesFor } from "@repo/features/analytics";
@@ -225,8 +220,7 @@ import {
   type TasksFindParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
-  type TasksIssueAnswer,
-  type TasksIssueParams,
+  type TasksLinkStandingParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -237,10 +231,7 @@ import {
   type TasksPictureParams,
   type TasksPinParams,
   type TasksPinRepositoryParams,
-  type TasksPullRequestAnswer,
-  type TasksPullRequestParams,
   type TasksRenameParams,
-  type TasksRepositoriesAnswer,
   type TasksRepositoriesParams,
   type TasksRevisionAnswer,
   type TasksRevisionParams,
@@ -296,13 +287,10 @@ import {
   tasksFindAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
   tasksGitHubPageAnswerSchema,
-  tasksIssueAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
   tasksPictureAnswerSchema,
   tasksPictureKeepAnswerSchema,
-  tasksPullRequestAnswerSchema,
-  tasksRepositoriesAnswerSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionsAnswerSchema,
   tasksSetParentAnswerSchema,
@@ -377,12 +365,15 @@ import type {
   AppInstalledSkills,
   AppIntegrations,
   AppIntegrationTools,
+  AppLinkStandings,
   AppMcpClients,
   AppMemories,
   AppPages,
   AppPlanComments,
   AppPlanDocuments,
   AppProviderKeys,
+  AppPullRequestParts,
+  AppRepositoryLists,
   AppSlackChannels,
   AppThisMacHosts,
   AppWorkspaceIntegrations,
@@ -480,8 +471,14 @@ export interface HostOperator {
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
-  /** The repositories the account reaches through our GitHub App, read from the service now; or why there is no list. */
-  tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
+  /** The repositories the account reaches in one workspace, or in every one, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onRepositoryListsChanged`. */
+  tasksRepositoriesFollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** One workspace's repositories let go by the windows. */
+  tasksRepositoriesUnfollow(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** One workspace's held repositories asked again at once, as Try again asks; done once the ask has landed. */
+  tasksRepositoriesRetry(params: TasksRepositoriesParams): Effect.Effect<void>;
+  /** Every workspace's repositories the host holds for the windows, whole, each time any of them moves. */
+  onRepositoryListsChanged(listener: (held: AppRepositoryLists) => void): () => void;
   /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
   tasksSetRepository(params: TasksSetRepositoryParams): Effect.Effect<TasksSetRepositoryAnswer>;
   /** One task moved to another of the account's workspaces; the workspace it now belongs to, or why it stands where it was. */
@@ -499,10 +496,12 @@ export interface HostOperator {
   tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
   /** The skills a developer may choose of a task's repository; or why they are not read. */
   tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
-  /** One pull request of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
-  tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
-  /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
-  tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+  /** What GitHub holds of the page a link names, held for the windows from now until let go and asked again as a window comes forward; what it holds is heard through `onLinkStandingsChanged`. */
+  tasksLinkStandingFollow(params: TasksLinkStandingParams): Effect.Effect<void>;
+  /** One link's standing let go by the windows. */
+  tasksLinkStandingUnfollow(params: TasksLinkStandingParams): Effect.Effect<void>;
+  /** Every link's standing the host holds for the windows, whole, each time any of them moves. */
+  onLinkStandingsChanged(listener: (held: AppLinkStandings) => void): () => void;
   /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
   tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** The id of the task a link names by its workspace and its number; or that none was found, or the service did not answer. */
@@ -792,6 +791,14 @@ export interface HostOperator {
   onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
+  /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
+  pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One pull request's part let go by the windows, kept a while among those let go lately. */
+  pullRequestPartUnfollow(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One pull request's held part asked again at once, as Try again asks; done once the ask has landed. */
+  pullRequestPartRetry(params: PullRequestPartParams): Effect.Effect<void>;
+  /** One of the Pull request tabs' held parts, whole, by its read's name, each time any of its keys moves. */
+  onPullRequestPartsChanged(listener: (held: Partial<AppPullRequestParts>) => void): () => void;
   /** One agent's pull request's newest chapters held followed for the windows from now until let go, and a while after among those let go lately; what they hold is heard through `onChaptersChanged`. */
   chaptersFollow(params: PullRequestChaptersReadParams): Effect.Effect<void>;
   /** One agent's pull request's chapters let go by the windows: they stay followed among those let go lately until later ones push them out. */
@@ -856,10 +863,6 @@ export interface HostOperator {
   agentPullRequestViewed(
     params: AgentPullRequestReadParams,
   ): Effect.Effect<AgentPullRequestViewedAnswerView>;
-  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
-  agentOverviewPullRequest(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
   agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
@@ -870,14 +873,6 @@ export interface HostOperator {
   agentWorkspaceToolsRetry(params: AgentPullRequestParams): Effect.Effect<void>;
   /** Every agent's own tools the host holds for the windows, whole, each time any of them moves. */
   onWorkspaceToolsChanged(listener: (held: AppWorkspaceTools) => void): () => void;
-  /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
-  agentOverviewChecks(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewChecksAnswerView>;
-  /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
-  agentOverviewConversation(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onProviderKeysChanged`. */
   providerKeysFollow(): Effect.Effect<void>;
   /** The account's provider keys let go by the windows. */
@@ -1047,6 +1042,11 @@ function pullRequestRead(params: AgentPullRequestReadParams): AgentPullRequestRe
     : { agentId: params.agentId, number: params.number };
 }
 
+/** One part of a pull request held as the gateway carries it: the part, the agent, and the number where the tab names one. */
+function pullRequestPart(params: PullRequestPartParams): PullRequestPartParams {
+  return { part: params.part, ...pullRequestRead(params) };
+}
+
 /** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
 function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
   return params.number === undefined
@@ -1153,6 +1153,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const on = gatewayEventReader(client);
 
   const wireReporter = (reporter: string) => ({ reporter });
+
+  /** A repository list's scope as the gateway carries it: its workspace, or nothing for every one. */
+  const repositoryScope = (params: TasksRepositoriesParams) =>
+    params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId };
 
   /**
    * A setting's value as the method's own field, or no field for a cleared
@@ -1366,13 +1370,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
         (answer) => record(answer)?.changed === true,
       ),
-    tasksRepositories: (params) =>
-      Effect.map(
-        client.call(
-          GATEWAY_METHOD.TASKS_REPOSITORIES,
-          params.workspaceId === undefined ? {} : { workspaceId: params.workspaceId },
-        ),
-        answerOf(tasksRepositoriesAnswerSchema, TASK_UNANSWERED),
+    tasksRepositoriesFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW, repositoryScope(params))),
+    tasksRepositoriesUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_UNFOLLOW, repositoryScope(params))),
+    tasksRepositoriesRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.TASKS_REPOSITORIES_RETRY, repositoryScope(params))),
+    onRepositoryListsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.REPOSITORY_LISTS_CHANGED,
+        // Note that the held lists are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppRepositoryLists>(payload) : undefined),
+        listener,
       ),
     tasksFile: (params) =>
       Effect.map(
@@ -1414,23 +1423,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
         answerOf(tasksSkillsAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+    tasksLinkStandingFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW, {
           workspaceId: params.workspaceId,
-          repository: params.repository,
-          number: params.number,
+          address: params.address,
         }),
-        answerOf(tasksPullRequestAnswerSchema, TASK_UNANSWERED),
       ),
-    tasksIssue: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ISSUE, {
+    tasksLinkStandingUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.TASKS_LINK_STANDING_UNFOLLOW, {
           workspaceId: params.workspaceId,
-          repository: params.repository,
-          number: params.number,
+          address: params.address,
         }),
-        answerOf(tasksIssueAnswerSchema, TASK_UNANSWERED),
+      ),
+    onLinkStandingsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.LINK_STANDINGS_CHANGED,
+        // Note that the held standings are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
+        (payload) => (isRecord(payload) ? answered<AppLinkStandings>(payload) : undefined),
+        listener,
       ),
     tasksBrowserTabOpen: (params) =>
       Effect.map(
@@ -2110,6 +2122,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           isRecord(payload) ? answered<Partial<AppAutomationReads>>(payload) : undefined,
         listener,
       ),
+    pullRequestPartFollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW, pullRequestPart(params))),
+    pullRequestPartUnfollow: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW, pullRequestPart(params))),
+    pullRequestPartRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY, pullRequestPart(params))),
+    onPullRequestPartsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED,
+        // Note that the held parts are the host's own, handed over in this process, so they are passed on as built, as the held pages are.
+        (payload) =>
+          isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
+        listener,
+      ),
     agentPullRequest: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
@@ -2243,11 +2269,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
         answerOf(agentPullRequestViewedAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    agentOverviewPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentOverviewPullRequestAnswerViewSchema, AGENT_UNANSWERED),
-      ),
     agentReviewOptions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
@@ -2267,16 +2288,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // Note that the held tools are the host's own, handed over in this process, so they are passed on as built, as the held inboxes are.
         (payload) => (isRecord(payload) ? answered<AppWorkspaceTools>(payload) : undefined),
         listener,
-      ),
-    agentOverviewChecks: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
-        answerOf(agentOverviewChecksAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentOverviewConversation: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
-        answerOf(agentOverviewConversationAnswerViewSchema, AGENT_UNANSWERED),
       ),
     providerKeysFollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_FOLLOW, {})),
     providerKeysUnfollow: () => fire(client.call(GATEWAY_METHOD.PROVIDER_KEYS_UNFOLLOW, {})),

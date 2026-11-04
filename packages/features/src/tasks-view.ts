@@ -9,13 +9,7 @@ import {
   tasklessAgentSchema,
 } from "./agent-wire.js";
 import {
-  githubIssueSummarySchema,
-  githubPullRequestNumberSchema,
-  githubPullRequestSummarySchema,
-  githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
-  githubRepositoryIssueAnswerSchema,
-  githubRepositoryPullRequestAnswerSchema,
   workspaceTokenRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import {
@@ -425,14 +419,6 @@ const REPOSITORY_LIST_FAILURES = [TASK_CALL_FAILURE.UNANSWERED] as const;
 
 export type RepositoryListFailure = (typeof REPOSITORY_LIST_FAILURES)[number];
 
-/** The repositories the account reaches, as the window hears them: the service's answer whole, or why there is none. */
-export const tasksRepositoriesAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ repositories: githubRepositoriesAnswerSchema }),
-  EffectSchema.Struct({ failure: EffectSchema.Literals(REPOSITORY_LIST_FAILURES) }),
-]);
-
-export type TasksRepositoriesAnswer = typeof tasksRepositoriesAnswerSchema.Type;
-
 /** A task's repository changed, as the window hears it: the repository the task now names, or why it is unchanged. */
 export const tasksSetRepositoryAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ repository: EffectSchema.NullOr(EffectSchema.String) }),
@@ -612,43 +598,19 @@ export const tasksSkillsAnswerSchema = EffectSchema.Union([
 
 export type TasksSkillsAnswer = typeof tasksSkillsAnswerSchema.Type;
 
-/** One pull request of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the pull request's number. */
-export const tasksPullRequestParamsSchema = EffectSchema.Struct({
-  ...repositoryPlaceFields,
-  number: githubPullRequestNumberSchema,
+/** The most characters a link's address may carry where a chip holds its standing. */
+const LINK_ADDRESS_MAX_CHARS = 2_048;
+
+/** A link's standing as a chip holds it: the workspace whose installation reaches the page, and the link's own address, which names the pull request or issue. */
+export const tasksLinkStandingParamsSchema = EffectSchema.Struct({
+  workspaceId: workspaceSchema.fields.id,
+  address: EffectSchema.String.check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(LINK_ADDRESS_MAX_CHARS),
+  ),
 });
 
-export type TasksPullRequestParams = typeof tasksPullRequestParamsSchema.Type;
-
-/** The read of one pull request, as the window hears it: the pull request, null where there is none to draw, or that the service did not answer. */
-export const tasksPullRequestAnswerSchema = EffectSchema.Union([
-  githubRepositoryPullRequestAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksPullRequestAnswer = typeof tasksPullRequestAnswerSchema.Type;
-
-/** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
-export const tasksPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
-
-/** One issue of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the issue's number. */
-export const tasksIssueParamsSchema = EffectSchema.Struct({
-  ...repositoryPlaceFields,
-  number: githubPullRequestNumberSchema,
-});
-
-export type TasksIssueParams = typeof tasksIssueParamsSchema.Type;
-
-/** The read of one issue, as the window hears it: the issue, null where there is none to draw, or that the service did not answer. */
-export const tasksIssueAnswerSchema = EffectSchema.Union([
-  githubRepositoryIssueAnswerSchema,
-  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
-]);
-
-export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
-
-/** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
-export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
+export type TasksLinkStandingParams = typeof tasksLinkStandingParamsSchema.Type;
 
 /**
  * Why a Browser tab a member asked for did not open in a coding agent's

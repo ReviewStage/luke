@@ -5,6 +5,7 @@ import {
   liveStatementOf,
 } from "@repo/database/core/live-statement";
 import { queryBuilder } from "@repo/database/core/query";
+import { taskMadeByRun } from "@repo/database/models/run-tasks";
 import { taskBlockedFor } from "@repo/database/models/task-block-store";
 import {
   AGENT_WORKSPACE,
@@ -85,8 +86,11 @@ export interface TaskListLiveStatements {
 
 /**
  * The plans the account reaches, each with the reader's own pin, its
- * owner's name, and whether it waits on an open task the account reaches
- * (`taskBlockedFor`). Note that `archivedAt` is still answered, as null, because
+ * owner's name, whether it waits on an open task the account reaches
+ * (`taskBlockedFor`), and whether an automation's run made it for itself
+ * (`taskMadeByRun`), which the run names in the transaction that inserts the
+ * task (`automation-runs.ts`'s `runTaskOf`), so the plan's own row moving
+ * reads it. Note that `archivedAt` is still answered, as null, because
  * a desktop from before #4541 decodes a row without it as no row: no
  * plan is archived any more, and the column is dropped. The key goes with
  * the minimum supported desktop version, not with a service deploy, since a
@@ -115,6 +119,7 @@ function tasksStatement(userId: string, narrowed: SQL = sql`true`) {
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           blocked: taskBlockedFor(userId),
+          madeByRun: taskMadeByRun(task.id),
         },
         {
           pinnedAt: taskPin.pinnedAt,

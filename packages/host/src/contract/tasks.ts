@@ -37,8 +37,7 @@ import {
   tasksFileParamsSchema,
   tasksFindAnswerSchema,
   tasksFindParamsSchema,
-  tasksIssueParamsSchema,
-  tasksIssueSchema,
+  tasksLinkStandingParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -49,10 +48,7 @@ import {
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
-  tasksPullRequestParamsSchema,
-  tasksPullRequestSchema,
   tasksRenameParamsSchema,
-  tasksRepositoriesAnswerSchema,
   tasksRepositoriesParamsSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionParamsSchema,
@@ -131,11 +127,17 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksWriteSectionParamsSchema))
     .output(EffectSchema.Boolean),
-  [TASKS_ACT_KIND.TASKS_REPOSITORIES]: actProcedure(
-    "Could not read your GitHub repositories on this system.",
+  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
+  [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: actProcedure(
+    "Could not follow your GitHub repositories on this system.",
   )
     .input(exactInput(tasksRepositoriesParamsSchema))
-    .output(EffectSchema.flip(tasksRepositoriesAnswerSchema)),
+    .output(eventIterator(type<never>())),
+  [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]: actProcedure(
+    "Could not read your GitHub repositories again on this system.",
+  )
+    .input(exactInput(tasksRepositoriesParamsSchema))
+    .output(EffectSchema.Void),
   [TASKS_ACT_KIND.TASKS_SET_REPOSITORY]: actProcedure(
     "Could not change that task's repository on this system.",
   )
@@ -201,14 +203,12 @@ export const tasksActsContract = {
   )
     .input(exactInput(tasksSkillsParamsSchema))
     .output(EffectSchema.flip(tasksSkillsAnswerSchema)),
-  [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: actProcedure(
-    "Could not read that pull request on this system.",
+  // Note that the hold's stream carries nothing: the held standing reaches the panel on app state, and the stream is the window's hold on it.
+  [TASKS_ACT_KIND.TASKS_LINK_STANDING_FOLLOW]: actProcedure(
+    "Could not follow that link on this system.",
   )
-    .input(exactInput(tasksPullRequestParamsSchema))
-    .output(EffectSchema.flip(tasksPullRequestSchema)),
-  [TASKS_ACT_KIND.TASKS_ISSUE]: actProcedure("Could not read that issue on this system.")
-    .input(exactInput(tasksIssueParamsSchema))
-    .output(EffectSchema.flip(tasksIssueSchema)),
+    .input(exactInput(tasksLinkStandingParamsSchema))
+    .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actProcedure(
     "Could not open a tab in that agent's browser on this system.",
   )

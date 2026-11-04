@@ -71,6 +71,8 @@ import {
   handCapabilities,
   handHostReads,
   holdAutomations,
+  holdRepositoryLists,
+  type RepositoriesRead,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -172,12 +174,35 @@ let refusePhoto = false;
 let refuseRole = false;
 /** The repositories the workspace reaches on GitHub, by full name. */
 let githubRepositories: string[] = [];
-/** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
-let repositoriesHeld: Promise<void> | undefined;
 /** A repository as the picker's listing answers it, by its full name and what reaches it. */
 function listedRepository(fullName: string, access: GitHubAccess) {
   const [owner = "", name = ""] = fullName.split("/");
   return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
+}
+
+/** The repositories the workspace's picker lists, as the service answers them: the App's, and the reader's token's as addable, or among them from a service older than `addable`. */
+function listing(): RepositoriesRead {
+  return {
+    repositories: {
+      installed: true,
+      installationUrl: "https://github.com/apps/luke/installations/new",
+      ...(beforeAddable
+        ? {
+            repositories: [
+              ...githubRepositories.map((fullName) =>
+                listedRepository(fullName, GITHUB_ACCESS.APP),
+              ),
+              ...tokenReach.map((fullName) => listedRepository(fullName, GITHUB_ACCESS.TOKEN)),
+            ],
+          }
+        : {
+            repositories: githubRepositories.map((fullName) =>
+              listedRepository(fullName, GITHUB_ACCESS.APP),
+            ),
+            addable: tokenReach.map((fullName) => listedRepository(fullName, GITHUB_ACCESS.TOKEN)),
+          }),
+    },
+  };
 }
 
 /** A token the reader saved, as the token's read answers it. */
@@ -409,39 +434,6 @@ function answer(request: Asked): Promise<Answered> {
       layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.TASKS_REPOSITORIES:
-      if (repositoriesHeld !== undefined) {
-        const held = repositoriesHeld;
-        repositoriesHeld = undefined;
-        return held.then(() => answer({ ...request }));
-      }
-      return Promise.resolve(
-        done({
-          repositories: {
-            installed: true,
-            installationUrl: "https://github.com/apps/luke/installations/new",
-            ...(beforeAddable
-              ? {
-                  repositories: [
-                    ...githubRepositories.map((fullName) =>
-                      listedRepository(fullName, GITHUB_ACCESS.APP),
-                    ),
-                    ...tokenReach.map((fullName) =>
-                      listedRepository(fullName, GITHUB_ACCESS.TOKEN),
-                    ),
-                  ],
-                }
-              : {
-                  repositories: githubRepositories.map((fullName) =>
-                    listedRepository(fullName, GITHUB_ACCESS.APP),
-                  ),
-                  addable: tokenReach.map((fullName) =>
-                    listedRepository(fullName, GITHUB_ACCESS.TOKEN),
-                  ),
-                }),
-          },
-        }),
-      );
     case ACT_KIND.GITHUB_TOKEN_READ:
       return Promise.resolve(done({ token: tokenSaved ? SAVED_TOKEN : null }));
     case ACT_KIND.WORKSPACE_LEAVE:
@@ -554,7 +546,6 @@ beforeEach(() => {
   refuseRole = false;
   automations = undefined;
   githubRepositories = [];
-  repositoriesHeld = undefined;
   tokenReach = [];
   beforeAddable = false;
   tokenRepositories = [];
@@ -596,6 +587,7 @@ beforeEach(() => {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
       automations === undefined ? undefined : { rows: automations.map(automationOf) },
   });
+  holdRepositoryLists(reads.deliverRepositoryLists, listing);
 });
 
 afterEach(() => {

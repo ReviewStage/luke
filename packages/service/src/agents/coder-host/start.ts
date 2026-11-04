@@ -571,9 +571,10 @@ const landingOf = Effect.fnUntraced(function* (
       place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
   }
-  // A task with no repository is handed to an agent only in the local demo, which the Start then
-  // holds to an agent on a host once it knows where the agent runs (`repositorylessOnHost`).
-  if (task.repository === null && !(yield* LocalDemo).on) {
+  // A task with no repository is handed words, as an agent on no task is, which works with no checkout;
+  // its plan is handed only in the local demo, which the Start then holds to an agent on a host once it
+  // knows where the agent runs (`repositorylessOnHost`), since a plan is built in a repository.
+  if (task.repository === null && brief === undefined && !(yield* LocalDemo).on) {
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
   const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
@@ -1101,18 +1102,21 @@ const machineOfStart = Effect.fnUntraced(function* (
 
 /**
  * Whether a Start that landed on a task with no repository may go on where
- * its agent runs: a blank one anywhere, as ever, and one handed the plan or a
- * prompt, which only the local demo lands (`landingOf`), on a host alone,
- * where the host starts it in an empty folder of its own; never in the cloud,
- * whose sandbox is a checkout of a repository. A Start with no task, or on a
- * task with a repository, goes on as it landed.
+ * its agent runs: a blank one anywhere, as ever, and one handed words
+ * anywhere, as an agent on no task is, the cloud's sandbox and a host's
+ * folder holding no checkout; one handed the plan, which only the local
+ * demo lands (`landingOf`), on a host alone, where the host starts it in an
+ * empty folder of its own, never in the cloud, whose sandbox would hold no
+ * repository to build the plan in. A Start with no task, or on a task with
+ * a repository, goes on as it landed.
  */
 function repositorylessOnHost(
   ask: Pick<StartAsk, "blank">,
-  landing: Pick<StartLanding, "task" | "repository">,
+  landing: Pick<StartLanding, "task" | "repository" | "place">,
   where: StartMachine,
 ): boolean {
   if (landing.task === undefined || landing.repository !== null || ask.blank === true) return true;
+  if (landing.place.prompt !== null) return true;
   return where.asked.machine === AGENT_MACHINE.DEVICE;
 }
 

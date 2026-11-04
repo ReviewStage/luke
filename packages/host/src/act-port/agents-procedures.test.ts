@@ -83,14 +83,8 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_PAGE]: "Could not read the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_CHANGES]: "Could not read the agent's changes on this system.",
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST]:
-    "Could not read the agent's pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]:
     "Could not read the repository's reviewers and labels on this system.",
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS]:
-    "Could not read the pull request's checks on this system.",
-  [AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION]:
-    "Could not read the pull request's conversation on this system.",
   [AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE]: "Could not read the pull request's image on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: "Could not change the pull request on this system.",
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]:
@@ -206,24 +200,9 @@ const ACTS: readonly {
     ask: "agentChanges",
   },
   {
-    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST,
-    payload: { agentId: AGENT_ID },
-    ask: "agentOverviewPullRequest",
-  },
-  {
     kind: AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS,
     payload: { agentId: AGENT_ID },
     ask: "agentReviewOptions",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CHECKS,
-    payload: { agentId: AGENT_ID },
-    ask: "agentOverviewChecks",
-  },
-  {
-    kind: AGENT_ACT_KIND.AGENTS_OVERVIEW_CONVERSATION,
-    payload: { agentId: AGENT_ID },
-    ask: "agentOverviewConversation",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_GITHUB_IMAGE,

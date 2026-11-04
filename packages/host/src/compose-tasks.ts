@@ -23,6 +23,7 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
 import {
   browserTabsOfLiveRows,
   type LIVE_READ,
@@ -75,16 +76,13 @@ import {
   type TasksFindAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
-  type TasksIssueAnswer,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPinParams,
-  type TasksPullRequestAnswer,
   type TasksRenameParams,
-  type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
   type TasksSetParentAnswer,
@@ -120,14 +118,13 @@ import {
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksFindParamsSchema,
-  tasksIssueParamsSchema,
+  tasksLinkStandingParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
   tasksPinParamsSchema,
   tasksPinRepositoryParamsSchema,
-  tasksPullRequestParamsSchema,
   tasksRenameParamsSchema,
   tasksRepositoriesParamsSchema,
   tasksRevisionParamsSchema,
@@ -182,6 +179,7 @@ import {
   FiberMap,
   MutableHashMap,
   Option,
+  PubSub,
   Queue,
   Schema,
   Scope,
@@ -189,7 +187,15 @@ import {
   Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import { NO_BROWSER_TABS, NO_KEYS_HELD, NO_PAGES } from "./app-state.js";
+import {
+  type AppLinkStanding,
+  type AppLinkStandings,
+  type AppRepositoryLists,
+  EVERY_WORKSPACE,
+  NO_BROWSER_TABS,
+  NO_KEYS_HELD,
+  NO_PAGES,
+} from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { type EntityStore, KEPT_READ } from "./entity-store.js";
@@ -221,6 +227,7 @@ import {
 } from "./plan-comment-reads.js";
 import { planCommentWrites } from "./plan-comment-writes.js";
 import { planDocumentReads } from "./plan-document-reads.js";
+import type { PullRequestListing } from "./pull-request-parts.js";
 import type { RunMode } from "./run-mode.js";
 import { sidebarCollections, sidebarWrites } from "./sidebar-collections.js";
 import { PLAN, type PlanRow, taskListCollections } from "./task-list-collections.js";
@@ -332,6 +339,12 @@ function linkReadKey(asked: {
     number: asked.number,
   });
 }
+
+/** One link's standing as the windows hold it, by the workspace it is read through and the link's own address. */
+class LinkStandingKey extends Data.Class<{
+  readonly workspaceId: string;
+  readonly address: string;
+}> {}
 
 /** How long a link's read is kept: `LINK_READ_KEPT.ANSWERED` where the service answered, `UNANSWERED` where it did not. */
 function linkReadKept(exit: Exit.Exit<unknown>): Duration.Duration {
@@ -555,6 +568,10 @@ export interface TasksComposer extends Composer {
    * waits for nothing.
    */
   listed: (txid: string | undefined) => Effect.Effect<void>;
+  /** The task list as each drawing of it stands, each agent's status and every pull request it names, from the caller's listening until its scope closes, which the Pull request tabs' parts are asked again on (`pull-request-parts.ts`). */
+  pullRequestListings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
+  /** Every workspace's repositories the windows hold asked again, as the member's own token saved or removed moves them. */
+  repositoriesMoved: Effect.Effect<void>;
 }
 
 /** The statuses a task stands finished in, which the service stamps `completedAt` as it enters. */
@@ -753,6 +770,83 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       ),
     { capacity: LINK_READ_KEPT.CAPACITY, timeToLive: linkReadKept },
   );
+
+  /** What GitHub holds of the page a link names, from the reads kept for every link; none where its address names no page or the service did not answer. */
+  const linkStandingOf = (link: LinkStandingKey) => {
+    const { workspaceId, address } = link;
+    const pullRequest = pullRequestAddressOf(address);
+    if (pullRequest !== undefined) {
+      const read = Cache.get(pullRequestReads, linkReadKey({ workspaceId, ...pullRequest }));
+      return Effect.map(
+        read,
+        (answer): Option.Option<AppLinkStanding> => Option.fromUndefinedOr(answer),
+      );
+    }
+    const issue = issueAddressOf(address);
+    if (issue === undefined) return Effect.succeed(Option.none<AppLinkStanding>());
+    const read = Cache.get(issueReads, linkReadKey({ workspaceId, ...issue }));
+    return Effect.map(
+      read,
+      (answer): Option.Option<AppLinkStanding> => Option.fromUndefinedOr(answer),
+    );
+  };
+  /**
+   * What GitHub holds of each page a link names, fetched for the chips that
+   * hold it (`held-fetch.ts`), by the workspace whose installation reaches it
+   * and then the link's own address: asked as a chip first holds it and again
+   * as a window comes forward, each ask answered from the reads kept for
+   * every link (`LINK_READ_KEPT`), so a focus inside their minute asks
+   * GitHub nothing.
+   */
+  const linkStandings = yield* heldFetch<typeof LIVE_READ.LINK_STANDINGS, LinkStandingKey>({
+    empty: NO_KEYS_HELD,
+    path: (link) => [link.workspaceId, link.address],
+    gate,
+    focus: dependencies.focus,
+    fetch: linkStandingOf,
+    tell: (held: AppLinkStandings) =>
+      kernel.emit(GATEWAY_EVENT.LINK_STANDINGS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each link's standing, one fiber standing until let go. */
+  const linkHolds = yield* FiberMap.make<LinkStandingKey>();
+  /**
+   * The repositories the account reaches in each workspace, or in every one,
+   * fetched for the windows that hold them (`held-fetch.ts`): asked as a
+   * window first holds a workspace's, again as a window comes forward, which
+   * is how a developer returns from installing the App in the browser, as the
+   * workspace's GitHub installations move or a token repository is set in it,
+   * as the member's own token changes (`repositoriesMoved`), and on Try again.
+   */
+  const repositoryLists = yield* heldFetch<typeof LIVE_READ.REPOSITORY_LISTS, string>({
+    empty: NO_KEYS_HELD,
+    path: (workspace) => [workspace],
+    gate,
+    focus: dependencies.focus,
+    fetch: (workspace) =>
+      Effect.map(
+        served(client.repositories(workspace === EVERY_WORKSPACE ? undefined : workspace)),
+        (listed) => (listed.ok ? Option.some(listed.answer) : Option.none()),
+      ),
+    tell: (held: AppRepositoryLists) =>
+      kernel.emit(GATEWAY_EVENT.REPOSITORY_LISTS_CHANGED, carried(held)),
+  });
+  /** The windows' hold on each workspace's repositories, one fiber standing until let go. */
+  const repositoryHolds = yield* FiberMap.make<string>();
+  /** The workspace a repository list's params name, or every one where they name none. */
+  const repositoryScopeOf = (params: WireRecord) =>
+    Effect.map(
+      readParams(
+        tasksRepositoriesParamsSchema,
+        params,
+        "a repository list names the workspace it is for, or none",
+      ),
+      (read) => read.workspaceId ?? EVERY_WORKSPACE,
+    );
+  /** The lists of the workspaces named asked again, and the list of every workspace's, which a change in any of them moves too. */
+  const repositoriesMovedIn = (workspaceIds: ReadonlySet<string>) =>
+    repositoryLists.wake(
+      (workspace) => workspace === EVERY_WORKSPACE || workspaceIds.has(workspace),
+    );
 
   /**
    * One read of the service at a time, whichever ask made it. Note that the
@@ -1075,6 +1169,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * holds of each task whose plan is held, its name, pin, status, assignee,
    * and repository, reaches its plan as the list carries it.
    */
+  /** Each drawing of the task list, told to every listener of the Pull request tabs' parts. */
+  const listings = yield* Effect.acquireRelease(
+    PubSub.unbounded<PullRequestListing>(),
+    PubSub.shutdown,
+  );
+
   const openTaskList = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const collections = yield* Scope.provide(scope)(
@@ -1099,6 +1199,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             taskAgentPins,
           });
           documents.relisted();
+          const agents = [...taskAgents, ...(list.planlessAgents ?? [])];
+          PubSub.publishUnsafe(listings, {
+            statuses: new Map(agents.map((agent) => [agent.id, agent.status])),
+            pullRequests: agentPullRequests,
+          });
         },
         txWait: () => listWait,
       }),
@@ -1191,6 +1296,21 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const gone = yield* Stream.runForEach(moves, (workspaces) =>
         Effect.gen(function* () {
           const drawn = new Map(view.workspaces.map((each) => [each.id, JSON.stringify(each)]));
+          const installed = new Map(
+            view.workspaces.map((each) => [
+              each.id,
+              JSON.stringify(each.githubInstallations ?? []),
+            ]),
+          );
+          // Note that a workspace whose GitHub installations moved reaches other repositories now, so its list is asked again.
+          const reinstalled = new Set(
+            workspaces
+              .filter((each) => {
+                const was = installed.get(each.id);
+                return was !== undefined && was !== JSON.stringify(each.githubInstallations ?? []);
+              })
+              .map((each) => each.id),
+          );
           const listed = new Set(workspaces.map((each) => each.id));
           // Note that a workspace leaving the list lets go of all content kept, since what was read in it is no longer the account's to read.
           if ([...drawn.keys()].some((id) => !listed.has(id))) yield* kept.clear;
@@ -1200,6 +1320,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }
           write({ workspaces, workspacesStatus: TASKS_READ.READY });
           yield* dependencies.entities()?.keep(KEPT_READ.WORKSPACES, workspaces) ?? Effect.void;
+          if (reinstalled.size > 0) yield* repositoriesMovedIn(reinstalled);
         }),
       ).pipe(
         Effect.as(false),
@@ -2384,34 +2505,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = Option.isSome(held) ? held.value : yield* Fiber.join(read);
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A pull request is answered to the link that asked, and kept for every
-    // link asking it again for as long as `LINK_READ_KEPT` says.
-    [GATEWAY_METHOD.TASKS_PULL_REQUEST]: (params) =>
+    // A link's standing is held for the windows while a chip draws it, and told only on the app state (`LINK_STANDINGS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.TASKS_LINK_STANDING_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksPullRequestParamsSchema,
-          params,
-          "reading a pull request names a workspace, its repository, and the pull request's number",
+        const link = new LinkStandingKey(
+          yield* readParams(
+            tasksLinkStandingParamsSchema,
+            params,
+            "following a link names the workspace it is read through and its address",
+          ),
         );
-        if (!gate()) {
-          return carried<TasksPullRequestAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const answer = yield* Cache.get(pullRequestReads, linkReadKey(read));
-        return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+        yield* FiberMap.run(
+          linkHolds,
+          link,
+          Effect.scoped(Effect.andThen(linkStandings.hold(link), Effect.never)),
+          { onlyIfMissing: true },
+        );
+        return {};
       }),
-    // An issue is answered as a pull request is: to the link that asked, and kept as it is.
-    [GATEWAY_METHOD.TASKS_ISSUE]: (params) =>
+    [GATEWAY_METHOD.TASKS_LINK_STANDING_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksIssueParamsSchema,
+        const link = yield* readParams(
+          tasksLinkStandingParamsSchema,
           params,
-          "reading an issue names a workspace, its repository, and the issue's number",
+          "letting a link go names the workspace it is read through and its address",
         );
-        if (!gate()) {
-          return carried<TasksIssueAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const answer = yield* Cache.get(issueReads, linkReadKey(read));
-        return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
+        yield* FiberMap.remove(linkHolds, new LinkStandingKey(link));
+        return {};
       }),
     // A tab a member opens in an agent's browser is answered to the panel
     // that asked and held nowhere; the held list names it once it moves.
@@ -2854,23 +2974,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           (read) => ({ ...read, ownerId: dependencies.accountId(), at: kernel.now() }),
         ),
     ),
-    // The list is the service's answer whole, read now and held nowhere: the
-    // panel asks again whenever its chip opens, so an App installed meanwhile
-    // shows on the next opening.
-    [GATEWAY_METHOD.TASKS_REPOSITORIES]: (params) =>
+    // A workspace's repositories, or every one's, are held for the windows while a chip or a picker stands, and told only on the app state (`REPOSITORY_LISTS_CHANGED`). Note that the windows' hold is one fiber standing until let go.
+    [GATEWAY_METHOD.TASKS_REPOSITORIES_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = yield* readParams(
-          tasksRepositoriesParamsSchema,
-          params,
-          "listing repositories names the workspace they are for, or none",
+        const workspace = yield* repositoryScopeOf(params);
+        yield* FiberMap.run(
+          repositoryHolds,
+          workspace,
+          Effect.scoped(Effect.andThen(repositoryLists.hold(workspace), Effect.never)),
+          { onlyIfMissing: true },
         );
-        if (!gate()) {
-          return carried<TasksRepositoriesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        }
-        const listed = yield* served(client.repositories(read.workspaceId));
-        return carried<TasksRepositoriesAnswer>(
-          listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
-        );
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_REPOSITORIES_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        yield* FiberMap.remove(repositoryHolds, yield* repositoryScopeOf(params));
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_REPOSITORIES_RETRY]: (params) =>
+      Effect.gen(function* () {
+        yield* repositoryLists.retry(yield* repositoryScopeOf(params));
+        return {};
       }),
     [GATEWAY_METHOD.TASKS_SET_REPOSITORY]: declaredMethod(
       dependencies.pool,
@@ -3435,6 +3559,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const changed = yield* served(
           client.workspaces.setTokenRepository(workspaceId, repository, added),
         );
+        if (changed.ok) yield* repositoriesMovedIn(new Set([workspaceId]));
         return carried<TasksWorkspaceTokenRepositoriesAnswer>(
           changed.ok ? { repositories: changed.answer } : { failure: changed.failure },
         );
@@ -3588,6 +3713,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldBrowserTabs.open;
       yield* heldHistories.open;
       yield* comments.open;
+      yield* linkStandings.open;
+      yield* repositoryLists.open;
       yield* membersReads.held.open;
       yield* integrations.open;
       yield* slackChannels.open;
@@ -3598,6 +3725,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.run(githubOpened, readGithubWhenStale, { onlyIfMissing: true });
     }),
     listed,
+    pullRequestListings: Effect.map(PubSub.subscribe(listings), Stream.fromSubscription),
+    repositoriesMoved: repositoryLists.wake(() => true),
     reset: Effect.gen(function* () {
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
@@ -3608,6 +3737,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* heldBrowserTabs.end;
       yield* heldHistories.end;
       yield* comments.end;
+      yield* linkStandings.end;
+      yield* repositoryLists.end;
       yield* membersReads.held.end;
       yield* integrations.end;
       yield* slackChannels.end;

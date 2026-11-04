@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PULL_REQUEST_PART } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentOverviewPullRequest,
@@ -29,7 +30,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handMembers } from "../testing/app-state.js";
+import { handHostReads, handMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -161,6 +162,14 @@ async function settle(): Promise<void> {
 
 /** The agent's Pull request tab, its reads answering the description as GitHub holds it, which the member may edit or not. */
 async function drawTab(canEditDescription = true): Promise<HTMLElement> {
+  // The host holds the tab's parts, its pull request read anew from what GitHub holds on each ask.
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: () =>
+      Promise.resolve({ pullRequest: pullRequestOf(onGitHub, canEditDescription) }),
+    [PULL_REQUEST_PART.CHECKS]: () => Promise.resolve({ pullRequest: { checks: [] } }),
+    [PULL_REQUEST_PART.CONVERSATION]: () =>
+      Promise.resolve({ pullRequest: { reviewers: [], conversation: [], earlier: 0 } }),
+  });
   const control = agentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -180,11 +189,6 @@ async function drawTab(canEditDescription = true): Promise<HTMLElement> {
         },
       ],
     ]),
-    readOverviewPullRequest: () =>
-      Promise.resolve({ pullRequest: pullRequestOf(onGitHub, canEditDescription) }),
-    readOverviewChecks: () => Promise.resolve({ pullRequest: { checks: [] } }),
-    readOverviewConversation: () =>
-      Promise.resolve({ pullRequest: { reviewers: [], conversation: [], earlier: 0 } }),
   });
   const tab = createElement(AgentPullRequestTab, {
     agentId: AGENT.id,

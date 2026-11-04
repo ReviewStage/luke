@@ -1,3 +1,4 @@
+import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
@@ -16,10 +17,11 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { repositoryMenuRow } from "../repository-row.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { MenuRow } from "./menu-row.js";
 import { Picker, PickerRow } from "./picker-row.js";
@@ -63,11 +65,6 @@ const WORDS = {
 } as const;
 
 /** The repositories the workspace reaches, as the menu reads them: still reading, not read, or their rows. */
-type RepositoryRows =
-  | { readonly kind: "reading" }
-  | { readonly kind: "failed" }
-  | { readonly kind: "read"; readonly rows: readonly MenuRowChoice[] };
-
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /** A channel as a sentence names it, as Slack writes one. */
@@ -80,34 +77,24 @@ function ChannelMark({ channel }: { channel: SlackListedChannel }): React.JSX.El
   return channel.private ? <GLYPH.PRIVATE_CHANNEL /> : <GLYPH.CHANNEL />;
 }
 
-/** The repositories the workspace reaches, read as a picker opens, so one that failed is asked for again. */
+/**
+ * The repositories the workspace reaches, held by the host while the row
+ * stands (`LIVE_READ.REPOSITORY_LISTS`); a picker opened over a read that
+ * never answered asks for it again.
+ */
 function useRepositoryRows(workspaceId: string) {
-  const { act } = useAct();
-  const [rows, setRows] = useState<RepositoryRows>({ kind: "reading" });
-  const read = () => {
-    setRows({ kind: "reading" });
-    act(ACT_KIND.TASKS_REPOSITORIES, { workspaceId }).then(
-      (answer) =>
-        setRows(
-          "failure" in answer
-            ? { kind: "failed" }
-            : {
-                kind: "read",
-                rows: answer.repositories.repositories.map((one) =>
-                  repositoryMenuRow(one.fullName, true),
-                ),
-              },
-        ),
-      () => setRows({ kind: "failed" }),
-    );
-  };
-  const note =
-    rows.kind === "reading"
+  const { rows: listed, status, retry } = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const rows: readonly MenuRowChoice[] = useMemo(
+    () => listed?.repositories.map((one) => repositoryMenuRow(one.fullName, true)) ?? [],
+    [listed],
+  );
+  const failed = status === HOST_READ_STATUS.FAILED;
+  const note = failed
+    ? readFailedWords(TERM.REPOSITORY.many)
+    : listed === undefined
       ? readingWords(TERM.REPOSITORY.many)
-      : rows.kind === "failed"
-        ? readFailedWords(TERM.REPOSITORY.many)
-        : undefined;
-  return { read, note, rows: rows.kind === "read" ? rows.rows : [] };
+      : undefined;
+  return { read: failed ? retry : () => undefined, note, rows };
 }
 
 /**
