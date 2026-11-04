@@ -1,6 +1,8 @@
 import { useAtom } from "@effect/atom-react";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentSummary, TasklessAgent } from "@repo/features/agent-wire";
+import { automationTriggerText } from "@repo/features/automation-list-model";
+import type { AutomationSummary } from "@repo/features/automation-wire";
 import {
   type DateSpan,
   dateChipText,
@@ -91,7 +93,8 @@ import {
 } from "lucide-react";
 import { type RefObject, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
+import { useAutomations } from "../desktop/use-automations.js";
 import { unreadShown } from "../failure-report.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -202,6 +205,12 @@ import { useTaskStatus } from "./use-known-names.js";
  * thread's link (`@repo/features/link-grammar`), which every place draws
  * as its chip.
  *
+ * Wherever the words stand in a workspace, the list offers its automations
+ * too once a word is typed, as its Automations page lists them, followed
+ * only while the list stands open, each by its name and what fires it,
+ * wearing its tile and hanging its card: no mention names an automation
+ * either, so a pick writes the automation's link, drawn as its chip.
+ *
  * Where the words typed read as a date (`@repo/features/date-mention`),
  * `tomorrow 3pm`, `next fri`, `oct 20 to 24`, the list offers that date
  * first, said from today as its chip says it and in full beside it, a pick
@@ -236,6 +245,7 @@ const MENTION_GROUP = {
   PAGES: "Pages",
   FILES: "Files and folders",
   THREADS: "Threads",
+  AUTOMATIONS: "Automations",
   PULL_REQUESTS: "Pull requests",
   SKILLS: "Skills",
   SERVERS: INTEGRATION_LABEL.many,
@@ -251,6 +261,7 @@ const MENTION_FROM = {
   AGENTS: "agents",
   PEOPLE: "people",
   THREADS: "threads",
+  AUTOMATIONS: "automations",
   PULL_REQUESTS: "prs",
   SKILLS: "skills",
   DATES: "dates",
@@ -315,6 +326,9 @@ const TOOL_JOIN = " · ";
 
 /** What the Threads kind counts, the Inbox's items. */
 const THREAD_NOUN = { one: "thread", many: "threads" } as const;
+
+/** What the Automations kind counts. */
+const AUTOMATION_NOUN = { one: "automation", many: "automations" } as const;
 
 /** The repository's skills as an `@` list offers them: as read, the ask to read them, and the pick that writes one as its `/name` chip. */
 export interface MentionSkills {
@@ -407,6 +421,8 @@ type MentionRow = {
   | { readonly mention: Mention }
   /** An Inbox thread, which no mention names: a pick writes its link, which every place draws as its chip. */
   | { readonly thread: ThreadPlace; readonly item: InboxItem }
+  /** An automation, which no mention names either: a pick writes its link, drawn as its chip. */
+  | { readonly automation: AutomationSummary }
   | { readonly skill: string }
   | { readonly from: MentionKind }
   | { readonly picksDate: true }
@@ -743,6 +759,23 @@ function threadRows(
     .map((each) => each.row);
 }
 
+/** Each of the workspace's automations' rows, by its name, said by what fires it, found by both, wearing its tile and hanging its card. */
+function automationRows(
+  automations: readonly AutomationSummary[],
+  workspace: Workspace | undefined,
+): MentionRow[] {
+  return automations.map((automation) => {
+    const fires = automationTriggerText(automation.trigger, automation.repositories ?? []);
+    return {
+      automation,
+      name: automation.name,
+      detail: fires,
+      terms: `${automation.name} ${fires}`,
+      card: <AutomationCard automation={automation} workspaceName={workspace?.name} />,
+    };
+  });
+}
+
 /**
  * Each of the place's pull requests' rows, its task's or its agent's on no
  * task, by its number and title, wearing its mark, labeled by the agent
@@ -985,6 +1018,8 @@ interface KindRows {
   readonly people: readonly MentionRow[];
   /** The workspace's Inbox threads. */
   readonly threads: readonly MentionRow[];
+  /** The workspace's automations. */
+  readonly automations: readonly MentionRow[];
   readonly pullRequests: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
   /** The date the words name, or the dates a list narrowed to dates offers. */
@@ -1016,6 +1051,8 @@ function narrowedRows(
       return best(rows.people, term, PER_KIND);
     case MENTION_FROM.THREADS:
       return best(rows.threads, term, PER_KIND);
+    case MENTION_FROM.AUTOMATIONS:
+      return best(rows.automations, term, PER_KIND);
     case MENTION_FROM.PULL_REQUESTS:
       return best(rows.pullRequests, term, PER_KIND);
     case MENTION_FROM.SKILLS:
@@ -1062,10 +1099,13 @@ function groupsFor(
   };
   // The group holding the task the words are the key of, the plan's own or another, leads the list.
   const keyedGroup = [plan, tasks].find((group) => group.rows.some((row) => keyed(row, term)));
-  // The workspace's threads are offered only once a word is typed, as its tasks are.
+  // The workspace's threads and automations are offered only once a word is typed, as its tasks are.
   const inbox = bare
     ? []
-    : [{ label: MENTION_GROUP.THREADS, rows: best(rows.threads, term, PER_GROUP) }];
+    : [
+        { label: MENTION_GROUP.THREADS, rows: best(rows.threads, term, PER_GROUP) },
+        { label: MENTION_GROUP.AUTOMATIONS, rows: best(rows.automations, term, PER_GROUP) },
+      ];
   // Note that agents and tasks lead and files come last of these, because they are what is
   // mentioned most, and a path's letters in order find it by almost any word.
   const ranked = [
@@ -1105,6 +1145,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <UsersIcon aria-hidden="true" />;
     case MENTION_FROM.THREADS:
       return <GLYPH.THREAD />;
+    case MENTION_FROM.AUTOMATIONS:
+      return <GLYPH.AUTOMATION />;
     case MENTION_FROM.PULL_REQUESTS:
       return <GitPullRequestIcon aria-hidden="true" />;
     case MENTION_FROM.SKILLS:
@@ -1124,6 +1166,9 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   if ("from" in row) return <KindGlyph kind={row.from} />;
   if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
   if ("thread" in row) return inboxItemGlyph(row.item);
+  if ("automation" in row) {
+    return <ActorMark actor={automationActor(row.automation)} size={ACTOR_SIZE.INLINE} />;
+  }
   if (row.pullRequest !== undefined) return <PullRequestMark pullRequest={row.pullRequest} />;
   const { mention } = row;
   switch (mention.kind) {
@@ -1162,6 +1207,7 @@ function rowKey(row: MentionRow): string {
   if ("skill" in row) return row.skill;
   if ("picksDate" in row) return PICK_DATE_KEY;
   if ("thread" in row) return JSON.stringify(row.thread);
+  if ("automation" in row) return row.automation.id;
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
@@ -1251,6 +1297,7 @@ const MENTION_READ = {
   FILES: "the repository's files",
   SKILLS: "skills",
   THREADS: "Inbox threads",
+  AUTOMATIONS: "automations",
 } as const;
 
 type MentionRead = (typeof MENTION_READ)[keyof typeof MENTION_READ];
@@ -1441,7 +1488,7 @@ function treeKey(
  * where it reads them, its other tasks where it holds any, its people where
  * the window has read them, the plan where one stands, the pages of what
  * holds it, its repository's files and folders where it names one, its
- * Inbox threads where it holds any, the pull requests
+ * Inbox threads and automations where it holds any, the pull requests
  * the plan's agents or the agent on no task published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
@@ -1453,7 +1500,7 @@ function kindsOf(
   servers: readonly NamedServer[],
   people: number,
   tasks: number,
-  threads: number,
+  inbox: { readonly threads: number; readonly automations: number },
 ): readonly MentionKind[] {
   const { holder, repository } = source;
   const taskId = holderTaskId(holder);
@@ -1512,13 +1559,22 @@ function kindsOf(
     ...(repository === null || treeKey(taskId, source.workspaceId, repository) === undefined
       ? []
       : [{ from: MENTION_FROM.FILES, name: MENTION_GROUP.FILES, detail: repository }]),
-    ...(threads === 0
+    ...(inbox.threads === 0
       ? []
       : [
           {
             from: MENTION_FROM.THREADS,
             name: MENTION_GROUP.THREADS,
-            detail: countWords(threads, THREAD_NOUN),
+            detail: countWords(inbox.threads, THREAD_NOUN),
+          },
+        ]),
+    ...(inbox.automations === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.AUTOMATIONS,
+            name: MENTION_GROUP.AUTOMATIONS,
+            detail: countWords(inbox.automations, AUTOMATION_NOUN),
           },
         ]),
     ...(pullRequests === 0
@@ -1719,6 +1775,14 @@ export function useMentionPicker({
   const threadRowsOffered = threadsAsked
     ? threadRows(feed.rows, taskId, tasksWorkspace, listed.tasks, listed.tasklessAgents)
     : [];
+  // The automations offered are the workspace's, followed only while the list stands open.
+  const automationsAsked = open && tasksWorkspace !== undefined;
+  const automations = useAutomations(automationsAsked ? tasksWorkspace.id : undefined);
+  const automationsRead = automationsAsked ? automations.read : undefined;
+  const automationRowsOffered =
+    automationsRead !== undefined && "automations" in automationsRead
+      ? automationRows(automationsRead.automations, tasksWorkspace)
+      : [];
   // The plan's own key, which finds the plan's row as another task's finds its.
   const planNumber = listed.tasks.find((task) => task.id === taskId)?.number;
   const planKey =
@@ -1727,15 +1791,10 @@ export function useMentionPicker({
       : taskKey(tasksWorkspace.name, planNumber);
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
   const kinds = open
-    ? kindsOf(
-        source,
-        self,
-        skills,
-        servers,
-        people.length,
-        taskRowsOffered.length,
-        threadRowsOffered.length,
-      )
+    ? kindsOf(source, self, skills, servers, people.length, taskRowsOffered.length, {
+        threads: threadRowsOffered.length,
+        automations: automationRowsOffered.length,
+      })
     : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
@@ -1803,6 +1862,7 @@ export function useMentionPicker({
             ),
             people: personRows(people, readerId),
             threads: threadRowsOffered,
+            automations: automationRowsOffered,
             pullRequests: pullRequestRows(source.pullRequests ?? NO_PULL_REQUESTS),
             skills: skillRows(skills?.known ?? []),
             dates: dateRows(term, narrow?.from === MENTION_FROM.DATES, now, readerZone()),
@@ -1828,7 +1888,8 @@ export function useMentionPicker({
         !pathsFailed &&
         treeKey(taskId, workspaceId, repository) !== undefined) ||
       (skills !== undefined && skills.known === undefined && !skills.unread) ||
-      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING));
+      (threadsAsked && feed.status === HOST_READ_STATUS.LOADING) ||
+      (automationsAsked && automationsRead === undefined));
   // The list says a read could not be read, never that nothing matches, and Retry reads it again.
   const failures: readonly MentionReadFailure[] = open
     ? [
@@ -1842,6 +1903,9 @@ export function useMentionPicker({
         ...(skills?.unread === true ? [{ read: MENTION_READ.SKILLS, retry: skills.ask }] : []),
         ...(threadsAsked && feed.status === HOST_READ_STATUS.FAILED
           ? [{ read: MENTION_READ.THREADS, retry: feed.retry }]
+          : []),
+        ...(automationsRead !== undefined && "failure" in automationsRead
+          ? [{ read: MENTION_READ.AUTOMATIONS, retry: automations.reload }]
           : []),
       ]
     : [];
@@ -1912,6 +1976,9 @@ export function useMentionPicker({
       // A thread is written by its id alone, whose agent and task its reader asks the service for.
       const thread = { kind: LINK_PLACE.INBOX_ITEM, itemId: row.thread.itemId } as const;
       onChoose({ name: row.name, target: linkOf(thread, place.workspace) });
+    } else if ("automation" in row) {
+      const automation = { kind: LINK_PLACE.AUTOMATION, automationId: row.automation.id } as const;
+      onChoose({ name: row.name, target: linkOf(automation, place.workspace) });
     } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
