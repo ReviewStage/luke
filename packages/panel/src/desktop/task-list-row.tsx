@@ -24,6 +24,7 @@ import {
 import { type ChildTaskCount, repositoryLabel } from "@repo/ui/task-list-model";
 import { RENAME_FAILED_NOTE } from "@repo/ui/tasks-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
 import { type ReactNode, useRef } from "react";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { PullRequestCard } from "../tasks/pull-request-card.js";
@@ -131,6 +132,7 @@ export function TaskListRow({
   menuGroups = [],
   unlisted = false,
   more = true,
+  place,
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
@@ -165,6 +167,8 @@ export function TaskListRow({
   unlisted?: boolean | undefined;
   /** Whether it draws its menu's ⋯, as its list says (`TaskRows`'s `more`). */
   more?: boolean | undefined;
+  /** Where it stands in a run drawing only the rows near the view (`VirtualRows`); none where its list draws every row. */
+  place?: VirtualRowPlace | undefined;
 }): React.JSX.Element {
   const unread = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -273,6 +277,7 @@ export function TaskListRow({
       nest={nest}
       fold={fold}
       settled={settled}
+      place={place}
     >
       {actions.dialog}
     </TaskRow>

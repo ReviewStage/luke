@@ -11,6 +11,7 @@ import {
 import {
   type FocusEvent,
   Fragment,
+  type PointerEventHandler,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -65,7 +66,16 @@ import { motionRows } from "../list-motion/list-motion.js";
  * items of the caller's own (`listItems`), as a `ListRow` is, the run is a
  * `<ul>` that wraps none of them, and each row wears its place
  * (`VirtualRowPlace`) on its own `<li>`. A run whose rows move as a list's do
- * wears what `ListMotion` reads (`moves`), each row being a mover.
+ * wears what `ListMotion` reads (`moves`), each row being a mover. A run is
+ * named to a reader as a list is (`aria-label`), and a run whose rows are
+ * dragged hears the press on its block and says it keeps an order a row is
+ * dropped at a place in, as any list of dragged rows does (`onPointerDown`,
+ * `data-row-drop-rows`), the drag counting a place from the first row drawn
+ * (`data-index`).
+ *
+ * A list of several runs, a list's groups each one, holds each while it
+ * stands (`useVirtualRuns`), so a row any of them leaves undrawn is brought
+ * in by its key alone.
  *
  * Where it is asked to (`holdsFocus`), as a list walked by the keyboard
  * is, a row holding the keyboard stays drawn wherever the run is scrolled,
@@ -99,6 +109,14 @@ export interface VirtualRowsHandle {
   readonly rowElement: (key: string) => HTMLElement | undefined;
   /** The keys of the rows drawn now, in order. */
   readonly drawnKeys: () => readonly string[];
+}
+
+/** A list's runs, each held while it stands, and the bringing in of a row whichever run lists it. */
+export interface VirtualRuns {
+  /** Holds a run while it stands; the answer lets it go. */
+  readonly hold: (run: RefObject<VirtualRowsHandle | null>) => () => void;
+  /** Brings in the row with `key` as its run's `bringIn` does, whichever run lists it; false where none does. */
+  readonly bringIn: (key: string, then?: (row: HTMLElement) => void) => boolean;
 }
 
 /** A row brought in and waiting to be drawn, and what is handed it then. */
@@ -209,6 +227,23 @@ function rowHolding(block: HTMLElement | null, target: EventTarget): Element | u
   return at ?? undefined;
 }
 
+/** A list's runs (`VirtualRuns`), held from its first draw to its last. */
+export function useVirtualRuns(): VirtualRuns {
+  const [runs] = useState((): VirtualRuns => {
+    const held = new Set<RefObject<VirtualRowsHandle | null>>();
+    return {
+      hold: (run) => {
+        held.add(run);
+        return () => {
+          held.delete(run);
+        };
+      },
+      bringIn: (key, then) => [...held].some((run) => run.current?.bringIn(key, then) === true),
+    };
+  });
+  return runs;
+}
+
 export function VirtualRows({
   scroller,
   pinned,
@@ -224,6 +259,9 @@ export function VirtualRows({
   className,
   rowClassName,
   handle,
+  "aria-label": label,
+  onPointerDown,
+  "data-row-drop-rows": dropRows,
   children,
 }: {
   /** The element that scrolls, which the rows stand in. */
@@ -251,6 +289,12 @@ export function VirtualRows({
   /** The class each row wears beside its own, or the class the row at an index wears; the caller's own where its rows are list items. */
   rowClassName?: string | ((index: number) => string) | undefined;
   handle?: RefObject<VirtualRowsHandle | null> | undefined;
+  /** What the run is called, to a reader, as a group's rows are named by its head. */
+  "aria-label"?: string | undefined;
+  /** Hears a press on the run's block, where its rows are dragged (`use-row-drag.ts`). */
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  /** Says the run keeps an order of its own that a row dragged into it is dropped at a place in (`use-row-drag.ts`). */
+  "data-row-drop-rows"?: "" | undefined;
   /** Draws the row at an index, which wears `place` where its rows are list items of the caller's own. */
   children: (index: number, place: VirtualRowPlace) => ReactNode;
 }): ReactNode {
@@ -402,6 +446,9 @@ export function VirtualRows({
   const run = {
     ref: holdBlock,
     className: className === undefined ? own : `${own} ${className}`,
+    "aria-label": label,
+    onPointerDown,
+    "data-row-drop-rows": dropRows,
     ...{ [VIRTUAL_ROWS_ATTRIBUTE]: `${keys.length}:${keys.at(-1) ?? ""}:${keys[0] ?? ""}` },
     ...(moves ? motionRows() : {}),
     // Note that the spacers are the block's own padding rather than properties its rows inherit, because a property the rows inherit is read again for every element in them each time the drawn rows move.

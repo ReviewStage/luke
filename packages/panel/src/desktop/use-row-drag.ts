@@ -60,7 +60,13 @@
  * standing for a task, so a quick add's lines drawn among them are no place
  * a drag counts, and tells its owner the row dragged by its task's id rather
  * than its place, so the task found is the one pressed whichever of the
- * list's rows are drawn.
+ * list's rows are drawn. Such a list may draw only the rows near the view
+ * (`VirtualRows`): a place in it, or in a zone it is carried over, counts
+ * from where the first row drawn stands among them all (`data-index`); the
+ * pressed row takes the keyboard as it is lifted, which keeps it drawn
+ * however far the list is scrolled beneath it; and rows drawn or dropped by
+ * that scroll leave the drag standing, which only the pressed row's leaving
+ * puts back.
  */
 
 import { CARD_DROP_TARGET, MOTION_TOKEN, tokenTiming } from "@repo/ui";
@@ -79,6 +85,12 @@ const EDGE_SPEED = 12;
 
 /** What a card or a task's row wears, its task's id as the value. */
 const TASK_ID = "data-task-id";
+
+/** What a row wears in a list drawing only the rows near the view, its place among them all as the value (`VirtualRows`). */
+const ROW_INDEX = "data-index";
+
+/** What the pressed row's keyboard is taken by as it is lifted: the control the press landed in. */
+const TAKES_FOCUS = "button, a[href], [tabindex]";
 
 /** What a row and its list wear while a drag lasts; desktop.css fades the one to a placeholder and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
@@ -111,15 +123,18 @@ interface RowKind<Row> {
   readonly item: string;
   /** What the owner hears the row at `at` among them by. */
   readonly name: (row: HTMLElement, at: number) => Row | undefined;
+  /** Whether the list may draw only the rows near the view (`VirtualRows`), which its owner hears each by more than its place among those drawn. */
+  readonly partial: boolean;
 }
 
 /** A row of any list, heard by its place among the list's rows. */
-const PLACED_ROW: RowKind<number> = { item: "li", name: (_row, at) => at };
+const PLACED_ROW: RowKind<number> = { item: "li", name: (_row, at) => at, partial: false };
 
 /** A card or a row standing for a task, heard by its task's id. */
 const TASK_ROW: RowKind<string> = {
   item: `li[${TASK_ID}]`,
   name: (row) => row.getAttribute(TASK_ID) ?? undefined,
+  partial: true,
 };
 
 /** A zone the pressed row is carried over: the element, its id, and the place among its rows it would land at. */
@@ -151,6 +166,10 @@ interface RowPress {
   listTop: number;
   /** What an item of the list, or of a zone it is carried over, must be to be a row (`RowKind`). */
   item: string;
+  /** Whether the list may draw only the rows near the view (`RowKind`). */
+  partial: boolean;
+  /** The control the press landed in, which takes the keyboard as the row is lifted; none where it landed in none. */
+  control: HTMLElement | undefined;
   at: number;
   rows: HTMLElement[];
   slots: Slot[];
@@ -187,6 +206,12 @@ export type RowMove<Row = number> = (from: Row, to: number) => void;
 /** The list's rows that move, its items of the kind (`item`); one on its way out (`ListMotion`) is no longer one of them. */
 function rowsIn(list: HTMLElement, item: string): HTMLElement[] {
   return [...list.querySelectorAll<HTMLElement>(`:scope > ${item}:not([data-leaving])`)];
+}
+
+/** Where the first of `rows` stands among every row of its list, where the list may draw only those near the view (`data-index`); 0 where it draws them all. */
+function firstPlace(press: RowPress, rows: readonly HTMLElement[]): number {
+  if (!press.partial) return 0;
+  return Number(rows[0]?.getAttribute(ROW_INDEX) ?? 0) || 0;
 }
 
 /** A drop zone's rows of the kind (`item`), where it keeps an order of its own that a drop lands at a place in. */
@@ -512,6 +537,9 @@ function useListDrag<Row>(
         // Copied before it is marked, so the copy is lifted rather than faded.
         if (row !== undefined) press.carried = liftCopy(row, list, press.scope);
         row?.setAttribute(DRAGGING_ATTRIBUTE, "true");
+        // Note that the row takes the keyboard as it is lifted, because a list drawing only the rows near the
+        // view keeps the row holding it drawn (`VirtualRows`' `holdsFocus`), and Safari focuses no pressed button itself.
+        if (press.partial) press.control?.focus({ preventScroll: true });
         // Drawn now, so a zone that stands only while a row is carried is there to be found.
         flushSync(() => carried(true));
       }
@@ -534,9 +562,14 @@ function useListDrag<Row>(
       const row = pressed();
       if (!press.dragging || row === undefined) return;
       // A row pinned or unpinned under the drag leaves its places stale, so
-      // the drag is put back rather than dropped at a place that moved.
+      // the drag is put back rather than dropped at a place that moved; but
+      // a list drawing only the rows near the view draws and drops rows as it
+      // is scrolled beneath the drag, so there only the pressed row leaving does.
       const now = rowsIn(list, press.item);
-      if (now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at])) {
+      const stale = press.partial
+        ? !now.includes(row)
+        : now.length !== press.rows.length || now.some((each, at) => each !== press.rows[at]);
+      if (stale) {
         lower(press, list, true);
         carried(false);
         return;
@@ -547,9 +580,10 @@ function useListDrag<Row>(
       draw(press, list, out);
       const zone = press.zone;
       if (zone !== undefined) {
+        const at = zone.at + firstPlace(press, zoneRowsIn(zone.zone, press.item));
         // The row now stands in the zone's list, so it comes down there rather than settling here.
         flushSync(() => {
-          latestOut.current?.(name, zone.id, zone.at);
+          latestOut.current?.(name, zone.id, at);
           carried(false);
         });
         lower(press, list, false);
@@ -558,7 +592,7 @@ function useListDrag<Row>(
       // The list is drawn in its new order before the rows come down, so they
       // come down where that drew them, and the copy lands on the row there.
       flushSync(() => {
-        if (press.to !== press.at) latest.current?.(name, press.to);
+        if (press.to !== press.at) latest.current?.(name, press.to + firstPlace(press, press.rows));
         carried(false);
       });
       const copy = press.carried;
@@ -614,6 +648,7 @@ function useListDrag<Row>(
     if (name === undefined || (rows.length < 2 && !out)) return;
     const grip = handle === undefined ? null : target.closest(handle);
     if (handle !== undefined && (grip === null || !pressed?.contains(grip))) return;
+    const control = target.closest<HTMLElement>(TAKES_FOCUS) ?? undefined;
     const slots = rows.map((row) => {
       const box = row.getBoundingClientRect();
       return { top: box.top, height: box.height };
@@ -638,7 +673,12 @@ function useListDrag<Row>(
       frame: undefined,
       scroller: scrollerOf(list, scope),
     };
-    begin(list, { ...pointer, listTop, item: kind.item, at, rows, slots, gap, ...state }, name);
+    const kept = {
+      item: kind.item,
+      partial: kind.partial,
+      control: control !== undefined && pressed?.contains(control) === true ? control : undefined,
+    };
+    begin(list, { ...pointer, listTop, ...kept, at, rows, slots, gap, ...state }, name);
   };
 }
 
