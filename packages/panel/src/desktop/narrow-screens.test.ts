@@ -36,6 +36,7 @@ import { pixelsOf, wayBackGap } from "../testing/laid-length.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
+import { HOST_READ_STATUS } from "../use-host-read.js";
 // Note that Settings is loaded as the shell loads it, on first use, so the
 // module is read here first and its load settles within the test's own ticks.
 import "./desktop-settings.js";
@@ -118,9 +119,16 @@ function line(seq: number) {
   };
 }
 
-/** The plan's history as the service answers it: two revisions, each the plan as it stands. */
+/** The plan's history as main holds it for the version history: two revisions, each the plan as it stands. */
+const HELD_HISTORY = {
+  rows: { revisions: [line(3), line(2)] },
+  status: HOST_READ_STATUS.READY,
+  retry: () => Promise.resolve(),
+};
+
+/** Each version as the service answers it, the plan as it stands. */
 const HISTORY: PlanHistorySource = {
-  readPage: () => Promise.resolve({ revisions: [line(3), line(2)] }),
+  readPage: () => Promise.resolve({ revisions: [] }),
   readRevision: (_taskId, seq) =>
     Promise.resolve({
       revision: { seq, document: DOCUMENT_TASK.document, previous: DOCUMENT_TASK.document },
@@ -230,6 +238,7 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
   const versions = usePlanHistory({
     source: HISTORY,
     taskId: DOCUMENT_TASK.id,
+    history: HELD_HISTORY,
     editedAt: undefined,
     name: DOCUMENT_TASK.name,
     shown: true,

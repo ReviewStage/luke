@@ -61,11 +61,12 @@ function followOrigin(
           )
         : Effect.succeed({ ...LIVE_SIGNED_OUT, gone: true }),
     decode: (parts) => Option.some(parts.origin),
-    publish: (rows) => {
-      const origin = rows === undefined ? undefined : agentOriginOfLive(rows);
-      if (origin === undefined) return answers.unanswered();
-      answers.answered(origin);
-    },
+    publish: (rows) =>
+      Effect.sync(() => {
+        const origin = rows === undefined ? undefined : agentOriginOfLive(rows);
+        if (origin === undefined) return answers.unanswered();
+        answers.answered(origin);
+      }),
   });
 }
 

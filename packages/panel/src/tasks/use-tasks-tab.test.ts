@@ -92,6 +92,7 @@ import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
 import { useInboxTask } from "./use-inbox-task.js";
 import { MAIN_TAB } from "./use-main-tabs.js";
+import { HISTORY_READ } from "./use-plan-history.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
@@ -354,7 +355,7 @@ function _undoButton(): HTMLButtonElement {
 }
 
 /** One revision as the history lists it, written by the app on a call. */
-function _revisionLine(seq: number) {
+function revisionLine(seq: number) {
   return {
     seq,
     lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: false },
@@ -1671,6 +1672,22 @@ test("a task whose plan the host holds opens on its plan in its first frame agai
     { kind: DOCUMENT_REGION.READY, task: TASK },
     "no skeleton stands before it",
   );
+});
+
+test("a version history opened on a held task lists its versions in its first frame, with no page read", async () => {
+  const versions = [revisionLine(2), revisionLine(1)];
+  handState({}, { [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } } });
+  const tab = mount({ shown: true, tasks: OPEN });
+  await settle();
+
+  act(() => tab.control().history.onOpen(TASK.id));
+
+  assert.deepEqual(tab.control().history.list, {
+    kind: HISTORY_READ.READY,
+    revisions: versions,
+    earlier: undefined,
+  });
+  assert.equal(tab.told.includes(ACT_KIND.TASKS_REVISIONS), false, "no page is read");
 });
 
 test("a section shown is let go, so the plan opened again later opens where it would, while a newer ask stands", () => {

@@ -26,8 +26,8 @@ export interface LivePushDependencies<Part extends string, Value> {
   readonly seal: (poll: boolean, after?: string) => Effect.Effect<SealedRead<Part> | SealFailure>;
   /** The value a delivery's rows stand for, none where they do not decode. */
   readonly decode: (rows: Readonly<Record<Part, readonly unknown[]>>) => Option.Option<Value>;
-  /** The value as it now stands each time it moves, or that it could not be followed. */
-  readonly publish: (value: Value | undefined) => void;
+  /** Takes the value as it now stands each time it moves, or that it could not be followed. */
+  readonly publish: (value: Value | undefined) => Effect.Effect<void>;
   /** Handed how to wait for a write's transaction on the read where it has one, and none once it is let go (`liveRows`). */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
 }
@@ -40,7 +40,7 @@ export function pushLive<Part extends string, Value>(
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.seal(false);
     if ("failure" in sealed) {
-      dependencies.publish(undefined);
+      yield* dependencies.publish(undefined);
       if (sealed.gone === true) return false;
       yield* Effect.sleep(LIVE_RESEAL);
       return true;
@@ -55,7 +55,7 @@ export function pushLive<Part extends string, Value>(
     yield* Stream.runForEach(rows, (read) =>
       Option.match(dependencies.decode(read), {
         onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: (value) => Effect.sync(() => dependencies.publish(value)),
+        onSome: dependencies.publish,
       }),
     ).pipe(Effect.catch(() => Effect.void));
     yield* Effect.sleep(LIVE_RESEAL);
