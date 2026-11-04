@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { motionHeld } from "../../motion-timing.js";
+import { useMotionHeld } from "../../use-motion-held.js";
 import { useBeat } from "../time/time-clock.js";
 
 /**
@@ -11,7 +10,7 @@ import { useBeat } from "../time/time-clock.js";
  * (`useBeat`), lapping the eight cells in 1.6s, so the motion is stepped
  * frames of `transform` alone, never lays anything out, and costs the window
  * a frame only when a pixel moves, where a CSS animation would tick it every
- * vsync. Reduced motion and a capture run hold it (`motionHeld`) on its
+ * vsync. Reduced motion and a capture run hold it (`useMotionHeld`) on its
  * resting frame, chosen to show the chase mid-lap rather than its first, so a
  * still mark always lights four cells and reads as working. The mark itself
  * is decorative; the seat it stands in names it. Its side is 16px unless a
@@ -74,11 +73,6 @@ function cellTransform(index: number): string {
   return `translate(${column * PITCH}px, ${row * PITCH}px)`;
 }
 
-/** Whether a mark drawn now holds still: off a page, as a static render is, or where motion is held. */
-function heldStill(): boolean {
-  return typeof document === "undefined" || motionHeld();
-}
-
 /** The moving pixels, `beat` cells on from where they rest. */
 function WorkingDots({ beat }: { readonly beat: number }): React.JSX.Element {
   return (
@@ -106,8 +100,8 @@ function LappingDots(): React.JSX.Element {
 
 /** The mark, hidden from a reader, since the seat it stands in says it. */
 export function WorkingMark(): React.JSX.Element {
-  // Note that a mark asks once, as it mounts, so a held one never reads the beat at all.
-  const [held] = useState(heldStill);
+  // Note that a held mark never reads the beat at all, and one already standing stops as the setting changes.
+  const held = useMotionHeld();
   return (
     <svg
       className="ui-working-mark [&[viewBox]]:block [&[viewBox]]:size-working-mark [&[viewBox]]:flex-none [&[viewBox]]:fill-current"

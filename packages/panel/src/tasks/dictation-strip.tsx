@@ -11,11 +11,11 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useMotionHeld,
 } from "@repo/ui";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useMotionHeld } from "../use-motion-held.js";
 import { frameLevel } from "./frame-level.js";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";
 

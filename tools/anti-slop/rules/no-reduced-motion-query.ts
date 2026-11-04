@@ -11,7 +11,7 @@ const REDUCED_MOTION_QUERY = /prefers-reduced-motion/u;
  * The one script that may name the query: it reads `motionHeld` and listens
  * to the setting only to know when to read the tokens again.
  */
-const QUERY_LISTENER = "packages/panel/src/use-motion-held.ts";
+const QUERY_LISTENER = "packages/ui/src/use-motion-held.ts";
 
 /**
  * A script that chooses between motion and none asks `motionHeld`

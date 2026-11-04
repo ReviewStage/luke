@@ -1,5 +1,9 @@
-import { motionHeld } from "@repo/ui";
 import { useEffect, useState } from "react";
+import { motionHeld } from "./motion-timing.js";
+
+/**
+ * use-motion-held.ts -- whether motion is held still, read again as the reduced-motion setting changes.
+ */
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
@@ -11,9 +15,12 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
  * again, since the tokens change with it.
  */
 export function useMotionHeld(): boolean {
-  const [held, setHeld] = useState(() => motionHeld());
+  // Note that a render off a page, as a static render is, has no tokens to read, and holds still.
+  const [held, setHeld] = useState(() => typeof document === "undefined" || motionHeld());
 
   useEffect(() => {
+    // Note that a document with no media queries, as a test's is, has no setting to follow.
+    if (typeof window.matchMedia !== "function") return;
     const query = window.matchMedia(REDUCED_MOTION_QUERY);
     const update = () => setHeld(motionHeld());
     query.addEventListener("change", update);
