@@ -46,7 +46,8 @@
  *
  * A write whose declaration says it may wait (`WriteDeclaration.queue`) is
  * sent under an idempotency key the pool mints for it once and sends on
- * every attempt. Where the service did not answer it (`Refused.unanswered`),
+ * every attempt, each sent from the waiting writes saying so
+ * (`Sent.waited`). Where the service did not answer it (`Refused.unanswered`),
  * it goes on standing and waits, its caller answered at once with what the
  * declaration says it hears meanwhile; a write that may wait asked while
  * others wait waits behind them, so the service takes them in the order
@@ -216,9 +217,11 @@ export interface QueuedWrite<Input, Answer> {
   readonly queued: (input: Input) => Answer;
 }
 
-/** What one attempt of a write is sent with: the idempotency key of a write that may wait, the same on every attempt; none for any other. */
+/** What one attempt of a write is sent with: the idempotency key of a write that may wait, the same on every attempt, none for any other; and whether the write waited before it, so what its asking did at once is not done again. */
 export interface Sent {
   readonly key: string | undefined;
+  /** That the attempt is sent from the waiting writes rather than as the write was asked. */
+  readonly waited: boolean;
 }
 
 /** A write waiting for the service as the pool hands it out to be kept and takes it back: its declaration's name, its key, and its input in its kept form. */
@@ -684,11 +687,12 @@ function written<Row extends object, Change, Input, Answer>(
             })),
           );
     // Note that each attempt asks the declaration anew, so one sent again reads the host as it stands then.
-    const attempt = Effect.suspend(() => declaration.send(input, { key }));
+    const attempt = (waited: boolean) =>
+      Effect.suspend(() => declaration.send(input, { key, waited }));
     const sent = Effect.gen(function* () {
       yield* drawnOn;
       yield* awaitEach(before, (each) => each.answered);
-      return yield* attempt;
+      return yield* attempt(false);
     }).pipe(Effect.ensuring(Deferred.succeed(turn.answered, undefined)));
     // Note that every read showing the keys is waited on at once, so the write stands until the slowest carries it.
     const settled = (kept: Written<Change, Answer>) =>
@@ -730,7 +734,7 @@ function written<Row extends object, Change, Input, Answer>(
         const waiting: Waiting = {
           entry: kept,
           retried: Effect.gen(function* () {
-            const answered = yield* attempt;
+            const answered = yield* attempt(true);
             if ("refused" in answered) {
               if (answered.unanswered === true) return RETRIED.UNANSWERED;
               yield* takenBack(answered);

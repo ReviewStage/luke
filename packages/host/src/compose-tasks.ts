@@ -22,6 +22,7 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
 import {
   browserTabsOfLiveRows,
@@ -45,6 +46,7 @@ import type {
   SlackListedChannel,
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
+import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   type PlanRevisionsAnswer,
   startRelationsOf,
@@ -57,6 +59,7 @@ import {
   type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSkillsAnswer,
+  taskCreateRequestSchema,
   UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
@@ -452,6 +455,21 @@ interface StartOpened {
   readonly drawn: boolean;
   readonly before: string | undefined;
 }
+
+/** Whether a start may wait for the service: one that draws its row and names no agent, since an agent's start is remote work. */
+function startMayWait(start: Start): boolean {
+  return start.request.agent === undefined && start.row !== undefined;
+}
+
+/** A start as it waits for the service, which only one that may wait keeps as, since a write that does not keep never waits (`WriteDeclaration.queue`). */
+const startKeptSchema = Schema.Struct({
+  request: Schema.Struct({ ...taskCreateRequestSchema.fields, id: Schema.String }),
+  quiet: Schema.Boolean,
+  row: Schema.UndefinedOr(taskListLiveRowsSchema.fields.plans.value),
+}).check(Schema.makeFilter(startMayWait));
+
+/** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its plan laid as held. */
+const OPENED_EARLIER: StartOpened = { asked: -1, drawn: true, before: undefined };
 
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
@@ -2406,30 +2424,43 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * agent a start asks for waits on the service, as remote work does. Where
    * the list hands no wait, or the service answers a start sent again with
    * no transaction, the row as the service answered it is taken in the
-   * list's place.
+   * list's place. One that names no agent and draws its row waits where the
+   * service did not answer it, its row drawn and its task open, and is sent
+   * again with the other writes waiting; sent so, it opens nothing, and its
+   * answer reaches its task only where the task stands open.
    */
   const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
     kind: PLAN,
     keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
     // Note that a start that draws no row names no key, so its change is never drawn.
     change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
-    send: (start) =>
+    send: (start, { key, waited }) =>
       gate()
         ? Effect.gen(function* () {
-            const opened = start.quiet ? undefined : yield* startOpened(start.request.id);
+            const { id } = start.request;
+            const opened = start.quiet
+              ? undefined
+              : waited
+                ? OPENED_EARLIER
+                : yield* startOpened(id);
             return yield* serial(
               Effect.gen(function* () {
-                const created = yield* served(client.create(start.request));
+                const created = yield* served(client.create(start.request, key));
                 if (!created.ok) {
                   const { failure, localAgentRefusal } = created;
-                  if (opened !== undefined) yield* startedBack(opened, start.request.id);
-                  return {
+                  const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
+                  // Note that a start that waits keeps its task open, and any other unanswered is taken back as refused.
+                  const waits =
+                    went === WRITE_UNTAKEN.UNANSWERED && key !== undefined && startMayWait(start);
+                  if (opened !== undefined && !waits) yield* startedBack(opened, id);
+                  return untaken<FieldChange<PlanRow>, WireValue>(went, {
+                    kept: carried<TasksStartAnswer>({ planId: id }),
                     refused: carried<TasksStartAnswer>(
                       localAgentRefusal === undefined
                         ? { failure }
                         : { failure, localAgentRefusal },
                     ),
-                  };
+                  });
                 }
                 const { task, agent, txid } = created.answer;
                 if (opened !== undefined) yield* startedAs(opened, task);
@@ -2448,6 +2479,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         : Effect.succeed({
             refused: carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED }),
           }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_START,
+      input: startKeptSchema,
+      queued: ({ request }) => carried<TasksStartAnswer>({ planId: request.id }),
+    },
   };
 
   /**
@@ -3985,6 +4021,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     }),
     listed,
     queueable: [
+      anyWrite(started),
       anyWrite(renamed),
       anyWrite(stood),
       anyWrite(pinned),

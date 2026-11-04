@@ -5,7 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { readTaskBlocks } from "@repo/database/models/task-block-store";
 import { createTask, listTasks, readTaskHeader } from "@repo/database/models/task-store";
 import { fakeWorkspaceSeams, getTestDB, openWorkspace } from "@repo/database/testing";
-import { HOSTED_API_ERROR } from "@repo/features";
+import { HOSTED_API_ERROR, IDEMPOTENCY_KEY } from "@repo/features";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   TASK_CREATE_RELATION_KIND,
@@ -79,12 +79,18 @@ const starting = (bearers: ReadonlyMap<string, string>) =>
     });
     // SAFETY: a start yields the store, the clock, and GitHub alone, which is all a test provides of the web runtime's services.
     const webServices = services as Context.Context<WebServices>;
-    return (bearer: string, body: TaskCreateRequest) =>
+    return (bearer: string, body: TaskCreateRequest, idempotencyKey?: string) =>
       Effect.promise(async () => {
         const response = await handle(
           new Request(new URL("/api/plans", ORIGIN), {
             method: "POST",
-            headers: { authorization: bearer, "content-type": "application/json" },
+            headers: {
+              authorization: bearer,
+              "content-type": "application/json",
+              ...(idempotencyKey === undefined
+                ? undefined
+                : { [IDEMPOTENCY_KEY.HEADER]: idempotencyKey }),
+            },
             body: JSON.stringify(body),
           }),
           webServices,
@@ -209,7 +215,7 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
   );
 
   it.effect(
-    "a start sent again under its id answers the plan it made with no transaction, its relation written once",
+    "a start sent again under its id answers the plan it made with no transaction, and under its idempotency key is refused as already written, its relation written once",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
@@ -222,22 +228,29 @@ it.layer(getTestDB())("a plan started in a relation to another", (it) => {
         });
         const send = yield* starting(new Map([["Bearer owner", owner]]));
         const id = randomUUID();
-        const start = () =>
-          send("Bearer owner", {
-            id,
-            name: "Parent",
-            workspaceId: workspace,
-            relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: below },
-          });
+        const key = randomUUID();
+        const start = (idempotencyKey?: string) =>
+          send(
+            "Bearer owner",
+            {
+              id,
+              name: "Parent",
+              workspaceId: workspace,
+              relation: { kind: TASK_CREATE_RELATION_KIND.PARENT_OF, taskId: below },
+            },
+            idempotencyKey,
+          );
 
-        const first = yield* start();
+        const first = yield* start(key);
         const again = yield* start();
+        const keyed = yield* start(key);
 
         assert.equal(first.status, 201, JSON.stringify(first.body));
         assert.equal(again.status, 201, JSON.stringify(again.body));
         assert.match(first.body.txid, /^\d+$/u);
         assert.equal(again.body.txid, undefined);
         assert.deepEqual([first.body.plan.id, again.body.plan.id], [id, id]);
+        assert.deepEqual(keyed, { status: 409, body: { error: HOSTED_API_ERROR.ALREADY_WRITTEN } });
         assert.equal(yield* parentOf(owner, below), id);
         assert.deepEqual(yield* listedIds(owner), [below, id].sort());
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),

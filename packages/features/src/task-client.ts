@@ -150,6 +150,8 @@ export type TaskCallResult<Answer, Failure> =
       readonly failure: Failure;
       /** Why the device the call named would not take the task's agents, where that is why and the service said. */
       readonly localAgentRefusal?: LocalAgentRefusal;
+      /** How a call sent under an idempotency key went untaken, where it traveled as one (`keyed-write.ts`). */
+      readonly untaken?: WriteUntaken;
     };
 
 export interface HostedTaskClientOptions {
@@ -239,7 +241,21 @@ function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): Ta
     : { task: changed.plan, txid: changed.txid };
 }
 
-/** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
+/** A procedure's failure as a result: its refusal where it is one the caller names, unanswered for everything else. */
+function hostedRefusal<Failure extends string>(
+  failed: HostedFailure,
+  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
+) {
+  if (failed._tag !== "HostedRefused") return UNANSWERED;
+  const failure = named[failed.refusal];
+  if (failure === undefined) return UNANSWERED;
+  const localAgentRefusal = failed.data?.localAgentRefusal;
+  return localAgentRefusal === undefined
+    ? ({ ok: false, failure } as const)
+    : ({ ok: false, failure, localAgentRefusal } as const);
+}
+
+/** A procedure's answer as a result, as `hostedRefusal` reads a failure. */
 function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -250,15 +266,7 @@ function hostedResult<Answer, Failure extends string>(
 > {
   return Effect.match(asked, {
     onSuccess: succeeded,
-    onFailure: (failed) => {
-      if (failed._tag !== "HostedRefused") return UNANSWERED;
-      const failure = named[failed.refusal];
-      if (failure === undefined) return UNANSWERED;
-      const localAgentRefusal = failed.data?.localAgentRefusal;
-      return localAgentRefusal === undefined
-        ? ({ ok: false, failure } as const)
-        : ({ ok: false, failure, localAgentRefusal } as const);
-    },
+    onFailure: (failed) => hostedRefusal(failed, named),
   });
 }
 
@@ -1099,24 +1107,28 @@ export class HostedTaskClient {
   /**
    * Starts a task with an empty plan, on the repository the
    * request names where it names one, and the agent it names on it where it
-   * names one; a request the service would refuse by shape is refused here
-   * without traveling at all, and a repository the service refused is
-   * answered as the refusal it was. An agent the service refused beside the
-   * task it made is answered with the task, as a refused Start reads.
+   * names one, under the idempotency key given where one is; a request the
+   * service would refuse by shape is refused here without traveling at all,
+   * and a repository the service refused is answered as the refusal it was,
+   * with how it went untaken where it traveled. An agent the service refused
+   * beside the task it made is answered with the task, as a refused Start
+   * reads.
    */
   create(
     request: TaskCreateRequest,
+    key?: string,
   ): Effect.Effect<TaskCallResult<TaskStarted, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
     const deadline = admitted.agent === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.START;
-    return hostedResult(
-      Effect.map(askHosted(this.#hosted.plans.create, admitted, deadline), (started) =>
-        taskStartedOf(started.body),
-      ),
-      START_REFUSALS,
-    );
+    return Effect.match(askHosted(this.#hosted.plans.create, admitted, deadline, key), {
+      onSuccess: (started) => succeeded(taskStartedOf(started.body)),
+      onFailure: (failed) => ({
+        ...hostedRefusal(failed, START_REFUSALS),
+        untaken: writeUntakenOf(hostedFailureFacts(failed)),
+      }),
+    });
   }
 }
 

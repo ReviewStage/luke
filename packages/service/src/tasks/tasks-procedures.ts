@@ -584,9 +584,12 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * the plan it made, with no transaction, and starts the agent it names
      * under that agent's own key, so never a second. An id a plan the
      * account does not reach stands under is refused as a workspace it is
-     * not in is, so the answer names nothing of that plan.
+     * not in is, so the answer names nothing of that plan. A start sent
+     * again under the idempotency key it was taken under is refused as
+     * already written without running (`writeReceiptMiddleware`), as a start
+     * made offline is, so none of its checks can refuse a plan it made.
      */
-    create: plans.create.effect(function* ({ input, context }) {
+    create: plans.create.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId } = context;
       const { agent } = input;
       yield* modeAsked(userId, input.mode);

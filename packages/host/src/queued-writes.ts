@@ -2,13 +2,14 @@
  * queued-writes.ts -- a keyed row write that went untaken, as the sync engine takes it: refused, left standing to wait while unanswered, or settled where the service took it already under its key.
  *
  * The row writes that may wait for the service (`WriteDeclaration.queue`
- * on each: a task's rename, standing, and pin, a repository's pin, a
- * section write, an agent's rename and pin, and an inbox item's read mark,
- * snooze, nod, and close, and every item marked read) ask nothing, reach
- * no outside service, and change only rows the pool holds; a nod or a
- * close on an item its agent waits on is also handed to that agent, as it
- * is when sent at once. Each is sent under its idempotency key, and reads
- * its client's untaken answer here (`@repo/features/keyed-write`).
+ * on each: a task's start that names no agent, its rename, standing, and
+ * pin, a repository's pin, a section write, an agent's rename and pin, and
+ * an inbox item's read mark, snooze, nod, and close, and every item marked
+ * read) start no agent, ask no model, and change only rows the pool holds;
+ * a nod or a close on an item its agent waits on is also handed to that
+ * agent, as it is when sent at once. Each is sent under its idempotency
+ * key, and reads its client's untaken answer here
+ * (`@repo/features/keyed-write`).
  */
 
 import { WRITE_UNTAKEN, type WriteUntaken } from "@repo/features/keyed-write";
