@@ -25,6 +25,8 @@ import {
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentReviewOptionsAnswerView,
   type AgentTranscriptPage,
 } from "@repo/features/agent-view";
 import {
@@ -1003,16 +1005,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   }),
   [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
   [ACT_KIND.AGENTS_PULL_REQUEST]: () => PUBLISHED,
-  [ACT_KIND.AGENTS_REVIEW_OPTIONS]: () => ({
-    labels: OVERVIEW_PULL_REQUEST.pullRequest.labels,
-    users: [ADA, GRACE],
-    teams: [],
-  }),
   [ACT_KIND.AGENTS_CHANGES]: () => CHANGES,
-  [ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: () => ({
-    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-    files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
-  }),
   [ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw }) => {
     const lines = FILES.get(path);
     if (lines === undefined) return { refusal: TASK_FILE_REFUSAL.MISSING };
@@ -1148,6 +1141,15 @@ const STAGED_PARTS = {
   [LIVE_READ.PULL_REQUEST_CONVERSATION]:
     stagedPart<AgentOverviewConversationAnswerView>(OVERVIEW_CONVERSATION),
   [LIVE_READ.PULL_REQUEST_PUBLISHED]: stagedPart<AgentPullRequestAnswerView>(PUBLISHED),
+  [LIVE_READ.REVIEW_OPTIONS]: stagedPart<AgentReviewOptionsAnswerView>({
+    labels: OVERVIEW_PULL_REQUEST.pullRequest.labels,
+    users: [ADA, GRACE],
+    teams: [],
+  }),
+  [LIVE_READ.PULL_REQUEST_VIEWED]: stagedPart<AgentPullRequestViewedAnswerView>({
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [{ path: "src/db/schema/memberships.ts", state: FILE_VIEWED_STATE.VIEWED }],
+  }),
 };
 
 /**
@@ -1192,6 +1194,12 @@ export function agentAppState(state: AppStateSnapshot, taskId: string): AppState
     ),
     [LIVE_READ.PULL_REQUEST_PUBLISHED]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_PUBLISHED](
       state[LIVE_READ.PULL_REQUEST_PUBLISHED],
+    ),
+    [LIVE_READ.REVIEW_OPTIONS]: STAGED_PARTS[LIVE_READ.REVIEW_OPTIONS](
+      state[LIVE_READ.REVIEW_OPTIONS],
+    ),
+    [LIVE_READ.PULL_REQUEST_VIEWED]: STAGED_PARTS[LIVE_READ.PULL_REQUEST_VIEWED](
+      state[LIVE_READ.PULL_REQUEST_VIEWED],
     ),
   };
 }

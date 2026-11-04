@@ -875,6 +875,10 @@ export const LIVE_READ = {
   PULL_REQUEST_CONVERSATION: "pullRequestConversation",
   /** What one agent published, its pull request as the service last read it from GitHub, keyed and fetched as `PULL_REQUEST`. */
   PULL_REQUEST_PUBLISHED: "pullRequestPublished",
+  /** Which of one agent's pull request's files the member marked viewed on GitHub, read on their own GitHub sign-in, keyed and fetched as `PULL_REQUEST`. */
+  PULL_REQUEST_VIEWED: "pullRequestViewed",
+  /** What the reviewer and label pickers of one agent's Pull request tab offer, its repository's labels, assignable users, and teams, keyed and fetched as `PULL_REQUEST`. */
+  REVIEW_OPTIONS: "reviewOptions",
   /** One task's comments, its plan's own threads or one page's: the service's `taskCommentsLive` query. */
   PLAN_COMMENTS: "taskComments",
   /** One task's plan history, by the task: the service's `taskHistoryLive` query for its newest page, then the older pages its version history read past it, held for the windows that show it and a few they showed lately. */

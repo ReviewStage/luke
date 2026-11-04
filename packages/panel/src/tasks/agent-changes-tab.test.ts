@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
   AGENT_CALL_FAILURE,
   type AgentPullRequestViewedAnswerView,
+  PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
@@ -33,7 +35,6 @@ import {
   type ShortcutChord,
 } from "@repo/settings/shortcuts";
 import { DisclosureFind } from "@repo/ui";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -62,7 +63,7 @@ import {
   refusedOnPort,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
-import { handSettings } from "../testing/app-state.js";
+import { handHostReads, handSettings, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
@@ -155,11 +156,6 @@ const control = agentsControl({
   agents: [AGENT],
   agentIds: [AGENT.id],
   models: [],
-  readPullRequestViewed: () => {
-    viewedReads += 1;
-    const answer = viewedAnswer;
-    return (viewedHeld ?? Promise.resolve()).then(() => answer);
-  },
   readChanges: () =>
     Promise.resolve({
       pullRequest: {
@@ -241,6 +237,17 @@ beforeAll(async () => {
   );
 });
 
+/** The member's viewed marks held by the host over the window's settings, read as the test's service answers them. */
+function holdViewedReads(): void {
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.VIEWED]: () => {
+      viewedReads += 1;
+      const answer = viewedAnswer;
+      return (viewedHeld ?? Promise.resolve()).then(() => answer);
+    },
+  });
+}
+
 beforeEach(() => {
   drawn = [];
   revealed = [];
@@ -263,6 +270,7 @@ beforeEach(() => {
   });
   fakeAppBridge({});
   handSettings();
+  holdViewedReads();
 });
 
 afterEach(() => {
@@ -1565,6 +1573,7 @@ function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionReq
   const asked: PullRequestActionRequest[] = [];
   fakeAppBridge({});
   handSettings();
+  holdViewedReads();
   fakeActPort({
     ...fakeActPortCalls(),
     [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
@@ -1837,6 +1846,7 @@ function holdMarks(): Array<{
   }> = [];
   fakeAppBridge({});
   handSettings();
+  holdViewedReads();
   fakeActPort({
     ...fakeActPortCalls(),
     [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
@@ -2211,12 +2221,12 @@ const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join
 const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
-/** Answers each read of a file whole as given, keeping every read asked. */
+/** Answers each read of a file whole as given, keeping every such read asked. */
 function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
   const asked: AnyAct[] = [];
   fakeActs({
     act: (request: AnyAct) => {
-      asked.push(request);
+      if (request.kind === ACT_KIND.TASKS_FILE) asked.push(request);
       const outcome: FakeActAnswer = {
         status: FAKE_ANSWER.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,

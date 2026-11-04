@@ -368,13 +368,17 @@ function published(state: PullRequestState) {
   };
 }
 
-/** The overview's three parts and the pickers' options, any of them answering otherwise than the fixtures above. */
+/** The overview's three parts, the pickers' options, and the member's viewed marks, any of them answering otherwise than the fixtures above, which answer neither the options nor the marks. */
 interface OverviewReads {
   readonly pullRequest?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.PULL_REQUEST];
-  readonly reviewOptions?: AgentsControl["readReviewOptions"];
+  readonly reviewOptions?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.REVIEW_OPTIONS];
   readonly checks?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.CHECKS];
   readonly conversation?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.CONVERSATION];
+  readonly viewed?: PullRequestPartAnswers[typeof PULL_REQUEST_PART.VIEWED];
 }
+
+/** A read of the options or the marks the service did not answer. */
+const unanswered = () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED } as const);
 
 /** The plan's agents, the one whose pull request it is among them, its parts held by the host and answering as given and the fixtures otherwise. */
 function controlAnswering(
@@ -389,6 +393,8 @@ function controlAnswering(
     [PULL_REQUEST_PART.CHECKS]: reads.checks ?? (() => Promise.resolve({ pullRequest: CHECKS })),
     [PULL_REQUEST_PART.CONVERSATION]:
       reads.conversation ?? (() => Promise.resolve({ pullRequest: CONVERSATION })),
+    [PULL_REQUEST_PART.REVIEW_OPTIONS]: reads.reviewOptions ?? unanswered,
+    [PULL_REQUEST_PART.VIEWED]: reads.viewed ?? unanswered,
   };
   const control = agentsControl({
     agents: [AGENT],
@@ -396,7 +402,6 @@ function controlAnswering(
     models: [],
     pullRequests: new Map([[AGENT.id, published(state)]]),
     readChanges,
-    ...(reads.reviewOptions === undefined ? undefined : { readReviewOptions: reads.reviewOptions }),
   });
   partsOf.set(control, answers);
   drawnParts = answers;
@@ -421,6 +426,10 @@ function holdDrawnParts(): void {
       (drawnParts[PULL_REQUEST_PART.CHECKS] ?? unanswering)(agentId, number),
     [PULL_REQUEST_PART.CONVERSATION]: (agentId, number) =>
       (drawnParts[PULL_REQUEST_PART.CONVERSATION] ?? unanswering)(agentId, number),
+    [PULL_REQUEST_PART.REVIEW_OPTIONS]: (agentId, number) =>
+      (drawnParts[PULL_REQUEST_PART.REVIEW_OPTIONS] ?? unanswering)(agentId, number),
+    [PULL_REQUEST_PART.VIEWED]: (agentId, number) =>
+      (drawnParts[PULL_REQUEST_PART.VIEWED] ?? unanswering)(agentId, number),
   });
 }
 
@@ -5812,8 +5821,16 @@ function viewing(
 ) {
   const [additions, deletions] = options.published ?? [60, 7];
   const changedFiles = options.changedFiles ?? SIZED.length;
+  const viewed = () =>
+    Promise.resolve({
+      outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+      files: SIZED.map(([path]) => ({
+        path,
+        state: marked.includes(path) ? FILE_VIEWED_STATE.VIEWED : FILE_VIEWED_STATE.UNVIEWED,
+      })),
+    });
   const control: AgentsControl = {
-    ...controlAnswering({}, PULL_REQUEST_STATE.OPEN, () =>
+    ...controlAnswering({ viewed }, PULL_REQUEST_STATE.OPEN, () =>
       Promise.resolve({
         pullRequest: {
           url: PAGE,
@@ -5833,14 +5850,6 @@ function viewing(
     pullRequests: new Map([
       [AGENT.id, { ...published(PULL_REQUEST_STATE.OPEN), additions, deletions, changedFiles }],
     ]),
-    readPullRequestViewed: () =>
-      Promise.resolve({
-        outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
-        files: SIZED.map(([path]) => ({
-          path,
-          state: marked.includes(path) ? FILE_VIEWED_STATE.VIEWED : FILE_VIEWED_STATE.UNVIEWED,
-        })),
-      }),
   };
   return { control };
 }
