@@ -35,6 +35,7 @@ import {
   type ReviewThread,
 } from "@repo/features/agent-wire";
 import { LINK_PLACE, PULL_REQUEST_THREAD_VIEW, type ReadLink } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   FILE_VIEWED_STATE,
   MERGE_METHOD,
@@ -49,7 +50,7 @@ import type { TaskSummary } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { AppStateDelivery, AppStateSnapshot } from "@repo/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot, AppWorkspaceMembers } from "@repo/host/app-state";
 import { timeRuntime } from "@repo/ui";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -79,7 +80,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { deliveryOf, handSettings, stateWith } from "../testing/app-state.js";
+import { deliveryOf, handHostReads, handSettings, stateWith } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -116,6 +117,9 @@ const CHARLES: WorkspaceMember = {
   email: "charles@example.com",
   role: WORKSPACE_ROLE.MEMBER,
 };
+
+/** The workspace's people as the host holds them for the tab: Charles alone. */
+const HELD_PEOPLE: AppWorkspaceMembers = { "workspace-acme": { rows: { members: [CHARLES] } } };
 
 const AGENT: AgentSummary = {
   id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
@@ -323,7 +327,6 @@ beforeEach(() => {
       opened.push(url);
       return Promise.resolve();
     },
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
     [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: (payload) => {
       changes.push([payload.agentId, payload.request]);
       changeNumbers.push(payload.number);
@@ -335,6 +338,8 @@ beforeEach(() => {
       return Promise.resolve(PIXEL);
     },
   });
+  // Note that the workspace's people stand on the document from the first frame, as the host holds them for a tab drawn again.
+  handHostReads({ members: HELD_PEOPLE });
 });
 
 afterEach(() => {
@@ -4368,7 +4373,7 @@ test("Files changed draws each review thread under its line, its comments throug
         ],
       },
     });
-  handSettings();
+  handSettings({}, { [LIVE_READ.WORKSPACE_MEMBERS]: HELD_PEOPLE });
   const tab = await draw(
     controlAnswering(
       {

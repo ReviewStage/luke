@@ -65,6 +65,7 @@ import {
   type KEYS_ON,
   UNREAD,
 } from "./app-state.js";
+import { TX_WAIT_TIMEOUT } from "./live-follow.js";
 
 /** Every row a collection, or a live query, shows now, what a standing write drew among them. */
 export function rowsOf<Row extends object>(collection: {
@@ -166,30 +167,85 @@ export interface AnsweredCollection<Row extends object, Key extends string> {
    * it answered it, which is as new.
    */
   readonly confirmNew: (row: Row) => void;
+  /**
+   * Waits until the rows the read answered first satisfy `until`, at once
+   * where they do already: how a write whose service hands no transaction
+   * keeps what it drew until the read carries it. It settles too once the
+   * collection's scope closes, so a read that ends holds no write, and gives
+   * up after `TX_WAIT_TIMEOUT`, said in the log, since the write committed.
+   * Note that it reads the rows the read answered, never what the
+   * collection shows, since a write's draw stands over them meanwhile.
+   */
+  readonly carried: (until: (rows: readonly Row[]) => boolean) => Effect.Effect<void>;
 }
 
 /** A collection of rows keyed by `getKey`, ready and empty until its read first answers, for as long as the scope stands. */
 export function answeredCollection<Row extends object, Key extends string>(options: {
   readonly getKey: (row: Row) => Key;
 }): Effect.Effect<AnsweredCollection<Row, Key>, never, Scope.Scope> {
-  return Effect.map(syncedCollection(options.getKey), ({ collection, held, take }) => ({
-    collection,
-    answer: (rows) => take(new Map(rows.map((row) => [options.getKey(row), row]))),
-    confirmRow: (key, fields) => {
-      const row = held().get(key);
-      if (row !== undefined) take(new Map(held()).set(key, { ...row, ...fields(row) }));
-    },
-    confirmGone: (key) => {
-      if (!held().has(key)) return;
-      const next = new Map(held());
-      next.delete(key);
-      take(next);
-    },
-    confirmNew: (row) => {
-      const key = options.getKey(row);
-      if (!held().has(key)) take(new Map(held()).set(key, row));
-    },
-  }));
+  return Effect.gen(function* () {
+    const synced = yield* syncedCollection(options.getKey);
+    const { collection, held } = synced;
+    /** The waits on the read's rows (`carried`), each by what it waits for, while the scope stands. */
+    const waits = new Map<Deferred.Deferred<void>, (rows: readonly Row[]) => boolean>();
+    let open = true;
+    /** Settles every wait the rows now satisfy, or every one where `all` says the scope closed. */
+    const settleWaits = (all: boolean) => {
+      const rows = [...held().values()];
+      for (const [settled, until] of waits) {
+        if (!all && !until(rows)) continue;
+        waits.delete(settled);
+        Deferred.doneUnsafe(settled, Effect.void);
+      }
+    };
+    /** Takes the rows `next` holds as the synced ones (`syncedCollection`), settling every wait they now satisfy. */
+    const take = (next: ReadonlyMap<Key, Row>) => {
+      const keys = synced.take(next);
+      if (keys.length > 0) settleWaits(false);
+      return keys;
+    };
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        open = false;
+        settleWaits(true);
+      }),
+    );
+    const carried = (until: (rows: readonly Row[]) => boolean) =>
+      Effect.suspend(() => {
+        if (!open || until([...held().values()])) return Effect.void;
+        const settled = Deferred.makeUnsafe<void>();
+        waits.set(settled, until);
+        return Deferred.await(settled).pipe(
+          Effect.timeoutOption(TX_WAIT_TIMEOUT),
+          Effect.flatMap((arrived) =>
+            Option.isSome(arrived)
+              ? Effect.void
+              : Effect.logWarning("live-collection: a write's rows did not arrive on its read"),
+          ),
+          Effect.ensuring(Effect.sync(() => waits.delete(settled))),
+        );
+      });
+    return {
+      collection,
+      answer: (rows: readonly Row[]) =>
+        take(new Map(rows.map((row) => [options.getKey(row), row]))),
+      confirmRow: (key: Key, fields: (row: Row) => Partial<Row>) => {
+        const row = held().get(key);
+        if (row !== undefined) take(new Map(held()).set(key, { ...row, ...fields(row) }));
+      },
+      confirmGone: (key: Key) => {
+        if (!held().has(key)) return;
+        const next = new Map(held());
+        next.delete(key);
+        take(next);
+      },
+      confirmNew: (row: Row) => {
+        const key = options.getKey(row);
+        if (!held().has(key)) take(new Map(held()).set(key, row));
+      },
+      carried,
+    };
+  });
 }
 
 /**
@@ -467,6 +523,18 @@ export interface HeldSlice<Key> {
   readonly end: Effect.Effect<void>;
 }
 
+/** A held slice's rows by key, read and laid apart from its follows, as a write's answer lays a key's. */
+export interface HeldRows<Key, Rows> {
+  /** The rows `key` holds on the slice now; none where its read has not answered, or nobody holds it. */
+  readonly rowsOf: (key: Key) => Rows | undefined;
+  /**
+   * Lays `rows` at `key` as an answer of its read would be, as a write's
+   * answer is drawn before its read carries it. Note that a key nobody holds
+   * stands laid until one holds it and lets it go, or the session ends.
+   */
+  readonly lay: (key: Key, rows: Rows) => void;
+}
+
 /** `keyed` with `read` laid at `path`, or the key there dropped where it is none, every other key and level the very one held. */
 function withKeyLaid(keyed: object, path: readonly string[], read: object | undefined): object {
   const [id, ...below] = path;
@@ -512,7 +580,7 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
   /** `key`'s read followed until let go, each answer and each failure to answer told through `answers`. */
   readonly follow: (key: Key, answers: HeldAnswers<AppHostReads[Slice]>) => Effect.Effect<void>;
   readonly tell: (slice: AppState[Slice]) => void;
-}): Effect.Effect<HeldSlice<Key>, never, Scope.Scope> {
+}): Effect.Effect<HeldSlice<Key> & HeldRows<Key, AppHostReads[Slice]>, never, Scope.Scope> {
   return Effect.gen(function* () {
     let held = options.empty;
     const lay = (key: Key, read: AppHostRead<AppHostReads[Slice]> | undefined) => {
@@ -546,6 +614,8 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
       hold: reads.hold,
       held: reads.held,
       retry: (key) => Effect.andThen(Effect.sync(answers(key).retried), reads.reopen(key)),
+      rowsOf: (key) => answers(key).rows(),
+      lay: (key, rows) => lay(key, { rows }),
       open: reads.reopenHeld,
       end: reads.end,
     };

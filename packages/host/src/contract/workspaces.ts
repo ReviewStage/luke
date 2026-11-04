@@ -4,14 +4,12 @@ import { workspaceSentryAnswerSchema } from "@repo/features/sentry-install-wire"
 import { workspaceSlackBotAnswerSchema } from "@repo/features/slack-bot-wire";
 import {
   type TasksWorkspaceInvitationsAnswer,
-  type TasksWorkspaceMembersAnswer,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
   tasksWorkspaceInviteParamsSchema,
   tasksWorkspaceLeaveParamsSchema,
   tasksWorkspaceMemberRemoveParamsSchema,
   tasksWorkspaceMemberRoleParamsSchema,
-  tasksWorkspaceMembersParamsSchema,
   tasksWorkspaceParamsSchema,
   tasksWorkspacePhotoAnswerSchema,
   tasksWorkspacePhotoParamsSchema,
@@ -28,11 +26,7 @@ import {
   workspacePeopleFollowSchema,
 } from "@repo/features/tasks-view";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
-import {
-  formerMemberSchema,
-  workspaceMemberSchema,
-  workspaceSchema,
-} from "@repo/features/workspace-wire";
+import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace-wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
@@ -133,26 +127,22 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSlackBotChannelParamsSchema))
     .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
-    "Could not read that workspace's members on this system.",
-  )
-    .input(exactInput(tasksWorkspaceMembersParamsSchema))
-    .output(answersMembers),
-  [WORKSPACE_ACT_KIND.WORKSPACE_PEOPLE]: actProcedure(
+  // Note that the hold's stream carries nothing: the held people reach the panel on app state, and the stream is the window's hold on them.
+  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: actProcedure(
     "Could not follow that workspace's members on this system.",
   )
     .input(exactInput(workspacePeopleFollowSchema))
-    .output(eventIterator(type<TasksWorkspaceMembersAnswer>())),
+    .output(eventIterator(type<never>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_RETRY]: actProcedure(
+    "Could not read that workspace's members again on this system.",
+  )
+    .input(exactInput(workspacePeopleFollowSchema))
+    .output(EffectSchema.Void),
   [WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS]: actProcedure(
     "Could not follow that workspace's invitations on this system.",
   )
     .input(exactInput(workspacePeopleFollowSchema))
     .output(eventIterator(type<TasksWorkspaceInvitationsAnswer>())),
-  [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: actProcedure(
-    "Could not read who left that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceMembersParamsSchema))
-    .output(EffectSchema.flip(EffectSchema.Array(formerMemberSchema))),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actProcedure(
     "Could not remove that member on this system.",
   )

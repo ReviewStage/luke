@@ -278,12 +278,21 @@ export const INSTALLED_SKILL_ACT_KIND = {
 
 /**
  * Settings' integration rows: where every one of the account's integrations
- * stands, a browser sign-in to one begun and opened by the host, and one
- * connection ended. The window hears whether the browser was sent, never the
- * address it was sent to.
+ * stands, held, a browser sign-in to one begun and opened by the host, and
+ * one connection ended. The window hears whether the browser was sent, never
+ * the address it was sent to.
  */
 export const INTEGRATION_ACT_KIND = {
-  INTEGRATIONS_STATUS: "integrations.status",
+  /**
+   * Where every one of the account's integrations stands, held for the
+   * window while it holds the stream open and a while after among those let
+   * go lately, a sign-in pending settled by the host as it waits: what it
+   * holds reaches the panel on app state (`LIVE_READ.INTEGRATIONS`), so the
+   * stream carries nothing.
+   */
+  INTEGRATIONS_FOLLOW: "integrations.follow",
+  /** The account's held integrations, which the panel reads on app state, read again at once, as Try again asks. */
+  INTEGRATIONS_RETRY: "integrations.retry",
   INTEGRATIONS_CONNECT: "integrations.connect",
   INTEGRATIONS_CANCEL: "integrations.cancel",
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
@@ -299,6 +308,17 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_TOOLS_RETRY: "integrations.toolsRetry",
   /** One account at a provider named as the developer calls it. */
   INTEGRATIONS_RENAME: "integrations.rename",
+  /**
+   * The outside MCP clients the account allowed, with the server's address,
+   * held for the window while it holds the stream open: what they hold
+   * reaches the panel on app state (`LIVE_READ.MCP_CLIENTS`), so the stream
+   * carries nothing.
+   */
+  MCP_CLIENTS_FOLLOW: "mcpClients.follow",
+  /** The held outside MCP clients read again at once, as Try again asks. */
+  MCP_CLIENTS_RETRY: "mcpClients.retry",
+  /** One outside MCP client revoked under the Mac's session, answering the clients as they then stand, or that the revoke did not finish. */
+  MCP_CLIENTS_REVOKE: "mcpClients.revoke",
 } as const;
 
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
@@ -408,6 +428,15 @@ export const TASKS_ACT_KIND = {
    * stream carries nothing.
    */
   TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One task's plan held followed while the window holds the stream open
+   * for the task it has open, and a while after among those let go lately:
+   * what it holds reaches the panel on app state
+   * (`LIVE_READ.PLAN_DOCUMENT`), so the stream carries nothing.
+   */
+  TASKS_DOCUMENT_FOLLOW: "tasks.documentFollow",
+  /** A held task's plan, which the panel reads on app state, read again at once, as Try again asks. */
+  TASKS_DOCUMENT_RETRY: "tasks.documentRetry",
   /**
    * One plan's newest page of history, followed while the window holds the
    * stream open for its version history: each time a save lands, over Neon
@@ -535,14 +564,15 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: "workspace.slackBotNotifications",
   WORKSPACE_SLACK_BOT_REPOSITORY: "workspace.slackBotRepository",
   WORKSPACE_SLACK_BOT_CHANNEL: "workspace.slackBotChannel",
-  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
-  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
   /**
-   * A workspace's people, followed while the window holds the stream open:
-   * its members and who its work names but left as they first stand, then
-   * each time they move, or why there are none.
+   * A workspace's people, its members and who its work names but left, held
+   * while the window holds the stream open; the stream carries nothing, and
+   * what they hold reaches the panel on app state
+   * (`LIVE_READ.WORKSPACE_MEMBERS`).
    */
-  WORKSPACE_PEOPLE: "workspace.people",
+  WORKSPACE_MEMBERS_FOLLOW: "workspace.membersFollow",
+  /** A held workspace's people read again at once, as Try again asks. */
+  WORKSPACE_MEMBERS_RETRY: "workspace.membersRetry",
   /**
    * A workspace's pending invitations, followed for an owner or an admin
    * while the window holds the stream open: as they first stand, then each
@@ -757,13 +787,17 @@ export const PORT_ACT_USE = {
   INSTALLED_SKILLS_SHARE: ACT_USE.WRITE,
   INSTALLED_SKILLS_REMOVE: ACT_USE.WRITE,
 
-  INTEGRATIONS_STATUS: ACT_USE.READ,
+  INTEGRATIONS_FOLLOW: ACT_USE.READ,
+  INTEGRATIONS_RETRY: ACT_USE.READ,
   INTEGRATIONS_CONNECT: ACT_USE.WRITE,
   INTEGRATIONS_CANCEL: ACT_USE.WRITE,
   INTEGRATIONS_DISCONNECT: ACT_USE.WRITE,
   INTEGRATIONS_TOOLS_FOLLOW: ACT_USE.READ,
   INTEGRATIONS_TOOLS_RETRY: ACT_USE.READ,
   INTEGRATIONS_RENAME: ACT_USE.WRITE,
+  MCP_CLIENTS_FOLLOW: ACT_USE.READ,
+  MCP_CLIENTS_RETRY: ACT_USE.READ,
+  MCP_CLIENTS_REVOKE: ACT_USE.WRITE,
 
   MAC_COMMAND_ANSWER: ACT_USE.WRITE,
 
@@ -811,6 +845,8 @@ export const PORT_ACT_USE = {
   TASKS_RESTORE: ACT_USE.WRITE,
   TASKS_PAGE_SOURCE: ACT_USE.FETCH,
   TASKS_PAGES_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_FOLLOW: ACT_USE.READ,
+  TASKS_DOCUMENT_RETRY: ACT_USE.READ,
   TASKS_HISTORY_FOLLOW: ACT_USE.READ,
   TASKS_PICTURE_READ: ACT_USE.FETCH,
   TASKS_PICTURE_KEEP: ACT_USE.WRITE,
@@ -864,9 +900,8 @@ export const PORT_ACT_USE = {
   WORKSPACE_SLACK_BOT_NOTIFICATIONS: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_REPOSITORY: ACT_USE.WRITE,
   WORKSPACE_SLACK_BOT_CHANNEL: ACT_USE.WRITE,
-  WORKSPACE_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_FORMER_MEMBERS_READ: ACT_USE.READ,
-  WORKSPACE_PEOPLE: ACT_USE.READ,
+  WORKSPACE_MEMBERS_FOLLOW: ACT_USE.READ,
+  WORKSPACE_MEMBERS_RETRY: ACT_USE.READ,
   WORKSPACE_INVITATIONS: ACT_USE.READ,
   WORKSPACE_MEMBER_REMOVE: ACT_USE.WRITE,
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,

@@ -1,4 +1,5 @@
 import type { AgentSummary } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { type MentionPlace, sectionAnchors } from "@repo/features/mention-link";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { planSections } from "@repo/features/plan-document";
@@ -17,7 +18,7 @@ import {
 import { useAct } from "../act.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import type { MentionNode } from "../plan-editor/contract.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { useHeldRows } from "../use-host-read.js";
 import { agentActor, agentName } from "./agent-model.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
 import type { MentionHolder } from "./mention-holder.js";
@@ -252,8 +253,8 @@ interface SavedPlanRead {
 
 /**
  * The saved words of a task's plan for a place off its page, as the
- * Inbox's box on a thread of the task offers its sections: the open plan's
- * as the window holds them, else its newest revision's, read through the
+ * Inbox's box on a thread of the task offers its sections: a plan's the host
+ * holds for a window that opened it, else its newest revision's, read through the
  * version history's acts and again once a save moves the task's stamp,
  * the words last read standing meanwhile; none until first read, or where
  * the read failed. A plan with no revision yet has no words to offer.
@@ -262,8 +263,8 @@ export function useSavedPlanText(
   task: Pick<TaskSummary, "id" | "updatedAt"> | undefined,
 ): string | undefined {
   const { act } = useAct();
-  const opened = useAppSlice(APP_SLICE.TASKS)?.document.task;
-  const openText = task !== undefined && opened?.id === task.id ? opened.document.body : undefined;
+  const held = useHeldRows(LIVE_READ.PLAN_DOCUMENT, task?.id);
+  const openText = held !== undefined && "task" in held ? held.task.document.body : undefined;
   const [read, setRead] = useState<SavedPlanRead>();
   const reading = openText === undefined ? task?.id : undefined;
   const savedAt = task?.updatedAt;

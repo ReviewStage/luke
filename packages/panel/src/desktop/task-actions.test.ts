@@ -13,10 +13,10 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -28,13 +28,10 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
-import {
-  fakeActPort,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
@@ -149,6 +146,11 @@ function mount(element: ReactElement): HTMLElement {
   roots.push(root);
   act(() => root.render(element));
   return container;
+}
+
+/** `element` drawn on a registry of its own, so it reads main's document anew, the members the test laid among it. */
+function mountReading(element: ReactElement): HTMLElement {
+  return mount(onRegistry(AtomRegistry.make(), element));
 }
 
 /** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu. */
@@ -459,7 +461,7 @@ test("a sidebar task no one is on wears no face in a workspace of the reader alo
     installMembers(members);
     const { tasks, asked } = openTab();
     const task = { ...OTHER, workspaceId: workspace.id };
-    const container = mount(
+    const container = mountReading(
       createElement(MemberDirectory, {
         workspace,
         readerId: DEAN.userId,
@@ -752,7 +754,7 @@ test("a task's card says you of the reader's own task outside a member directory
   ) => {
     installMembers(members);
     const tasks = tasksControl({ me: DEAN.userId, workspaces: [PERSONAL, workspace] });
-    const card = mount(
+    const card = mountReading(
       members === undefined
         ? taskCardOf(tasks, mine, mine.updatedAt)
         : createElement(MemberDirectory, {
@@ -777,23 +779,25 @@ test("a task's card says you of the reader's own task outside a member directory
   assert.deepEqual(await lines(stage, undefined), []);
 });
 
-/** The bridge answering the members read with `members`, each a member of the workspace. */
+/** The host holding the workspace's people as `members`, each a member of the workspace, or their read refused where there are none. */
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
   });
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      members === undefined
-        ? Promise.reject(refusedOnPort("Could not read."))
-        : Promise.resolve(
-            members.map((member) => ({
+  fakeActPort({});
+  handMembers(() =>
+    members === undefined
+      ? { failed: true }
+      : {
+          rows: {
+            members: members.map((member) => ({
               ...member,
               email: `${member.userId}@example.com`,
               role: WORKSPACE_ROLE.MEMBER,
             })),
-          ),
-  });
+          },
+        },
+  );
 }
 /** Where a task from a service with statuses stands before anything moves it. */
 const STANDING = { status: TASK_STATUS.TODO, priority: TASK_PRIORITY.NONE } as const;

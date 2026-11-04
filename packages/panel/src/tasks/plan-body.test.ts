@@ -8,7 +8,6 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -17,7 +16,7 @@ import { afterEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handState, signedInAs } from "../testing/app-state.js";
+import { handMembers, handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -97,14 +96,12 @@ interface Drawn {
   readonly sectionLinks?: NonNullable<React.ComponentProps<typeof PlanBody>["sectionLinks"]>;
 }
 
-/** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
+/** The plan drawn in a workspace whose people the host holds as `MEMBERS` and `FORMER`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve(FORMER),
-  });
+  fakeActPort({});
   if (drawn.account !== undefined) handState({}, { account: signedInAs(drawn.account).account });
+  handMembers(() => ({ rows: { members: MEMBERS, former: FORMER } }));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const { readerId, account: _account, ...rest } = drawn;
@@ -420,7 +417,8 @@ test("a save that writes a section above the one the keyboard stands on leaves T
     },
   };
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const registry = AtomRegistry.make();

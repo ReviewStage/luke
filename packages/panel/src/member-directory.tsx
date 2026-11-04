@@ -1,10 +1,11 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@repo/ui/actor-model";
-import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
-import { useFormerMembersRead, useWorkspaceMembersRead } from "./tasks/use-workspace-members.js";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
 
 /**
  * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.
@@ -13,16 +14,18 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * tab, an agent's card, and an Inbox answer each read the person against the
  * workspace's members for their picture, email, and role, and the reader's
  * own id to say You (`@repo/ui/actor-model`'s `personActor`), and someone
- * who left keeps their picture, grayed, from who the read says left. The plan reads
- * the members once, here, rather than once for every line naming someone,
- * and again whenever the workspace's count changes. Outside a directory, or
- * while the members are unread, a person stands by the wire's name alone.
- * The directory also says whether its reads are out or were refused, with
- * their Retry, so a place that cannot draw without them, a person's page,
- * says why rather than wait on a read that will not answer.
+ * who left keeps their picture, grayed, from who the read says left. The
+ * directory holds the workspace's people once, here, rather than once for
+ * every line naming someone, on the one read the host holds of them
+ * (`LIVE_READ.WORKSPACE_MEMBERS`), so a surface drawn again draws its faces
+ * in its first frame. Outside a directory, or while the people are unread,
+ * a person stands by the wire's name alone. The directory also says whether
+ * the read is out or was refused, with its Retry, so a place that cannot
+ * draw without it, a person's page, says why rather than wait on a read that
+ * will not answer.
  */
 
-/** The members as read, the reader's own account id, who the workspace's work names but left, the workspace they are the members of, and where their reads stand. */
+/** The members as read, the reader's own account id, who the workspace's work names but left, the workspace they are the members of, and where their read stands. */
 export interface Directory {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
@@ -31,25 +34,22 @@ export interface Directory {
   readonly workspaceId?: string | undefined;
   /** How many members that workspace has, as its listing counts them, before the members are read. */
   readonly memberCount?: number | undefined;
-  /** Whether the members or who left are still being read, neither read refused. */
+  /** Whether the workspace's people are still being read, the read not refused. */
   readonly reading: boolean;
-  /** Whether the members alone are still being read and not refused, which a menu of them says whatever became of the read of who left. */
-  readonly membersReading: boolean;
-  /** Whether the members read alone was refused, which a menu of them says whatever became of the read of who left. */
-  readonly membersRefused: boolean;
-  /** Whether the members read or the read of who left was refused, until Retry asks again. */
+  /** Whether the read of the workspace's people was refused before it ever answered, until Retry asks again. */
   readonly refused: boolean;
-  /** Reads again whichever of the members and who left was refused. */
+  /** Reads the workspace's people again. */
   readonly retry: () => void;
 }
+
+/** Who left a workspace whose read names nobody, one list for every draw, so the directory holds while nothing moves. */
+const NOBODY_LEFT: readonly FormerMember[] = [];
 
 const DirectoryContext = createContext<Directory>({
   members: undefined,
   readerId: undefined,
   former: undefined,
   reading: false,
-  membersReading: false,
-  membersRefused: false,
   refused: false,
   retry: () => undefined,
 });
@@ -64,24 +64,15 @@ export function MemberDirectory({
   readerId: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const {
-    members,
-    refused: membersRefused,
-    retry: retryMembers,
-  } = useWorkspaceMembersRead(workspace);
-  const { former, refused: formerRefused, retry: retryFormer } = useFormerMembersRead(workspace);
-  const refused = membersRefused || formerRefused;
-  const membersReading = workspace !== undefined && !membersRefused && members === undefined;
-  const reading =
-    workspace !== undefined && !refused && (members === undefined || former === undefined);
-  // Note that Retry asks again only for a read that was refused, so the one that answered stays drawn meanwhile.
-  const retry = useCallback(() => {
-    if (membersRefused) retryMembers();
-    if (formerRefused) retryFormer();
-  }, [membersRefused, formerRefused, retryMembers, retryFormer]);
+  const workspaceId = workspace?.id;
+  const { rows, status, retry } = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId);
+  const members = rows?.members;
+  // Note that who left stands unread as long as the members do, and as nobody once a read names nobody.
+  const former = rows === undefined ? undefined : (rows.former ?? NOBODY_LEFT);
+  const reading = workspaceId !== undefined && status === HOST_READ_STATUS.LOADING;
+  const refused = workspaceId !== undefined && status === HOST_READ_STATUS.FAILED;
   // Note that the directory is the same across draws while none of it moves, because every
   // face and name inside it is drawn again for a new one.
-  const workspaceId = workspace?.id;
   const memberCount = workspace?.memberCount;
   const directory = useMemo(
     () => ({
@@ -91,23 +82,10 @@ export function MemberDirectory({
       workspaceId,
       memberCount,
       reading,
-      membersReading,
-      membersRefused,
       refused,
       retry,
     }),
-    [
-      members,
-      readerId,
-      former,
-      workspaceId,
-      memberCount,
-      reading,
-      membersReading,
-      membersRefused,
-      refused,
-      retry,
-    ],
+    [members, readerId, former, workspaceId, memberCount, reading, refused, retry],
   );
   return <DirectoryContext.Provider value={directory}>{children}</DirectoryContext.Provider>;
 }

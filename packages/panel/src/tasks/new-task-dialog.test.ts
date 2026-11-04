@@ -42,7 +42,7 @@ import {
   fakeAppBridge,
 } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handMembers, handState, holdIntegrations } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -359,15 +359,14 @@ test("Fast on a model nothing pays for lands on its harness's row in Settings, a
 });
 
 test("a server switched off from the + menu's Integrations is handed to the agent's start, and a refused card opened again keeps it off", async () => {
-  fakeActPort({
-    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
-      Promise.resolve({
-        integrations: {
-          ...UNAVAILABLE,
-          [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED,
-        },
-      }),
-  });
+  holdIntegrations(() => ({
+    rows: {
+      integrations: {
+        ...UNAVAILABLE,
+        [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED,
+      },
+    },
+  }));
   const card = await mount("The service is down.");
   const slackSwitch = async () => {
     act(() => card.button("Add files and more").click());
@@ -864,7 +863,8 @@ const PEOPLE: readonly WorkspaceMember[] = [
 ];
 
 test("a member of a workspace with no GitHub connected is told which owners and admins to ask, and no member is named", async () => {
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: PEOPLE } }));
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     workspaceName: "Acme",
@@ -879,7 +879,8 @@ test("a member of a workspace with no GitHub connected is told which owners and 
 });
 
 test("a member of a workspace whose GitHub reaches no repository is told so and which owners and admins to ask, with no Open Settings", async () => {
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(PEOPLE) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: PEOPLE } }));
   await mount(undefined, undefined, {
     scope: "workspace-acme",
     manages: false,

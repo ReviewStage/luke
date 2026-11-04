@@ -192,7 +192,6 @@ const RefusalSchema = Schema.Struct({
 
 /** How one attempt to open the pull request ended. */
 const ATTEMPT = {
-  /** GitHub opened it. */
   OPENED: "opened",
   /** GitHub refused the token it went on, or the account behind it. */
   TOKEN_REFUSED: "token-refused",

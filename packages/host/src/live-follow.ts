@@ -49,6 +49,12 @@ import {
  * joins such an answer onto the rows it holds (`decodedLiveRows`'s
  * `joined`); one past no cursor of the reader's, as after a rewind, is
  * whole, and taken in their place.
+ *
+ * A read followed by sync id (`LIVE_POLL.SYNC`), as the account's inbox
+ * items are, is asked past the id its last answer named, and answered only
+ * what moved since, with the ids of rows that stand no longer for the
+ * reader, or whole where it is too far behind (`SyncStanding`); an id that
+ * stalls is answered around (`SYNC_STALL`).
  */
 
 /** The least time between two polls, so a service answering at once is not asked in a hot loop; each poll is otherwise held by the service until the rows move. */
@@ -97,7 +103,7 @@ export class LiveBroken extends Data.TaggedError("LiveBroken")<{
 }> {}
 
 /** How long a write waits for its transaction to reach the read that shows it, so a write is never held unbounded, and how long an answer's txids are kept for a write whose own answer lands after it. */
-const TX_WAIT_TIMEOUT = Duration.seconds(10);
+export const TX_WAIT_TIMEOUT = Duration.seconds(10);
 
 /** A snapshot as Postgres spells one (`pg_current_snapshot()::text`): `xmin:xmax:xip,…`, the transactions it lists as running, if any, joined by commas. */
 const SNAPSHOT_SPELLING = /^(\d+):(\d+):((?:\d+(?:,\d+)*)?)$/;
@@ -131,6 +137,29 @@ function shows(snapshot: string, txid: string): boolean {
  */
 export type TxWait = (txid: string, timeout: Duration.Duration) => Effect.Effect<void, LiveBroken>;
 
+/**
+ * Where an answer of a read followed by sync id stands: the id its rows
+ * were read past, none where they are whole; the id to read past next; and
+ * the ids of the rows that stand no longer for the reader, every part's.
+ */
+export interface SyncStanding {
+  readonly past: string | undefined;
+  readonly next: string;
+  readonly gone: readonly string[];
+}
+
+/** Where an answer stands by sync id; none for an answer of a read not followed by one, or asked whole without one. */
+function syncStandingOf<Part extends string>(read: SealedRead<Part>): SyncStanding | undefined {
+  const parts = Object.values<SealedLiveQueryWire>(read.queries);
+  const answered = parts.find((query) => query.sync !== undefined)?.sync;
+  if (answered === undefined) return undefined;
+  return {
+    past: answered.past,
+    next: answered.next,
+    gone: [...new Set(parts.flatMap((query) => query.gone ?? []))],
+  };
+}
+
 /** A read answered for following: the address it was answered at, and each part's answer. */
 export interface SealedRead<Part extends string> {
   readonly url: string;
@@ -141,14 +170,17 @@ export interface LiveFollowDependencies<Part extends string> {
   /**
    * The read with each part's rows inline (`LIVE_POLL_URL`), held by the
    * service until the rows move past `after` (`liveDigestOf`), its cursor
-   * parts past `cursor`, the one its last answer named, where it has any; a
-   * failure where the service answered none, asked again a second later, or
-   * `gone` where the read names nothing the account reaches any more, which
-   * stops the follow.
+   * parts past `cursor`, the one its last answer named, where it has any,
+   * and, for a read followed by sync id, past `sync`, the id its last answer
+   * named, or whole where none is given, as after a stall; a failure where
+   * the service answered none, asked again a second later, or `gone` where
+   * the read names nothing the account reaches any more, which stops the
+   * follow.
    */
   readonly poll: (
     after: string | undefined,
     cursor?: string,
+    sync?: string,
   ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /**
    * Hears the read's wait for a write's transaction once an answer carried
@@ -361,9 +393,16 @@ function liveAnswers<Part extends string>(
       let seen = standing(first.queries);
       /** The cursor the last answer named, past which the next poll reads the cursor parts; kept through a failed poll, since the rows held stand at it still. */
       let cursor = cursorOf(first);
+      /** The sync id the last answer named, past which the next poll reads; kept through a failed poll, and a whole answer that names none. */
+      let sync = syncStandingOf(first)?.next;
+      /** When the sync id last moved, or a stall was last asked around, by the host's clock. */
+      let syncMovedAt = yield* Clock.currentTimeMillis;
       yield* answered(first);
       const pollOnce = Effect.gen(function* () {
-        const read = yield* dependencies.poll(seen, cursor);
+        const now = yield* Clock.currentTimeMillis;
+        const stalled = sync !== undefined && now - syncMovedAt > Duration.toMillis(SYNC_STALL);
+        if (stalled) syncMovedAt = now;
+        const read = yield* dependencies.poll(seen, cursor, stalled ? undefined : sync);
         if ("failure" in read) {
           if (ended(read)) {
             Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
@@ -377,6 +416,11 @@ function liveAnswers<Part extends string>(
         }
         seen = standing(read.queries) ?? seen;
         cursor = cursorOf(read) ?? cursor;
+        const next = syncStandingOf(read)?.next;
+        if (next !== undefined && next !== sync) {
+          sync = next;
+          syncMovedAt = yield* Clock.currentTimeMillis;
+        }
         return yield* answered(read);
       });
       yield* Effect.forkScoped(
@@ -441,8 +485,9 @@ export function decodedLiveRows<Part extends string, Rows>(
 /**
  * A read followed until it is gone, each answer's rows, every part's,
  * decoded under `schema` and handed to `take` the moment its poll answers,
- * before the follow carries the answer's snapshots and txids on to a write
- * waiting for them. So a write confirmed on the read finds its rows already
+ * with where it stands by sync id for a read followed by one, before the
+ * follow carries the answer's snapshots and txids on to a write waiting for
+ * them. So a write confirmed on the read finds its rows already
  * taken, where a reader of `decodedLiveRows` may not have taken them yet. An
  * answer carrying no rows inline hands none; one whose rows do not decode
  * is a failed poll, asked again, and a first one fails the follow, which
@@ -452,7 +497,7 @@ export function followTakingRows<Part extends string, Rows>(
   dependencies: LiveFollowDependencies<Part>,
   first: SealedRead<Part>,
   schema: Schema.Decoder<Rows>,
-  take: (rows: Rows) => Effect.Effect<void>,
+  take: (rows: Rows, standing?: SyncStanding) => Effect.Effect<void>,
 ): Effect.Effect<void, LiveBroken> {
   const decode = Schema.decodeUnknownOption(schema);
   const parts = Object.keys(first.queries).filter((part): part is Part => part in first.queries);
@@ -462,13 +507,13 @@ export function followTakingRows<Part extends string, Rows>(
     if (carried === undefined) return Effect.succeed(true);
     return Option.match(decode(carried), {
       onNone: () => Effect.succeed(false),
-      onSome: (rows) => Effect.as(take(rows), true),
+      onSome: (rows) => Effect.as(take(rows, syncStandingOf(read)), true),
     });
   };
   return Effect.gen(function* () {
     if (!(yield* taken(first))) return yield* new LiveBroken({ reason: "a row did not decode" });
-    const poll: LiveFollowDependencies<Part>["poll"] = (after, cursor) =>
-      Effect.flatMap(dependencies.poll(after, cursor), (read) =>
+    const poll: LiveFollowDependencies<Part>["poll"] = (after, cursor, sync) =>
+      Effect.flatMap(dependencies.poll(after, cursor, sync), (read) =>
         "failure" in read
           ? Effect.succeed(read)
           : Effect.map(taken(read), (decoded) =>
@@ -478,6 +523,32 @@ export function followTakingRows<Part extends string, Rows>(
     yield* Stream.runDrain(liveRows({ ...dependencies, poll }, first));
   });
 }
+
+/**
+ * How long a sync id may stand still before the next poll asks whole,
+ * without it, once, and again each time as long passes still. Note that a
+ * sync id is the cluster's settled id, which moves whenever any transaction
+ * anywhere ends, and the devices' beats alone end one every 15 s, so an id
+ * that stood still past a 25 s hold is a long transaction holding every
+ * delta back, as a migration during a deploy does, or a database nothing
+ * writes to, where a whole answer each 30 s costs nothing. The host cannot
+ * see the wakes behind a stalled id, since a delta held over one answers
+ * empty and carries no txids.
+ */
+const SYNC_STALL = Duration.seconds(30);
+
+/**
+ * How long a live follow waits before sealing again after a seal the
+ * service did not answer, or a follow that stopped: the first wait, doubling
+ * on each that fails again, up to the longest.
+ */
+export const FOLLOW_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
+
+export const FOLLOW_BACKOFF = Schedule.exponential(FOLLOW_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, FOLLOW_RESEAL.LONGEST)),
+  ),
+);
 
 /** How long a follow that stopped, or whose read the service did not answer, waits before it is read again. */
 export const LIVE_RESTART = Duration.seconds(5);

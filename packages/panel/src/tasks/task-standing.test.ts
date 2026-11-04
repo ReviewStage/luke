@@ -12,12 +12,15 @@ import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads, handMembers } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import type { RepositoryChooser } from "./repository-chip.js";
@@ -228,15 +231,16 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
     role: WORKSPACE_ROLE.MEMBER,
   });
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([
+  fakeActPort({});
+  handMembers(() => ({
+    rows: {
+      members: [
         member("user-grace", "Grace Hopper"),
         member("user-dean", "Dean"),
         member("user-ada", "Ada Lovelace"),
-      ]),
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
-  });
+      ],
+    },
+  }));
   const sent: TaskStanding[] = [];
   const host = document.createElement("div");
   document.body.append(host);
@@ -244,16 +248,19 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
   roots.push(root);
   await act(async () => {
     root.render(
-      createElement(MemberDirectory, {
-        workspace: { id: "workspace-acme", memberCount: 3 },
-        readerId: "user-dean",
-        children: createElement(TaskStandingChips, {
-          task: TASK,
-          onSet: (standing: TaskStanding) => {
-            sent.push(standing);
-          },
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MemberDirectory, {
+          workspace: { id: "workspace-acme", memberCount: 3 },
+          readerId: "user-dean",
+          children: createElement(TaskStandingChips, {
+            task: TASK,
+            onSet: (standing: TaskStanding) => {
+              sent.push(standing);
+            },
+          }),
         }),
-      }),
+      ),
     );
   });
 
@@ -279,21 +286,22 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
 
 test("the assignee's menu says it is reading while the members are unread, and never that none match", async () => {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => new Promise(() => undefined),
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => new Promise(() => undefined),
-  });
+  fakeActPort({});
+  handMembers(() => undefined);
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
   await act(async () => {
     root.render(
-      createElement(MemberDirectory, {
-        workspace: { id: "workspace-acme", memberCount: 3 },
-        readerId: "user-dean",
-        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MemberDirectory, {
+          workspace: { id: "workspace-acme", memberCount: 3 },
+          readerId: "user-dean",
+          children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+        }),
+      ),
     );
   });
 
@@ -305,29 +313,33 @@ test("the assignee's menu says it is reading while the members are unread, and n
 
 test("the assignee's menu says No members match when a search finds nobody", async () => {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([
+  fakeActPort({});
+  handMembers(() => ({
+    rows: {
+      members: [
         {
           userId: "user-ada",
           name: "Ada Lovelace",
           email: "user-ada@acme.test",
           role: WORKSPACE_ROLE.MEMBER,
         },
-      ]),
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
-  });
+      ],
+    },
+  }));
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   roots.push(root);
   await act(async () => {
     root.render(
-      createElement(MemberDirectory, {
-        workspace: { id: "workspace-acme", memberCount: 1 },
-        readerId: "user-dean",
-        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MemberDirectory, {
+          workspace: { id: "workspace-acme", memberCount: 1 },
+          readerId: "user-dean",
+          children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+        }),
+      ),
     );
   });
 
@@ -345,23 +357,19 @@ test("the assignee's menu says No members match when a search finds nobody", asy
 });
 
 test("the assignee's menu says the members could not be read, with Retry, never that none match, and Retry reads them again", async () => {
-  let reads = 0;
   fakeAppBridge({});
+  const reads = handHostReads({ members: { "workspace-acme": { failed: true } } });
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
-      reads += 1;
-      return reads === 1
-        ? Promise.reject(new Error("offline"))
-        : Promise.resolve([
-            {
-              userId: "user-ada",
-              name: "Ada Lovelace",
-              email: "ada@acme.test",
-              role: WORKSPACE_ROLE.MEMBER,
-            },
-          ]);
+    [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
+      const ada = {
+        userId: "user-ada",
+        name: "Ada Lovelace",
+        email: "ada@acme.test",
+        role: WORKSPACE_ROLE.MEMBER,
+      };
+      reads.deliverMembers({ [workspaceId]: { rows: { members: [ada] } } });
+      return Promise.resolve();
     },
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
   });
   const host = document.createElement("div");
   document.body.append(host);
@@ -369,11 +377,14 @@ test("the assignee's menu says the members could not be read, with Retry, never 
   roots.push(root);
   await act(async () => {
     root.render(
-      createElement(MemberDirectory, {
-        workspace: { id: "workspace-acme", memberCount: 1 },
-        readerId: "user-dean",
-        children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
-      }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(MemberDirectory, {
+          workspace: { id: "workspace-acme", memberCount: 1 },
+          readerId: "user-dean",
+          children: createElement(TaskStandingChips, { task: TASK, onSet: () => undefined }),
+        }),
+      ),
     );
   });
 

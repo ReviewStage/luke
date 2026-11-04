@@ -43,8 +43,15 @@ const statements = Effect.promise(async () =>
   ),
 );
 
-/** The table as the migration before it left it: one row per account and provider, keyed by the pair. */
+/**
+ * The table as the migration before it left it: one row per account and
+ * provider, keyed by the pair. Note that Sync's capture of the table, which
+ * a later migration adds and which names the columns dropped here, goes
+ * first, since nothing captured the table back then.
+ */
 const BEFORE = [
+  `DROP TRIGGER IF EXISTS "app_sync_update" ON "integration_connection"`,
+  `DROP TRIGGER IF EXISTS "app_sync_write" ON "integration_connection"`,
   `DROP INDEX IF EXISTS "integration_connection_user_name_idx"`,
   `DROP INDEX IF EXISTS "integration_connection_provider_subject_idx"`,
   `DROP INDEX IF EXISTS "integration_connection_user_provider_idx"`,

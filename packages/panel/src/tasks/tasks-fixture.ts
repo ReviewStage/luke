@@ -27,7 +27,12 @@ import {
 } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppPlanComments, type AppStateSnapshot, RUN_PROFILE } from "@repo/host/app-state";
+import {
+  type AppPlanComments,
+  type AppPlanDocuments,
+  type AppStateSnapshot,
+  RUN_PROFILE,
+} from "@repo/host/app-state";
 import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS, FIXTURE_TASK_NAME } from "@repo/host/fixture-stage";
 import type { SettingsLink } from "@repo/settings/settings-views";
@@ -42,7 +47,6 @@ import {
 import { automationsAppState, automationsLaunchPlace } from "./automations-fixture.js";
 import {
   FIXTURE_PERSON,
-  fixtureMembersAnswer,
   settingsActAnswer,
   settingsAppState,
   settingsLaunchLink,
@@ -389,16 +393,14 @@ const FIXTURE_TASK_LIST: TasksView = {
   listStatus: TASKS_READ.READY,
   workspaces: FIXTURE_WORKSPACES,
   github: { connected: true, login: null },
-  document: { status: TASKS_READ.IDLE },
   // Every task's agents as the list followed live carries them: none, where no profile stages one.
   taskAgents: [],
 };
 
-/** The open task, its document read. */
+/** The open task, whose plan main's document holds as read (`fixtureAppState`). */
 const FIXTURE_OPEN_TASK: TasksView = {
   ...FIXTURE_TASK_LIST,
   activeTaskId: FIXTURE_TASK.id,
-  document: { status: TASKS_READ.READY, task: FIXTURE_TASK },
 };
 
 /** One thread's comment, written by `writer` at `at`. */
@@ -636,10 +638,9 @@ function emptyTaskAnswer(
  * so an act that answers nothing is told from one left to main: the
  * fixture task's version history under every profile, its agent
  * profiles' tabs' reads, its signed-in profiles' pages' reads (an
- * Automations profile's are laid on its document instead), every
- * profile's workspace members, every other profile's task as one with no
- * agents, and nothing else, which goes to main as it
- * would.
+ * Automations profile's are laid on its document instead), every other
+ * profile's task as one with no agents, and nothing else, which goes to
+ * main as it would.
  */
 export function fixtureActAnswer(
   run: { readonly profile: string },
@@ -650,14 +651,35 @@ export function fixtureActAnswer(
     historyActAnswer(kind, payload) ??
     agentActAnswer(run.profile, kind, payload) ??
     settingsActAnswer(run.profile, kind, payload) ??
-    fixtureMembersAnswer(kind, payload) ??
     emptyTaskAnswer(kind)
   );
 }
 
+/** Main's held plans with the fixture's task's plan held, one object for each of main's. */
+const STAGED_PLANS = new WeakMap<AppPlanDocuments, AppPlanDocuments>();
+
 /**
- * Main's document as a fixture run draws it (`use-app-state.ts`): with the
- * synthetic account signed in under the profiles that stage one
+ * Main's document with the fixture's task's plan held as the window's read
+ * of it holds one (`LIVE_READ.PLAN_DOCUMENT`), under the profiles that open
+ * the task (`fixtureTasksView`), so it opens on its plan; the very document
+ * under any other.
+ */
+function plannedAppState(state: AppStateSnapshot): AppStateSnapshot {
+  if (fixtureTasksView(state.run)?.activeTaskId !== FIXTURE_TASK_ID) return state;
+  const held = state[LIVE_READ.PLAN_DOCUMENT];
+  let staged = STAGED_PLANS.get(held);
+  if (staged === undefined) {
+    staged = { ...held, [FIXTURE_TASK_ID]: { rows: { task: FIXTURE_TASK } } };
+    STAGED_PLANS.set(held, staged);
+  }
+  return { ...state, [LIVE_READ.PLAN_DOCUMENT]: staged };
+}
+
+/**
+ * Main's document as a fixture run draws it (`use-app-state.ts`): the
+ * fixture's task's plan held under the profiles that open it, with the
+ * fixture workspaces' members held under every profile, and the synthetic
+ * account signed in under the profiles that stage one
  * (`settings-fixture.ts`), the open task's pages held with the page its
  * agent showed under the agent profiles (`agent-fixture.ts`), the
  * workspaces' automations and runs held under the Automations profiles
@@ -667,7 +689,7 @@ export function fixtureActAnswer(
 export function fixtureAppState(state: AppStateSnapshot): AppStateSnapshot {
   return commentsAppState(
     automationsAppState(
-      agentAppState(settingsAppState(state.run.profile, state), FIXTURE_TASK_ID),
+      agentAppState(settingsAppState(state.run.profile, plannedAppState(state)), FIXTURE_TASK_ID),
       FIXTURE_WORKSPACE_IDS,
     ),
   );

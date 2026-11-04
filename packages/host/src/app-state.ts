@@ -13,14 +13,17 @@ import type {
   AutomationWorkspaceRun,
 } from "@repo/features/automation-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
+import type { McpClientsAnswer } from "@repo/features/mcp-client-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
-import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
+import { COMMENT_SUBJECT, type HeldPlanDocument, type TasksView } from "@repo/features/tasks-view";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
+import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
 import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import type { MicrophoneRoute, MicrophoneStatus } from "@repo/settings/microphone";
@@ -399,9 +402,29 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/** One workspace's people, as the host's read of them stands: its members and who its work names but left, once it answered. */
+export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
+
+/**
+ * Each workspace's people the host holds for the windows
+ * (`workspace-members-read.ts`): those a window draws, and the few drawn
+ * lately, by the workspace's id, each as its own read stands. One absent is
+ * held by nobody.
+ */
+export type AppWorkspaceMembers = Readonly<Record<string, AppWorkspaceMembersRead>>;
+
 /** Each agent's own tools the windows hold, by the agent, as the host's read of them stands. */
 export type AppWorkspaceTools = Readonly<Record<string, AppHostRead<WorkspaceToolsAnswer>>>;
 
+/**
+ * Where every one of the account's integrations stands, by the account, as
+ * the host's read of them stands (`compose-integrations.ts`): its rows as
+ * the service last answered them, with GitHub's standing beside them.
+ */
+export type AppIntegrations = Readonly<Record<string, AppHostRead<IntegrationStatusesAnswer>>>;
+
+/** The outside MCP clients the account allowed, by the account, as the host's read of them stands. */
+export type AppMcpClients = Readonly<Record<string, AppHostRead<McpClientsAnswer>>>;
 /** Each integration server's tools the windows hold, by the server's name, as the host's read of them stands: its tools, or why it listed none. */
 export type AppIntegrationTools = Readonly<Record<string, AppHostRead<IntegrationToolsAnswer>>>;
 
@@ -425,6 +448,13 @@ export const NO_KEYS_HELD: Readonly<Record<string, never>> = {};
  * absent is held by nobody.
  */
 export type AppHeldById<Rows> = Readonly<Record<string, AppHostRead<Rows>>>;
+
+/**
+ * Each task's plan the host holds for the windows (`compose-tasks.ts`): the
+ * tasks a window opened, and the few it opened lately, by the task's id,
+ * each as its read and the writes since stand.
+ */
+export type AppPlanDocuments = AppHeldById<HeldPlanDocument>;
 
 /** The automations' held reads, by their names: each workspace's automations, each workspace's runs, and each automation's runs (`compose-automations.ts`). */
 export type AppAutomationReads = Pick<
@@ -462,17 +492,21 @@ export interface AppHostReads {
   [LIVE_READ.AGENT_ORIGINS]: AgentOrigin | null;
   [LIVE_READ.INBOX_ITEMS]: AppInboxItems;
   [LIVE_READ.HOLDER_INBOX]: readonly InboxItem[];
+  [LIVE_READ.INTEGRATIONS]: IntegrationStatusesAnswer;
   [LIVE_READ.INTEGRATION_TOOLS]: IntegrationToolsAnswer;
   [LIVE_READ.PAGES]: readonly PageLine[];
   [LIVE_READ.PROVIDER_KEYS]: AppProviderKeyList;
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
+  [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
   [LIVE_READ.AUTOMATIONS]: readonly AutomationSummary[];
   [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: readonly AutomationWorkspaceRun[];
   [LIVE_READ.AUTOMATION_RUNS]: readonly AutomationRunSummary[];
   [LIVE_READ.PLAN_COMMENTS]: readonly PlanCommentThread[];
+  [LIVE_READ.PLAN_DOCUMENT]: HeldPlanDocument;
 }
 
 /**
@@ -553,8 +587,8 @@ export interface AppState {
   audio: AppAudioSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
-   * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it.
+   * hold them: the list and the one active task, whose plan is held apart
+   * (`LIVE_READ.PLAN_DOCUMENT`). Only the panel's Tasks tab draws it.
    */
   tasks: TasksView;
   agents: AppAgentsSlice;
@@ -565,6 +599,8 @@ export interface AppState {
   [LIVE_READ.INBOX_ITEMS]: AppHostRead<AppInboxItems>;
   /** Each plan's or agent's inbox the windows chose, held while a window holds it and a while after: what a chosen item's pane, a task's Inbox tab, and an agent's page read past the feed. */
   [LIVE_READ.HOLDER_INBOX]: AppHolderInboxes;
+  /** Where every one of the account's integrations stands, held while a window draws one and a while after: what Settings › Integrations, onboarding's tools step, the composer's servers, and every server's card read. */
+  [LIVE_READ.INTEGRATIONS]: AppIntegrations;
   /** Each integration server's tools the windows chose, held while a surface listing it shows and a while after: what an integration's health is read from. */
   [LIVE_READ.INTEGRATION_TOOLS]: AppIntegrationTools;
   /** Each task's or agent's pages the windows chose, held while a window holds them and a while after: what the panel beside an Inbox item, and beside an agent's page, lists. */
@@ -577,8 +613,12 @@ export interface AppState {
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
+  [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
+  /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
+  [LIVE_READ.MCP_CLIENTS]: AppMcpClients;
   /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
   [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;
   /** Each workspace's runs the windows chose, by the workspace, newest fired first, held as the automations are: what the Runs tab and the sidebar's Automations row read. */
@@ -587,6 +627,8 @@ export interface AppState {
   [LIVE_READ.AUTOMATION_RUNS]: AppHeldById<readonly AutomationRunSummary[]>;
   /** Each plan's or page's comment threads the windows show, held while a window holds them and a while after: what a plan's margin, its Comments tab, its summary, and a page's tab draw. */
   [LIVE_READ.PLAN_COMMENTS]: AppPlanComments;
+  /** Each task's plan the windows opened, held while a window has it open and a while after: what the task's page, a section's chip, and a mention's saved text draw. */
+  [LIVE_READ.PLAN_DOCUMENT]: AppPlanDocuments;
   macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
@@ -705,6 +747,7 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof InboxItem,
   },
+  [LIVE_READ.INTEGRATIONS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.INTEGRATION_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.PAGES]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.PROVIDER_KEYS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
@@ -727,7 +770,9 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.AUTOMATIONS]: {
     keys: READ_KEYS.ONE,
     on: KEYS_ON.SLICE,
@@ -743,6 +788,8 @@ export const HOST_READ_SLICE = {
     on: KEYS_ON.SLICE,
     rowId: "id" satisfies keyof AutomationRunSummary,
   },
+  // Note that a plan crosses whole, since each save replaces it.
+  [LIVE_READ.PLAN_DOCUMENT]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
 } as const satisfies { readonly [Slice in keyof AppState]?: HostReadSliceEntry };
 
 /** A slice `HOST_READ_SLICE` declares. */

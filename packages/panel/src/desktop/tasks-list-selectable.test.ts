@@ -8,7 +8,6 @@ import {
 } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW, TASKS_READ } from "@repo/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import { selectableListBehavior } from "@repo/ui/testing/selectable-list";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -19,6 +18,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { useLeaveGuard, useTasksTab } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { TasksPage } from "./tasks-page.js";
 
@@ -79,7 +79,8 @@ async function mount() {
   window.localStorage.clear();
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: MEMBERS } }));
   const opened: string[] = [];
   function Page() {
     const control = useTasksTab({

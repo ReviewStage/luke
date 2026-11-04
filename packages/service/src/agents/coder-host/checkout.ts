@@ -39,7 +39,7 @@ import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-s
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
- * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
+ * checkout.ts -- a coding agent's checkout of its repository, whose commits are, and the credential its sandbox pushes through.
  *
  * The agent's repository is checked out in two steps. As its sandbox opens,
  * it is checked out on the same terms as the brain's checkout
@@ -69,7 +69,7 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * Who the agent writes as is settled once, as its first session starts, and
  * kept on its row (`AGENT_AUTHOR`), so the instructions that session
  * runs under and the checkout agree for the agent's life. An agent a
- * developer started, by hand or by voice, writes as that developer where
+ * developer started by hand writes as that developer where
  * they signed in with GitHub and their own account may push to the
  * repository: its commits are authored as their GitHub account, at the
  * noreply address GitHub links to it, each ending on a trailer that names
@@ -337,7 +337,7 @@ export const agentRepositoryRead = /* @__PURE__ */ Effect.fn("web/agentRepositor
   agent: WithRepository<Agent>,
 ): Effect.fn.Return<AgentRepositoryRead, CheckoutRefused, CheckoutServices> {
   const app = yield* GitHubApp;
-  // Note that a store that could not be read refuses as GitHub unavailable, as the checkout always has.
+  // Note that a store that could not be read refuses as GitHub unavailable.
   const workspace = yield* agentWorkspace(target, agent).pipe(Effect.mapError(refusedBy));
   if (Option.isNone(workspace))
     return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
@@ -422,7 +422,6 @@ export const refreshAgentCheckout = /* @__PURE__ */ Effect.fn("web/refreshAgentC
   },
 );
 
-/** The command that makes the working folder where a checkout would stand; one already there is left as it is. */
 const MAKE_WORKING_FOLDER = `mkdir -p ${CODER.CHECKOUT_PATH}`;
 
 /**

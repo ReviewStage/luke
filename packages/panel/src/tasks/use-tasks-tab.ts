@@ -97,9 +97,9 @@ import {
   type PinMove,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
+  renamedRegion,
   renamedView,
   repositoryChangeFailureNote,
-  STATUS_RESTORE_FAILED_NOTE,
   type StatusChange,
   settleChanges,
   settledNote,
@@ -112,7 +112,6 @@ import {
   type TaskNames,
   type TasksPage,
   tasksPage,
-  undoStillDue,
   workspaceReaches,
 } from "@repo/ui/tasks-model";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
@@ -144,8 +143,9 @@ import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
+import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
 import { APP_SETTINGS_VIEW, useAppSlice, useStartsWithoutRepository } from "../use-app-state.js";
-import { useHostRead } from "../use-host-read.js";
+import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -1159,6 +1159,39 @@ const PARENT_REMOVED_NOTE = "Parent removed";
 /** What the toast says once a block is removed, offering Undo. */
 const BLOCK_REMOVED_NOTE = "Relation removed";
 
+/** What ⌘Z's toast calls a task's rename it takes back or puts back. */
+const TASK_RENAMED_NOTE = "Task renamed";
+
+/** What ⌘Z's toast calls a task's pin it takes back or puts back, by what was asked. */
+const TASK_MARKED_NOTES = {
+  [TASK_MARK.PIN]: "Task pinned",
+  [TASK_MARK.UNPIN]: "Task unpinned",
+} as const satisfies Record<TaskMark, string>;
+
+/** What ⌘Z's toast calls an agent's pin it takes back or puts back, by whether it was a pin or an unpin. */
+const AGENT_PINNED_NOTES = {
+  PIN: "Agent pinned",
+  UNPIN: "Agent unpinned",
+} as const;
+
+/** What ⌘Z's toast calls a change of a task's priority it takes back or puts back. */
+const PRIORITY_CHANGED_NOTE = "Priority changed";
+
+/** What ⌘Z's toast calls a change of who a task is assigned to, by whether it names anyone. */
+const ASSIGNEE_CHANGED_NOTES = {
+  ASSIGNED: "Task assigned",
+  UNASSIGNED: "Task unassigned",
+} as const;
+
+/** What ⌘Z's toast calls a change of where one task stands, by what it changed. */
+function standingNote(standing: TaskStanding): string {
+  if (standing.status !== undefined) return settledNote(standing.status, 1, 0);
+  if (standing.assigneeId === undefined) return PRIORITY_CHANGED_NOTE;
+  return standing.assigneeId === null
+    ? ASSIGNEE_CHANGED_NOTES.UNASSIGNED
+    : ASSIGNEE_CHANGED_NOTES.ASSIGNED;
+}
+
 /** What a relation's refusal says: its own reason where the service named one, and a plain refusal otherwise. */
 function relationRefusedNote(failure: RelationCallFailure | ParentCallFailure): string {
   switch (failure) {
@@ -1435,11 +1468,28 @@ export function useTasksTab(input: {
   );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = tasksPage(tasks);
-  const region = documentRegion(tasks);
+  // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
+  // its first frame, and one never held reads; a name being typed draws over it as over the list.
+  const heldPlan = useHostRead(LIVE_READ.PLAN_DOCUMENT, viewed.activeTaskId);
+  const heldPlanRows = heldPlan.rows;
+  const heldPlanFailed = heldPlan.status === HOST_READ_STATUS.FAILED;
+  const retryPlan = heldPlan.retry;
+  const openedTaskId = viewed.activeTaskId;
+  const region = useMemo(
+    () =>
+      renamedRegion(
+        documentRegion(
+          { activeTaskId: openedTaskId },
+          { rows: heldPlanRows, failed: heldPlanFailed },
+        ),
+        drafts,
+      ),
+    [openedTaskId, heldPlanRows, heldPlanFailed, drafts],
+  );
   // A started agent's tab opens selected; the column's tabs are built after
   // the agents they draw, so the opening reaches them through this late binding.
   const mainRef = useRef<MainTabsControl | undefined>(undefined);
-  const openDocument = viewed.document.task;
+  const openDocument = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
   // The open task's own words, which a dictation into one of its agents' boxes listens for.
   const dictationWords = useMemo(
     () =>
@@ -1939,10 +1989,20 @@ export function useTasksTab(input: {
     return { ...DELETE_REFUSED, cause: deleted.cause };
   };
 
-  // A fixture's tasks are renamed nowhere, as they are read from nowhere.
+  // The tasks the tab draws as they stand at each call, and its act, which
+  // ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
+  const drawnTasks = useRef(tasks);
+  drawnTasks.current = tasks;
+  const rowDoors: RowDoors<TasksView> = { rows: () => drawnTasks.current, act };
+
+  // A fixture's tasks are renamed nowhere, as they are read from nowhere. A
+  // rename the service kept is ⌘Z's to take back.
   const renameTask = async (taskId: string, name: string): Promise<boolean> => {
     if (fixture !== undefined) return false;
-    return act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
+    const pressed = pressRows(ROW_WRITE.TASK_RENAME, rowDoors, [{ id: taskId, after: { name } }]);
+    const renamed = await act(ACT_KIND.TASKS_RENAME, { taskId, name }).catch(() => false);
+    if (renamed) pressed.keep(TASK_RENAMED_NOTE);
+    return renamed;
   };
 
   // The open task as it stands when a move is answered, which may be
@@ -1953,28 +2013,28 @@ export function useTasksTab(input: {
   // A fixture's tasks are marked nowhere, as they are read from nowhere.
   // Main draws a pin at once and puts it back where the service refused it;
   // a pin says nothing once it lands, since the row it moves is in sight,
-  // and a refusal says so in a toast, since the menu that asked has closed.
-  // It answers whether the service kept the mark, which the pin migration
-  // above waits on.
+  // and a refusal says so in a toast, since the menu that asked has closed;
+  // one kept is ⌘Z's to take back. It answers whether the service kept the
+  // mark, which the pin migration above waits on.
   const markTask = (taskId: string, mark: TaskMark): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })).then(
-      (changed) => {
-        if (!changed.kept) {
-          toast({
-            words: MARK_FAILED_NOTES[mark],
-            tone: STATUS_TONE.DANGER,
-            hold: TOAST_HOLD.FAILED,
-            failure: {
-              surface: FAILURE_SURFACE.TASK_MARK,
-              cause: changed.cause,
-              about: { taskId },
-            },
-          });
-        }
-        return changed.kept;
-      },
-    );
+    const pinned = mark === TASK_MARK.PIN;
+    const pressed = pressRows(ROW_WRITE.TASK_PIN, rowDoors, [
+      { id: taskId, after: { pinned, position: null } },
+    ]);
+    return askKept(act(ACT_KIND.TASKS_PIN, { taskId, pinned })).then((changed) => {
+      if (changed.kept) {
+        pressed.keep(TASK_MARKED_NOTES[mark]);
+        return true;
+      }
+      toast({
+        words: MARK_FAILED_NOTES[mark],
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure: { surface: FAILURE_SURFACE.TASK_MARK, cause: changed.cause, about: { taskId } },
+      });
+      return false;
+    });
   };
   markTaskNow.current = markTask;
   // A fixture's repositories are pinned nowhere, as its tasks are marked
@@ -2035,8 +2095,15 @@ export function useTasksTab(input: {
   };
   const pinAgent = (agentId: string, pinned: boolean) => {
     if (fixture !== undefined) return;
+    const pressed = pressRows(ROW_WRITE.AGENT_PIN, rowDoors, [
+      { id: agentId, after: { pinned, position: null } },
+    ]);
     askAgentPin(agentId, pinned).then((asked) => {
-      if (asked === AGENT_PIN_ASKED.CHANGED || asked === AGENT_PIN_ASKED.UNASKED) return;
+      if (asked === AGENT_PIN_ASKED.CHANGED) {
+        pressed.keep(pinned ? AGENT_PINNED_NOTES.PIN : AGENT_PINNED_NOTES.UNPIN);
+        return;
+      }
+      if (asked === AGENT_PIN_ASKED.UNASKED) return;
       toast({
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
@@ -2144,14 +2211,9 @@ export function useTasksTab(input: {
     });
   };
 
-  // Each task's status choices made here so far, counted as each is sent,
-  // so an Undo can tell a choice made after its press, answered or not.
-  const statusChoices = useRef(new Map<string, number>());
-  const chooseStatus = (taskId: string) =>
-    statusChoices.current.set(taskId, (statusChoices.current.get(taskId) ?? 0) + 1);
   // The tasks as the list holds them, or the open document where the list does not hold one yet.
   const standingTasksOf = (taskIds: readonly string[]) => {
-    const held = tasks.document.task;
+    const held = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
     return taskIds.flatMap((taskId): readonly Pick<TaskSummary, "id" | "status">[] => {
       const task = tasks.tasks.find((each) => each.id === taskId);
       if (task !== undefined) return [task];
@@ -2166,7 +2228,6 @@ export function useTasksTab(input: {
     standing: TaskStanding,
     assigneeName?: string,
   ): Promise<Kept> => {
-    if (standing.status !== undefined) chooseStatus(taskId);
     // Note that the name the reader knows a member by goes with them, so main draws them by it until the list carries them.
     const named = standing.assigneeId && assigneeName !== undefined ? { assigneeName } : undefined;
     return askKept(act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing, ...named }));
@@ -2184,17 +2245,20 @@ export function useTasksTab(input: {
   };
 
   // Tasks set at a status by one press answer with one toast rather than
-  // one each, so its Undo puts back the status of every task the service
-  // kept, and says so only where the service refuses that too. The open
-  // task stays open, since a task done or canceled is still read and worked on.
+  // one each, and are one entry for ⌘Z, whose Undo the toast runs: it puts
+  // back the status of every task the service kept that still stands where
+  // the press left it (`undo-stack.ts`). The open task stays open, since a
+  // task done or canceled is still read and worked on.
   const settleTasks = (taskIds: readonly string[], status: TaskStatus) => {
     if (fixture !== undefined) return;
-    const { asked, undo } = settleChanges(standingTasksOf(taskIds), status);
+    const asked = settleChanges(standingTasksOf(taskIds), status);
     if (asked.length === 0) return;
-    const sent = sendStatuses(asked);
-    // The status choice each task stood at once this press was sent, which a later choice moves on.
-    const choices = new Map(asked.map(({ taskId }) => [taskId, statusChoices.current.get(taskId)]));
-    sent.then(({ landed, refused, cause }) => {
+    const pressed = pressRows(
+      ROW_WRITE.TASK_STANDING,
+      rowDoors,
+      asked.map((change) => ({ id: change.taskId, after: { status: change.status } })),
+    );
+    sendStatuses(asked).then(({ landed, refused, cause }) => {
       if (landed.length === 0) {
         toast({
           words: settleFailedNote(status, refused),
@@ -2204,44 +2268,15 @@ export function useTasksTab(input: {
         });
         return;
       }
+      const words = settledNote(status, landed.length, refused);
+      const undo = pressed.keep(words, (taskId) => landed.includes(taskId));
       toast(
-        undoToast(settledNote(status, landed.length, refused), () =>
-          restoreNow.current(
-            undo.filter(
-              ({ taskId }) =>
-                landed.includes(taskId) &&
-                statusChoices.current.get(taskId) === choices.get(taskId),
-            ),
-            status,
-          ),
-        ),
+        undo === undefined
+          ? { words, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
+          : undoToast(words, undo),
       );
     });
   };
-  // Note that an Undo puts back only the tasks given no status since its
-  // press, here or still in flight, and still at the status it undoes, so a
-  // status chosen since, on the Board, the task's chip, or another Mac,
-  // stands.
-  const restoreStatuses = (changes: readonly StatusChange[], settled: TaskStatus) => {
-    const due = undoStillDue(
-      changes,
-      settled,
-      standingTasksOf(changes.map(({ taskId }) => taskId)),
-    );
-    if (due.length === 0) return;
-    sendStatuses(due).then(({ refused, cause }) => {
-      if (refused === 0) return;
-      toast({
-        words: STATUS_RESTORE_FAILED_NOTE,
-        tone: STATUS_TONE.DANGER,
-        hold: TOAST_HOLD.FAILED,
-        failure: { surface: FAILURE_SURFACE.TASK_SETTLE, cause },
-      });
-    });
-  };
-  // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
-  const restoreNow = useRef(restoreStatuses);
-  restoreNow.current = restoreStatuses;
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -2359,14 +2394,28 @@ export function useTasksTab(input: {
     );
   };
 
-  // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  // A fixture's tasks are read from nowhere, so nothing keeps where they
+  // stand. A change the service kept is ⌘Z's to take back.
   const setTaskStanding = (
     taskId: string,
     standing: TaskStanding,
     assigneeName?: string,
   ): Promise<Kept> => {
     if (fixture !== undefined) return Promise.resolve(notKept(FAILURE_CONDITION.NOT_KEPT));
-    return sendStanding(taskId, standing, assigneeName);
+    const { assigneeId, ...rest } = standing;
+    const assignee =
+      assigneeId === undefined
+        ? undefined
+        : {
+            assignee: assigneeId === null ? null : { userId: assigneeId, name: assigneeName ?? "" },
+          };
+    const pressed = pressRows(ROW_WRITE.TASK_STANDING, rowDoors, [
+      { id: taskId, after: { ...rest, ...assignee } },
+    ]);
+    return sendStanding(taskId, standing, assigneeName).then((kept) => {
+      if (kept.kept) pressed.keep(standingNote(standing));
+      return kept;
+    });
   };
 
   // A fixture's tasks are read from nowhere, so no block of one is kept. The
@@ -3757,9 +3806,7 @@ export function useTasksTab(input: {
       });
     },
     onRetryList: () => press(ACT_KIND.TASKS_REFRESH),
-    onRetryDocument: () => {
-      if (tasks.activeTaskId !== undefined) select(tasks.activeTaskId);
-    },
+    onRetryDocument: retryPlan,
     onNewTask: newTask,
     onNewTaskIn: (repository) => newTaskWith({ repository }),
     onNewRelatedTask: (taskId, kind) => {

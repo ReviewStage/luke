@@ -81,6 +81,10 @@ export {
   MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
+  HostedMcpClientsClient,
+  type HostedMcpClientsClientOptions,
+} from "./mcp-clients-client.js";
+export {
   automationPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,

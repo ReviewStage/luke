@@ -6,11 +6,11 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import {
+  type HeldPlanDocument,
   type RepositoryCallFailure,
   type StartCallFailure,
   TASK_CALL_FAILURE,
   TASK_PARENT_FAILURE,
-  TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
 import type { Workspace } from "@repo/features/workspace-wire";
@@ -68,17 +68,30 @@ export type DocumentRegion =
   | { readonly kind: typeof DOCUMENT_REGION.FAILED }
   | { readonly kind: typeof DOCUMENT_REGION.MISSING };
 
+/** The open task's plan as the host holds it for the window: what its read answered, absent until it first does, and whether it failed before it ever had. */
+export interface HeldDocumentRead {
+  readonly rows?: HeldPlanDocument | undefined;
+  readonly failed?: boolean;
+}
+
 /**
- * The document region's state. The tab never draws a document it did not
- * read: a task is drawn only when the held document is the active task's.
+ * The document region's state, from the open task's held plan. The tab
+ * never draws a document it did not read: a task is drawn only when the
+ * held plan is the active task's, and the region reads only while that plan
+ * holds nothing and has not failed, so a task held lately draws at once.
  */
-export function documentRegion(view: TasksView): DocumentRegion {
-  const { activeTaskId, document } = view;
+export function documentRegion(
+  view: { readonly activeTaskId?: string | undefined },
+  held: HeldDocumentRead | undefined,
+): DocumentRegion {
+  const { activeTaskId } = view;
   if (activeTaskId === undefined) return { kind: DOCUMENT_REGION.NONE };
-  if (document.status === TASKS_READ.MISSING) return { kind: DOCUMENT_REGION.MISSING };
-  const task = document.task;
-  if (task !== undefined && task.id === activeTaskId) return { kind: DOCUMENT_REGION.READY, task };
-  if (document.status === TASKS_READ.FAILED) return { kind: DOCUMENT_REGION.FAILED };
+  const rows = held?.rows;
+  if (rows !== undefined && !("task" in rows)) return { kind: DOCUMENT_REGION.MISSING };
+  if (rows !== undefined && rows.task.id === activeTaskId) {
+    return { kind: DOCUMENT_REGION.READY, task: rows.task };
+  }
+  if (rows === undefined && held?.failed === true) return { kind: DOCUMENT_REGION.FAILED };
   return { kind: DOCUMENT_REGION.READING };
 }
 
@@ -218,19 +231,23 @@ export const RENAME_FAILED_NOTE = "The task could not be renamed. Try again.";
 /** Names drawn over the ones a view carries, by task id: a name being typed. */
 export type TaskNames = ReadonlyMap<string, string>;
 
-/** The view with each name given drawn in place of the one it replaces, in the list and on the open document alike. */
+/** `task` with the name given for it drawn in place of its own, the very task where none is given. */
+function named<Named extends { id: string; name: string }>(task: Named, renames: TaskNames): Named {
+  const name = renames.get(task.id);
+  return name === undefined ? task : { ...task, name };
+}
+
+/** The view with each name given drawn in place of the one it replaces in the list. */
 export function renamedView(view: TasksView, renames: TaskNames): TasksView {
   if (renames.size === 0) return view;
-  const named = <Named extends { id: string; name: string }>(task: Named): Named => {
-    const name = renames.get(task.id);
-    return name === undefined ? task : { ...task, name };
-  };
-  const held = view.document.task;
-  return {
-    ...view,
-    tasks: view.tasks.map(named),
-    document: held === undefined ? view.document : { ...view.document, task: named(held) },
-  };
+  return { ...view, tasks: view.tasks.map((task) => named(task, renames)) };
+}
+
+/** The region with the name given for its task drawn in place of the one it replaces, as the list draws it. */
+export function renamedRegion(region: DocumentRegion, renames: TaskNames): DocumentRegion {
+  if (region.kind !== DOCUMENT_REGION.READY) return region;
+  const task = named(region.task, renames);
+  return task === region.task ? region : { ...region, task };
 }
 
 /** What a press of the task menu does to a task's place: pins it or unpins it. */
@@ -267,19 +284,16 @@ function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
 }
 
 /**
- * What setting tasks at a status asks of each, and what its Undo asks: the
- * status each stood at before. A task already there is left out of both,
- * since the press changes nothing about it.
+ * What setting tasks at a status asks of each. A task already there is left
+ * out, since the press changes nothing about it.
  */
 export function settleChanges(
   tasks: readonly Pick<TaskSummary, "id" | "status">[],
   status: TaskStatus,
-): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
-  const moved = tasks.filter((task) => standingStatus(task) !== status);
-  return {
-    asked: moved.map((task) => ({ taskId: task.id, status })),
-    undo: moved.map((task) => ({ taskId: task.id, status: standingStatus(task) })),
-  };
+): readonly StatusChange[] {
+  return tasks
+    .filter((task) => standingStatus(task) !== status)
+    .map((task) => ({ taskId: task.id, status }));
 }
 
 /** Whether the task menu offers settling the task at a status: not where it already stands there. */
@@ -335,25 +349,6 @@ export function settledNote(status: TaskStatus, landed: number, refused: number)
 export function settleFailedNote(status: TaskStatus, refused: number): string {
   const notes = STATUS_NOTES[status];
   return refused === 1 ? notes.failedOne : notes.failedMany;
-}
-
-/** What the toast says when the service refused an Undo putting a status back. */
-export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
-
-/**
- * What an Undo of setting tasks at a status still puts back: only the tasks
- * that still stand there, since one given another status since was chosen
- * anew and an Undo must not take that choice back.
- */
-export function undoStillDue(
-  undo: readonly StatusChange[],
-  settled: TaskStatus,
-  tasks: readonly Pick<TaskSummary, "id" | "status">[],
-): readonly StatusChange[] {
-  return undo.filter(({ taskId }) => {
-    const task = tasks.find((each) => each.id === taskId);
-    return task !== undefined && standingStatus(task) === settled;
-  });
 }
 
 /** What the toast says when the service refused a repository's pin, by whether it was a pin or an unpin. */

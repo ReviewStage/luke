@@ -9,7 +9,6 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { MESSAGE_ROLE } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -18,6 +17,7 @@ import { afterEach, test } from "vitest";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab } from "./agent-tab.js";
@@ -81,10 +81,10 @@ afterEach(() => {
 /** The agent's turn as the tab draws it, over a page of the task and that turn, for an agent of `status`. */
 async function drawnTurn(status: AgentStatus): Promise<HTMLElement> {
   fakeAppBridge({});
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
-      Promise.resolve([{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }]),
-  });
+  fakeActPort({});
+  handMembers(() => ({
+    rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
+  }));
   const messages = [TASK, turn(status !== AGENT_STATUS.RUNNING)];
   const control = agentsControl({
     agents: [agentOf(status)],

@@ -122,7 +122,6 @@ import {
   inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import {
-  ACCOUNT_INBOX_ITEMS,
   type AccountInboxItemsLiveAnswer,
   type AccountInboxLiveAnswer,
   type AgentTranscriptLiveAnswer,
@@ -1201,21 +1200,19 @@ export class HostedAgentClient {
   }
 
   /**
-   * Every inbox item the account reaches sealed for following over Neon
-   * Realtime, or with `poll` its rows inline, answered at once: where each
-   * stands, and those changed since `since` (epoch milliseconds; every one
-   * where none is named) whole. A poll is held on where they stand alone, so
-   * `after` is that part's digest (`liveDigestOn` over
-   * `ACCOUNT_INBOX_ITEMS.HELD_ON`). Unanswered for anything that went wrong,
-   * which the caller answers by asking again. Sealed for the account
-   * `userId` names, and signed out where the session is no longer that
-   * account's.
+   * Every inbox item the account reaches, its rows inline, read by the sync
+   * id the reader holds them at (`LIVE_POLL.SYNC`): whole, with the id to
+   * read past next, where `sync` is empty or the reader is too far behind;
+   * past an id, only the items that moved since, each whole, with the ids
+   * of those that stand no longer for it, held by the service until
+   * something moves. Without `sync`, every item whole as it stands, answered
+   * at once. Unanswered for anything that went wrong, which the caller
+   * answers by asking again. Read for the account `userId` names, and signed
+   * out where the session is no longer that account's.
    */
   accountInboxItemsLive(
     userId: string,
-    since: number | undefined,
-    poll = false,
-    after?: string,
+    sync: string | undefined,
   ): Effect.Effect<
     AccountInboxItemsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
     never,
@@ -1223,10 +1220,17 @@ export class HostedAgentClient {
   > {
     const read = {
       [LIVE_USER_QUERY]: userId,
-      ...(since === undefined ? undefined : { [ACCOUNT_INBOX_ITEMS.SINCE]: String(since) }),
+      ...(sync === undefined ? undefined : { [LIVE_POLL.SYNC]: sync }),
     };
+    // Note that a read past an id is held by the service until something moves, so it travels under the held deadline.
     return Effect.catchIf(
-      askLive(this.#hosted.live.inboxItems, read, poll, after),
+      askLive(
+        this.#hosted.live.inboxItems,
+        read,
+        true,
+        undefined,
+        sync !== undefined && sync !== "",
+      ),
       (failed) =>
         failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
       () => Effect.succeed(LIVE_SIGNED_OUT),

@@ -114,6 +114,16 @@
  * beside it, which no statement can read. It is woken by a claim, finish,
  * or failure in the agent's workspace (`pullRequestChaptersLive`), so
  * another member's Generate reaches an open view without a Refresh.
+ *
+ * `GET /api/live/integration-statuses` answers every integration row the
+ * account holds, each where it stands as stored, a sign-in counted under
+ * way within its window from the instant the read is answered, with the
+ * providers the deployment offers the account and those that take several
+ * accounts beside them, which no statement can read. It is woken by a
+ * sign-in begun, completed, or ended, a label, an expiry, or a disconnect
+ * (`integrationStatusesLive`), so a sign-in finished in the browser reaches
+ * an open view with no focus. GitHub's standing is
+ * `/api/account/integrations/github`'s, read beside it.
  */
 
 import type { LiveStatement } from "@repo/database/core/live-statement";
@@ -130,6 +140,7 @@ import {
 import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import { ACCOUNT_INBOX_REPOSITORYLESS } from "@repo/features/account-inbox-wire";
 import { agentCallIdSchema, agentCursorSchema } from "@repo/features/agent-wire";
+import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import {
   ACCOUNT_INBOX_ITEMS,
   LIVE_POLL,
@@ -154,6 +165,8 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import { accountIntegrationConnect } from "../integrations/integration-connect.js";
+import { signInIssuedSince } from "../integrations/integrations-app.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   agentBrowserTabsLive,
@@ -166,6 +179,7 @@ import {
   automationWorkspaceRunsLive,
   inboxItemsLive,
   inboxLive,
+  integrationStatusesLive,
   macCommandsLive,
   PLAN_THREADS,
   pullRequestChaptersLive,
@@ -936,6 +950,22 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
       return { ...sealed, generatable };
+    }),
+    integrationStatuses: signedIn.integrationStatuses.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const connect = yield* hostedStoreOrUnavailable(accountIntegrationConnect(context.userId));
+      const offered = INTEGRATION_PROVIDER_LIST.filter((provider) => connect[provider].configured);
+      const now = yield* Clock.currentTimeMillis;
+      const sealed = yield* liveQueryParts(
+        integrationStatusesLive,
+        { userId: context.userId, issuedSince: String(signInIssuedSince(now)) },
+        input,
+      );
+      return {
+        ...sealed,
+        offered,
+        multiple: offered.filter((provider) => connect[provider].multipleAccounts),
+      };
     }),
   };
 }

@@ -10,6 +10,7 @@ import {
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
@@ -30,6 +31,8 @@ import {
   type AppProviderKeyList,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppWorkspaceMembers,
+  type AppWorkspaceMembersRead,
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
@@ -44,6 +47,7 @@ import {
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
+  WORKSPACE_ACT_KIND,
 } from "@repo/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
@@ -100,17 +104,21 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.AGENT_ORIGINS]: NO_AGENT_ORIGINS,
     [LIVE_READ.INBOX_ITEMS]: UNREAD,
     [LIVE_READ.HOLDER_INBOX]: NO_HOLDER_INBOXES,
+    [LIVE_READ.INTEGRATIONS]: NO_KEYS_HELD,
     [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
+    [LIVE_READ.MCP_CLIENTS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATIONS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_WORKSPACE_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.AUTOMATION_RUNS]: NO_KEYS_HELD,
     [LIVE_READ.PLAN_COMMENTS]: NO_PLAN_COMMENTS,
+    [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
@@ -163,17 +171,20 @@ export function handCapabilities(capabilities: readonly HostCapability[]): void 
 }
 
 /**
- * Hands the window main's document with its settings as given, and answers
- * each settings write as main does: stored, then the document delivered
- * again to every listener, so a surface draws the setting it wrote and the
- * next surface drawn reads it. Every other act and procedure is answered
- * as the window's fakes answered it before. The write is answered as
- * accepted.
+ * Hands the window main's document with its settings as given, its other
+ * slices patched, and answers each settings write as main does: stored,
+ * then the document delivered again to every listener, so a surface draws
+ * the setting it wrote and the next surface drawn reads it. Every other act
+ * and procedure is answered as the window's fakes answered it before. The
+ * write is answered as accepted.
  */
-export function handSettings(settings: Partial<AppSettingsView> = {}): void {
+export function handSettings(
+  settings: Partial<AppSettingsView> = {},
+  patch: Partial<AppStateSnapshot> = {},
+): void {
   let view: AppSettingsView = Object.assign(settingsView(), settings);
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
-  const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
+  const snapshot = () => stateWith({}, { ...patch, settings: appSettingsWire(view) });
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(snapshot()),
@@ -208,6 +219,7 @@ export interface HostReadsHanded {
   readonly deliverTools: (next: AppIntegrationTools) => void;
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
+  readonly deliverMembers: (next: AppWorkspaceMembers) => void;
 }
 
 /** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
@@ -222,12 +234,12 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
 
 /**
  * Lays the host's reads as given, the account's feed of every item, the
- * holders' own inboxes, the pull requests' chapters, the servers' tools, and
- * the signed-in account's keys, over whatever document the window was
- * handed, its experiments and the reads handed before among it, and answers
- * with how each is delivered again as it moves, as the host tells it. The
- * account is given an id where the document names none, since the host
- * holds its keys by it.
+ * holders' own inboxes, the pull requests' chapters, the servers' tools, the
+ * signed-in account's keys, and the workspaces' people, over whatever
+ * document the window was handed, its experiments and the reads handed
+ * before among it, and answers with how each is delivered again as it
+ * moves, as the host tells it. The account is given an id where the document
+ * names none, since the host holds its keys by it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
@@ -235,6 +247,7 @@ export function handHostReads(first: {
   readonly chapters?: AppChapters;
   readonly tools?: AppIntegrationTools;
   readonly keys?: AppHostRead<AppProviderKeyList>;
+  readonly members?: AppWorkspaceMembers;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
@@ -242,14 +255,16 @@ export function handHostReads(first: {
   let account = HELD_ACCOUNT_ID;
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
+    // Note that the document answers at the version it was asked at, so a read delivered while the handed one was awaited stands over it.
     requestAppState: async () => {
+      const asked = version;
       const snapshot = withAccountId(handed === undefined ? snapshotWith({}) : await handed());
       if (snapshot.account.status === ACCOUNT_STATUS.SIGNED_IN && snapshot.account.id) {
         account = snapshot.account.id;
       }
       return {
         ...snapshot,
-        version,
+        version: asked,
         ...(first.items === undefined ? undefined : { [LIVE_READ.INBOX_ITEMS]: first.items }),
         ...(first.holders === undefined ? undefined : { [LIVE_READ.HOLDER_INBOX]: first.holders }),
         ...(first.chapters === undefined
@@ -259,6 +274,9 @@ export function handHostReads(first: {
         ...(first.keys === undefined
           ? undefined
           : { [LIVE_READ.PROVIDER_KEYS]: { [account]: first.keys } }),
+        ...(first.members === undefined
+          ? undefined
+          : { [LIVE_READ.WORKSPACE_MEMBERS]: first.members }),
       };
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
@@ -280,6 +298,7 @@ export function handHostReads(first: {
     deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
+    deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
   };
 }
 
@@ -424,6 +443,48 @@ export function holdIntegrationTools(
 }
 
 /**
+ * Answers the window's holds on a workspace's people as the host does,
+ * beside whatever acts the test answers by now: where `membersOf` holds
+ * them, their read laid on the document through `deliver` as they are first
+ * held, and staying there once let go, as `holdPages` lays pages. Answers
+ * with every workspace held, in order.
+ */
+export function holdMembers(
+  deliver: HostReadsHanded["deliverMembers"],
+  membersOf: (workspaceId: string) => AppWorkspaceMembersRead | undefined,
+): readonly string[] {
+  const asked: string[] = [];
+  let held: AppWorkspaceMembers = NO_KEYS_HELD;
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: ({ workspaceId }) => {
+      asked.push(workspaceId);
+      const read = membersOf(workspaceId);
+      // Note that the host pushes what it read once the hold is taken, never inside it.
+      if (read !== undefined && held[workspaceId] === undefined) {
+        held = { ...held, [workspaceId]: read };
+        const laid = held;
+        void Promise.resolve().then(() => deliver(laid));
+      }
+      return quietHold();
+    },
+  });
+  return asked;
+}
+
+/**
+ * Lays each workspace's people as `membersOf` holds them, as the host lays
+ * them once the window holds them (`holdMembers`), over whatever document
+ * and acts the test handed the window by now. Answers with every workspace
+ * held, in order.
+ */
+export function handMembers(
+  membersOf: (workspaceId: string) => AppWorkspaceMembersRead | undefined,
+): readonly string[] {
+  return holdMembers(handHostReads({}).deliverMembers, membersOf);
+}
+
+/**
  * Answers the window's holds on a task's or an agent's pages as the host
  * does, beside whatever acts the test answers by now: where `pagesOf` holds
  * each, its rows or that the host was refused them, laid on the document
@@ -537,4 +598,88 @@ export function handBeats(
       };
     },
   });
+}
+
+/** The id the account a test's integrations are held for goes by, where the document handed names none. */
+const INTEGRATIONS_ACCOUNT_ID = "user-integrations";
+
+/** The window's hold on the account's integrations as a test's host answers it. */
+export interface IntegrationsHeld {
+  /** Lays the read as the test's host reads it now, as the host lays a read that moved. */
+  readonly lay: () => void;
+  /** How many holds the window took. */
+  readonly holds: () => number;
+  /** How many Try agains the window asked. */
+  readonly retries: () => number;
+}
+
+/**
+ * Answers the window's hold on the account's integrations as the host does,
+ * beside whatever acts the test answers by now: the read `readOf` answers
+ * laid on the document under the account signed in, given an id where the
+ * document names none, as the window first asks for the document, again as
+ * Try again asks, and again as `lay` asks, as the host lays a read that
+ * moved; none is laid while it answers none. Note that each read is laid
+ * under the newest version the window was handed, by the document or a
+ * delivery of the helpers beneath this one, which a delivery repeating it
+ * is adopted at, so it never puts another helper's later delivery behind it.
+ */
+export function holdIntegrations(
+  readOf: () => AppHostRead<IntegrationStatusesAnswer> | undefined,
+): IntegrationsHeld {
+  const handed = fakeAppBridgeCalls().requestAppState;
+  const listening = fakeAppBridgeCalls().onAppState;
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  let accountId = INTEGRATIONS_ACCOUNT_ID;
+  let version = 0;
+  let holds = 0;
+  let retries = 0;
+  const laid = () => {
+    const read = readOf();
+    return read === undefined ? NO_KEYS_HELD : { [accountId]: read };
+  };
+  const lay = () => {
+    for (const listener of [...listeners]) {
+      listener({ version, entries: { [LIVE_READ.INTEGRATIONS]: laid() } });
+    }
+  };
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: async () => {
+      const snapshot = handed === undefined ? snapshotWith({}) : await handed();
+      version = Math.max(version, snapshot.version);
+      const { account } = snapshot;
+      if (account.status !== ACCOUNT_STATUS.SIGNED_IN) return snapshot;
+      accountId = account.id ?? INTEGRATIONS_ACCOUNT_ID;
+      return {
+        ...snapshot,
+        account: { ...account, id: accountId },
+        [LIVE_READ.INTEGRATIONS]: laid(),
+      };
+    },
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      const before = listening?.((delivery) => {
+        version = Math.max(version, delivery.version);
+        listener(delivery);
+      });
+      return () => {
+        listeners.delete(listener);
+        before?.();
+      };
+    },
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_FOLLOW]: () => {
+      holds += 1;
+      return quietHold();
+    },
+    [INTEGRATION_ACT_KIND.INTEGRATIONS_RETRY]: () => {
+      retries += 1;
+      lay();
+      return Promise.resolve();
+    },
+  });
+  return { lay, holds: () => holds, retries: () => retries };
 }

@@ -173,17 +173,23 @@ it.effect("the Inbox profile takes a read mark, so no toast says a mark was refu
   }),
 );
 
-it.effect("any other profile leaves main's document as it is, and stages no Inbox", () =>
-  Effect.gen(function* () {
-    yield* standFixtureRun(RUN_PROFILE.TASKS);
-    const fixture = loadedTasksFixture();
-    assert.ok(fixture);
-    const tasks = fixtureRun(RUN_PROFILE.TASKS);
+it.effect(
+  "any other profile leaves main's account and Inbox as they are, and stages no Inbox",
+  () =>
+    Effect.gen(function* () {
+      yield* standFixtureRun(RUN_PROFILE.TASKS);
+      const fixture = loadedTasksFixture();
+      assert.ok(fixture);
+      const tasks = fixtureRun(RUN_PROFILE.TASKS);
 
-    assert.equal(fixture.fixtureAppState(tasks), tasks);
-    assert.equal(
-      fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
-      undefined,
-    );
-  }),
+      // Note that every profile holds the fixture workspaces' people (`settings-fixture.ts`), so the document is laid over, its account and Inbox untouched.
+      const staged = fixture.fixtureAppState(tasks);
+      assert.equal(staged.account, tasks.account);
+      assert.equal(staged.inbox, tasks.inbox);
+      assert.equal(staged[LIVE_READ.INBOX_ITEMS], tasks[LIVE_READ.INBOX_ITEMS]);
+      assert.equal(
+        fixture.fixtureActAnswer(tasks.run, ACT_KIND.AGENTS_INBOX_READ_ALL, { itemIds: [] }),
+        undefined,
+      );
+    }),
 );

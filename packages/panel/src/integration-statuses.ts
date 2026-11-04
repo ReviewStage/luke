@@ -1,12 +1,12 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import {
   signInBegun as begunSignIn,
   SIGN_IN,
   type SignIn,
   signInAfterRead,
-  signInGraced,
 } from "@repo/features/integration-sign-in";
 import type { IntegrationStatusView } from "@repo/features/integration-view";
 import {
@@ -20,6 +20,7 @@ import {
   type IntegrationStatus,
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -28,48 +29,51 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useAct } from "./act.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
+import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
 
 /**
  * integration-statuses.ts -- where every one of the account's integrations stands, as every surface that draws one reads it.
  *
- * Read once for all of them, into one book the window keeps for the account
- * signed in to it, when a surface is drawn and again whenever the window is
- * focused, which is how the developer comes back from a sign-in in the
- * browser. Settings › Integrations, the composer's list of servers, a
- * server's card, and every other surface read that one book rather than a
- * copy of their own, so they never disagree about a provider, and so does a
- * sign-in the window waits on (`integration-sign-in.ts`): begun here, ended
- * by the reads, given up on by any read past its own deadline, which the
- * window's focus shortens to a grace and one more read is armed for, and
- * canceled here, which ends it
- * at the service so the provider no longer stands pending. A Cancel the
- * service answers connected came too late: the sign-in had finished, and
- * the row stands connected.
+ * The host holds the account's integrations while any surface draws one
+ * (`LIVE_READ.INTEGRATIONS`), followed live, so a sign-in the developer
+ * finishes in the browser draws on every surface with no focus and no read
+ * of the window's own; the host settles one that stands pending as it
+ * waits. Settings › Integrations, the composer's list of servers, a
+ * server's card, onboarding's tools step, and every other surface read that
+ * one slice, and share one book beside it for the account signed in: the
+ * sign-ins the window waits on (`integration-sign-in.ts`), begun here, ended
+ * as the slice moves for their server, given up on past their own deadline,
+ * and canceled here, which ends one at the service so the provider no
+ * longer stands pending; and where a write's answer left a server, drawn
+ * over the slice until the slice moves for it. A Cancel the service answers
+ * connected came too late: the sign-in had finished, and the row stands
+ * connected.
  *
  * A user account may hold more than one account at a provider, so every
  * read and change here names a server: one account by its connection name
  * (`notion`, `notion-2`), the first account's being its provider's, so a
  * provider with no account at all is named by the provider alone. An
  * account added from a surface stands pending under the name the service
- * answered for it until a read lists it.
+ * answered for it until the slice lists it.
  */
 
 /** Where every provider and every account stands, as the surfaces share it. */
 export interface IntegrationStatuses {
-  /** Where one server stands (an account by its connection name, or a provider with none), or nothing until the first read answers. */
+  /** Where one server stands (an account by its connection name, or a provider with none), or nothing until the host first answers. */
   readonly statusOf: (server: string) => IntegrationStatus | undefined;
   /** The accounts the user account holds at one provider, in their places' order; none where it holds none. */
   readonly accountsOf: (provider: IntegrationProvider) => readonly IntegrationAccount[];
   /** Whether another account may be added at the provider. */
   readonly canAdd: (provider: IntegrationProvider) => boolean;
-  /** Whether the last read listed this account, which a sign-in begun for it again needs the service to still hold. */
+  /** Whether the host's read lists this account, which a sign-in begun for it again needs the service to still hold. */
   readonly listed: (server: string) => boolean;
   /** The sign-in to one server the window waits on, or last waited on, where one stands. */
   readonly signInOf: (server: string) => SignIn | undefined;
-  /** Whether the last read answered nothing a surface can draw. */
+  /** Whether the host's read failed before it ever answered anything a surface can draw. */
   readonly readFailed: boolean;
+  /** The host's read asked again at once, as Try again asks. */
   readonly read: () => Promise<void>;
-  /** One server's standing as an answer of the host's left it, ahead of the next read. */
+  /** One server's standing as an answer of the host's left it, drawn over the slice until the slice moves for it. */
   readonly settle: (server: string, status: IntegrationStatus) => void;
   /** A sign-in begun: the server stands pending and the window waits on it, unless a connection already stands. */
   readonly signInBegun: (server: string) => void;
@@ -82,25 +86,38 @@ type Standing = ReadonlyMap<string, IntegrationStatus>;
 
 type SignIns = ReadonlyMap<string, SignIn>;
 
+/** A server's standing as a write's answer left it, and the slice's word for it as the answer landed, which it is drawn over until the slice moves for it. */
+interface Overlay {
+  readonly status: IntegrationStatus;
+  readonly under: IntegrationStatus | undefined;
+}
+
+type Overlays = ReadonlyMap<string, Overlay>;
+
 const NO_ACCOUNTS: readonly IntegrationAccount[] = [];
+
+const NO_PROVIDERS: readonly IntegrationProvider[] = [];
 
 /** The provider a server is of: its own for a provider, its account's for a connection name. */
 function providerOfServer(server: string): IntegrationProvider | undefined {
   return integrationConnectionOf(server)?.provider;
 }
 
-/** Where every server stands as one read answered it: each provider's word, then each account's over it. */
-function standingOfRead(
-  integrations: Readonly<Record<IntegrationProvider, IntegrationStatus>>,
-  accounts: readonly IntegrationAccount[],
-): Standing {
+/** Where every server stands as the host's read holds it: each provider's word, then each account's over it. */
+function standingOfRead(answer: IntegrationStatusesAnswer): Standing {
   return new Map([
-    ...INTEGRATION_PROVIDER_LIST.map((provider) => [provider, integrations[provider]] as const),
-    ...accounts.map((account) => [account.connection, account.status] as const),
+    ...INTEGRATION_PROVIDER_LIST.map(
+      (provider) => [provider, answer.integrations[provider]] as const,
+    ),
+    ...(answer.accounts ?? NO_ACCOUNTS).map(
+      (account) => [account.connection, account.status] as const,
+    ),
   ]);
 }
 
 const NO_SIGN_INS: SignIns = new Map();
+
+const NO_OVERLAYS: Overlays = new Map();
 
 /** The one wait a surface holds, until a deadline on the runtime's clock: a write arms it afresh, cutting short the wait before it. */
 const signInWaitAtom = () =>
@@ -110,62 +127,50 @@ const signInWaitAtom = () =>
     ),
   );
 
-/** Every server's sign-in as one read leaves it, with the sign-in failures it named. */
+/**
+ * Every server's sign-in as the host's read leaves it, with the sign-in
+ * failures it named, read at `read`'s mark and instant. Note that a server
+ * whose standing did not move since the read before (`before`), and that it
+ * names no failure of, is passed over, unless the deadline asked (`before`
+ * none), because the slice is laid again whenever anything of it moves,
+ * GitHub's standing among it, which may land before a sign-in just begun
+ * reaches it: that is no word on how the sign-in went.
+ */
 function signInsAfterRead(
   signIns: SignIns,
   standing: Standing,
   failures: readonly IntegrationSignInFailure[],
+  before: Standing | undefined,
   read: { readonly mark: number; readonly at: number },
 ): SignIns {
   const next = new Map<string, SignIn>();
   const servers = new Set([...INTEGRATION_PROVIDER_LIST, ...standing.keys(), ...signIns.keys()]);
   for (const server of servers) {
+    const status = standing.get(server);
+    const held = signIns.get(server);
     const named = failures.find((failure) => (failure.connection ?? failure.provider) === server);
-    const signIn = signInAfterRead(signIns.get(server), {
-      status: standing.get(server),
-      failure:
-        named === undefined
-          ? undefined
-          : {
-              reason: named.reason,
-              ...(named.message !== undefined ? { message: named.message } : undefined),
-            },
-      ...read,
-    });
+    const failure =
+      named === undefined
+        ? undefined
+        : {
+            reason: named.reason,
+            ...(named.message !== undefined ? { message: named.message } : undefined),
+          };
+    const signIn =
+      failure === undefined && before !== undefined && before.get(server) === status
+        ? held
+        : signInAfterRead(held, { status, failure, ...read });
     if (signIn !== undefined) next.set(server, signIn);
   }
   return next;
 }
 
-/**
- * The sign-ins with the failures a read answered after a newer one named,
- * and nothing else of it. Note that such a read still says how a sign-in it
- * settled ended, because the service names that once, to the read that
- * settled it, and `signInAfterRead` already keeps a sign-in begun after the
- * read from its word; one the window no longer holds stays let go.
- */
-function failuresAfterRead(
-  signIns: SignIns,
-  failures: readonly IntegrationSignInFailure[],
-  read: { readonly mark: number; readonly at: number },
-): SignIns {
-  const next = new Map(signIns);
-  for (const named of failures) {
-    const server = named.connection ?? named.provider;
-    // A sign-in a newer read let go of, as one that found it connected does, is not brought back.
-    const standing = signIns.get(server);
-    if (standing === undefined) continue;
-    const signIn = signInAfterRead(standing, {
-      status: INTEGRATION_STATUS.DISCONNECTED,
-      failure: {
-        reason: named.reason,
-        ...(named.message !== undefined ? { message: named.message } : undefined),
-      },
-      ...read,
-    });
-    if (signIn !== undefined) next.set(server, signIn);
-  }
-  return next;
+/** The overlays the host's read has not moved past: each stands while the slice's word for its server is the one it was laid over. */
+function overlaysAfterRead(overlays: Overlays, standing: Standing): Overlays {
+  if (overlays.size === 0) return overlays;
+  return new Map(
+    [...overlays].filter(([server, overlay]) => standing.get(server) === overlay.under),
+  );
 }
 
 /** Whether the server is granted by the account's own GitHub, whose connect the service never answers pending. */
@@ -184,49 +189,32 @@ function nextDeadline(signIns: SignIns): number | undefined {
   return deadlines.length === 0 ? undefined : Math.min(...deadlines);
 }
 
-/** What every surface shares of one account's integrations: what the reads left, and the sign-ins the window waits on. */
+/** What every surface shares of one account's integrations beside the slice: the writes' answers drawn over it, and the sign-ins the window waits on. */
 interface Book {
-  readonly statuses: Standing | undefined;
-  readonly accounts: readonly IntegrationAccount[];
-  readonly addable: readonly IntegrationProvider[];
+  readonly overlays: Overlays;
   readonly signIns: SignIns;
-  /** Whether the last read answered nothing a surface can draw. */
-  readonly readFailed: boolean;
 }
 
-const NO_BOOK: Book = {
-  statuses: undefined,
-  accounts: NO_ACCOUNTS,
-  addable: [],
-  signIns: NO_SIGN_INS,
-  readFailed: false,
-};
-
-/** The read on its way, by the mark it was sent at, and its answer landing. */
-interface Flight {
-  readonly mark: number;
-  readonly landed: Promise<void>;
-}
+const NO_BOOK: Book = { overlays: NO_OVERLAYS, signIns: NO_SIGN_INS };
 
 /**
- * What the book's reads keep beside it, which no surface draws: the marks,
- * the reads sent, the read on its way, and the last focus read for.
- * Note that it is a mutable record, because a read's answer compares its own
- * mark with the sign-ins' as it lands, which no render stands between.
+ * What the book keeps beside it, which no surface draws: the marks, and the
+ * host's read the sign-ins were last told of with where it stood. Note that
+ * it is a mutable record, because every surface hears the slice move and
+ * the first to tell the sign-ins of it tells them for all, which no render
+ * stands between.
  */
 interface Ledger {
   marks: number;
-  reads: number;
-  flight: Flight | undefined;
-  focus: Event | undefined;
+  told: { readonly answer: IntegrationStatusesAnswer; readonly standing: Standing } | undefined;
 }
 
 /**
  * One account's book and ledger, each made afresh when a surface first
  * draws it after none did, and let go with the last surface that drew it,
- * so a window with no integration on screen keeps nothing and its next
- * surface reads again. Note that neither lingers once let go, because the
- * next account's surfaces, or a test's, must never meet what the last left.
+ * so a window with no integration on screen keeps nothing. Note that neither
+ * lingers once let go, because the next account's surfaces, or a test's,
+ * must never meet what the last left.
  */
 interface Shared {
   readonly book: Atom.Writable<Book>;
@@ -237,15 +225,13 @@ interface Shared {
 const sharedOf = Atom.family(
   (_owner: string | null): Shared => ({
     book: Atom.make(NO_BOOK).pipe(Atom.setIdleTTL(0)),
-    ledger: Atom.make(
-      (): Ledger => ({ marks: 0, reads: 0, flight: undefined, focus: undefined }),
-    ).pipe(Atom.setIdleTTL(0)),
+    ledger: Atom.make((): Ledger => ({ marks: 0, told: undefined })).pipe(Atom.setIdleTTL(0)),
   }),
 );
 
-/** The account signed in to the window, by its id or, where it holds none, its address; none while signed out. */
+/** The account signed in to the window, by its id, which the host holds its integrations by; none while signed out. */
 const ownerAtom: Atom.Atom<string | null> = Atom.map(APP_SLICE.ACCOUNT, (account) =>
-  account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : null,
+  account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? null) : null,
 );
 
 /** The book with its sign-ins as `change` leaves them. */
@@ -254,16 +240,19 @@ function withSignIns(book: Book, change: (signIns: SignIns) => SignIns): Book {
 }
 
 /**
- * Where every integration stands, from the one book every surface of the
- * window shares for the account signed in to it: a read, a sign-in begun,
- * or a Cancel on one surface is what every other draws at once.
+ * Where every integration stands, from the slice the host holds for the
+ * account signed in and the one book every surface of the window shares
+ * beside it: a sign-in begun, an answer settled, or a Cancel on one surface
+ * is what every other draws at once.
  */
 export function useIntegrationStatuses(): IntegrationStatuses {
   const { act } = useAct();
   const registry = useContext(RegistryContext);
   const owner = useAppSlice(ownerAtom);
+  const held = useHostRead(LIVE_READ.INTEGRATIONS, owner ?? undefined);
+  const answer = held.rows;
   const shared = sharedOf(owner);
-  const { statuses, accounts, addable, signIns, readFailed } = useAtomValue(shared.book);
+  const { overlays, signIns } = useAtomValue(shared.book);
   const ledger = useAtomValue(shared.ledger);
   const [waitAtom] = useState(signInWaitAtom);
   const [waited, arm] = useAtom(waitAtom);
@@ -278,120 +267,80 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     [registry, shared],
   );
 
-  // Note that only the newest read sent is applied, because reads overlap, and one answered after it is from before it; but for the sign-in failures it alone was told.
-  const send = useCallback((): Promise<void> => {
-    ledger.marks += 1;
-    const mark = ledger.marks;
-    ledger.reads += 1;
-    const sentAs = ledger.reads;
-    change((book) => (book.readFailed ? { ...book, readFailed: false } : book));
-    const landed = act(ACT_KIND.INTEGRATIONS_STATUS)
-      .then(
-        (answer) => {
-          if (sentAs !== ledger.reads) {
-            const failures = "failure" in answer ? [] : (answer.signInFailures ?? []);
-            if (failures.length > 0) {
-              const at = now();
-              change((book) =>
-                withSignIns(book, (standing) =>
-                  failuresAfterRead(standing, failures, { mark, at }),
-                ),
-              );
-            }
-            return;
-          }
-          if ("failure" in answer) {
-            change((book) => ({ ...book, readFailed: true }));
-            return;
-          }
-          const at = now();
-          const read = standingOfRead(answer.integrations, answer.accounts ?? []);
-          change((book) => ({
-            statuses: read,
-            accounts: answer.accounts ?? NO_ACCOUNTS,
-            addable: answer.addable ?? [],
-            signIns: signInsAfterRead(book.signIns, read, answer.signInFailures ?? [], {
-              mark,
-              at,
-            }),
-            readFailed: false,
-          }));
-        },
-        () => {
-          if (sentAs === ledger.reads) change((book) => ({ ...book, readFailed: true }));
-        },
-      )
-      .finally(() => {
-        if (ledger.flight?.mark === mark) ledger.flight = undefined;
-      });
-    ledger.flight = { mark, landed };
-    return landed;
-  }, [act, change, ledger, now]);
+  /** The sign-ins and overlays told where the host's read stands now: of what moved in it, or of every server where the deadline asks. */
+  const tell = useCallback(
+    (latest: IntegrationStatusesAnswer, deadline: boolean) => {
+      const before = ledger.told?.standing;
+      const standing = ledger.told?.answer === latest ? before : standingOfRead(latest);
+      if (standing === undefined) return;
+      ledger.told = { answer: latest, standing };
+      ledger.marks += 1;
+      const read = { mark: ledger.marks, at: now() };
+      // Note that the failures a read names are told once, by the read that carried them, never again at a deadline.
+      const failures = deadline ? [] : (latest.signInFailures ?? []);
+      change((book) => ({
+        overlays: overlaysAfterRead(book.overlays, standing),
+        signIns: signInsAfterRead(
+          book.signIns,
+          standing,
+          failures,
+          deadline ? undefined : before,
+          read,
+        ),
+      }));
+    },
+    [ledger, now, change],
+  );
 
-  /**
-   * A read that any read already on its way answers, unless a mark was taken
-   * since it was sent: what a surface drawn, or a deadline passed, asks of
-   * every surface at once, which one read answers for all of them.
-   */
-  const join = useCallback((): Promise<void> => {
-    const flight = ledger.flight;
-    return flight !== undefined && flight.mark === ledger.marks ? flight.landed : send();
-  }, [ledger, send]);
-
+  // The host's read moved: the first surface to hear it tells the sign-ins for all of them.
   useEffect(() => {
-    void join();
-  }, [join]);
+    if (answer !== undefined && ledger.told?.answer !== answer) tell(answer, false);
+  }, [answer, ledger, tell]);
 
-  // A deadline passed: one more read, which gives up on a sign-in still pending past it.
+  // A deadline passed: the sign-ins told where the read stands now, which gives up on one still pending past it.
   useEffect(() => {
-    if (AsyncResult.isSuccess(waited) && !waited.waiting) void join();
-  }, [waited, join]);
+    if (!AsyncResult.isSuccess(waited) || waited.waiting) return;
+    const latest = ledger.told?.answer;
+    if (latest !== undefined) tell(latest, true);
+  }, [waited, ledger, tell]);
 
   const deadline = nextDeadline(signIns);
   useEffect(() => {
     if (deadline !== undefined) arm(deadline);
   }, [deadline, arm]);
 
-  // The focus is the developer back from the browser, where a sign-in settles; one still pending is given a grace to land. Note that every surface listens, so the focus is heard while any one stands, and the first to hear an event reads for all of them, so one focus is one read.
-  useEffect(() => {
-    const focused = (event: Event) => {
-      if (ledger.focus === event) return;
-      ledger.focus = event;
-      const at = now();
-      change((book) =>
-        book.signIns.size === 0
-          ? book
-          : withSignIns(
-              book,
-              (standing) =>
-                new Map(
-                  [...standing].map(([server, signIn]) => [server, signInGraced(signIn, at)]),
-                ),
-            ),
-      );
-      void send();
-    };
-    window.addEventListener("focus", focused);
-    return () => window.removeEventListener("focus", focused);
-  }, [ledger, send, now, change]);
+  const standing = answer === undefined ? undefined : standingOfRead(answer);
+
+  /** The slice's word for a server, with the overlay a write's answer left over it where the slice has not moved past it. */
+  const readOf = (server: string): IntegrationStatus | undefined => {
+    const word = standing?.get(server);
+    const overlay = overlays.get(server);
+    return overlay !== undefined && overlay.under === word ? overlay.status : word;
+  };
 
   const settle = useCallback(
     (server: string, status: IntegrationStatus) => {
-      change((book) => ({ ...book, statuses: new Map(book.statuses).set(server, status) }));
+      const under = ledger.told?.standing.get(server);
+      change((book) => ({
+        ...book,
+        overlays: new Map(book.overlays).set(server, { status, under }),
+      }));
     },
-    [change],
+    [ledger, change],
   );
 
   // Note that a connection that stands is not waited on, because the service
   // answers it connected throughout, so no read could say how the sign-in ended.
   const signInBegun = useCallback(
     (server: string) => {
-      if (registry.get(shared.book).statuses?.get(server) === INTEGRATION_STATUS.CONNECTED) return;
+      const under = ledger.told?.standing.get(server);
+      const overlay = registry.get(shared.book).overlays.get(server);
+      const drawn = overlay !== undefined && overlay.under === under ? overlay.status : under;
+      if (drawn === INTEGRATION_STATUS.CONNECTED) return;
       ledger.marks += 1;
       const signIn = begunSignIn(ledger.marks, now(), !byGitHub(server));
       change((book) => ({
-        ...book,
-        statuses: new Map(book.statuses).set(server, INTEGRATION_STATUS.PENDING),
+        overlays: new Map(book.overlays).set(server, { status: INTEGRATION_STATUS.PENDING, under }),
         signIns: new Map(book.signIns).set(server, signIn),
       }));
     },
@@ -403,25 +352,17 @@ export function useIntegrationStatuses(): IntegrationStatuses {
     async (server: string): Promise<boolean> => {
       const provider = providerOfServer(server);
       if (provider === undefined) return false;
-      const answer: IntegrationStatusView | undefined = byGitHub(server)
+      const canceled: IntegrationStatusView | undefined = byGitHub(server)
         ? { status: INTEGRATION_STATUS.DISCONNECTED }
         : await act(ACT_KIND.INTEGRATIONS_CANCEL, {
             provider,
             ...(server === provider ? undefined : { connection: server }),
           }).catch(() => undefined);
-      if (answer === undefined || "failure" in answer) return false;
-      settle(server, answer.status);
-      // A first sign-in canceled is gone from the service, so the account it was to be leaves the list, and Try again adds one.
-      if (answer.status === INTEGRATION_STATUS.DISCONNECTED) {
-        change((book) => ({
-          ...book,
-          accounts: book.accounts.filter((account) => account.connection !== server),
-        }));
-        // Note that a read follows, because the place it held is free again, which only the service's count says.
-        void send();
-      }
+      if (canceled === undefined || "failure" in canceled) return false;
+      // A first sign-in canceled is gone from the service, so the account it was to be leaves the list until the host's read says otherwise.
+      settle(server, canceled.status);
       // A sign-in begun again while the Cancel was out still stands, and is waited on for its own whole wait.
-      if (answer.status === INTEGRATION_STATUS.PENDING) {
+      if (canceled.status === INTEGRATION_STATUS.PENDING) {
         ledger.marks += 1;
         const begun = begunSignIn(ledger.marks, now(), true);
         change((book) => withSignIns(book, (standing) => new Map(standing).set(server, begun)));
@@ -436,16 +377,17 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       );
       return true;
     },
-    [act, settle, now, send, change, ledger],
+    [act, settle, now, change, ledger],
   );
 
   /**
-   * Where a server stands: the last read's word, or, for an account the
-   * window began a sign-in for that no read has listed, its sign-in's: pending
-   * while it waits, else disconnected, its failure said on its line.
+   * Where a server stands: the host's read's word, a write's answer over it,
+   * or, for an account the window began a sign-in for that the read does
+   * not list, its sign-in's: pending while it waits, else disconnected, its
+   * failure said on its line.
    */
   const statusOf = (server: string): IntegrationStatus | undefined => {
-    const read = statuses?.get(server);
+    const read = readOf(server);
     if (read !== undefined) return read;
     const signIn = signIns.get(server);
     if (signIn === undefined) return undefined;
@@ -454,12 +396,15 @@ export function useIntegrationStatuses(): IntegrationStatuses {
       : INTEGRATION_STATUS.DISCONNECTED;
   };
 
+  const accounts = answer?.accounts ?? NO_ACCOUNTS;
+  const addable = answer?.addable ?? NO_PROVIDERS;
+
   // Note that an account added from a surface stands as a row from its
-  // sign-in alone, because no read lists it until it settles, one answered
-  // late from before it began lists it not at all, and one whose first
-  // sign-in failed has gone from the service while its failure is still said.
-  // The provider's first name is the provider's own row while no account of
-  // it is listed, and an account's row of its own beside one that is.
+  // sign-in alone, because the host's read lists it only once the service
+  // holds it, and one whose first sign-in failed has gone from the service
+  // while its failure is still said. The provider's first name is the
+  // provider's own row while no account of it is listed, and an account's
+  // row of its own beside one that is.
   const unlisted = [...signIns.keys()].flatMap((server): IntegrationAccount[] => {
     const added = integrationConnectionOf(server);
     if (added === undefined) return [];
@@ -479,9 +424,14 @@ export function useIntegrationStatuses(): IntegrationStatuses {
   return {
     statusOf,
     listed: (server) => accounts.some((account) => account.connection === server),
+    // An account a write's answer left disconnected leaves the list at once, as the service's next read leaves it out.
     accountsOf: (provider) =>
       [...accounts, ...unlisted]
-        .filter((account) => account.provider === provider)
+        .filter(
+          (account) =>
+            account.provider === provider &&
+            readOf(account.connection) !== INTEGRATION_STATUS.DISCONNECTED,
+        )
         .toSorted(
           (a, b) =>
             (integrationConnectionOf(a.connection)?.place ?? 0) -
@@ -489,8 +439,8 @@ export function useIntegrationStatuses(): IntegrationStatuses {
         ),
     canAdd: (provider) => addable.includes(provider),
     signInOf: (server) => signIns.get(server),
-    readFailed,
-    read: send,
+    readFailed: held.status === HOST_READ_STATUS.FAILED,
+    read: async () => held.retry(),
     settle,
     signInBegun,
     cancelSignIn,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type { TasksRevisionAnswer, TasksRevisionsAnswer } from "@repo/features/tasks-view";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
@@ -6,12 +7,13 @@ import { ACT_KIND } from "@repo/host/acts";
 import { RUN_PROFILE } from "@repo/host/app-state";
 import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { test } from "vitest";
-import { fixtureActAnswer, fixtureTasksView } from "./tasks-fixture.js";
+import { stateWith } from "../testing/app-state.js";
+import { fixtureActAnswer, fixtureAppState, fixtureTasksView } from "./tasks-fixture.js";
 
 /**
  * tasks-fixture.test.ts -- a fixture run's tasks carry the times and the
  * creator a service would answer, so no row reads the epoch's first day or
- * "Created by someone"; every profile answers its workspaces' members,
+ * "Created by someone"; every profile holds its workspaces' members,
  * so ⌘K's People lists them rather than saying the read failed; and the open
  * task's version history reads real versions by more than one writer rather
  * than waiting on a read main answers with nothing.
@@ -27,12 +29,13 @@ function listedTasks(): readonly TaskSummary[] {
   return view.tasks;
 }
 
-/** A workspace's members as a profile answers ⌘K's read of them. */
+/** A workspace's members as a profile holds them on the document, which ⌘K's People reads. */
 function membersOf(profile: string, workspaceId: string): readonly WorkspaceMember[] {
-  const staged = fixtureActAnswer({ profile }, ACT_KIND.WORKSPACE_MEMBERS_READ, { workspaceId });
-  assert.ok(staged, `${profile} answers the members of ${workspaceId}`);
-  // SAFETY: the profile answered the members read, with its result.
-  return staged.answer as readonly WorkspaceMember[];
+  const main = stateWith({}, {});
+  const staged = fixtureAppState({ ...main, run: { ...main.run, profile } });
+  const members = staged[LIVE_READ.WORKSPACE_MEMBERS][workspaceId]?.rows?.members;
+  assert.ok(members, `${profile} holds the members of ${workspaceId}`);
+  return members;
 }
 
 test("every fixture task was started this year and saved no earlier than it started", () => {

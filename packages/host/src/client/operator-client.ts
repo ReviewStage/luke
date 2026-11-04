@@ -93,6 +93,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onHolderInboxesChanged((held) => {
         state.update({ [LIVE_READ.HOLDER_INBOX]: held });
       }),
+      gateway.host.onIntegrationsChanged((held) => {
+        state.update({ [LIVE_READ.INTEGRATIONS]: held });
+      }),
       gateway.host.onIntegrationToolsChanged((held) => {
         state.update({ [LIVE_READ.INTEGRATION_TOOLS]: held });
       }),
@@ -111,14 +114,23 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),
+      gateway.host.onWorkspaceMembersChanged((held) => {
+        state.update({ [LIVE_READ.WORKSPACE_MEMBERS]: held });
+      }),
       gateway.host.onWorkspaceToolsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_TOOLS]: held });
+      }),
+      gateway.host.onMcpClientsChanged((held) => {
+        state.update({ [LIVE_READ.MCP_CLIENTS]: held });
       }),
       gateway.host.onAutomationsChanged((held) => {
         state.update(held);
       }),
       gateway.host.onPlanCommentsChanged((held) => {
         state.update({ [LIVE_READ.PLAN_COMMENTS]: held });
+      }),
+      gateway.host.onPlanDocumentsChanged((held) => {
+        state.update({ [LIVE_READ.PLAN_DOCUMENT]: held });
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
