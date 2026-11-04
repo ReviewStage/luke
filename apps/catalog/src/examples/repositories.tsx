@@ -2,12 +2,25 @@
  * repositories.tsx -- a repository as every surface names it: its owner's
  * picture, then its name; `owner/name` where another in the view shares the
  * name; no repository's crossed-out folder; a picture that cannot be drawn
- * standing as the repository's glyph; and its card, the owner under the
- * name. The catalog draws no owners' pictures, which
+ * standing as the repository's glyph; its picture and no repository's
+ * mark alone, as a slot holds them; the one repository a chip sets, its
+ * owner muted after its name; and its card, the owner under the name. The catalog draws no owners' pictures, which
  * it would ask of the network, so each picture stands as the glyph.
  */
 
-import { GAP, RepositoryCard, RepositoryName, Stack } from "@repo/ui";
+import {
+  CHIP_LOOK,
+  Chip,
+  ChipDetail,
+  ChipName,
+  GAP,
+  Inline,
+  NoRepositoryGlyph,
+  RepositoryCard,
+  RepositoryName,
+  RepositoryPicture,
+  Stack,
+} from "@repo/ui";
 import { repositoryLabel } from "@repo/ui/task-list-model";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -40,6 +53,19 @@ function Repositories(): React.JSX.Element {
             />
           </Stack>
         </div>
+      </CatalogSection>
+      <CatalogSection id="repository-glyphs" title="In a glyph's slot: picture, no repository">
+        <Inline gap={GAP.CONTROL}>
+          <RepositoryPicture repository="acme/relay" pictures={false} />
+          <NoRepositoryGlyph />
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="repository-chip" title="The repository a chip sets: name, owner muted">
+        <Chip look={CHIP_LOOK.PILL} aria-label="acme/relay">
+          <RepositoryPicture repository="acme/relay" pictures={false} />
+          <ChipName>relay</ChipName>
+          <ChipDetail>acme</ChipDetail>
+        </Chip>
       </CatalogSection>
       <CatalogSection id="repository-card" title="Card">
         <RepositoryCard repository="acme/relay" pictures={false} />

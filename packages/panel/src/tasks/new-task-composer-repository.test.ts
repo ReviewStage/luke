@@ -209,7 +209,7 @@ test("a preset a read does not list is let go, so a later read listing it does n
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);
-  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
+  assert.notEqual(chip.getAttribute("aria-label"), "octo/tools");
 });
 
 test("a preset survives a read made before the workspace resolved and stands once its workspace's read lists it", async () => {
@@ -262,5 +262,5 @@ test("a recent default a read does not list is let go, so a later read listing i
     assert.fail("the card draws the repository chip");
 
   assert.equal(reads, 2);
-  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
+  assert.notEqual(chip.getAttribute("aria-label"), "octo/tools");
 });
