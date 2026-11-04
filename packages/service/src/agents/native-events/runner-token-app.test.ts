@@ -3,8 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { createAgent, recordAgentRunnerToken } from "@repo/database/models/agent-store";
-import { queueDeviceAgentLine } from "@repo/database/models/device-agent-store";
-import { beatDevice, registerDevice } from "@repo/database/models/device-store";
+import { registerDevice } from "@repo/database/models/device-store";
 import { enrollOwnDevice } from "@repo/database/models/host-store";
 import { type KeyRing, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
@@ -17,7 +16,6 @@ import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/s
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
 import {
-  DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
   DEVICE_ISOLATION,
   DEVICE_PLATFORM,
@@ -114,7 +112,7 @@ const standing = Effect.gen(function* () {
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
   const web = HttpRouter.toWebHandler(
-    runnerTokenApp({ resolveUserId: () => Effect.succeedNone }).pipe(
+    runnerTokenApp().pipe(
       HttpRouter.provideRequest(Layer.merge(services, GitHubApp.layer(undefined))),
     ),
     {
@@ -139,26 +137,12 @@ const standing = Effect.gen(function* () {
 });
 
 /** A coding agent on the runtime and payer given, its runner's bearer recorded. */
-const agentOn = (
-  runtime: ConversationRuntime,
-  payer: AgentPayer,
-  model = "openai/gpt-5.5",
-  onMac?: { readonly codex: boolean },
-) =>
+const agentOn = (runtime: ConversationRuntime, payer: AgentPayer, model = "openai/gpt-5.5") =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
-    const deviceId = randomUUID();
-    if (onMac !== undefined) {
-      yield* registerDevice(userId, {
-        id: deviceId,
-        name: "Studio",
-        ...DEVICE_LAYOUT,
-        signedIn: { codex: onMac.codex },
-      });
-    }
     const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
@@ -169,12 +153,11 @@ const agentOn = (
       prompt: null,
       runtime,
       payer,
-      ...(onMac === undefined ? undefined : { machine: AGENT_MACHINE.DEVICE, deviceId }),
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");
     yield* recordAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-    return { userId, agentId: agent.id, bearer, deviceId };
+    return { userId, agentId: agent.id, bearer };
   });
 
 const codexOnPlan = agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.CHATGPT_SUBSCRIPTION);
@@ -288,39 +271,13 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
-    "hands a local agent started on its Mac's own Codex sign-in no token while its running launch runs on that sign-in, and the plan's to a launch that turned to the plan, whatever the Mac says since",
+    "hands a Codex agent recorded on its Mac's sign-in the plan's token, which its launch turns to",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* standing;
-        const agent = yield* agentOn(
-          CONVERSATION_RUNTIME.CODEX,
-          AGENT_PAYER.MAC_SIGN_IN,
-          "openai/gpt-5.5",
-          { codex: true },
-        );
+        const agent = yield* agentOn(CONVERSATION_RUNTIME.CODEX, AGENT_PAYER.MAC_SIGN_IN);
         yield* signIn(agent.userId, 60);
-        /** A launch line of the agent's, as its Mac's machine queues one, on the Mac's sign-in or not. */
-        const launched = (ownLogin: boolean) =>
-          queueDeviceAgentLine(agent.userId, {
-            agentId: agent.agentId,
-            kind: DEVICE_AGENT_LINE_KIND.LAUNCH,
-            payload: {
-              checkoutPath: "/Users/fixture/.vespin/agents/a/repository",
-              repository: null,
-              startBranch: null,
-              firstSequence: 0,
-              ...(ownLogin ? { ownLogin: true } : undefined),
-            },
-          });
 
-        yield* launched(true);
-        const refused = yield* ask(agent.bearer);
-        assert.equal(refused.status, HOSTED_HTTP_STATUS.FORBIDDEN);
-        assert.deepEqual(refused.body, { error: HOSTED_API_ERROR.NOT_PERMITTED });
-
-        // The Mac signed out and the agent relaunched on the plan; the Mac signing in again mid-turn cuts that launch's turn no short.
-        yield* launched(false);
-        yield* beatDevice(agent.userId, agent.deviceId, { codex: true });
         assert.deepEqual((yield* ask(agent.bearer)).body, { accessToken: "access-0" });
       }),
   );
@@ -396,16 +353,9 @@ const installationOf = (id: number): InstallationFixture => ({
 const INSTALLATIONS = Array.from({ length: 8 }, (_, index) => installationOf(31 + index));
 let installationsTaken = 0;
 
-/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host or a desktop makes; `desktops` names the member each desktop sign-in's bearer stands for. */
+/** The route's group over the test's store, a GitHub on which the App reaches the repository, and a log the test reads, as a fetch a host makes. */
 const hostStanding = Effect.gen(function* () {
   const github = githubReaching(INSTALLATIONS);
-  const desktops = new Map<string, string>();
-  const resolveUserId = (request: Request) =>
-    Effect.succeed(
-      Option.fromNullishOr(
-        desktops.get(request.headers.get("authorization")?.replace(/^Bearer /u, "") ?? ""),
-      ),
-    );
   const logged: string[] = [];
   const services = Layer.mergeAll(
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
@@ -415,10 +365,9 @@ const hostStanding = Effect.gen(function* () {
     github.layer,
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
-  const web = HttpRouter.toWebHandler(
-    runnerTokenApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
-    { disableLogger: true },
-  );
+  const web = HttpRouter.toWebHandler(runnerTokenApp().pipe(HttpRouter.provideRequest(services)), {
+    disableLogger: true,
+  });
   yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
   const ask = (bearer: string, agentId: string) =>
     Effect.promise(async () => {
@@ -438,7 +387,7 @@ const hostStanding = Effect.gen(function* () {
         body: await response.json(),
       };
     });
-  return { ask, logged, desktops };
+  return { ask, logged };
 });
 
 /** A member whose task's workspace reaches the repository through an installation of its own. */
@@ -456,7 +405,7 @@ const openMember = Effect.gen(function* () {
   return { userId, taskId: task.id };
 });
 
-/** A host enrolled under the member, and registered running its agents in VMs, as a host does once it starts: its device id and its secret. */
+/** A host enrolled under the member, and registered running its agents straight on the box, as a host does once it starts: its device id and its secret. */
 const enrolledHost = (userId: string) =>
   Effect.gen(function* () {
     const secret = mintHostSecret(HOST_WIRE.DEVICE_SECRET_PREFIX);
@@ -473,7 +422,7 @@ const enrolledHost = (userId: string) =>
       name: "rack-1",
       ...DEVICE_LAYOUT,
       platform: DEVICE_PLATFORM.LINUX,
-      isolation: DEVICE_ISOLATION.SANDBOX,
+      isolation: DEVICE_ISOLATION.DIRECT,
     });
     return { deviceId, secret: secret.secret };
   });
@@ -557,19 +506,18 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
           body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
         };
 
-        // The member's agent on another of their hosts, and on their desktop.
+        // The member's agent on another of their hosts, and on a device of theirs never enrolled.
         const otherHost = yield* enrolledHost(member.userId);
         const onOtherHost = yield* agentOnDevice(member, otherHost.deviceId);
         assert.deepEqual(yield* ask(host.secret, onOtherHost), forbidden);
-        const desktopId = randomUUID();
+        const unenrolledId = randomUUID();
         yield* registerDevice(member.userId, {
-          id: desktopId,
+          id: unenrolledId,
           name: "Studio",
           ...DEVICE_LAYOUT,
-          signedIn: { codex: false },
         });
-        const onDesktop = yield* agentOnDevice(member, desktopId);
-        assert.deepEqual(yield* ask(host.secret, onDesktop), forbidden);
+        const onUnenrolled = yield* agentOnDevice(member, unenrolledId);
+        assert.deepEqual(yield* ask(host.secret, onUnenrolled), forbidden);
 
         // Another member's agent on that member's own host.
         const other = yield* openMember;
@@ -577,36 +525,17 @@ it.layer(getTestDB())("a host's GitHub token", (it) => {
         const theirs = yield* agentOnDevice(other, theirHost.deviceId);
         assert.deepEqual(yield* ask(host.secret, theirs), forbidden);
 
-        // A desktop's sign-in, or any bearer that is no device secret, is no host, and no runner either.
-        const desktop = yield* ask("desktop-session-token", own);
-        assert.equal(desktop.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
-        assert.deepEqual(desktop.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });
+        // A bearer that is no device secret is no host, and no runner either.
+        const stranger = yield* ask("session-token", own);
+        assert.equal(stranger.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+        assert.deepEqual(stranger.body, { error: HOSTED_API_ERROR.INVALID_TOKEN });
       }),
   );
 });
 
 it.layer(getTestDB())("a Mac's GitHub token", (it) => {
   it.effect(
-    "refuses a desktop's own sign-in as needing an upgrade, even for its member's own agent on a sandboxed Mac",
-    () =>
-      Effect.gen(function* () {
-        const { ask, desktops } = yield* hostStanding;
-        const member = yield* openMember;
-        desktops.set("desktop-sign-in", member.userId);
-        const mac = yield* enrolledMac(member.userId, DEVICE_ISOLATION.SANDBOX);
-        const agentId = yield* agentOnDevice(member, mac.deviceId);
-
-        assert.deepEqual(yield* ask("desktop-sign-in", agentId), {
-          status: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
-          cache: null,
-          body: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
-        });
-        assert.equal((yield* ask(mac.secret, agentId)).status, HOSTED_HTTP_STATUS.OK);
-      }),
-  );
-
-  it.effect(
-    "refuses an agent on a Mac running its agents on its own logins, and mints for one running them on the box on Vespin's",
+    "refuses an agent on a Mac whose row never registered running its agents on the box, and mints for one that did",
     () =>
       Effect.gen(function* () {
         const { ask } = yield* hostStanding;

@@ -5,9 +5,8 @@
  * bearer alone, never a browser's session cookie (`deviceMiddleware`), since
  * a line carries a runner's secrets and an answer is the word of the device
  * that ran it, and names the device's id: the machine's device secret, which
- * acts for its own device alone and answers not found for any other. A
- * desktop's own sign-in, which released desktop builds followed the queue
- * on, is refused there as needing an upgrade. The own enroll's bearer is the
+ * acts for its own device alone and answers not found for any other; any
+ * other bearer is refused as unauthenticated. The own enroll's bearer is the
  * desktop's sign-in alone (`bearerOnlyMiddleware`, never a browser's cookie,
  * since it mints a credential), and it converts a device the member's account registered in place under its id, or creates one
  * under the account with the name, platform and architecture the enroll
@@ -117,7 +116,7 @@ import {
 import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
-  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and a released desktop build's, refused elsewhere as needing an upgrade (`deviceMiddleware`). */
+  /** The account behind a desktop's request, read from its bearer alone: the own enroll's caller, and no other procedure's. */
   resolveUserId: UserIdResolver;
 }
 
@@ -210,7 +209,7 @@ function newerReleaseFor(request: Request): DeviceAgentRelease | undefined {
 
 /** The device-agents resource: the own enroll on the desktop's sign-in, a pairing's start on no credential and its poll on its poll secret, and every other procedure on the device's bearer. */
 export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
-  const deviceAgents = hosted.deviceAgents.use(deviceMiddleware(seams.resolveUserId));
+  const deviceAgents = hosted.deviceAgents.use(deviceMiddleware());
   // Note that each caller middleware is used on the resource rather than its procedure, so it refuses before the input is read, as every procedure's does.
   const signedIn = hosted.deviceAgents.use(bearerOnlyMiddleware(seams.resolveUserId));
   const pairing = hosted.deviceAgents.use(pairingHostMiddleware);
@@ -347,13 +346,7 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
       yield* followed(context, input.deviceId);
       return yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
-          settledDeviceAgentLine(
-            context.userId,
-            input.deviceId,
-            input.id,
-            input.exitCode,
-            input.refusal,
-          ),
+          settledDeviceAgentLine(context.userId, input.deviceId, input.id, input.exitCode),
         ),
       );
     }),

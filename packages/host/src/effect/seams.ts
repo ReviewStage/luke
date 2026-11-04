@@ -236,23 +236,6 @@ export interface LocalAgentPlatformSeam {
   readonly unsavedWorkScript?: ((input: { readonly worktree: string }) => string) | undefined;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
-  /**
-   * Whether agents on this device may have run on the developer's own logins
-   * before we gave each agent a folder of its own
-   * (`DEVICE_ISOLATION.BARE`): This Mac's did, a host's never. On such a
-   * device the follower keeps how each agent ran, takes an agent from before
-   * that record with a checkout as one that ran so, never starts it again,
-   * and checks its folder on the device before a discard.
-   */
-  readonly formerlyDirect: boolean;
-  /**
-   * Whether the agents' folders under the device's home are this install's
-   * alone: a Linux host's are, and a Mac's
-   * never, since This Mac and a standalone `vespin-host` share the member's.
-   * On such a device the follower takes every agent with a folder there as
-   * one it made as its gate opens, beside those its own state names.
-   */
-  readonly storesOwned: boolean;
 }
 
 export class LocalAgentPlatform extends Context.Service<
@@ -265,7 +248,7 @@ export class LocalAgentPlatform extends Context.Service<
  * account install the install command puts on a Mac, under the member's own
  * home, whose LaunchAgent launchd runs at login, which every build of the
  * app reads and controls alike. Each act answers, never fails: what it
- * answered, or the words it could not with. Only the local agents concern
+ * answered, or the words it could not with. Only the This Mac host concern
  * asks for it.
  */
 export interface ThisMacHostSeam {

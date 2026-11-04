@@ -25,9 +25,8 @@ import type { HostOs } from "./host-os.js";
  * permissions as root unless it is told the box is a sandbox of its own, so
  * a host running as root, as a dedicated box's may, tells it so
  * (`IS_SANDBOX`). What differs by OS, the platform it registers as, its
- * name, whether agents ran on the developer's own logins on it before,
- * whether its agents' folders are its own alone, and its check for unsaved
- * work, comes from its description (`HostOs`).
+ * name, and its check for unsaved work, comes from its description
+ * (`HostOs`).
  *
  * Every host keeps its own Claude Code, Codex, and GitHub CLI, the pinned
  * builds for its OS and architecture (`HostOs.agentClis`), fetched under
@@ -82,8 +81,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
       [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST,
       ...(options.user.uid === ROOT ? { [CLAUDE_CODE_SANDBOXED]: "1" } : {}),
     },
-    formerlyDirect: options.os.formerlyDirect,
-    storesOwned: options.os.storesOwned,
     deviceName: options.os.deviceName(),
     deviceMachine: options.os.machine(),
     devicePlatform: options.os.platform,

@@ -29,11 +29,10 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
-import { deviceLayout } from "@repo/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
-import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
+import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { MODEL_SPEED } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -68,9 +67,6 @@ const ALLOWED_DOMAINS = [
   "pypi.org",
   "files.pythonhosted.org",
 ] as const;
-
-/** A launch on its Mac's own Claude Code login: no credential of the account's in its environment. */
-const MAC_LOGIN: { readonly env: Readonly<Record<string, string>> } = { env: {} };
 
 /** The effort the CLI takes for the agent's own, where it names one of the SDK's. */
 function effortOf(effort: string): Effort | undefined {
@@ -118,21 +114,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     Effect.map(readAgentRouting(userId, agent.id), (routing) =>
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
-
-  /**
-   * Whether the agent runs on its starter's Mac and that Mac last said it is
-   * signed in to Claude Code itself (`device.signed_in`), so its launch
-   * carries no credential of the account's and the CLI there falls back to
-   * its own Keychain login (https://code.claude.com/docs/en/authentication,
-   * "Authentication precedence", 7), its config folder left as the
-   * developer's, which that login is kept under.
-   */
-  const onMacLogin = (agent: Agent) =>
-    agent.machine !== AGENT_MACHINE.DEVICE || agent.deviceId == null
-      ? Effect.succeed(false)
-      : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
-          Option.exists(device, (standing) => standing.signedIn.claudeCode === true),
-        );
 
   /**
    * Where the account's saved credential pays for the agent: its own API key
@@ -265,7 +246,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     const effort = effortOf(agent.effort);
     const model = providerModelOf(agent.model);
     const asked = Effect.gen(function* () {
-      if (yield* onMacLogin(agent)) return;
       if ((yield* savedPayer(agent)) === AGENT_PAYER.API_KEY) return;
       yield* standingPlan;
     });
@@ -288,7 +268,6 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CLAUDE_CODE],
     launch: (agent) =>
       Effect.gen(function* () {
-        if (yield* onMacLogin(agent)) return MAC_LOGIN;
         return yield* (yield* savedPayer(agent)) === AGENT_PAYER.API_KEY
           ? apiKeyCredential
           : planCredential;

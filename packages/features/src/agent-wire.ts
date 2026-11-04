@@ -2485,13 +2485,7 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
   subagents: EffectSchema.optionalKey(EffectSchema.Array(agentSubagentStandingSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_FAILURE))),
-  /**
-   * Where a failed agent that ran directly on its Mac, which now runs every
-   * agent in a folder of its own and so refused to start it, left its work: the folder of
-   * its checkout on that Mac. Its `failureReason` is `session_ended`, which
-   * a panel older than this key words; absent for every other failure, and
-   * from a service older than it.
-   */
+  /** A folder an older service named beside a failed turn; no service fills it any more, and no panel reads it. */
   ranDirectly: EffectSchema.optionalKey(EffectSchema.Struct({ folder: EffectSchema.String })),
   /**
    * The host a failed agent's run was lost with, by its name, where the

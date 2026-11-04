@@ -71,7 +71,7 @@ const nativeCoderInstructions = (
   userId: string,
   agent: Agent,
   harness: CoderHarness,
-  place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation" | "sharedFiles">,
+  place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "sharedFiles">,
 ) =>
   Effect.gen(function* () {
     const target = { userId, conversationId: agent.conversationId };

@@ -3,7 +3,7 @@
  *
  * Every concern but the platform ones runs wherever the host does. A
  * platform concern reaches something only some hosts have: a process
- * spawner, the runner a local agent runs on this Mac, a terminal's relay socket, a
+ * spawner, This Mac's host, a terminal's relay socket, a
  * loopback the browser hands a sign-in back to. The
  * assembly is built with the platform concerns its host chose; one left out
  * is never started, asks for nothing, and answers each of its methods with a
@@ -30,7 +30,7 @@ export const HOST_CONCERN = {
   INTEGRATIONS: "integrations",
   INSTALLED_SKILLS: "installedSkills",
   MAC_COMMANDS: "macCommands",
-  LOCAL_AGENTS: "localAgents",
+  THIS_MAC_HOST: "thisMacHost",
   TERMINALS: "terminals",
   CHATGPT_SIGN_IN: "chatGptSignIn",
 } as const;
@@ -40,7 +40,7 @@ export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 /** The concerns a host may leave out, for want of what they reach on its platform. */
 export const HOST_PLATFORM_CONCERN = {
   MAC_COMMANDS: HOST_CONCERN.MAC_COMMANDS,
-  LOCAL_AGENTS: HOST_CONCERN.LOCAL_AGENTS,
+  THIS_MAC_HOST: HOST_CONCERN.THIS_MAC_HOST,
   TERMINALS: HOST_CONCERN.TERMINALS,
   CHATGPT_SIGN_IN: HOST_CONCERN.CHATGPT_SIGN_IN,
 } as const;
@@ -58,18 +58,21 @@ const PLATFORM_CONCERNS: ReadonlySet<HostConcern> = new Set(ALL_HOST_PLATFORM_CO
 export const isPlatformConcern = (concern: HostConcern): concern is HostPlatformConcern =>
   PLATFORM_CONCERNS.has(concern);
 
-/** What each platform concern offers the client, which a host that left it out does not. */
+/** What each platform concern offers the client, which a host that left it out does not; This Mac's host offers nothing the panel draws by. */
 const CAPABILITY_OF_CONCERN = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: HOST_CAPABILITY.MAC_COMMANDS,
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: HOST_CAPABILITY.LOCAL_AGENTS,
   [HOST_PLATFORM_CONCERN.TERMINALS]: HOST_CAPABILITY.TERMINALS,
   [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: HOST_CAPABILITY.CHATGPT_SIGN_IN,
-} as const satisfies Readonly<Record<HostPlatformConcern, HostCapability>>;
+} as const satisfies Readonly<Partial<Record<HostPlatformConcern, HostCapability>>>;
+
+/** `CAPABILITY_OF_CONCERN` read by any platform concern, one that offers none among them. */
+const capabilityOf: Readonly<Partial<Record<HostPlatformConcern, HostCapability>>> =
+  CAPABILITY_OF_CONCERN;
 
 /** A capability the client answers for itself, rather than a concern of the host it runs. */
 export type ClientCapability = Exclude<
   HostCapability,
-  (typeof CAPABILITY_OF_CONCERN)[HostPlatformConcern]
+  (typeof CAPABILITY_OF_CONCERN)[keyof typeof CAPABILITY_OF_CONCERN]
 >;
 
 const CONCERN_CAPABILITIES: ReadonlySet<HostCapability> = new Set(
@@ -99,7 +102,8 @@ export function hostCapabilities(
 ): readonly HostCapability[] {
   const offered = new Set<HostCapability>(client);
   for (const concern of ALL_HOST_PLATFORM_CONCERNS) {
-    if (concerns.has(concern)) offered.add(CAPABILITY_OF_CONCERN[concern]);
+    const capability = capabilityOf[concern];
+    if (concerns.has(concern) && capability !== undefined) offered.add(capability);
   }
   return Object.values(HOST_CAPABILITY).filter((capability) => offered.has(capability));
 }
@@ -107,8 +111,8 @@ export function hostCapabilities(
 /** The methods each platform concern answers, which a host that left it out refuses. */
 const PLATFORM_CONCERN_METHODS = {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: [GATEWAY_METHOD.MAC_COMMAND_ANSWER],
-  // Note that the panel asks nothing of a local agent's runner, which the service reaches through rows, nor of This Mac's host, which tells the windows itself.
-  [HOST_PLATFORM_CONCERN.LOCAL_AGENTS]: [],
+  // Note that the panel asks nothing of This Mac's host, which tells the windows itself.
+  [HOST_PLATFORM_CONCERN.THIS_MAC_HOST]: [],
   [HOST_PLATFORM_CONCERN.TERMINALS]: [
     GATEWAY_METHOD.TERMINALS_LIST,
     GATEWAY_METHOD.TERMINALS_CREATE,

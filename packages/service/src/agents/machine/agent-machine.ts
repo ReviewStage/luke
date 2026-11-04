@@ -38,7 +38,6 @@
 import type { Agent } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
-import type { DeviceIsolation, DeviceSignedIn } from "@repo/features/device-agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
 import type { CheckoutServices } from "../coder-host/checkout.js";
@@ -69,10 +68,8 @@ export interface MachinePlace {
  * where the harness starts and the instructions name, where the member's
  * installed skills are installed and where they are written for that, the
  * folder a message's files are written under, the Claude Code CLI and the
- * Codex a launch runs, none where the harness's own default stands, the
- * folders the agent's commands may write beside its checkout, which
- * harnesses the machine is signed in to by itself, and how a local agent's
- * device runs it.
+ * Codex a launch runs, none where the harness's own default stands, and
+ * the folders the agent's commands may write beside its checkout.
  */
 export interface MachineLayout {
   readonly checkoutPath: string;
@@ -86,10 +83,6 @@ export interface MachineLayout {
   readonly codexExecutable: string | undefined;
   /** A local agent's own folder on its Mac; none in a sandbox, whose checkout is all it writes. */
   readonly writableRoots: readonly string[];
-  /** The Mac's own logins, as it last said; none for a sandbox. */
-  readonly signedIn: DeviceSignedIn;
-  /** How a local agent's device runs it, in a VM of its own or directly on the machine; none for a sandbox of ours. */
-  readonly isolation: DeviceIsolation | undefined;
   /**
    * Whether the runner reads its lines past its config from the service
    * (`@repo/agent-runner`'s `RUNNER_LINES`), as a sandbox's does, rather than
@@ -104,8 +97,6 @@ export interface RunnerMark {
   readonly firstSequence: number;
   /** None for a launch from before fingerprints were recorded. */
   readonly fingerprint?: string;
-  /** Whether the launch runs on its Mac's own sign-in rather than a credential of the account's; nothing secret, and none for any other launch. */
-  readonly ownLogin?: boolean;
   /** Whether the launch reads its lines from the service (`MachineLayout`'s `linesRead`); none for one the service writes them to the stdin of, a launch from before the read among them. */
   readonly linesRead?: boolean;
 }

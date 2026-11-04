@@ -32,8 +32,8 @@ import { CREDENTIAL_HEADER } from "./session-credential.js";
  * `hostCallerOf` is the one door every host-facing route reads its caller
  * through, the device-agents procedures and the runner token route alike:
  * a bearer that is no device secret is none of its business, and answers
- * nothing, so the route reads it as a desktop's sign-in, which it refuses as
- * needing an upgrade (`../orpc/base.ts`'s `deviceCallerOf`); a device secret
+ * nothing, so the route refuses it as unauthenticated
+ * (`../orpc/base.ts`'s `deviceCallerOf`); a device secret
  * that names no standing host (unknown, or its host removed) is
  * refused at once, as the 401 every host has read as removed, marked
  * `hostRemoved` (`HOST_REMOVED_REFUSAL`) so a host tells it from any other

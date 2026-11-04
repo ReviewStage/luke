@@ -1,5 +1,5 @@
 /**
- * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and, on This Mac alone, an agent that ran on the developer's own logins before refused with why.
+ * compose-local-agents.test.ts -- the follower as the operating system sees it run agents straight on the box: a device registered as direct, signed in to nothing, getting ready while it fetches its CLIs and ready to take an agent only once it has them, or why it could not have them, an agent launched on the box with a GitHub token from the service in gh's config in its home, a launch whose claim's answer was lost claimed again and launched once, and an agent whose checkout stands started though the machine's state file is corrupt.
  *
  * The follower runs over a scripted spawner, a file system that holds
  * nothing but what a test names, and a fake service that hands one launch line and a new GitHub
@@ -31,12 +31,10 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
   DEVICE_ISOLATION,
-  DEVICE_LAUNCH_REFUSAL,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceAgentLine,
   type DeviceAgentRelease,
-  type DeviceLaunchRefusal,
   type DeviceSignedIn,
   deviceAgentLayout,
   HOST_UPDATE,
@@ -63,7 +61,6 @@ import { type Script, scriptedSpawner } from "./testing/scripted-spawner.js";
 const HOME = "/Users/dev";
 const AGENT_ID = "6f1c2a4e-0b7d-4c55-9a3e-2d8f61b0c9a1";
 const LINE_ID = "0e9b7c1d-5a2f-4e63-8b40-7c1d2e3f4a5b";
-const USER_ID = "user-fixture";
 /** A launch the service holds the device to that this run of the follower never claimed. */
 const GONE_LINE_ID = "3c5d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 const GONE_AGENT_ID = "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
@@ -107,17 +104,16 @@ const until = (holds: () => boolean) =>
   });
 
 /**
- * The follower on a device whose agents run straight on the box, This Mac
- * unless `formerlyDirect` says it is a host, with its CLIs ready once
- * `ready` succeeds; one launch line is handed. `madeBare` says the agent's
- * checkout already stands, as a launch from before the record left it.
- * With what it registered, spawned, asked, settled, and reported.
+ * The follower on a host whose agents run straight on the box, with its
+ * CLIs ready once `ready` succeeds; one launch line is handed.
+ * `checkoutStands` says the agent's checkout already stands, as an earlier
+ * launch left it. With what it registered, spawned, asked, settled, and
+ * reported.
  */
 const followingDevice = (
   ready: LocalAgentClis["ready"],
   options: {
-    readonly madeBare?: boolean;
-    readonly formerlyDirect?: boolean;
+    readonly checkoutStands?: boolean;
     /** The service refuses a register naming a setup, as one from before the field does. */
     readonly refusesSetup?: boolean;
     /** The files of the machine's state, shared with another follower on the same machine where given. */
@@ -178,7 +174,7 @@ const followingDevice = (
     /** What each beat said of the host's update, none where it named none. */
     const said: (DeviceAgentUpdate | undefined)[] = [];
     const reported: string[] = [];
-    const settled: { id: string; exitCode?: number; refusal?: DeviceLaunchRefusal }[] = [];
+    const settled: { id: string; exitCode?: number }[] = [];
     /**
      * The service as the test steers it: the launches it holds the device
      * to, which a claim adds and a settle it takes removes; how many settles
@@ -232,12 +228,7 @@ const followingDevice = (
             }),
         ),
       lineStep: () => Effect.succeed(true),
-      settleLine: (
-        _deviceId: string,
-        id: string,
-        exitCode?: number,
-        refusal?: DeviceLaunchRefusal,
-      ) =>
+      settleLine: (_deviceId: string, id: string, exitCode?: number) =>
         Effect.andThen(
           Effect.sleep(service.settleTakes),
           Effect.sync(() => {
@@ -250,7 +241,6 @@ const followingDevice = (
             settled.push({
               id,
               ...(exitCode === undefined ? undefined : { exitCode }),
-              ...(refusal === undefined ? undefined : { refusal }),
             });
             return true;
           }),
@@ -269,7 +259,8 @@ const followingDevice = (
       spawner.layer,
       NodePath.layer,
       FileSystem.layerNoop({
-        exists: (path) => Effect.succeed(options.madeBare === true && path === LAYOUT.checkoutPath),
+        exists: (path) =>
+          Effect.succeed(options.checkoutStands === true && path === LAYOUT.checkoutPath),
         makeDirectory: (path) =>
           options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
             ? Effect.sleep(options.writingTakes)
@@ -317,8 +308,6 @@ const followingDevice = (
         launch: ({ node, env }) => ({ command: node, args: [], env }),
         tools: { node: RUNNER, claude: CLIS.paths.claude, codex: CLIS.paths.codex },
         clis: fakeClis(ready),
-        formerlyDirect: options.formerlyDirect ?? true,
-        storesOwned: false,
         runnerBundle: "/opt/agent/agent-runner/agent-runner.mjs",
         runnerEnv: {},
         deviceName: "Studio",
@@ -334,12 +323,10 @@ const followingDevice = (
     const composer = yield* composeLocalAgents({
       kernel: {
         stateRoot: STATE_ROOT,
-        // Note that each follower mints its own lease holder first, then the account's device id.
-        createId: () => (minted++ === 0 ? `holder-${holders.length}` : "device-1"),
-        runMode: { sendsNetwork: true },
+        // Note that each follower mints its own lease holder first.
+        createId: () => (minted++ === 0 ? `holder-${holders.length}` : `claim-${minted}`),
       },
-      account: { capabilitiesActive: () => true },
-      accountId: () => USER_ID,
+      deviceId: "device-1",
       switchedOn: Effect.succeed(true),
       client,
       update: options.update,
@@ -636,37 +623,14 @@ it.effect(
 );
 
 it.effect(
-  "an agent that ran on the developer's own logins on This Mac before is settled unstarted, naming why, and never started",
+  "an agent whose checkout already stands starts though the machine's state file is corrupt and keeps nothing of it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { spawned, settled, reported } = yield* followingDevice(() => Effect.void, {
-          madeBare: true,
-        });
-        yield* until(() => settled.some((each) => each.id === LINE_ID));
-
-        assert.deepEqual(settled, [
-          { id: LINE_ID, exitCode: 1, refusal: DEVICE_LAUNCH_REFUSAL.RAN_DIRECTLY },
-        ]);
-        assert.equal(
-          spawned.some((each) => each.program === RUNNER),
-          false,
-        );
-        assert.deepEqual(reported, [
-          "a local agent that ran on the developer's own logins on this Mac was not started, since its work is outside a folder of its own",
-        ]);
-      }),
-    ),
-);
-
-it.effect(
-  "a host, whose agents never ran on the developer's own logins, starts an agent whose checkout already stands",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
+        const files = new Map([[`${STATE_ROOT}/local-agents.json`, "{ not json\n"]]);
         const { spawned, settled } = yield* followingDevice(() => Effect.void, {
-          madeBare: true,
-          formerlyDirect: false,
+          checkoutStands: true,
+          files,
         });
         yield* until(() => spawned.some((each) => each.program === RUNNER));
 
@@ -862,10 +826,7 @@ it.effect("after a restart, a launch kept from the run before is settled as a ru
       const files = new Map([
         [
           `${STATE_ROOT}/local-agents.json`,
-          `${JSON.stringify({
-            devices: { [USER_ID]: "device-1" },
-            launches: [{ userId: USER_ID, id: GONE_LINE_ID, agentId: GONE_AGENT_ID }],
-          })}\n`,
+          `${JSON.stringify({ launches: [{ id: GONE_LINE_ID, agentId: GONE_AGENT_ID }] })}\n`,
         ],
       ]);
       const { settled } = yield* followingDevice(() => Effect.void, { files, lines: [] });

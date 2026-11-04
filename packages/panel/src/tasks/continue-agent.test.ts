@@ -326,28 +326,9 @@ test("the end line's words and whether it tells of a failure come apart, and nam
     endLineParts(AGENT_STATUS.FAILED, undefined)?.words,
     "Failed: the run ended without saying why",
   );
-  // Note that an agent that ran directly on its Mac says why and where its work is, rather than its session's end.
-  assert.deepEqual(
-    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.SESSION_ENDED, undefined, true, {
-      folder: "/Users/ada/.vespin/agents/agent-1/repository",
-    }),
-    {
-      words:
-        "This agent ran on your Mac before Vespin gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.vespin/agents/agent-1/repository. Continue in a new agent to carry on.",
-      failed: true,
-      failure: AGENT_FAILURE.SESSION_ENDED,
-    },
-  );
-  // Note that a teammate is told whose Mac holds the work, not pointed at their own.
-  assert.equal(
-    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.SESSION_ENDED, "Ada Lovelace", true, {
-      folder: "/Users/ada/.vespin/agents/agent-1/repository",
-    })?.words,
-    "This agent ran on Ada Lovelace's Mac before Vespin gave each agent a folder of its own, so it can't start there again. Its unpushed work is still in /Users/ada/.vespin/agents/agent-1/repository there. Continue in a new agent to carry on.",
-  );
   // Note that an agent whose host stopped beating names the host and a message as the way on, rather than reading as the run's own failure.
   assert.equal(
-    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.OTHER, undefined, true, undefined, {
+    endLineParts(AGENT_STATUS.FAILED, AGENT_FAILURE.OTHER, undefined, true, {
       host: "Studio",
     })?.words,
     "Studio went offline during this turn. Send a message to carry on once it's back.",
@@ -406,7 +387,6 @@ test("a failed end line's row ends on Continue where only a new agent goes on, a
     status: AGENT_STATUS.FAILED,
     endReason: endLineReason(AGENT_FAILURE.SESSION_ENDED),
     failure: AGENT_FAILURE.SESSION_ENDED,
-    ranDirectly: false,
   };
   const key = { ...failed, endReason: endLineReason(AGENT_FAILURE.PROVIDER_KEY) };
   // Note that a model call that failed leaves the agent taking messages, so a message carries it on.
@@ -418,10 +398,6 @@ test("a failed end line's row ends on Continue where only a new agent goes on, a
 
   assert.equal(endLineOffersContinue({ ...failed, continued: false, boxClosed: false }), true);
   assert.equal(endLineOffersContinue({ ...model, continued: false, boxClosed: false }), false);
-  assert.equal(
-    endLineOffersContinue({ ...model, ranDirectly: true, continued: false, boxClosed: false }),
-    true,
-  );
   assert.equal(endLineOffersContinue({ ...model, continued: true, boxClosed: false }), true);
   assert.equal(endLineOffersContinue({ ...failed, continued: true, boxClosed: false }), true);
   assert.equal(endLineOffersContinue({ ...failed, continued: false, boxClosed: true }), false);

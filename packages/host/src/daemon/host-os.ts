@@ -22,7 +22,7 @@ import { linuxMachine, macMachine } from "../node/machine-identity.js";
 import { agentUnsavedWorkScript } from "../node/open-on-mac.js";
 
 /**
- * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, how it reads which machine it is, which builds of the agent CLIs it keeps, whether agents ran on the developer's own logins on it before, and whether its agents' folders are its own alone.
+ * host-os.ts -- what a host's daemon does differently on each OS it runs on (`HostOs`): the platform it enrolls and registers as, the architectures it is built for, its default name, how it reads which machine it is, and which builds of the agent CLIs it keeps.
  *
  * Everything else, the connect, the follower, and each agent run straight
  * on the box, is the same program on every OS (`hostPlatform`,
@@ -44,10 +44,6 @@ export interface HostOs {
   readonly machine: () => DeviceMachine;
   /** The builds of the agent CLIs it fetches and keeps, for the architecture it runs on (`LocalAgentPlatformSeam.clis`). */
   readonly agentClis: (arch: DeviceArch) => AgentCliPins;
-  /** Whether agents may have run on the developer's own logins on the machine before (`LocalAgentPlatformSeam.formerlyDirect`). */
-  readonly formerlyDirect: boolean;
-  /** Whether the agents' folders the daemon runs with are its own alone (`LocalAgentPlatformSeam.storesOwned`). */
-  readonly storesOwned: boolean;
   /** What says a discard would lose work from an agent's worktree (`LocalAgentPlatformSeam.unsavedWorkScript`), run on the box. */
   readonly unsavedWorkScript: NonNullable<LocalAgentPlatformSeam["unsavedWorkScript"]>;
   /** The folder the daemon's state lives in, for the home it runs with (`hostRuntime`). */
@@ -66,22 +62,17 @@ export const LINUX_HOST: HostOs = {
     codex: CODEX_LINUX_PINS[arch],
     gh: GH_LINUX_PINS[arch],
   }),
-  formerlyDirect: false,
-  storesOwned: true,
   unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home) => path.join(home, "state"),
 };
 
 /**
  * A Mac: Apple silicon alone, its Computer Name, and the macOS arm64
- * builds of the agent CLIs, each install keeping its own copy. Note that
- * agents ran on the developer's own logins on This Mac before, which never
- * start again. Its `vespin-host` is the account install, run as the member,
- * so its state is the account install's own, under the member's home
- * (`ACCOUNT_STATE` in `apps/host/scripts/vespin-host.sh`, which names it
- * too). Its agents' folders stand in the member's own `~/.vespin/agents`,
- * where agents that ran on This Mac before left theirs, so they are never
- * its own alone.
+ * builds of the agent CLIs, each install keeping its own copy. Its
+ * `vespin-host` is the account install, run as the member, so its state is
+ * the account install's own, under the member's home (`ACCOUNT_STATE` in
+ * `apps/host/scripts/vespin-host.sh`, which names it too), and its agents'
+ * folders stand in the member's own `~/.vespin/agents`.
  */
 export const DARWIN_HOST: HostOs = {
   name: "macOS",
@@ -91,8 +82,6 @@ export const DARWIN_HOST: HostOs = {
   machine: macMachine,
   // Note that the arch is not read, since a Mac host is built for Apple silicon alone (`arches`).
   agentClis: () => ({ claude: CLAUDE_CODE_MAC_PIN, codex: CODEX_MAC_PIN, gh: GH_MAC_PIN }),
-  formerlyDirect: true,
-  storesOwned: false,
   unsavedWorkScript: agentUnsavedWorkScript,
   stateRoot: (home) => path.join(home, ".local", "state", "vespin-host"),
 };

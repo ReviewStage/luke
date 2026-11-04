@@ -26,7 +26,7 @@ import { openTerminalSocketOverWs } from "@repo/host/node";
 import { ConfigProvider, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { net } from "electron";
-import { thisMacHostLayer } from "../native/host-login-item";
+import { thisMacHostLayer } from "../native/this-mac-host";
 import type { DesktopConfig } from "./desktop-config";
 
 interface HostSeamDependencies {

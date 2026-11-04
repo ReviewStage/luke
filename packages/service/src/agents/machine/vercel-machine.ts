@@ -193,8 +193,6 @@ const SANDBOX_LAYOUT: MachineLayout = {
   claudeExecutable: undefined,
   codexExecutable: undefined,
   writableRoots: [],
-  signedIn: {},
-  isolation: undefined,
   linesRead: true,
 };
 

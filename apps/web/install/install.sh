@@ -477,9 +477,6 @@ main() {
         ORIGIN="${1#--origin=}"
         shift
         ;;
-      --token | --token=*)
-        fail "Vespin host no longer takes an install token. Run it without sudo, and approve the code it shows in Vespin: curl -fsSL $ORIGIN/install.sh | sh"
-        ;;
       *) fail "Unknown option: $1" ;;
     esac
   done

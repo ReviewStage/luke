@@ -13,12 +13,14 @@ import {
 } from "@repo/database/testing";
 import { HOSTED_API_ERROR } from "@repo/features";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import type { TaskRunsOnRequest } from "@repo/features/task-wire";
 import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { sessionSandboxesLayer } from "../agents/session-sandboxes.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { fakeGitHub, GITHUB_APP_WITH_TOKENS, openTokenMember } from "../testing/github-app-fake.js";
 import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
@@ -76,11 +78,12 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
       });
   });
 
-/** A device of the account's, registered now by the name given, signed in to Claude Code, so it runs some model. */
+/** A device of the account's, registered now by the name given, the account's Anthropic key saved, so it runs some model. */
 const deviceOf = (userId: string, name: string) =>
   Effect.gen(function* () {
     const id = randomUUID();
-    yield* registerDevice(userId, { id, name, ...DEVICE_LAYOUT, signedIn: { claudeCode: true } });
+    yield* registerDevice(userId, { id, name, ...DEVICE_LAYOUT });
+    yield* connectAgentApiKeys(userId, { providers: [PROVIDER_KEY_PROVIDER.ANTHROPIC] });
     return id;
   });
 

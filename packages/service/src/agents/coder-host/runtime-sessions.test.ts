@@ -1188,7 +1188,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by its own login to it where it has one, a plan in Vespin or none; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
+      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by a plan in Vespin; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1201,16 +1201,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
-              name: "no plan saved in Vespin, the Mac signed in to Claude Code",
-              mac: true,
-              plan: false,
-              signedIn: { claudeCode: true },
-              chatGpt: "none",
-              model: "anthropic/claude-opus-5.5",
-              refused: undefined,
-              runs: ["claude_code", AGENT_PAYER.MAC_SIGN_IN],
-            },
-            {
               name: "a GPT model on a Mac that checked a Codex, the ChatGPT plan saved in Vespin",
               mac: true,
               codex: true,
@@ -1218,25 +1208,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               model: "openai/gpt-5.5",
               refused: undefined,
               runs: ["codex", AGENT_PAYER.CHATGPT_SUBSCRIPTION],
-            },
-            {
-              name: "a GPT model, nothing of OpenAI's saved in Vespin, the Mac signed in to Codex",
-              mac: true,
-              codex: true,
-              signedIn: { codex: true },
-              chatGpt: "none",
-              model: "openai/gpt-5.5",
-              refused: undefined,
-              runs: ["codex", AGENT_PAYER.MAC_SIGN_IN],
-            },
-            {
-              name: "another Mac of the account signed in to Claude Code, the named one not",
-              mac: true,
-              otherSignedIn: true,
-              chatGpt: "none",
-              model: "anthropic/claude-opus-5.5",
-              refused: undefined,
-              runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
             },
             {
               name: "the task's device gone",
@@ -1270,9 +1241,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             },
           ] as const;
           for (const each of cases) {
-            const plan = !("plan" in each) || each.plan;
-            const signedIn = "signedIn" in each ? each.signedIn : {};
-            const { owner, workspaceId } = yield* openStarter(plan, each.chatGpt);
+            const { owner, workspaceId } = yield* openStarter(true, each.chatGpt);
             const deviceId = randomUUID();
             if (each.mac) {
               yield* registerDevice(owner, {
@@ -1281,16 +1250,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
                 ...("setup" in each ? { setup: each.setup } : undefined),
-                signedIn,
-              });
-            }
-            if ("otherSignedIn" in each) {
-              // Note that the other Mac registers last, so it is the account's latest to beat.
-              yield* registerDevice(owner, {
-                id: randomUUID(),
-                name: "Laptop",
-                ...DEVICE_LAYOUT,
-                signedIn: { claudeCode: true },
               });
             }
             // A device whose row is gone leaves the task naming none.
@@ -1345,14 +1304,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
       "a Start handed the plan of a task with no repository runs only in the local demo, on its starter's host, whose launch line names no repository; with no flag, with the flag beside a Vercel variable or a database off this machine, and in the cloud in the demo, it is refused as naming no repository, as ever, and leaves no agent",
       () =>
         Effect.gen(function* () {
-          const { owner, workspaceId } = yield* openStarter(false);
+          const { owner, workspaceId } = yield* openStarter(true);
           const deviceId = randomUUID();
-          yield* registerDevice(owner, {
-            id: deviceId,
-            name: "Studio",
-            ...DEVICE_LAYOUT,
-            signedIn: { claudeCode: true },
-          });
+          yield* registerDevice(owner, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
           const onHost = yield* createTask(owner, {
             organizationId: workspaceId,
             name: "Invitations",
@@ -1606,7 +1560,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Mac is offered as running a provider's models only where the account pays for its harness in Vespin or the Mac is signed in to it, and GPT models only on a Mac that checked a Codex",
+      "a Mac is offered as running a provider's models only where the account pays for its harness in Vespin, and GPT models only on a Mac that checked a Codex",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1615,7 +1569,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               plan: true,
               chatGpt: "none",
               codex: false,
-              signedIn: {},
               providers: [MODEL_PROVIDER.ANTHROPIC],
             },
             {
@@ -1623,7 +1576,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               plan: false,
               chatGpt: "none",
               codex: false,
-              signedIn: {},
               providers: [],
             },
             {
@@ -1631,7 +1583,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               plan: false,
               chatGpt: "signed_in",
               codex: false,
-              signedIn: {},
               providers: [],
             },
             {
@@ -1639,15 +1590,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               plan: false,
               chatGpt: "signed_in",
               codex: true,
-              signedIn: {},
-              providers: [MODEL_PROVIDER.OPENAI],
-            },
-            {
-              name: "nothing saved, the Mac signed in to Codex",
-              plan: false,
-              chatGpt: "none",
-              codex: true,
-              signedIn: { codex: true },
               providers: [MODEL_PROVIDER.OPENAI],
             },
           ] as const;
@@ -1658,7 +1600,6 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               name: "Studio",
               ...DEVICE_LAYOUT,
               ...(each.codex ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
-              signedIn: each.signedIn,
             });
             const offers = yield* macOffers(owner).pipe(
               Effect.provide(Layer.mergeAll(environment(), runtimes().native)),
@@ -1673,7 +1614,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a device is offered with where its setup stands while it gets ready or after it failed, and with none once it registers ready, as a desktop from before setups always does",
+      "a device is offered with where its setup stands while it gets ready or after it failed, and with none once it registers ready, as a device from before setups always does",
       () =>
         Effect.gen(function* () {
           const { owner } = yield* openStarter(true, "none");
@@ -1687,9 +1628,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           yield* register({ setup: DEVICE_SETUP.PREPARING });
           assert.deepEqual(yield* offered, [["Studio", DEVICE_SETUP.PREPARING, undefined]]);
-          yield* register({ setup: DEVICE_SETUP.FAILED, setupFailure: "smolvm could not be had" });
+          yield* register({ setup: DEVICE_SETUP.FAILED, setupFailure: "gh could not be had" });
           assert.deepEqual(yield* offered, [
-            ["Studio", DEVICE_SETUP.FAILED, "smolvm could not be had"],
+            ["Studio", DEVICE_SETUP.FAILED, "gh could not be had"],
           ]);
           yield* register({});
           assert.deepEqual(yield* offered, [["Studio", undefined, undefined]]);

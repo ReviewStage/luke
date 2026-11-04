@@ -1,5 +1,5 @@
 /**
- * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on a local agent's Mac's own Codex sign-in.
+ * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks our token route for, or on its OpenAI API key.
  *
  * The `codex` implementation of `AgentSessions`
  * (`eve-host/eve-sessions.ts`), on the launch machinery every native
@@ -32,14 +32,11 @@
  *   plan, and a key gone or unreadable refuses the launch.
  * - A `model` line with the agent's model and effort as they stand goes
  *   ahead of every message, as on Claude Code.
- * - A local agent runs the Codex its Mac checked against the pin, in its
- *   folder there, its commands under Codex's own sandbox writing that
- *   folder (`@repo/agent-runner`'s `codex.ts`), and `CODEX_HOME` left as
- *   the developer's. Where its Mac said Codex holds a sign-in of its own,
- *   the launch hands it nothing of the account's and Codex runs and
- *   refreshes that sign-in itself; otherwise it runs on the account's saved
- *   credential as a cloud agent does, the plan's token asked of the route
- *   over HTTPS, so no token ever travels through the Mac's queue.
+ * - A local agent runs the Codex its host checked against the pin, in its
+ *   folder there, with `CODEX_HOME` left at its default under the agent's
+ *   own home, on the account's saved credential as a cloud agent does, the
+ *   plan's token asked of the route over HTTPS, so no token ever travels
+ *   through the host's queue.
  */
 
 import { CODEX_PIN } from "@repo/agent-runner/pins";
@@ -53,12 +50,10 @@ import {
   RUNNER_HARNESS,
 } from "@repo/agent-runner/protocol";
 import { type Agent, readAgentRouting } from "@repo/database/models/agent-store";
-import { deviceLayout } from "@repo/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { listProviderKeyRows } from "@repo/database/models/provider-key-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
-import type { DeviceSignedIn } from "@repo/features/device-agent-wire";
 import { MODEL_PROVIDER, MODEL_SPEED } from "@repo/features/models-wire";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { Duration, Effect, Option, Redacted, Result } from "effect";
@@ -130,42 +125,14 @@ function codexModelOf(agent: Agent): string | undefined {
   return model?.provider === MODEL_PROVIDER.OPENAI ? model.modelId : undefined;
 }
 
-/** A launch on its Mac's own Codex sign-in: nothing of the account's in its environment, and `CODEX_HOME` left as the developer's. */
-const MAC_LOGIN: { readonly env: Readonly<Record<string, string>>; readonly ownLogin: true } = {
-  env: {},
-  ownLogin: true,
-};
-
-/**
- * Whether a local agent runs on its Mac's own Codex sign-in, by what the Mac
- * said of it: the one rule the launch's environment and its config are both
- * written by.
- */
-function onMacLoginOf(agent: Agent, signedIn: DeviceSignedIn): boolean {
-  return agent.machine === AGENT_MACHINE.DEVICE && signedIn.codex === true;
-}
-
 /**
  * Where Codex keeps its threads: in a sandbox, the home the image made on its
- * persisted disk; on a Mac, the developer's own default, which the launch
- * leaves alone, since Codex's own sign-in is kept there
- * (https://learn.chatgpt.com/docs/auth).
+ * persisted disk; on a host, its default under the agent's own home there
+ * (`@repo/host`'s `local-agent-box.ts`), which the launch leaves alone.
  */
 function homeOf(agent: Agent): Readonly<Record<string, string>> {
   return agent.machine === AGENT_MACHINE.DEVICE ? {} : { [CODEX_HOME_ENV]: CODEX_PATH.HOME };
 }
-
-/**
- * Whether the agent runs on its starter's Mac and that Mac last said Codex
- * there holds a sign-in of its own (`device.signed_in`), as a launch's
- * `config` reads it off the layout too (`onMacLoginOf`).
- */
-const onMacCodexLogin = (userId: string, agent: Agent) =>
-  agent.machine !== AGENT_MACHINE.DEVICE || agent.deviceId == null
-    ? Effect.succeed(false)
-    : Effect.map(deviceLayout(userId, agent.deviceId), (device) =>
-        Option.exists(device, (standing) => onMacLoginOf(agent, standing.signedIn)),
-      );
 
 /** Codex as the shared launch drives it, for one account. */
 function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
@@ -203,8 +170,6 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     Effect.map(readAgentRouting(userId, agent.id), (routing) =>
       Option.getOrUndefined(Option.flatMapNullishOr(routing, (row) => row.payer)),
     );
-
-  const onMacLogin = (agent: Agent) => onMacCodexLogin(userId, agent);
 
   /**
    * Where the account's saved credential pays for the agent: its own API key
@@ -273,15 +238,12 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
   const planEnv = (agent: Agent) => Effect.as(standingPlan, { env: homeOf(agent) });
 
   /**
-   * The credential a launch starts with, chosen here alone: on a Mac whose
-   * Codex holds a sign-in of its own, that sign-in, with nothing of the
-   * account's in the environment, so no token is ever handed to the Mac;
-   * otherwise the account's saved credential (`savedPayer`), its key in the
-   * environment or the plan's token asked of our route over HTTPS.
+   * The credential a launch starts with, chosen here alone: the account's
+   * saved credential (`savedPayer`), its key in the environment or the
+   * plan's token asked of our route over HTTPS.
    */
   const launch = (agent: Agent) =>
     Effect.gen(function* () {
-      if (yield* onMacLogin(agent)) return MAC_LOGIN;
       return yield* (yield* onApiKey(agent)) ? apiKeyEnv(agent) : planEnv(agent);
     });
 
@@ -321,7 +283,6 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         ...(layout.writableRoots.length === 0
           ? undefined
           : { writableRoots: layout.writableRoots }),
-        ...(onMacLoginOf(agent, layout.signedIn) ? { ownLogin: true } : undefined),
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,
       };
@@ -337,9 +298,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
       ...(model === undefined ? undefined : { model, ...speedKeysOf(agent) }),
       ...(effort === undefined ? undefined : { effort }),
     };
-    // Note that an agent on its Mac's sign-in or its API key has no plan to ask, and its runner holds what it launched with.
+    // Note that an agent on its API key has no plan to ask, and its runner holds what it launched with.
     const asked = Effect.gen(function* () {
-      if (yield* onMacLogin(agent)) return;
       if (yield* onApiKey(agent)) return;
       yield* standingPlan;
     });

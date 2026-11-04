@@ -192,11 +192,8 @@ function StandingLine({ host, book }: { host: HostLine; book: PresenceBook }): R
 /** What Remove says goes, whatever the machine. */
 const REMOVED = `It stops taking agents now, and its agents stop. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
 
-/** The title of the uninstall command Remove shows, by what the machine is: a server the install command set up, and a Mac that may have joined from its app instead, since the service lists no word of how a Mac joined. */
-const UNINSTALL_TITLE = {
-  SERVER: `Run this on the host to remove ${PRODUCT_NAME} from it`,
-  MAC: "If you used the install command, run this on it",
-} as const;
+/** The title of the uninstall command Remove shows, a Mac's and a server's alike, since the install command set up each. */
+const UNINSTALL_TITLE = `Run this on the host to remove ${PRODUCT_NAME} from it`;
 
 /** One machine's row: what it is called, whether it is online and what it is, and Remove behind its ⋯, which the This Mac the app keeps offers none of. */
 function HostRow({
@@ -267,11 +264,7 @@ function RemoveHostDialog({
       }}
     >
       <CodeCard
-        title={
-          asked?.host.platform === DEVICE_PLATFORM.DARWIN
-            ? UNINSTALL_TITLE.MAC
-            : UNINSTALL_TITLE.SERVER
-        }
+        title={UNINSTALL_TITLE}
         titleIs={CODE_CARD_TITLE.WORDS}
         code={HOST_UNINSTALL_COMMAND}
         copy={copyThroughShell}

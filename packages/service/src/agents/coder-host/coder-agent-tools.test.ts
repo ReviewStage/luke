@@ -977,7 +977,6 @@ test("start_agent on a task that runs on another member's device is refused in w
         id: deviceId,
         name: "Studio",
         ...DEVICE_LAYOUT,
-        signedIn: { claudeCode: true },
       });
       return yield* createTask(agents.teammates.userId, {
         organizationId: workspaceId,

@@ -206,7 +206,7 @@ export interface RunnerSessionsOptions {
   /** Our coder instructions for the agent, naming its checkout and installed skills where its machine keeps them, which the harness's config carries. */
   readonly instructions: (
     agent: Agent,
-    place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "isolation" | "sharedFiles">,
+    place: Pick<MachineLayout, "checkoutPath" | "installedSkills" | "sharedFiles">,
   ) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
   readonly nextSequence: (
@@ -218,12 +218,6 @@ export interface RunnerSessionsOptions {
 interface HarnessLaunch {
   /** The variables beside the bearer: the harness's credential, and whatever else it reads. Never written anywhere but the command's environment. */
   readonly env: Readonly<Record<string, string>>;
-  /**
-   * Whether it runs on its Mac's own sign-in, which its environment alone
-   * may not tell apart from a credential of the account's (a Mac's Codex
-   * launch on the plan carries none either); recorded in the launch's mark.
-   */
-  readonly ownLogin?: boolean;
 }
 
 /** The lines a message to a running runner goes behind. */
@@ -442,11 +436,8 @@ function launchFingerprint(
 ): string {
   const env = Object.entries(credential.env).sort(([one], [other]) => one.localeCompare(other));
   const names = integrations.map((each) => each.name).sort();
-  // Note that the Mac's own sign-in is part of what the launch was started with, so a turn
-  // to or from it relaunches a warm runner whose environment reads the same either way.
-  const own = credential.ownLogin === true ? { ownLogin: true } : {};
   return createHash("sha256")
-    .update(JSON.stringify({ env, names, ...own }))
+    .update(JSON.stringify({ env, names }))
     .digest("hex")
     .slice(0, FINGERPRINT_CHARS);
 }
@@ -788,7 +779,6 @@ export const runnerSessions = <
               const mark: RunnerMark = {
                 firstSequence: made.firstSequence,
                 fingerprint: launchFingerprint(credential, yield* options.integrations(agent)),
-                ...(credential.ownLogin === true ? { ownLogin: true } : undefined),
                 ...(layout.linesRead ? { linesRead: true } : undefined),
               };
               const opened = made.opening === undefined ? [] : [made.opening.line];

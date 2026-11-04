@@ -93,8 +93,6 @@ const directMac = (unsavedWork: Script | undefined) => ({
     codex: "/opt/agent/agent-tools/codex",
   },
   clis: fakeClis(),
-  formerlyDirect: true,
-  storesOwned: false,
   runnerBundle: "/opt/agent/agent-runner/agent-runner.mjs",
   runnerEnv: {},
   deviceName: "Studio",
@@ -125,12 +123,6 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
     const owned = path.join(root, "state", "owned-agents", AGENT_ID);
     yield* fileSystem.makeDirectory(path.dirname(owned), { recursive: true });
     yield* fileSystem.writeFileString(owned, "");
-    // Note that the agent is kept as one that ran on the box, so This Mac checks its folder as it checks every other.
-    const modes = { [AGENT_ID]: DEVICE_ISOLATION.DIRECT };
-    yield* fileSystem.writeFileString(
-      path.join(root, "state", "local-agents.json"),
-      JSON.stringify({ devices: {}, launches: [], modes }),
-    );
 
     const settled: string[] = [];
     const discardSettled = Deferred.makeUnsafe<void>();
@@ -171,13 +163,8 @@ const following = (lines: readonly DeviceAgentLine[], unsavedWork?: Script) =>
       Layer.succeed(LocalAgentPlatform, directMac(unsavedWork)),
     );
     const composer = yield* composeLocalAgents({
-      kernel: {
-        stateRoot: path.join(root, "state"),
-        createId: () => DEVICE_ID,
-        runMode: { sendsNetwork: true },
-      },
-      account: { capabilitiesActive: () => true },
-      accountId: () => "user-fixture",
+      kernel: { stateRoot: path.join(root, "state"), createId: () => DEVICE_ID },
+      deviceId: DEVICE_ID,
       switchedOn: Effect.succeed(true),
       client: new HostedDeviceAgentClient({
         credential: fixedBearer("device-token"),
@@ -352,7 +339,6 @@ const launching = (workStands: boolean, repositoryHangs = false) =>
       Layer.succeed(Reporter, { report: (message) => void reported.push(message) }),
       Layer.succeed(LocalAgentPlatform, {
         ...platform,
-        formerlyDirect: false,
         devicePlatform: DEVICE_PLATFORM.LINUX,
         deviceArch: DEVICE_ARCH.X64,
         worktreeScript: (input) => {
@@ -362,13 +348,8 @@ const launching = (workStands: boolean, repositoryHangs = false) =>
       }),
     );
     const composer = yield* composeLocalAgents({
-      kernel: {
-        stateRoot: path.join(root, "state"),
-        createId: () => DEVICE_ID,
-        runMode: { sendsNetwork: true },
-      },
-      account: { capabilitiesActive: () => true },
-      accountId: () => "user-fixture",
+      kernel: { stateRoot: path.join(root, "state"), createId: () => DEVICE_ID },
+      deviceId: DEVICE_ID,
       switchedOn: Effect.succeed(true),
       client: new HostedDeviceAgentClient({
         credential: fixedBearer("device-token"),

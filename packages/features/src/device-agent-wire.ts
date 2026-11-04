@@ -135,20 +135,14 @@ export const DEVICE_KIND = {
 export type DeviceKind = (typeof DEVICE_KIND)[keyof typeof DEVICE_KIND];
 
 /**
- * How a device runs its local agents. A sandboxed agent runs in a Linux
- * microVM of its own, booted from our sandbox image, with its folder
- * mounted in at the same absolute path it has on the device, so every path
- * the service hands out (`deviceAgentLayout`) stands in every mode; it
- * reaches none of the device's own tools, services, or logins. A direct
- * agent runs on the device itself, as the device's own user, with full
- * access to what that user reaches, but on the sign-ins saved in the app and
- * the GitHub token we hand the device, as a sandboxed one does; a bare
- * one ran on the developer's own logins.
+ * How a device runs its local agents, as it registers: every host runs each
+ * agent on the device itself, as the device's own user, with full access to
+ * what that user reaches, on the sign-ins saved in the app and the GitHub
+ * token we hand the device (`DIRECT`). A row from before the field reads
+ * `BARE`, which no host registers.
  */
 export const DEVICE_ISOLATION = {
-  /** Each agent in a microVM of its own. */
-  SANDBOX: "sandbox",
-  /** Each agent directly on the device, with its installed tools and its own logins. */
+  /** What a row from before the field reads; no host registers it. */
   BARE: "bare",
   /** Each agent directly on the device, in a folder of its own, on the sign-ins saved in the app and the GitHub token we hand it. */
   DIRECT: "direct",
@@ -342,8 +336,6 @@ export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
   firstSequence: EffectSchema.Int,
   /** What the launch was started with, as a one-way digest the service reads back; nothing for the Mac to read. */
   fingerprint: EffectSchema.optionalKey(EffectSchema.String),
-  /** Whether the launch runs on the Mac's own sign-in, which the service's token route reads back; absent for one on the account's credential. */
-  ownLogin: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * Who the agent's commits are by, as the service settled it for a cloud
    * checkout too, which the device sets in the agent's repository before the
@@ -426,45 +418,32 @@ export const deviceAgentReadArgsSchema = EffectSchema.Struct({
 });
 
 /**
- * Which harnesses the Mac is signed in to by itself, by the harness's own
- * login on the Mac, never the credential: a local agent on a harness its Mac
- * is signed in to launches on that login rather than the plan or key the
- * account saved in the app. A key absent is a harness the Mac did not check.
- * A sandboxed or direct device says none, since its agents run on none of
- * its logins, so each launches on the account's saved credential.
+ * Which harnesses the device says it is signed in to by itself: every host
+ * says none, since its agents launch on the account's saved credential, and
+ * nothing reads it.
  */
 export const deviceSignedInSchema = EffectSchema.Struct({
-  /** Claude Code's own login on the Mac, as `claude auth status` answers it for the CLI the Mac bundles. */
   claudeCode: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /**
-   * Codex's own sign-in on the Mac, a managed ChatGPT login or an API key
-   * `codex login` stored under the user's default `CODEX_HOME`, as
-   * app-server's `account/read` answers it for the Codex the Mac checked
-   * (https://learn.chatgpt.com/docs/app-server).
-   */
   codex: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type DeviceSignedIn = typeof deviceSignedInSchema.Type;
 
-/** The device a call names, by the id the desktop minted once. */
+/** The device a call names, by the id it enrolled under. */
 const deviceField = { deviceId: wireUuidSchema };
 
 /**
  * A register: the Mac's id, its name, its home folder, and the CLI it
  * bundles, both absolute, the Codex binary it runs, absent until it has one,
- * which harnesses it is signed in to (neither, from a device that
- * runs its agents in VMs or directly on the sign-ins saved in the app), its platform and architecture, and
- * how it runs its agents, absent for one that runs them bare, as every
- * desktop from before the field does, and the capabilities its follower has
- * (`DEVICE_CAPABILITY`), absent for none, as every desktop from before the
- * field registers. The device sends each key only when it names something
+ * which harnesses it is signed in to (neither, from every host), its
+ * platform and architecture, and how it runs its agents (`DEVICE_ISOLATION`),
+ * absent for a row from before the field, and the capabilities its follower has
+ * (`DEVICE_CAPABILITY`), absent for none. The device sends each key only when it names something
  * beyond the default, so a service from before it, which refuses a key it
  * does not know, never sees it from a device that has none; a capability
  * this service does not know is passed over rather than refused, so a newer
  * device's list never fails its register. A device names each executable
- * by its path where its agents run: a sandboxed one's inside the VM, a
- * direct one's the CLIs it keeps on the device. A device not
+ * by its path where its agents run: the CLIs it keeps on the device. A device not
  * ready to take an agent yet registers where its setup stands
  * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
  * secret, why; it names none once ready, so a service from before the
@@ -542,22 +521,17 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
 
 /** A line settled: its id, and for a launch line whose runner exited, its exit code. */
 /**
- * Why a device settled a launch without starting its runner, where it is
- * one the service words for the agent's reader.
+ * Why a device settled a launch without starting its runner, as a host
+ * from before this build may still name it; the service takes it and reads
+ * nothing of it, and no host of this build names one.
  */
-export const DEVICE_LAUNCH_REFUSAL = {
-  /** The agent ran directly on the device before we kept each agent's repository and sessions in its own folder, on the developer's own logins, so its session cannot be reached again there. */
-  RAN_DIRECTLY: "ran-directly",
-} as const;
-
-export type DeviceLaunchRefusal =
-  (typeof DEVICE_LAUNCH_REFUSAL)[keyof typeof DEVICE_LAUNCH_REFUSAL];
+const DEVICE_LAUNCH_REFUSAL = { RAN_DIRECTLY: "ran-directly" } as const;
 
 export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
-  /** Why a launch was settled unstarted, where the device names why; a device from before it names none. */
+  /** Why a launch was settled unstarted, where an older host names why; nothing reads it. */
   refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_LAUNCH_REFUSAL))),
 });
 

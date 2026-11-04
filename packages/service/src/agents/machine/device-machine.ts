@@ -253,13 +253,11 @@ function deviceMachineOver(
         // Note that the Mac writes the skills where they are installed, since no root installs them after.
         skillsUpload: folders.installedSkills,
         attachments: folders.attachments,
-        // Note that the Mac answers reads inside the agent's folder alone, so what we read back is saved in its temp folder, never `/tmp`, which its VM keeps to itself.
+        // Note that the Mac answers reads inside the agent's folder alone, so what we read back is saved in its temp folder, never `/tmp`.
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
         writableRoots: [folders.folder],
-        signedIn: device.value.signedIn,
-        isolation: device.value.isolation,
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
       };
@@ -510,7 +508,6 @@ function deviceMachineOver(
             startBranch: agent.value.startBranch,
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
-            ...(mark.ownLogin === true ? { ownLogin: true } : {}),
             ...(commitsBy === undefined ? {} : { identity: commitsBy }),
           };
           yield* queued(pin, {

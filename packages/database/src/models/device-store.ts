@@ -64,11 +64,15 @@ const DeviceLayoutSchema = Schema.Struct({
   codexExecutable: Schema.NullOr(Schema.String),
 });
 
-/** A Mac's layout, which harnesses it is signed in to, and how it runs its agents, as a local agent's launch reads them. */
+/**
+ * A Mac's layout, which harnesses it is signed in to, and how it runs its
+ * agents, as a local agent's launch reads them. Note that the isolation is
+ * read as any text, because a row may name one a later build retired.
+ */
 const DeviceStandingSchema = Schema.Struct({
   ...DeviceLayoutSchema.fields,
   signedIn: deviceSignedInSchema,
-  isolation: Schema.Literals(Object.values(DEVICE_ISOLATION)),
+  isolation: Schema.String,
   capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
 });
 
@@ -119,6 +123,7 @@ const upsertDevice = SqlSchema.findAll({
     platform: Schema.Literals(Object.values(DEVICE_PLATFORM)),
     arch: Schema.Literals(Object.values(DEVICE_ARCH)),
     ...MachineColumnsSchema.fields,
+    isolation: Schema.Literals(Object.values(DEVICE_ISOLATION)),
     capabilities: Schema.Array(Schema.Literals(Object.values(DEVICE_CAPABILITY))),
     setup: Schema.NullOr(deviceSetupSchema),
     setupFailure: Schema.NullOr(Schema.String),

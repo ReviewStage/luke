@@ -11,7 +11,6 @@ import {
   type AgentBrief,
   type AgentKind,
 } from "@repo/features/agent-wire";
-import { DEVICE_ISOLATION, type DeviceIsolation } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf, taskLinkStep } from "@repo/features/link-grammar";
@@ -193,8 +192,6 @@ interface ToolWords {
   readonly worker: (worker: WorkerWords) => string;
   /** How it reaches the services the developer connected, where its harness takes each as an MCP server of its own; nothing where it reaches them through tools of its own. */
   readonly integrations: string;
-  /** The sandbox its commands run under on the developer's Mac, a local agent's: its harness's own. */
-  readonly ownSandbox: string;
 }
 
 /** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../workspace-mcp/app.ts`). */
@@ -265,7 +262,6 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ readOnly, keeps }) =>
       `Claude Code's Agent tool hands a scoped job to a worker, which Claude Code calls a subagent: give it \`subagent_type: "${CLAUDE_CODE_WORKER}"\`, ${PRODUCT_NAME}'s worker, which runs on your model and answers you once it is done; several run at once. SendMessage only sends more to a worker of yours, by its name or id; another agent is reached with \`${MESSAGE_AGENT_TOOL.name}\`. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.`,
     integrations: NATIVE_INTEGRATION_WORDS,
-    ownSandbox: "Claude Code's own sandbox",
   },
   [CODER_HARNESS.CODEX]: {
     checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. The checkout holds the repository's whole history.`,
@@ -289,7 +285,6 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     worker: ({ readOnly, keeps }) =>
       `Codex's own subagents are your workers: each takes a scoped job, runs on a GPT model, and answers you once it is done; several run at once. Hand workers broad searches, a comparison of approaches, and investigations independent of each other, and keep ${keeps} to yourself. Nothing holds a Codex subagent to reading, so write this rule into each one's job: ${readOnly} A worker knows only what its job says, and the developer reads it too, so write the job as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints. Codex's own \`listAgents\` and \`sendMessage\` reach its subagents only, never ${PRODUCT_NAME}'s agents: use \`${CODER_TOOL.LIST_AGENTS}\` and \`${MESSAGE_AGENT_TOOL.name}\` for those.`,
     integrations: NATIVE_INTEGRATION_WORDS,
-    ownSandbox: "Codex's own sandbox",
   },
 };
 
@@ -552,20 +547,12 @@ interface WorkWords {
 const EXAMPLE_REPOSITORY = "acme/app";
 
 /**
- * Where an agent works: its own sandbox, or, for a local agent, its
- * starter's device (`agent.machine`), straight on it or in a Linux VM of
- * its own there, with the checkout's path the machine reports either way
- * (`../machine/agent-machine.ts`'s `layout`).
+ * Where an agent works: its own sandbox, or, for a local agent, straight on
+ * its starter's device (`agent.machine`), with the checkout's path the
+ * machine reports (`../machine/agent-machine.ts`'s `layout`).
  */
 export interface CoderMachine {
   readonly local: boolean;
-  /**
-   * How a local agent runs on its device (`DEVICE_ISOLATION`): in a VM of
-   * its own, out of reach of the device's own tools and services; straight
-   * on it, on the app's sign-ins, with full access to it; or on the
-   * developer's own logins. None in the cloud.
-   */
-  readonly isolation?: DeviceIsolation | undefined;
   readonly checkoutPath: string;
   /** Where the machine keeps the skills the member installed into the app. */
   readonly installedSkills: string;
@@ -606,9 +593,6 @@ function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
  */
 const RUN_ON_MAC_WORDS = `\`${CODER_TOOL.RUN_ON_MAC}\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. It is offered only until someone other than the developer puts words into you, such as a teammate's message, a webhook's body, or a review on your pull request.`;
 
-/** Where a sandboxed local agent runs, and what of its device it cannot reach. */
-const DEVICE_VM_WORDS = `You run in a Linux virtual machine of your own on one of the developer's devices, booted from ${PRODUCT_NAME}'s sandbox image, with your folder mounted in from the device: the device's own installed tools, running services, and files outside your folder are out of your reach.`;
-
 /** Where a local agent run straight on its device runs, and what of it it reaches. */
 const DEVICE_DIRECT_WORDS =
   "You run straight on one of the developer's own machines, as its own user and with full access to it, in a folder of your own: its installed tools, running services, and files are all within your reach, the folders of its other agents among them, so work in your own folder and leave what is not yours alone.";
@@ -617,34 +601,17 @@ const DEVICE_DIRECT_WORDS =
 const DEVICE_WORKTREE_WORDS =
   "Your checkout is a git worktree of the machine's one clone of the repository, which its other agents' worktrees share: where git says a branch is already checked out in another worktree, work on it detached with `git switch --detach origin/<branch>`, and push with `git push origin HEAD:<branch>`.";
 
-/** Where a local agent on its device runs on the app's sign-ins, in a VM or straight on the device, in words; none for one on the developer's own logins or in the cloud. */
-function deviceWords(machine: CoderMachine): string | undefined {
-  if (machine.isolation === DEVICE_ISOLATION.SANDBOX) return DEVICE_VM_WORDS;
-  if (machine.isolation === DEVICE_ISOLATION.DIRECT) return DEVICE_DIRECT_WORDS;
-  return undefined;
-}
-
 /** The checkout section's words after where it stands and the tools' own: how GitHub is reached, and the Mac beside the sandbox. */
-function checkoutReachWords(tools: ToolWords, machine: CoderMachine): string {
-  const device = deviceWords(machine);
-  if (device !== undefined) {
-    const worktree =
-      machine.isolation === DEVICE_ISOLATION.DIRECT ? ` ${DEVICE_WORKTREE_WORDS}` : "";
-    return `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${device}${worktree}`;
-  }
+function checkoutReachWords(machine: CoderMachine): string {
   return machine.local
-    ? `GitHub is reachable through \`gh\` and \`git\` from the shell, under the developer's own git credentials on their Mac, so never put a token in a URL or a command, and never sign in as anyone else. You run on the developer's own Mac, in a worktree of your own, with their installed tools and running services, inside ${tools.ownSandbox}, which keeps your worktree and the temp folder writable.`
+    ? `GitHub is reachable through \`gh\` and \`git\` from the shell, already signed in for you, so never put a token in a URL or a command, and never try to sign in. ${DEVICE_DIRECT_WORDS} ${DEVICE_WORKTREE_WORDS}`
     : `GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. ${RUN_ON_MAC_WORDS}`;
 }
 
 /** How the agent looks at what it built before it publishes: on the sandbox's Playwright, display, and browser, or on the developer's machine with whatever the repository runs. */
 function seeingWords(tools: ToolWords, machine: CoderMachine): string {
-  if (machine.isolation === DEVICE_ISOLATION.SANDBOX) {
-    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright from the shell, whose \`playwright\` command, package, and Chromium are installed in your machine, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
-  }
   if (machine.local) {
-    const where = machine.isolation === DEVICE_ISOLATION.DIRECT ? "the machine" : "the Mac";
-    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or ${where} has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
+    return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with whatever the repository or the machine has for it, such as Playwright from the shell, look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words; a WebM of a flow plays there too, kept under 4 MB. ${tools.started}`;
   }
   return `When your change is something a person looks at, such as a page, a screen, or a component, look at it yourself before you publish. ${tools.serve}, then screenshot it with Playwright, whose \`playwright\` command, package, and Chromium are installed: \`playwright screenshot --wait-for-timeout=2000 http://localhost:3000 ${SHARED_FILES_DIRECTORY}/home.png\`, saving every picture, video, and page you show or post under \`${SHARED_FILES_DIRECTORY}/\` (\`mkdir -p ${SHARED_FILES_DIRECTORY}\` where it is missing) or the checkout, which ${PRODUCT_NAME} reads, never in a temp folder of your harness's own, which only you can read, or, for a page that needs a click, a viewport, or a dark color scheme, a short CommonJS script of your own that requires \`playwright\`, run with \`NODE_PATH="${PLAYWRIGHT_PIN.PREFIX}/lib/node_modules:$(npm root -g)" node shot.cjs\` so it finds the installed package rather than one of the checkout's. An Electron app runs here too, on the X display \`xvfb-run -a\` gives it: fetch its binary first, which an install on Linux often skips, with \`node node_modules/electron/install.js\` from the app's own folder, then start it with \`--disable-gpu\`, without which its window never draws, or drive it from such a script with Playwright's \`_electron.launch\`, choosing its window by URL, since the first one open may be a hidden one. Look at the picture with ${tools.readFile}, fix what is wrong, and show the developer the result with \`${CODER_TOOL.SHOW_IMAGE}\` where a picture says it better than words. Where what you built is a flow rather than a screen, such as a form to fill in and submit, record it as a video: in your browser, \`record\` before the flow and \`stop_recording\` with a caption after it, which keeps the video in your transcript; or, in such a script, draw your pointer, its clicks, and its typing into the page as ${PRODUCT_NAME} draws them, with \`await page.addInitScript({ path: "${RECORDING_CURSOR_FILE.PATH}" })\` before \`page.goto\`, and start it once the page has drawn, never before it loads, which a dev server's first compile can leave blank for seconds: after \`page.goto\`, \`page.screencast.start({ path: "${SHARED_FILES_DIRECTORY}/flow.webm", size: { width: 1280, height: 800 } })\`, and after the flow \`page.screencast.stop()\`, which writes the WebM that \`${CODER_TOOL.SHOW_IMAGE}\` plays in your transcript; keep it to the steps that matter, under 4 MB. ${tools.started}`;
 }
@@ -714,7 +681,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(tools, machine)}
+The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(machine)}
 
 ## How to work
 
@@ -753,16 +720,10 @@ ${tools.integrations}`,
 
 /** The sandbox with no repository an agent with none works in, and the Mac beside it; or, for a local agent, its folder on that Mac. */
 function sandboxSection(tools: ToolWords, machine: CoderMachine = SANDBOX_MACHINE): string {
-  const device = deviceWords(machine);
-  if (device !== undefined) {
-    return `## Your folder
-
-You work in a folder of your own with no repository in it. ${device} ${tools.sandbox}`;
-  }
   if (machine.local) {
     return `## Your folder
 
-You work on the developer's own Mac, in a folder of your own with no repository in it, with their installed tools and running services, inside ${tools.ownSandbox}. ${tools.sandbox}`;
+You work in a folder of your own with no repository in it. ${DEVICE_DIRECT_WORDS} ${tools.sandbox}`;
   }
   return `## Your sandbox
 
@@ -911,7 +872,7 @@ function pilotWords(
       ? sandboxSection(tools, machine)
       : `## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(tools, machine)} You commit, push, and open a pull request only on a task you do yourself.`;
+The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(machine)} You commit, push, and open a pull request only on a task you do yourself.`;
   const rules =
     repository === null
       ? ""
@@ -1127,12 +1088,11 @@ export interface AgentInstructionsContext {
   readonly taskNumber?: number | undefined;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
-  /** Where the agent's machine keeps its checkout, its installed skills, and the files the service reads back, and how a local agent's device runs it; where every sandbox keeps them, where unsaid. */
+  /** Where the agent's machine keeps its checkout, its installed skills, and the files the service reads back; where every sandbox keeps them, where unsaid. */
   readonly place?:
     | {
         readonly checkoutPath: string;
         readonly installedSkills: string;
-        readonly isolation: DeviceIsolation | undefined;
         readonly sharedFiles: string;
       }
     | undefined;
@@ -1171,7 +1131,6 @@ export function agentCoderInstructions(agent: Agent, context: AgentInstructionsC
     context.memoryOn,
     {
       local: agent.machine === AGENT_MACHINE.DEVICE,
-      isolation: agent.machine === AGENT_MACHINE.DEVICE ? context.place?.isolation : undefined,
       checkoutPath: context.place?.checkoutPath ?? SANDBOX_MACHINE.checkoutPath,
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
       sharedFiles: context.place?.sharedFiles ?? SANDBOX_MACHINE.sharedFiles,

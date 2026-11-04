@@ -225,22 +225,6 @@ export const FAILURE_WORDS: readonly (readonly [AgentFailure, readonly string[]]
   [AGENT_FAILURE.OTHER, [HOST_AWAY_DETAIL, LAUNCH_STOPPED_DETAIL]],
 ];
 
-/** What a failed turn's detail opens with when its Mac refused an agent that ran directly on it; the folder of its checkout follows. */
-export const RAN_DIRECTLY_DETAIL =
-  "the agent ran directly on its Mac, which now runs every agent in a VM; its work is still in ";
-
-/** The folder an agent its Mac refused for having run directly on it left its work in, as its failed turn records it; nothing for any other turn. */
-export function ranDirectlyFolderOf(
-  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
-): string | undefined {
-  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure !== TURN_FAILURE.SESSION_ENDED) return undefined;
-  const detail = turn.failureDetail ?? "";
-  if (!detail.startsWith(RAN_DIRECTLY_DETAIL)) return undefined;
-  const folder = detail.slice(RAN_DIRECTLY_DETAIL.length);
-  return folder.length > 0 ? folder : undefined;
-}
-
 /** The host that lost a failed turn's run, by the name its turn records; nothing for any other turn. */
 export function hostLostOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,

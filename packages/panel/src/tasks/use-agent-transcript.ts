@@ -73,8 +73,6 @@ export interface AgentTranscriptControl {
   messages: readonly AgentTranscriptMessage[];
   /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
   failure: AgentFailure | undefined;
-  /** Where a failed agent that ran directly on its Mac left its work, as the last page said; nothing for any other failure. */
-  ranDirectly: { readonly folder: string } | undefined;
   /** The host a failed agent's run was lost with, as the last page said; nothing for any other failure. */
   hostLost: { readonly host: string } | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
@@ -283,7 +281,6 @@ export function useAgentTranscript(input: {
   return {
     messages,
     failure: word?.failureReason,
-    ranDirectly: word?.ranDirectly,
     hostLost: word?.hostLost,
     usage: word?.usage,
     payer: word?.payer,

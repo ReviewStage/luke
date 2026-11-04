@@ -1,5 +1,5 @@
 /**
- * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, its worktree's entry pruned from the shared clone it links to, but kept, for a week, where the box's check finds work in its folder, and kept again a week at a time while it still does; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work not checked again within the week, and a pass that died never the last; an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, one from before the stamp not until a week after the start that stamps it, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle; and the agents an install ran before it kept its record of them taken as its own as the gate opens, a Mac's by its own state alone and never by the folders it shares, a Linux host's by its folders.
+ * local-agent-orphans.test.ts -- the follower's passes over the agents this machine made, its agents run straight on the box and their folders kept between turns: an agent two answered reads in a row leave out removed whole, its worktree's entry pruned from the shared clone it links to, but kept, for a week, where the box's check finds work in its folder, and kept again a week at a time while it still does; never on a read that was not answered, never under a runner or a launch still kept, never another install's agent, at most five a pass, a folder with unsaved work not checked again within the week, and a pass that died never the last; and an idle agent's folder cleared a week after its last use where its work is all on GitHub, the agent kept as this machine's, and never a busy agent's, nor one with unpushed work, which is checked once while its agent stays idle.
  *
  * The follower runs on a real temporary folder, against a fake service
  * whose live-agents read answers what each test lists, read by read, and
@@ -11,14 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
@@ -43,7 +36,6 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
 const RUNNER_FOLDER = "/opt/vespin-host/lib";
 /** The runner's own start on the box, as the platform launches it. */
 const RUNNER = "/opt/vespin-host/node/bin/node";
-const USER_ID = "user-fixture";
 /** The platform's check of a worktree, named so the scripted spawner answers it, the worktree after it. */
 const UNSAVED_WORK_SCRIPT = "check-for-unsaved-work";
 /** Half a pass short of a week before the second pass runs, five minutes in, and so half a pass past a week before the third: when a folder was first kept, or an agent last used. */
@@ -59,7 +51,6 @@ const AGENT = {
   LAUNCH_KEPT: "2c3d4e5f-6071-4829-8b3c-4d5e6f7a8b9c",
   UNSAVED: "3d4e5f60-7182-4930-9c4d-5e6f7a8b9c0d",
   OTHER_INSTALL: "4e5f6071-8293-4a41-8d5e-6f7a8b9c0d1e",
-  FROM_BEFORE: "607182a3-a4b5-4c63-8f70-8b9c0d1e2f30",
 } as const;
 
 /** How many turns in a row must find nothing asked of the disk unanswered before the follower is taken to wait on the clock alone. */
@@ -87,15 +78,11 @@ const agentNumbered = (index: number) =>
   `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 
 /**
- * The follower on a Linux host, or This Mac where `mac` says, whose agents
- * run straight on it, with a folder holding a worktree for each agent
- * `held` names, every one recorded as this machine's but those `unowned`
- * names, another install's, and those `madeBeforeRecord` names, which this
- * machine made before it kept that record, in folders shared with another
- * install, as a Mac's are, or its own alone where `storesOwned` says, as a
- * Linux host's are; with each folder kept since when `kept` says; each
- * agent last used when `used` says, and each folder from before that record
- * last changed when `changedAt` says; its check of a worktree printing what
+ * The follower on a Linux host, whose agents run straight on it, with a
+ * folder holding a worktree for each agent `held` names, every one recorded
+ * as this machine's but those `unowned` names, another install's; with each
+ * folder kept since when `kept` says; each agent last used when `used`
+ * says; its check of a worktree printing what
  * `unsavedWork` names for its agent, and nothing for any other; and its
  * live-agents read answering `reads` one after another, the first dying
  * before them where `firstReadDies` says. `launches` hands launch lines
@@ -107,12 +94,8 @@ const agentNumbered = (index: number) =>
 const following = (input: {
   readonly held: readonly string[];
   readonly unowned?: readonly string[];
-  readonly madeBeforeRecord?: readonly string[];
-  readonly storesOwned?: boolean;
-  readonly mac?: boolean;
   readonly kept?: Readonly<Record<string, number>>;
   readonly used?: Readonly<Record<string, number>>;
-  readonly changedAt?: Readonly<Record<string, number>>;
   readonly reads: readonly (readonly string[] | undefined)[];
   readonly unsavedWork?: Readonly<Record<string, string>>;
   readonly launches?: (home: string) => readonly DeviceAgentClaimedLine[];
@@ -135,27 +118,17 @@ const following = (input: {
         `gitdir: ${sharedClone}/worktrees/${agentId}\n`,
       );
     }
-    for (const [agentId, at] of Object.entries(input.changedAt ?? {})) {
-      utimesSync(deviceAgentLayout(home, agentId).folder, new Date(at), new Date(at));
-    }
     const owned = input.held.filter((agentId) => !(input.unowned ?? []).includes(agentId));
     mkdirSync(`${stateRoot}/owned-agents`, { recursive: true });
-    for (const agentId of owned.filter((each) => !(input.madeBeforeRecord ?? []).includes(each))) {
+    for (const agentId of owned) {
       writeFileSync(`${stateRoot}/owned-agents/${agentId}`, "");
     }
     writeFileSync(
       `${stateRoot}/local-agents.json`,
       JSON.stringify({
-        devices: { [USER_ID]: "device-1" },
-        launches: (input.keptLaunches ?? []).map((launch) => ({ userId: USER_ID, ...launch })),
+        launches: input.keptLaunches ?? [],
         ...(input.kept === undefined ? {} : { kept: input.kept }),
         ...(input.used === undefined ? {} : { lastUsed: input.used }),
-        // Note that This Mac records how each of its agents ran, these on the box.
-        ...(input.mac === true
-          ? {
-              modes: Object.fromEntries(owned.map((agentId) => [agentId, DEVICE_ISOLATION.DIRECT])),
-            }
-          : {}),
       }),
     );
 
@@ -236,12 +209,10 @@ const following = (input: {
         clis,
         runnerBundle: `${RUNNER_FOLDER}/agent-runner.mjs`,
         runnerEnv: {},
-        formerlyDirect: input.mac === true,
-        storesOwned: input.storesOwned === true,
         deviceName: "rack-1",
         deviceMachine: {},
-        devicePlatform: input.mac === true ? DEVICE_PLATFORM.DARWIN : DEVICE_PLATFORM.LINUX,
-        deviceArch: input.mac === true ? DEVICE_ARCH.ARM64 : DEVICE_ARCH.X64,
+        devicePlatform: DEVICE_PLATFORM.LINUX,
+        deviceArch: DEVICE_ARCH.X64,
         deviceIsolation: DEVICE_ISOLATION.DIRECT,
         deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
         worktreeScript: () => "exit 0",
@@ -249,9 +220,8 @@ const following = (input: {
       }),
     );
     const composer = yield* composeLocalAgents({
-      kernel: { stateRoot, createId: () => "device-1", runMode: { sendsNetwork: true } },
-      account: { capabilitiesActive: () => true },
-      accountId: () => USER_ID,
+      kernel: { stateRoot, createId: () => "device-1" },
+      deviceId: "device-1",
       switchedOn: Effect.succeed(true),
       client,
     }).pipe(Effect.provide(services));
@@ -530,57 +500,15 @@ it.effect("a pass that died is reported, and the passes after it still run", () 
 );
 
 it.effect(
-  "a Mac takes as its own, as its gate opens, an agent its state says it ran but never recorded, and never one only the folders it shares hold",
+  "a pass clears an idle agent's folder a week after its last use, its work all on GitHub and its agent still this machine's",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const device = yield* following({
-          held: [AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL],
-          madeBeforeRecord: [AGENT.FROM_BEFORE],
-          unowned: [AGENT.OTHER_INSTALL],
-          mac: true,
-          reads: [[AGENT.FROM_BEFORE, AGENT.OTHER_INSTALL]],
-        });
-        yield* device.passed(1);
-
-        assert.deepEqual(device.ownedRecorded(), [AGENT.FROM_BEFORE]);
-        assert.equal(device.folderStands(AGENT.FROM_BEFORE), true);
-        assert.equal(device.folderStands(AGENT.OTHER_INSTALL), true);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "a Linux host takes as its own, as its gate opens, every agent with a folder there, its agents' folders its own alone",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const device = yield* following({
-          held: [AGENT.FROM_BEFORE],
-          madeBeforeRecord: [AGENT.FROM_BEFORE],
-          storesOwned: true,
-          reads: [[AGENT.FROM_BEFORE]],
-        });
-        yield* device.passed(1);
-
-        assert.deepEqual(device.ownedRecorded(), [AGENT.FROM_BEFORE]);
-        assert.equal(device.folderStands(AGENT.FROM_BEFORE), true);
-      }),
-    ).pipe(Effect.provide(NodeFileSystem.layer)),
-);
-
-it.effect(
-  "a pass clears an idle agent's folder a week after its last use, its work all on GitHub and its agent still this machine's, but one from before the stamp not until a week after the start that stamps it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const [used, fromBefore] = [agentNumbered(1), agentNumbered(2)];
-        const listed = [used, fromBefore];
+        const used = agentNumbered(1);
+        const listed = [used];
         const device = yield* following({
           held: listed,
           used: { [used]: A_WEEK_BY_THE_THIRD_PASS },
-          // Note that its folder last changed long before the clock starts, which dates nothing.
-          changedAt: { [fromBefore]: USED_OVER_A_WEEK_AGO },
           reads: [listed, listed, listed],
         });
         yield* device.passed(2);
@@ -589,7 +517,6 @@ it.effect(
         yield* device.passed(3);
 
         assert.equal(device.folderStands(used), false);
-        assert.equal(device.folderStands(fromBefore), true);
         assert.deepEqual(device.ownedRecorded(), listed);
       }),
     ).pipe(Effect.provide(NodeFileSystem.layer)),

@@ -8,7 +8,6 @@ import {
   type AgentBrief,
   type AgentKind,
 } from "@repo/features/agent-wire";
-import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { Schema } from "effect";
 import { test } from "vitest";
 import { INBOX_TOOLS } from "./inbox.js";
@@ -106,20 +105,15 @@ test("a Claude Code or Codex agent is told of its browser, which Vespin's MCP se
   }
 });
 
-test("a local agent is told its folders on the Mac, its own harness's sandbox, and no browser", () => {
+test("a local agent is told its folders on its machine, and no browser", () => {
   const MAC = {
     local: true,
-    isolation: DEVICE_ISOLATION.BARE,
     checkoutPath: "/Users/dev/.vespin/agents/a1/repository",
     installedSkills: "/Users/dev/.vespin/agents/a1/installed-skills",
     sharedFiles: "/Users/dev/.vespin/agents/a1/tmp",
   };
-  const SANDBOX_OF = [
-    [CODER_HARNESS.CLAUDE_CODE, "Claude Code's own sandbox", "Codex's own sandbox"],
-    [CODER_HARNESS.CODEX, "Codex's own sandbox", "Claude Code's own sandbox"],
-  ] as const;
   for (const repository of ["Acme/Relay", null]) {
-    for (const [harness, own, other] of SANDBOX_OF) {
+    for (const harness of [CODER_HARNESS.CLAUDE_CODE, CODER_HARNESS.CODEX]) {
       const words = coderInstructions(
         repository,
         AGENT_BRIEF.PROMPT,
@@ -134,8 +128,6 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
         MAC,
       );
       const label = `${harness} ${repository ?? "no repository"}`;
-      assert.ok(words.includes(own), label);
-      assert.ok(!words.includes(other), label);
       assert.ok(!words.includes("## Your browser"), label);
       if (repository !== null) assert.ok(words.includes(`\`${MAC.checkoutPath}\``), label);
     }
@@ -157,62 +149,45 @@ test("a local agent is told its folders on the Mac, its own harness's sandbox, a
   assert.ok(codex.includes(`\`${MAC.installedSkills}/`));
 });
 
-test.each([
-  {
-    isolation: DEVICE_ISOLATION.SANDBOX,
-    told: ["Linux virtual machine of your own", "out of your reach"],
-    untold: ["their installed tools"],
-    toldWithRepository: [],
-  },
-  {
-    isolation: DEVICE_ISOLATION.DIRECT,
-    told: ["straight on one of the developer's own machines", "full access"],
-    untold: ["Linux virtual machine of your own", "Claude Code's own sandbox"],
-    // Note that its worktree shares the machine's one clone, whose branches another agent's worktree may hold.
-    toldWithRepository: [
-      "`git switch --detach origin/<branch>`",
-      "`git push origin HEAD:<branch>`",
-    ],
-  },
-])(
-  "a local agent run on Vespin's sign-ins on its device ($isolation) is told where it runs and what it reaches, and to save pages where its device reads them",
-  ({ isolation, told, untold, toldWithRepository }) => {
-    const VM = {
-      local: true,
-      isolation,
-      checkoutPath: "/home/vespin-host/.vespin/agents/a1/repository",
-      installedSkills: "/home/vespin-host/.vespin/agents/a1/installed-skills",
-      sharedFiles: "/home/vespin-host/.vespin/agents/a1/tmp",
-    };
-    for (const repository of ["Acme/Relay", null]) {
-      const words = coderInstructions(
-        repository,
-        AGENT_BRIEF.PROMPT,
-        true,
-        TASK_ADDRESS,
-        undefined,
-        null,
-        false,
-        CODER_HARNESS.CLAUDE_CODE,
-        undefined,
-        false,
-        VM,
-      );
-      const label = repository ?? "no repository";
-      for (const each of told) assert.ok(words.includes(each), `${label}: ${each}`);
-      for (const each of untold) assert.ok(!words.includes(each), `${label}: ${each}`);
-      assert.ok(!words.includes("the developer's own git credentials"), label);
-      assert.ok(!words.includes("## Your browser"), label);
-      if (repository !== null) assert.ok(words.includes(`\`${VM.checkoutPath}\``), label);
-      for (const each of toldWithRepository) {
-        assert.equal(words.includes(each), repository !== null, `${label}: ${each}`);
-      }
-      // The device reads back only inside the agent's folder, never the VM's own `/tmp`.
-      assert.ok(words.includes(`under \`${VM.sharedFiles}/\``), label);
-      assert.ok(!words.includes(SHARED_FILES_DIRECTORY), label);
+test("a local agent is told it runs straight on its machine with full access to it, how to work a branch its machine's clone holds, and to save pages where its machine reads them", () => {
+  const HOST = {
+    local: true,
+    checkoutPath: "/home/vespin-host/.vespin/agents/a1/repository",
+    installedSkills: "/home/vespin-host/.vespin/agents/a1/installed-skills",
+    sharedFiles: "/home/vespin-host/.vespin/agents/a1/tmp",
+  };
+  const told = ["straight on one of the developer's own machines", "full access"];
+  // Note that its worktree shares the machine's one clone, whose branches another agent's worktree may hold.
+  const toldWithRepository = [
+    "`git switch --detach origin/<branch>`",
+    "`git push origin HEAD:<branch>`",
+  ];
+  for (const repository of ["Acme/Relay", null]) {
+    const words = coderInstructions(
+      repository,
+      AGENT_BRIEF.PROMPT,
+      true,
+      TASK_ADDRESS,
+      undefined,
+      null,
+      false,
+      CODER_HARNESS.CLAUDE_CODE,
+      undefined,
+      false,
+      HOST,
+    );
+    const label = repository ?? "no repository";
+    for (const each of told) assert.ok(words.includes(each), `${label}: ${each}`);
+    assert.ok(!words.includes("## Your browser"), label);
+    if (repository !== null) assert.ok(words.includes(`\`${HOST.checkoutPath}\``), label);
+    for (const each of toldWithRepository) {
+      assert.equal(words.includes(each), repository !== null, `${label}: ${each}`);
     }
-  },
-);
+    // The machine reads back only inside the agent's folder, never its own `/tmp`.
+    assert.ok(words.includes(`under \`${HOST.sharedFiles}/\``), label);
+    assert.ok(!words.includes(SHARED_FILES_DIRECTORY), label);
+  }
+});
 
 test("a Codex agent is told of Codex's own tools and never of Vespin's it is not offered, nor of Claude Code's", () => {
   // Our tools Codex owns its own of; \`apply_patch\` is Codex's own too, under the same name.

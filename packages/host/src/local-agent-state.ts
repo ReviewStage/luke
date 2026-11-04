@@ -1,9 +1,8 @@
-import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { Effect, Option, Path, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
- * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the device id each account registered under, the launches no exit has settled yet, how each agent has run there, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written by the follower (`compose-local-agents.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
+ * local-agent-state.ts -- what a machine keeps of its local agents between runs (`local-agents.json` in its state): the launches no exit has settled yet, the agents whose folders a discard kept, and since when, and when each agent was last used there; read and written by the follower (`compose-local-agents.ts`). Beside it, which agents' folders this machine made (`owned-agents`).
  *
  * The follower holds the state while it follows and writes it whole. A file that
  * cannot be read or decoded reads as nothing kept, and a key it does not
@@ -12,48 +11,37 @@ import * as FileSystem from "effect/FileSystem";
  * off leaves the last whole one.
  */
 
-/** The file in the machine's state the device ids and the launches running are kept in. */
+/** The file in the machine's state the launches running are kept in. */
 const STATE_FILE = "local-agents.json";
 
 /**
  * The folder in the machine's state holding an empty file for each agent
  * whose folder this machine made, named for the agent, from its first
- * launch or files, or, for one it last ran before it kept this record, the
- * first time its follower's gate opens after, until a discard removes its
- * folder. The folder stands in the user's own `~/.vespin/agents`, which every
- * install for that user shares, so `vespin-host uninstall` reads this to
+ * launch or files, until a discard removes its folder. The folder stands in
+ * the user's own `~/.vespin/agents`, so `vespin-host uninstall` reads this to
  * remove its own and no other's (`apps/host/scripts/vespin-host.sh`), and the
  * follower to pass over its own alone (`ownedAgents`).
  */
 const OWNED_FOLDER = "owned-agents";
 
 /**
- * The state: the device id each account registered under, the launches
- * whose runners this device started and the service has not yet taken a
- * settle of, each with the agent it ran for, absent from a launch kept
- * before it, on a device whose agents may have run directly on it
- * (`formerlyDirect`), how each agent has run here, in a folder of its own
- * or on the developer's own logins,
- * the agents the service no longer lists whose folders a discard kept for
- * work in them, each with when it was first kept (epoch milliseconds),
- * which the follower never checks again while they stand and lets go of
- * whole a week after, and when each agent whose folder stands was last used
- * here (epoch milliseconds): its last launch, turn's end, or files written,
- * or, for a folder from before the record, the first start that kept it,
- * which a pass reads to clear the folders of agents long unused; each of
- * the last three absent from a state file from before it.
+ * The state: the launches whose runners this device started and the
+ * service has not yet taken a settle of, each with the agent it ran for,
+ * absent from a launch kept before it, the agents the service no longer
+ * lists whose folders a discard kept for work in them, each with when it
+ * was first kept (epoch milliseconds), which the follower never checks
+ * again while they stand and lets go of whole a week after, and when each
+ * agent whose folder stands was last used here (epoch milliseconds): its
+ * last launch, turn's end, or files written, which a pass reads to clear
+ * the folders of agents long unused; each of the last two absent from a
+ * state file from before it.
  */
 const LocalAgentStateSchema = Schema.Struct({
-  devices: Schema.Record(Schema.String, Schema.String),
   launches: Schema.Array(
     Schema.Struct({
-      userId: Schema.String,
       id: Schema.String,
       agentId: Schema.optionalKey(Schema.String),
     }),
-  ),
-  modes: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.Literals(Object.values(DEVICE_ISOLATION))),
   ),
   kept: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
   lastUsed: Schema.optionalKey(Schema.Record(Schema.String, Schema.Int)),
@@ -61,7 +49,7 @@ const LocalAgentStateSchema = Schema.Struct({
 
 export type LocalAgentState = typeof LocalAgentStateSchema.Type;
 
-const NO_STATE: LocalAgentState = { devices: {}, launches: [] };
+const NO_STATE: LocalAgentState = { launches: [] };
 
 const decodeState = Schema.decodeUnknownOption(Schema.fromJsonString(LocalAgentStateSchema));
 const encodeState = Schema.encodeSync(Schema.fromJsonString(LocalAgentStateSchema));
@@ -85,28 +73,6 @@ export const writeLocalAgentState = (stateRoot: string, state: LocalAgentState) 
     const written = `${statePath}.writing`;
     yield* fileSystem.writeFileString(written, `${encodeState(state)}\n`);
     yield* fileSystem.rename(written, statePath);
-  });
-
-/** The state read, changed, and written again; whether it landed. */
-const changed = (stateRoot: string, change: (current: LocalAgentState) => LocalAgentState) =>
-  Effect.flatMap(readLocalAgentState(stateRoot), (current) =>
-    writeLocalAgentState(stateRoot, change(current)).pipe(
-      Effect.as(true),
-      Effect.orElseSucceed(() => false),
-    ),
-  );
-
-/** The device id the account registers under on this machine: the one kept, or one minted with `createId` and kept the first time. */
-export const localAgentDeviceOf = (stateRoot: string, userId: string, createId: () => string) =>
-  Effect.gen(function* () {
-    const kept = (yield* readLocalAgentState(stateRoot)).devices[userId];
-    if (kept !== undefined) return kept;
-    const minted = createId();
-    yield* changed(stateRoot, (current) => ({
-      ...current,
-      devices: { ...current.devices, [userId]: minted },
-    }));
-    return minted;
   });
 
 /** The agent given kept as one whose folder this machine made; a write that fails is let go, since the record only serves an uninstall. */
