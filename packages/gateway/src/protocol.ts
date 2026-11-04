@@ -17,6 +17,8 @@ export const GATEWAY_METHOD = {
   TASKS_REFRESH: "tasks.refresh",
   /** The Mac woke, unlocked, or found its network again: a task list already followed is sealed and followed again now, once however many of those land together. */
   TASKS_RESYNC: "tasks.resync",
+  /** The windows have said that the changes made offline the service refused when they were sent again are seen: their count is cleared. */
+  TASKS_OFFLINE_REFUSED_CLEAR: "tasks.offlineRefusedClear",
   /** One task made the active one and its saved document read, replacing whichever was active. */
   TASKS_OPEN: "tasks.open",
   /** The developer left the open task, and no task is active. */
@@ -208,9 +210,20 @@ export const GATEWAY_METHOD = {
   WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
   /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
   WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
-  /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
-  WORKSPACES_TOKEN_REPOSITORIES: "workspaces.tokenRepositories",
-  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand. */
+  /**
+   * The repositories members added to one workspace on their own GitHub
+   * tokens, held for a window from now until it is let go, asked of the
+   * service at once and again as a window comes forward, and a while after
+   * among the reads let go lately. What it holds is heard as
+   * `TOKEN_REPOSITORIES_CHANGED` events, on the app state every window
+   * draws, never answered.
+   */
+  WORKSPACES_TOKEN_REPOSITORIES_FOLLOW: "workspaces.tokenRepositoriesFollow",
+  /** One workspace's token repositories let go by the window that held them. */
+  WORKSPACES_TOKEN_REPOSITORIES_UNFOLLOW: "workspaces.tokenRepositoriesUnfollow",
+  /** One workspace's held token repositories asked again at once, as Try again asks; answered once the ask has landed. */
+  WORKSPACES_TOKEN_REPOSITORIES_RETRY: "workspaces.tokenRepositoriesRetry",
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand, which are laid on its held read too. */
   WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
@@ -441,11 +454,22 @@ export const GATEWAY_METHOD = {
   CHATGPT_SIGN_IN: "chatGpt.signIn",
   /** The ChatGPT sign-in waiting on the browser, withdrawn. */
   CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
-  /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
-  GITHUB_TOKEN_READ: "githubToken.read",
-  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */
+  /**
+   * The member's own GitHub token as its login, hint, and status, never the
+   * token, held for a window from now until it is let go, asked of the
+   * service at once and again as a window comes forward, and a while after
+   * among the reads let go lately. What it holds is heard as
+   * `GITHUB_TOKEN_CHANGED` events, on the app state every window draws,
+   * never answered.
+   */
+  GITHUB_TOKEN_FOLLOW: "githubToken.follow",
+  /** The member's GitHub token let go by the window that held it. */
+  GITHUB_TOKEN_UNFOLLOW: "githubToken.unfollow",
+  /** The member's held GitHub token asked again at once, as Try again asks; answered once the ask has landed. */
+  GITHUB_TOKEN_RETRY: "githubToken.retry",
+  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept, which is laid on its held read too. */
   GITHUB_TOKEN_SAVE: "githubToken.save",
-  /** The member's GitHub token removed on the service; none then stands. */
+  /** The member's GitHub token removed on the service; none then stands, which is laid on its held read too. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /**
    * The memories our agents kept in one workspace, held for a window from
@@ -739,12 +763,18 @@ export const GATEWAY_EVENT = {
   WORKSPACE_TOOLS_CHANGED: "workspaceTools.changed",
   /** The outside MCP clients the host holds for the windows, whole, as its read of them stands, each time it moves. */
   MCP_CLIENTS_CHANGED: "mcpClients.changed",
+  /** How many changes made offline the service refused as they were sent again, since the windows last cleared the count, each time it moves. */
+  OFFLINE_REFUSED_CHANGED: "offlineRefused.changed",
   /** Every integration server's tools the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   INTEGRATION_TOOLS_CHANGED: "integrationTools.changed",
   /** Every workspace's memories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   MEMORIES_CHANGED: "memories.changed",
   /** The account's provider keys the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
+  /** The member's GitHub token the host holds for the windows, whole, as its reads of it stand, each time it moves. */
+  GITHUB_TOKEN_CHANGED: "githubToken.changed",
+  /** Every workspace's token repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  TOKEN_REPOSITORIES_CHANGED: "tokenRepositories.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
   /** Every workspace's repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

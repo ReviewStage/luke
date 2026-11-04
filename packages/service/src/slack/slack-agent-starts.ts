@@ -29,13 +29,18 @@
  * conversation. Where its session has ended for good (`AGENT_RETIRED`), a new
  * agent continues it as Continue does, handed its work, a summary of its
  * transcript, and the message, and the thread moves to it, with one line in
- * the thread linking it; any other
- * starts an agent as the writer on no task, on the one path a Start takes
- * (`coder-host/start.ts`), keyed by Slack's event id. It works in the
- * repository the message names as `owner/name` where the workspace reaches
- * it, else in the channel's default repository, else in the workspace's,
- * both as an owner or admin named them in Settings, else in the repository
- * of the writer's latest agent in the workspace, else in none. The PNG,
+ * the thread linking it, the new agent on the ended one's own task, as
+ * Continue puts it, and on no task only for an agent started from Slack
+ * before its starts made tasks; any other
+ * makes a task and starts an agent as the writer on it, on the one path a
+ * Start takes (`coder-host/start.ts`), both keyed by Slack's event id. The
+ * task starts untitled, for its agent's title to name it, with a blank
+ * plan, since the message is the agent's prompt, assigned to the writer and
+ * in progress, and works in the repository the
+ * message names as `owner/name` where the workspace reaches it, else in the
+ * channel's default repository, else in the workspace's, both as an owner
+ * or admin named them in Settings, else in the repository of the writer's
+ * latest agent in the workspace, else in none. The PNG,
  * JPEG, and WebP images the message shared are read from Slack on the bot's
  * token once the writer is found (`SlackBot.download`), sniffed by their
  * bytes and held to the bounds a Start holds a message's files to, a large
@@ -59,7 +64,11 @@
  * files under the thread (`SlackBot.upload`). A turn that finished well then
  * archives the agent under the rule an automation's "Archive finished runs"
  * archives by (`archiveFinishedAgents`), so one with a pull request or an
- * inbox item open stands, and the thread's next message brings it back. Slack's words reach the
+ * inbox item open stands, and the thread's next message brings it back. Its
+ * task finishes as the turn's end settles it, as a run's does, with no
+ * merge asked (`tasks/task-finish.ts`): once its agents finished well and
+ * nothing waits on the writer, a pull request open among it, which its
+ * merge then finishes. Slack's words reach the
  * agent's prompt, transcript, and traces, never a log line: a failure is
  * logged by its kind alone.
  */
@@ -86,6 +95,7 @@ import {
   slackStartRepository,
   slackTeamWorkspaces,
 } from "@repo/database/models/slack-installation-store";
+import { createTaskOnce, readTask } from "@repo/database/models/task-store";
 import { type SettledAgentTurn, storeWriter } from "@repo/database/models/writer";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { shownPicturesOf } from "@repo/features/agent-pictures-model";
@@ -99,7 +109,8 @@ import { sniffImageType } from "@repo/features/image-signature";
 import { INBOX_IMAGE_TYPE } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { causeKind } from "@repo/runtime/effect";
+import { TASK_STATUS } from "@repo/features/task-wire";
+import { causeKind, failureKind } from "@repo/runtime/effect";
 import {
   EXCESS_KEYS,
   MESSAGE_CHANNEL,
@@ -116,6 +127,7 @@ import {
   TOOL_PART_STATE,
 } from "@repo/wire/ui-messages";
 import { Clock, Effect, Option, Result, Schema } from "effect";
+import { calledId } from "../agents/called-id.js";
 import {
   productionSummaryModel,
   type SummaryModelOf,
@@ -674,7 +686,35 @@ const sendToAgent = Effect.fnUntraced(function* (
   yield* bot.react(addressed.channel, addressed.ts, HEARD_EMOJI);
 });
 
-/** An agent started as the member from the message, the thread kept as its own, and the message marked heard; a refusal is said instead. */
+/**
+ * The task the message's agent starts on, made for it: untitled, so the
+ * agent's title names it as it names any untitled task (`title.ts`),
+ * assigned to the writer, in the repository the start resolved or in none,
+ * in progress, and with a blank plan, since the message is handed to the
+ * agent as its prompt. Note that it is made under an id drawn from Slack's
+ * event id, as the agent is keyed by it, because a start run again must find
+ * the task it made rather than make a second.
+ */
+const slackTaskOf = Effect.fnUntraced(function* (
+  addressed: SlackAddressed,
+  organizationId: string,
+  userId: string,
+  repository: string | null,
+) {
+  const id = calledId(userId, addressed.eventId);
+  if (Option.isSome(yield* readTask(userId, id))) return id;
+  yield* createTaskOnce(userId, {
+    id,
+    organizationId,
+    repository,
+    status: TASK_STATUS.IN_PROGRESS,
+    assigneeId: userId,
+    text: "",
+  });
+  return id;
+});
+
+/** An agent started as the member from the message on a task made for it, the thread kept as its own, and the message marked heard; a refusal is said instead. */
 const startFromSlack = Effect.fnUntraced(function* (
   bot: SlackBotService,
   addressed: SlackAddressed,
@@ -688,11 +728,21 @@ const startFromSlack = Effect.fnUntraced(function* (
   const earlier = messages.filter((message) => Number(message.ts) < Number(addressed.ts));
   const permalink = yield* bot.permalink(addressed.channel, addressed.ts);
   const attachments = yield* sharedImages(bot, addressed.images);
+  const made = yield* Effect.result(slackTaskOf(addressed, organizationId, userId, repository));
+  if (Result.isFailure(made)) {
+    yield* Effect.logWarning("a Slack message's task was not made", {
+      failure: failureKind(made.failure),
+    });
+    yield* bot.reply(
+      addressed.channel,
+      thread,
+      refusalReply("start an agent", { error: HOSTED_API_ERROR.UNAVAILABLE }),
+    );
+    return;
+  }
   const started = yield* Effect.result(
     startAgent(routedSessions(userId), userId, {
-      taskId: null,
-      organizationId,
-      repository,
+      taskId: made.success,
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: startPrompt(addressed, earlier, permalink),

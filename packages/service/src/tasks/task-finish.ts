@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readAgent } from "@repo/database/models/agent-store";
 import { isRunTask } from "@repo/database/models/automation-store";
+import { isSlackTask } from "@repo/database/models/slack-installation-store";
 import {
   archiveAgentOfDoneTask,
   beginTaskWork,
@@ -46,10 +47,12 @@ import {
  * reads it (`stop.ts`'s `standsStopped`): a line awaiting its turn reads as
  * running, an agent started blank with no turn as idle.
  *
- * A task an automation's run made for itself asks no merged pull request:
- * it is done once every agent of it finished well and nothing it holds waits
- * on the developer, so a run that failed, was stopped, or asked something
- * leaves it in progress.
+ * A task an automation's run or a Slack message made for itself asks no
+ * merged pull request: it is done once every agent of it finished well and
+ * nothing it holds waits on the developer, so a run that failed, was
+ * stopped, or asked something leaves it in progress, as does a Slack
+ * agent's turn that did, or one that opened a pull request, which its merge
+ * then finishes.
  *
  * The finish archives no agent, since someone may be talking to one: an
  * agent brought back and messaged on a task we finished takes the task up,
@@ -82,19 +85,28 @@ function logged<A>(what: string, move: Effect.Effect<A, unknown, DatabaseService
   );
 }
 
+/** What made the task for itself, which finishes it with no merge asked: an automation's run, or a Slack message; none for any other task. */
+const madeForItselfBy = Effect.fnUntraced(function* (taskId: string) {
+  if (yield* isRunTask(taskId)) return SERVER_TASK_FINISHER.RUN;
+  if (yield* isSlackTask(taskId)) return SERVER_TASK_FINISHER.SLACK;
+  return undefined;
+});
+
 /**
  * The task moved to done where its work is finished, counted under the
  * account it was made for, in the task's workspace, where it moved. A task
- * an automation's run made for itself is finished once every agent of it
- * finished well, with no merge asked, since a run may publish nothing; a
- * run that failed, was stopped, or waits on someone leaves it in progress.
+ * an automation's run or a Slack message made for itself is finished once
+ * every agent of it finished well, with no merge asked, since its agent may
+ * publish nothing; one that failed, was stopped, or waits on someone leaves
+ * it in progress.
  */
 function finishCounted(userId: string, taskId: string) {
   return Effect.gen(function* () {
-    const ranFor = yield* isRunTask(taskId);
-    const moved = ranFor
-      ? yield* finishTaskWork(userId, taskId, standsFinishedWell, false)
-      : yield* finishTaskWork(userId, taskId, standsStopped);
+    const madeBy = yield* madeForItselfBy(taskId);
+    const moved =
+      madeBy === undefined
+        ? yield* finishTaskWork(userId, taskId, standsStopped)
+        : yield* finishTaskWork(userId, taskId, standsFinishedWell, false);
     if (!moved) return;
     yield* recordServerEventIn(
       SERVER_EVENT.TASK_FINISH,
@@ -102,7 +114,7 @@ function finishCounted(userId: string, taskId: string) {
       readTaskWorkspace(userId, taskId),
       {
         status: TASK_STATUS.DONE,
-        by: ranFor ? SERVER_TASK_FINISHER.RUN : SERVER_TASK_FINISHER.MERGE,
+        by: madeBy ?? SERVER_TASK_FINISHER.MERGE,
       },
     );
   });

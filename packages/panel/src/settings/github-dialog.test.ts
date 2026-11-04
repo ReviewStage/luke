@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
@@ -14,24 +13,37 @@ import type { PortActKind } from "@repo/host/contract";
 import type { SettingsLink } from "@repo/settings/settings-views";
 import { holdExits } from "@repo/ui/testing/held-exits";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState, holdGitHubToken } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { holdMotion, releaseMotion } from "../testing/motion-held.js";
 import { AccountSection } from "./account-section.js";
 
 /**
  * Settings › Profile's GitHub personal access token row and its dialog, over
- * a bridge answering as the host would: the row offers Add with no token and
+ * a bridge answering as the host would, the token held on app state and each
+ * write's answer laid there: the row offers Add with no token and
  * Manage with one, drawn as its hint, login, and expiry; a pasted token is
  * sent once from an unrecorded password field; Remove asks first; a refused
  * save says why in a short label. Synthetic tokens.
  */
 
 const PASTED = "synthetic-classic-token-0000000000wxyz";
+
+/** The account signed in, whose token the host holds. */
+const ADA = {
+  status: ACCOUNT_STATUS.SIGNED_IN,
+  id: "user-ada",
+  email: "ada@example.com",
+  name: "Ada",
+  provider: ACCOUNT_PROVIDER.GOOGLE,
+} as const;
 
 const KEPT: GitHubTokenSummary = {
   login: "octo-member",
@@ -50,6 +62,8 @@ let sent: { kind: PortActKind; payload: unknown }[] = [];
 let refuseSave: GitHubTokenRejection | undefined;
 /** How many of the next reads go unanswered. */
 let unansweredReads = 0;
+/** Lays the token on the window's document, as the host lays its read and each write's answer. */
+let layToken: () => void = () => undefined;
 /** Every place in Settings the window was asked to open, in order. */
 let opened: SettingsLink[] = [];
 
@@ -62,24 +76,26 @@ beforeEach(() => {
   refuseSave = undefined;
   unansweredReads = 0;
   opened = [];
+  handState({}, { account: ADA });
+  // Note that the token is laid as the host holds it, and a write's answer is laid before it answers.
+  layToken = holdGitHubToken(() => {
+    if (unansweredReads === 0) return { rows: { token: stored } };
+    unansweredReads -= 1;
+    return { failed: true };
+  }).lay;
   fakeActPort({
-    [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
-      sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
-      if (unansweredReads > 0) {
-        unansweredReads -= 1;
-        return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-      }
-      return Promise.resolve({ token: stored });
-    },
+    ...fakeActPortCalls(),
     [ACT_KIND.GITHUB_TOKEN_SAVE]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_SAVE, payload });
       if (refuseSave !== undefined) return Promise.resolve({ token: stored, rejected: refuseSave });
       stored = KEPT;
+      layToken();
       return Promise.resolve({ token: stored });
     },
     [ACT_KIND.GITHUB_TOKEN_REMOVE]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_REMOVE, payload });
       stored = null;
+      layToken();
       return Promise.resolve({ token: null });
     },
   });
@@ -95,7 +111,7 @@ afterEach(() => {
 
 async function settle(): Promise<void> {
   await act(async () => {
-    for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
 }
 
@@ -107,20 +123,17 @@ async function mountAndOpen(open = true): Promise<void> {
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        OpenSettingsProvider,
-        { value: (link: SettingsLink) => opened.push(link) },
-        createElement(AccountSection, {
-          account: {
-            status: ACCOUNT_STATUS.SIGNED_IN,
-            id: "user-ada",
-            email: "ada@example.com",
-            name: "Ada",
-            provider: ACCOUNT_PROVIDER.GOOGLE,
-          },
-          onSignOut: () => Promise.resolve(),
-          onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-        }),
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(
+          OpenSettingsProvider,
+          { value: (link: SettingsLink) => opened.push(link) },
+          createElement(AccountSection, {
+            account: ADA,
+            onSignOut: () => Promise.resolve(),
+            onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+          }),
+        ),
       ),
     ),
   );
@@ -319,36 +332,42 @@ test("a read that went unanswered says so as an alert with Retry in place of Add
   button("Add");
 });
 
-test("the row reads the token again when Profile is drawn for another account", async () => {
+test("the row draws no other account's token when Profile is drawn for another account", async () => {
   stored = KEPT;
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = AtomRegistry.make();
   const draw = (id: string) =>
     act(() =>
       root.render(
-        createElement(AccountSection, {
-          account: {
-            status: ACCOUNT_STATUS.SIGNED_IN,
-            id,
-            email: `${id}@example.com`,
-            name: id,
-            provider: ACCOUNT_PROVIDER.GOOGLE,
-          },
-          onSignOut: () => Promise.resolve(),
-          onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-        }),
+        onRegistry(
+          registry,
+          createElement(AccountSection, {
+            account: {
+              status: ACCOUNT_STATUS.SIGNED_IN,
+              id,
+              email: `${id}@example.com`,
+              name: id,
+              provider: ACCOUNT_PROVIDER.GOOGLE,
+            },
+            onSignOut: () => Promise.resolve(),
+            onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+          }),
+        ),
       ),
     );
-  draw("ada");
+  draw(ADA.id);
   await settle();
   button("Manage");
 
-  stored = null;
-  draw("bea");
+  draw("user-bea");
   await settle();
-  button("Add");
+  assert.equal(
+    [...container.querySelectorAll("button")].some((each) => each.textContent === "Manage"),
+    false,
+  );
   assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
 });
 

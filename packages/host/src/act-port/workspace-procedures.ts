@@ -56,8 +56,9 @@ import {
  * in its own sentence. What the service answers comes back as the panel's
  * own answer, or why there is none: a write the account's role does not
  * allow in words that say so, and anything else in the kind's own words. A
- * workspace's people are held followed while a panel holds its stream open:
- * the host holds them on the first stream and lets them go with the last,
+ * workspace's people, and its token repositories, are held while a panel
+ * holds their stream open: the host holds them on the first stream and lets
+ * them go with the last,
  * and what they hold reaches every panel on app state, never down the
  * stream, which carries nothing. How many streams stand open of each is all
  * else held here.
@@ -125,9 +126,17 @@ export interface WorkspaceProceduresDependencies {
     workspaceInvitationCancel(
       params: TasksWorkspaceInvitationCancelParams,
     ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
-    workspaceTokenRepositories(
+    /** A workspace's token repositories held at the host while any stream of them stands; what they hold reaches the panel on app state. */
+    workspaceTokenRepositoriesFollow(
       params: TasksWorkspaceTokenRepositoriesParams,
-    ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+    ): Effect.Effect<void>;
+    workspaceTokenRepositoriesUnfollow(
+      params: TasksWorkspaceTokenRepositoriesParams,
+    ): Effect.Effect<void>;
+    /** A workspace's held token repositories asked again at once, as Try again asks; done once the ask has landed. */
+    workspaceTokenRepositoriesRetry(
+      params: TasksWorkspaceTokenRepositoriesParams,
+    ): Effect.Effect<void>;
     workspaceTokenRepositorySet(
       params: TasksWorkspaceTokenRepositorySetParams,
     ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
@@ -203,6 +212,8 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
   const { host, openExternal } = dependencies;
   /** Every workspace whose people a window holds a stream open of, so the host lets them go only with the last. */
   const openPeople: OpenFollows<never> = MutableHashMap.empty();
+  /** Every workspace whose token repositories a window holds a stream open of, so the host lets them go only with the last. */
+  const openTokenRepositories: OpenFollows<never> = MutableHashMap.empty();
   /** The streams standing open of each workspace's invitations, so the host lets each go only with the last, and hears its follows and unfollows in the order its streams opened and closed. */
   const openInvitations = openRefollows<string>();
   const invitations = workspaceSide<TasksWorkspaceInvitationsAnswer>({
@@ -419,13 +430,29 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
         return yield* refusedWorkspace(errors.REFUSED, answer.failure);
       },
     ),
-    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actPort[
-      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
-      const answer = yield* host.workspaceTokenRepositories(input);
-      if ("repositories" in answer) return answer.repositories;
-      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+      // Note that nothing is heard down the hold, since the held repositories reach the panel on app state.
+      const hold = followedStream(
+        {
+          keyOf: (held: TasksWorkspaceTokenRepositoriesParams) => held.workspaceId,
+          follow: host.workspaceTokenRepositoriesFollow,
+          unfollow: host.workspaceTokenRepositoriesUnfollow,
+          onChanged: () => () => undefined,
+          valueOf: () => Option.none<never>(),
+        },
+        openTokenRepositories,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(hold));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.workspaceTokenRepositoriesRetry(input);
     }),
     [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actPort[
       WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET

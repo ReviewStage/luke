@@ -82,52 +82,20 @@
     <meta name="apple-mobile-web-app-title" content="Vespin" />
   </head>
   <body>
-    <!-- The shell's frame, drawn the moment the page and its stylesheet land,
+    <!-- The loading frame, drawn the moment the page and its stylesheet land,
          while the host stands in the tab and reads the session, which only
          then draws the panel: React's first render replaces it, and a tab
          that can draw nothing takes it down (`src/app/web-root.tsx`). It is
-         built of the shell's own classes (`@repo/panel`'s `desktop.css`), so
-         each box stands where the shell's does. The sidebar stands only where
-         this browser last read someone signed in and drew it pinned, and the
-         stage is wide enough to pin it, which the head's script reads
-         (`public/app-theme.js`); everywhere else, a phone or a visitor signed
-         out among it, the work column is
-         the whole frame, and the product's mark comes up in it should the wait run
-         on (`src/app/app.css`). -->
+         the product's mark alone, in the middle of the screen at one size on
+         a phone and a desktop alike, and it comes up only should the wait
+         run on (`src/app/app.css`). -->
     <div id="root">
-      <div class="app-stage boot-frame" data-surface="desktop" aria-hidden="true">
-        <div class="desktop-stage">
-          <div class="desktop-shell">
-            <aside class="desktop-sidebar">
-              <div class="desktop-drag-strip"></div>
-              <div class="sidebar-identity">
-                <span class="sidebar-identity-face">
-                  <svg class="ui-product-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M0,50c0,-12.93 4.91,-24.71 12.96,-33.59l0.00,0.00c0.54,-0.60 1.34,-0.98 2.22,-0.98c1.22,0 2.28,0.73 2.74,1.79l25.88,55.50c1.04,2.37 3.41,4.03 6.18,4.03c2.76,0 5.13,-1.65 6.18,-4.03l25.88,-55.50c0.46,-1.05 1.51,-1.79 2.74,-1.79c0.88,0 1.67,0.37 2.22,0.98l0.00,-0.00c8.05,8.87 12.96,20.66 12.96,33.59c0,27.61 -22.38,50 -50,50c-27.61,0 -50,-22.38 -50,-50zM30.12,4.10c6.09,-2.64 12.81,-4.10 19.87,-4.10c7.06,0 13.78,1.46 19.87,4.10l-0.00,0.01c1.06,0.46 1.80,1.52 1.80,2.75c0,0.47 -0.11,0.92 -0.30,1.32l-18.16,38.95c-0.54,1.23 -1.77,2.09 -3.20,2.09c-1.43,0 -2.66,-0.86 -3.20,-2.09l-18.16,-38.95c-0.19,-0.39 -0.30,-0.84 -0.30,-1.32c0,-1.23 0.74,-2.29 1.80,-2.75z" />
-                  </svg>
-                </span>
-                <span class="sidebar-identity-copy">
-                  <span class="sidebar-identity-name">Vespin</span>
-                </span>
-              </div>
-              <div class="sidebar-places">
-                <span class="ui-nav-item boot-frame-row"></span>
-                <span class="ui-nav-item boot-frame-row"></span>
-                <span class="ui-nav-item boot-frame-row"></span>
-                <span class="ui-nav-item boot-frame-row"></span>
-                <span class="ui-nav-item boot-frame-row"></span>
-                <span class="ui-nav-item boot-frame-row"></span>
-              </div>
-            </aside>
-            <main class="desktop-main">
-              <span class="sidebar-identity-face boot-frame-mark">
-                <svg class="ui-product-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-                  <path fill="currentColor" d="M0,50c0,-13.55 5.39,-25.84 14.14,-34.84c0.54,-0.56 1.30,-0.90 2.15,-0.90c1.22,0 2.28,0.73 2.74,1.79l26.14,56.07c0.81,1.84 2.65,3.13 4.80,3.13c2.14,0 3.99,-1.29 4.80,-3.13l26.14,-56.07c0.46,-1.05 1.51,-1.79 2.74,-1.79c0.84,0 1.60,0.34 2.15,0.90c8.75,9.00 14.14,21.29 14.14,34.84c0,27.61 -22.38,50 -50,50c-27.61,0 -50,-22.38 -50,-50zM28.66,4.76c6.46,-3.05 13.70,-4.76 21.33,-4.76c7.63,0 14.86,1.70 21.33,4.76l-0.00,0.01c1.01,0.48 1.72,1.51 1.72,2.71c0,0.47 -0.11,0.92 -0.30,1.32l-19.99,42.87c-0.46,1.05 -1.51,1.79 -2.74,1.79c-1.22,0 -2.28,-0.73 -2.74,-1.79l-19.99,-42.87c-0.19,-0.39 -0.30,-0.84 -0.30,-1.32c0,-1.19 0.70,-2.23 1.72,-2.71z" />
-                </svg>
-              </span>
-            </main>
-          </div>
-        </div>
+      <div class="boot-frame" aria-hidden="true">
+        <span class="boot-frame-mark">
+          <svg class="ui-product-mark" viewBox="0 0 100 100" aria-hidden="true" focusable="false" data-fill="true">
+            <path fill="currentColor" d="M0,50c0,-13.55 5.39,-25.84 14.14,-34.84c0.54,-0.56 1.30,-0.90 2.15,-0.90c1.22,0 2.28,0.73 2.74,1.79l26.14,56.07c0.81,1.84 2.65,3.13 4.80,3.13c2.14,0 3.99,-1.29 4.80,-3.13l26.14,-56.07c0.46,-1.05 1.51,-1.79 2.74,-1.79c0.84,0 1.60,0.34 2.15,0.90c8.75,9.00 14.14,21.29 14.14,34.84c0,27.61 -22.38,50 -50,50c-27.61,0 -50,-22.38 -50,-50zM28.66,4.76c6.46,-3.05 13.70,-4.76 21.33,-4.76c7.63,0 14.86,1.70 21.33,4.76l-0.00,0.01c1.01,0.48 1.72,1.51 1.72,2.71c0,0.47 -0.11,0.92 -0.30,1.32l-19.99,42.87c-0.46,1.05 -1.51,1.79 -2.74,1.79c-1.22,0 -2.28,-0.73 -2.74,-1.79l-19.99,-42.87c-0.19,-0.39 -0.30,-0.84 -0.30,-1.32c0,-1.19 0.70,-2.23 1.72,-2.71z" />
+          </svg>
+        </span>
       </div>
     </div>
     <script type="module" src="/src/app/main.tsx"></script>

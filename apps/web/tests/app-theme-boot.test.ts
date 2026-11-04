@@ -11,11 +11,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
  * its head before any stylesheet paints): the theme the account last chose
  * in this browser is worn, and with nothing chosen, or System, the
  * machine's; and the browser's chrome is tinted with that theme's own
- * ground, as the palette names it, so a dark tab never opens light. And the
- * shell's frame app.html draws stands its sidebar as the shell last drew it
- * here: pinned, at the width kept, as the panel bounds it, where the tab
- * last read someone signed in, and none where the shell kept it folded or
- * never drew it, or the tab last read nobody signed in.
+ * ground, as the palette names it, so a dark tab never opens light.
  */
 
 const BOOT = readFileSync(join(import.meta.dirname, "..", "public", "app-theme.js"), "utf8");
@@ -47,8 +43,6 @@ beforeEach(() => {
 
 afterEach(() => {
   document.head.replaceChildren();
-  document.documentElement.removeAttribute("data-ui-boot-sidebar");
-  document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
   localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -90,53 +84,5 @@ test("with System chosen, or nothing yet, the first frame follows the machine", 
       assert.equal(frame.theme, machine ? "dark" : "light", `${chosen} on a ${machine} machine`);
       assert.equal(frame.chrome, frame.ground);
     }
-  }
-});
-
-/** The sidebar the frame stands, as the boot script leaves it on the root: pinned or not, and at what width. */
-function frameSidebar() {
-  // biome-ignore lint/security/noGlobalEval: the script under test is the site's own file, run as the page runs it.
-  window.eval(BOOT);
-  const root = document.documentElement;
-  return {
-    pinned: root.getAttribute("data-ui-boot-sidebar") === "pinned",
-    width: root.style.getPropertyValue("--ui-boot-sidebar-width") || undefined,
-  };
-}
-
-test("the frame pins the sidebar as the shell last drew it here, at the width kept within the panel's bounds", () => {
-  for (const [kept, width] of [
-    ["300", "300px"],
-    ["120", "200px"],
-    ["999.6", "400px"],
-    [undefined, undefined],
-    ["wide", undefined],
-  ] as const) {
-    localStorage.setItem("app.signed-in-here", "true");
-    localStorage.setItem("app.sidebar-collapsed", "false");
-    if (kept === undefined) localStorage.removeItem("app.sidebar-width");
-    else localStorage.setItem("app.sidebar-width", kept);
-    document.documentElement.style.removeProperty("--ui-boot-sidebar-width");
-
-    assert.deepEqual(frameSidebar(), { pinned: true, width }, `kept ${kept}`);
-  }
-});
-
-test("a sidebar kept folded or never drawn, or a browser not signed in here, stands no sidebar in the frame", () => {
-  for (const [signedIn, collapsed] of [
-    ["true", "true"],
-    ["true", undefined],
-    [undefined, "false"],
-  ] as const) {
-    localStorage.clear();
-    if (signedIn !== undefined) localStorage.setItem("app.signed-in-here", signedIn);
-    if (collapsed !== undefined) localStorage.setItem("app.sidebar-collapsed", collapsed);
-    localStorage.setItem("app.sidebar-width", "300");
-
-    assert.deepEqual(
-      frameSidebar(),
-      { pinned: false, width: undefined },
-      `signed in ${signedIn}, folded ${collapsed}`,
-    );
   }
 });

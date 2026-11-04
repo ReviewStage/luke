@@ -9,6 +9,7 @@ import {
   recordSlackAgentThread,
   writeSlackChannelRepository,
 } from "@repo/database/models/slack-installation-store";
+import { readTask } from "@repo/database/models/task-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { slackAgentThread } from "@repo/database/schemas/slack-installation";
@@ -18,6 +19,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_MESSAGE_AUTHOR } from "@repo/features/inbox-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { TASK_STATUS, UNTITLED_TASK_NAME } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
@@ -47,11 +49,11 @@ import { dmThreadPost } from "./thread-dms.js";
  * the ask as the member it was written to, hands the agent its answer, and
  * rewrites the DM to say the option chosen, and a request Connect did not
  * sign is refused before anything of it is read; and a mention of the bot
- * starts an agent as the member Slack's email names, replying with its
- * link, and starts nothing for a Slack user who is no member; a message in
+ * starts an agent as the member Slack's email names on a task made for it,
+ * replying with its link, and starts nothing for a Slack user who is no member; a message in
  * the thread of an archived agent brings it back and hands it the message,
  * and one in the thread of an agent whose session ended continues it in a
- * new agent the thread moves to; a member's reply under the DM of an inbox
+ * new agent on the same task, which the thread moves to; a member's reply under the DM of an inbox
  * thread is posted on that thread as theirs and starts no agent; and a
  * direct message sharing an image and no words starts an agent handed the
  * image.
@@ -369,12 +371,16 @@ function dmReply(
   });
 }
 
-/** A member's agent on no task, on the runtime given, in the Beacon repository where asked and none otherwise, started from a Slack thread of its own; with that thread and the Slack user their email names. */
+/** A member's agent on the task a Slack message made, on the runtime given, in the Beacon repository where asked and none otherwise, started from a Slack thread of its own; with that thread and the Slack user their email names. */
 const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     yield* connectAgentApiKeys(owner);
-    const { workspaceId } = yield* startTask(owner, { name: "Flaky tests" });
+    const task = yield* startTask(owner, {
+      name: "Flaky tests",
+      repository: inBeacon ? "Acme/Beacon" : null,
+    });
+    const { workspaceId } = task;
     yield* linkSlackInstallation({
       organizationId: workspaceId,
       teamId: "T0001",
@@ -383,8 +389,7 @@ const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
     });
     if (inBeacon) yield* connectWorkspaceGitHub(workspaceId, BEACON_INSTALLATION);
     const started = yield* createAgent(owner, {
-      taskId: null,
-      organizationId: workspaceId,
+      taskId: task.id,
       idempotencyKey: randomUUID(),
       model: AGENT_DEFAULT_CHOICE.model,
       effort: "high",
@@ -414,7 +419,7 @@ const openThreadAgent = (runtime: ConversationRuntime, inBeacon: boolean) =>
       .select({ email: user.email })
       .from(user)
       .where(eq(user.id, owner));
-    return { owner, agent, threadTs, slackUserId: `U-${row?.email}` };
+    return { owner, agent, taskId: task.id, threadTs, slackUserId: `U-${row?.email}` };
   });
 
 it.layer(getTestDB())("our Slack route", (it) => {
@@ -521,7 +526,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a mention starts an agent as the member Slack's email names, in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
+    "a mention starts an agent as the member Slack's email names, on an untitled task with a blank plan in its channel's repository, and reacts to it with 👀; one from no member starts nothing",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
@@ -564,6 +569,8 @@ it.layer(getTestDB())("our Slack route", (it) => {
         );
         const [startedAgent] = yield* (yield* Database)
           .select({
+            taskId: agentTable.taskId,
+            prompt: agentTable.prompt,
             repository: agentTable.repository,
             source: agentTable.source,
             metadata: messages.metadata,
@@ -571,8 +578,30 @@ it.layer(getTestDB())("our Slack route", (it) => {
           .from(slackAgentThread)
           .innerJoin(agentTable, eq(agentTable.id, slackAgentThread.agentId))
           .innerJoin(messages, eq(messages.conversationId, agentTable.conversationId))
-          .where(eq(slackAgentThread.channelId, "C0001"));
+          .where(eq(slackAgentThread.userId, owner));
         assert.equal(startedAgent?.repository, "Acme/Relay");
+        const made = Option.getOrThrow(yield* readTask(owner, startedAgent?.taskId ?? ""));
+        assert.deepEqual(
+          {
+            name: made.task.name,
+            assignee: made.task.assignee?.userId,
+            repository: made.task.repository,
+            status: made.task.status,
+            plan: made.text,
+          },
+          {
+            name: UNTITLED_TASK_NAME,
+            assignee: owner,
+            repository: "Acme/Relay",
+            status: TASK_STATUS.IN_PROGRESS,
+            plan: "",
+          },
+          "the agent works on a task the message made, left for its title to name and assigned to its writer",
+        );
+        assert.ok(
+          startedAgent?.prompt?.startsWith("find the flakiest test and fix it"),
+          "the message is the agent's prompt",
+        );
         // The agent keeps where it came from, which the lists mark it by.
         assert.deepEqual(startedAgent?.source, {
           kind: "slack",
@@ -621,13 +650,13 @@ it.layer(getTestDB())("our Slack route", (it) => {
   );
 
   it.effect(
-    "a message in the thread of an agent whose session ended continues it in a new agent, moves the thread to it, and links it once",
+    "a message in the thread of an agent whose session ended continues it in a new agent on the same task, moves the thread to it, and links it once",
     () => {
       const calls: SlackCall[] = [];
       const bot = Layer.succeed(SlackBot, slackBotOver(fakeSlack(calls)));
       return Effect.gen(function* () {
         // An agent left on eve runs on no harness, so its session has ended for good.
-        const { owner, agent, threadTs, slackUserId } = yield* openThreadAgent(
+        const { owner, agent, taskId, threadTs, slackUserId } = yield* openThreadAgent(
           CONVERSATION_RUNTIME.EVE,
           true,
         );
@@ -646,6 +675,7 @@ it.layer(getTestDB())("our Slack route", (it) => {
         assert.ok(thread !== undefined && thread.agentId !== agent.id);
         const continued = Option.getOrThrow(yield* readAgent(owner, thread.agentId));
         assert.deepEqual(continued.startedFrom?.agentId, agent.id);
+        assert.equal(continued.taskId, taskId, "the new agent works on the ended one's task");
         assert.deepEqual(HARNESS.heard.at(-1), { call: "open", account: owner });
         const replies = calls.filter((call) => call.method === "chat.postMessage");
         assert.equal(replies.length, 1);

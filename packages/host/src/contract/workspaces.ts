@@ -171,11 +171,17 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceSlugSetParamsSchema))
     .output(answersWorkspace),
-  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: actProcedure(
-    "Could not read that workspace's repositories on this system.",
+  // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
+  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actProcedure(
+    "Could not follow that workspace's repositories on this system.",
   )
     .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
-    .output(answersTokenRepositories),
+    .output(eventIterator(type<never>())),
+  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY]: actProcedure(
+    "Could not read that workspace's repositories again on this system.",
+  )
+    .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
+    .output(EffectSchema.Void),
   [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actProcedure(
     "Could not change that workspace's repositories on this system.",
   )

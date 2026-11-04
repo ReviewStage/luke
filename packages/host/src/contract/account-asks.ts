@@ -62,11 +62,17 @@ export const accountAskActsContract = {
   )
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.Void),
-  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actProcedure(
-    "Could not read your GitHub token on this system.",
+  // Note that the hold's stream carries nothing: the held token reaches the panel on app state, and the stream is the window's hold on it.
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_FOLLOW]: actProcedure(
+    "Could not follow your GitHub token on this system.",
   )
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(githubTokenAnswerViewSchema)),
+    .output(eventIterator(type<never>())),
+  [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_RETRY]: actProcedure(
+    "Could not read your GitHub token again on this system.",
+  )
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actProcedure(
     "Could not save your GitHub token on this system.",
   )
