@@ -370,10 +370,11 @@ export function longRunTranscript(): AppTranscript {
  */
 export function longRunHold(): AsyncIteratorClass<never, void> {
   const hold = {};
-  holds.add(hold);
   let closed = false;
   return new AsyncIteratorClass<never, void>(
     async () => {
+      // Note that a hold joins those open on its first read, so a hold never read neither advances the run nor blocks another.
+      if (!closed) holds.add(hold);
       while (!closed) {
         await rendererPause(LONG_RUN.STEP_MS);
         if (closed || holds.values().next().value !== hold) continue;
