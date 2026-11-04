@@ -544,10 +544,9 @@ it.layer(getTestDB())("our Slack route", (it) => {
         yield* kept.run;
         yield* kept.run;
 
-        assert.equal(
-          blocks[1]?.text,
-          "Pick how long an invitation stays open.\n\n1. Open the repository's settings.\n\n2. Run this:\n   ```\n   pnpm install\n   ```",
-        );
+        const words =
+          "Pick how long an invitation stays open.\n\n1. Open the repository's settings.\n\n2. Run this:\n   ```\n   pnpm install\n   ```";
+        assert.equal(blocks[1]?.text, words);
         const stored = Option.getOrThrow(yield* readInboxItem(owner, item.id));
         const asked = stored.item.thread?.find((message) => message.ask);
         assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
@@ -556,6 +555,8 @@ it.layer(getTestDB())("our Slack route", (it) => {
           updated[0]?.args.text,
           "How long should an invitation last? · You marked it done",
         );
+        // The settled DM keeps the steps it asked.
+        assert.equal(JSON.parse(updated[0]?.args.blocks ?? "[]")[1]?.text, words);
       });
     },
   );
