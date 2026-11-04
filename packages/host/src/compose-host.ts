@@ -252,6 +252,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         },
         client: agentClient,
         listed: tasks.listed,
+        pullRequestListings: tasks.pullRequestListings,
         pool,
         repositoriesMoved: tasks.repositoriesMoved,
       }),

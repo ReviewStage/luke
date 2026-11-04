@@ -126,6 +126,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onBrowserTabsChanged((held) => {
         state.update({ [LIVE_READ.BROWSER_TABS]: held });
       }),
+      gateway.host.onPullRequestPartsChanged((held) => {
+        state.update(held);
+      }),
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),

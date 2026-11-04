@@ -7,6 +7,7 @@ import {
   type AgentCallFailure,
   type AgentMessagesAnswerView,
   type AgentPageAnswerView,
+  PULL_REQUEST_PART,
 } from "@repo/features/agent-view";
 import {
   AGENT_ARCHIVER,
@@ -78,6 +79,7 @@ import {
   handState,
   holdAutomations,
   holdPages,
+  holdPullRequestParts,
   stateWith,
 } from "../testing/app-state.js";
 import {
@@ -318,33 +320,6 @@ beforeEach(() => {
         transcript = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
-        const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
-      if (
-        request.kind === ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST &&
-        published?.pullRequest != null
-      ) {
-        // Note that the overview is read from what the agent published, as the service reads both from one pull request.
-        const { number, title, url, state } = published.pullRequest;
-        const value = {
-          pullRequest: {
-            number,
-            title,
-            url,
-            state,
-            html: "",
-            base: "main",
-            head: published.branch ?? "main",
-            createdAt: 1,
-            mergedAt: null,
-            merge: MERGE_STATE.CLEAN,
-            requested: [],
-          },
-        };
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
-      }
       if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST && published !== undefined) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
@@ -380,6 +355,34 @@ beforeEach(() => {
   // Note that the agent's workspace's people are laid on the document as the page holds them, refused where the test names none.
   handMembers(() => (members === undefined ? { failed: true } : { rows: { members } }));
   handCapabilities(DESKTOP_CAPABILITIES);
+  // The host holds a Pull request tab's parts, read from what the agent published, as the service reads both from one pull request; refused where the test names none.
+  const unanswered = { failure: AGENT_CALL_FAILURE.UNANSWERED } as const;
+  holdPullRequestParts(handHostReads({}).deliverParts, {
+    [PULL_REQUEST_PART.PULL_REQUEST]: () => {
+      const pullRequest = published?.pullRequest;
+      if (pullRequest == null) return Promise.resolve(unanswered);
+      const { number, title, url, state } = pullRequest;
+      return Promise.resolve({
+        pullRequest: {
+          number,
+          title,
+          url,
+          state,
+          html: "",
+          base: "main",
+          head: published?.branch ?? "main",
+          createdAt: 1,
+          mergedAt: null,
+          merge: MERGE_STATE.CLEAN,
+          requested: [],
+        },
+      });
+    },
+    [PULL_REQUEST_PART.CONVERSATION]: () =>
+      Promise.resolve(
+        earlier > 0 ? { pullRequest: { reviewers: [], conversation: [], earlier } } : unanswered,
+      ),
+  });
 });
 
 afterEach(() => {

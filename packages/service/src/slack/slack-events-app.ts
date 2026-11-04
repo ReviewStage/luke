@@ -18,8 +18,11 @@
  * left, a failure logged by its kind alone. It is read for the option
  * button's value, which
  * names the item, the message whose ask it answers, and the option
- * (`SlackChoice`, `thread-dms.ts`); a press with none, the Open button's
- * among them, is acknowledged and nothing else. The presser is found back as
+ * (`SlackChoice`, `thread-dms.ts`), or for a Submit's, which names no option
+ * and is answered with the checkboxes the press's state holds ticked, each
+ * found back by its place among the ask's options; a press with none, the
+ * Open button's and a tick of a checkbox among them, is acknowledged and
+ * nothing else. The presser is found back as
  * the workspace member the bot's lookups kept under that Slack user, or
  * one whose own Slack account is that user, in the team the item's
  * workspace connected (`SlackBot.memberOf`), and the ask is
@@ -32,7 +35,7 @@
  */
 
 import { storeWriter } from "@repo/database/models/writer";
-import { INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
+import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY, knownAsk } from "@repo/features/inbox-wire";
 import { causeKind } from "@repo/runtime/effect";
 import { EXCESS_KEYS, HTTP_METHOD, type UnparsedWireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
@@ -52,7 +55,7 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { answerAsMember } from "../inbox/inbox-procedures.js";
-import { INBOX_ASK_ANSWER } from "../inbox/inbox-store.js";
+import { INBOX_ASK_ANSWER, readInboxItem } from "../inbox/inbox-store.js";
 import { ANY_METHOD } from "../route.js";
 import { actOnSlackEvent } from "./slack-agent-starts.js";
 import { SlackBot, type SlackMessage } from "./slack-bot.js";
@@ -60,6 +63,7 @@ import {
   chosenLine,
   itemWorkspace,
   rewriteThreadDm,
+  SLACK_PICKS_ACTION,
   type SlackChoice,
   SlackChoiceSchema,
   settledLine,
@@ -89,7 +93,7 @@ const SLACK_RETRY_HEADER = "x-slack-retry-num";
 /** Where a verifier is told the request came, which it reads only for its headers. */
 const VERIFIED_ORIGIN = "https://slack.connect.invalid";
 
-/** A press as far as it is read: who pressed, in which team, the DM it was in, and the buttons' action ids and values. */
+/** A press as far as it is read: who pressed, in which team, the DM it was in, the buttons' action ids and values, and the checkboxes ticked in that DM. */
 const BlockActionsSchema = Schema.Struct({
   type: Schema.Literal(SLACK_REQUEST_TYPE.BLOCK_ACTIONS),
   user: Schema.Struct({ id: Schema.String, team_id: Schema.optionalKey(Schema.String) }),
@@ -102,6 +106,21 @@ const BlockActionsSchema = Schema.Struct({
   ),
   actions: Schema.Array(
     Schema.Struct({ action_id: Schema.String, value: Schema.optionalKey(Schema.String) }),
+  ),
+  state: Schema.optionalKey(
+    Schema.Struct({
+      values: Schema.Record(
+        Schema.String,
+        Schema.Record(
+          Schema.String,
+          Schema.Struct({
+            selected_options: Schema.optionalKey(
+              Schema.Array(Schema.Struct({ value: Schema.String })),
+            ),
+          }),
+        ),
+      ),
+    }),
   ),
 });
 
@@ -160,6 +179,37 @@ function pressedChoice(
   return undefined;
 }
 
+/** The places among the ask's options of the checkboxes ticked when the press was made; none where the DM holds none. */
+function tickedPlaces(press: BlockActions): readonly number[] {
+  for (const block of Object.values(press.state?.values ?? {})) {
+    const ticked = block[SLACK_PICKS_ACTION]?.selected_options;
+    if (ticked !== undefined) return ticked.map(({ value }) => Number(value));
+  }
+  return [];
+}
+
+/**
+ * The labels a press picked: the option its button names, or for a Submit,
+ * the ticked checkboxes' options as the member reads the ask; none where
+ * the ask is not found or takes no options.
+ */
+const pickedLabels = /* @__PURE__ */ Effect.fnUntraced(function* (
+  member: string,
+  choice: SlackChoice,
+  press: BlockActions,
+) {
+  if (choice.choice !== undefined) return [choice.choice];
+  const stored = yield* hostedStoreOrUnavailable(readInboxItem(member, choice.item));
+  if (Option.isNone(stored)) return [];
+  const message = (stored.value.item.thread ?? []).find((each) => each.id === choice.ask);
+  const ask = message?.ask === undefined ? undefined : knownAsk(message.ask);
+  if (ask?.type !== INBOX_ASK.DECIDE) return [];
+  return tickedPlaces(press).flatMap((place) => {
+    const option = ask.options[place];
+    return option === undefined ? [] : [option.label];
+  });
+});
+
 /** The DM a press was made in, where Slack named it. */
 function pressedDm(press: BlockActions): SlackMessage | undefined {
   const channel = press.container?.channel_id;
@@ -168,8 +218,9 @@ function pressedDm(press: BlockActions): SlackMessage | undefined {
 }
 
 /**
- * A press of an option answered as the member who pressed it, and the DM
- * rewritten past the answer: the answer taken says the option chosen
+ * A press of an option, or a Submit of the options ticked, answered as the
+ * member who pressed it, and the DM
+ * rewritten past the answer: the answer taken says the options chosen
  * through the hand-off's own settling of the item's DMs, and one already
  * taken, or an ask no longer open, is said here. Nothing where the item,
  * the member, or the option is not found.
@@ -186,7 +237,8 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
     (yield* SlackBot).memberOf(organizationId.value, teamId, press.user.id),
   );
   if (Option.isNone(member)) return;
-  const line = chosenLine(choice.choice);
+  const choices = yield* pickedLabels(member.value, choice, press);
+  const line = chosenLine(choices);
   const answered = yield* answerAsMember(
     storeWriter({ tools: CODER_TOOL_SET }),
     member.value,
@@ -195,7 +247,7 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
       text: "",
       clientKey: actionId,
       attachments: [],
-      answers: { ask: choice.ask, reply: INBOX_REPLY.CHOSE, choices: [choice.choice] },
+      answers: { ask: choice.ask, reply: INBOX_REPLY.CHOSE, choices },
     },
     { messageId: choice.ask, line },
   ).pipe(

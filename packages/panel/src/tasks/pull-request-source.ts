@@ -1,8 +1,5 @@
 import type {
   AgentChangesAnswerView,
-  AgentOverviewChecksAnswerView,
-  AgentOverviewConversationAnswerView,
-  AgentOverviewPullRequestAnswerView,
   AgentPullRequestViewedAnswerView,
   AgentPullRequestWriteAnswerView,
   AgentReviewOptionsAnswerView,
@@ -23,7 +20,7 @@ import type { AgentsControl } from "./use-agents.js";
  *
  * The tab and its parts, its header, Conversation, Checks, Chapters, and
  * Files changed, reach the pull request only through a `PullRequestSource`:
- * the pull request as last read, its overview's parts, its changed files,
+ * the pull request as last read, its changed files,
  * its chapters' Generate, the member's viewed marks, and its changes, a review's among
  * them. A tab is an agent's for now (`agentPullRequestSource`), so each read
  * names the agent, and the pull request's number where the tab names one
@@ -40,14 +37,6 @@ export interface PullRequestSource {
   readonly place: WritePlace;
   /** The pull request as last read, which names the tab before its overview lands; none before it is read. */
   readonly published: AgentPullRequest | undefined;
-  /** Reads the pull request again, kept as `published` once it lands. */
-  readonly readPublished: () => Promise<void>;
-  /** The pull request itself as the overview draws it: its description, branches, mergeability, and people. */
-  readonly readOverviewPullRequest: () => Promise<AgentOverviewPullRequestAnswerView>;
-  /** Its conversation and where its reviewers stand. */
-  readonly readOverviewConversation: () => Promise<AgentOverviewConversationAnswerView>;
-  /** The checks on its head. */
-  readonly readOverviewChecks: () => Promise<AgentOverviewChecksAnswerView>;
   /** What the reviewer and label pickers offer. */
   readonly readReviewOptions: () => Promise<AgentReviewOptionsAnswerView>;
   /** Its changed files, as Files changed draws them. */
@@ -99,48 +88,17 @@ export function useAgentPullRequestSource(
   const taskId = agent?.planId ?? null;
   const { workspaceId } = control;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const {
-    readPullRequest,
-    readNumberedPullRequest,
-    readOverviewPullRequest,
-    readOverviewConversation,
-    readOverviewChecks,
-    readReviewOptions,
-    readChanges,
-    readPullRequestViewed,
-    generateChapters,
-  } = control;
+  const { readReviewOptions, readChanges, readPullRequestViewed, generateChapters } = control;
   // Note that the doors are kept while what they name stands, because every part under the tab that hears the source draws anew on a new one.
   const doors = useMemo(
     () => ({
-      readPublished: () =>
-        (number === undefined
-          ? readPullRequest(agentId)
-          : readNumberedPullRequest(agentId, number)
-        ).then(() => undefined),
-      readOverviewPullRequest: () => readOverviewPullRequest(agentId, number),
-      readOverviewConversation: () => readOverviewConversation(agentId, number),
-      readOverviewChecks: () => readOverviewChecks(agentId, number),
       readReviewOptions: () => readReviewOptions(agentId),
       readChanges: () => readChanges(agentId, number),
       readViewed: () => readPullRequestViewed(agentId, number),
       generateChapters: () => generateChapters(agentId, number),
       write: agentPullRequestWrite(act, agentId, number),
     }),
-    [
-      act,
-      agentId,
-      number,
-      readPullRequest,
-      readNumberedPullRequest,
-      readOverviewPullRequest,
-      readOverviewConversation,
-      readOverviewChecks,
-      readReviewOptions,
-      readChanges,
-      readPullRequestViewed,
-      generateChapters,
-    ],
+    [act, agentId, number, readReviewOptions, readChanges, readPullRequestViewed, generateChapters],
   );
   // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
   const place = useMemo(() => ({ taskId, workspaceId }), [taskId, workspaceId]);
