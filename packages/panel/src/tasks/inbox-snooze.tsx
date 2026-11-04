@@ -7,7 +7,12 @@ import { type RefObject, useCallback } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { DATE_PICKER_CLOSE, type DatePicked, useDatePicker } from "./date-picker.js";
+import {
+  DATE_PICKER_CLOSE,
+  type DatePicked,
+  type DatePickerMoment,
+  useDatePicker,
+} from "./date-picker.js";
 import { isSnoozed } from "./inbox-model.js";
 
 /**
@@ -15,14 +20,15 @@ import { isSnoozed } from "./inbox-model.js";
  *
  * A snooze takes an item out of the reader's Inbox until a time they pick:
  * in an hour, tomorrow at 9 AM, next Monday at 9 AM, or a day and time
- * picked in the date picker a date mention opens (`date-picker.tsx`), a day
- * picked without a time meaning 9 AM. The item's row offers them in a
+ * picked in the date picker a date mention opens (`date-picker.tsx`), asked
+ * there for one moment, opening on tomorrow at 9 AM, which only its Snooze
+ * confirms. The item's row offers them in a
  * Snooze submenu, and H opens them on the chosen row; an item snoozed
  * already offers Unsnooze besides. What a snooze does to the item, and how
  * it comes back, is `inbox-model.ts`'s `inboxAtNow`.
  */
 
-/** The hour a day picked without a time, tomorrow, and next week wake at, in the reader's own zone. */
+/** The hour tomorrow, next week, and the picker's opening day wake at, in the reader's own zone. */
 const MORNING_HOUR = 9;
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -37,6 +43,9 @@ const WORDS = {
   UNSNOOZE: "Unsnooze",
   PAST: "Pick a time after now to snooze until",
 } as const;
+
+/** The picker asked for one moment: titled as the menu is, confirmed by Snooze. */
+const SNOOZE_MOMENT: DatePickerMoment = { title: WORDS.SNOOZE_UNTIL, verb: WORDS.SNOOZE };
 
 /** One time a snooze menu offers: its words, and when it wakes, counted from the moment it is chosen. */
 interface SnoozeTime {
@@ -73,22 +82,19 @@ export function snoozeWords(at: number, now: number): string {
   return dateChipText({ start: momentOf(at) }, now, readerZone());
 }
 
-/** What a pick names: nothing, where the picker closed as it opened, was cleared, or holds no date; a time not ahead of now; or the instant to snooze until. */
+/** What a pick names: nothing, where the picker closed without its Snooze or holds no date; a time not ahead of now; or the instant to snooze until. */
 const PICKED = { NONE: "none", PAST: "past", AT: "at" } as const;
 
 type Picked =
   | { readonly kind: typeof PICKED.NONE | typeof PICKED.PAST }
   | { readonly kind: typeof PICKED.AT; readonly at: number };
 
-/** What a pick names at `now`, a day picked alone meaning 9 AM. Note that a picker closed as it opened names the day it showed, which nobody picked. */
+/** What a pick names at `now`. Note that a picker closed any way but its Snooze names nothing, since only the act confirms a time. */
 function pickedInstant(picked: DatePicked, now: number): Picked {
-  if (!picked.changed || picked.how === DATE_PICKER_CLOSE.CLEAR || picked.date === undefined) {
+  if (picked.how !== DATE_PICKER_CLOSE.CONFIRM || picked.date === undefined) {
     return { kind: PICKED.NONE };
   }
-  const { start } = picked.date;
-  const at = /T/u.test(start)
-    ? Date.parse(start)
-    : new Date(`${start}T${String(MORNING_HOUR).padStart(2, "0")}:00`).getTime();
+  const at = Date.parse(picked.date.start);
   if (Number.isNaN(at)) return { kind: PICKED.NONE };
   return at <= now ? { kind: PICKED.PAST } : { kind: PICKED.AT, at };
 }
@@ -172,7 +178,8 @@ export function useInboxSnoozing({
       if (row === undefined || onSnooze === undefined) return;
       open({
         at: row,
-        date: undefined,
+        date: { start: momentOf(dayAt(Date.now(), 1, MORNING_HOUR)) },
+        moment: SNOOZE_MOMENT,
         onClose: (picked) => {
           const named = pickedInstant(picked, Date.now());
           if (named.kind === PICKED.AT) onSnooze(item, named.at);

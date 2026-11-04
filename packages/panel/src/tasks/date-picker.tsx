@@ -19,10 +19,13 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  DIALOG_TONE,
+  DialogActions,
   type FieldControl,
   FormField,
   GAP,
   Inline,
+  JUSTIFY,
   type MenuRow,
   POPOVER_WIDTH,
   PopoverPanel,
@@ -83,6 +86,14 @@ import { SwitchRow } from "../settings/switch-row.js";
  * the list is written as a new chip. A press outside leaves the caret where
  * it landed; any other close hands it back to the words.
  *
+ * An owner that asks for one moment rather than a date to write, as a
+ * snooze does (`inbox-snooze.tsx`), opens it with `moment`: the card is
+ * titled as the owner names it and holds one date and its time, always
+ * timed, with no End date, no Include time, and no Clear; a range typed
+ * keeps only its start. Its foot holds Cancel and the owner's act
+ * (`@repo/ui`'s `DialogActions`), and only the act, or Enter in its words,
+ * closes it as `DATE_PICKER_CLOSE.CONFIRM`; every other close is a cancel.
+ *
  * The picker stands in the room the `@` list stands in, over the editor
  * rather than inside it, so a box that scrolls its words cuts none of it,
  * and the editor reads none of its keys. It hangs from its chip or its `@`
@@ -104,11 +115,12 @@ const DATE_PICKER_PAGE = {
 
 type DatePickerPage = (typeof DATE_PICKER_PAGE)[keyof typeof DATE_PICKER_PAGE];
 
-/** How the picker closed: a key (Escape, or Enter in its words), focus leaving it, or Clear. */
+/** How the picker closed: a key (Escape, or Enter in its words), focus leaving it, Clear, or a moment's act. */
 export const DATE_PICKER_CLOSE = {
   KEY: "key",
   LEAVE: "leave",
   CLEAR: "clear",
+  CONFIRM: "confirm",
 } as const;
 
 type DatePickerClose = (typeof DATE_PICKER_CLOSE)[keyof typeof DATE_PICKER_CLOSE];
@@ -128,10 +140,17 @@ type DatePickerAnchor =
   | Element
   | { readonly left: number; readonly top: number; readonly bottom: number };
 
-/** One opening of the picker: where it hangs, the date it opens on, none for a new one, and who hears it close. */
+/** A picker that asks for one moment: what its card is titled, and the word of the act that confirms it. */
+export interface DatePickerMoment {
+  readonly title: string;
+  readonly verb: string;
+}
+
+/** One opening of the picker: where it hangs, the date it opens on, none for a new one, whether it asks for one moment, and who hears it close. */
 export interface DatePickerOpening {
   readonly at: DatePickerAnchor;
   readonly date: DateSpan | undefined;
+  readonly moment?: DatePickerMoment | undefined;
   readonly onClose: (picked: DatePicked) => void;
 }
 
@@ -152,6 +171,8 @@ const WORDS = {
   /** The date fields', named apart from the End date switch. */
   START_DATE: "Start",
   END_DATE: "End",
+  /** A moment's one date field, and its time. */
+  DATE: "Date",
   /** Under a date field whose words name no date; its example a fixed day, so the words never read the clock. */
   UNREAD: "Write a date, such as Oct 24.",
   END: "End date",
@@ -161,6 +182,7 @@ const WORDS = {
   ZONE_NO_MATCH: "No time zones match",
   START_TIME: "Start time",
   END_TIME: "End time",
+  MOMENT_TIME: "Time",
   CLEAR: "Clear",
   CLOSE: "Close",
 } as const;
@@ -299,20 +321,23 @@ function typedInto(draft: Draft, which: DateEnd, moment: DateWallMoment): Draft 
 /**
  * The draft with its typed words read as `dateOfWords` reads an `@` word,
  * and the day they named, whose month the calendar then shows: words
- * naming a range set both ends, and words naming one moment set the end
- * typed into; nothing where they name no date.
+ * naming a range set both ends, unless the picker asks for one moment
+ * (`single`), and words naming one moment set the end typed into; nothing
+ * where they name no date.
  */
 function wordsRead(
   draft: Draft,
   now: number,
   zone: string,
+  single: boolean,
 ): { readonly draft: Draft; readonly day: string } | undefined {
   const { typing } = draft;
   if (typing === undefined) return { draft, day: draft.wall.start.day };
   const named = dateOfWords(typing.words, now, zone);
   const wall = named === undefined ? undefined : dateWall(named, zone);
   if (wall === undefined) return undefined;
-  if (wall.end !== undefined) return { draft: changedTo(wall, false), day: wall.start.day };
+  if (wall.end !== undefined && !single)
+    return { draft: changedTo(wall, false), day: wall.start.day };
   return { draft: typedInto(draft, typing.end, wall.start), day: wall.start.day };
 }
 
@@ -410,24 +435,40 @@ function TimeField({
   );
 }
 
+/** The wall a picker opens on: `date`'s, or today's; a moment's always timed. */
+function openingWall(
+  date: DateSpan | undefined,
+  zone: string,
+  today: string,
+  single: boolean,
+): DateWall {
+  const wall = (date === undefined ? undefined : dateWall(date, zone)) ?? { start: { day: today } };
+  if (!single) return wall;
+  return { start: { day: wall.start.day, time: wall.start.time ?? DEFAULT_TIME.START } };
+}
+
 /**
  * The picker itself, opened on `date`, or on today for a new one, handing
  * what it holds to `onClose` once. Its fields stand as Notion's: each end's
  * date, and beside it, while Include time is on, its time, the end's row
- * under the start's; with no time the two dates share a row.
+ * under the start's; with no time the two dates share a row. Opened for a
+ * `moment`, it holds the start alone, timed, and closes on its act.
  */
 function DatePickerPanel({
   open,
   date,
+  moment,
   onClose,
   onExited,
 }: {
   /** Whether it stands; closed, it fades out, then tells its owner it is gone. */
   open: boolean;
   date: DateSpan | undefined;
+  moment: DatePickerMoment | undefined;
   onClose: (picked: DatePicked) => void;
   onExited: () => void;
 }): React.JSX.Element | null {
+  const single = moment !== undefined;
   const now = useMinute();
   // Note that the zone is kept beside its state too, because the picker closes reading it in the same event that may change it.
   const chosenZone = useRef(readerZone());
@@ -444,7 +485,7 @@ function DatePickerPanel({
   const field = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   const [draft, setDraft] = useState<Draft>(() => ({
-    wall: (date === undefined ? undefined : dateWall(date, zone)) ?? { start: { day: today } },
+    wall: openingWall(date, zone, today, single),
     pickingEnd: false,
     typing: undefined,
     changed: false,
@@ -463,7 +504,7 @@ function DatePickerPanel({
     if (done.current) return;
     done.current = true;
     const at = chosenZone.current;
-    const closing = wordsRead(latest.current, Date.now(), at)?.draft ?? latest.current;
+    const closing = wordsRead(latest.current, Date.now(), at, single)?.draft ?? latest.current;
     onClose({
       date: dateOfWall(closing.wall, at),
       zone: at,
@@ -505,7 +546,7 @@ function DatePickerPanel({
   const read = (): boolean => {
     const typing = latest.current.typing;
     if (typing === undefined) return true;
-    const next = wordsRead(latest.current, Date.now(), chosenZone.current);
+    const next = wordsRead(latest.current, Date.now(), chosenZone.current, single);
     if (next === undefined) {
       update({ ...latest.current, typing: { ...typing, invalid: true } });
       return false;
@@ -529,7 +570,7 @@ function DatePickerPanel({
           read();
         }}
         onEnter={() => {
-          if (read()) finish(DATE_PICKER_CLOSE.KEY);
+          if (read()) finish(single ? DATE_PICKER_CLOSE.CONFIRM : DATE_PICKER_CLOSE.KEY);
         }}
       />
     );
@@ -537,7 +578,7 @@ function DatePickerPanel({
   // Each end under its label, its time beside its date while Include time is on, and under both the line saying its words named no date.
   const endField = (which: DateEnd, moment: DateWallMoment) => (
     <FormField
-      label={which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
+      label={single ? WORDS.DATE : which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
       error={
         draft.typing?.end === which && draft.typing.invalid ? inputProblem(WORDS.UNREAD) : undefined
       }
@@ -556,7 +597,9 @@ function DatePickerPanel({
   );
   const timeField = (which: DateEnd, moment: DateWallMoment) => (
     <TimeField
-      label={which === DATE_END.START ? WORDS.START_TIME : WORDS.END_TIME}
+      label={
+        single ? WORDS.MOMENT_TIME : which === DATE_END.START ? WORDS.START_TIME : WORDS.END_TIME
+      }
       time={moment.time}
       onChange={(time) => {
         const wall =
@@ -594,7 +637,7 @@ function DatePickerPanel({
   return (
     <PopoverPanel
       open={open}
-      title={WORDS.TITLE}
+      title={moment?.title ?? WORDS.TITLE}
       closeLabel={WORDS.CLOSE}
       initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
       onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
@@ -626,18 +669,22 @@ function DatePickerPanel({
         onShowMonth={setMonth}
       />
       <Stack gap={GAP.TIGHT}>
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label={WORDS.END}
-          checked={end !== undefined}
-          onChange={(on) => update(endSwitched(latest.current, on))}
-        />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label={WORDS.TIME}
-          checked={timed}
-          onChange={(on) => update(timeSwitched(latest.current, on))}
-        />
+        {single ? null : (
+          <>
+            <SwitchRow
+              density={SETTINGS_ROW_DENSITY.COMPACT}
+              label={WORDS.END}
+              checked={end !== undefined}
+              onChange={(on) => update(endSwitched(latest.current, on))}
+            />
+            <SwitchRow
+              density={SETTINGS_ROW_DENSITY.COMPACT}
+              label={WORDS.TIME}
+              checked={timed}
+              onChange={(on) => update(timeSwitched(latest.current, on))}
+            />
+          </>
+        )}
         {timed ? (
           <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
             {(control) => (
@@ -657,11 +704,28 @@ function DatePickerPanel({
           </SettingsRow>
         ) : null}
       </Stack>
-      <div className="-mx-ui-16 mt-0 -mb-ui-8 border-t border-border px-row-inset pt-tight-gap pb-0">
-        <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
-          {WORDS.CLEAR}
-        </Button>
-      </div>
+      {moment === undefined ? (
+        <div className="-mx-ui-16 mt-0 -mb-ui-8 border-t border-border px-row-inset pt-tight-gap pb-0">
+          <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+            {WORDS.CLEAR}
+          </Button>
+        </div>
+      ) : (
+        <Inline gap={GAP.CONTROL} justify={JUSTIFY.END}>
+          <DialogActions
+            onCancel={() => finish(DATE_PICKER_CLOSE.KEY)}
+            act={{
+              verb: moment.verb,
+              tone: DIALOG_TONE.PRIMARY,
+              running: moment.verb,
+              // Note that words naming no date hold the act back, as Enter in them does, so it never confirms the date they replaced.
+              onPress: () => {
+                if (read()) finish(DATE_PICKER_CLOSE.CONFIRM);
+              },
+            }}
+          />
+        </Inline>
+      )}
     </PopoverPanel>
   );
 }
@@ -701,6 +765,7 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
           key={opened.key}
           open={opened.standing}
           date={opened.opening.date}
+          moment={opened.opening.moment}
           onClose={(picked) => {
             setOpened((was) => (was?.key === opened.key ? { ...was, standing: false } : was));
             opened.opening.onClose(picked);
