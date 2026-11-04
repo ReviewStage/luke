@@ -10,24 +10,17 @@ import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/feature
 import { ACT_KIND } from "@repo/host/acts";
 import {
   ANNOUNCE,
-  AVATAR_SIZE,
-  Badge,
-  BUTTON_VARIANT,
-  Button,
   CONFIRM_LOSS,
   ConfirmDialog,
   ErrorState,
   type MenuRow,
-  RepositoryPicture,
   repositoryMenuRow,
-  SETTINGS_ROW_INDENT,
   SettingsLine,
-  SettingsRow,
-  SettingsRowMark,
   useConfirmDialog,
 } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
@@ -35,15 +28,18 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
+import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js";
 
 /**
  * workspace-token-repositories.tsx -- the repositories members added to a workspace on their own GitHub tokens, under GitHub's row on Settings › Workspace.
  *
- * Each stands inset under GitHub's row, as a connected account does, led by
- * its owner's picture on GitHub and marked Token, with Remove for its adder
- * and for a workspace's owner or admin, which asks first, in the accent
- * rather than red: adding it again undoes it, but its agents stop reaching
- * it for every member meanwhile. One the workspace's App reaches is
+ * They stand under GitHub's row by owner, after the App's accounts and in
+ * order of the owners' logins, each owner the same row every account is
+ * (`GitHubOwnerRow`), with nothing saying how its repositories got there.
+ * An owner's ⋯ holds Remove for each repository its adder or a workspace's
+ * owner or admin reads, and stands nowhere where the reader may remove
+ * none; Remove asks first, in the accent rather than red: adding it again
+ * undoes it, but its agents stop reaching it for every member meanwhile. One the workspace's App reaches is
  * left out by the service, since the App wins. Add repository drops the
  * app's searched menu over the repositories the reader's own token may
  * push to that neither the App nor the workspace's list already holds, read
@@ -61,7 +57,6 @@ import { AddMenuButton } from "./add-menu-button.js";
 /** The words the rows and the menu say: labels and facts alone. */
 const WORDS = {
   ADD: "Add repository",
-  TOKEN: "Token",
   REMOVE: "Remove",
   REMOVING: "Removing",
   SEARCH: "Search repositories",
@@ -224,58 +219,85 @@ function AddRepositoryMenu({
   );
 }
 
+/** The token repositories of one owner, as their row lists them: the owner as first spelled, and its repositories, newest added first. */
+interface TokenOwner {
+  readonly login: string;
+  readonly repositories: readonly WorkspaceTokenRepository[];
+}
+
+/** The repository's own name, past its owner's. */
+function nameOf(repository: WorkspaceTokenRepository): string {
+  return repository.fullName.slice(repository.fullName.indexOf("/") + 1);
+}
+
+/** The token repositories by owner, each owner keyed as no case spells it, the owners in order of their logins. */
+function tokenOwners(listed: readonly WorkspaceTokenRepository[]): readonly TokenOwner[] {
+  const byOwner = new Map<string, { login: string; repositories: WorkspaceTokenRepository[] }>();
+  for (const repository of listed) {
+    const login = repository.fullName.slice(0, repository.fullName.indexOf("/"));
+    const key = login.toLowerCase();
+    const owner = byOwner.get(key);
+    if (owner === undefined) byOwner.set(key, { login, repositories: [repository] });
+    else owner.repositories.push(repository);
+  }
+  return [...byOwner.values()].sort((one, other) =>
+    one.login.localeCompare(other.login, undefined, { sensitivity: "base" }),
+  );
+}
+
 /**
- * One token repository's row, inset under GitHub's: its owner's picture,
- * its name marked Token, and Remove where the reader may, asked first. The
- * removal takes the row away at once, as the host draws it on the press, so
- * the question lets go with it, and a refusal, its row back, is said in a
- * toast.
+ * One owner's token repositories, drawn as every GitHub account under
+ * GitHub's row is (`GitHubOwnerRow`): its picture, its login, its count, and
+ * the names folded under it; its ⋯ holds Remove for each the reader may
+ * remove and stands nowhere where they may remove none. Remove asks first;
+ * the removal takes the name away at once, as the host draws it on the
+ * press, so the question lets go with it, and a refusal, its name back, is
+ * said in a toast.
  */
-function TokenRepositoryRow({
-  repository,
+function TokenOwnerRow({
+  owner,
   onRemove,
 }: {
-  repository: WorkspaceTokenRepository;
-  onRemove: () => void;
+  owner: TokenOwner;
+  onRemove: (repository: string) => void;
 }): React.JSX.Element {
+  const [asked, setAsked] = useState<WorkspaceTokenRepository>();
+  // Note that the question stands only while the repository it names is still listed and removable, so a read that drops it dismisses it.
+  const standing =
+    asked !== undefined &&
+    owner.repositories.some((one) => one.fullName === asked.fullName && one.removable);
   const removal = useConfirmDialog(
-    { subject: repository.removable, surfaceOpen: true },
+    { subject: standing, surfaceOpen: true },
     () => {
-      onRemove();
+      if (asked !== undefined) onRemove(asked.fullName);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_REPOSITORY_REMOVE),
   );
-  const pictures = useRepositoryPictures();
+  const actions = owner.repositories
+    .filter((repository) => repository.removable)
+    .map((repository) => ({
+      label: `${WORDS.REMOVE} ${nameOf(repository)}`,
+      icon: <GLYPH.DELETE />,
+      danger: true,
+      onSelect: () => {
+        setAsked(repository);
+        removal.ask();
+      },
+    }));
   return (
     <>
-      <SettingsRow
-        indent={SETTINGS_ROW_INDENT.MARK}
-        leading={
-          <SettingsRowMark>
-            <RepositoryPicture
-              repository={repository.fullName}
-              pictures={pictures}
-              size={AVATAR_SIZE.STACK}
-            />
-          </SettingsRowMark>
-        }
-        label={repository.fullName}
-        adornment={<Badge>{WORDS.TOKEN}</Badge>}
-      >
-        {() =>
-          repository.removable ? (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={removal.ask}>
-              {WORDS.REMOVE}
-            </Button>
-          ) : null
-        }
-      </SettingsRow>
+      <GitHubOwnerRow
+        login={owner.login}
+        line={repositoryCount(owner.repositories.length)}
+        names={owner.repositories.map(nameOf)}
+        actions={actions}
+      />
       <ConfirmDialog
         open
         confirm={removal}
         question={{
-          title: `Remove ${repository.fullName}?`,
+          title: `Remove ${asked?.fullName ?? ""}?`,
           body: "Agents in this workspace stop reaching it until someone adds it again.",
           verb: WORDS.REMOVE,
           running: WORDS.REMOVING,
@@ -286,8 +308,8 @@ function TokenRepositoryRow({
   );
 }
 
-/** Every token repository of the workspace, a row each, newest added first. */
-export function TokenRepositoryRows({
+/** Every owner of the workspace's token repositories, a row each, in order of their logins, after the App's accounts. */
+export function TokenOwnerRows({
   repositories,
 }: {
   repositories: TokenRepositories;
@@ -315,11 +337,11 @@ export function TokenRepositoryRows({
   }
   return (
     <>
-      {repositories.listed.map((repository) => (
-        <TokenRepositoryRow
-          key={repository.fullName.toLowerCase()}
-          repository={repository}
-          onRemove={() => repositories.remove(repository.fullName)}
+      {tokenOwners(repositories.listed).map((owner) => (
+        <TokenOwnerRow
+          key={owner.login.toLowerCase()}
+          owner={owner}
+          onRemove={repositories.remove}
         />
       ))}
     </>

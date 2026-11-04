@@ -1602,14 +1602,9 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
     assert.deepEqual(integrationRows(page), [
       ["GitHub", undefined],
-      ["acme-org", "Connected 0 repositories"],
-      ["acme-labs", "Suspended or removed on GitHub."],
+      ["acme-org", "0 repositories"],
     ]);
-    assert.equal(
-      rowNamed(group, "acme-labs").querySelector('[data-state="attention"]')?.textContent,
-      "Suspended or removed on GitHub.",
-    );
-    for (const name of ["acme-org", "acme-labs"]) {
+    for (const name of ["acme-org"]) {
       const account = rowNamed(group, name);
       assert.equal(
         account.querySelector(".ui-avatar[data-shape='tile']")?.textContent,
@@ -1635,26 +1630,20 @@ const foldLines = (row: HTMLElement) =>
 const foldOn = (row: HTMLElement) =>
   row.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? assert.fail("no fold");
 
-test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it by name, and a suspended account shows neither", async () => {
+test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it by name, and an inactive account draws no row", async () => {
   githubRepositories = ["acme-org/relay", "ACME-ORG/site", "acme-labs/old", "other/thing"];
   tokenReach = ["acme-org/forked"];
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const group = githubGroup(page);
   const org = rowNamed(group, "acme-org");
 
-  assert.deepEqual(integrationRows(page).slice(1), [
-    ["acme-org", "Connected 2 repositories"],
-    ["acme-labs", "Suspended or removed on GitHub."],
-  ]);
+  assert.deepEqual(integrationRows(page).slice(1), [["acme-org", "2 repositories"]]);
   assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
   assert.equal(foldOn(org).getAttribute("aria-expanded"), "true");
   assert.deepEqual(foldLines(org), ["relay", "site"]);
-  const labs = rowNamed(group, "acme-labs");
-  assert.deepEqual(foldLines(labs), []);
-  assert.equal(labs.querySelector("button"), null);
 });
 
-test("an account given every repository says All N and opens on six lines before Show all, one given a selection says N selected, named and found by the login GitHub holds now, and one the service says nothing of says the count alone", async () => {
+test("an account given every repository says All N and opens on six lines before Show all, and one given a selection, named and found by the login GitHub holds now, or one the service says nothing of, says the count alone", async () => {
   const shown = Array.from({ length: 8 }, (_, at) => `acme-org/r${at + 1}`);
   githubRepositories = [...shown, "acme-labs-renamed/one", "acme-tools/a", "acme-tools/b"];
   listedInstallations = [
@@ -1676,17 +1665,10 @@ test("an account given every repository says All N and opens on six lines before
   const org = rowNamed(githubGroup(page), "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [
-    ["acme-org", "Connected All 8 repositories"],
-    ["acme-labs-renamed", "Connected 1 selected repository"],
-    ["acme-tools", "Connected 2 repositories"],
+    ["acme-org", "All 8 repositories"],
+    ["acme-labs-renamed", "1 repository"],
+    ["acme-tools", "2 repositories"],
   ]);
-  assert.deepEqual(
-    [...(org.querySelector(".ui-settings-row-description .ui-inline")?.children ?? [])].map(
-      (fact) => fact.textContent,
-    ),
-    ["Connected ", "All\u00a08\u00a0repositories "],
-    "each fact is whole, with no dot to strew at a line's edge",
-  );
   assert.deepEqual(foldLines(org), [], "more than five start folded");
   act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), [
@@ -1700,27 +1682,24 @@ test("an account given every repository says All N and opens on six lines before
   );
 });
 
-test("while the repositories are read each active account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {
+test("while the repositories are read each account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {
   repositoriesReadHeld = true;
   const reading = await mount(SEVERAL);
-  assert.deepEqual(integrationRows(reading.page).slice(1), [
-    ["acme-org", "Connected Reading repositories"],
-    ["acme-labs", "Suspended or removed on GitHub."],
-  ]);
+  assert.deepEqual(integrationRows(reading.page).slice(1), [["acme-org", "Reading repositories"]]);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   repositoriesReadHeld = false;
   repositoriesReadFails = true;
   const { page } = await mount(SEVERAL);
   const group = githubGroup(page);
-  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected"]]);
+  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", undefined]]);
   assert.equal(group.textContent?.includes("Repositories could not be read."), true);
 
   repositoriesReadFails = false;
   githubRepositories = ["acme-org/relay"];
   act(() => button(group, "Retry").click());
   await settle();
-  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "Connected 1 repository"]]);
+  assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", "1 repository"]]);
   assert.equal(group.textContent?.includes("Repositories could not be read."), false);
 });
 
@@ -1742,7 +1721,7 @@ test("a service from before several connections names one GitHub account alone, 
 
   assert.deepEqual(integrationRows(page), [
     ["GitHub", undefined],
-    ["acme-org", "Connected 0 repositories"],
+    ["acme-org", "0 repositories"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
 });
@@ -1778,9 +1757,12 @@ test("a GitHub page the browser could not open is said under the row, from Manag
   }
 });
 
-test("an owner or an admin of a workspace with no GitHub is offered Connect beside Add repository, which opens the same connect", async () => {
+test("an owner or an admin of a workspace with no GitHub, or none still active, is offered Connect beside Add repository, which opens the same connect", async () => {
+  // Note that the admin's workspace holds one installation GitHub suspended or removed, which counts as none.
+  const inactive = [{ installationId: 12, login: "acme-labs", active: false }];
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
-    const { page } = await mount({ ...ACME, role, githubInstallations: [] });
+    const installations = role === WORKSPACE_ROLE.ADMIN ? inactive : [];
+    const { page } = await mount({ ...ACME, role, githubInstallations: installations });
     const row = rowNamed(page, "GitHub");
 
     assert.deepEqual(rowWords(row), ["GitHub", "Not connected."]);
@@ -1803,8 +1785,7 @@ test("a member reads every account connected, or is told to ask an owner or admi
 
   assert.deepEqual(integrationRows(connected.page), [
     ["GitHub", MANAGED_ON_GITHUB],
-    ["acme-org", "Connected 0 repositories"],
-    ["acme-labs", "Suspended or removed on GitHub."],
+    ["acme-org", "0 repositories"],
   ]);
   assert.deepEqual(integrationRows(unconnected.page), [
     ["GitHub", "Not connected. Ask an owner or admin."],
@@ -1821,24 +1802,26 @@ test("a member reads every account connected, or is told to ask an owner or admi
   }
 });
 
-test("the repositories members added on their tokens stand under GitHub's accounts marked Token, with Remove where the service says the reader may, and a removal lists what the service answers", async () => {
+test("the repositories members added on their tokens stand by owner after the App's accounts, each owner a row like theirs, its ⋯ removing what the reader may after asking, and no ⋯ where they may remove none", async () => {
   tokenRepositories = [
-    { fullName: "octo-member/side", addedBy: MEMBER.userId, addedAt: 2, removable: false },
-    { fullName: "acme/relay", addedBy: READER_ID, addedAt: 1, removable: true },
+    { fullName: "octo-member/side", addedBy: MEMBER.userId, addedAt: 3, removable: false },
+    { fullName: "acme/relay", addedBy: READER_ID, addedAt: 2, removable: true },
+    { fullName: "ACME/notes", addedBy: READER_ID, addedAt: 1, removable: true },
   ];
   const { page } = await mount(SEVERAL);
   const group = githubGroup(page);
 
-  assert.deepEqual(
-    integrationRows(page).map(([name]) => name),
-    ["GitHub", "acme-org", "acme-labs", "octo-member/side", "acme/relay"],
-  );
-  for (const name of ["octo-member/side", "acme/relay"]) {
-    assert.equal(rowNamed(group, name).querySelector(".ui-badge")?.textContent, "Token");
-  }
-  assert.deepEqual(rowButtons(rowNamed(group, "octo-member/side")), []);
+  assert.deepEqual(integrationRows(page), [
+    ["GitHub", undefined],
+    ["acme-org", "0 repositories"],
+    ["acme", "2 repositories"],
+    ["octo-member", "1 repository"],
+  ]);
+  assert.deepEqual(foldLines(rowNamed(group, "acme")), ["relay", "notes"]);
+  assert.deepEqual(rowActions(rowNamed(group, "octo-member")), []);
+  assert.deepEqual(rowActions(rowNamed(group, "acme")), ["Remove relay", "Remove notes"]);
 
-  act(() => button(rowNamed(group, "acme/relay"), "Remove").click());
+  await chooseAction(rowNamed(group, "acme"), "Remove relay");
   const asked = sent.some((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET);
   // The repository goes for every member's agents, so its removal asks first, in the accent.
   act(() => button(dialog(), "Remove").click());
@@ -1851,10 +1834,10 @@ test("the repositories members added on their tokens stand under GitHub's accoun
       .map((one) => one.payload),
     [{ workspaceId: SEVERAL.id, repository: "acme/relay", added: false }],
   );
-  assert.deepEqual(
-    integrationRows(page).map(([name]) => name),
-    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
-  );
+  assert.deepEqual(integrationRows(page).slice(2), [
+    ["ACME", "1 repository"],
+    ["octo-member", "1 repository"],
+  ]);
 });
 
 test("Add repository offers the repositories the reader's own token may push to that the workspace lists nowhere yet, and a pick adds one", async () => {
@@ -1879,10 +1862,7 @@ test("Add repository offers the repositories the reader's own token may push to 
       .map((one) => one.payload),
     [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
   );
-  assert.equal(
-    rowNamed(githubGroup(page), "octo-member/side").querySelector(".ui-badge")?.textContent,
-    "Token",
-  );
+  assert.deepEqual(foldLines(rowNamed(githubGroup(page), "octo-member")), ["side", "notes"]);
 });
 
 test("Add repository offers the token's repositories from a service older than addable, which lists them among the picker's own", async () => {
@@ -1979,7 +1959,7 @@ test("the token repositories say Reading while they are read, and a refused read
   assert.doesNotMatch(page.textContent ?? "", /Reading token|token repositories could not/u);
   assert.deepEqual(
     integrationRows(page).map(([name]) => name),
-    ["GitHub", "acme-org", "acme-labs"],
+    ["GitHub", "acme-org"],
     "the retry read a workspace with none",
   );
 });

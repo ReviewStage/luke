@@ -9,6 +9,7 @@ import {
   Inline,
   JUSTIFY,
   MARK_PROVIDER,
+  MoreButton,
   PlusIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -60,7 +61,7 @@ import { CatalogSection } from "../section";
  * its row with a refusal under that, and accounts indented under their
  * provider's row; and accounts that fold their repositories open under
  * their words, one open from the start with a long name among them, one
- * folded with Show all at its foot, at a page's measure and
+ * folded with Show all at its foot, one with a ⋯ after its chevron, at a page's measure and
  * narrower than 380px.
  */
 
@@ -344,16 +345,6 @@ function ListRows(): React.JSX.Element {
   );
 }
 
-/** A connected account's line: Connected, and how many repositories it gave. */
-function AccountLine({ count }: { count: string }): React.JSX.Element {
-  return (
-    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} wrap>
-      <span>Connected · </span>
-      <span>{count}</span>
-    </SettingsRowStateLine>
-  );
-}
-
 /** Accounts under their provider's row that fold their repositories open under their words. */
 function FoldRows(): React.JSX.Element {
   return (
@@ -364,7 +355,7 @@ function FoldRows(): React.JSX.Element {
       <SettingsFoldRow
         indent={SETTINGS_ROW_INDENT.MARK}
         label="ada-lovelace"
-        description={<AccountLine count="3 selected repositories" />}
+        description="3 repositories"
         leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
         foldLabel="ada-lovelace's repositories"
         defaultOpen
@@ -378,7 +369,7 @@ function FoldRows(): React.JSX.Element {
       <SettingsFoldRow
         indent={SETTINGS_ROW_INDENT.MARK}
         label="analytical-engine"
-        description={<AccountLine count="All 24 repositories" />}
+        description="All 24 repositories"
         leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
         foldLabel="analytical-engine's repositories"
       >
@@ -389,6 +380,18 @@ function FoldRows(): React.JSX.Element {
             Show all 24
           </TextButton>
         </SettingsFoldFoot>
+      </SettingsFoldRow>
+      <SettingsFoldRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="byron"
+        description="2 repositories"
+        leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+        foldLabel="byron's repositories"
+        defaultOpen
+        actions={() => <MoreButton thing="byron" />}
+      >
+        <SettingsFoldLine>poems</SettingsFoldLine>
+        <SettingsFoldLine>letters</SettingsFoldLine>
       </SettingsFoldRow>
     </SettingsSection>
   );

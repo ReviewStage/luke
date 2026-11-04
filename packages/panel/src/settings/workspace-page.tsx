@@ -113,7 +113,7 @@ import { SwitchRow } from "./switch-row.js";
 import { GitHubAccountRows, type ShownConnection } from "./workspace-github-accounts.js";
 import {
   AddTokenRepository,
-  TokenRepositoryRows,
+  TokenOwnerRows,
   useTokenRepositories,
 } from "./workspace-token-repositories.js";
 
@@ -138,9 +138,10 @@ import {
  * connects for everyone, named apart from the account's own Integrations
  * page, each drawn as Settings › Integrations draws its rows. GitHub,
  * the one place a workspace's repositories are set: every GitHub
- * account whose installation of our GitHub App is connected, each
- * inset under GitHub's row with its picture on GitHub, Connected with the
- * repositories it gave the App folded under it, or suspended
+ * account whose installation of our GitHub App is connected and active,
+ * then every owner of a repository a member added on their own token, each
+ * the same row inset under GitHub's, its picture on GitHub, its count of
+ * repositories, and their names folded under it
  * (`workspace-github-accounts.tsx`);
  * an owner or an admin connects the first with Connect, and once one is,
  * Manage on GitHub opens the one GitHub page that both adds an account and
@@ -1162,13 +1163,16 @@ function Invitations({
 }
 
 /**
- * The GitHub accounts connected to the workspace, the first linked first:
- * every one a service with several lists, else the one a service from
- * before them names.
+ * The GitHub accounts connected to the workspace and active, the first
+ * linked first: every one a service with several lists, else the one a
+ * service from before them names. Note that one suspended or removed on
+ * GitHub counts as none, because the store never forgets a removed one and
+ * agents reach nothing through it.
  */
 function connectionsOf(workspace: Workspace): readonly ShownConnection[] {
-  if (workspace.githubInstallations !== undefined) return workspace.githubInstallations;
-  return workspace.github === null ? [] : [workspace.github];
+  const listed =
+    workspace.githubInstallations ?? (workspace.github === null ? [] : [workspace.github]);
+  return listed.filter((connection) => connection.active);
 }
 
 /**
@@ -1255,9 +1259,10 @@ function ManagedGitHub({
 /**
  * The workspace's GitHub: an owner's or an admin's to connect, and for a
  * member, read only, or the ask to have it; then every account connected,
- * the same for both, and every repository a member added on their own
- * token (`workspace-token-repositories.tsx`), which a member whose own
- * token is saved adds from GitHub's row, and none else is offered it.
+ * the same for both, and every owner of a repository a member added on
+ * their own token (`workspace-token-repositories.tsx`), which a member
+ * whose own token is saved adds from GitHub's row, and none else is
+ * offered it.
  */
 function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Element {
   const connections = connectionsOf(workspace);
@@ -1292,7 +1297,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
         </SettingsRow>
       )}
       <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
-      <TokenRepositoryRows repositories={repositories} />
+      <TokenOwnerRows repositories={repositories} />
     </>
   );
 }

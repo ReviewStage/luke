@@ -8,14 +8,14 @@ import {
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
 import { OneLine } from "../one-line/one-line.js";
-import { SettingsRow, type SettingsRowIndent } from "./settings-row.js";
+import { SettingsRow, type SettingsRowControl, type SettingsRowIndent } from "./settings-row.js";
 
 /**
  * settings-row-fold.tsx -- a settings row that folds open what it owns under its words, a line each, as a GitHub account its repositories.
  *
- * The row is `SettingsRow` as it stands, its one press the chevron at its
- * end, a quiet `IconButton` where another row holds its ⋯, which turns as
- * the fold opens and says whether it is open in `aria-expanded`. The fold
+ * The row is `SettingsRow` as it stands, its chevron at its end, a quiet
+ * `IconButton` before any ⋯ the row holds, which turns as the fold opens and
+ * says whether it is open in `aria-expanded`. The fold
  * stands in the row's own `below`, inside the row's rule and inset to its
  * words, so what it holds reads as part of the row rather than a box of its
  * own in the card. It opens and closes on the disclosure's motion
@@ -31,7 +31,8 @@ import { SettingsRow, type SettingsRowIndent } from "./settings-row.js";
 
 /**
  * A row named `label` that folds `children` open under its words, its
- * chevron named `foldLabel`, open at first where `defaultOpen` says.
+ * chevron named `foldLabel`, open at first where `defaultOpen` says, and
+ * the row's other controls, such as its ⋯, after the chevron at its end.
  */
 export function SettingsFoldRow({
   label,
@@ -40,6 +41,7 @@ export function SettingsFoldRow({
   indent,
   foldLabel,
   defaultOpen = false,
+  actions,
   children,
 }: {
   label: ReactNode;
@@ -50,6 +52,8 @@ export function SettingsFoldRow({
   /** The chevron's name, which a sighted reader has from the row ("Repositories of acme"). */
   foldLabel: string;
   defaultOpen?: boolean | undefined;
+  /** The row's other controls, handed its ids, standing after the chevron. */
+  actions?: ((control: SettingsRowControl) => ReactNode) | undefined;
   /** The fold's lines. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -78,13 +82,16 @@ export function SettingsFoldRow({
             : undefined
         }
       >
-        {() => (
-          <IconButton
-            icon={<DisclosureChevron />}
-            label={foldLabel}
-            aria-expanded={state.open}
-            onClick={state.toggle}
-          />
+        {(control) => (
+          <>
+            <IconButton
+              icon={<DisclosureChevron />}
+              label={foldLabel}
+              aria-expanded={state.open}
+              onClick={state.toggle}
+            />
+            {actions?.(control)}
+          </>
         )}
       </SettingsRow>
     </DisclosureScope>
