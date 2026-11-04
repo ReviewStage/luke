@@ -57,7 +57,6 @@ const READS: readonly Read[] = [
   read(ACT_KIND.AGENTS_MODELS, undefined),
   read(ACT_KIND.AGENTS_DEFAULT_READ, undefined),
   read(ACT_KIND.CHAPTERS_MODEL_READ, undefined),
-  read(ACT_KIND.WORKSPACE_MEMBERS_READ, ACME),
   read(ACT_KIND.WORKSPACE_INVITATIONS_READ, ACME),
   read(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, ACME),
   read(ACT_KIND.WORKSPACE_SENTRY_READ, ACME),
@@ -186,7 +185,7 @@ test("Admin's Overview answers the window and the scope its controls ask for, it
   assert.ok(everyone.users.total > byDefault.users.total);
 });
 
-test("a signed-in profile lays the synthetic account, an admin, over main's signed-out document; any other leaves it as it is", () => {
+test("a signed-in profile lays the synthetic account, an admin, over main's signed-out document; any other leaves its account and access as they are", () => {
   const { run } = stateWith({}, {});
   const signedOut = stateWith({}, { account: { status: "signed-out" }, access: { admin: false } });
   const staged = fixtureAppState({
@@ -198,7 +197,9 @@ test("a signed-in profile lays the synthetic account, an admin, over main's sign
   assert.equal(staged.account.status, "signed-in");
   assert.equal(staged.access.admin, true);
   assert.equal(staged.settings?.experiments.memory, true);
-  assert.equal(fixtureAppState(tasks), tasks);
+  const other = fixtureAppState(tasks);
+  assert.equal(other.account, tasks.account);
+  assert.equal(other.access, tasks.access);
 });
 
 test("a profile that stages no account answers none of its pages' reads itself", () => {

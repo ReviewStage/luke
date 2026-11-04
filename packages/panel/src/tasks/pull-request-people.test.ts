@@ -12,7 +12,6 @@ import {
   REVIEW_STATE,
 } from "@repo/features/agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
-import { ACT_KIND } from "@repo/host/acts";
 import { Tooltip } from "@repo/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -22,6 +21,7 @@ import { tabCard } from "../desktop/tab-card.js";
 import { MemberDirectory } from "../member-directory.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { handMembers } from "../testing/app-state.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -93,7 +93,8 @@ let root: Root | undefined;
 
 beforeEach(() => {
   fakeAppBridge({});
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]) });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [CHARLES] } }));
 });
 
 afterEach(() => {

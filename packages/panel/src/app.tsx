@@ -74,6 +74,7 @@ import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { usePlanWordsUnsaved } from "./tasks/use-plan-editing.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { ToastHost } from "./toast.js";
+import { forgetUndo, redoLast, undoLast, useUndoWaits } from "./undo-stack.js";
 import { useUpdatedToast } from "./update-toast.js";
 import {
   APP_SETTINGS_VIEW,
@@ -213,12 +214,13 @@ function AppWindow(): React.JSX.Element {
   const inbox = useAppSlice(APP_SLICE.INBOX);
   const unseenAgents = useAppSlice(UNSEEN_AGENTS);
   const settingsHeld = useAppSlice(SETTINGS_HELD);
-  // A picture, and a link's answer, is read as the account signed in, so the window lets go of every one it read once that account changes.
+  // A picture, and a link's answer, is read as the account signed in, so the window lets go of every one it read once that account changes, and of every write it would undo, which is its presser's own.
   const accountKey =
     account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined;
   useEffect(() => {
     forgetPictures();
     forgetStandings();
+    forgetUndo();
   }, [accountKey]);
   // A draft is its account's: the window reads the unsent words of the one signed in alone.
   useDraftsOwner(account?.status === ACCOUNT_STATUS.SIGNED_IN ? account : undefined);
@@ -333,6 +335,13 @@ function AppWindow(): React.JSX.Element {
     setFeedbackAbout(undefined);
     setFeedbackKind(FEEDBACK_KIND.PROMPT);
   });
+
+  // ⌘Z and ⇧⌘Z take back and put back the reader's last row write, offered
+  // only while one waits, so a field's typing, or nothing to undo, falls
+  // through to the menu bar's Edit items.
+  const undo = useUndoWaits();
+  useAppCommand(APP_COMMAND.UNDO, undo.undoes ? () => void undoLast() : undefined);
+  useAppCommand(APP_COMMAND.REDO, undo.redoes ? () => void redoLast() : undefined);
 
   // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
   useWindowZoom(useAppSlice(ZOOM), (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));

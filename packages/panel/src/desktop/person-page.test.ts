@@ -24,7 +24,12 @@ import {
 import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import { type AppHostRead, type AppInboxItems, UNREAD } from "@repo/host/app-state";
+import {
+  type AppHostRead,
+  type AppInboxItems,
+  type AppWorkspaceMembersRead,
+  UNREAD,
+} from "@repo/host/app-state";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -33,9 +38,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handHostReads, handState, holdAutomations } from "../testing/app-state.js";
+import {
+  type HostReadsHanded,
+  handHostReads,
+  handState,
+  holdAutomations,
+  holdMembers,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { longPress, underAFinger } from "../testing/finger.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -224,13 +235,11 @@ let automationsRefused = false;
 let inboxHeld = false;
 /** Whether the automations' reads are still out, answering nothing yet. */
 let automationsHeld = false;
-/** Whether the members read is held until the test answers it with `answerMembers`. */
+/** Whether the workspace's people are held back until the test lays them with `answerMembers`. */
 let membersHeld = false;
-/** Whether the members read is refused, as a read that failed is. */
+/** Whether the read of the workspace's people is refused, as a read that failed is. */
 let membersRefused = false;
-/** Whether the read of who left is refused, as a read that failed is. */
-let formerRefused = false;
-/** Answers the held members read with the fixture's members. */
+/** Lays the held-back people on the document, the fixture's members and who left. */
 let answerMembers: () => void = () => undefined;
 /** Every text the page asked the window to copy, in order. */
 let copied: string[] = [];
@@ -242,20 +251,11 @@ beforeEach(() => {
   automationsHeld = false;
   membersHeld = false;
   membersRefused = false;
-  formerRefused = false;
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
-      if (membersHeld) {
-        return new Promise((resolve) => {
-          answerMembers = () => resolve(MEMBERS);
-        });
-      }
-      return membersRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(MEMBERS);
-    },
     // An agent read by its own id stands at rest, as its page reads it.
     [ACT_KIND.AGENTS_PAGE]: ({ agentId }: { agentId: string }) =>
       Promise.resolve({
@@ -274,8 +274,6 @@ beforeEach(() => {
           startedBy: CHARLES,
         },
       }),
-    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () =>
-      formerRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(FORMER),
   });
 });
 
@@ -308,6 +306,28 @@ function feedNow(): AppHostRead<AppInboxItems> {
   };
 }
 
+/**
+ * The workspace's people as the host holds them once the page holds them:
+ * held back until `answerMembers` where the test holds them, refused where
+ * it refuses them, and laid anew by Try again.
+ */
+function holdPeople(deliver: HostReadsHanded["deliverMembers"]): void {
+  const people = (): AppWorkspaceMembersRead =>
+    membersRefused ? { failed: true } : { rows: { members: MEMBERS, former: FORMER } };
+  holdMembers(deliver, (workspaceId) => {
+    if (!membersHeld) return people();
+    answerMembers = () => deliver({ [workspaceId]: people() });
+    return undefined;
+  });
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.WORKSPACE_MEMBERS_RETRY]: ({ workspaceId }) => {
+      deliver({ [workspaceId]: people() });
+      return Promise.resolve();
+    },
+  });
+}
+
 function mount(userId: string, name?: string, memberCount = MEMBERS.length) {
   return mountWith({}, userId, name, memberCount);
 }
@@ -329,6 +349,7 @@ function mountWith(
       return automationsRefused ? { failed: true } : { rows: AUTOMATIONS };
     },
   });
+  holdPeople(reads.deliverMembers);
   const control = (more: Partial<TasksControl>) =>
     tasksControl({
       me: DEAN.userId,
@@ -846,7 +867,7 @@ test("a page opened by a member's id alone stands a placeholder head while the m
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
 });
 
-test("a members read that was refused says so and offers Retry in the head's place, and Retry names them", async () => {
+test("a read of the workspace's people that was refused says so and offers Retry in the head's place, and Retry names them", async () => {
   membersRefused = true;
   const { page } = mount("user-sam");
   await settle();
@@ -863,22 +884,6 @@ test("a members read that was refused says so and offers Retry in the head's pla
   assert.doesNotMatch(page.textContent ?? "", /could not be read/u);
   assert.deepEqual(head(page), ["Sam Ortiz", "Member · sam@example.com"]);
   assert.deepEqual(titles(page), ["Sam Ortiz"]);
-});
-
-test("a read of who left that was refused says so and offers Retry, and Retry names them as a former member", async () => {
-  formerRefused = true;
-  const { page } = mount(OLA.userId);
-  await settle();
-
-  assert.match(page.textContent ?? "", /Their profile could not be read\./u);
-  assert.deepEqual(waits(page), []);
-  assert.doesNotMatch(page.textContent ?? "", /Not found/u);
-
-  formerRefused = false;
-  act(() => button(page, "Retry").click());
-  await settle();
-
-  assert.deepEqual(head(page), [OLA.name, "Former member"]);
 });
 
 test("while the task list is read, placeholder rows stand for their tasks and the page is never called empty", async () => {

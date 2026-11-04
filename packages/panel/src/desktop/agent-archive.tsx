@@ -164,7 +164,7 @@ export function useAgentArchive(
   });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => agents.onArchive(agent.id, true).then(heard),
+    () => agents.onArchive(agent.id, true, { asked: true }).then(heard),
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);

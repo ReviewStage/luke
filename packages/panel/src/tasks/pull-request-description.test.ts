@@ -29,6 +29,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { handMembers } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -128,7 +129,6 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({});
   fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([]),
     [ACT_KIND.AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
       changes.push(request);
       if (
@@ -141,6 +141,7 @@ beforeEach(() => {
       return (changeHeld ?? Promise.resolve()).then(() => answer);
     },
   });
+  handMembers(() => ({ rows: { members: [] } }));
 });
 
 afterEach(() => {

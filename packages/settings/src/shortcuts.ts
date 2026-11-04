@@ -102,6 +102,8 @@ export const APP_COMMAND = {
   INSERT_PICTURE: "insert-picture",
   NEXT_RECENT_TAB: "next-recent-tab",
   PREVIOUS_RECENT_TAB: "previous-recent-tab",
+  UNDO: "undo",
+  REDO: "redo",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -197,6 +199,8 @@ export const SHORTCUT_KEY = {
   // ⌘E, ⇧⌘X, and the digits but 0 are the writing chords' own (`WRITING_SHORTCUTS`); no app command holds them.
   E: { accelerator: "E", glyph: "E", key: "e", code: "KeyE" },
   X: { accelerator: "X", glyph: "X", key: "x", code: "KeyX" },
+  // ⌘Z and ⇧⌘Z are a field's own undo and redo, which the keymap leaves to it.
+  Z: { accelerator: "Z", glyph: "Z", key: "z", code: "KeyZ", editsText: true },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
   TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
@@ -397,8 +401,9 @@ export interface AppShortcut {
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
  * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
  * words selected as Google Docs has it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
- * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
- * browser has them.
+ * found, as every Mac app has them, ⌘+, ⌘−, and ⌘0 to zoom as every
+ * browser has them, and ⌘Z and ⇧⌘Z to undo and redo as every Mac app has
+ * them.
  *
  * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, ⌃⌘F, and ⌘R,
  * which every Mac app answers through the menu bar's standard items, ⌘R
@@ -647,6 +652,9 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.TAB, control: true, shift: true, switching: true },
     capability: HOST_CAPABILITY.DESKTOP_APP,
   },
+  // Note that Undo and Redo take back and put back the reader's last row write in this window, a pin or a status, and only outside a field, whose typing they leave to it; the menu bar's Edit items stay the field's own.
+  [APP_COMMAND.UNDO]: { label: "Undo", chord: { key: SHORTCUT_KEY.Z } },
+  [APP_COMMAND.REDO]: { label: "Redo", chord: { key: SHORTCUT_KEY.Z, shift: true } },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /**
@@ -786,6 +794,8 @@ export const APP_SHORTCUT_GROUPS = [
     keys: [IN_CONTEXT_KEY.STEP_BACK],
     commands: [
       APP_COMMAND.COMMAND_PALETTE,
+      APP_COMMAND.UNDO,
+      APP_COMMAND.REDO,
       APP_COMMAND.SETTINGS,
       APP_COMMAND.KEYBOARD_SHORTCUTS,
       APP_COMMAND.FIND,
