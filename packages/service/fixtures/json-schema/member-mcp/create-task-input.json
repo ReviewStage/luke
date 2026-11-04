@@ -1,0 +1,111 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace to list, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "The task's name, as the developer would name it in the sidebar."
+    },
+    "repository": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 140
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The GitHub repository its agents work in, as owner/name, which the workspace's GitHub installation must reach; null or left out for none, or the parent's where you give a parent."
+    },
+    "brief": {
+      "type": "string",
+      "maxLength": 16000,
+      "description": "The developer's own words about the task, which Vespin is handed when they open a call on it; their words where they gave them, left out otherwise."
+    },
+    "plan": {
+      "type": "string",
+      "maxLength": 200000,
+      "description": "The plan's body to start it with, as Markdown under its sections' ## headings, without the # title, which the task's name is; an agent started on it with no prompt is handed it. Left out, it starts empty."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "backlog",
+        "todo",
+        "in-progress",
+        "done",
+        "canceled"
+      ],
+      "description": "Where the task stands: backlog for work filed for later; todo where left out."
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "none",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "How much the task matters; none for a task no one has weighed yet."
+    },
+    "assignee": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The member the task is assigned to, who is on it now, by their mention link as list_tasks or another read names them, `[@Name](https://vespin.dev/<workspace>/person/<id>)`, or its address alone; a member of the task's workspace. null for no one."
+    },
+    "parentTaskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The task to make it a child of, by the id list_tasks answered: a part of that task's work, which works in its repository and runs on its machine. Left out, it stands at the top."
+    },
+    "relation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "blocked-by",
+            "blocks",
+            "sub-task-of",
+            "parent-of"
+          ],
+          "description": "How the new task stands to the other, from the new task's side: blocked-by, it waits on the other's work; blocks, the other waits on its work; sub-task-of, a child of the other, as parentTaskId makes one; parent-of, the other's parent, refused where the other has a parent already."
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36,
+          "description": "The other task, of your workspace, by the id list_tasks answered."
+        }
+      },
+      "required": [
+        "kind",
+        "taskId"
+      ],
+      "additionalProperties": false,
+      "description": "Another task of your workspace the new task starts related to, written with it so both land together. A sub-task-of or parent-of takes the other task's repository, so leave repository out, and another is refused; a block takes nothing of it. Not beside parentTaskId; left out, it starts related to none."
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}

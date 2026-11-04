@@ -1,3 +1,4 @@
+import { accountPictureAt } from "@repo/features/account-picture";
 import type { AdminUserDetail } from "@repo/features/admin-answer-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@repo/features/admin-wire";
 import { formatCount } from "@repo/features/number-format";
@@ -8,6 +9,8 @@ import {
   Badge,
   GAP,
   Inline,
+  PICTURE_TILE_FACE,
+  PictureTile,
   SKELETON_SHAPE,
   Skeleton,
   STATUS_TONE,
@@ -19,7 +22,9 @@ import {
 } from "@repo/ui";
 import { accountLabel } from "@repo/ui/account-initials";
 import { signInMethodLabel } from "@repo/ui/admin-format";
+import { useState } from "react";
 import { NOT_FOUND_THING, NotFound } from "../../not-found.js";
+import { AttachmentViewer } from "../../tasks/attachment-viewer.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
 import { ActivityCalendar, ActivityCalendarSkeleton } from "../charts/activity-calendar.js";
@@ -50,6 +55,12 @@ const SKELETON_AVATAR_WIDTH = "56px";
 const SKELETON_EMAIL_WIDTH = "224px";
 
 const SKELETON_JOINED_WIDTH = "160px";
+
+/** The size, in device pixels, an account's photo is asked for at to be enlarged, which its provider answers at up to the photo's own. */
+const ENLARGED_PHOTO_PIXELS = 512;
+
+/** What the viewer takes an account's photo as: some picture, its exact type its provider's to say. */
+const PHOTO_MEDIA_TYPE = "image/*";
 
 /** What the usage chart is headed. */
 const USAGE_LABEL = "This account's calls per day";
@@ -133,19 +144,55 @@ function MastheadFrame({
   );
 }
 
+/**
+ * The account's avatar, which, where the account has a photo that loads,
+ * enlarges it over the window when pressed, as a picture in a transcript
+ * opens: the window's file viewer (`attachment-viewer.tsx`) grown from the
+ * disc, showing the photo asked for at a viewer's size rather than the disc's.
+ */
+function MastheadAvatar({ account }: { account: ViewerAccount }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const avatar = (
+    <AccountAvatar account={account} size={AVATAR_SIZE.MASTHEAD} onFail={() => setFailed(true)} />
+  );
+  // Note that a photo that failed stands as the letter, which has nothing to enlarge.
+  if (account.image === undefined || failed) return avatar;
+  const label = accountLabel(account);
+  const photo = {
+    name: label,
+    mediaType: PHOTO_MEDIA_TYPE,
+    url: accountPictureAt(account.image, ENLARGED_PHOTO_PIXELS),
+  };
+  return (
+    <>
+      <PictureTile name={label} face={PICTURE_TILE_FACE.ROUND} onOpen={() => setOpen(true)}>
+        {avatar}
+      </PictureTile>
+      {open ? (
+        <AttachmentViewer
+          files={[photo]}
+          at={0}
+          onAt={() => undefined}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
 /** Who the account is: its avatar, its email with an admin's badge, and when it joined, was last seen, and signs in with. */
 function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
   const subject = detail.account;
   return (
     <MastheadFrame
       avatar={
-        <AccountAvatar
+        <MastheadAvatar
           account={{
             name: subject.name,
             email: subject.email,
             image: subject.image ?? undefined,
           }}
-          size={AVATAR_SIZE.MASTHEAD}
         />
       }
       email={

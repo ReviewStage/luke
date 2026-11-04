@@ -1,5 +1,6 @@
 import {
   type LiveStatement,
+  liveKeysIn,
   liveSelection,
   liveStatementOf,
 } from "@repo/database/core/live-statement";
@@ -15,8 +16,23 @@ import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { automationRun } from "@repo/database/schemas/automation";
 import { task } from "@repo/database/schemas/task";
+import { taskBlock } from "@repo/database/schemas/task-block";
+import { TOPIC } from "@repo/database/sync/notification";
+import {
+  agentPinSync,
+  agentSync,
+  automationRunSync,
+  conversationsSync,
+  deviceSync,
+  messagesSync,
+  taskBlockSync,
+  taskPinSync,
+  taskSync,
+  turnsSync,
+  userSync,
+} from "@repo/database/sync/tables";
 import { AGENT_BRIEF, AGENT_KIND } from "@repo/features/agent-wire";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Option } from "effect";
 import {
@@ -25,6 +41,7 @@ import {
   latestTurnOf,
   sessionEndedOf,
 } from "../live/agent-standing.js";
+import type { SyncMoved } from "../sync/live-query.js";
 
 /**
  * task-list-live.ts -- the plan list written for Neon Realtime: the plans the account reaches, and every agent of them and with no plan, with what the list reads each agent's status from.
@@ -44,6 +61,14 @@ import {
  * instant as epoch milliseconds. Nothing here reads the clock: an agent's
  * status, which turns on it, is the reader's to read, and so is the order,
  * since Realtime keeps none.
+ *
+ * A reader past a sync id is read the same statements narrowed to the rows
+ * what moved could move (`taskListDeltaStatements`): a plan whose own row,
+ * pin, or block moved, that a moved plan blocks, or that names a moved
+ * member, and an agent whose own row or pin moved, whose turn or
+ * conversation moved, whose plan moved, that names a moved member or Mac,
+ * or that a moved pilot or run started. Each keeps its rule of who reads it,
+ * so a key another workspace's write moved reads no row.
  */
 
 const starter = alias(user, "starter");
@@ -67,7 +92,7 @@ export interface TaskListLiveStatements {
  * the minimum supported desktop version, not with a service deploy, since a
  * desktop stays old far longer than a service build runs.
  */
-function tasksStatement(userId: string) {
+function tasksStatement(userId: string, narrowed: SQL = sql`true`) {
   return queryBuilder
     .select(
       liveSelection(
@@ -103,7 +128,7 @@ function tasksStatement(userId: string) {
     .leftJoin(taskPin, and(eq(taskPin.taskId, task.id), eq(taskPin.userId, userId)))
     .leftJoin(user, eq(user.id, task.userId))
     .leftJoin(assignee, eq(assignee.id, task.assigneeId))
-    .where(taskReachableBy(userId));
+    .where(and(taskReachableBy(userId), narrowed));
 }
 
 /**
@@ -127,7 +152,7 @@ function issuesStatement() {
  * because a beat wakes nothing (`deviceSync`) and a window judges a Mac by
  * its own presence read. Note too that a pilot is said by a column of its own.
  */
-function agentsStatement(userId: string) {
+function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
   const latest = latestTurnOf(agentTable.conversationId, "latest_turn");
   return queryBuilder
     .select(
@@ -199,8 +224,59 @@ function agentsStatement(userId: string) {
     .leftJoinLateral(latest, sql`true`)
     .where(
       // An agent on a task is listed only where the account reaches the task too, as a read of it by its id is.
-      agentVisibleTo(userId),
+      and(agentVisibleTo(userId), narrowed),
     );
+}
+
+/** The plans what moved could move: their own rows, the reader's pins, a block either way, a plan a moved plan blocks, and a plan naming a moved member. */
+function movedPlans(moved: SyncMoved): SQL {
+  const plans = moved.keys(taskSync, task.id);
+  const members = moved.keys(userSync, user.id);
+  const blockedByMoved = sql`(${queryBuilder
+    .select({ id: taskBlock.blockedTaskId })
+    .from(taskBlock)
+    .where(liveKeysIn(taskBlock.blockerTaskId, plans))})`;
+  return (
+    or(
+      liveKeysIn(task.id, [
+        ...plans,
+        ...moved.keys(taskPinSync, taskPin.taskId),
+        ...moved.keys(taskBlockSync, taskBlock.blockedTaskId),
+      ]),
+      sql`${task.id} in ${blockedByMoved}`,
+      liveKeysIn(task.userId, members),
+      liveKeysIn(task.assigneeId, members),
+    ) ?? sql`false`
+  );
+}
+
+/**
+ * The agents what moved could move: their own rows and the reader's pins,
+ * those whose turn or conversation moved, those of a moved plan, those
+ * naming a moved member or Mac, and those a moved pilot or run started.
+ */
+function movedAgents(moved: SyncMoved): SQL {
+  const agents = moved.keys(agentSync, agentTable.id);
+  const members = moved.keys(userSync, user.id);
+  return (
+    or(
+      liveKeysIn(agentTable.id, [
+        ...agents,
+        ...moved.keys(agentPinSync, agentPin.agentId),
+        ...moved.topics(turnsSync, TOPIC.AGENT),
+      ]),
+      liveKeysIn(agentTable.conversationId, [
+        ...moved.topics(messagesSync, TOPIC.CONVERSATION),
+        ...moved.topics(conversationsSync, TOPIC.CONVERSATION),
+      ]),
+      liveKeysIn(agentTable.taskId, moved.keys(taskSync, task.id)),
+      liveKeysIn(agentTable.userId, members),
+      liveKeysIn(sql`${agentTable.archivedBy} ->> 'userId'`, members),
+      liveKeysIn(agentTable.deviceId, moved.keys(deviceSync, device.id)),
+      liveKeysIn(agentTable.startedByAgentId, agents),
+      liveKeysIn(agentTable.automationRunId, moved.keys(automationRunSync, automationRun.id)),
+    ) ?? sql`false`
+  );
 }
 
 /** The plan list written for Neon Realtime for the account; none where a statement names a value Realtime cannot carry. */
@@ -208,6 +284,18 @@ export function taskListLiveStatements(userId: string): Option.Option<TaskListLi
   return Option.all({
     plans: liveStatementOf(tasksStatement(userId)),
     agents: liveStatementOf(agentsStatement(userId)),
+    issues: liveStatementOf(issuesStatement()),
+  });
+}
+
+/** The plan list narrowed to the rows what moved past a reader's sync id could move; none where a statement names a value Realtime cannot carry. */
+export function taskListDeltaStatements(
+  userId: string,
+  moved: SyncMoved,
+): Option.Option<TaskListLiveStatements> {
+  return Option.all({
+    plans: liveStatementOf(tasksStatement(userId, movedPlans(moved))),
+    agents: liveStatementOf(agentsStatement(userId, movedAgents(moved))),
     issues: liveStatementOf(issuesStatement()),
   });
 }

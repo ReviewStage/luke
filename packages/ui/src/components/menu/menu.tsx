@@ -187,7 +187,7 @@ export type MenuKeyMatch = (event: React.KeyboardEvent) => boolean;
 
 export interface MenuAction {
   label: string;
-  /** The glyph leading the label, drawn in a column every item keeps whether or not it has one. */
+  /** The glyph leading the label, drawn in a column every item in a menu keeps whether or not it has one; a field's pinned row without one keeps none, its label starting at the row's inset. */
   icon?: React.JSX.Element;
   /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
   detail?: string | undefined;
@@ -713,13 +713,23 @@ function secondLine(action: MenuAction): boolean {
   return action.detail !== undefined && action.detailPlace !== MENU_DETAIL.BESIDE;
 }
 
-/** An item's glyph, words, and end, as every row draws them. */
-function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
+/**
+ * An item's glyph, words, and end, as every row draws them; one that keeps
+ * no `column` draws no glyph slot where it has no glyph.
+ */
+function ItemBody({
+  action,
+  column = true,
+}: {
+  action: MenuAction;
+  column?: boolean;
+}): React.JSX.Element {
   const beside = action.detailPlace === MENU_DETAIL.BESIDE;
+  const glyph = column || action.icon !== undefined ? <MenuGlyph>{action.icon}</MenuGlyph> : null;
   if (action.detail === undefined) {
     return (
       <>
-        <MenuGlyph>{action.icon}</MenuGlyph>
+        {glyph}
         {action.tag === undefined ? (
           <OneLine className="ui-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
         ) : (
@@ -734,7 +744,7 @@ function ItemBody({ action }: { action: MenuAction }): React.JSX.Element {
   }
   return (
     <>
-      <MenuGlyph>{action.icon}</MenuGlyph>
+      {glyph}
       <span
         className={cn(
           "ui-menu-item-copy flex min-w-0 flex-1",
@@ -797,7 +807,7 @@ export function MenuItem({
         steered={steered}
         heard={heard}
         onChoose={onChoose}
-        body={<ItemBody action={action} />}
+        body={<ItemBody action={action} column={false} />}
       />
     );
   }

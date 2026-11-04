@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "sectionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36,
+      "description": "The section's id, as list_tasks or create_section answered it."
+    }
+  },
+  "required": [
+    "sectionId"
+  ],
+  "additionalProperties": false
+}

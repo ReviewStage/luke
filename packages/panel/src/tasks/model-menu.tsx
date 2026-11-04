@@ -11,6 +11,7 @@ import { readingWords } from "@repo/features/words";
 import {
   ErrorState,
   type FootRow,
+  type MenuLastLine,
   type MenuRow,
   type PopoverAlign,
   type PopoverBounds,
@@ -79,14 +80,14 @@ import { useRepositoryRemedy } from "./repository-remedy.js";
  * menu, whose choice a new agent starts on and the reader's own
  * credentials pay for, a choice that is such a model, as a stored Claude
  * default is once no Claude credential pays for it, has a Connect row head the
- * pinned rows and the last line say why it cannot run; a running agent's
+ * pinned rows and the last line say why it cannot run, in the place a
+ * running agent's says who pays; a running agent's
  * chip says nothing of it, since the catalog marks what the reader's
  * account lacks and the agent runs on what its starter's pays. The id a choice names is
  * the catalog's own, the fast or Ultrafast version's where that speed is chosen, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: an automation starts on it, and the chip
- * changes its agent, and under the pinned rows says what the agent has
- * cost.
+ * changes its agent, and under the pinned rows says who pays for it.
  */
 
 /** What the menu says in the list's place. */
@@ -173,10 +174,8 @@ export function ModelMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** Whether the Fast switch is pinned under the list: not for an agent whose harness runs no fast version. */
   offersFast?: boolean | undefined;
-  /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on an automation's. */
-  footNote?: string | undefined;
-  /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
-  planNote?: React.ReactNode;
+  /** The muted last line under the pinned rows: who pays for the agent, on the chip's menu; nothing on an automation's, whose line says why its choice cannot run where it cannot. */
+  lastLine?: MenuLastLine | undefined;
   /** Whether the choice is what a new agent would start on, on the reader's own credentials, so one nothing of theirs pays for says it cannot run: an automation's. */
   startsNew?: boolean | undefined;
   /** The menu is on its way out (`SearchableMenu`'s). */
@@ -378,8 +377,7 @@ export function ModelMenu(props: {
       onClose={onClose}
       onLeave={props.onLeave}
       foot={foot}
-      footNote={props.footNote}
-      planNote={unrunnable === undefined ? props.planNote : unrunnable.text}
+      lastLine={unrunnable === undefined ? props.lastLine : { words: unrunnable.text }}
       leaving={props.leaving}
       ref={props.ref}
     />

@@ -13,7 +13,8 @@
  * names on GitHub is drawn by their GitHub avatar alone (`githubAvatarUrl`),
  * or, for a person GitHub named by login alone, the avatar GitHub serves
  * for that login (`githubUserAvatarUrl`), each asked for at the
- * size it is drawn (`githubAvatarAt`). A GitHub App, which runs a pull
+ * size it is drawn (`githubAvatarAt`), as a sign-in picture of either host
+ * is (`accountPictureAt`). A GitHub App, which runs a pull
  * request's checks, is drawn by the logo GitHub serves at its App's address
  * (`githubAppAvatarUrl`). A workspace's connected GitHub account is drawn
  * in its invitation email by the avatar GitHub serves for its id
@@ -22,6 +23,9 @@
 
 const GOOGLE_PICTURE_HOST = "googleusercontent.com";
 const GITHUB_PICTURE_HOST = "avatars.githubusercontent.com";
+
+/** The size Google names at the end of a profile photo's address, square-cropped where `-c` follows (`…=s96-c`). */
+const GOOGLE_PICTURE_SIZE = /=s\d+(-c)?$/u;
 
 /** The avatar revision GitHub's own answers name, which keeps an address the browser caches the one GitHub's pages use. */
 const GITHUB_AVATAR_REVISION = "4";
@@ -92,5 +96,21 @@ export function githubAvatarAt(value: string, pixels: number): string {
   const url = httpsUrl(value);
   if (url?.hostname !== GITHUB_PICTURE_HOST) return value;
   url.searchParams.set("s", String(Math.round(pixels)));
+  return url.toString();
+}
+
+/**
+ * A sign-in picture asked for at a size in device pixels: a GitHub avatar by
+ * its size parameter, and a Google photo by the size its address ends in,
+ * which Google answers at up to the photo's own; any other address as it is.
+ */
+export function accountPictureAt(value: string, pixels: number): string {
+  const url = httpsUrl(value);
+  if (url === undefined) return value;
+  if (url.hostname === GITHUB_PICTURE_HOST) return githubAvatarAt(value, pixels);
+  const host = url.hostname;
+  const googleHosted = host === GOOGLE_PICTURE_HOST || host.endsWith(`.${GOOGLE_PICTURE_HOST}`);
+  if (!googleHosted || !GOOGLE_PICTURE_SIZE.test(url.pathname)) return value;
+  url.pathname = url.pathname.replace(GOOGLE_PICTURE_SIZE, `=s${String(Math.round(pixels))}-c`);
   return url.toString();
 }

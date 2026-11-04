@@ -33,7 +33,8 @@ import { AttachmentViewer } from "./attachment-viewer.js";
  * pixels does. Two fingers on a touch screen pinch it about the point
  * between them, and a picture asked to open at its own pixels does so from
  * its top left corner once it loads. Copy image puts the picture shown on
- * the clipboard as the PNG it is. A Mermaid file is drawn as the picture the
+ * the clipboard as the PNG it is, and a picture held by its address alone
+ * is shown and zoomed with no size, Copy, or Download. A Mermaid file is drawn as the picture the
  * diagram bundle answers, which stands in for Mermaid since it cannot lay out
  * under jsdom, and a file of any other kind imports no bundle. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
@@ -579,6 +580,21 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   viewer.key("ArrowRight");
   await act(async () => refused.reject(new Error("refused")));
   assert.equal(glyph(), "idle", "a copy answered after the next picture was shown lands nowhere");
+});
+
+test("a picture held by its address alone is shown and zoomed, with no size, Copy image, or Download", () => {
+  const photo: FileChip = {
+    name: "Ada Lovelace",
+    mediaType: "image/*",
+    url: "https://avatars.githubusercontent.com/u/1001?v=4&s=512",
+  };
+  const viewer = opened();
+  viewer.show([photo], 0);
+  assert.equal(viewer.picture().getAttribute("src"), photo.url);
+  viewer.press("Zoom in");
+  assert.equal(document.querySelector(".attachment-viewer-size")?.textContent, "");
+  assert.equal(document.querySelector('button[aria-label="Copy image"]'), null);
+  assert.equal(document.querySelector('button[aria-label="Download file"]'), null);
 });
 
 test("Copy text puts a text file's words on the clipboard and shows the check", async () => {

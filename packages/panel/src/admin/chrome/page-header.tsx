@@ -39,9 +39,12 @@ export interface ViewerAccount {
 export function AccountAvatar({
   account,
   size = AVATAR_SIZE.CARD,
+  onFail,
 }: {
   account: ViewerAccount;
   size?: AvatarSize;
+  /** Called once when the photo fails to load, so a place offering it can stop. */
+  onFail?: () => void;
 }): React.JSX.Element {
   return (
     <Avatar
@@ -50,6 +53,7 @@ export function AccountAvatar({
       {...(account.image === undefined ? {} : { src: account.image })}
       size={size}
       decorative
+      {...(onFail === undefined ? {} : { onFail })}
     />
   );
 }

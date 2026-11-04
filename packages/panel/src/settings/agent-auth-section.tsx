@@ -29,30 +29,27 @@ import {
   BUTTON_VARIANT,
   Button,
   ButtonLink,
-  CHOICE_LOOK,
-  ChoiceList,
-  type ChoiceOption,
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
   CONFIRM_LOSS,
   DIALOG_SIZE,
-  DIALOG_TONE,
   Dialog,
   DialogActions,
   ErrorState,
   FootQuestion,
   GAP,
-  IconButton,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
   MARK_PROVIDER,
-  PencilIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  SETTINGS_ROW_INDENT,
   SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SecretField,
-  SettingsFacts,
   SettingsLine,
   SettingsRow,
   SettingsRowMark,
@@ -60,23 +57,18 @@ import {
   type SettingsRowState,
   SettingsRowStateLine,
   SettingsRowsSkeleton,
-  SettingsSavedMark,
   SettingsSection,
   Stack,
-  TEXT_ELEMENT,
-  TEXT_FIELD_FONT,
-  TEXT_FONT,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  TextField,
+  TextButton,
   TextLink,
-  Tooltip,
-  TrashIcon,
   useConfirmDialog,
 } from "@repo/ui";
 import { InfoIcon } from "@repo/ui/icons";
+import type { ShownError } from "@repo/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -98,13 +90,16 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * the fix: Connect while neither is set, Manage once one is, Sign in again
  * for a ChatGPT plan OpenAI signed out, and Manage usage, which opens
  * ChatGPT's usage settings, for one at its limit. Every other press
- * opens the harness's dialog: a radio card per credential, each
- * holding its own controls, the checked radio being the default. The
- * default is the plan's `forAgents`: Subscription checked is on, API key
- * checked is off, and every agent Start makes on that provider's models
- * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
- * neither saved, no agent starts on that provider's models, since our key
- * pays for no coding agent. Calls and dictation run on the OpenAI API key
+ * opens the harness's dialog: a settings row per credential, the plan's led
+ * by its mark where it has one and the key's lined up with its words, each
+ * with its state under its name, its presses at its end, and its field or
+ * notice opening under it. Which one new agents use is a control of its
+ * own, in a section above the rows, standing only while both are saved:
+ * it writes the plan's `forAgents`, on for the plan and off for the key,
+ * and every agent Start makes on that provider's models runs on it; there
+ * is no choice at Start. With one saved, that one is used; with neither, no
+ * agent starts on that provider's models, since our key pays for no coding
+ * agent. Calls and dictation run on the OpenAI API key
  * alone, so every answer here is handed to the window too
  * (`../openai-key.tsx`), and removing that key says they stop.
  *
@@ -117,11 +112,11 @@ import { useHeldThroughExit } from "../use-held-through-exit.js";
  * field's characters but not their count.
  *
  * The ChatGPT sign-in runs through a loopback only the desktop can listen
- * on; elsewhere its card says so and stands unpressable until a sign-in
- * made on the desktop is there to pick or disconnect. The first sign-in on
- * this Mac is met with OpenAI's notice that the app uses the ChatGPT plan
- * (developers.openai.com/siwc/ui-ux-guidelines), drawn in its card under the
- * sign-in, dismissed with Got it and never shown again here, kept in the
+ * on; elsewhere its row says so and offers nothing until a sign-in made
+ * on the desktop is there to disconnect. The first sign-in on this Mac is
+ * met with OpenAI's notice that the app uses the ChatGPT plan
+ * (developers.openai.com/siwc/ui-ux-guidelines), drawn under the plan row's
+ * name, dismissed with Got it and never shown again here, kept in the
  * renderer's own storage.
  *
  * What the dialog asks about a credential it holds, disconnecting a plan or
@@ -168,7 +163,7 @@ interface Connection {
 /** What a harness's row and dialog are drawn from. */
 interface Harness {
   readonly name: string;
-  /** What its plan is called wherever a surface names the credential: the card's label, a disconnect's title. */
+  /** What its plan is called wherever a surface names the credential: its row's label, a disconnect's title. */
   readonly planName: string;
   readonly plan: SubscriptionKeySummary["kind"];
   readonly keyName: string;
@@ -230,10 +225,15 @@ const WORDS = {
   SAVING_TOKEN: "Saving the token",
   DISCONNECT: "Disconnect",
   DISCONNECTING: "Disconnecting",
+  REMOVE: "Remove",
   REMOVE_KEY: "Remove key",
   REMOVING: "Removing",
-  ADD_TOKEN: "Add token",
+  REPLACE: "Replace",
   REPLACE_TOKEN: "Replace token",
+  SAVED: "Saved",
+  NEW_KEY: "New key",
+  PLAN_LIMITS: "Counts against your plan's limits",
+  FINISH_SIGNING_IN: "Finish signing in in your browser.",
   REPLACES_TOKEN: `Saving replaces the token ${PRODUCT_NAME} holds.`,
   REPLACES_KEY: `Saving replaces the key ${PRODUCT_NAME} holds.`,
   SIGN_IN: "Continue with ChatGPT",
@@ -312,7 +312,7 @@ function defaultOf(
  * provider named one. A ChatGPT plan OpenAI signed out offers Sign in again
  * where this client can take the sign-in (`signInOffered`), and one at its
  * limit Manage usage, as OpenAI's guidelines ask; a Claude plan at its limit
- * keeps Manage, and every other lapse says it needs attention, its card
+ * keeps Manage, and every other lapse says it needs attention, its dialog
  * saying why.
  */
 function connectionOf(
@@ -490,75 +490,100 @@ function markNoticeSeen(): void {
 
 /* ----- Small parts ----- */
 
-/** A status in the connected or the attention tint, announced where it needs a hand. */
-function State({ ok, children }: { ok: boolean; children: string }): React.JSX.Element {
+/** A status in the connected or the attention tint, announced where it needs a hand; `block` stands it on a line of its own. */
+function State({
+  ok,
+  block = false,
+  children,
+}: {
+  ok: boolean;
+  block?: boolean;
+  children: string;
+}): React.JSX.Element {
   useAnnounceShown(ANNOUNCE.ALERT, ok ? "" : children);
   return (
-    <SettingsRowStateLine state={ok ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.ATTENTION}>
+    <SettingsRowStateLine
+      state={ok ? SETTINGS_ROW_STATE.CONNECTED : SETTINGS_ROW_STATE.ATTENTION}
+      block={block}
+    >
       {children}
     </SettingsRowStateLine>
   );
 }
 
-/** The green check beside a saved credential's label and a connected row's words. */
-function Saved(): React.JSX.Element {
-  return <SettingsSavedMark />;
-}
-
 /**
- * The foot of a pasted secret's form: Save alone while nothing is held to
- * go back to, else Cancel and Save as a dialog's foot draws them. Note that
- * Save stays the form's submit where it stands alone, because Enter in the
- * field presses it there; with Cancel beside it Enter still submits the
- * form's one field.
+ * A pasted secret's form, opened under its row's label: the field, then
+ * Save, the form's submit, so Enter in the field presses it. Note that going
+ * back to a held secret is the row's Cancel at its end, never a second
+ * button here.
  */
-function SecretFoot({
-  cancel,
+function SecretForm({
+  field,
+  label,
+  description,
+  error,
+  saved,
+  placeholder,
+  value,
   saving,
-  empty,
   running,
+  onEscape,
+  onChange,
   onSave,
 }: {
-  /** Goes back to the held secret; undefined where none is held. */
-  cancel: (() => void) | undefined;
+  field: React.RefObject<HTMLInputElement | null>;
+  label: string;
+  description: string | undefined;
+  error: ShownError | undefined;
+  /** Whether a secret is already held, which the empty field says in its place. */
+  saved: boolean;
+  placeholder: string;
+  value: string;
   saving: boolean;
-  empty: boolean;
   running: string;
+  onEscape: (() => void) | undefined;
+  onChange: (value: string) => void;
   onSave: () => void;
 }): React.JSX.Element {
   return (
-    <Inline justify={JUSTIFY.END}>
-      {cancel === undefined ? (
+    <Stack
+      as={LAYOUT_ELEMENT.FORM}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave();
+      }}
+    >
+      <SecretField
+        ref={field}
+        label={label}
+        description={description}
+        error={error}
+        saved={saved}
+        placeholder={placeholder}
+        disabled={saving}
+        value={value}
+        onEscape={onEscape}
+        onChange={onChange}
+      />
+      <Inline justify={JUSTIFY.END}>
         <Button
           type={BUTTON_TYPE.SUBMIT}
           variant={BUTTON_VARIANT.PRIMARY}
-          disabled={empty}
+          disabled={value.trim() === ""}
           busy={saving}
           busyLabel={running}
         >
           {WORDS.SAVE}
         </Button>
-      ) : (
-        <DialogActions
-          onCancel={cancel}
-          act={{
-            verb: WORDS.SAVE,
-            tone: DIALOG_TONE.PRIMARY,
-            onPress: onSave,
-            running,
-            busy: saving,
-            disabled: empty,
-          }}
-        />
-      )}
-    </Inline>
+      </Inline>
+    </Stack>
   );
 }
 
-/* ----- The subscription cards ----- */
+/* ----- The plan's row ----- */
 
-/** Claude's plan: a pasted setup-token, its status, Replace token, and Disconnect. */
-function ClaudeTokenPanel({
+/** Claude's plan: a pasted setup-token opening under the row until one is held, then its status, Replace token, and Disconnect. */
+function ClaudePlanRow({
   plan,
   field,
   onAnswer,
@@ -569,10 +594,16 @@ function ClaudeTokenPanel({
   onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [editing, setEditing] = useState(plan === undefined);
+  const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
+  const open = plan === undefined || editing;
+
+  // Replace token opens the field with the focus in it, ready for the paste.
+  useEffect(() => {
+    if (editing) field.current?.focus();
+  }, [editing]);
 
   const disconnect = useCallback(
     (): Promise<ActionResult> =>
@@ -589,7 +620,7 @@ function ClaudeTokenPanel({
             };
           }
           onAnswer(removed);
-          setEditing(true);
+          setEditing(false);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
         }),
     [act, onAnswer],
@@ -627,7 +658,7 @@ function ClaudeTokenPanel({
           setRejection(tokenRejectionWords(saved.rejected));
           return;
         }
-        // Kept: the token leaves the field, and the card draws the service's word for it.
+        // Kept: the token leaves the field, and the row draws the service's word for it.
         setPasted("");
         setEditing(false);
       });
@@ -636,67 +667,55 @@ function ClaudeTokenPanel({
   const ok = plan !== undefined && standing(plan);
   return (
     <>
-      {plan === undefined ? null : (
-        <Inline justify={JUSTIFY.BETWEEN}>
-          <SettingsFacts>
+      <SettingsRow
+        label={HARNESS[PROVIDER_KEY_PROVIDER.ANTHROPIC].planName}
+        indent={SETTINGS_ROW_INDENT.MARK}
+        description={
+          plan === undefined ? (
+            WORDS.PLAN_LIMITS
+          ) : (
             <State ok={ok && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
               {tokenWords(plan)}
             </State>
-            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
-              {plan.hint}
-            </Text>
-          </SettingsFacts>
-          {editing ? null : (
+          )
+        }
+        below={
+          open
+            ? () => (
+                <SecretForm
+                  field={field}
+                  label="Claude setup-token"
+                  description={plan === undefined ? undefined : WORDS.REPLACES_TOKEN}
+                  error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
+                  saved={plan !== undefined}
+                  placeholder='Paste the token from "claude setup-token"'
+                  value={pasted}
+                  saving={saving}
+                  running={WORDS.SAVING_TOKEN}
+                  onEscape={plan === undefined ? undefined : cancel}
+                  onChange={(value) => {
+                    setPasted(value);
+                    setRejection(undefined);
+                  }}
+                  onSave={save}
+                />
+              )
+            : undefined
+        }
+      >
+        {() =>
+          plan === undefined ? null : open ? (
+            <TextButton onClick={cancel}>{WORDS.CANCEL}</TextButton>
+          ) : (
             <Inline wrap={false}>
               {ok ? null : (
-                <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setEditing(true)}>
-                  {WORDS.REPLACE_TOKEN}
-                </Button>
+                <TextButton onClick={() => setEditing(true)}>{WORDS.REPLACE_TOKEN}</TextButton>
               )}
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                busy={removal.busy}
-                busyLabel={WORDS.DISCONNECTING}
-                onClick={removal.ask}
-              >
-                {WORDS.DISCONNECT}
-              </Button>
+              <TextButton onClick={removal.ask}>{WORDS.DISCONNECT}</TextButton>
             </Inline>
-          )}
-        </Inline>
-      )}
-      {editing ? (
-        <Stack
-          as={LAYOUT_ELEMENT.FORM}
-          onSubmit={(event) => {
-            event.preventDefault();
-            save();
-          }}
-        >
-          <SecretField
-            ref={field}
-            label="Claude setup-token"
-            description={plan === undefined ? undefined : WORDS.REPLACES_TOKEN}
-            error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
-            saved={plan !== undefined}
-            placeholder='Paste the token from "claude setup-token"'
-            disabled={saving}
-            value={pasted}
-            onEscape={plan === undefined ? undefined : cancel}
-            onChange={(value) => {
-              setPasted(value);
-              setRejection(undefined);
-            }}
-          />
-          <SecretFoot
-            cancel={plan === undefined ? undefined : cancel}
-            saving={saving}
-            empty={pasted.trim() === ""}
-            running={WORDS.SAVING_TOKEN}
-            onSave={save}
-          />
-        </Stack>
-      ) : null}
+          )
+        }
+      </SettingsRow>
       <FootQuestion
         confirm={removal}
         question={{
@@ -712,9 +731,9 @@ function ClaudeTokenPanel({
 }
 
 /**
- * OpenAI's first-sign-in notice, in the ChatGPT card under the sign-in it
- * meets: what using the plan means, and Got it, which takes focus as the
- * notice lands, as the sign-in's own button has just gone.
+ * OpenAI's first-sign-in notice, under the ChatGPT plan row's label: what
+ * using the plan means, and Got it, which takes focus as the notice lands,
+ * as the sign-in's own button has just gone.
  */
 function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
   const gotIt = useRef<HTMLButtonElement | null>(null);
@@ -737,8 +756,12 @@ function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.
   );
 }
 
-/** The ChatGPT plan: Continue with ChatGPT where the loopback can be listened on, its status, and Disconnect. */
-function ChatGptPanel({
+/**
+ * The ChatGPT plan: Continue with ChatGPT where the loopback can be listened
+ * on, else that it is the desktop's alone, its status once held, and
+ * Disconnect; OpenAI's notice and an unconfirmed sign-out open under it.
+ */
+function ChatGptPlanRow({
   plan,
   offered,
   signInButton,
@@ -750,7 +773,7 @@ function ChatGptPanel({
   /** The dialog's way to Continue with ChatGPT while it stands. */
   signInButton: React.RefObject<HTMLButtonElement | null>;
   onAnswer: (answer: ProviderKeysAnswer) => void;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const { act } = useAct();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -815,29 +838,59 @@ function ChatGptPanel({
 
   const connected = plan !== undefined && standing(plan);
   const continueOffered = offered && !connected;
-  if (plan === undefined && !continueOffered && !unconfirmed && error === undefined) return null;
+  const status =
+    plan !== undefined ? (
+      <State ok={connected && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
+        {signInWords(plan, offered)}
+      </State>
+    ) : !offered ? (
+      WORDS.DESKTOP_ONLY
+    ) : signingIn ? (
+      WORDS.FINISH_SIGNING_IN
+    ) : (
+      WORDS.PLAN_LIMITS
+    );
   return (
     <>
-      <Inline justify={JUSTIFY.BETWEEN}>
-        <SettingsFacts>
-          {plan === undefined ? null : (
-            <State ok={connected && plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED}>
-              {signInWords(plan, offered)}
-            </State>
-          )}
-        </SettingsFacts>
-        <Inline wrap={false}>
-          {connected ? (
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              busy={removal.busy}
-              busyLabel={WORDS.DISCONNECTING}
-              onClick={removal.ask}
-            >
-              {WORDS.DISCONNECT}
-            </Button>
-          ) : continueOffered ? (
+      <SettingsRow
+        leading={
+          <SettingsRowMark>
+            <ProviderMark provider={MARK_PROVIDER.CHATGPT} size={PROVIDER_MARK_SIZE.ROW} />
+          </SettingsRowMark>
+        }
+        label={HARNESS[PROVIDER_KEY_PROVIDER.OPENAI].planName}
+        description={
+          error === undefined ? (
+            status
+          ) : (
             <>
+              {status}
+              <State ok={false} block>
+                {error}
+              </State>
+            </>
+          )
+        }
+        below={
+          notice || unconfirmed
+            ? () => (
+                <>
+                  {unconfirmed ? (
+                    <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                      {WORDS.REVOCATION_UNCONFIRMED}
+                    </Text>
+                  ) : null}
+                  {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
+                </>
+              )
+            : undefined
+        }
+      >
+        {() =>
+          connected ? (
+            <TextButton onClick={removal.ask}>{WORDS.DISCONNECT}</TextButton>
+          ) : continueOffered ? (
+            <Inline wrap={false}>
               {signingIn ? (
                 <Button variant={BUTTON_VARIANT.QUIET} onClick={cancel}>
                   {WORDS.CANCEL}
@@ -855,17 +908,10 @@ function ChatGptPanel({
               >
                 {WORDS.SIGN_IN}
               </Button>
-            </>
-          ) : null}
-        </Inline>
-      </Inline>
-      {error === undefined ? null : <State ok={false}>{error}</State>}
-      {unconfirmed ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {WORDS.REVOCATION_UNCONFIRMED}
-        </Text>
-      ) : null}
-      {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
+            </Inline>
+          ) : null
+        }
+      </SettingsRow>
       <FootQuestion
         confirm={removal}
         question={{
@@ -880,10 +926,15 @@ function ChatGptPanel({
   );
 }
 
-/* ----- The API key card ----- */
+/* ----- The key's row ----- */
 
-/** The provider's API key: a secret field while one is pasted, else its hint with the pencil and a ⋯ holding Remove. */
-function ApiKeyPanel({
+/**
+ * The provider's API key, its words lined up with the plan's: what it costs
+ * and Get key, with the field opening under them, until one is held; then
+ * Saved and its hint, with Replace, which opens a New key field and turns
+ * the row's end into Cancel, and Remove.
+ */
+function ApiKeyRow({
   provider,
   stored,
   field,
@@ -896,14 +947,17 @@ function ApiKeyPanel({
   onAnswer: (answer: ProviderKeysAnswer) => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const name = HARNESS[provider].keyName;
+  const openLink = useOpenLink();
+  const harness = HARNESS[provider];
+  const name = harness.keyName;
+  const keyName = `${name} ${WORDS.API_KEY}`;
   const [editing, setEditing] = useState(false);
   const [pasted, setPasted] = useState("");
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const open = stored === undefined || editing;
 
-  // The pencil opens the field with the focus in it, ready for the paste.
+  // Replace opens the field with the focus in it, ready for the paste.
   useEffect(() => {
     if (editing) field.current?.focus();
   }, [editing]);
@@ -950,86 +1004,87 @@ function ApiKeyPanel({
           setRejection(keyRejectionWords(provider, answer.rejected));
           return;
         }
-        // Kept: the key leaves the field, and the card draws the service's hint of it.
+        // Kept: the key leaves the field, and the row draws the service's hint of it.
         setPasted("");
         setEditing(false);
       });
   };
 
-  const status = stored === undefined ? undefined : keyStatusWords(provider, stored.status);
+  const fault = stored === undefined ? undefined : keyStatusWords(provider, stored.status);
   return (
     <>
-      {open ? (
-        <Stack
-          as={LAYOUT_ELEMENT.FORM}
-          onSubmit={(event) => {
-            event.preventDefault();
-            save();
-          }}
-        >
-          <SecretField
-            ref={field}
-            label={`${name} API key`}
-            description={stored === undefined ? undefined : WORDS.REPLACES_KEY}
-            error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
-            saved={stored !== undefined}
-            placeholder={`Paste your ${name} API key`}
-            disabled={saving}
-            value={pasted}
-            onEscape={stored === undefined ? undefined : cancel}
-            onChange={(value: string) => {
-              setPasted(value);
-              setRejection(undefined);
-            }}
-          />
-          <SecretFoot
-            cancel={stored === undefined ? undefined : cancel}
-            saving={saving}
-            empty={pasted.trim() === ""}
-            running="Checking the key"
-            onSave={save}
-          />
-        </Stack>
-      ) : (
-        <Inline justify={JUSTIFY.BETWEEN}>
-          <Inline grow wrap={false} gap={GAP.TIGHT} growFirst>
-            <TextField
-              label={`${name} API key`}
-              readOnly
-              font={TEXT_FIELD_FONT.MONO}
-              value={stored?.hint ?? ""}
-              onChange={() => undefined}
-            />
-            <Tooltip label="Edit key">
-              <IconButton
-                icon={<PencilIcon />}
-                label="Edit key"
-                disabled={removal.busy}
-                onClick={() => setEditing(true)}
-              />
-            </Tooltip>
-            <Tooltip label={WORDS.REMOVE_KEY}>
-              <IconButton
-                icon={<TrashIcon />}
-                label={WORDS.REMOVE_KEY}
-                disabled={removal.busy}
-                onClick={removal.ask}
-              />
-            </Tooltip>
-          </Inline>
-        </Inline>
-      )}
-      {status === undefined || stored === undefined ? null : (
-        <State ok={keyStanding(stored.status)}>{status}</State>
-      )}
+      <SettingsRow
+        label={keyName}
+        indent={SETTINGS_ROW_INDENT.MARK}
+        description={
+          stored === undefined ? (
+            <>
+              {`Billed by ${name} per token. `}
+              <TextLink
+                look={TEXT_LINK_LOOK.UNDERLINED}
+                href={harness.keyUrl}
+                external
+                onClick={(event) => {
+                  event.preventDefault();
+                  openLink(harness.keyUrl);
+                }}
+              >
+                {WORDS.GET_KEY}
+              </TextLink>
+            </>
+          ) : fault === undefined ? (
+            <State ok>{stored.hint === "" ? WORDS.SAVED : `${WORDS.SAVED} ${stored.hint}`}</State>
+          ) : (
+            <State ok={false}>{fault}</State>
+          )
+        }
+        below={
+          open
+            ? () => (
+                <SecretForm
+                  field={field}
+                  label={stored === undefined ? WORDS.API_KEY : WORDS.NEW_KEY}
+                  description={stored === undefined ? undefined : WORDS.REPLACES_KEY}
+                  error={refusedShown(rejection, FAILURE_SURFACE.AGENT_KEY_SAVE)}
+                  saved={stored !== undefined}
+                  placeholder={`Paste your ${keyName}`}
+                  value={pasted}
+                  saving={saving}
+                  running="Checking the key"
+                  onEscape={stored === undefined ? undefined : cancel}
+                  onChange={(value) => {
+                    setPasted(value);
+                    setRejection(undefined);
+                  }}
+                  onSave={save}
+                />
+              )
+            : undefined
+        }
+      >
+        {() =>
+          stored === undefined ? null : editing ? (
+            <TextButton onClick={cancel}>{WORDS.CANCEL}</TextButton>
+          ) : (
+            <Inline wrap={false}>
+              <TextButton aria-label={`Replace ${keyName}`} onClick={() => setEditing(true)}>
+                {WORDS.REPLACE}
+              </TextButton>
+              <TextButton aria-label={`Remove ${keyName}`} onClick={removal.ask}>
+                {WORDS.REMOVE}
+              </TextButton>
+            </Inline>
+          )
+        }
+      </SettingsRow>
       <FootQuestion
         confirm={removal}
         question={{
-          title: `Remove your ${name} API key?`,
+          title: `Remove your ${keyName}?`,
           body:
             provider === PROVIDER_KEY_PROVIDER.OPENAI
-              ? `Agents on ${name} models won't start without a ${HARNESS[provider].planName}. Calls and dictation will be off.`
-              : `Agents on ${name} models won't start without a ${HARNESS[provider].planName}.`,
+              ? `Agents on ${name} models won't start without a ${harness.planName}. Calls and dictation will be off.`
+              : `Agents on ${name} models won't start without a ${harness.planName}.`,
           verb: WORDS.REMOVE_KEY,
           running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
@@ -1039,58 +1094,30 @@ function ApiKeyPanel({
   );
 }
 
-/* ----- The dialog ----- */
+/* ----- The default ----- */
 
-/** A harness's dialog: a radio card per credential, the checked one its new agents' default. */
-function AgentAuthDialog({
-  open,
+/**
+ * Which credential the harness's new agents use, while both are saved: the
+ * plan or the key, written as the plan's `forAgents`, every agent Start makes
+ * on that provider's models running on it; there is no choice at Start.
+ */
+function DefaultRow({
   provider,
-  answer,
+  chosen,
   onAnswer,
-  onClose,
-  onExited,
 }: {
-  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
-  open: boolean;
   provider: ProviderKeyProvider;
-  answer: ProviderKeysAnswer;
+  chosen: Credential;
   onAnswer: (answer: ProviderKeysAnswer) => void;
-  onClose: () => void;
-  onExited: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const openLink = useOpenLink();
-  const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
   const harness = HARNESS[provider];
-  const plan = planOf(answer, provider);
-  const key = keyOf(answer, provider);
-  const chosen = defaultOf(plan, key);
+  const label = `New ${harness.name} agents use`;
   const [turning, setTurning] = useState(false);
   const [refused, setRefused] = useState<string | undefined>(undefined);
-  const tokenField = useRef<HTMLInputElement | null>(null);
-  const keyField = useRef<HTMLInputElement | null>(null);
-  const signInButton = useRef<HTMLButtonElement | null>(null);
-  // Note that a ChatGPT plan OpenAI signed out opens on Continue with ChatGPT, the fix its row's Sign in again named.
-  const signInFirst =
-    connectionOf(provider, plan, key, chatGptOffered).act === ROW_ACT.SIGN_IN_AGAIN;
-  // Note that the card otherwise opens on the first field it draws, the setup-token's above the API key's, and none where both are kept.
-  const firstField = useMemo(
-    () => ({
-      get current() {
-        return (
-          (signInFirst ? signInButton.current : null) ?? tokenField.current ?? keyField.current
-        );
-      },
-    }),
-    [signInFirst],
-  );
-  const claude = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC;
-  // The ChatGPT sign-in is the desktop's alone, so elsewhere its card stands out of reach until one made there is held.
-  const planOutOfReach = !claude && !chatGptOffered && plan === undefined;
 
   const choose = (next: Credential) => {
-    // Note that with no plan held the key is already the default, so there is nothing to write.
-    if (plan === undefined || turning) return;
+    if (next === chosen || turning) return;
     setTurning(true);
     setRefused(undefined);
     void act(ACT_KIND.PROVIDER_KEYS_FOR_AGENTS, {
@@ -1109,74 +1136,137 @@ function AgentAuthDialog({
       });
   };
 
-  const selectable = {
-    [CREDENTIAL.SUBSCRIPTION]: plan !== undefined && !turning,
-    [CREDENTIAL.API_KEY]: key !== undefined && !turning,
-  };
-  const cards: readonly ChoiceOption<Credential>[] = [
-    {
-      value: CREDENTIAL.SUBSCRIPTION,
-      label: harness.planName,
-      after: plan !== undefined && standing(plan) ? <Saved /> : undefined,
-      disabled: !selectable[CREDENTIAL.SUBSCRIPTION] || planOutOfReach,
-      detail: planOutOfReach ? WORDS.DESKTOP_ONLY : undefined,
-      below: planOutOfReach ? null : claude ? (
-        <ClaudeTokenPanel plan={plan} field={tokenField} onAnswer={onAnswer} />
-      ) : (
-        <ChatGptPanel
-          plan={plan}
-          offered={chatGptOffered}
-          signInButton={signInButton}
-          onAnswer={onAnswer}
+  return (
+    <SettingsRow
+      label={label}
+      description={refused === undefined ? undefined : <State ok={false}>{refused}</State>}
+    >
+      {() => (
+        <ChoiceBar
+          label={label}
+          items={[
+            { value: CREDENTIAL.SUBSCRIPTION, label: harness.planName },
+            { value: CREDENTIAL.API_KEY, label: WORDS.API_KEY },
+          ]}
+          value={chosen}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          size={CHOICE_BAR_SIZE.COMPACT}
+          disabled={turning}
+          onChange={choose}
         />
-      ),
-    },
-    {
-      value: CREDENTIAL.API_KEY,
-      label: WORDS.API_KEY,
-      after: key !== undefined ? <Saved /> : undefined,
-      disabled: !selectable[CREDENTIAL.API_KEY],
-      aside: (
-        <TextLink
-          look={TEXT_LINK_LOOK.UNDERLINED}
-          href={harness.keyUrl}
-          external
-          onClick={(event) => {
-            event.preventDefault();
-            openLink(harness.keyUrl);
-          }}
-        >
-          {WORDS.GET_KEY}
-        </TextLink>
-      ),
-      below: <ApiKeyPanel provider={provider} stored={key} field={keyField} onAnswer={onAnswer} />,
-    },
-  ];
+      )}
+    </SettingsRow>
+  );
+}
+
+/* ----- The dialog ----- */
+
+/** Where the dialog finds each control it may open on. */
+interface CredentialFields {
+  readonly token: React.RefObject<HTMLInputElement | null>;
+  readonly key: React.RefObject<HTMLInputElement | null>;
+  readonly signIn: React.RefObject<HTMLButtonElement | null>;
+}
+
+/**
+ * A harness's credentials as settings rows, kept apart from the dialog so a
+ * surface without one can stand them too: the default's own section while
+ * both are saved, over the plan's row and the key's.
+ */
+function AgentCredentialRows({
+  provider,
+  answer,
+  fields,
+  onAnswer,
+}: {
+  provider: ProviderKeyProvider;
+  answer: ProviderKeysAnswer;
+  fields: CredentialFields;
+  onAnswer: (answer: ProviderKeysAnswer) => void;
+}): React.JSX.Element {
+  const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
+  const plan = planOf(answer, provider);
+  const key = keyOf(answer, provider);
+  const chosen = defaultOf(plan, key);
+  return (
+    <div className={NO_CAPTURE}>
+      <Stack gap={GAP.SECTION}>
+        {/* With one credential saved, that one is used, so there is nothing to choose. */}
+        {plan === undefined || key === undefined || chosen === undefined ? null : (
+          <SettingsSection>
+            <DefaultRow provider={provider} chosen={chosen} onAnswer={onAnswer} />
+          </SettingsSection>
+        )}
+        <SettingsSection>
+          {provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? (
+            <ClaudePlanRow plan={plan} field={fields.token} onAnswer={onAnswer} />
+          ) : (
+            <ChatGptPlanRow
+              plan={plan}
+              offered={chatGptOffered}
+              signInButton={fields.signIn}
+              onAnswer={onAnswer}
+            />
+          )}
+          <ApiKeyRow provider={provider} stored={key} field={fields.key} onAnswer={onAnswer} />
+        </SettingsSection>
+      </Stack>
+    </div>
+  );
+}
+
+/** A harness's dialog: its credentials' rows under the harness's name, and Done. */
+function AgentAuthDialog({
+  open,
+  provider,
+  answer,
+  onAnswer,
+  onClose,
+  onExited,
+}: {
+  /** Whether the card stands; falling, it fades out, then tells its owner it is gone. */
+  open: boolean;
+  provider: ProviderKeyProvider;
+  answer: ProviderKeysAnswer;
+  onAnswer: (answer: ProviderKeysAnswer) => void;
+  onClose: () => void;
+  onExited: () => void;
+}): React.JSX.Element {
+  const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
+  const token = useRef<HTMLInputElement | null>(null);
+  const key = useRef<HTMLInputElement | null>(null);
+  const signIn = useRef<HTMLButtonElement | null>(null);
+  const fields = useMemo(() => ({ token, key, signIn }), []);
+  // Note that a ChatGPT plan OpenAI signed out opens on Continue with ChatGPT, the fix its row's Sign in again named.
+  const signInFirst =
+    connectionOf(provider, planOf(answer, provider), keyOf(answer, provider), chatGptOffered)
+      .act === ROW_ACT.SIGN_IN_AGAIN;
+  // Note that the dialog otherwise opens on the first field it draws, the setup-token's above the API key's, and none where both are kept.
+  const firstField = useMemo(
+    () => ({
+      get current() {
+        return (signInFirst ? signIn.current : null) ?? token.current ?? key.current;
+      },
+    }),
+    [signInFirst],
+  );
 
   return (
     <Dialog
       open={open}
-      title={harness.name}
+      title={HARNESS[provider].name}
       size={DIALOG_SIZE.WIDE}
       initialFocus={firstField}
       onDismiss={onClose}
       onExited={onExited}
       actions={<DialogActions onDone={onClose} />}
     >
-      <div className={NO_CAPTURE}>
-        <Stack gap={GAP.CONTROL}>
-          <ChoiceList
-            legend={`${harness.name} credential`}
-            options={cards}
-            value={chosen === undefined ? [] : [chosen]}
-            look={CHOICE_LOOK.CARD}
-            onChange={([next]) => {
-              if (next !== undefined) choose(next);
-            }}
-          />
-          {refused === undefined ? null : <State ok={false}>{refused}</State>}
-        </Stack>
-      </div>
+      <AgentCredentialRows
+        provider={provider}
+        answer={answer}
+        fields={fields}
+        onAnswer={onAnswer}
+      />
     </Dialog>
   );
 }

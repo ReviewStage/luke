@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "properties": {
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "description": "The workspace to list, by the slug list_workspaces answered; leave it out where the member belongs to one workspace alone."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "The section's title, as the sidebar shows it, at most 60 characters."
+    },
+    "emoji": {
+      "type": "string",
+      "maxLength": 32,
+      "description": "One emoji the section wears beside its title; leave it out for none."
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "additionalProperties": false
+}

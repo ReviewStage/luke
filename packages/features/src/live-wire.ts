@@ -67,11 +67,19 @@ export const LIVE_POLL_URL = "vespin-poll:";
 
 /**
  * How a reader asks for a live read's rows inline rather than sealed, while
- * Realtime fails it; where they last stood (`AFTER`); and, for a read whose
+ * Realtime fails it; where they last stood (`AFTER`); for a read whose
  * parts it follows by cursor, the cursor it holds them at (`CURSOR`), past
- * which those parts are answered rather than whole.
+ * which those parts are answered rather than whole; and, for a read that
+ * answers deltas, the sync id it holds every row at (`SYNC`), past which it
+ * is answered what moved alone, held until something does.
  */
-export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after", CURSOR: "cursor" } as const;
+export const LIVE_POLL = {
+  QUERY: "poll",
+  ON: "true",
+  AFTER: "after",
+  CURSOR: "cursor",
+  SYNC: "sync",
+} as const;
 
 /**
  * The query every live read names the account it was started for under, as
@@ -174,6 +182,17 @@ const liveCursorAnswerSchema = EffectSchema.Struct({
   next: EffectSchema.String,
 });
 
+/**
+ * Where a part a reader follows by sync id stands: the id its rows were read
+ * past, absent where they are its rows whole, as for a reader too far
+ * behind; and the id to read past next, below which every write has ended
+ * and shows in the rows a reader holds once it joins these on.
+ */
+const liveSyncAnswerSchema = EffectSchema.Struct({
+  past: EffectSchema.optionalKey(EffectSchema.String),
+  next: EffectSchema.String,
+});
+
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
@@ -216,6 +235,15 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
    * holds, or its rows whole where `past` is absent.
    */
   cursor: EffectSchema.optionalKey(liveCursorAnswerSchema),
+  /**
+   * Where the part stands for a reader that named a sync id
+   * (`LIVE_POLL.SYNC`), answered only to such a reader: its rows are then
+   * only those past `past` moved, which replace the reader's rows of the
+   * same id, or its rows whole where `past` is absent.
+   */
+  sync: EffectSchema.optionalKey(liveSyncAnswerSchema),
+  /** The ids of the part's rows that moved past `sync.past` and stand no longer for the reader, which it drops; answered only beside `sync.past`. */
+  gone: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;

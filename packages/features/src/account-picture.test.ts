@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { githubAvatarUrl, pinnedPictureUrl } from "./account-picture.js";
+import { accountPictureAt, githubAvatarUrl, pinnedPictureUrl } from "./account-picture.js";
 
 /**
  * account-picture.test.ts -- a person's picture is drawn only from the hosts the
@@ -37,4 +37,19 @@ test("a sign-in picture is kept from Google's and GitHub's hosts alike, and drop
     "https://avatars.githubusercontent.com/u/1",
   );
   assert.equal(pinnedPictureUrl("https://evil.example.com/a.png"), undefined);
+});
+
+test("a sign-in picture is asked for at the size it is drawn, from Google's address and GitHub's alike", () => {
+  assert.equal(
+    accountPictureAt("https://lh3.googleusercontent.com/a/photo=s96-c", 512),
+    "https://lh3.googleusercontent.com/a/photo=s512-c",
+  );
+  assert.equal(
+    accountPictureAt("https://avatars.githubusercontent.com/u/1001?v=4", 512),
+    "https://avatars.githubusercontent.com/u/1001?v=4&s=512",
+  );
+  assert.equal(
+    accountPictureAt("https://lh3.googleusercontent.com/a/photo", 512),
+    "https://lh3.googleusercontent.com/a/photo",
+  );
 });

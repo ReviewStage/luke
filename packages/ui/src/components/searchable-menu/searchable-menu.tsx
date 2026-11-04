@@ -45,7 +45,11 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
  * opens a submenu ending in a
  * chevron; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
- * on GitHub or the effort an agent will run at. A pinned row is a press of
+ * on GitHub or the effort an agent will run at, each label starting at the
+ * row's inset where the row has no glyph; and under those, behind a hairline
+ * of its own, one muted last line pressed by nothing, such as who pays for
+ * an agent, with a link at its end, set apart and never broken across lines,
+ * where its owner hands one. A pinned row is a press of
  * its own, a switch the press turns without closing anything, or opens a
  * submenu of rows beside itself, as a listed row may too (a new Browser
  * tab, and where it opens), anchored to the row and turned to the other
@@ -203,6 +207,13 @@ export interface FootRow {
   disabled?: string | undefined;
 }
 
+/** The menu's last line, pressed by nothing: who pays for the agent, and the link that manages it where its provider asks for one. */
+export interface MenuLastLine {
+  words: string;
+  /** A link at the line's end, set apart from the words: Manage usage. */
+  end?: React.ReactNode;
+}
+
 /** Which side of the menu a submenu stands on: beside its row to the right, or to the left where there is no room. */
 const SUBMENU_SIDE = {
   RIGHT: "right",
@@ -256,13 +267,20 @@ const MENU =
 /** The rows pinned under the list, behind a hairline, where the scrolling cannot take them. */
 const FOOT = "ui-searchable-menu-foot block flex-none border-t border-border p-menu-inset";
 
-/**
- * One muted line under the pinned rows or a submenu's, inset as a row's
- * words are: what the agent has cost; one aligned starts where a row's label
- * does, past the row's glyph slot.
- */
+/** One muted line under a submenu's rows, inset as a row's words are: what the long context window costs. */
 const NOTE =
-  "ui-searchable-menu-note px-row-inset pt-ui-4 pb-0 [.ui-searchable-menu-submenu>&]:pb-menu-inset data-[aligned=true]:pl-menu-label";
+  "ui-searchable-menu-note px-row-inset pt-ui-4 pb-0 [.ui-searchable-menu-submenu>&]:pb-menu-inset";
+
+/** The menu's last line, in a block of its own behind the pinned rows' hairline, its words inset as a row's are. */
+const LAST_LINE =
+  "ui-searchable-menu-last-line block flex-none border-t border-border p-menu-inset";
+
+/** The last line's words and the link at its end, set apart: the words take the room, the link keeps to one line. */
+const LAST_LINE_BODY =
+  "ui-searchable-menu-last-line-body flex items-baseline justify-between gap-ui-8 px-row-inset";
+
+/** The link at the last line's end, never broken across lines. */
+const LAST_LINE_END = "ui-searchable-menu-last-line-end flex-none whitespace-nowrap";
 
 /** A section's heading over rows drawn in place, inset as a row's words are. */
 const HEADING = "ui-searchable-menu-heading px-row-inset pt-ui-8 pb-ui-4";
@@ -439,20 +457,33 @@ function submenuOptions(open: Submenu): ComboboxOption[] {
   }));
 }
 
-/** One muted line pressed by nothing, under the pinned rows or a submenu's. */
-function FootNote({
-  words,
-  aligned = false,
-}: {
-  words: React.ReactNode;
-  /** Whether the words start where a row's label does, past its glyph slot. */
-  aligned?: boolean;
-}): React.JSX.Element {
+/** One muted line pressed by nothing, under a submenu's rows. */
+function FootNote({ words }: { words: React.ReactNode }): React.JSX.Element {
   return (
-    <div className={NOTE} data-aligned={aligned || undefined}>
+    <div className={NOTE}>
       <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {words}
       </Text>
+    </div>
+  );
+}
+
+/** The menu's last line, muted under its own hairline, its link at its end where it has one. */
+function LastLine({ line }: { line: MenuLastLine }): React.JSX.Element {
+  return (
+    <div className={LAST_LINE}>
+      <div className={LAST_LINE_BODY}>
+        <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {line.words}
+        </Text>
+        {line.end === undefined ? null : (
+          <span className={LAST_LINE_END}>
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {line.end}
+            </Text>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -578,10 +609,8 @@ export function SearchableMenu(
     onLeave: (left: EventTarget | null) => void;
     /** Pinned under the list, always on screen, reached by the arrows past the last match. */
     foot?: readonly FootRow[] | undefined;
-    /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
-    footNote?: string | undefined;
-    /** One muted line under that, which may hold a link: the plan that pays, as its provider asks. */
-    planNote?: React.ReactNode;
+    /** One muted line under its own hairline, after the pinned rows: who pays for the agent. */
+    lastLine?: MenuLastLine | undefined;
     /** The menu is on its way out: drawn fading, and taking nothing. */
     leaving?: boolean | undefined;
     /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -772,7 +801,7 @@ export function SearchableMenu(
   // What the field controls, as the space-separated list of ids ARIA reads:
   // the list, the pinned rows, and a submenu while one is open, so every row
   // it may name stands in a popup it controls.
-  const footed = foot.length > 0 || props.footNote !== undefined || props.planNote !== undefined;
+  const footed = foot.length > 0;
   const controlled =
     sheet && open !== undefined
       ? [submenuId]
@@ -950,7 +979,7 @@ export function SearchableMenu(
 
   // The submenu standing beside its row, which a sheet never draws there.
   const beside = sheet ? undefined : open;
-  const footRows = footed ? (
+  const pinnedRows = footed ? (
     <div id={footId} className={FOOT}>
       {foot.map((row, index) => {
         const item = (
@@ -991,10 +1020,14 @@ export function SearchableMenu(
           </Tooltip>
         );
       })}
-      {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
-      {props.planNote === undefined ? null : <FootNote words={props.planNote} aligned />}
     </div>
   ) : null;
+  const footRows = (
+    <>
+      {pinnedRows}
+      {props.lastLine === undefined ? null : <LastLine line={props.lastLine} />}
+    </>
+  );
 
   // Note that the sheet hears no blur for its owner's `onLeave`, because its
   // dialog stands outside the owner's box, so every focus moving inside it

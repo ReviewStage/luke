@@ -1,3 +1,4 @@
+import attachmentViewer from "@repo/panel/styles/attachment-viewer.css?raw";
 import base from "@repo/panel/styles/base.css?raw";
 import desktop from "@repo/panel/styles/desktop.css?raw";
 import entry from "@repo/panel/styles/index.css?raw";
@@ -53,6 +54,7 @@ const SHEET_BY_IMPORT = {
   "./base.css": base,
   "@repo/ui/styles.css": ui,
   "./tasks.css": tasks,
+  "./attachment-viewer.css": attachmentViewer,
   "./shell.css": shell,
   "./desktop.css": desktop,
 } as const;
