@@ -31,7 +31,7 @@ import {
   type ReachFeature,
 } from "@repo/features/admin-overview-vocabulary";
 import type { AdminMetricsScope, AdminMetricsWindow } from "@repo/features/admin-wire";
-import { PULL_REQUEST_STATE } from "@repo/features/agent-wire";
+import { AGENT_KIND, AGENT_SOURCE, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { AUTOMATION_RUN_STATUS } from "@repo/features/automation-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { INTEGRATION_STATUS } from "@repo/features/integration-wire";
@@ -50,6 +50,7 @@ import {
   isNotNull,
   max,
   ne,
+  not,
   or,
   type SQL,
   sql,
@@ -123,6 +124,30 @@ const PR_MERGED = or(
 /** Whether an automation started the agent, as every query asks it. */
 const STARTED_BY_AUTOMATION = agentAutomationRunSql(agentTable);
 
+/** Whether the Slack bot started the agent; false rather than null for an agent with no source. */
+const STARTED_FROM_SLACK = sql<boolean>`coalesce(${agentTable.source} ->> 'kind' = ${AGENT_SOURCE.SLACK}, false)`;
+
+/** Whether another coding agent's `start_agent` started the agent. */
+const STARTED_BY_AGENT = isNotNull(agentTable.startedByAgentId);
+
+/**
+ * The agents started since `since` that `filters` keep, tagged `count`: one
+ * filtered arm of the same scan per figure. The origins' filters spell
+ * `AGENT_ORIGIN`'s precedence, each leaving out the origins before it, so no
+ * agent is counted under two; by hand is what they leave of every agent, which
+ * the fold takes rather than a fourth arm restating it.
+ */
+function agentsStartedRows(count: DailyCount, since: Date, ...filters: SQL[]) {
+  return queryBuilder
+    .select({
+      tag: tag(count),
+      userId: userIdOf(agentTable.userId),
+      at: atOf(agentTable.createdAt),
+    })
+    .from(agentTable)
+    .where(and(gte(agentTable.createdAt, since), ...filters));
+}
+
 /**
  * Every meaningful action since `since`, one row per action: the account that
  * took it and when. This is the one definition of "active" on the Overview:
@@ -170,22 +195,22 @@ function dailyCountRows(since: Date) {
       })
       .from(task)
       .where(gte(task.createdAt, since)),
-    queryBuilder
-      .select({
-        tag: tag(DAILY_COUNT.AGENTS_STARTED),
-        userId: userIdOf(agentTable.userId),
-        at: atOf(agentTable.createdAt),
-      })
-      .from(agentTable)
-      .where(gte(agentTable.createdAt, since)),
-    queryBuilder
-      .select({
-        tag: tag(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS),
-        userId: userIdOf(agentTable.userId),
-        at: atOf(agentTable.createdAt),
-      })
-      .from(agentTable)
-      .where(and(gte(agentTable.createdAt, since), STARTED_BY_AUTOMATION)),
+    agentsStartedRows(DAILY_COUNT.AGENTS_STARTED, since),
+    agentsStartedRows(DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, since, STARTED_BY_AUTOMATION),
+    agentsStartedRows(
+      DAILY_COUNT.AGENTS_FROM_SLACK,
+      since,
+      STARTED_FROM_SLACK,
+      not(STARTED_BY_AUTOMATION),
+    ),
+    agentsStartedRows(
+      DAILY_COUNT.AGENTS_FROM_AGENTS,
+      since,
+      STARTED_BY_AGENT,
+      not(STARTED_BY_AUTOMATION),
+      not(STARTED_FROM_SLACK),
+    ),
+    agentsStartedRows(DAILY_COUNT.PILOTS_STARTED, since, eq(agentTable.kind, AGENT_KIND.PILOT)),
     queryBuilder
       .select({
         tag: tag(DAILY_COUNT.PRS_MERGED),

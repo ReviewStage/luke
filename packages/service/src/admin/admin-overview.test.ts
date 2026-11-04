@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   ACTIVITY_FEATURE,
+  AGENT_ORIGIN,
   DAILY_COUNT,
   type DailyCount,
   FUNNEL_STEP,
@@ -13,7 +14,8 @@ import { buildAdminOverview, emptyOverviewSource } from "./admin-overview.js";
 /**
  * admin-overview.test.ts -- the overview's fold: the chart's days are the
  * window's own, zero-filled; each tile's trend compares the last seven UTC
- * days with the seven before, whatever the window; the funnel and reach keep
+ * days with the seven before, whatever the window; the week's agents split by
+ * origin sum to the agents started; the funnel and reach keep
  * the vocabulary's order with shares of their own bases, and no share of
  * nobody; and the most active accounts keep their rank with their counts
  * joined.
@@ -86,9 +88,40 @@ test("each tile compares the last seven days with the seven before, past a short
   // The 10-07 tasks fall before both runs.
   assert.deepEqual(overview.headline.tasksCreated, { days: 7, recent: 3, prior: 5 });
   assert.deepEqual(overview.headline.agentsStarted, { days: 7, recent: 8, prior: 0 });
-  assert.equal(overview.headline.agentsFromAutomations, 2);
   assert.deepEqual(overview.headline.prsMerged, { days: 7, recent: 1, prior: 4 });
   assert.deepEqual(overview.headline.prsOpened, { opened: 5, merged: 3 });
+});
+
+test("the week's agents split by origin sum to the agents started, by hand the rest, pilots beside", () => {
+  const overview = buildAdminOverview(
+    {
+      ...emptyOverviewSource(),
+      daily: dailyOf([
+        // The 10-14 counts fall in the run before, so no origin carries them.
+        [DAILY_COUNT.AGENTS_STARTED, { "2026-10-20": 6, "2026-10-16": 4, "2026-10-14": 50 }],
+        [DAILY_COUNT.AGENTS_FROM_AUTOMATIONS, { "2026-10-20": 2, "2026-10-14": 50 }],
+        [DAILY_COUNT.AGENTS_FROM_SLACK, { "2026-10-16": 3 }],
+        [DAILY_COUNT.AGENTS_FROM_AGENTS, { "2026-10-20": 1 }],
+        [DAILY_COUNT.PILOTS_STARTED, { "2026-10-20": 2 }],
+      ]),
+    },
+    NOW,
+    ADMIN_METRICS_WINDOW.MONTH,
+  );
+
+  assert.deepEqual(overview.agentOrigins, {
+    agentsStarted: 10,
+    origins: [
+      { origin: AGENT_ORIGIN.AUTOMATION, agents: 2, share: 0.2 },
+      { origin: AGENT_ORIGIN.SLACK, agents: 3, share: 0.3 },
+      { origin: AGENT_ORIGIN.AGENT, agents: 1, share: 0.1 },
+      { origin: AGENT_ORIGIN.HAND, agents: 4, share: 0.4 },
+    ],
+    pilots: 2,
+  });
+
+  const quiet = buildAdminOverview(emptyOverviewSource(), NOW, ADMIN_METRICS_WINDOW.MONTH);
+  assert.ok(quiet.agentOrigins.origins.every((row) => row.agents === 0 && row.share === null));
 });
 
 test("the funnel and reach keep their order, with shares of their bases and none of nobody", () => {

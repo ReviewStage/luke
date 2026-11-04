@@ -16,7 +16,12 @@ import type {
   AdminPullRequest,
   AdminWorkspaceKind,
 } from "./admin-account-wire.js";
-import type { ActivityFeature, FunnelStep, ReachFeature } from "./admin-overview-vocabulary.js";
+import type {
+  ActivityFeature,
+  AgentOrigin,
+  FunnelStep,
+  ReachFeature,
+} from "./admin-overview-vocabulary.js";
 import type { ADMIN_ATTENTION_KIND, AdminWorkspacesKind } from "./admin-wire.js";
 import type { AgentFailure, AgentStatus, ContextWindow } from "./agent-wire.js";
 import type { AutomationRunReason } from "./automation-wire.js";
@@ -129,6 +134,13 @@ interface AdminReachRow {
   share: number | null;
 }
 
+/** One origin's agents among the week's agents started, and their share of them. */
+interface AdminAgentOriginRow {
+  origin: AgentOrigin;
+  agents: number;
+  share: number | null;
+}
+
 /**
  * One of the most active accounts over the window, ranked by the days it took
  * a meaningful action rather than by volume: who lives in the app daily, which a
@@ -160,8 +172,6 @@ export interface AdminOverview {
     activeDevelopers: AdminTrend;
     tasksCreated: AdminTrend;
     agentsStarted: AdminTrend;
-    /** Of the agents started in the recent run, how many an automation started. */
-    agentsFromAutomations: number;
     prsMerged: AdminTrend;
     /**
      * The pull requests of the agents started in the recent run, and how many
@@ -171,6 +181,15 @@ export interface AdminOverview {
      * an older agent opened this week is in neither figure.
      */
     prsOpened: { opened: number; merged: number };
+  };
+  /** The agents started in the headline's recent run, split by how each started. */
+  agentOrigins: {
+    /** The headline's `agentsStarted.recent`, the base of every share. */
+    agentsStarted: number;
+    /** Every origin, in the vocabulary's order, each agent under one; their agents sum to `agentsStarted`. */
+    origins: AdminAgentOriginRow[];
+    /** Of those agents, how many are task pilots, whatever started them. */
+    pilots: number;
   };
   activity: {
     /** The window's UTC days, oldest first, zero-filled. */

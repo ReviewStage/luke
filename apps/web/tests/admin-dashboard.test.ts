@@ -2,6 +2,7 @@
 import type { AdminMetrics, AdminOverview } from "@repo/features/admin-answer-wire";
 import {
   ACTIVITY_FEATURE,
+  AGENT_ORIGIN,
   FUNNEL_STEP,
   REACH_FEATURE,
 } from "@repo/features/admin-overview-vocabulary";
@@ -53,9 +54,18 @@ function overview(overrides: Partial<AdminOverview> = {}): AdminOverview {
       activeDevelopers: { days: 7, recent: 12, prior: 10 },
       tasksCreated: { days: 7, recent: 30, prior: 20 },
       agentsStarted: { days: 7, recent: 40, prior: 40 },
-      agentsFromAutomations: 10,
       prsMerged: { days: 7, recent: 9, prior: 12 },
       prsOpened: { opened: 20, merged: 15 },
+    },
+    agentOrigins: {
+      agentsStarted: 40,
+      origins: [
+        { origin: AGENT_ORIGIN.AUTOMATION, agents: 10, share: 0.25 },
+        { origin: AGENT_ORIGIN.SLACK, agents: 6, share: 0.15 },
+        { origin: AGENT_ORIGIN.AGENT, agents: 8, share: 0.2 },
+        { origin: AGENT_ORIGIN.HAND, agents: 16, share: 0.4 },
+      ],
+      pilots: 3,
     },
     activity: {
       daily: [
@@ -227,7 +237,7 @@ test("each headline tile reads its week's figure under its name, with its move a
     "Tasks created · 7 days30+50% vs the 7 days before · 2.5 per active developer",
   );
   expect(cardOf(page, "Agents started · 7 days")).toBe(
-    "Agents started · 7 days40flat vs the 7 days before · 25% from automations",
+    "Agents started · 7 days40flat vs the 7 days before",
   );
   expect(cardOf(page, "PRs merged · 7 days")).toBe(
     "PRs merged · 7 days9−25% vs the 7 days before · 75% of this week's agents' 20 PRs merged",
@@ -289,6 +299,20 @@ test("the funnel and reach read each row's count and its share of the base", () 
     "Automations | 1 | 8%",
   ]);
   expect(page.textContent).toContain("of 12 active developers");
+});
+
+test("the week's agents read by origin, each row's count and share of the agents started, pilots beside", () => {
+  const page = render(ready(metrics()));
+  const thisWeek = regions(page).find((region) => region.name === "This week")?.words;
+
+  expect(listRows(page, "Agents by origin")).toEqual([
+    "Automation | 10 | 25%",
+    "Slack | 6 | 15%",
+    "Another agent | 8 | 20%",
+    "By hand | 16 | 40%",
+  ]);
+  expect(thisWeek).toContain("of 40 agents started · 3 pilots");
+  expect(thisWeek).toContain("the first that fits");
 });
 
 test("retention counts meaningful actions, and the retired hosted basis stands in its own grid", () => {
