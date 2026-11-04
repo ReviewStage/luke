@@ -29,6 +29,7 @@ import {
   setPlanStatus,
   setProviderKeyStatus,
 } from "@repo/database/models/provider-key-store";
+import { holdSandbox } from "@repo/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@repo/database/models/writer";
 import { user } from "@repo/database/schemas/auth";
 import { deviceAgentLine } from "@repo/database/schemas/device-agent";
@@ -53,6 +54,7 @@ import { afterEach, vi } from "vitest";
 import { CHATGPT_OAUTH, sealChatGptCredentials } from "../../accounts/chatgpt-credentials.js";
 import { TURN_ORIGIN } from "../../core.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
+import { sweepCodexPlanSwaps } from "../../maintenance/codex-plan-sweep.js";
 import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
 import {
   fixtureToken,
@@ -243,6 +245,22 @@ function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   return codexSessions(options);
 }
 
+/** What the newest policy the sandbox's firewall was sent sets on OpenAI's API. */
+const openAiRules = (api: ReturnType<typeof runnerSandboxApi>) => {
+  const policy = api.policies.at(-1)?.policy as
+    | { readonly allow?: Readonly<Record<string, unknown>> }
+    | undefined;
+  return policy?.allow?.["api.openai.com"];
+};
+
+/** The swap the firewall carries for a credential: its bearer set where a request carries the placeholder's. */
+const swapRule = (placeholder: string, credential: string) => ({
+  match: {
+    headers: [{ key: { exact: "authorization" }, value: { exact: `Bearer ${placeholder}` } }],
+  },
+  transform: [{ headers: { authorization: `Bearer ${credential}` } }],
+});
+
 /** The developer's words of a message line: what follows the turn's own words, which lead every message (`turn-message.ts`). */
 const developerContent = (line: InputLine | undefined) =>
   line?.type === INPUT_LINE.MESSAGE ? line.content.slice(1) : [];
@@ -364,7 +382,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "open launches the runner in its Codex mode on the account's plan, naming the token route, with the bearer's placeholder in its environment alone",
+    "open launches the runner in its Codex mode on the account's plan, its token held at the firewall behind the placeholder its token command answers, with the bearer's placeholder in its environment alone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -397,6 +415,11 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(placeholder !== undefined && bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
+        // The token is set at the firewall before the runner starts, behind the placeholder its command answers.
+        const tokenPlaceholder = command.env[RUNNER_ENV.CODEX_TOKEN];
+        assert.ok(tokenPlaceholder !== undefined && tokenPlaceholder.length > 20);
+        assert.notEqual(tokenPlaceholder, placeholder);
+        assert.deepEqual(openAiRules(api), [swapRule(tokenPlaceholder, "access-0")]);
 
         const [config, first] = (yield* launchLines(command)) as [CodexConfig, InputLine];
         assert.deepEqual(config, {
@@ -426,7 +449,14 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
-        for (const secret of ["access-0", "refresh-0", "id-token-0", placeholder, bearer]) {
+        for (const secret of [
+          "access-0",
+          "refresh-0",
+          "id-token-0",
+          placeholder,
+          tokenPlaceholder,
+          bearer,
+        ]) {
           assert.equal(visible.includes(secret), false, "a secret outside the environment");
         }
         assert.equal(JSON.stringify(command.env).includes(bearer), false);
@@ -434,7 +464,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, an Ultrafast version on the ultrafast tier, never asks the plan, and is refused once the key is gone",
+    "an agent its starter's OpenAI API key pays for launches with a placeholder as OPENAI_API_KEY, the key held at the firewall, an Ultrafast version on the ultrafast tier, never asks the plan, and is refused once the key is gone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -480,13 +510,15 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const [command] = api.commands;
         assert.ok(command !== undefined);
-        assert.equal(command.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
+        const placeholder = command.env[RUNNER_ENV.OPENAI_API_KEY];
+        assert.ok(placeholder !== undefined && placeholder.length > 20);
+        assert.deepEqual(openAiRules(api), [swapRule(placeholder, apiKey)]);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
         // An Ultrafast version runs its base model on Codex's ultrafast tier, and on its fast one where the runner predates it.
         const [config] = linesOf(command) as [CodexConfig];
         assert.equal(config.model, "gpt-6.1-sol");
         assert.deepEqual([config.fast, config.ultrafast], [true, true]);
-        const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
+        const visible = JSON.stringify([command, api.sandboxes]);
         assert.equal(visible.includes(apiKey), false);
         assert.equal(
           (yield* sessions.send(opened.sessionId, message(agent, "Also the emails."))).outcome,
@@ -625,6 +657,34 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
+    "a launch's end while a developer's Terminal holds the sandbox takes the token off its firewall and leaves it up",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        yield* signIn(userId, 60);
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
+        assert.deepEqual(openAiRules(api), [swapRule(placeholder, "access-0")]);
+        yield* holdSandbox(agent.conversationId, new Date(Date.UTC(2030, 0, 1)));
+
+        yield* runnerTook(agent.id);
+        const ended = yield* runnerEnded({
+          target: { userId, conversationId: agent.conversationId },
+          sessionId: opened.sessionId,
+          sequence: 5,
+        }).pipe(Effect.provide(services(api)));
+
+        assert.equal(ended, RUNNER_ENDED.HELD);
+        assert.equal(api.sandboxes[0]?.status, "running");
+        assert.deepEqual(api.policies.at(-1)?.policy, { mode: "allow-all" });
+      }),
+  );
+
+  it.effect(
     "a sign-in OpenAI signed out, or none, fails the launch with that refusal, deletes its sandbox and starts no runner",
     () =>
       Effect.gen(function* () {
@@ -753,6 +813,44 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         for (const secret of ["access-0", "access-1", "refresh-1"]) {
           assert.equal(visible.includes(secret), false, "a token handed to the runner");
         }
+      }),
+  );
+});
+
+// A database of its own, so the sweep reads this launch's firewall record alone.
+it.layer(getTestDB())("the scheduled renewal of a Codex plan's token", (it) => {
+  it.effect(
+    "the sweep sets the account's renewed token behind the launch's placeholder before it lapses, and writes nothing while the swap carries it",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const openai = openAi();
+        const { userId, agent } = yield* openAgent;
+        yield* signIn(userId, 60);
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const placeholder = api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN] ?? "";
+        const swept = Effect.flatMap(DateTime.nowAsDate, (now) =>
+          sweepCodexPlanSwaps(NO_KEYS.providerKeyEncryptionKeys, now).pipe(
+            Effect.provide(services(api, openai)),
+          ),
+        );
+
+        // An hour is left: nothing is due, and nothing is written.
+        const sent = api.policies.length;
+        assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
+        assert.equal(api.policies.length, sent);
+        // Twenty minutes on, forty are left: the token is renewed and set behind the same placeholder.
+        yield* TestClock.adjust("20 minutes");
+        assert.deepEqual(yield* swept, { renewed: 1, failed: 0 });
+        assert.equal(openai.state.renewals, 1);
+        assert.deepEqual(openAiRules(api), [swapRule(placeholder, "access-1")]);
+        // A minute on, the swap carries the token as it stands, and is left.
+        yield* TestClock.adjust("1 minute");
+        assert.deepEqual(yield* swept, { renewed: 0, failed: 0 });
+        assert.equal(openai.state.renewals, 1);
       }),
   );
 });

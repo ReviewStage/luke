@@ -12,13 +12,22 @@ import { conversations, turns } from "@repo/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@repo/wire";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Duration, Effect, ErrorReporter, Layer, Option } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option, Redacted } from "effect";
 import { afterEach, vi } from "vitest";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { RUNNER_TAG } from "../agents/machine/vercel-machine.js";
+import {
+  FIREWALL_SLOT,
+  githubEntry,
+  placeholderSwap,
+  sandboxFirewall,
+} from "../agents/sandbox-firewall.js";
+import { deploymentOidcToken, vercelSandboxApi } from "../agents/vercel-sandbox-api.js";
+import { LOCAL_AGENT_ENVIRONMENT } from "../testing/local-agent.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -383,6 +392,62 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.deepEqual(api.pagesListed, [
           { status: "running", sortBy: "createdAt", order: "asc" },
         ]);
+      }),
+  );
+
+  it.effect(
+    "a held sandbox whose run ended and whose runner exited, its END's own withdraw never run, has the runner's credential taken off it once, and the rest left",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const agent = yield* openAgent(CONVERSATION_RUNTIME.CODEX, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        yield* holdSandbox(agent.conversationId, new Date(NOW.getTime() + 60_000));
+        const api = vercel();
+        const sandbox = nativeSandbox(agent.id);
+        api.sandboxes.push(sandbox);
+        const session = { userId: agent.userId, sandboxSessionId: sandbox.currentSessionId };
+        const withRing = Effect.provide(Layer.merge(api.layer, LOCAL_AGENT_ENVIRONMENT));
+        const firewall = sandboxFirewall(
+          yield* vercelSandboxApi(deploymentOidcToken).pipe(Effect.provide(api.layer)),
+        );
+        yield* Effect.gen(function* () {
+          yield* firewall.set(
+            session,
+            FIREWALL_SLOT.GITHUB,
+            githubEntry({
+              token: Redacted.make("ghs_fixture"),
+              fullName: "Acme/Relay",
+              access: { kind: GITHUB_ACCESS.APP },
+            }),
+          );
+          yield* firewall.set(
+            session,
+            FIREWALL_SLOT.OPENAI_PLAN,
+            placeholderSwap({
+              domain: "api.openai.com",
+              header: "authorization",
+              placeholder: Redacted.make("Bearer placeholder-fixture"),
+              value: Redacted.make("Bearer access-fixture"),
+            }),
+          );
+        }).pipe(withRing);
+        const seeded = api.policies.length;
+
+        const first = yield* sweepNativeSandboxes(NOW).pipe(withRing);
+        const afterFirst = api.policies.length;
+        yield* sweepNativeSandboxes(NOW).pipe(withRing);
+
+        assert.equal(first.held, 1);
+        assert.equal(sandbox.status, "running");
+        assert.deepEqual(
+          [...(yield* firewall.standing(session).pipe(withRing))],
+          [FIREWALL_SLOT.GITHUB],
+        );
+        // One send takes the runner's swap off; the next sweep reads the record and sends nothing.
+        assert.deepEqual([afterFirst - seeded, api.policies.length - afterFirst], [1, 0]);
       }),
   );
 

@@ -21,7 +21,7 @@ import {
 import { Effect, Exit, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { claudeCodeLive } from "./claude-code.js";
-import { askCodexToken } from "./codex-token.js";
+import { codexToken } from "./codex-token.js";
 import { hostProcessTable, MAC_PS } from "./host-processes.js";
 import { runsOnHost } from "./launch.js";
 import { processTable } from "./processes.js";
@@ -74,7 +74,7 @@ const launch = runAgent({
 // Note that the token goes to stdout alone, for app-server, and a failure says only its words.
 const token = Effect.gen(function* () {
   if (tokenUrl === undefined) return yield* Effect.fail("no token URL was given");
-  const accessToken = yield* askCodexToken(tokenUrl, process.env).pipe(
+  const accessToken = yield* codexToken(tokenUrl, process.env).pipe(
     Effect.mapError((failure) => failure.detail),
   );
   yield* Effect.sync(() => process.stdout.write(`${accessToken}\n`));

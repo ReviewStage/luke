@@ -14,7 +14,12 @@ import {
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "@repo/database/testing";
-import { AGENT_MACHINE, AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
+import {
+  AGENT_MACHINE,
+  AGENT_PAYER,
+  type AgentMachineKind,
+  type AgentPayer,
+} from "@repo/features/agent-wire";
 import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import {
@@ -131,13 +136,20 @@ const standing = Effect.gen(function* () {
   return { ask, openai, logged };
 });
 
-/** A coding agent on the runtime and payer given, its runner's bearer recorded. */
-const agentOn = (runtime: ConversationRuntime, payer: AgentPayer, model = "openai/gpt-5.5") =>
+/** A coding agent on the runtime and payer given, its runner's bearer recorded: on its member's host, or in a cloud sandbox where `machine` names one. */
+const agentOn = (
+  runtime: ConversationRuntime,
+  payer: AgentPayer,
+  model = "openai/gpt-5.5",
+  machine: AgentMachineKind = AGENT_MACHINE.DEVICE,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@app.test` });
     const task = yield* startTask(userId, { name: "Teammate invitations" });
+    const deviceId = randomUUID();
+    if (machine === AGENT_MACHINE.DEVICE) yield* registered(userId, deviceId);
     const started = yield* createAgent(userId, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
@@ -148,6 +160,7 @@ const agentOn = (runtime: ConversationRuntime, payer: AgentPayer, model = "opena
       prompt: null,
       runtime,
       payer,
+      ...(machine === AGENT_MACHINE.DEVICE ? { machine, deviceId } : undefined),
     });
     const agent = Option.getOrThrow(started).agent;
     const bearer = randomBytes(32).toString("base64url");
@@ -226,7 +239,7 @@ it.layer(getTestDB())("the runner's token route", (it) => {
   );
 
   it.effect(
-    "hands nothing to a missing, unknown or retired bearer, nor to an agent not on Codex on the plan",
+    "hands nothing to a missing, unknown or retired bearer, nor to an agent not on Codex on the plan, nor to a runner in the cloud's sandbox",
     () =>
       Effect.gen(function* () {
         const { ask, openai } = yield* standing;
@@ -250,6 +263,13 @@ it.layer(getTestDB())("the runner's token route", (it) => {
             "anthropic/claude-opus-5.5",
           ),
           agentOn(CONVERSATION_RUNTIME.CLAUDE_CODE, AGENT_PAYER.CHATGPT_SUBSCRIPTION),
+          // Its token stands at its sandbox's firewall, so its command asks for none.
+          agentOn(
+            CONVERSATION_RUNTIME.CODEX,
+            AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+            "openai/gpt-5.5",
+            AGENT_MACHINE.VERCEL,
+          ),
         ];
         for (const other of others) {
           const { userId, bearer } = yield* other;

@@ -22,7 +22,7 @@ import {
 import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
 import { CODEX_BUNDLED_MODELS_JSON } from "./codex-protocol/bundled-models.js";
-import { askCodexToken } from "./codex-token.js";
+import { codexToken } from "./codex-token.js";
 import type { RunnerSelf } from "./launch.js";
 import { processTable } from "./processes.js";
 import {
@@ -62,6 +62,7 @@ it.effect(
   "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a model line moving to an Ultrafast version runs the next turn on the ultrafast tier its own catalog lists",
   () =>
     Effect.gen(function* () {
+      // Note that in a sandbox this is the launch's placeholder, the key itself set at its firewall, which the runner reads alike.
       const apiKey = "openai-api-key-for-tests";
       const service = fakeService("sleep 600");
       // The launch knows no bundle: on its API key it asks no token.
@@ -430,7 +431,7 @@ it.effect(
         `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
-        'shell_environment_policy.exclude=["APP_RUNNER_TOKEN"]',
+        'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
         'shell_environment_policy.set={ PLAYWRIGHT_BROWSERS_PATH = "0" }',
       ]);
       // The bearer reaches app-server in its environment alone, never argv.
@@ -792,7 +793,7 @@ function fakeTokenRoute() {
 /**
  * Codex's provider `auth` as app-server runs it: the command and its args read
  * from the process's argv, run with the process's own environment (here the
- * command's body, the runner's `askCodexToken`, in place of a child), and
+ * command's body, the runner's `codexToken`, in place of a child), and
  * its stdout the bearer app-server sends.
  */
 function runTokenCommand(process: Spawned, http: Layer.Layer<HttpClient.HttpClient>) {
@@ -800,7 +801,7 @@ function runTokenCommand(process: Spawned, http: Layer.Layer<HttpClient.HttpClie
   const args: string[] = JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]");
   assert.equal(command, SELF.executable);
   assert.deepEqual(args.slice(0, 2), [SELF.script, CODEX_TOKEN_COMMAND]);
-  return askCodexToken(args[2] ?? "", process.env).pipe(Effect.provide(http), Effect.orDie);
+  return codexToken(args[2] ?? "", process.env).pipe(Effect.provide(http), Effect.orDie);
 }
 
 it.effect(
@@ -855,7 +856,10 @@ it.effect(
       ]);
       // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
-      assert.equal(override(process, "shell_environment_policy.exclude"), '["APP_RUNNER_TOKEN"]');
+      assert.equal(
+        override(process, "shell_environment_policy.exclude"),
+        '["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
+      );
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
@@ -869,20 +873,57 @@ it.effect(
 );
 
 it.effect(
+  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, and never asks the service",
+  () =>
+    Effect.gen(function* () {
+      const placeholder = "plan-placeholder-for-tests";
+      const service = fakeService();
+      const route = fakeTokenRoute();
+      const http = fakeHttpClientLayer((url, init) =>
+        url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
+      );
+      const sentToOpenAi: string[] = [];
+      const turn: Exchange = {
+        ...RESUMED_TURN,
+        beforeReply: (process) =>
+          Effect.gen(function* () {
+            sentToOpenAi.push(yield* runTokenCommand(process, http));
+            sentToOpenAi.push(yield* runTokenCommand(process, http));
+          }),
+      };
+      const { spawned, write, run } = yield* launch(
+        [{ exchanges: [...RESUME, turn] }],
+        service,
+        { ...ENV, [RUNNER_ENV.CODEX_TOKEN]: placeholder },
+        { self: SELF, http },
+      );
+      yield* write({ ...CONFIG, threadId: THREAD });
+      yield* write(message("What exact line did you first write to PROBE.md?"));
+
+      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+      const [process] = spawned;
+      assert.deepEqual(sentToOpenAi, [placeholder, placeholder]);
+      assert.deepEqual(route.bearers, []);
+      assert.ok(!(process?.args ?? []).some((arg) => arg.includes(placeholder)));
+      assert.ok(!service.bodies.join("\n").includes(placeholder));
+    }),
+);
+
+it.effect(
   "the token command says only Vespin's status when Vespin refuses it, never the bearer",
   () =>
     Effect.gen(function* () {
       const http = fakeHttpClientLayer(async () => new Response(null, { status: 409 }));
-      const refused = yield* askCodexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
+      const refused = yield* codexToken(TOKEN_URL, ENV).pipe(Effect.provide(http), Effect.flip);
       assert.equal(refused.detail, "The service refused the token: 409");
 
-      const unset = yield* askCodexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
+      const unset = yield* codexToken(TOKEN_URL, {}).pipe(Effect.provide(http), Effect.flip);
       assert.equal(unset.detail, "APP_RUNNER_TOKEN is not set");
 
       const unreachable = fakeHttpClientLayer(async () => {
         throw new Error(`connection reset for ${BEARER}`);
       });
-      const failed = yield* askCodexToken(TOKEN_URL, ENV).pipe(
+      const failed = yield* codexToken(TOKEN_URL, ENV).pipe(
         Effect.provide(unreachable),
         Effect.flip,
       );

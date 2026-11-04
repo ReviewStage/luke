@@ -21,7 +21,11 @@
  * (`retireWarmRunner`), which a runner that took a message since declines,
  * and its END stops the sandbox. The stop is as the END's: the repository's credential taken off the firewall,
  * then the session stopped, its filesystem kept for a later resume; where the
- * credential would not come off, the sandbox is left for the next sweep.
+ * credential would not come off, the sandbox is left for the next sweep. One
+ * a Terminal holds keeps running with the credentials only its exited runner
+ * sent taken off (`RUNNER_SLOTS`), where they still stand: a runner a halt or
+ * a Stop's force ended, one that died without its END, or a launch that
+ * failed, which no END's own withdraw took them off for.
  *
  * A runner that exited while its run's turn still runs died without its END
  * (it drains its END to us before it exits): the sweep settles that turn
@@ -71,6 +75,7 @@ import {
   taggedRunner,
 } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
+import { type FirewallSession, RUNNER_SLOTS, sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -373,6 +378,29 @@ const retiredPastWarm = (
   });
 
 /**
+ * The credentials only a runner sends taken off a sandbox a Terminal keeps up
+ * past its runner's exit, where they still stand, so a sweep that finds them
+ * gone reads the record alone. One that would not come off is said and taken
+ * off at a later sweep's read; a send that failed once its record moved on
+ * is followed by the next write to the session, the Terminal's own renewal
+ * of its GitHub credential among them, which sends what stands.
+ */
+const runnerCredentialsWithdrawn = (api: VercelSandboxApi, session: FirewallSession) =>
+  Effect.gen(function* () {
+    const firewall = sandboxFirewall(api);
+    const standing = yield* firewall.standing(session);
+    for (const slot of RUNNER_SLOTS) {
+      if (standing.has(slot)) yield* firewall.withdraw(session, slot);
+    }
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `an exited runner's credentials stayed on a held sandbox: ${failure.message}`,
+      ),
+    ),
+  );
+
+/**
  * An ended sandbox stopped under its agent's runner lease, and left where
  * another call holds the lease, as a message that resumed the sandbox holds
  * it through its relaunch, before any runner is tagged in it. Once the lease
@@ -393,7 +421,13 @@ const stoppedUnderLease = (
         if (runner !== RUNNER_STANDING.EXITED) return SANDBOX_ENDING.LEFT;
         const ended = yield* runEnded(sandbox, now);
         if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
-        if (yield* sandboxHeld(ended.value.conversationId, now)) return SANDBOX_ENDING.HELD;
+        if (yield* sandboxHeld(ended.value.conversationId, now)) {
+          yield* runnerCredentialsWithdrawn(api, {
+            userId: ended.value.userId,
+            sandboxSessionId: sandbox.running,
+          });
+          return SANDBOX_ENDING.HELD;
+        }
         return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
       }),
     ),

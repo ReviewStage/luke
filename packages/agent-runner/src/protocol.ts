@@ -11,9 +11,12 @@
  * The config says which harness the launch runs: Claude Code (P05), or Codex
  * through `codex app-server` (P20). Secrets never travel in argv or on
  * stdin: the runner's bearer and the harness's credential are in its
- * environment, and Codex asks the service for each ChatGPT access token over HTTPS
- * through the runner's token command (`codex-token.ts`), so no line carries
- * one, on a Mac's queue (`@repo/features/device-agent-wire`) or anywhere else.
+ * environment. Codex's ChatGPT access token is never handed in at all: on a
+ * host the runner's token command (`codex-token.ts`) asks the service for
+ * each over HTTPS, and in the cloud's sandbox it answers the launch's
+ * placeholder (`RUNNER_ENV.CODEX_TOKEN`), the token set in its place at the
+ * sandbox's firewall, so no line carries one, on a Mac's queue
+ * (`@repo/features/device-agent-wire`) or anywhere else.
  */
 
 import type {
@@ -34,8 +37,11 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * stands in its place for an agent the account's key pays for. In a sandbox
  * either is a placeholder minted for the launch, which the sandbox's firewall
  * swaps for the real one on Anthropic's API, so neither enters the sandbox;
- * on a host it is the credential itself. Codex's token is never
- * in it: app-server asks the service for it through the runner's token command.
+ * on a host it is the credential itself. Codex's token is never in it: on a
+ * host app-server asks the service for it through the runner's token command,
+ * and in the cloud's sandbox the command answers a placeholder held here
+ * (`CODEX_TOKEN`), as an OpenAI API key is one there too, each swapped for the
+ * real value at the sandbox's firewall.
  */
 export const RUNNER_ENV = {
   BEARER: "APP_RUNNER_TOKEN",
@@ -53,6 +59,13 @@ export const RUNNER_ENV = {
    * Codex runs inherits.
    */
   OPENAI_API_KEY: "OPENAI_API_KEY",
+  /**
+   * What Codex's token command answers in the cloud's sandbox, in place of
+   * asking the service: the placeholder minted for the launch, which the
+   * sandbox's firewall swaps for the plan's access token on OpenAI's API.
+   * Unset on a host, whose token command asks the service for the token.
+   */
+  CODEX_TOKEN: "APP_CODEX_TOKEN",
   /**
    * Where the runner runs, where its starter says (`RUNNER_PLACE`): set by a
    * host's daemon alone, on a Linux box and a Mac alike, This Mac's among
@@ -161,7 +174,8 @@ export const INPUT_LINE = {
 /**
  * The argument that starts the runner's bundle as Codex's token command rather
  * than as a launch: `node <bundle> codex-token <tokenUrl>`, which prints the
- * plan's access token the service answers, and nothing else, on stdout.
+ * plan's access token the service answers, or in the cloud's sandbox the
+ * launch's placeholder (`RUNNER_ENV.CODEX_TOKEN`), and nothing else, on stdout.
  */
 export const CODEX_TOKEN_COMMAND = "codex-token";
 
