@@ -35,7 +35,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
  * Its acts may come in groups, a rule between each. The ⋯ is `@repo/ui`'s
  * quiet `IconButton`. A row given its words (`row`) stands in `@repo/ui`'s
  * `SettingsRow`, its control and the ⋯ at the row's end, or, where it folds
- * lines open under its words, in `SettingsFoldRow`, its chevron before the ⋯;
+ * lines open under its words, in `SettingsFoldRow`, its ⋯ before the chevron;
  * one given `children` still draws them in the window's own row, until its
  * page moves.
  */
@@ -62,7 +62,7 @@ interface MenuRowWords {
   landed?: boolean;
   /** Whether the row stands inset under the row above, one of its things, as GitHub's accounts stand under GitHub's. */
   indent?: SettingsRowIndent;
-  /** What the row folds open under its words from a chevron before its ⋯ (`SettingsFoldRow`), its lines, the chevron's name, and whether it starts open. */
+  /** What the row folds open under its words from a chevron after its ⋯ (`SettingsFoldRow`), its lines, the chevron's name, and whether it starts open. */
   fold?: { lines: ReactNode; label: string; defaultOpen: boolean };
 }
 

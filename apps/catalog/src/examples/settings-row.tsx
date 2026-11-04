@@ -61,7 +61,7 @@ import { CatalogSection } from "../section";
  * its row with a refusal under that, and accounts indented under their
  * provider's row; and accounts that fold their repositories open under
  * their words, one open from the start with a long name among them, one
- * folded with Show all at its foot, one with a ⋯ after its chevron, at a page's measure and
+ * folded with Show all at its foot, one with a ⋯ before its chevron, at a page's measure and
  * narrower than 380px.
  */
 

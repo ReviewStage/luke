@@ -13,8 +13,9 @@ import { SettingsRow, type SettingsRowControl, type SettingsRowIndent } from "./
 /**
  * settings-row-fold.tsx -- a settings row that folds open what it owns under its words, a line each, as a GitHub account its repositories.
  *
- * The row is `SettingsRow` as it stands, its chevron at its end, a quiet
- * `IconButton` before any ⋯ the row holds, which turns as the fold opens and
+ * The row is `SettingsRow` as it stands, its chevron last at its end, a
+ * quiet `IconButton` after any ⋯ the row holds, so every fold row's chevron
+ * stands in one column, which turns as the fold opens and
  * says whether it is open in `aria-expanded`. The fold
  * stands in the row's own `below`, inside the row's rule and inset to its
  * words, so what it holds reads as part of the row rather than a box of its
@@ -32,7 +33,7 @@ import { SettingsRow, type SettingsRowControl, type SettingsRowIndent } from "./
 /**
  * A row named `label` that folds `children` open under its words, its
  * chevron named `foldLabel`, open at first where `defaultOpen` says, and
- * the row's other controls, such as its ⋯, after the chevron at its end.
+ * the row's other controls, such as its ⋯, before the chevron at its end.
  */
 export function SettingsFoldRow({
   label,
@@ -52,7 +53,7 @@ export function SettingsFoldRow({
   /** The chevron's name, which a sighted reader has from the row ("Repositories of acme"). */
   foldLabel: string;
   defaultOpen?: boolean | undefined;
-  /** The row's other controls, handed its ids, standing after the chevron. */
+  /** The row's other controls, handed its ids, standing before the chevron. */
   actions?: ((control: SettingsRowControl) => ReactNode) | undefined;
   /** The fold's lines. */
   children: ReactNode;
@@ -84,13 +85,13 @@ export function SettingsFoldRow({
       >
         {(control) => (
           <>
+            {actions?.(control)}
             <IconButton
               icon={<DisclosureChevron />}
               label={foldLabel}
               aria-expanded={state.open}
               onClick={state.toggle}
             />
-            {actions?.(control)}
           </>
         )}
       </SettingsRow>
