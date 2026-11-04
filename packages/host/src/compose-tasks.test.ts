@@ -41,6 +41,7 @@ import {
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
   TASK_PRIORITY,
+  TASK_RELATION_KIND,
   TASK_SKILL_SOURCE,
   TASK_STATUS,
   type Task,
@@ -135,6 +136,12 @@ interface FakeService extends TasksClient {
   liveListReads: number;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
+  /** What a delete's answer waits on, so a test can see what is drawn while it is out. */
+  deleteAnswered: Effect.Effect<void>;
+  /** Whether a relation's change is refused, as a service that did not answer refuses it. */
+  relationFails: boolean;
+  /** What a relation change's answer waits on, so a test can see what is drawn while it is out. */
+  relationAnswered: Effect.Effect<void>;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
@@ -450,6 +457,9 @@ function fakeService(tasks: Task[]): FakeService {
     tasklessAgents: [],
     liveListReads: 0,
     deleteFails: false,
+    deleteAnswered: Effect.void,
+    relationFails: false,
+    relationAnswered: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
@@ -990,6 +1000,7 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync((): TaskCallResult<TaskWritten, RelationCallFailure> => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND };
+        if (service.relationFails) return { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED };
         const moved = {
           ...found,
           blockedBy: (found.blockedBy ?? []).filter((id) => id !== otherId),
@@ -999,7 +1010,7 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? moved : candidate,
         );
         return { ok: true, answer: { task: moved } };
-      }),
+      }).pipe(Effect.tap(() => service.relationAnswered)),
     // The service re-titles the document with the name, as the store does.
     rename: (taskId, { name }) =>
       Effect.sync(() => {
@@ -1051,7 +1062,7 @@ function fakeService(tasks: Task[]): FakeService {
         if (service.deleteFails) return undefined;
         service.tasks = service.tasks.filter((candidate) => candidate.id !== taskId);
         return {};
-      }),
+      }).pipe(Effect.tap(() => service.deleteAnswered)),
   };
   return service;
 }
@@ -2082,6 +2093,75 @@ it.effect("a block the service answered stands on the open task through the list
 
     assert.deepEqual(answered, { blockedBy: [BILLING], blocks: [] });
     assert.deepEqual(blockedBy(), [BILLING]);
+  }),
+);
+
+it.effect(
+  "a block turned around between two tasks draws on both at once, and a refusal takes both back",
+  () =>
+    Effect.gen(function* () {
+      const invites = {
+        ...task(INVITES, "Teammate invitations", "# Draft", 10),
+        blockedBy: [BILLING],
+      };
+      const service = fakeService([invites, task(BILLING, "Billing", "# Draft", 11)]);
+      const { call, last, settled, listed, openTask } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      service.live.list.set({
+        plans: service.tasks.map((each) => ({ ...rowOfTask(each), blocked: each.id === INVITES })),
+      });
+      yield* nextPoll(settled);
+      yield* openTask(INVITES);
+      const blocked = () =>
+        [INVITES, BILLING].map(
+          (id) => last()?.tasks.find((row) => row.id === id)?.blocked === true,
+        );
+      const answered = yield* Deferred.make<void>();
+      service.relationAnswered = Deferred.await(answered);
+      service.relationFails = true;
+
+      const turning = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_CHANGE_RELATION, {
+          taskId: INVITES,
+          relation: {
+            taskId: BILLING,
+            from: TASK_RELATION_KIND.BLOCKED_BY,
+            to: TASK_RELATION_KIND.BLOCKS,
+          },
+        }),
+      );
+      yield* settled;
+      const drawn = blocked();
+      yield* Deferred.succeed(answered, undefined);
+
+      assert.deepEqual(yield* Fiber.join(turning), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(drawn, [false, true], "the block is drawn turned around while it is out");
+      assert.deepEqual(blocked(), [true, false]);
+    }),
+);
+
+it.effect("a delete asked draws its task gone before the service answers", () =>
+  Effect.gen(function* () {
+    const service = fakeService([
+      task(INVITES, "Teammate invitations", "# Draft", 10),
+      task(BILLING, "Billing", "# Draft", 11),
+    ]);
+    const { call, last, settled, listed } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed();
+    const answered = yield* Deferred.make<void>();
+    service.deleteAnswered = Deferred.await(answered);
+
+    const deleting = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.TASKS_DELETE, { taskId: INVITES }),
+    );
+    yield* settled;
+    const drawn = last()?.tasks.map((row) => row.id);
+    yield* Deferred.succeed(answered, undefined);
+
+    assert.deepEqual(yield* Fiber.join(deleting), { deleted: true });
+    assert.deepEqual(drawn, [BILLING]);
   }),
 );
 
@@ -3394,7 +3474,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last, listed, openTask } = yield* subject(fakeService([invites]));
+      const service = fakeService([invites]);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, listed, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
       yield* openTask(INVITES);

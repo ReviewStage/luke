@@ -33,7 +33,6 @@ import {
   type AgentServersParams,
   type AgentTranscriptOlderAnswer,
   type AgentTranscriptPage,
-  ARCHIVE_DRAWN,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
   agentDefaultWriteParamsSchema,
@@ -125,6 +124,7 @@ import {
   declaredMethod,
   type EntityPool,
   type FieldChange,
+  ROW_GONE,
   type WriteDeclaration,
 } from "@repo/sync";
 import type { WireRecord, WireValue } from "@repo/wire";
@@ -315,8 +315,7 @@ export interface AgentsDependencies {
   /**
    * Waits for a write's transaction to arrive on the task list followed
    * live, which holds every agent's row (`TasksComposer.listed`), so a
-   * Start, or an archive a dialog waits on, is answered once the list
-   * carries it; none waits for nothing.
+   * Start is answered once the list carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
   /**
@@ -685,14 +684,12 @@ function composed(
   );
   /**
    * An archive, drawn on the agent's row at once, stamped now by the member,
-   * unless a dialog that asked waits on the answer, which then draws nothing
-   * and comes once the list carries it. Note that an agent archived lets go
-   * of what this host held of its transcript and its workers', and of their
-   * content kept.
+   * a dialog's that asked first among them. Note that an agent archived
+   * lets go of what this host held of its transcript and its workers', and
+   * of their content kept.
    */
   const archived = agentWrite<AgentArchiveParams>(
-    ({ drawn, archived: archive }) => {
-      if (drawn === ARCHIVE_DRAWN.ON_ANSWER) return () => ({});
+    ({ archived: archive }) => {
       const archiver = reader();
       const at = kernel.now();
       return () =>
@@ -707,19 +704,39 @@ function composed(
             }
           : { archivedAt: null, archivedBy: null, archiverName: null };
     },
-    ({ agentId, drawn, ...request }) =>
+    ({ agentId, ...request }) =>
       Effect.tap(asked(client.archive(agentId, request)), (answer) =>
         "agent" in answer
           ? Effect.andThen(
-              Effect.andThen(
-                held.forget((key) => key.agentId === agentId),
-                kept.forget(keptOfAgent(agentId)),
-              ),
-              drawn === ARCHIVE_DRAWN.ON_ANSWER ? listed(answer.txid) : Effect.void,
+              held.forget((key) => key.agentId === agentId),
+              kept.forget(keptOfAgent(agentId)),
             )
           : Effect.void,
       ),
   );
+  /**
+   * An agent deleted once its question was answered, drawn gone from the
+   * list at once and kept once the list carries it; a refusal puts it back.
+   * Note that an agent deleted lets go of its content kept, and its
+   * workers'.
+   */
+  const deleted: WriteDeclaration<
+    AgentRow,
+    FieldChange<AgentRow>,
+    { readonly agentId: string },
+    WireValue
+  > = {
+    kind: AGENT,
+    keys: ({ agentId }) => [agentId],
+    change: () => () => ROW_GONE,
+    send: ({ agentId }) =>
+      Effect.gen(function* () {
+        const answer = yield* asked(client.delete(agentId));
+        if (!("deleted" in answer)) return { refused: carried<AgentDeleteAnswerView>(answer) };
+        yield* kept.forget(keptOfAgent(agentId));
+        return { answer: carried<AgentDeleteAnswerView>(answer), txid: answer.txid };
+      }),
+  };
   /** A pin, drawn on the agent's row at once, newest pinned and standing where it was dragged, and kept once the list carries it. */
   const pinned = agentWrite<AgentPinParams>(
     (request) => (row) =>
@@ -1096,19 +1113,12 @@ function composed(
         const answer = yield* asked(client.rewind(agentId, messageId));
         return carried<AgentAgentAnswer>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_DELETE]: (params) =>
-      Effect.gen(function* () {
-        const { agentId } = yield* readParams(
-          agentStopParamsSchema,
-          params,
-          "deleting an agent names one agent",
-        );
-        const answer = yield* asked(client.delete(agentId));
-        // Note that an agent deleted lets go of its content kept, and its workers'.
-        if ("deleted" in answer) yield* kept.forget(keptOfAgent(agentId));
-        if ("txid" in answer) yield* listed(answer.txid);
-        return carried<AgentDeleteAnswerView>(answer);
-      }),
+    [GATEWAY_METHOD.AGENTS_DELETE]: declaredMethod(
+      dependencies.pool,
+      deleted,
+      (params: WireRecord) =>
+        readParams(agentStopParamsSchema, params, "deleting an agent names one agent"),
+    ),
     [GATEWAY_METHOD.AGENTS_PAGE]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
