@@ -78,6 +78,41 @@ it.effect("each pixel steps one cell on along the lap on each beat", () =>
   }),
 );
 
+it.effect("a mark committed under a capture stage holds its resting frame on the beat", () =>
+  Effect.gen(function* () {
+    const registry = AtomRegistry.make({
+      initialValues: [
+        [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, yield* Clock.Clock))],
+      ],
+    });
+    // The stage zeroes the motion tokens as it is committed, after the mark's render has read them.
+    const stage = (element: HTMLElement | null) => {
+      if (element !== null) document.body.style.setProperty("--ui-duration-fast", "0s");
+    };
+    const mark = render(
+      createElement(
+        RegistryContext.Provider,
+        { value: registry },
+        createElement("div", { ref: stage }, createElement(WorkingMark)),
+      ),
+    );
+    yield* TestClock.adjust("200 millis");
+    yield* Effect.promise(() => act(() => Promise.resolve()));
+    document.body.style.removeProperty("--ui-duration-fast");
+    assert.deepEqual(
+      [...mark.querySelectorAll<SVGElement>(".ui-working-mark-dot")].map(
+        (dot) => dot.style.transform,
+      ),
+      [
+        "translate(5px, 0px)",
+        "translate(0px, 0px)",
+        "translate(5px, 10px)",
+        "translate(10px, 10px)",
+      ],
+    );
+  }),
+);
+
 test("the shimmer says its words and passes props on", () => {
   const line = render(createElement(Shimmer, { children: "Working", "aria-live": "polite" }));
   const span = line.querySelector(".ui-shimmer");

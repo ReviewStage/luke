@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ORPCError } from "@orpc/client";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import { AGENT_STATUS, type AgentSummary } from "@repo/features/agent-wire";
 import {
@@ -21,9 +22,10 @@ import {
   type TERMINAL_ACT_KIND,
 } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { timeRuntime } from "@repo/ui";
 import type { UnparsedWireValue } from "@repo/wire";
-import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -295,7 +297,9 @@ async function mount(
   const root = createRoot(container);
   roots.push(root);
   const agents = agentsControl({ agents: [AGENT], agentIds: [AGENT.id] });
-  const registry = AtomRegistry.make();
+  // Note that the window's ticks never start here, because the working agent's mark steps on one
+  // forever, and a test that runs every fake timer out would never finish.
+  const registry = AtomRegistry.make({ initialValues: [[timeRuntime, AsyncResult.initial()]] });
   before?.(registry);
   const wrapped = (tab: React.ReactElement) =>
     findable

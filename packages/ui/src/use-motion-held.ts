@@ -19,10 +19,13 @@ export function useMotionHeld(): boolean {
   const [held, setHeld] = useState(() => typeof document === "undefined" || motionHeld());
 
   useEffect(() => {
+    const update = () => setHeld(motionHeld());
+    // Note that we read again once drawn, because a capture run zeroes the tokens under a stage
+    // that may be committed beside the caller, after the render's own read.
+    update();
     // Note that a document with no media queries, as a test's is, has no setting to follow.
     if (typeof window.matchMedia !== "function") return;
     const query = window.matchMedia(REDUCED_MOTION_QUERY);
-    const update = () => setHeld(motionHeld());
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
