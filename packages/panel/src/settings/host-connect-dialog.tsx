@@ -155,7 +155,6 @@ function AskDialog({
   sending,
   connected,
   onAnswer,
-  onConnected,
   onClose,
 }: {
   code: string;
@@ -163,7 +162,6 @@ function AskDialog({
   sending: Sending | undefined;
   connected: boolean;
   onAnswer: (answer: Answer) => void;
-  onConnected: () => void;
   onClose: () => void;
 }): React.JSX.Element {
   const inFlight = sending === SENDING.CONNECT || sending === SENDING.DENY;
@@ -192,10 +190,7 @@ function AskDialog({
             busy={sending === SENDING.CONNECT}
             busyLabel={WORDS.CONNECTING}
             done={connected}
-            onDone={() => {
-              onConnected();
-              onClose();
-            }}
+            onDone={onClose}
             onClick={() => onAnswer(ANSWER.CONNECT)}
           >
             {WORDS.CONNECT}
@@ -274,17 +269,15 @@ function ReadingDialog({
 
 /**
  * The dialog for one code: read as it opens, then asked, answered, or why it
- * cannot be. `onConnected` hears the host made once Connect's check has
- * been seen, as the dialog closes onto the list.
+ * cannot be. Once Connect's check has been seen it closes onto the list,
+ * which carries the host made as the service lists it.
  */
 export function HostConnectDialog({
   code,
   onClose,
-  onConnected,
 }: {
   code: string;
   onClose: () => void;
-  onConnected: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const [standing, setStanding] = useState<Standing>({ kind: STANDING.READING });
@@ -339,7 +332,6 @@ export function HostConnectDialog({
           sending={standing.kind === STANDING.ASKING ? standing.sending : undefined}
           connected={standing.kind === STANDING.CONNECTED}
           onAnswer={(pressed) => answer(standing.box, pressed)}
-          onConnected={onConnected}
           onClose={onClose}
         />
       );

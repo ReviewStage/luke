@@ -135,6 +135,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onDevicePresenceChanged((held) => {
         state.update({ [LIVE_READ.DEVICE_PRESENCE]: held });
       }),
+      gateway.host.onHostsChanged((held) => {
+        state.update({ [LIVE_READ.HOSTS]: held });
+      }),
       gateway.host.onWorkspaceInvitationsChanged((held) => {
         state.update({ [LIVE_READ.WORKSPACE_INVITATIONS]: held });
       }),

@@ -12,7 +12,11 @@
  * account.
  *
  * Each read the tabs ask is answered here, through the act door
- * (`act.ts`), as main would answer it with the service behind it. A Terminal
+ * (`act.ts`), as main would answer it with the service behind it, but the
+ * parts of the pull request the host holds for its tabs, the pull request,
+ * its checks, conversation, and what the agent published, the pickers'
+ * options, and the viewed marks, which are staged on the document as the
+ * host would lay them (`agentAppState`). A Terminal
  * attached is answered as main answers one too: a port posted to the window
  * under the terminal channel, carrying the shell's bytes and the state the
  * profile stages.
@@ -994,7 +998,7 @@ type StagedAnswer<Kind extends PortActKind> = (
   stage: AgentStage,
 ) => PortActResult<Kind>;
 
-/** Every read the agent's tabs ask, answered as the service would answer it for this agent. */
+/** Every read the agent's tabs ask through the act door, answered as the service would answer it for this agent; the parts the host holds are staged apart (`STAGED_PARTS`). */
 const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.AGENTS_LIST]: ({ taskId }, stage) => ({
     agents: [agentSummary(taskId, longRun(stage))],
@@ -1004,7 +1008,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     failure: AGENT_CALL_FAILURE.NOT_FOUND,
   }),
   [ACT_KIND.AGENTS_PICTURE]: () => longRunPicture(),
-  [ACT_KIND.AGENTS_PULL_REQUEST]: () => PUBLISHED,
   [ACT_KIND.AGENTS_CHANGES]: () => CHANGES,
   [ACT_KIND.TASKS_FILE]: ({ path, firstLine, lastLine, raw }) => {
     const lines = FILES.get(path);
@@ -1134,7 +1137,7 @@ function stagedPart<Part>(
   };
 }
 
-/** The parts of the agent's own pull request its Pull request tab holds, as the host would lay each. */
+/** The parts of the agent's own pull request its tabs hold, as the host would lay each. */
 const STAGED_PARTS = {
   [LIVE_READ.PULL_REQUEST]: stagedPart<AgentOverviewPullRequestAnswerView>(OVERVIEW_PULL_REQUEST),
   [LIVE_READ.PULL_REQUEST_CHECKS]: stagedPart<AgentOverviewChecksAnswerView>(OVERVIEW_CHECKS),

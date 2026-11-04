@@ -1,8 +1,8 @@
 import { REPLAY_STEP_KIND, type Replay, type ReplayStep } from "@repo/features/agent-replay";
-import type { AgentPullRequestAnswerView } from "@repo/features/agent-view";
 import type { AgentPullRequest, AgentSummary, AgentTodos } from "@repo/features/agent-wire";
 import { AGENT_SENDER } from "@repo/features/agent-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import {
   BUTTON_VARIANT,
   Button,
@@ -32,6 +32,7 @@ import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/
 import { PLAN_BODY_LAYOUT, Plan, PlanContent, PlanHeader, PlanIcon } from "../ai-elements/plan.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { useHostRead } from "../use-host-read.js";
 import { lineSender, providerOf } from "./agent-model.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
 import { CopyMessageAction } from "./copy-message.js";
@@ -97,8 +98,6 @@ export interface ReplayPlace {
   readonly pullRequests: ReadonlyMap<string, AgentPullRequest>;
   /** Reads one agent by its id, as a page that lists only its own agent names the source; none where nothing reads one. */
   readonly readAgent: ((agentId: string) => Promise<AgentSummary | undefined>) | undefined;
-  /** Reads what an agent published, its branch among it; none where nothing reads it. */
-  readonly readPublished: ((agentId: string) => Promise<AgentPullRequestAnswerView>) | undefined;
   readonly openGitHub: (url: string) => void;
 }
 
@@ -113,10 +112,7 @@ const NO_AGENTS: readonly AgentSummary[] = [];
  */
 export function replayPlace(input: {
   agent: AgentSummary;
-  control: Pick<
-    AgentsControl,
-    "agents" | "archived" | "pullRequests" | "readPullRequest" | "readAgent" | "me"
-  >;
+  control: Pick<AgentsControl, "agents" | "archived" | "pullRequests" | "readAgent" | "me">;
   tile: ((agentId: string) => Actor | undefined) | undefined;
   target: ((target: ToolTarget) => ReactNode) | undefined;
   onOpenTarget: ((target: ToolTarget) => void) | undefined;
@@ -136,15 +132,8 @@ export function replayPlace(input: {
         : (agentId) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agentId }),
     pullRequests: control.pullRequests,
     readAgent: control.readAgent,
-    readPublished: control.readPullRequest,
     openGitHub,
   };
-}
-
-/** The branch and pull request an agent published, as one read answered them. */
-interface Published {
-  readonly branch: string | null;
-  readonly pullRequest: AgentPullRequest | null;
 }
 
 /** The source agent named on a card, as its chip wears it, when the place does not list it: by its title and its harness's mark where a read found it, the mark of no known harness until then. */
@@ -181,24 +170,6 @@ function useSource(agentId: string, place: ReplayPlace): AgentSummary | undefine
     };
   }, [agentId, reader, unlisted]);
   return listed ?? (read?.id === agentId ? read : undefined);
-}
-
-/** What the source published, read once as the card's body is drawn; nothing until it answers, or where it cannot be read. */
-function usePublished(agentId: string, read: ReplayPlace["readPublished"]): Published | undefined {
-  const [published, setPublished] = useState<Published | undefined>(undefined);
-  useEffect(() => {
-    if (read === undefined) return;
-    let current = true;
-    read(agentId)
-      .then((answer) => {
-        if (current && !("failure" in answer)) setPublished(answer);
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [agentId, read]);
-  return published;
 }
 
 /**
@@ -428,7 +399,7 @@ function ReplaySteps({
   );
 }
 
-/** The foot: the branch and pull request the source published, where known; nothing, rule and all, where neither is. */
+/** The foot: the branch and pull request the source published, where known, held by the host while the card's body is drawn (`LIVE_READ.PULL_REQUEST_PUBLISHED`); nothing, rule and all, where neither is. */
 function ReplayFoot({
   agentId,
   place,
@@ -436,9 +407,11 @@ function ReplayFoot({
   agentId: string;
   place: ReplayPlace;
 }): React.JSX.Element | null {
-  const published = usePublished(agentId, place.readPublished);
+  const held = useHostRead(LIVE_READ.PULL_REQUEST_PUBLISHED, { agentId }).rows;
+  const published = held === undefined || "failure" in held ? undefined : held;
   const doors = useMentionDoors();
-  const pullRequest = published?.pullRequest ?? place.pullRequests.get(agentId);
+  // Note that the task list's pull request stands first, since it moves without a read.
+  const pullRequest = place.pullRequests.get(agentId) ?? published?.pullRequest;
   const branch = published?.branch ?? undefined;
   const words =
     pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);

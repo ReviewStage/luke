@@ -29,6 +29,7 @@ import type {
   WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
 import type { GitHubTokenSummary } from "@repo/features/github-token-wire";
+import type { HostLine } from "@repo/features/host-live";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
@@ -449,6 +450,15 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/** The account's hosts as Settings › Hosts draws them, by name, with each removal still out drawn gone, and the install script's address its commands name. */
+export interface AppHostsHeld {
+  hosts: readonly HostLine[];
+  installScriptUrl: string;
+}
+
+/** The account's hosts the windows hold, by the account, as the host's read of them stands. */
+export type AppHosts = Readonly<Record<string, AppHostRead<AppHostsHeld>>>;
+
 /**
  * Each workspace's pending invitations the host holds for an owner's or an
  * admin's windows (`workspace-invitations-read.ts`): those a window draws,
@@ -645,6 +655,7 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_VIEWED]: AgentPullRequestViewedAnswerView;
   [LIVE_READ.REVIEW_OPTIONS]: AgentReviewOptionsAnswerView;
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.HOSTS]: AppHostsHeld;
   [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.THIS_MAC_HOST]: AppThisMacHost;
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
@@ -788,6 +799,8 @@ export interface AppState {
   [LIVE_READ.REVIEW_OPTIONS]: AppPullRequestPart<AgentReviewOptionsAnswerView>;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** The account's hosts, held while Settings › Hosts draws them and a while after: what that page lists. */
+  [LIVE_READ.HOSTS]: AppHosts;
   /** Each workspace's pending invitations an owner's or an admin's windows draw, held while a window draws them and a while after: what Settings › Workspace lists under Invitations. */
   [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
   /** Which machine This Mac is and the device its host's record names, held for the signed-in session and told as it moves: what Settings › Hosts and Runs on name This Mac by. */
@@ -976,6 +989,7 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.HOSTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_INVITATIONS]: {
     keys: READ_KEYS.ONE,
     on: KEYS_ON.SLICE,

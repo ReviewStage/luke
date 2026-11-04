@@ -47,7 +47,6 @@ import {
   type AgentPictureParams,
   type AgentPinParams,
   type AgentPullRequestActionParams,
-  type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
   type AgentPullRequestWriteAnswerView,
@@ -80,7 +79,6 @@ import {
   agentModelsAnswerSchema,
   agentPageAnswerViewSchema,
   agentPartViewSchema,
-  agentPullRequestAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentTranscriptChangedSchema,
@@ -94,9 +92,7 @@ import {
   type GitHubTokenSaveParams,
   githubTokenAnswerViewSchema,
   type HostDoneAnswerView,
-  type HostsAnswerView,
   hostDoneAnswerViewSchema,
-  hostsAnswerViewSchema,
   type MemoriesAnswerView,
   type MemoriesFollowParams,
   type MemoryForgetParams,
@@ -355,6 +351,7 @@ import type {
   AppHistories,
   AppHolderInboxes,
   AppHostRead,
+  AppHosts,
   AppInboxItems,
   AppInstalledSkills,
   AppIntegrations,
@@ -707,8 +704,14 @@ export interface HostOperator {
   agentDefaultRead(): Effect.Effect<AgentDefaultAnswer>;
   /** The default written; the choice as kept, or why it is unchanged. */
   agentDefaultWrite(choice: ModelChoice): Effect.Effect<AgentDefaultAnswer>;
-  /** The account's hosts, as Settings lists them; or why there is no list. */
-  hostsList(): Effect.Effect<HostsAnswerView>;
+  /** The account's hosts held for the windows from now until let go, followed live; what they hold is heard through `onHostsChanged`. */
+  hostsFollow(): Effect.Effect<void>;
+  /** The account's hosts let go by the windows. */
+  hostsUnfollow(): Effect.Effect<void>;
+  /** The account's held hosts read again at once, as Try again asks. */
+  hostsRetry(): Effect.Effect<void>;
+  /** The account's hosts the host holds for the windows, whole, each time they move. */
+  onHostsChanged(listener: (held: AppHosts) => void): () => void;
   /** The account's devices' beats held for the windows from now until let go, asked again every `MAC_PRESENCE.POLL_MS` while held; what they hold is heard through `onDevicePresenceChanged`. */
   hostsPresenceFollow(): Effect.Effect<void>;
   /** The account's devices' beats let go by the windows. */
@@ -778,8 +781,6 @@ export interface HostOperator {
   automationsRetry(scope: AutomationFollow): Effect.Effect<void>;
   /** One of the automations' held reads, whole, by its name, each time any of its keys moves. */
   onAutomationsChanged(listener: (held: Partial<AppAutomationReads>) => void): () => void;
-  /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
-  agentPullRequest(params: AgentPullRequestReadParams): Effect.Effect<AgentPullRequestAnswerView>;
   /** One part of one agent's pull request held for the windows' Pull request tabs from now until let go, asked again as a window comes forward and as the pull request moves; what it holds is heard through `onPullRequestPartsChanged`. */
   pullRequestPartFollow(params: PullRequestPartParams): Effect.Effect<void>;
   /** One pull request's part let go by the windows, kept a while among those let go lately. */
@@ -1897,10 +1898,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentDefaultAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    hostsList: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.HOSTS_LIST),
-        answerOf(hostsAnswerViewSchema, AGENT_UNANSWERED),
+    hostsFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_FOLLOW, {})),
+    hostsUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_UNFOLLOW, {})),
+    hostsRetry: () => fire(client.call(GATEWAY_METHOD.HOSTS_RETRY, {})),
+    onHostsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.HOSTS_CHANGED,
+        // Note that the held hosts are the host's own, handed over in this process, so they are passed on as built, as the held beats are.
+        (payload) => (isRecord(payload) ? answered<AppHosts>(payload) : undefined),
+        listener,
       ),
     hostsPresenceFollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_FOLLOW, {})),
     hostsPresenceUnfollow: () => fire(client.call(GATEWAY_METHOD.HOSTS_PRESENCE_UNFOLLOW, {})),
@@ -2110,11 +2116,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           isRecord(payload) ? answered<Partial<AppPullRequestParts>>(payload) : undefined,
         listener,
-      ),
-    agentPullRequest: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST, pullRequestRead(params)),
-        answerOf(agentPullRequestAnswerViewSchema, AGENT_UNANSWERED),
       ),
     chaptersFollow: (params) =>
       fire(

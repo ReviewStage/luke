@@ -320,9 +320,6 @@ beforeEach(() => {
         transcript = { failure: AGENT_CALL_FAILURE.UNANSWERED };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      if (request.kind === ACT_KIND.AGENTS_PULL_REQUEST && published !== undefined) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
-      }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
@@ -382,6 +379,7 @@ beforeEach(() => {
       Promise.resolve(
         earlier > 0 ? { pullRequest: { reviewers: [], conversation: [], earlier } } : unanswered,
       ),
+    [PULL_REQUEST_PART.PUBLISHED]: () => Promise.resolve(published ?? unanswered),
   });
 });
 

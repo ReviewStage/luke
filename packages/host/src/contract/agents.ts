@@ -35,7 +35,6 @@ import {
   agentPartViewSchema,
   agentPinParamsSchema,
   agentPullRequestActionParamsSchema,
-  agentPullRequestAnswerViewSchema,
   agentPullRequestParamsSchema,
   agentPullRequestReadParamsSchema,
   agentPullRequestWriteAnswerViewSchema,
@@ -52,7 +51,6 @@ import {
   agentWorkspaceListParamsSchema,
   hostDoneAnswerViewSchema,
   hostIdParamsSchema,
-  hostsAnswerViewSchema,
   pullRequestPartParamsSchema,
 } from "@repo/features/agent-view";
 import {
@@ -95,9 +93,13 @@ export const agentActsContract = {
   )
     .input(exactInput(agentDefaultWriteParamsSchema))
     .output(EffectSchema.flip(agentDefaultAnswerViewSchema)),
-  [AGENT_ACT_KIND.HOSTS_LIST]: actProcedure("Could not read your hosts on this system.")
+  // Note that the hold's stream carries nothing: the held hosts reach the panel on app state, and the stream is the window's hold on them.
+  [AGENT_ACT_KIND.HOSTS_FOLLOW]: actProcedure("Could not follow your hosts on this system.")
     .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(hostsAnswerViewSchema)),
+    .output(eventIterator(type<never>())),
+  [AGENT_ACT_KIND.HOSTS_RETRY]: actProcedure("Could not read your hosts again on this system.")
+    .input(exactInput(EffectSchema.Undefined))
+    .output(EffectSchema.Void),
   // Note that the hold's stream carries nothing: the held beats reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.HOSTS_PRESENCE_FOLLOW]: actProcedure(
     "Could not follow your devices' beats on this system.",
@@ -202,11 +204,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPageParamsSchema))
     .output(EffectSchema.Void),
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST]: actProcedure(
-    "Could not read the agent's pull request on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentPullRequestAnswerViewSchema)),
   // Note that the hold's stream carries nothing: the held part reaches the panel on app state, and the stream is the window's hold on it.
   [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_PART_FOLLOW]: actProcedure(
     "Could not follow the agent's pull request on this system.",

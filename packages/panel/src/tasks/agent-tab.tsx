@@ -3135,10 +3135,7 @@ function AgentTabBody({
   });
   const { published } = useAgentPullRequest({
     agentId: agent.id,
-    status: agent.status,
     shown,
-    messages: transcript.messages,
-    read: control.readPullRequest,
     known: control.pullRequests.get(agent.id),
   });
   // Note that the log never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.

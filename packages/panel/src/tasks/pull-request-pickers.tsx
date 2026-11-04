@@ -43,9 +43,10 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  *
  * What the pickers offer is the agent's repository's (`review-options`):
  * the users it may assign and the teams that reach it, who may be asked for a
- * review, and its labels. It is read once, as a picker first opens, on
- * our GitHub App's token as every read is, and read again only where that
- * read failed, which its menu offers as a Retry in the place of its items.
+ * review, and its labels. The host holds them from the moment a picker
+ * first opens (`useReviewOptions`), read on our GitHub App's token as every
+ * read is, and asks again as a window comes forward and on the Retry a
+ * failed read's menu offers in the place of its items.
  * Choosing an item is one change, sent through the tab's own writes
  * (`pull-request-writes.tsx`): asking or no longer asking a review of a
  * user or a team, putting a label on or taking it off. That change is made

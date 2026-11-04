@@ -896,6 +896,8 @@ export const LIVE_READ = {
   REPOSITORY_LISTS: "repositoryLists",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
+  /** The account's hosts, by the account: the service's `hostsLive` query, held while Settings › Hosts draws them and a while after. */
+  HOSTS: "hosts",
   /** One workspace's pending invitations, by the workspace: the service's `workspaceInvitations` query, held for an owner's or an admin's windows that draw them and a few they drew lately. */
   WORKSPACE_INVITATIONS: "workspaceInvitations",
   /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */

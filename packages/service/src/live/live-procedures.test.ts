@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { pointBrowserTab, upsertBrowserTab } from "@repo/database/models/agent-browser-tabs";
 import { createAgent } from "@repo/database/models/agent-store";
+import { enrollOwnDevice, removeHost } from "@repo/database/models/host-store";
 import {
   type InstalledSkillOwner,
   installSkill,
@@ -36,6 +37,12 @@ import { agentOriginLiveAnswerSchema, agentOriginOfLive } from "@repo/features/a
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import { BROWSER_CURSOR_KIND } from "@repo/features/browser-agent-actions";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
+import { DEVICE_ARCH, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import {
+  hostsLiveAnswerSchema,
+  hostsLiveRowsSchema,
+  hostsOfLiveRows,
+} from "@repo/features/host-live";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import {
   installedSkillsLiveAnswerSchema,
@@ -1347,6 +1354,51 @@ it.layer(getTestDB())("a workspace's memories' live read", (it) => {
             path: `/api/live/workspace-memories?workspaceId=${workspaceId}`,
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the account's hosts' live read", (it) => {
+  it.effect(
+    "the account is answered its own hosts polled, with the install script's address, never a teammate's, and a host it removed no more",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const [owner, teammate] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
+        for (const id of [owner, teammate]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@app.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const enrolled = (userId: string, name: string) =>
+          Effect.gen(function* () {
+            const id = randomUUID();
+            yield* enrollOwnDevice(userId, {
+              id,
+              version: "0.5.0",
+              secretHash: `secret-${randomUUID()}`,
+              machine: { name, platform: DEVICE_PLATFORM.LINUX, arch: DEVICE_ARCH.X64 },
+            });
+            return id;
+          });
+        yield* enrolled(owner, "fra-03");
+        const removed = yield* enrolled(owner, "ams-01");
+        yield* enrolled(teammate, "teammate-box");
+        yield* removeHost(owner, removed);
+
+        const polled = yield* ask({ bearer: owner, path: "/api/live/hosts" });
+        assert.equal(polled.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(hostsLiveAnswerSchema)(polled.body);
+        const { hosts } = Schema.decodeUnknownSync(hostsLiveRowsSchema)({
+          hosts: answer.queries.hosts.rows,
+        });
+
+        assert.equal(answer.url, LIVE_POLL_URL);
+        assert.equal(answer.installScriptUrl, "https://app.test/install.sh");
+        assert.deepEqual(
+          hostsOfLiveRows(hosts).map((host) => [host.name, host.platform]),
+          [["fra-03", DEVICE_PLATFORM.LINUX]],
         );
       }),
   );
