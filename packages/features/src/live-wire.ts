@@ -855,6 +855,8 @@ export const LIVE_READ = {
   INTEGRATIONS: "integrationStatuses",
   /** The tools one integration server offers the account's agents, by the server: fetched by the host while a window holds it. */
   INTEGRATION_TOOLS: "integrationTools",
+  /** What GitHub holds of the pull request or issue a link names, by the workspace it is read through and then the link's own address: fetched by the host while a chip holds it. */
+  LINK_STANDINGS: "linkStandings",
   /** One workspace's memories, by the workspace: the service's `workspaceMemories` query, held for the windows that draw Settings › Memory and a few they drew lately. */
   MEMORIES: "workspaceMemories",
   /** One task's pages, or one agent's on no task, by what they stand on: the service's `taskPagesLive` or `agentPagesLive` query, by its kind, held for the windows that chose it and a few they chose lately. */
@@ -869,6 +871,8 @@ export const LIVE_READ = {
   HISTORY: "taskHistory",
   /** One task's cloud Browser tabs, every one of its agents', or one agent's, by what they are listed for: the service's `taskBrowserTabsLive` or `agentBrowserTabsLive` query, by its kind, held for the windows whose side panel lists them and a few they listed lately. */
   BROWSER_TABS: "browserTabs",
+  /** The repositories the account reaches in one workspace, or in every one where a list names none, by the workspace: fetched by the host while a window holds it. */
+  REPOSITORY_LISTS: "repositoryLists",
   /** When each of the account's own devices last beat, by the account: fetched by the host while a window holds it, and again every `MAC_PRESENCE.POLL_MS`. */
   DEVICE_PRESENCE: "devicePresence",
   /** Which machine This Mac is and the device its host's record names, by the account: read by the host as it starts and every few seconds after, held for the session, and never in a browser tab, which has no This Mac. */

@@ -10,12 +10,13 @@ import {
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
+import type { GitHubRepositoriesAnswer } from "@repo/features/github-repositories-wire";
 import type { IntegrationStatusesAnswer } from "@repo/features/integration-live";
 import type { IntegrationToolsView } from "@repo/features/integration-view";
 import type { IntegrationToolsAnswer } from "@repo/features/integration-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PagePlace } from "@repo/features/page-wire";
-import { IDLE_TASKS_VIEW, type TasksView } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TASK_CALL_FAILURE, type TasksView } from "@repo/features/tasks-view";
 import {
   type AppAutomationReads,
   type AppBrowserTabs,
@@ -29,10 +30,12 @@ import {
   type AppPages,
   type AppPlanComments,
   type AppProviderKeyList,
+  type AppRepositoryLists,
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
+  EVERY_WORKSPACE,
   NO_AGENT_ORIGINS,
   NO_BROWSER_TABS,
   NO_CHAPTERS,
@@ -107,9 +110,11 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.INSTALLED_SKILLS]: NO_KEYS_HELD,
     [LIVE_READ.INTEGRATIONS]: NO_KEYS_HELD,
     [LIVE_READ.INTEGRATION_TOOLS]: NO_KEYS_HELD,
+    [LIVE_READ.LINK_STANDINGS]: NO_KEYS_HELD,
     [LIVE_READ.MEMORIES]: NO_KEYS_HELD,
     [LIVE_READ.PAGES]: NO_PAGES,
     [LIVE_READ.PROVIDER_KEYS]: NO_KEYS_HELD,
+    [LIVE_READ.REPOSITORY_LISTS]: NO_KEYS_HELD,
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
@@ -223,6 +228,7 @@ export interface HostReadsHanded {
   readonly deliverTools: (next: AppIntegrationTools) => void;
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
+  readonly deliverRepositoryLists: (next: AppRepositoryLists) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
   /** The account's task list, as the host lays it whole. */
   readonly deliverTasks: (next: TasksView) => void;
@@ -244,8 +250,9 @@ function withAccountId(snapshot: AppStateSnapshot): AppStateSnapshot {
  * signed-in account's keys, and the workspaces' people, over whatever
  * document the window was handed, its experiments and the reads handed
  * before among it, and answers with how each is delivered again as it
- * moves, as the host tells it. The account is given an id where the document
- * names none, since the host holds its keys by it.
+ * moves, as the host tells it; what the bridge delivered before still
+ * reaches the window. The account is given an id where the document names
+ * none, since the host holds its keys by it.
  */
 export function handHostReads(first: {
   readonly items?: AppHostRead<AppInboxItems>;
@@ -256,7 +263,10 @@ export function handHostReads(first: {
   readonly members?: AppWorkspaceMembers;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
+  const earlier = fakeAppBridgeCalls().onAppState;
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  /** Everything delivered here, which what the bridge delivered before never takes back. */
+  let laid: AppStateDelivery["entries"] = {};
   let version = 1;
   let account = HELD_ACCOUNT_ID;
   fakeAppBridge({
@@ -287,10 +297,19 @@ export function handHostReads(first: {
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      // Note that what the bridge delivered before, a test's settings among it, still reaches the window, stamped as newer than all delivered here, with what was delivered here laid over it.
+      const off = earlier?.((delivery) => {
+        version += 1;
+        listener({ version, entries: { ...delivery.entries, ...laid } });
+      });
+      return () => {
+        listeners.delete(listener);
+        off?.();
+      };
     },
   });
   const deliver = (entries: AppStateDelivery["entries"]) => {
+    laid = { ...laid, ...entries };
     version += 1;
     for (const listener of [...listeners]) listener({ version, entries });
   };
@@ -304,6 +323,7 @@ export function handHostReads(first: {
     deliverComments: (next) => deliver({ [LIVE_READ.PLAN_COMMENTS]: next }),
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
+    deliverRepositoryLists: (next) => deliver({ [LIVE_READ.REPOSITORY_LISTS]: next }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
     deliverTasks: (next) => deliver({ tasks: next }),
   };
@@ -447,6 +467,74 @@ export function holdIntegrationTools(
     },
   });
   return asked;
+}
+
+/** What a test's service answers a workspace's repositories read with: the list whole, or that it did not answer. */
+export type RepositoriesRead =
+  | { readonly repositories: GitHubRepositoriesAnswer }
+  | { readonly failure: typeof TASK_CALL_FAILURE.UNANSWERED };
+
+/** What a test's service answers each list's read with, by the list's key; nothing for a read that never answers. */
+type RepositoriesAnswer = (
+  workspace: string,
+) => RepositoriesRead | Promise<RepositoriesRead> | undefined;
+
+/**
+ * Answers the window's holds on each workspace's repositories, and its Try
+ * again on one, as the host does, beside whatever acts the test answers by
+ * now: each list asked of `listOf` by the workspace it names, or
+ * `EVERY_WORKSPACE` where it names none, as it is first held, again on Try
+ * again, and again with every list held as `again` asks, as the host asks
+ * as a window comes forward, and laid on the document through `deliver`;
+ * an answer that is no list keeps what the list held, and fails one that
+ * never answered. Answers with every list asked, by its key, in order.
+ */
+export function holdRepositoryLists(
+  deliver: HostReadsHanded["deliverRepositoryLists"],
+  listOf: RepositoriesAnswer,
+): { readonly asked: readonly string[]; readonly again: () => Promise<void> } {
+  const asked: string[] = [];
+  const scopes = new Map<string, { readonly workspaceId?: string }>();
+  let held: AppRepositoryLists = NO_KEYS_HELD;
+  const ask = async ({ workspaceId }: { readonly workspaceId?: string }) => {
+    const key = workspaceId ?? EVERY_WORKSPACE;
+    asked.push(key);
+    const answering = listOf(key);
+    if (answering === undefined) return;
+    const answer = await Promise.resolve(answering).catch(() => undefined);
+    const was = held[key];
+    const read: AppHostRead<GitHubRepositoriesAnswer> =
+      answer !== undefined && "repositories" in answer
+        ? { rows: answer.repositories }
+        : was?.rows !== undefined
+          ? was
+          : { failed: true };
+    held = { ...held, [key]: read };
+    deliver(held);
+  };
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [TASKS_ACT_KIND.TASKS_REPOSITORIES_FOLLOW]: (scope) => {
+      scopes.set(scope.workspaceId ?? EVERY_WORKSPACE, scope);
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      void Promise.resolve().then(() => ask(scope));
+      return quietHold();
+    },
+    [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]: async (scope) => {
+      const key = scope.workspaceId ?? EVERY_WORKSPACE;
+      if (held[key]?.failed === true) {
+        held = { ...held, [key]: UNREAD };
+        deliver(held);
+      }
+      await ask(scope);
+    },
+  });
+  return {
+    asked,
+    again: async () => {
+      for (const scope of scopes.values()) await ask(scope);
+    },
+  };
 }
 
 /**
