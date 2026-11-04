@@ -51,7 +51,7 @@ export const accountPreferencesLiveRowsSchema = EffectSchema.Struct({
 
 /** The account's choices as the row holds them, each read as the preferences snapshot reads it. */
 export interface AccountPreferencesLive {
-  /** What a click on Start runs on; none until the account chooses. */
+  /** The coding agents' default the account stored; none until it chooses, where a surface draws the fallback (`agentDefaultOf`). */
   readonly agent: ModelChoice | undefined;
   /** What a Generate chapters the account presses runs on; Haiku until the account chooses. */
   readonly chaptersModel: ChaptersModelId;

@@ -292,12 +292,12 @@ it.layer(getTestDB())("the account's live reads", (it) => {
         const answered = yield* ask({ bearer: dana, path: "/api/live/account-preferences" });
         assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
         const answer = Schema.decodeUnknownSync(accountPreferencesLiveAnswerSchema)(answered.body);
+        const rows = Schema.decodeUnknownSync(accountPreferencesLiveRowsSchema)({
+          preferences: answer.queries.preferences.rows,
+        }).preferences;
+        assert.equal(rows.length, 1, "one row, the account's own");
         assert.deepEqual(
-          accountPreferencesOfLiveRows(
-            Schema.decodeUnknownSync(accountPreferencesLiveRowsSchema)({
-              preferences: answer.queries.preferences.rows,
-            }).preferences,
-          ),
+          accountPreferencesOfLiveRows(rows),
           {
             agent: { model: "openai/gpt-6.1-sol", effort: "medium" },
             chaptersModel: CHAPTERS_MODEL.SONNET,

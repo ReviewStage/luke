@@ -251,9 +251,9 @@ export const macCommandsLive = defineLiveQuery({
  * The account's preferences row, its default agent, chapters model, and
  * Slack notifications as stored, woken by a write to any column a view
  * reads, which names the account. Note that a Start with Runs on, an
- * enroll, and a register rewrite only the row's runs-on pick and a settings
- * push its instant beside what stood, which the capture ignores, so neither
- * wakes it, nor the account's other reads.
+ * enroll, and a register write only the row's runs-on pick, and a settings
+ * push that changes nothing writes only its instant; the capture ignores
+ * both, so none of them wakes this read or the account's other reads.
  */
 export const accountPreferencesLive = defineLiveQuery({
   name: "accountPreferences",

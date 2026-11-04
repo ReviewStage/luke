@@ -45,10 +45,10 @@ export const MODEL_PROVIDER = {
 export type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
 
 /**
- * How long a read of the models is kept before it is asked again: AI
- * Gateway's catalog by each service instance (`model-catalog.ts`), and the
- * models the account is offered by the host that holds them for its
- * windows, so neither sits on a catalog longer than the other.
+ * How long each service instance keeps a read of AI Gateway's catalog
+ * before asking again (`model-catalog.ts`). Note that it is the wire's
+ * rather than the service's, so a client holding the models it is offered
+ * can ask again on the same hour without reaching into the service.
  */
 export const MODEL_CATALOG_TTL = Duration.hours(1);
 
