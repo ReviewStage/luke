@@ -709,21 +709,29 @@ const MessageFileWriteSchema = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
 });
 
-/** One file of a message's written as a row of the item's, naming the message, at its place among the message's files. */
-const insertMessageFile = SqlSchema.void({
-  Request: MessageFileWriteSchema,
-  execute: ({ now, itemId, messageId, ...file }) =>
+const insertMessageFiles = SqlSchema.void({
+  Request: Schema.Array(MessageFileWriteSchema),
+  execute: (files) =>
     Database.use((db) =>
-      db.insert(attachment).values({
-        ...file,
-        inboxItemId: itemId,
-        inboxMessageId: messageId,
-        kind: INBOX_ATTACHMENT_KIND.MESSAGE,
-        byteCount: file.bytes.byteLength,
-        createdAt: now,
-      }),
+      db.insert(attachment).values(
+        files.map(({ now, itemId, messageId, ...file }) => ({
+          ...file,
+          inboxItemId: itemId,
+          inboxMessageId: messageId,
+          kind: INBOX_ATTACHMENT_KIND.MESSAGE,
+          byteCount: file.bytes.byteLength,
+          createdAt: now,
+        })),
+      ),
     ),
 });
+
+/** A message's files written as rows of the item's in one statement, each naming the message, at its place among the message's files. */
+function writeMessageFiles(
+  files: readonly (typeof MessageFileWriteSchema.Type)[],
+): InboxStoreEffect<void> {
+  return files.length === 0 ? Effect.void : insertMessageFiles(files);
+}
 
 /** Where an ask is to stand: open again, answered, replaced, or withdrawn with why. */
 const AskStandingSchema = Schema.Struct({
@@ -2255,8 +2263,8 @@ function keepPost(
       withdrawnAt: null,
     });
     if (ask !== null) yield* holdAsk({ itemId, messageId: message.id });
-    yield* Effect.forEach(post.pictures, (picture, position) =>
-      insertMessageFile({
+    yield* writeMessageFiles(
+      post.pictures.map((picture, position) => ({
         id: picture.id,
         userId: agent.userId,
         taskId: agent.taskId,
@@ -2268,7 +2276,7 @@ function keepPost(
         contentType: picture.contentType,
         bytes: picture.bytes,
         now,
-      }),
+      })),
     );
     return yield* itemAsWritten(agent.userId, itemId);
   });
@@ -2949,8 +2957,8 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
     });
     if (write.files.length === 0) return;
     const scope = yield* itemScope({ itemId });
-    yield* Effect.forEach(write.files, (file, position) =>
-      insertMessageFile({
+    yield* writeMessageFiles(
+      write.files.map((file, position) => ({
         ...scope,
         itemId,
         messageId: written.value.id,
@@ -2959,7 +2967,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
         contentType: file.mediaType,
         bytes: bytesOf(file),
         now,
-      }),
+      })),
     );
   });
 }
@@ -3278,15 +3286,15 @@ function writeInboxMessage(
         });
         if (Option.isSome(written)) {
           const scope = yield* itemScope({ itemId });
-          yield* Effect.forEach(files, (file, position) =>
-            insertMessageFile({
+          yield* writeMessageFiles(
+            files.map((file, position) => ({
               ...scope,
               itemId,
               messageId: written.value.id,
               ...file,
               position,
               now,
-            }),
+            })),
           );
           yield* touchItem({ itemId, now });
           if (member !== undefined) {
@@ -3578,8 +3586,8 @@ export function startInboxThread(
           clientKey,
           now,
         });
-        yield* Effect.forEach(files, (file, position) =>
-          insertMessageFile({
+        yield* writeMessageFiles(
+          files.map((file, position) => ({
             userId: agent.userId,
             taskId: agent.taskId,
             organizationId,
@@ -3588,7 +3596,7 @@ export function startInboxThread(
             ...file,
             position,
             now,
-          }),
+          })),
         );
         yield* upsertRead({ userId, itemId });
         const item = yield* itemAsWritten(userId, itemId, userId);
