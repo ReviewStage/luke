@@ -1505,19 +1505,20 @@ function shownToReader(element: Element): boolean {
   return true;
 }
 
-test("the Inbox left stays drawn, hidden from a reader, and comes back with its search as it stood", () => {
+test("the Inbox and the Tasks page left stay drawn, hidden from a reader, and come back as they stood", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  let setOpen: (open: boolean) => void = ignore;
+  let setOpen: (open: { inbox: boolean; board: boolean }) => void = ignore;
   function Shell() {
-    const [open, setInboxOpen] = useState(true);
-    setOpen = setInboxOpen;
+    const [open, setPlaceOpen] = useState({ inbox: true, board: false });
+    setOpen = setPlaceOpen;
     const tasks = tasksControl({
       page: TASKS_PAGE.HOME,
       workspaces: [ACME],
       workspace: ACME,
-      inboxView: { ...tasksControl().inboxView, open },
+      inboxView: { ...tasksControl().inboxView, open: open.inbox },
+      boardView: { ...tasksControl().boardView, open: open.board },
     });
     return createElement(DesktopShell, shellProps(tasks, PANEL_TAB.TASKS, ignore, {}));
   }
@@ -1532,11 +1533,35 @@ test("the Inbox left stays drawn, hidden from a reader, and comes back with its 
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
-  act(() => setOpen(false));
+  act(() => setOpen({ inbox: false, board: true }));
   assert.equal(search(), input, "the Inbox left is the same Inbox, kept");
   assert.equal(shownToReader(input), false, "and hidden from a reader while the window is away");
+  // The Tasks page is a chunk of its own, read the first time it is drawn.
+  await act(async () => {
+    await import("./tasks-page.js");
+  });
+  await settle();
+  const columns = () =>
+    [...container.querySelectorAll<HTMLElement>('[aria-label="Tasks view"] [role="radio"]')].find(
+      (each) => each.textContent?.trim() === "Columns",
+    );
+  act(() => columns()?.click());
+  const chosen = columns();
+  assert.ok(chosen, "the Tasks page offers Columns");
+  assert.equal(chosen.getAttribute("aria-checked"), "true", "and stands on it");
 
-  act(() => setOpen(true));
+  act(() => setOpen({ inbox: false, board: false }));
+  // Note that elements are compared by identity alone, since a failed comparison would print both whole.
+  assert.ok(columns() === chosen, "the Tasks page left is the same page, kept");
+  assert.equal(shownToReader(chosen), false, "and hidden from a reader");
+
+  act(() => setOpen({ inbox: false, board: true }));
+  assert.ok(columns() === chosen, "the same page comes back");
+  assert.equal(shownToReader(chosen), true);
+  assert.equal(chosen.getAttribute("aria-checked"), "true", "its view as it stood");
+
+  act(() => setOpen({ inbox: true, board: false }));
+  assert.equal(shownToReader(chosen), false);
   assert.equal(shownToReader(input), true);
   assert.equal(search()?.value, "zzz", "its search as it stood");
 });
