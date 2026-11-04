@@ -1,5 +1,6 @@
+import { bayerAt } from "@repo/brand";
 import { useEffect, useRef } from "react";
-import { bayerAt, fitCanvas, paintLoop } from "./landing-paint.js";
+import { fitCanvas, paintLoop } from "./landing-paint.js";
 
 /**
  * landing-field.tsx -- the landing's quiet grounds: a field of copper dots that drifts behind a stage.

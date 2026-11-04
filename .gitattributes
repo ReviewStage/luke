@@ -8,3 +8,5 @@ packages/brand/src/generated/*.test.ts -linguist-generated
 
 apps/desktop/src/renderer/styles/generated/** linguist-generated
 apps/desktop/src/renderer/styles/generated/*.test.ts -linguist-generated
+
+packages/brand/assets/banner/dots/*.svg linguist-generated
