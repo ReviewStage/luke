@@ -37,6 +37,7 @@ import {
   inboxWaitsOn,
   openAskOf,
   recommendedLabels,
+  threadNeedsReader,
 } from "@repo/features/inbox-wire";
 import { insideCode } from "@repo/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@repo/features/task-wire";
@@ -1394,16 +1395,19 @@ export function agentGroups(
 }
 
 /**
- * Which items an Inbox lists, as its view's menu chooses: Open, every
+ * Which items an Inbox lists, as its view's menu chooses: Needs me, the
+ * questions whose ask waits on the reader's answer (`threadNeedsReader`),
+ * which Addressed to never narrows; Open, every
  * thread still open, a question not yet answered or a notice nobody has
  * opened yet, which Addressed to then narrows; All, every item, open and
- * settled; or Snoozed, the items the reader snoozed, which the other two
+ * settled; or Snoozed, the items the reader snoozed, which the other three
  * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
  * kept before it reads as Open. Note too that no scope asks where the
  * item's task stands: an item of a task done or canceled is listed and
  * counted as any other, the Inbox being a feed of what the agents got done.
  */
 export const INBOX_SHOW = {
+  NEEDS_ME: "needs-me",
   OPEN: "to-do",
   ALL: "all",
   SNOOZED: "snoozed",
@@ -1431,6 +1435,7 @@ export const MINE: InboxWhose = { kind: INBOX_WHOSE.MINE };
 
 /** How many items each scope lists, filtered out by the scope shown or not. */
 export interface InboxCounts {
+  readonly [INBOX_SHOW.NEEDS_ME]: number;
   readonly [INBOX_SHOW.OPEN]: number;
   readonly [INBOX_SHOW.ALL]: number;
   readonly [INBOX_SHOW.SNOOZED]: number;
@@ -1603,10 +1608,28 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
+/** Whether Addressed to narrows a scope: every scope but Needs me, which names the reader already. */
+export function narrowedByWhose(show: InboxShow): boolean {
+  return show !== INBOX_SHOW.NEEDS_ME;
+}
+
+/** Whether a scope lists the item (`showsItem`) addressed to whom Addressed to names where it narrows the scope (`narrowedByWhose`). */
+function scopedItem(
+  show: InboxShow,
+  whose: InboxWhose,
+  item: InboxItem,
+  readerId: string | undefined,
+): boolean {
+  return (
+    showsItem(show, item, readerId) && (!narrowedByWhose(show) || whoseItem(whose, item, readerId))
+  );
+}
+
 /**
  * The list from every task's items, in one run, the latest changed first.
- * The scope shown lists only the items it takes (`showsItem`) addressed to
- * whom Addressed to names that its search finds (`searchedItem`), and the
+ * The scope shown lists only the items it takes addressed to whom Addressed
+ * to names where it narrows the scope (`scopedItem`) that its search finds
+ * (`searchedItem`), and the
  * item chosen where one is given. Note that the rows a list draws are given
  * only the chosen item they drew already, kept while it stays chosen
  * (`use-held-inbox-list.ts`), so a settled item leaves a list filtered to
@@ -1637,9 +1660,7 @@ export function inboxList(
       items
         .filter(
           (item) =>
-            (showsItem(view.show, item) &&
-              whoseItem(whose, item, readerId) &&
-              searchedItem(holder, item, search)) ||
+            (scopedItem(view.show, whose, item, readerId) && searchedItem(holder, item, search)) ||
             item.id === view.chosen,
         )
         .map((item) => inboxListed(holder, item)),
@@ -1704,15 +1725,19 @@ export function isDone(item: InboxItem): boolean {
 
 /**
 /**
- * Whether a scope lists the item: Open every open thread, a question or an
+ * Whether a scope lists the item: Needs me every question whose ask waits
+ * on the reader (`threadNeedsReader`), what main's to-do count and the
+ * Dock's badge count, a notice never; Open every open thread, a question or an
  * update not yet opened, which narrowed to the reader's own (`needsYou`)
  * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
  * all of them, each leaving out what the reader snoozed (`isSnoozed`),
  * which Snoozed alone lists. Note that a thread of theirs settled and unread is left to
  * All, because main counts no settled item.
  */
-function showsItem(show: InboxShow, item: InboxItem): boolean {
+function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
   switch (show) {
+    case INBOX_SHOW.NEEDS_ME:
+      return threadNeedsReader(item, readerId) && !isSnoozed(item);
     case INBOX_SHOW.OPEN:
       return item.status === INBOX_STATUS.OPEN && !isSnoozed(item);
     case INBOX_SHOW.ALL:
@@ -1722,17 +1747,19 @@ function showsItem(show: InboxShow, item: InboxItem): boolean {
   }
 }
 
-/** How many of every task's items each scope lists, of those addressed to whom Addressed to names. */
+/** How many of every task's items each scope lists, of those addressed to whom Addressed to names where it narrows the scope (`scopedItem`). */
 export function inboxCounts(
   tasks: readonly InboxGroup[],
   readerId: string | undefined,
   whose: InboxWhose = EVERYONES,
 ): InboxCounts {
-  const items = tasks
-    .flatMap(({ holder, items }) => items.map((item) => inboxListed(holder, item)))
-    .filter(({ item }) => whoseItem(whose, item, readerId));
-  const count = (show: InboxShow) => items.filter(({ item }) => showsItem(show, item)).length;
+  const items = tasks.flatMap(({ holder, items }) =>
+    items.map((item) => inboxListed(holder, item)),
+  );
+  const count = (show: InboxShow) =>
+    items.filter(({ item }) => scopedItem(show, whose, item, readerId)).length;
   return {
+    [INBOX_SHOW.NEEDS_ME]: count(INBOX_SHOW.NEEDS_ME),
     [INBOX_SHOW.OPEN]: count(INBOX_SHOW.OPEN),
     [INBOX_SHOW.ALL]: count(INBOX_SHOW.ALL),
     [INBOX_SHOW.SNOOZED]: count(INBOX_SHOW.SNOOZED),

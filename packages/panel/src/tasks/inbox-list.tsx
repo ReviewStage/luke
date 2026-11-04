@@ -140,6 +140,7 @@ import {
   listedItems,
   MINE,
   NEEDS_YOU,
+  narrowedByWhose,
 } from "./inbox-model.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
 import { type InboxSnoozer, useInboxSnoozing } from "./inbox-snooze.js";
@@ -232,6 +233,7 @@ const SKELETON_TIME = "20px";
 
 /** What each scope is called, in the view's menu and the list's region's name, and its glyph in the menu. */
 const SCOPE_WORDS = {
+  [INBOX_SHOW.NEEDS_ME]: { label: "Needs me", icon: <GLYPH.PERSON /> },
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
   [INBOX_SHOW.SNOOZED]: { label: "Snoozed", icon: <GLYPH.TIME /> },
@@ -239,6 +241,7 @@ const SCOPE_WORDS = {
 
 /** The scopes the window's Inbox's view's menu offers, in its order. */
 const INBOX_SCOPES = [
+  INBOX_SHOW.NEEDS_ME,
   INBOX_SHOW.OPEN,
   INBOX_SHOW.ALL,
   INBOX_SHOW.SNOOZED,
@@ -249,11 +252,21 @@ const INBOX_TITLE = "Inbox";
 
 /**
  * Whether the list holds only what needs the reader, the window's Inbox's
- * Open addressed to them: its rows then leave Needs you unsaid
- * (`needsYouShown`), and its region says it once.
+ * Needs me, or its Open addressed to them: its rows then leave Needs you
+ * unsaid (`needsYouShown`), and its region says it once.
  */
 function needsYouListed(head: InboxListHead): boolean {
-  return head.view?.show === INBOX_SHOW.OPEN && head.view.whose.kind === INBOX_WHOSE.MINE;
+  const { view } = head;
+  if (view === undefined) return false;
+  return (
+    view.show === INBOX_SHOW.NEEDS_ME ||
+    (view.show === INBOX_SHOW.OPEN && view.whose.kind === INBOX_WHOSE.MINE)
+  );
+}
+
+/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs me, or where the Inbox offers no view. */
+function narrowingWhose(view: InboxViewChoices | undefined): InboxWhoseChoice | undefined {
+  return view !== undefined && narrowedByWhose(view.show) ? view : undefined;
 }
 
 /** Whom Addressed to names, in the words a reader hears after the list's region's name. */
@@ -270,14 +283,16 @@ function whoseWords(whose: InboxWhose): string {
 
 /**
  * The list's region's name, saying what it lists, since the head names the
- * Inbox alone: Needs you where it holds only what needs the reader, whose
- * rows leave it unsaid (`needsYouShown`), so a reader hears it once; else
- * the scope and whom Addressed to names. A task's own Inbox lists
- * everything, so its region is named alone.
+ * Inbox alone: Needs me by its scope's name alone, whom Addressed to names
+ * leaving it as it is; Needs you where Open holds only what needs the
+ * reader, whose rows leave it unsaid (`needsYouShown`), so a reader hears it
+ * once; else the scope and whom Addressed to names. A task's own Inbox
+ * lists everything, so its region is named alone.
  */
 function regionLabel(head: InboxListHead): string {
   const { view } = head;
   if (view === undefined) return INBOX_ITEMS;
+  if (!narrowedByWhose(view.show)) return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label}`;
   if (needsYouListed(head)) return `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`;
   return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label} · ${whoseWords(view.whose)}`;
 }
@@ -288,6 +303,9 @@ export const NOTHING_HERE = "Nothing here";
 /** What the Snoozed scope says holding nothing the reader snoozed. */
 const NOTHING_SNOOZED = "Nothing snoozed";
 
+/** What Needs me says holding no question that waits on the reader, whomever Addressed to names. */
+const NOTHING_NEEDS_ME = "Nothing needs your response";
+
 /**
  * What the list says where its scope and Addressed to leave out every item
  * it holds, by whom Addressed to names: the reader's Open is Needs you, and
@@ -295,24 +313,28 @@ const NOTHING_SNOOZED = "Nothing snoozed";
  */
 const SHOW_EMPTY = {
   [INBOX_WHOSE.MINE]: {
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: NEEDS_YOU.NONE,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
     [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
   [INBOX_WHOSE.EVERYONE]: {
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: "Nothing open",
     [INBOX_SHOW.ALL]: NOTHING_HERE,
     [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
   [INBOX_WHOSE.PERSON]: {
+    [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
     [INBOX_SHOW.OPEN]: "Nothing addressed to them",
     [INBOX_SHOW.ALL]: "Nothing addressed to them",
     [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
 } as const satisfies Record<InboxWhose["kind"], Record<InboxShow, string>>;
 
-/** What the empty state's presses say: All of whom Addressed to names, the reader's own again, or anyone's. */
+/** What the empty state's presses say: Open or All of whom Addressed to names, the reader's own again, or anyone's. */
 const SHOW_INSTEAD = {
+  OPEN: "Show open",
   ALL: "Show all",
   MINE: "Show mine",
   EVERYONE: "Show anyone's",
@@ -579,8 +601,9 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Open, All, or Snoozed, the one shown checked; then Addressed to, a
- * submenu of Anyone, Me, or a teammate by face and name, its choice checked.
+ * it shows, Needs me, Open, All, or Snoozed, the one shown checked; then, but
+ * under Needs me, Addressed to, a submenu of Anyone, Me, or a teammate by
+ * face and name, its choice checked.
  */
 function ViewOptions({
   shown,
@@ -631,12 +654,13 @@ function markAllAction(readAll: InboxReadAll): MenuAction {
   };
 }
 
-/** The window's Inbox's own group of its view's menu, after its scopes: Addressed to. */
+/** The window's Inbox's own group of its view's menu, after its scopes: Addressed to, where it narrows the scope shown (`narrowedByWhose`). */
 function windowEntries(
   choices: InboxViewChoices,
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuEntry[][] {
+  if (!narrowedByWhose(choices.show)) return [];
   return [
     [
       {
@@ -788,10 +812,11 @@ function FilterChips({
 }
 
 /**
- * The way on from an empty scope: All of whom Addressed to names where it
- * holds anything; else back to the reader's own from a teammate's, or to
- * anyone's from the reader's own; none from anyone's, where nothing else
- * holds anything.
+ * The way on from an empty scope: from Needs me, Open of whom Addressed to
+ * names where it holds anything; else All where it holds anything; else,
+ * where Addressed to narrows the scope, back to the reader's own from a
+ * teammate's, or to anyone's from the reader's own; none from anyone's, or
+ * from Needs me, where nothing else holds anything.
  */
 function emptyWayOn(
   view: InboxViewChoices,
@@ -805,9 +830,14 @@ function emptyWayOn(
       change();
     },
   });
+  if (view.show === INBOX_SHOW.NEEDS_ME && counts[INBOX_SHOW.OPEN] > 0) {
+    return turn(SHOW_INSTEAD.OPEN, () => view.onShow(INBOX_SHOW.OPEN));
+  }
   if (view.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
     return turn(SHOW_INSTEAD.ALL, () => view.onShow(INBOX_SHOW.ALL));
   }
+  // Note that Addressed to never narrows Needs me, so naming another lists nothing more.
+  if (!narrowedByWhose(view.show)) return undefined;
   if (view.whose.kind === INBOX_WHOSE.PERSON) {
     return turn(SHOW_INSTEAD.MINE, () => view.onWhose(MINE));
   }
@@ -979,7 +1009,7 @@ function ListHead({
         )}
         {search}
         {view === undefined && head.task === undefined ? null : (
-          <FilterChips whose={view} task={head.task} readerId={readerId} />
+          <FilterChips whose={narrowingWhose(view)} task={head.task} readerId={readerId} />
         )}
       </>
     );
@@ -996,7 +1026,7 @@ function ListHead({
       )}
       {search}
       {view === undefined && head.task === undefined ? null : (
-        <FilterChips whose={view} task={head.task} readerId={readerId} />
+        <FilterChips whose={narrowingWhose(view)} task={head.task} readerId={readerId} />
       )}
     </>
   );
