@@ -16,6 +16,7 @@ import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable } from "./agent.js";
 import { organization, user } from "./auth.js";
+import { task } from "./task.js";
 
 /**
  * automation.ts -- an account's automations, each a trigger and a coding agent to start in a workspace, and every run one made.
@@ -139,6 +140,13 @@ export const automationRun = pgTable(
       onDelete: "set null",
     }),
     /**
+     * The task the run's agent works on: the one the run made for itself, or,
+     * where every run goes to the same agent, that agent's task; null before
+     * the run is acted on, for a run whose agent works on no task, and once
+     * the task is deleted.
+     */
+    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
+    /**
      * When the sweep settled what becomes of the agent a run started for an
      * automation that archives its successful runs: archived once it
      * finished well, or left standing for good as failed, stopped, or put
@@ -160,6 +168,8 @@ export const automationRun = pgTable(
     // The sweep starts the queued runs oldest first and fails the ones queued too long.
     index("automation_run_status_fired").on(table.status, table.firedAt),
     // The sweep recovers the started runs no agent was recorded for, oldest claim first.
+    // A task's finish asks whether a run made it, and a task's delete clears the runs that name it.
+    index("automation_run_task").on(table.taskId).where(sql`${table.taskId} is not null`),
     index("automation_run_unrecorded_settled")
       .on(table.status, table.settledAt)
       .where(sql`${table.agentId} is null`),
