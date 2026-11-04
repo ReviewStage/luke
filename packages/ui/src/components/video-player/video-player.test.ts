@@ -191,6 +191,10 @@ test("comma and period, like the frame buttons, pause the video and step one fra
   expect(playhead()).toBeCloseTo(0.05);
   pressButton("Next frame");
   expect(playhead()).toBeCloseTo(0.15);
+  // At its very end the last frame shows, so a step back lands on the one before it.
+  press("End");
+  press(",");
+  expect(playhead()).toBeCloseTo(LENGTH_S - 0.15);
   expect(reached).toEqual([]);
 });
 

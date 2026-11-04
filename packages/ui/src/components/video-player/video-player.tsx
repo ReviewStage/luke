@@ -77,6 +77,7 @@ const VIDEO_LABEL = {
   NEXT_FRAME: "Next frame",
   SEEK: "Seek",
   SPEED: "Playback speed",
+  SPEED_HINT: "Playback speed (< slower, > faster)",
   EXPAND: "Expand",
   FULL_SCREEN: "Full screen",
   EXIT_FULL_SCREEN: "Exit full screen",
@@ -283,7 +284,8 @@ function stepFrame(video: HTMLVideoElement, frame: number, by: number): void {
   video.pause();
   const end = endOf(video);
   const last = Math.max(0, Math.ceil(end / frame) - 1);
-  const shown = Math.floor(video.currentTime / frame);
+  // Note that at its very end the time stands on the edge past the last frame, which is the one showing.
+  const shown = Math.min(last, Math.floor(video.currentTime / frame));
   const next = Math.min(last, Math.max(0, shown + by));
   video.currentTime = Math.min(end, (next + 0.5) * frame);
 }
@@ -368,7 +370,7 @@ function BarButton({
   );
 }
 
-/** The bar's speed button, its words the speed it plays at, which a press walks round. */
+/** The bar's speed button, its words the speed it plays at, which a press walks round; its hint names the keys that step it. */
 function SpeedButton({
   speed,
   onPress,
@@ -377,7 +379,7 @@ function SpeedButton({
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Tooltip label={VIDEO_LABEL.SPEED}>
+    <Tooltip label={VIDEO_LABEL.SPEED_HINT}>
       <Button
         label={`${VIDEO_LABEL.SPEED}: ${speedText(speed)}`}
         variant={BUTTON_VARIANT.MEDIA}
