@@ -3078,9 +3078,8 @@ export function AgentTab(props: AgentTabProps): React.JSX.Element {
   const { agent, control, shown, onHeld, agentId: _agentId, ...rest } = props;
   const agentId = props.agentId === undefined ? props.agent.id : props.agentId;
   const transcript = useAgentTranscript({
-    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId },
+    transcript: useMemo(() => ({ kind: TRANSCRIPT_KIND.AGENT, agentId }), [agentId]),
     shown,
-    follower: control.transcripts,
   });
   const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
   // Note that what is held is dated by the page it was read from, never by
@@ -3365,9 +3364,11 @@ export function AgentSubagentTab({
   onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const transcript = useAgentTranscript({
-    transcript: { kind: TRANSCRIPT_KIND.AGENT, agentId, callId },
+    transcript: useMemo(
+      () => ({ kind: TRANSCRIPT_KIND.AGENT, agentId, callId }),
+      [agentId, callId],
+    ),
     shown,
-    follower: control.transcripts,
     onStatus: (_agentId, next) => onStatus(next.status),
   });
   const { messages, pageStatus, runStartedAt, pageTitle } = transcript;

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { RPCSerializer } from "@orpc/client";
 import { INBOX_SCOPE_KIND } from "@repo/features/agent-view";
+import {
+  AGENT_STATUS,
+  type AgentStatus,
+  type AgentTranscriptMessage,
+} from "@repo/features/agent-wire";
 import { INBOX_STATUS, INBOX_WIRE_VERSION, type InboxItem } from "@repo/features/inbox-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PAGE_OWNER, type PageLine } from "@repo/features/page-wire";
@@ -16,8 +21,10 @@ import {
   type AppPlanDocuments,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppTranscript,
   appStateDelivery,
   isAppStateSnapshot,
+  OWN_TRANSCRIPT,
   withAppStateDelivery,
 } from "./app-state.js";
 import { initialAppState } from "./client/app-state-store.js";
@@ -183,6 +190,28 @@ describe("a delivery that crosses the wire", () => {
     [LIVE_READ.PLAN_DOCUMENT]: held,
   });
   const quietPlan = { rows: { task: openPlan } };
+  /** One of an agent's messages, saying `text`. */
+  const line = (id: string, text: string): AgentTranscriptMessage => ({
+    id,
+    role: "assistant",
+    parts: [{ type: "text", text }],
+  });
+  /** The agent's own transcript held as `pages` pages left it, the last saying the agent stands at `status`. */
+  const transcript = (
+    messages: readonly AgentTranscriptMessage[],
+    status: AgentStatus,
+    pages: number,
+  ): AppTranscript => ({
+    messages,
+    cursor: `${pages}:0`,
+    word: { status, title: null, caughtUp: true },
+    pages,
+  });
+  const transcripts = (own: AppTranscript): AppStateSnapshot => ({
+    ...document,
+    [LIVE_READ.TRANSCRIPT]: { "agent-1": { [OWN_TRANSCRIPT]: { rows: own } } },
+  });
+  const quietLine = line("m-1", "Read the invites.");
   /** A plan's document holding `body` alone. */
   const draft = (body: string): Task["document"] => ({ body, assumptions: [] });
   const quietList = [quietItem];
@@ -262,6 +291,21 @@ describe("a delivery that crosses the wire", () => {
       }),
       kept: (state: AppStateSnapshot) => [state[LIVE_READ.PLAN_DOCUMENT].quiet],
       quiet: [openPlan.document.body],
+    },
+    {
+      name: "a held transcript, its journal grown, a message come, and its word moved with them",
+      sent: transcripts(transcript([quietLine, line("m-2", "Writing")], AGENT_STATUS.RUNNING, 1)),
+      next: transcripts(
+        transcript(
+          [quietLine, line("m-2", "Writing the expiry."), line("m-3", "Ship it?")],
+          AGENT_STATUS.COMPLETED,
+          2,
+        ),
+      ),
+      kept: (state: AppStateSnapshot) => [
+        state[LIVE_READ.TRANSCRIPT]["agent-1"]?.[OWN_TRANSCRIPT]?.rows?.messages[0],
+      ],
+      quiet: ["Read the invites."],
     },
   ])(
     "crosses a change to $name as what moved alone, what it kept the very one the window held",

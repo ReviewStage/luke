@@ -134,20 +134,20 @@ async function drawn(
     [PULL_REQUEST_PART.PUBLISHED]: () =>
       Promise.resolve({ repository: "acme/app", branch: "luke/start-from", pullRequest: null }),
   });
+  pushedTranscripts(() => [
+    {
+      messages: [...messages],
+      cursor: "2:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents: [agent],
     // An agent's own page lists that agent alone, and reads any other by its id.
     archived: listed ? [source] : [],
     readAgent: (agentId) => Promise.resolve(agentId === source.id ? source : undefined),
     me: DEAN.userId,
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [...messages],
-        cursor: "2:0",
-        status: AGENT_STATUS.COMPLETED,
-        title: null,
-      },
-    ]),
   });
   const cards: TranscriptCards = {
     target: () => undefined,

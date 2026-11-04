@@ -6,6 +6,7 @@ import {
 import {
   type AgentInboxScope,
   type AgentPullRequestReadParams,
+  type AgentTranscriptKey,
   PULL_REQUEST_PART,
   type PullRequestPart,
 } from "@repo/features/agent-view";
@@ -28,6 +29,7 @@ import {
   HOST_READ_SLICE,
   KEYS_ON,
   OWN_PULL_REQUEST,
+  OWN_TRANSCRIPT,
   READ_KEYS,
 } from "@repo/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
@@ -47,8 +49,8 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
  * own inbox, a task's or an agent's pages or cloud Browser tabs, a
- * workspace's automations or runs, an automation's runs, or a workspace's
- * people or invitations, is held by the
+ * workspace's automations or runs, an automation's runs, an agent's or a
+ * worker's transcript, or a workspace's people or invitations, is held by the
  * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
@@ -244,7 +246,9 @@ function pullRequestPartRead(part: PullRequestPart) {
  * Runs on hold; the account's own GitHub token, by the account,
  * which Settings › Account, a workspace's Add repository, and onboarding's
  * GitHub step hold; the outside MCP clients the account allowed, by
- * the account, which Settings › Integrations holds; one workspace's
+ * the account, which Settings › Integrations holds; one agent's or worker's
+ * transcript, by the agent and then the worker's call or the agent's own,
+ * which its tab holds while it shows; one workspace's
  * memories, which Settings › Memory holds; the skills the account sees in
  * one workspace, which Settings › Skills holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
@@ -433,6 +437,15 @@ const HOST_READS = {
     path: (accountId: string) => [accountId],
     hold: undefined,
     retry: undefined,
+  }),
+  [LIVE_READ.TRANSCRIPT]: hostRead(LIVE_READ.TRANSCRIPT, {
+    slice: APP_SLICE.TRANSCRIPT,
+    path: (transcript: AgentTranscriptKey) => [
+      transcript.agentId,
+      transcript.callId ?? OWN_TRANSCRIPT,
+    ],
+    hold: (transcript) => askAct(ACT_KIND.AGENTS_TRANSCRIPT, transcript),
+    retry: (transcript) => tellAct(ACT_KIND.AGENTS_TRANSCRIPT_RETRY, transcript),
   }),
   [LIVE_READ.WORKSPACE_MEMBERS]: hostRead(LIVE_READ.WORKSPACE_MEMBERS, {
     slice: APP_SLICE.WORKSPACE_MEMBERS,

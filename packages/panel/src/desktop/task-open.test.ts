@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentTranscriptPage } from "@repo/features/agent-view";
+import { type AgentTranscriptPage, TRANSCRIPT_KIND } from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentSummary,
@@ -14,12 +14,16 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { agentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import {
+  agentsControl,
+  tasksControl,
+  tellingTranscripts,
+  UNPINNED_SUMMARY,
+} from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -75,21 +79,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A follower that records each transcript followed and hands its pages over only when the test pushes them. */
-function heldFollower() {
-  const followed: string[] = [];
-  const hearers: ((page: AgentTranscriptPage) => void)[] = [];
-  const follower: TranscriptFollower = (transcript, hear) => {
-    followed.push(transcript.agentId);
-    hearers.push(hear);
-    return () => undefined;
-  };
+/** A host that records each transcript the window holds and lays its pages only when the test pushes them. */
+function heldTranscript() {
+  const telling = tellingTranscripts();
   return {
-    follower,
-    followed,
-    push: (page: AgentTranscriptPage) => {
-      for (const hear of hearers) hear(page);
-    },
+    followed: () => telling.asked.map((transcript) => transcript.agentId),
+    push: (page: AgentTranscriptPage) =>
+      telling.tell({ kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT.id }, page),
   };
 }
 
@@ -119,11 +115,7 @@ const ROW = {
 };
 
 /** The task's page opened on its agent's tab: the task `read` or still being read, the agents listed or not yet. */
-function opened(input: {
-  read: boolean;
-  listed: boolean;
-  follower: TranscriptFollower;
-}): TasksControl {
+function opened(input: { read: boolean; listed: boolean }): TasksControl {
   return tasksControl({
     tasks: [ROW],
     page: TASKS_PAGE.DOCUMENT,
@@ -141,7 +133,6 @@ function opened(input: {
     agents: agentsControl({
       agents: input.listed ? [AGENT] : undefined,
       agentIds: input.listed ? [AGENT.id] : undefined,
-      transcripts: input.follower,
     }),
   });
 }
@@ -190,11 +181,15 @@ function columnLog(container: HTMLElement): string {
 }
 
 test("a task opened on an agent whose list is still read follows the agent's transcript at once, its tab standing in its own shape rather than empty or Reading the agent", async () => {
-  const held = heldFollower();
-  const page = mount(opened({ read: true, listed: false, follower: held.follower }));
+  const held = heldTranscript();
+  const page = mount(opened({ read: true, listed: false }));
   await settle();
 
-  assert.deepEqual(held.followed, [AGENT.id], "the transcript is followed before the list answers");
+  assert.deepEqual(
+    held.followed(),
+    [AGENT.id],
+    "the transcript is followed before the list answers",
+  );
   const log = columnLog(page.container);
   assert.match(log, /^skeleton /u);
   assert.ok(
@@ -204,20 +199,20 @@ test("a task opened on an agent whose list is still read follows the agent's tra
 });
 
 test("opening a task on its agent passes through one placeholder, from the task's read to the transcript, the toolbar's tab, the column, and its composer standing where they land", async () => {
-  const held = heldFollower();
-  const page = mount(opened({ read: false, listed: false, follower: held.follower }));
+  const held = heldTranscript();
+  const page = mount(opened({ read: false, listed: false }));
   await settle();
   const seen = [columnLog(page.container)];
   const tabBlock = () =>
     page.container.querySelector(".ui-toolbar-heading .ui-skeleton")?.getAttribute("style");
   const tabWhileRead = tabBlock();
 
-  page.draw(opened({ read: true, listed: false, follower: held.follower }));
+  page.draw(opened({ read: true, listed: false }));
   await settle();
   seen.push(columnLog(page.container));
   assert.equal(tabBlock(), tabWhileRead, "the toolbar's tab stands as it stood");
 
-  page.draw(opened({ read: true, listed: true, follower: held.follower }));
+  page.draw(opened({ read: true, listed: true }));
   await settle();
   seen.push(columnLog(page.container));
   assert.ok(
@@ -233,5 +228,5 @@ test("opening a task on its agent passes through one placeholder, from the task'
   assert.equal(placeholders.length, 1, `one placeholder, not a chain: ${placeholders.join(" | ")}`);
   assert.match(placeholders[0] ?? "", /^skeleton /u);
   assert.equal(seen.at(-1), "transcript", "and the transcript in its place once its page lands");
-  assert.deepEqual(held.followed, [AGENT.id], "followed once, from the open on");
+  assert.deepEqual(held.followed(), [AGENT.id], "followed once, from the open on");
 });

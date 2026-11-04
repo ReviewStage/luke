@@ -77,36 +77,36 @@ async function workerTab(
     chosen: () => false,
     pages: undefined,
   });
+  pushedTranscripts(() => [
+    {
+      messages: [
+        ...(opened.first === undefined
+          ? []
+          : [
+              {
+                id: "worker-task",
+                role: "user" as const,
+                parts: [{ type: "text", text: opened.first }],
+              },
+            ]),
+        { id: "worker-turn", role: "assistant", parts: [...parts] },
+        ...(opened.later === undefined
+          ? []
+          : [
+              {
+                id: "worker-later",
+                role: "user" as const,
+                parts: [{ type: "text", text: opened.later }],
+              },
+            ]),
+      ],
+      cursor: "1:0",
+      status,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents,
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [
-          ...(opened.first === undefined
-            ? []
-            : [
-                {
-                  id: "worker-task",
-                  role: "user" as const,
-                  parts: [{ type: "text", text: opened.first }],
-                },
-              ]),
-          { id: "worker-turn", role: "assistant", parts: [...parts] },
-          ...(opened.later === undefined
-            ? []
-            : [
-                {
-                  id: "worker-later",
-                  role: "user" as const,
-                  parts: [{ type: "text", text: opened.later }],
-                },
-              ]),
-        ],
-        cursor: "1:0",
-        status,
-        title: null,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
@@ -251,21 +251,21 @@ test("a worker's tab whose earlier messages could not be read says so over its l
       return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   } as unknown as Parameters<typeof fakeActPort>[0]);
+  pushedTranscripts(() => [
+    {
+      messages: [
+        { id: "worker-turn", role: "assistant", parts: [{ type: "text", text: "Done." }] },
+      ],
+      cursor: "1:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+      newest: true,
+      before: "40",
+      caughtUp: true,
+    },
+  ]);
   const control = agentsControl({
     agents: [AGENT],
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [
-          { id: "worker-turn", role: "assistant", parts: [{ type: "text", text: "Done." }] },
-        ],
-        cursor: "1:0",
-        status: AGENT_STATUS.COMPLETED,
-        title: null,
-        newest: true,
-        before: "40",
-        caughtUp: true,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

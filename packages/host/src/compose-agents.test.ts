@@ -72,13 +72,19 @@ import { isRecord, type WireRecord, type WireValue } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { Deferred, Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import type { AppAccountPreferences, AppModels } from "./app-state.js";
+import {
+  type AppAccountPreferences,
+  type AppModels,
+  type AppTranscript,
+  type AppTranscripts,
+  OWN_TRANSCRIPT,
+} from "./app-state.js";
 import { type AgentClient, composeAgents } from "./compose-agents.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
 import { taskListCollections } from "./task-list-collections.js";
 import { type PolledLive, polledLive } from "./testing/polled-live.js";
 import { agentListRow } from "./testing/task-list-rows.js";
-import { HELD_TRANSCRIPTS } from "./transcript-held.js";
+import { HELD_TRANSCRIPTS } from "./transcript-follow.js";
 import { windowFocus } from "./window-focus.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -996,20 +1002,33 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** Every followed transcript's page the host told, in order. */
-    const pages = () =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.payload] : [],
-      );
-    /** How many reads the service had been asked as each followed transcript's page was told, in order. */
-    const askedAsTold = () =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.asked] : [],
-      );
+    /**
+     * Each read of `transcript` the host laid on the held transcripts as it
+     * moved, its rows, none where it held none, and how many reads the
+     * service had been asked as each was laid, in order.
+     */
+    const transcripts = (
+      transcript: { readonly agentId: string; readonly callId?: string } = FOLLOWED,
+    ) => {
+      const laid: { readonly rows: AppTranscript | undefined; readonly asked: number }[] = [];
+      let was: unknown;
+      for (const event of events) {
+        if (event.kind !== GATEWAY_EVENT.TRANSCRIPTS_CHANGED) continue;
+        // SAFETY: the held transcripts are the host's own, told as built.
+        const held = event.payload as unknown as AppTranscripts;
+        const read = held[transcript.agentId]?.[transcript.callId ?? OWN_TRANSCRIPT];
+        if (read === was) continue;
+        was = read;
+        laid.push({ rows: read?.rows, asked: event.asked });
+      }
+      return laid;
+    };
     return {
       call,
-      pages,
-      askedAsTold,
+      transcripts,
+      /** Each of `transcript`'s rows the host laid, in order. */
+      held: (transcript?: { readonly agentId: string; readonly callId?: string }) =>
+        transcripts(transcript).map((each) => each.rows),
       asked: service.asked,
       startCommits: service.startCommits,
       answerRemoves: service.answerRemoves,
@@ -1617,12 +1636,6 @@ function pageNow(
   };
 }
 
-/** A page past a cursor as the window is told it: the service's word on whether it would have held left in the host, and whether it came back short of a page's most. */
-function windowPage(page: TranscriptNowAnswer) {
-  const { holds: _holds, ...rest } = page;
-  return { ...rest, caughtUp: page.messages.length < AGENT_BOUNDS.MESSAGES_PAGE };
-}
-
 /** The newest page the service answers: one message, the cursor to follow on from, and where the older page is read below. */
 function newestPage(cursor: string, text: string, before?: string): AgentNewestAnswer {
   return {
@@ -1636,19 +1649,14 @@ function newestPage(cursor: string, text: string, before?: string): AgentNewestA
 
 const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
 
-/** Whether a page the host told came back caught up. */
-function caughtUpOf(told: WireValue | undefined): unknown {
-  return isRecord(told) && isRecord(told.page) ? told.page.caughtUp : undefined;
-}
-
 it.effect(
-  "a followed transcript opens on its newest page, read once beside the live read, then follows on from its cursor once the live read's first rows land, missing nothing written between; a short page is caught up, and the next is read only as the statements move or at the edge the service names; letting it go ends the telling",
+  "a held transcript opens on its newest page, read once beside the live read and laid on the held transcripts, then follows on from its cursor once the live read's first rows land, missing nothing written between; a short page is caught up, and the next is read only as the statements move or at the edge the service names; letting it go stops the following",
   () =>
     Effect.gen(function* () {
       const {
         call,
         asked,
-        pages,
+        held,
         sealTranscript,
         pageNow: script,
         pageNewest,
@@ -1665,8 +1673,14 @@ it.effect(
       script(between);
       assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
       yield* settled;
-      assert.deepEqual(pages(), [
-        { transcript: FOLLOWED, page: { ...newest, newest: true, caughtUp: false } },
+      assert.deepEqual(held(), [
+        {
+          messages: newest.messages,
+          before: "40",
+          cursor: "1:0",
+          word: { status: AGENT_STATUS.RUNNING, title: "Invites", caughtUp: false },
+          pages: 1,
+        },
       ]);
       assert.deepEqual(asked.toSorted(), [
         `messages-newest:${AGENT_ID}:cut`,
@@ -1676,18 +1690,23 @@ it.effect(
       // The live read's first rows read on from the newest page's cursor, never from the start.
       transcriptRows(live, 2);
       yield* settled;
-      assert.deepEqual(pages()[1], { transcript: FOLLOWED, page: windowPage(between) });
-      assert.equal(caughtUpOf(pages()[1]), true);
+      assert.deepEqual(held()[1], {
+        messages: [...newest.messages, ...between.messages],
+        before: "40",
+        cursor: "2:0",
+        word: { status: AGENT_STATUS.RUNNING, title: "Invites", caughtUp: true },
+        pages: 2,
+      });
       const reads = asked.filter((ask) => ask.startsWith("messages-"));
       assert.deepEqual(reads, [`messages-newest:${AGENT_ID}:cut`, `messages-now:${AGENT_ID}:1:0`]);
 
       // Note that a short page is caught up, so nothing is read again until the clock reaches the edge the service named.
       yield* TestClock.adjust("2 seconds");
       yield* settled;
-      assert.equal(pages().length, 2);
+      assert.equal(held().length, 2);
       yield* TestClock.adjust("1 second");
       yield* settled;
-      assert.equal(pages().length, 3);
+      assert.equal(held().length, 3);
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:2:0`);
 
       const moved = pageNow("3:0", { holds: false, text: "Testing the expiry." });
@@ -1695,26 +1714,28 @@ it.effect(
       // A turn opening is what reads the page again; its messages come as rows (see the window's own test).
       transcriptRows(live, 3, 2);
       yield* settled;
-      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(moved) });
+      assert.deepEqual(ids(held().at(-1)), ["m-1:0", "m-2:0", "m-3:0"]);
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 1);
       assert.ok(!asked.includes(`messages-now:${AGENT_ID}:${AGENT_CURSOR_START}`));
 
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
-      const toldBefore = pages().length;
+      const laidBefore = held().length;
+      const askedBefore = asked.length;
       transcriptRows(live, 4, 3);
-      yield* settled;
-      assert.equal(pages().length, toldBefore);
+      yield* nextPoll;
+      assert.equal(held().length, laidBefore, "a transcript let go moves no more");
+      assert.equal(asked.length, askedBefore, "nor reads anything");
     }),
 );
 
 it.effect(
-  "a followed transcript's newest messages are told as its window's rows draw them, each once and as caught up, beside what the last page said of the agent, with no page read again; a message whose parts are not all in waits for them",
+  "a held transcript's newest messages are laid as its window's rows draw them, each once and as caught up, beside what the last page said of the agent, with no page read again; a message whose parts are not all in waits for them",
   () =>
     Effect.gen(function* () {
       const {
         call,
         asked,
-        pages,
+        held,
         sealTranscript,
         pageNow: script,
         pageNewest,
@@ -1722,15 +1743,14 @@ it.effect(
       } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites."));
-      const caught = pageNow("1:0", { holds: true });
-      script(caught);
+      script(pageNow("1:0", { holds: true }));
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 1);
       yield* settled;
       const reads = () => asked.filter((ask) => ask.startsWith("messages-")).length;
       const readBefore = reads();
-      const toldBefore = pages().length;
+      const laidBefore = held().length;
 
       const first = windowRow(2, "Writing the expiry.");
       const second = windowRow(3, "Testing the expiry.");
@@ -1739,28 +1759,22 @@ it.effect(
       yield* nextPoll;
       live.transcript.set({ windowParts: [first.part, second.part] });
       yield* nextPoll;
-      // Rows answered again alike tell nothing more.
+      // Rows answered again alike lay nothing more.
       live.transcript.set({ window: [first.row, second.row] });
       yield* nextPoll;
 
-      const said = (seq: number, text: string) => ({
-        id: `m-${seq}`,
-        role: "assistant",
-        parts: [{ type: "text", text }],
-      });
-      assert.deepEqual(pages().slice(toldBefore), [
-        {
-          transcript: FOLLOWED,
-          page: { ...windowPage(caught), messages: [said(2, "Writing the expiry.")] },
-        },
-        {
-          transcript: FOLLOWED,
-          page: { ...windowPage(caught), messages: [said(3, "Testing the expiry.")] },
-        },
-      ]);
+      assert.deepEqual(
+        held()
+          .slice(laidBefore)
+          .map((rows) => [rows?.messages.slice(1), rows?.word?.caughtUp]),
+        [
+          [[said(2, "Writing the expiry.")], true],
+          [[said(2, "Writing the expiry."), said(3, "Testing the expiry.")], true],
+        ],
+      );
       assert.equal(reads(), readBefore);
 
-      // A turn moving reads the page past the messages the rows told.
+      // A turn moving reads the page past the messages the rows laid.
       transcriptRows(live, 3, 2);
       yield* nextPoll;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
@@ -1768,10 +1782,10 @@ it.effect(
 );
 
 it.effect(
-  "a line of the developer's that lands awaiting its turn after a stopped turn is told with the agent at work, never under the stopped turn's word",
+  "a line of the developer's that lands awaiting its turn after a stopped turn is laid with the agent at work, never under the stopped turn's word",
   () =>
     Effect.gen(function* () {
-      const { call, pages, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      const { call, held, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
       script(
@@ -1794,23 +1808,25 @@ it.effect(
       });
       yield* nextPoll;
 
-      const told = pages().find(
-        (each) =>
-          isRecord(each) &&
-          isRecord(each.page) &&
-          Array.isArray(each.page.messages) &&
-          each.page.messages.some((message) => isRecord(message) && message.id === "m-2"),
-      );
-      assert.ok(isRecord(told) && isRecord(told.page), "the line was told");
-      assert.equal(told.page.status, AGENT_STATUS.RUNNING);
+      const laid = held().find((rows) => ids(rows)?.includes("m-2"));
+      assert.ok(laid, "the line was laid");
+      assert.equal(laid.word?.status, AGENT_STATUS.RUNNING);
     }),
 );
 
 it.effect(
-  "a followed transcript reads its page again when only the agent's queue moves, or a line of the developer's lands awaiting its turn, whoever wrote it",
+  "a held transcript reads its page again when only the agent's queue moves, the page laid with the queue's revision it was read at, or when a line of the developer's lands awaiting its turn, whoever wrote it",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealTranscript, pageNow: script, pageNewest, live } = yield* subject();
+      const {
+        call,
+        asked,
+        held,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        live,
+      } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest(newestPage("1:0", "Reading the invites.", "40"));
       script(pageNow("1:0", { holds: false, text: "Reading the invites." }));
@@ -1825,6 +1841,7 @@ it.effect(
       live.transcript.set({ queueRevision: [{ revision: 1 }] });
       yield* nextPoll;
       assert.equal(reads(), beforeQueue + 1, "the queue moving reads the page");
+      assert.equal(held().at(-1)?.word?.queueRevision, 1, "its queue is at least that new");
 
       // A queue's hand-off writes the member's line before its turn is opened; the page says the agent runs.
       const beforeLine = reads();
@@ -1841,15 +1858,15 @@ it.effect(
 /**
  * A follow whose rows draw `m-2` as "Writing the expiry." at the
  * conversation's revision 2 while a moved turn's page is read, the page
- * answering `pageText` for it at the cursor named: every page told from the
- * moment the turn moved, once the page and a delivery of the rows after it
- * landed.
+ * answering `pageText` for it at the cursor named: every transcript laid
+ * from the moment the turn moved, once the page and a delivery of the rows
+ * after it landed.
  */
-function toldBesideRead(pageCursor: string, pageText: string) {
+function laidBesideRead(pageCursor: string, pageText: string) {
   return Effect.gen(function* () {
     const {
       call,
-      pages,
+      held,
       sealTranscript,
       pageNow: script,
       holdPages,
@@ -1858,13 +1875,12 @@ function toldBesideRead(pageCursor: string, pageText: string) {
     } = yield* subject();
     sealTranscript(LIVE_ANSWERED);
     pageNewest(newestPage("1:0", "Reading the invites."));
-    const caught = pageNow("1:0", { holds: true });
-    script(caught);
+    script(pageNow("1:0", { holds: true }));
     yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
     yield* settled;
     transcriptRows(live, 1);
     yield* settled;
-    const toldBefore = pages().length;
+    const laidBefore = held().length;
 
     const answer = yield* Deferred.make<void>();
     holdPages(Deferred.await(answer));
@@ -1879,14 +1895,14 @@ function toldBesideRead(pageCursor: string, pageText: string) {
     const drawn = windowRow(2, "Writing the expiry.");
     live.transcript.set({ window: [drawn.row], windowParts: [drawn.part] });
     yield* nextPoll;
-    const beside = pages().slice(toldBefore);
+    const beside = held().slice(laidBefore);
 
     yield* Deferred.succeed(answer, undefined);
     yield* settled;
-    // The rows answer again as they stood, which tells nothing older than the page.
+    // The rows answer again as they stood, which lays nothing older than the page.
     live.transcript.set({ windowParts: [drawn.part] });
     yield* nextPoll;
-    return { beside, after: pages().slice(toldBefore + beside.length), caught, read };
+    return { beside, after: held().slice(laidBefore + beside.length) };
   });
 }
 
@@ -1895,74 +1911,39 @@ function said(seq: number, text: string) {
   return { id: `m-${seq}`, role: "assistant" as const, parts: [{ type: "text", text }] };
 }
 
+/** The ids of the messages a held transcript holds, in order. */
+function ids(rows: AppTranscript | undefined): readonly string[] | undefined {
+  return rows?.messages.map((message) => message.id);
+}
+
 it.effect(
-  "a message the window's rows draw while a moved turn's page is read is told at once, and left out of that page where the page read it at an older revision",
+  "a message the window's rows draw while a moved turn's page is read is laid at once, and the page's older copy of it is left out where the page read it at an older revision",
   () =>
     Effect.gen(function* () {
-      const { beside, after, caught, read } = yield* toldBesideRead("3:0", "Writ");
+      const { beside, after } = yield* laidBesideRead("3:0", "Writ");
 
-      assert.deepEqual(beside, [
-        {
-          transcript: FOLLOWED,
-          page: { ...windowPage(caught), messages: [said(2, "Writing the expiry.")] },
-        },
-      ]);
-      assert.deepEqual(after, [
-        {
-          transcript: FOLLOWED,
-          page: { ...windowPage(read), messages: [said(3, "Testing the expiry.")] },
-        },
-      ]);
+      assert.deepEqual(
+        beside.map((rows) => rows?.messages.slice(1)),
+        [[said(2, "Writing the expiry.")]],
+      );
+      assert.deepEqual(
+        after.map((rows) => rows?.messages.slice(1)),
+        [[said(2, "Writing the expiry."), said(3, "Testing the expiry.")]],
+      );
     }),
 );
 
 it.effect(
-  "a page read at the rows' revision or later tells its newer copy of a message the rows drew beside it, and the rows never draw the older one back over it",
+  "a page read at the rows' revision or later lays its newer copy of a message the rows drew beside it, and the rows never draw the older one back over it",
   () =>
     Effect.gen(function* () {
       const newer = "Writing the expiry, then testing it.";
-      const { after, read } = yield* toldBesideRead("3:5", newer);
+      const { after } = yield* laidBesideRead("3:5", newer);
 
-      assert.deepEqual(after, [
-        {
-          transcript: FOLLOWED,
-          page: { ...windowPage(read), messages: [said(2, newer), said(3, "Testing the expiry.")] },
-        },
-      ]);
-    }),
-);
-
-it.effect(
-  "messages the window's rows drew are held too, so a transcript followed again is told them and reads on past them",
-  () =>
-    Effect.gen(function* () {
-      const harness = yield* subject();
-      const { call, asked, pages, sealTranscript, pageNow: script, pageNewest, live } = harness;
-      sealTranscript(LIVE_ANSWERED);
-      const newest = newestPage("1:0", "Reading the invites.");
-      pageNewest(newest);
-      script(pageNow("1:0", { holds: true }));
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      transcriptRows(live, 1);
-      yield* settled;
-      const drawn = windowRow(2, "Writing the expiry.");
-      live.transcript.set({ window: [drawn.row], windowParts: [drawn.part] });
-      yield* nextPoll;
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
-
-      const toldBefore = pages().length;
-      const askedBefore = asked.length;
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      const told = pages()[toldBefore];
-      assert.ok(isRecord(told) && isRecord(told.page) && Array.isArray(told.page.messages));
-      assert.equal(told.page.held, true);
       assert.deepEqual(
-        told.page.messages.map((message) => (isRecord(message) ? message.id : undefined)),
-        [newest.messages[0]?.id, "m-2"],
+        after.map((rows) => rows?.messages.slice(1)),
+        [[said(2, newer), said(3, "Testing the expiry.")]],
       );
-      assert.deepEqual(asked.slice(askedBefore), [`messages-now:${AGENT_ID}:2:0`]);
     }),
 );
 
@@ -1970,7 +1951,7 @@ it.effect(
   "a full page is followed by the next at once, and the short one after it is caught up",
   () =>
     Effect.gen(function* () {
-      const { call, asked, pages, sealTranscript, pageNow: script, live } = yield* subject();
+      const { call, asked, held, sealTranscript, pageNow: script, live } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       const full: TranscriptNowAnswer = {
         ...pageNow("2:0", { holds: false }),
@@ -1986,8 +1967,8 @@ it.effect(
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
-      const told = pages().map(caughtUpOf);
-      assert.deepEqual(told.slice(0, 3), [false, false, true]);
+      const laid = held().map((rows) => rows?.word?.caughtUp);
+      assert.deepEqual(laid.slice(0, 3), [false, false, true]);
       assert.deepEqual(asked.filter((ask) => ask.startsWith("messages-now")).slice(0, 2), [
         `messages-now:${AGENT_ID}:1:0`,
         `messages-now:${AGENT_ID}:2:0`,
@@ -1996,48 +1977,43 @@ it.effect(
 );
 
 it.effect(
-  "a live read the service does not answer leaves the newest page told, is asked again a bounded number of times, then says the transcript could not be read; following again reads anew",
+  "a live read the service does not answer leaves the newest page laid, is asked again a bounded number of times, then lays that the transcript could not be read beside it; Try again reads on from what is held",
   () =>
     Effect.gen(function* () {
-      const { call, asked, pages, sealTranscript } = yield* subject();
+      const { call, asked, held, sealTranscript } = yield* subject();
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(pages(), [
-        {
-          transcript: FOLLOWED,
-          page: { ...SAID, cursor: "1:0", newest: true, caughtUp: false },
-        },
-      ]);
+      assert.deepEqual(ids(held().at(-1)), ["m-1"]);
+      assert.equal(held().at(-1)?.cursor, "1:0");
 
       yield* TestClock.adjust("1 minute");
       yield* settled;
       const seals = asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
       assert.ok(seals > 1 && seals < 60, `read ${seals} times`);
-      assert.deepEqual(pages().at(-1), {
-        transcript: FOLLOWED,
-        page: {
-          failure: AGENT_CALL_FAILURE.UNANSWERED,
-          cause: { _tag: FAILURE_FACT.SEAL_UNANSWERED, code: AGENT_CALL_FAILURE.UNANSWERED },
-        },
+      assert.deepEqual(held().at(-1)?.failure, {
+        failure: AGENT_CALL_FAILURE.UNANSWERED,
+        cause: { _tag: FAILURE_FACT.SEAL_UNANSWERED, code: AGENT_CALL_FAILURE.UNANSWERED },
       });
+      assert.deepEqual(ids(held().at(-1)), ["m-1"], "the messages held stand");
       yield* TestClock.adjust("1 minute");
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals);
 
       sealTranscript(LIVE_ANSWERED);
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_RETRY, FOLLOWED);
       yield* settled;
       assert.equal(asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length, seals + 1);
-      // Note that the newest page told before stands held, so following again opens on it rather than reading it anew.
+      assert.equal(held().at(-1)?.failure, undefined, "reading again lets the failure go");
+      // Note that the newest page laid before stands, so reading again opens on it rather than reading it anew.
       assert.equal(asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length, 1);
     }),
 );
 
 it.effect(
-  "a newest page the service keeps not answering is asked for a bounded number of times, then the follow ends on the failure told",
+  "a newest page the service keeps not answering is asked for a bounded number of times, then the follow ends on the failure laid",
   () =>
     Effect.gen(function* () {
-      const { call, asked, pages, sealTranscript, pageNewest } = yield* subject();
+      const { call, asked, held, sealTranscript, pageNewest } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
       pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
@@ -2047,9 +2023,10 @@ it.effect(
       const newest = () => asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length;
       const read = newest();
       assert.ok(read > 1 && read < 60, `read the newest page ${read} times`);
-      assert.deepEqual(pages().at(-1), {
-        transcript: FOLLOWED,
-        page: { failure: AGENT_CALL_FAILURE.UNANSWERED },
+      assert.deepEqual(held().at(-1), {
+        messages: [],
+        pages: 0,
+        failure: { failure: AGENT_CALL_FAILURE.UNANSWERED },
       });
       yield* TestClock.adjust("1 minute");
       yield* settled;
@@ -2059,69 +2036,98 @@ it.effect(
 );
 
 it.effect(
-  "a page read at another rewind than the window's has the follow read the newest page afresh and tell it as the newest, which the window takes in place of what it drew",
+  "a page read at another rewind than the one held has the follow read the newest page afresh and lay it in place of what was held, though it meets it, so the messages the rewind dropped go",
   () =>
     Effect.gen(function* () {
       const {
         call,
         asked,
-        pages,
+        held,
         sealTranscript,
         pageNow: script,
         pageNewest,
         live,
       } = yield* subject();
       sealTranscript(LIVE_ANSWERED);
-      pageNewest(newestPage("2:0", "Writing the expiry."));
+      pageNewest({
+        ...newestPage("2:0", "Writing the expiry."),
+        messages: [said(1, "Reading the invites."), said(2, "Writing the expiry.")],
+      });
       script(pageNow("2:0", { holds: true }));
       yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(live, 2);
       yield* settled;
+      assert.deepEqual(ids(held().at(-1)), ["m-1", "m-2"]);
 
       // The agent is taken back to before its second line: every page says so from now on.
-      const rewound = { ...newestPage("3:1", "Reading the invites."), rewound: 1 };
+      const rewound = {
+        ...newestPage("3:1", "Reading the invites."),
+        messages: [said(1, "Reading the invites.")],
+        rewound: 1,
+      };
       pageNewest(rewound);
       script({ ...pageNow("3:1", { holds: true }), rewound: 1 });
       transcriptRows(live, 3, 2);
       yield* nextPoll;
 
-      const newestTold = pages().filter(
-        (told) => isRecord(told) && isRecord(told.page) && told.page.newest === true,
-      );
-      assert.deepEqual(newestTold.at(-1), {
-        transcript: FOLLOWED,
-        page: { ...rewound, newest: true, caughtUp: false },
-      });
+      assert.deepEqual(ids(held().at(-1)), ["m-1"]);
+      assert.equal(held().at(-1)?.word?.rewound, 1);
       assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 2);
     }),
 );
 
-it.effect("an older page is read below the place the window names, the agent's or a worker's", () =>
-  Effect.gen(function* () {
-    const { call, asked } = yield* subject();
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
-      { messages: SAID.messages, before: "3" },
-    );
-    yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
-      ...FOLLOWED,
-      callId: "call-7",
-      before: "40",
-    });
-    const refused = yield* Effect.flip(
-      call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
-    );
-    assert.equal(refused._tag, "InvalidParamsRefusal");
-    assert.deepEqual(asked, [
-      `messages-before:${AGENT_ID}:40:cut`,
-      `worker-before:${AGENT_ID}:call-7:40:cut`,
-    ]);
-  }),
+it.effect(
+  "an older page read below the place the window names is laid before the messages held and answers that it landed; one asked below a place they no longer begin at, as once a newer page took their place, is dropped, and a worker's is read under its call",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, held, sealTranscript, pageNewest } = yield* subject();
+      sealTranscript(LIVE_ANSWERED);
+      pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.equal(held().at(-1)?.before, "40");
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
+        { landed: true },
+      );
+      assert.deepEqual(ids(held().at(-1)), ["m-1", "m-1:0"]);
+      assert.equal(held().at(-1)?.before, "3");
+
+      // The messages held begin below "40" now, so a page read for it would leave a gap or repeat itself.
+      const laid = held().length;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "40" }),
+        { landed: false },
+      );
+      assert.equal(held().length, laid);
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, {
+          ...FOLLOWED,
+          callId: "call-7",
+          before: "40",
+        }),
+        { landed: false },
+      );
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_OLDER, { ...FOLLOWED, before: "the start" }),
+      );
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.deepEqual(
+        asked.filter((ask) => ask.includes("-before:")),
+        [
+          `messages-before:${AGENT_ID}:40:cut`,
+          `messages-before:${AGENT_ID}:40:cut`,
+          `worker-before:${AGENT_ID}:call-7:40:cut`,
+        ],
+      );
+    }),
 );
 
 it.effect(
-  "a followed transcript the account does not reach is told not found once; behind a closed gate it is told unanswered; and a sign-out lets every followed transcript go",
+  "a held transcript the account does not reach is laid not found once; behind a closed gate nothing is read; and a sign-out lets every held transcript go",
   () =>
     Effect.gen(function* () {
       const worker = { ...FOLLOWED, callId: "call-7" };
@@ -2131,14 +2137,14 @@ it.effect(
       yield* settled;
       yield* TestClock.adjust("5 seconds");
       yield* settled;
-      assert.deepEqual(refused.pages(), [
-        { transcript: worker, page: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
+      assert.deepEqual(refused.held(worker), [
+        { messages: [], pages: 0, failure: { failure: AGENT_CALL_FAILURE.NOT_FOUND } },
       ]);
 
       const signedOut = yield* subject({ signedIn: false });
       yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(signedOut.pages(), [{ transcript: FOLLOWED, page: GATE_CLOSED_SIGNED_OUT }]);
+      assert.deepEqual(signedOut.held(), []);
       assert.deepEqual(signedOut.asked, []);
 
       const followed = yield* subject();
@@ -2150,73 +2156,63 @@ it.effect(
       yield* followed.reset;
       yield* settled;
       assert.equal(followed.live.transcript.held(), 0, "a sign-out lets its poll go");
-      assert.equal(followed.pages().length, 1);
+      assert.equal(followed.held().at(-1), undefined, "and what was held of it");
     }),
 );
 
-/** A followed transcript opened on its newest page and caught up past it, as a window that followed it last saw it: its window, as the host holds it. */
+/** A held transcript opened on its newest page and caught up past it, then let go, as a window that showed it last left it. */
 function followedOnce(
   harness: Effect.Success<ReturnType<typeof subject>>,
   transcript: { readonly kind: "agent"; readonly agentId: string } = FOLLOWED,
 ) {
   return Effect.gen(function* () {
-    const newest = newestPage("1:0", "Reading the invites.", "40");
-    const past = pageNow("2:0", { holds: false, text: "Writing the expiry." });
     harness.sealTranscript(LIVE_ANSWERED);
-    harness.pageNewest(newest);
-    harness.pageNow(past);
+    harness.pageNewest(newestPage("1:0", "Reading the invites.", "40"));
+    harness.pageNow(pageNow("2:0", { holds: false, text: "Writing the expiry." }));
     yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, transcript);
     yield* settled;
     transcriptRows(harness.live, 2);
     yield* settled;
     yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, transcript);
-    const { holds: _holds, ...read } = past;
-    return {
-      ...read,
-      messages: [...newest.messages, ...past.messages],
-      before: "40",
-      newest: true,
-      held: true,
-      caughtUp: false,
-    };
   });
 }
 
 it.effect(
-  "a transcript followed again is told the window held of it before the service is asked anything, then read on once from the held cursor, so a message written while away arrives",
+  "a transcript held again stands as the host held it before the service is asked anything, then is read on once from its cursor, so a message written while away arrives",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const window = yield* followedOnce(harness);
-      const { asked, pages, askedAsTold, live } = harness;
+      yield* followedOnce(harness);
+      const { asked, transcripts, live } = harness;
+      assert.deepEqual(ids(harness.held().at(-1)), ["m-1:0", "m-2:0"], "let go, it stays held");
 
-      // Written while no window followed it.
+      // Written while no window held it.
       const away = pageNow("3:0", { holds: false, text: "Written while away." });
       harness.pageNow(away);
       yield* TestClock.adjust("5 seconds");
       transcriptRows(live, 3);
       yield* settled;
+      assert.deepEqual(ids(harness.held().at(-1)), ["m-1:0", "m-2:0"], "nor moves while let go");
 
-      const toldBefore = pages().length;
+      const laidBefore = transcripts().length;
       const askedBefore = asked.length;
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(pages().slice(toldBefore), [
-        { transcript: FOLLOWED, page: window },
-        { transcript: FOLLOWED, page: windowPage(away) },
-      ]);
-      assert.equal(askedAsTold()[toldBefore], askedBefore);
+      const laid = transcripts().slice(laidBefore);
+      assert.equal(laid[0]?.asked, askedBefore, "what was held stands before any read");
+      assert.equal(laid[0]?.rows?.word?.caughtUp, false, "not caught up until read on");
+      assert.deepEqual(ids(laid.at(-1)?.rows), ["m-1:0", "m-2:0", "m-3:0"]);
       assert.deepEqual(asked.slice(askedBefore), [`messages-now:${AGENT_ID}:2:0`]);
     }),
 );
 
 it.effect(
-  "a held message rewritten while away arrives on the read past the held cursor, and the window held after it carries the rewrite in place",
+  "a held message rewritten while away arrives on the read past the held cursor, laid in place",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const window = yield* followedOnce(harness);
-      const { pages, live } = harness;
+      yield* followedOnce(harness);
+      const { held, live } = harness;
       // The service answers a message older than the cursor again once its revision passed it.
       const rewrite = {
         ...pageNow("2:1", { holds: false }),
@@ -2232,50 +2228,42 @@ it.effect(
       transcriptRows(live, 2);
       yield* settled;
 
-      const toldBefore = pages().length;
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(pages().slice(toldBefore), [
-        { transcript: FOLLOWED, page: window },
-        { transcript: FOLLOWED, page: windowPage(rewrite) },
+      assert.equal(held().at(-1)?.cursor, "2:1");
+      assert.deepEqual(held().at(-1)?.messages, [
+        rewrite.messages[0],
+        { id: "m-2:0", role: "assistant", parts: [{ type: "text", text: "Writing the expiry." }] },
       ]);
-
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
-      const again = pages().length;
-      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      const told = pages()[again];
-      assert.ok(isRecord(told) && isRecord(told.page));
-      assert.equal(told.page.cursor, "2:1");
-      assert.deepEqual(told.page.messages, [rewrite.messages[0], window.messages[1]]);
     }),
 );
 
 it.effect(
-  "a held cursor the service refuses is let go for the newest page, as a follow holding nothing opens, and the refusal is never told",
+  "a held cursor the service refuses is let go for the newest page, as a follow holding nothing opens, and the refusal is never laid",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
-      const window = yield* followedOnce(harness);
-      const { asked, pages } = harness;
+      yield* followedOnce(harness);
+      const { asked, held } = harness;
       const fresh = newestPage("5:0", "Read afresh.", "41");
       harness.pageNewest(fresh);
       harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED }, pageNow("6:0", { holds: false }));
 
-      const toldBefore = pages().length;
+      const laidBefore = held().length;
       const askedBefore = asked.length;
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
-      assert.deepEqual(
-        pages()
-          .slice(toldBefore)
-          .map((told) => (isRecord(told) ? told.page : undefined)),
-        [
-          window,
-          { ...fresh, newest: true, caughtUp: false },
-          windowPage(pageNow("6:0", { holds: false })),
-        ],
+      const laid = held().slice(laidBefore);
+      assert.ok(
+        laid.every((rows) => rows?.failure === undefined),
+        "the refusal is never laid",
       );
+      assert.deepEqual(
+        ids(laid.at(-1)),
+        ["m-5:0"],
+        "the newest page takes the place of what was held",
+      );
+      assert.equal(laid.at(-1)?.before, "41");
       assert.deepEqual(asked.slice(askedBefore), [
         `messages-now:${AGENT_ID}:2:0`,
         `messages-newest:${AGENT_ID}:cut`,
@@ -2285,12 +2273,12 @@ it.effect(
 );
 
 it.effect(
-  "a transcript followed again while the service answers no read at all stays followed, and reads on once the service is back",
+  "a transcript held again while the service answers no read at all stays followed, and reads on once the service is back",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
       yield* followedOnce(harness);
-      const { pages } = harness;
+      const { held } = harness;
       harness.pageNow({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       harness.pageNewest({ failure: AGENT_CALL_FAILURE.UNANSWERED });
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
@@ -2303,50 +2291,40 @@ it.effect(
       harness.pageNewest(newestPage("3:0", "Back again.", "40"));
       yield* TestClock.adjust("5 seconds");
       yield* settled;
-      const told = pages().at(-1);
-      assert.ok(isRecord(told) && isRecord(told.page));
-      assert.ok(!("failure" in told.page));
-      assert.ok(JSON.stringify(told.page.messages).includes("Back again."));
+      assert.equal(held().at(-1)?.failure, undefined);
+      assert.ok(JSON.stringify(held().at(-1)?.messages).includes("Back again."));
     }),
 );
 
 it.effect(
-  "a sign-out, a switch of account, and an agent archived each let go of what was held, so the next follow reads the newest page",
+  "a sign-out lets go of every transcript held, and an archive of the agent's let go lately, so the next hold reads the newest page; one a window holds stays drawn",
   () =>
     Effect.gen(function* () {
       const newestReads = (asked: readonly string[]) =>
         asked.filter((ask) => ask === `messages-newest:${AGENT_ID}:cut`).length;
-      const heldTold = (pages: readonly WireValue[]) =>
-        pages.filter((told) => isRecord(told) && isRecord(told.page) && told.page.held === true)
-          .length;
 
       const signedOut = yield* subject();
       yield* followedOnce(signedOut);
       yield* signedOut.reset;
+      assert.equal(signedOut.held().at(-1), undefined);
       yield* signedOut.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(newestReads(signedOut.asked), 2);
-      assert.equal(heldTold(signedOut.pages()), 0);
-
-      let account = "user-dana";
-      const switched = yield* subject({ accountId: () => account });
-      yield* followedOnce(switched);
-      account = "user-eli";
-      yield* switched.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      assert.equal(newestReads(switched.asked), 2);
-      assert.equal(heldTold(switched.pages()), 0);
 
       const archived = yield* subject();
       yield* followedOnce(archived);
-      yield* archived.call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
-        agentId: AGENT_ID,
-        archived: true,
-      });
+      yield* archived.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true });
+      assert.equal(archived.held().at(-1), undefined);
       yield* archived.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       assert.equal(newestReads(archived.asked), 2);
-      assert.equal(heldTold(archived.pages()), 0);
+
+      const shown = yield* subject();
+      yield* followedOnce(shown);
+      yield* shown.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* shown.call(GATEWAY_METHOD.AGENTS_ARCHIVE, { agentId: AGENT_ID, archived: true });
+      assert.deepEqual(ids(shown.held().at(-1)), ["m-1:0", "m-2:0"]);
     }),
 );
 
@@ -2389,10 +2367,14 @@ it.effect(
 );
 
 it.effect(
-  "only the transcripts told most recently are held, the least recent let go past the bound",
+  "a transcript let go past the bound is closed, the least recently let go first, and one a window holds never is",
   () =>
     Effect.gen(function* () {
       const harness = yield* subject();
+      // One a window holds throughout, its tab shown.
+      const shown = { kind: TRANSCRIPT_KIND.AGENT, agentId: "agent-shown" };
+      yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, shown);
+      yield* settled;
       const transcripts = Array.from({ length: HELD_TRANSCRIPTS + 1 }, (_, index) => ({
         kind: TRANSCRIPT_KIND.AGENT,
         agentId: `agent-${index}`,
@@ -2401,11 +2383,15 @@ it.effect(
       const newestReads = (agentId: string) =>
         harness.asked.filter((ask) => ask === `messages-newest:${agentId}:cut`).length;
 
+      const first = transcripts[0] ?? FOLLOWED;
       const last = transcripts.at(-1) ?? FOLLOWED;
+      assert.equal(harness.held(first).at(-1), undefined, "the least recently let go is closed");
+      assert.notEqual(harness.held(last).at(-1), undefined);
+      assert.notEqual(harness.held(shown).at(-1), undefined, "one a window holds stays drawn");
+
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, last);
       yield* settled;
       assert.equal(newestReads(last.agentId), 1);
-      const first = transcripts[0] ?? FOLLOWED;
       yield* harness.call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, first);
       yield* settled;
       assert.equal(newestReads(first.agentId), 2);

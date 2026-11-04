@@ -12,6 +12,7 @@ import {
 } from "@repo/features/agent-browser-tab-wire";
 import {
   AGENT_CALL_FAILURE,
+  type AgentTranscriptKey,
   PULL_REQUEST_PART,
   type PullRequestPart,
   type PullRequestPartParams,
@@ -46,6 +47,8 @@ import {
   type AppStateDelivery,
   type AppStateSnapshot,
   type AppTokenRepositories,
+  type AppTranscript,
+  type AppTranscripts,
   type AppWorkspaceIntegrations,
   type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
@@ -58,7 +61,9 @@ import {
   NO_KEYS_HELD,
   NO_PAGES,
   NO_PLAN_COMMENTS,
+  NO_TRANSCRIPTS,
   OWN_PULL_REQUEST,
+  OWN_TRANSCRIPT,
   PULL_REQUEST_PART_READ,
   UNREAD,
 } from "@repo/host/app-state";
@@ -149,6 +154,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.HOSTS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_INVITATIONS]: NO_KEYS_HELD,
     [LIVE_READ.THIS_MAC_HOST]: NO_KEYS_HELD,
+    [LIVE_READ.TRANSCRIPT]: NO_TRANSCRIPTS,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_INTEGRATIONS]: NO_KEYS_HELD,
     [LIVE_READ.SLACK_CHANNELS]: NO_KEYS_HELD,
@@ -273,6 +279,7 @@ export interface HostReadsHanded {
   readonly deliverSlackChannels: (next: AppSlackChannels) => void;
   readonly deliverInvitations: (next: AppWorkspaceInvitations) => void;
   readonly deliverTokenRepositories: (next: AppTokenRepositories) => void;
+  readonly deliverTranscripts: (next: AppTranscripts) => void;
   /** The account's task list, as the host lays it whole. */
   readonly deliverTasks: (next: TasksView) => void;
 }
@@ -307,6 +314,7 @@ export function handHostReads(first: {
   readonly models?: AppHostRead<ModelsAnswer>;
   readonly members?: AppWorkspaceMembers;
   readonly tokenRepositories?: AppTokenRepositories;
+  readonly transcripts?: AppTranscripts;
 }): HostReadsHanded {
   const handed = fakeAppBridgeCalls().requestAppState;
   const earlier = fakeAppBridgeCalls().onAppState;
@@ -348,6 +356,9 @@ export function handHostReads(first: {
         ...(first.tokenRepositories === undefined
           ? undefined
           : { [LIVE_READ.TOKEN_REPOSITORIES]: first.tokenRepositories }),
+        ...(first.transcripts === undefined
+          ? undefined
+          : { [LIVE_READ.TRANSCRIPT]: first.transcripts }),
       };
     },
     onAppState: (listener: (delivery: AppStateDelivery) => void) => {
@@ -387,6 +398,7 @@ export function handHostReads(first: {
     deliverSlackChannels: (next) => deliver({ [LIVE_READ.SLACK_CHANNELS]: next }),
     deliverInvitations: (next) => deliver({ [LIVE_READ.WORKSPACE_INVITATIONS]: next }),
     deliverTokenRepositories: (next) => deliver({ [LIVE_READ.TOKEN_REPOSITORIES]: next }),
+    deliverTranscripts: (next) => deliver({ [LIVE_READ.TRANSCRIPT]: next }),
     deliverTasks: (next) => deliver({ tasks: next }),
   };
 }
@@ -774,6 +786,50 @@ export function holdBrowserTabs(
     },
   });
   return lay;
+}
+
+/** How a test's host lays one transcript anew, as the host does as its read moves, every hold the window asked, and every hold it let go, each in order. */
+export interface TranscriptsHeld {
+  readonly lay: (transcript: AgentTranscriptKey, read: AppHostRead<AppTranscript>) => void;
+  readonly asked: readonly AgentTranscriptKey[];
+  readonly closed: readonly AgentTranscriptKey[];
+}
+
+/**
+ * Answers the window's holds on an agent's or a worker's transcript as the
+ * host does, beside whatever acts the test answers by now: where
+ * `transcriptOf` names a transcript's read, laid on the document through
+ * `deliver` as it is first held, and staying there once let go. Answers
+ * with how the test's host lays a transcript anew, and the holds asked and
+ * let go.
+ */
+export function holdTranscripts(
+  deliver: HostReadsHanded["deliverTranscripts"],
+  transcriptOf: (transcript: AgentTranscriptKey) => AppHostRead<AppTranscript> | undefined,
+): TranscriptsHeld {
+  const asked: AgentTranscriptKey[] = [];
+  const closed: AgentTranscriptKey[] = [];
+  let held: AppTranscripts = NO_TRANSCRIPTS;
+  const lay = (transcript: AgentTranscriptKey, read: AppHostRead<AppTranscript>) => {
+    const { agentId } = transcript;
+    const id = transcript.callId ?? OWN_TRANSCRIPT;
+    held = { ...held, [agentId]: { ...held[agentId], [id]: read } };
+    deliver(held);
+  };
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [AGENT_ACT_KIND.AGENTS_TRANSCRIPT]: (transcript) => {
+      asked.push(transcript);
+      const read = transcriptOf(transcript);
+      const id = transcript.callId ?? OWN_TRANSCRIPT;
+      // Note that the host lays what it read once the hold is taken, never inside it.
+      if (read !== undefined && held[transcript.agentId]?.[id] === undefined) {
+        void Promise.resolve().then(() => lay(transcript, read));
+      }
+      return heldUntilClosed(() => closed.push(transcript));
+    },
+  });
+  return { lay, asked, closed };
 }
 
 /** Lays the account's feed of every item as given over the window's document, and answers with how it is delivered again as it moves. */

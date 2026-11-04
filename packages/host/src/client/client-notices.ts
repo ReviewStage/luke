@@ -3,6 +3,8 @@
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentAccountInboxAnswerView } from "@repo/features/agent-view";
+import type { AgentStatus } from "@repo/features/agent-wire";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   AgentNoticeDoors,
@@ -11,6 +13,7 @@ import {
   createAgentNotices,
   NOTICE_KIND,
 } from "../agent-notices.js";
+import { type AppTranscripts, OWN_TRANSCRIPT } from "../app-state.js";
 import type { HostOperator } from "../host-operator.js";
 import type { AppStateStore } from "./app-state-store.js";
 
@@ -70,6 +73,26 @@ function accountInboxOf(host: NoticeHost): Stream.Stream<AgentAccountInboxAnswer
       );
     }),
   );
+}
+
+/**
+ * Each agent's status its own held transcript says, noted where it moved
+ * since `noted` last held it, and each agent no longer held let go of.
+ */
+function observeTranscripts(
+  held: AppTranscripts,
+  noted: Map<string, AgentStatus>,
+  notices: Pick<AgentNotices, "observeStatus">,
+): void {
+  for (const agentId of noted.keys()) {
+    if (!Object.hasOwn(held, agentId)) noted.delete(agentId);
+  }
+  for (const [agentId, transcripts] of Object.entries(held)) {
+    const status = transcripts[OWN_TRANSCRIPT]?.rows?.word?.status;
+    if (status === undefined || noted.get(agentId) === status) continue;
+    noted.set(agentId, status);
+    notices.observeStatus(agentId, status);
+  }
 }
 
 /**
@@ -157,6 +180,26 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
             Effect.sync(() =>
               report(
                 `the agents on tasks could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+              ),
+            ),
+        ),
+    ),
+  );
+  // An agent's own transcript a window holds says where the agent stands as
+  // each page is read, which the notices hold so an end the panel is not
+  // looking at is still announced; a worker's says where the worker stands,
+  // which is no word on the agent.
+  const noted = new Map<string, AgentStatus>();
+  yield* Effect.forkScoped(
+    Stream.runForEach(
+      Stream.changes(Stream.map(state.changes, (document) => document[LIVE_READ.TRANSCRIPT])),
+      (held) =>
+        Effect.catchDefect(
+          Effect.sync(() => observeTranscripts(held, noted, notices)),
+          (defect) =>
+            Effect.sync(() =>
+              report(
+                `the agents' transcripts could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
             ),
         ),

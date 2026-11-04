@@ -188,17 +188,17 @@ async function drawnFor(
   });
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [listedAgent(SENDER_NOW)] } });
   handMembers(() => ({ rows: { members: MEMBERS } }));
+  pushedTranscripts(() => [
+    {
+      messages: [...messages],
+      cursor: "7:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+    },
+  ]);
   const control = agentsControl({
     agents: [agent],
     me: reader,
-    transcripts: pushedTranscripts(() => [
-      {
-        messages: [...messages],
-        cursor: "7:0",
-        status: AGENT_STATUS.COMPLETED,
-        title: null,
-      },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

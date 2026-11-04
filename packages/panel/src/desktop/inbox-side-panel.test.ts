@@ -24,7 +24,6 @@ import type { PageLine } from "@repo/features/page-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
-import type { PortActResult } from "@repo/host/contract";
 import { NO_EXPERIMENTS } from "@repo/settings";
 import { MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
@@ -51,7 +50,12 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { holdFrames, settleFrames } from "../testing/frames.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { listedAgent, tasksControl, waitingOf } from "../testing/tasks-control.js";
+import {
+  listedAgent,
+  pushedTranscripts,
+  tasksControl,
+  waitingOf,
+} from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 
 /**
@@ -158,14 +162,6 @@ const TRANSCRIPT: AgentMessagesAnswerView = {
   title: null,
 };
 
-/** The pages a transcript's stream pushes, then held open as a followed transcript stays. */
-async function* streamOf(
-  pages: readonly AgentMessagesAnswerView[],
-): AsyncGenerator<AgentMessagesAnswerView> {
-  yield* pages;
-  await new Promise(() => undefined);
-}
-
 const ITEM: InboxItem = {
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   agentId: AGENT.id,
@@ -222,14 +218,6 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
         status: FAKE_ANSWER.DONE,
         value: { id: request.payload.itemId, unread: request.payload.unread },
       });
-    case ACT_KIND.AGENTS_TRANSCRIPT:
-      // SAFETY: the window reads oRPC's stream as an async iterator alone, which a generator is.
-      return Promise.resolve({
-        status: FAKE_ANSWER.DONE,
-        value: streamOf([TRANSCRIPT]) as unknown as PortActResult<
-          typeof ACT_KIND.AGENTS_TRANSCRIPT
-        >,
-      });
     case ACT_KIND.AGENTS_MESSAGES:
       return Promise.resolve({
         status: FAKE_ANSWER.DONE,
@@ -260,6 +248,8 @@ async function inbox(
   handInboxItems({
     rows: { [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: [ITEM] }, [INBOX_SCOPE_KIND.AGENT]: {} },
   });
+  // The host lays the agent's transcript, which names a page of its task, once its tab holds it.
+  pushedTranscripts(() => [TRANSCRIPT]);
   function Page() {
     // Note that the item stands chosen, as a press on its row chooses it.
     const [chosen, setChosen] = useState<InboxChoice | undefined>({

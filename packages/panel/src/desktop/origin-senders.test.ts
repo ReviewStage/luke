@@ -87,6 +87,14 @@ async function mount(input: {
   side?: SidePanelTab | undefined;
 }): Promise<{ container: HTMLElement; chosen: (MainTab | SidePanelTab)[] }> {
   const chosen: (MainTab | SidePanelTab)[] = [];
+  pushedTranscripts((transcript) => [
+    {
+      messages: transcript.callId === undefined ? [BRIEF] : [],
+      cursor: "1:0",
+      status: AGENT_STATUS.COMPLETED,
+      title: null,
+    },
+  ]);
   const control = tasksControl({
     me: input.reader,
     page: TASKS_PAGE.DOCUMENT,
@@ -110,14 +118,6 @@ async function mount(input: {
       agents: [AGENT],
       agentIds: [AGENT.id],
       me: input.reader,
-      transcripts: pushedTranscripts((transcript) => [
-        {
-          messages: transcript.callId === undefined ? [BRIEF] : [],
-          cursor: "1:0",
-          status: AGENT_STATUS.COMPLETED,
-          title: null,
-        },
-      ]),
     }),
   });
   const container = document.body.appendChild(document.createElement("div"));

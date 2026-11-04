@@ -19,6 +19,7 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { appBridge } from "./app-bridge.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
+import { onFixtureMoved } from "./tasks/fixture-moves.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
@@ -27,10 +28,14 @@ interface AppStateSource {
   read: () => Promise<AppStateSnapshot>;
 }
 
-/** One reading of the document: the read that bootstraps the window, or a delivery of what moved in it since. */
+/** One reading of the document: the read that bootstraps the window, a delivery of what moved in it since, or a fixture run's stage moving on its own (`fixture-moves.ts`). */
 type AppStateReading =
   | { readonly read: AppStateSnapshot }
-  | { readonly delivered: AppStateDelivery };
+  | { readonly delivered: AppStateDelivery }
+  | typeof STAGE_MOVED;
+
+/** A fixture run's stage moved, so the document held is staged again. */
+const STAGE_MOVED = { stageMoved: true } as const;
 
 /**
  * The bridge refused the one read, so this window has no document to draw.
@@ -79,6 +84,10 @@ const readings = (source: AppStateSource): Stream.Stream<AppStateReading, AppSta
             Queue.offerUnsafe(queue, { delivered });
           }),
         ),
+        (stop) => Effect.sync(stop),
+      );
+      yield* Effect.acquireRelease(
+        Effect.sync(() => onFixtureMoved(() => Queue.offerUnsafe(queue, STAGE_MOVED))),
         (stop) => Effect.sync(stop),
       );
       yield* Effect.forkScoped(
@@ -134,6 +143,10 @@ const adopted = (
       if ("read" in reading) {
         const held = state.early.reduce(adopt, reading.read);
         return [{ held: Option.some(held), early: [] }, [held]];
+      }
+      // Note that a stage that moved hands the document held on again, to be staged anew (`staged`).
+      if ("stageMoved" in reading) {
+        return [state, Option.isSome(state.held) ? [state.held.value] : []];
       }
       if (Option.isNone(state.held)) {
         return [{ ...state, early: [...state.early, reading.delivered] }, []];
@@ -267,6 +280,7 @@ export const APP_SLICE = {
   HOSTS: sliceAtom(LIVE_READ.HOSTS),
   WORKSPACE_INVITATIONS: sliceAtom(LIVE_READ.WORKSPACE_INVITATIONS),
   THIS_MAC_HOST: sliceAtom(LIVE_READ.THIS_MAC_HOST),
+  TRANSCRIPT: sliceAtom(LIVE_READ.TRANSCRIPT),
   WORKSPACE_MEMBERS: sliceAtom(LIVE_READ.WORKSPACE_MEMBERS),
   WORKSPACE_INTEGRATIONS: sliceAtom(LIVE_READ.WORKSPACE_INTEGRATIONS),
   SLACK_CHANNELS: sliceAtom(LIVE_READ.SLACK_CHANNELS),

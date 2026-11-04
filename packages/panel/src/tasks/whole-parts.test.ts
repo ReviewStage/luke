@@ -134,12 +134,12 @@ async function drawnTab(answer: (index: number) => Promise<AgentPartView>) {
   handMembers(() => ({
     rows: { members: [{ ...DEAN, email: "dean@example.com", role: WORKSPACE_ROLE.OWNER }] },
   }));
+  pushedTranscripts(() => [
+    { messages: [CUT_TURN], cursor: "1:0", status: AGENT.status, title: null },
+  ]);
   const control = agentsControl({
     agents: [AGENT],
     me: DEAN.userId,
-    transcripts: pushedTranscripts(() => [
-      { messages: [CUT_TURN], cursor: "1:0", status: AGENT.status, title: null },
-    ]),
   });
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);

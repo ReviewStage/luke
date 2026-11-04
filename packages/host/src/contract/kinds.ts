@@ -160,14 +160,17 @@ export const AGENT_ACT_KIND = {
   AGENTS_START: "agents.start",
   AGENTS_MESSAGES: "agents.messages",
   /**
-   * One agent's transcript, a worker's, or a task's planning worker's,
-   * followed while the window holds the stream open: its pages, the first
-   * from the start and each later one what moved past the last.
+   * One agent's transcript, or one of its workers', held followed while the
+   * window holds the stream open, and kept a while after among those let go
+   * lately, following no longer: what it holds reaches the panel on app
+   * state (`LIVE_READ.TRANSCRIPT`), so the stream carries nothing.
    */
   AGENTS_TRANSCRIPT: "agents.transcript",
+  /** A held transcript, which the panel reads on app state, read again at once, as Try again asks. */
+  AGENTS_TRANSCRIPT_RETRY: "agents.transcriptRetry",
   /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
   AGENTS_PART: "agents.part",
-  /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
+  /** The page of a held transcript below the oldest message it holds, as its newest or last older page named it, laid before them on app state: whether it landed, or why it was not read. */
   AGENTS_TRANSCRIPT_OLDER: "agents.transcriptOlder",
   AGENTS_MESSAGE: "agents.message",
   AGENTS_CHOOSE: "agents.choose",
@@ -748,8 +751,11 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * host follows the list from the account gate opening and only a press asks
  * it again; `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
- * whenever it is shown and nothing keeps it; and `HOSTS_PAIRING_READ` is a
- * FETCH, read once as a pairing's link opens, and again on its Retry.
+ * whenever it is shown and nothing keeps it, as is `AGENTS_MESSAGES`, Copy
+ * transcript's read on its press; `AGENTS_TRANSCRIPT_OLDER` is a WRITE,
+ * because it lays an older page on the held transcript and answers only
+ * whether it landed; and `HOSTS_PAIRING_READ` is a FETCH, read once as a
+ * pairing's link opens, and again on its Retry.
  */
 export const PORT_ACT_USE = {
   ACCOUNT_BEGIN_SIGN_IN: ACT_USE.WRITE,
@@ -789,10 +795,11 @@ export const PORT_ACT_USE = {
   AGENTS_LIST: ACT_USE.READ,
   AGENTS_WORKSPACE_LIST: ACT_USE.FETCH,
   AGENTS_START: ACT_USE.WRITE,
-  AGENTS_MESSAGES: ACT_USE.READ,
+  AGENTS_MESSAGES: ACT_USE.FETCH,
   AGENTS_TRANSCRIPT: ACT_USE.READ,
+  AGENTS_TRANSCRIPT_RETRY: ACT_USE.READ,
   AGENTS_PART: ACT_USE.FETCH,
-  AGENTS_TRANSCRIPT_OLDER: ACT_USE.READ,
+  AGENTS_TRANSCRIPT_OLDER: ACT_USE.WRITE,
   AGENTS_MESSAGE: ACT_USE.WRITE,
   AGENTS_CHOOSE: ACT_USE.WRITE,
   AGENTS_RENAME: ACT_USE.WRITE,

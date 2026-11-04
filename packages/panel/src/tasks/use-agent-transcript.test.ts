@@ -15,9 +15,11 @@ import {
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { OWN_TRANSCRIPT } from "@repo/host/app-state";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   installPanelSpanRecorder,
   jsonBytes,
@@ -25,22 +27,28 @@ import {
   PANEL_SPAN_ATTRIBUTE,
   type PanelSpan,
 } from "../panel-spans.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
+import { handHostReads } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import {
+  type TranscriptsTelling,
+  tellingTranscripts,
+  transcriptTold,
+} from "../testing/tasks-control.js";
+import { useAppState } from "../use-app-state.js";
 import {
   type AgentTranscriptControl,
-  type HeardTranscriptPage,
-  type TranscriptFollower,
   type TranscriptOlderReader,
   useAgentTranscript,
-  windowTranscriptFollower,
 } from "./use-agent-transcript.js";
 
 /**
- * use-agent-transcript.test.ts -- a tab's transcript is followed while the
- * tab is shown and let go when it is not; the pages pushed for it join by
- * id, a page pushed for another transcript is left alone, and one that says
- * the transcript could not be read offers Try again, which follows it anew
- * while the messages held stand. Synthetic ids throughout.
+ * use-agent-transcript.test.ts -- a tab draws its transcript from the read
+ * the host holds of it on app state, holding it while the tab is shown and
+ * letting it go when it is not; what the host lays for another transcript
+ * is left alone, a transcript already held draws in the tab's first frame,
+ * and one that could not be read offers Try again while the messages held
+ * stand. Older pages are asked for one at a time. Synthetic ids throughout.
  */
 
 const AGENT: AgentTranscriptKey = {
@@ -51,30 +59,17 @@ const OTHER: AgentTranscriptKey = { ...AGENT, callId: "call-7" };
 
 let root: Root | undefined;
 
+beforeEach(() => {
+  fakeAppBridge({});
+  fakeActPort({});
+});
+
 afterEach(() => {
   vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
 });
-
-/** A follower that writes down each follow and let-go, and pushes what the test says to the stream of that transcript. */
-function scriptedFollower() {
-  const asked: string[] = [];
-  const hearing = new Map<string, (page: AgentTranscriptPage) => void>();
-  const follower: TranscriptFollower = (transcript, hear) => {
-    const name = transcript.callId ?? "own";
-    asked.push(`follow:${name}`);
-    hearing.set(name, hear);
-    return () => {
-      asked.push(`unfollow:${name}`);
-      hearing.delete(name);
-    };
-  };
-  const push = (transcript: AgentTranscriptKey, page: AgentTranscriptPage) =>
-    act(() => hearing.get(transcript.callId ?? "own")?.(page));
-  return { follower, asked, push };
-}
 
 /** A page saying `text` under `id`. */
 function pageOf(id: string, text: string): AgentTranscriptPage {
@@ -105,68 +100,115 @@ function newestOf(ids: readonly string[], before?: string): AgentTranscriptPage 
   };
 }
 
-/** What the probe last drew of the hook. */
-interface Seen {
-  current: AgentTranscriptControl | undefined;
+/** Lets what was laid reach the window and be drawn. */
+async function settle(): Promise<void> {
+  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
 }
 
-/** The hook drawn under a probe that keeps what it last answered. */
-function drawn(follower: TranscriptFollower, older?: TranscriptOlderReader) {
-  const seen: Seen = { current: undefined };
+/**
+ * The hook drawn under a probe that keeps every frame it drew, once the
+ * window's document has landed, as the window draws nothing before it, over
+ * a host telling the transcripts' pages as the test hands them.
+ */
+function drawn(older?: TranscriptOlderReader) {
+  const telling = tellingTranscripts();
+  const frames: AgentTranscriptControl[] = [];
   function Probe(props: { shown: boolean }) {
-    seen.current = useAgentTranscript({
-      transcript: AGENT,
-      shown: props.shown,
-      follower,
-      older,
-    });
+    frames.push(useAgentTranscript({ transcript: AGENT, shown: props.shown, older }));
     return null;
   }
+  function Window(props: { shown: boolean }) {
+    return useAppState() === undefined ? null : createElement(Probe, props);
+  }
+  const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  const draw = (shown: boolean) => act(() => root?.render(createElement(Probe, { shown })));
-  return { seen, draw };
+  return {
+    telling,
+    frames,
+    /** What the probe drew last. */
+    seen: () => frames.at(-1),
+    draw: (shown: boolean) =>
+      act(async () => {
+        root?.render(onRegistry(registry, createElement(Window, { shown })));
+        await settle();
+      }),
+    push: (transcript: AgentTranscriptKey, page: AgentTranscriptPage) =>
+      act(async () => {
+        telling.tell(transcript, page);
+        await settle();
+      }),
+  };
 }
 
-test("a shown tab follows its transcript, joins the pages pushed for it alone, and lets it go once hidden", () => {
-  const { follower, asked, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+/** The ids of the messages drawn. */
+function ids(control: AgentTranscriptControl | undefined): readonly string[] | undefined {
+  return control?.messages.map((message) => message.id);
+}
 
-  draw(true);
-  push(AGENT, pageOf("m-1", "Reading the invites."));
-  push(OTHER, pageOf("m-9", "A worker's words."));
-  push(AGENT, pageOf("m-1", "Reading the invites again."));
-  push(AGENT, pageOf("m-2", "Writing the expiry."));
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2"],
-  );
-  assert.equal(seen.current?.pages, 3);
+/** The agent's own transcript as it stands, held on the window's first document. */
+function heldOnFirstDocument(...pages: readonly AgentTranscriptPage[]): void {
+  handHostReads({
+    transcripts: { [AGENT.agentId]: { [OWN_TRANSCRIPT]: transcriptTold(pages) } },
+  });
+}
 
-  draw(false);
-  push(AGENT, pageOf("m-3", "Not heard."));
-  assert.deepEqual(asked, ["follow:own", "unfollow:own"]);
-  assert.equal(seen.current?.messages.length, 2);
+test("a shown tab holds its transcript and draws what the host lays for it alone, and lets the hold go once hidden, drawing what stands", async () => {
+  const { telling, seen, draw, push } = drawn();
+
+  await draw(true);
+  await push(AGENT, pageOf("m-1", "Reading the invites."));
+  await push(OTHER, pageOf("m-9", "A worker's words."));
+  await push(AGENT, pageOf("m-1", "Reading the invites again."));
+  await push(AGENT, pageOf("m-2", "Writing the expiry."));
+  assert.deepEqual(ids(seen()), ["m-1", "m-2"]);
+  assert.equal(seen()?.pages, 3);
+
+  await draw(false);
+  assert.deepEqual(telling.asked, [AGENT]);
+  assert.deepEqual(telling.closed, [AGENT]);
+  assert.deepEqual(ids(seen()), ["m-1", "m-2"], "a tab kept behind another stands as it was");
 });
 
-test("a page that could not be read offers Try again, which follows the transcript anew, the messages held standing", () => {
-  const { follower, asked, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+test("a tab shown on a transcript the host holds draws its messages in its first frame, never as reading", async () => {
+  heldOnFirstDocument(newestOf(["m-1", "m-2"]));
+  const { frames, draw } = drawn();
 
-  draw(true);
-  push(AGENT, pageOf("m-1", "Reading the invites."));
-  push(AGENT, { failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.equal(seen.current?.failed, true);
-  assert.equal(seen.current?.messages.length, 1);
-
-  act(() => seen.current?.onRetry());
-  push(AGENT, pageOf("m-2", "Writing the expiry."));
-  assert.equal(seen.current?.failed, false);
-  assert.deepEqual(asked, ["follow:own", "unfollow:own", "follow:own"]);
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2"],
+  await draw(true);
+  assert.deepEqual(ids(frames[0]), ["m-1", "m-2"]);
+  assert.equal(
+    frames.some((frame) => frame.reading),
+    false,
+    "no frame stood reading",
   );
+});
+
+test("a transcript that could not be read offers Try again, which asks the host to read it again, the messages held standing", async () => {
+  const { seen, draw, push } = drawn();
+  const retried: AgentTranscriptKey[] = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.AGENTS_TRANSCRIPT_RETRY]: (transcript) => {
+      retried.push(transcript);
+      return Promise.resolve();
+    },
+  });
+
+  await draw(true);
+  await push(AGENT, pageOf("m-1", "Reading the invites."));
+  await push(AGENT, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(seen()?.failed, true);
+  assert.deepEqual(seen()?.failedWith, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(ids(seen()), ["m-1"]);
+
+  await act(async () => {
+    seen()?.onRetry();
+    await settle();
+  });
+  await push(AGENT, pageOf("m-2", "Writing the expiry."));
+  assert.deepEqual(retried, [AGENT]);
+  assert.equal(seen()?.failed, false);
+  assert.deepEqual(ids(seen()), ["m-1", "m-2"]);
 });
 
 /** A page saying the agent's one worker stands at `status`, its title and start alike each time. */
@@ -191,135 +233,53 @@ function workerPage(status: AgentStatus): AgentTranscriptPage {
   };
 }
 
-test("a page that says the agent's workers as they stood keeps what the tab holds of them, and one that says a worker stands otherwise is held", () => {
-  const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+test("a page that says the agent's workers as they stood keeps what the tab holds of them, and one that says a worker stands otherwise is drawn", async () => {
+  const { seen, draw, push } = drawn();
 
-  draw(true);
-  push(AGENT, workerPage(AGENT_STATUS.RUNNING));
-  const first = seen.current;
-  push(AGENT, workerPage(AGENT_STATUS.RUNNING));
-  const again = seen.current;
-  assert.equal(again?.pages, (first?.pages ?? 0) + 1);
+  await draw(true);
+  await push(AGENT, workerPage(AGENT_STATUS.RUNNING));
+  const first = seen();
+  await push(AGENT, workerPage(AGENT_STATUS.RUNNING));
+  assert.equal(seen()?.pages, (first?.pages ?? 0) + 1);
+  assert.equal(seen()?.subagents, first?.subagents, "the workers read alike are the very map");
 
-  push(AGENT, workerPage(AGENT_STATUS.COMPLETED));
-  assert.equal(seen.current?.subagents.get("call-1")?.status, AGENT_STATUS.COMPLETED);
+  await push(AGENT, workerPage(AGENT_STATUS.COMPLETED));
+  assert.equal(seen()?.subagents.get("call-1")?.status, AGENT_STATUS.COMPLETED);
 });
 
-test("a stream that opens only after its tab let it go is closed at once", async () => {
-  let open: (stream: AsyncIteratorObject<AgentTranscriptPage>) => void = () => undefined;
-  let closed = false;
-  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
-    next: () => new Promise(() => undefined),
-    return: () => {
-      closed = true;
-      return Promise.resolve({ done: true, value: undefined });
-    },
-    [Symbol.asyncIterator]: () => stream,
-    [Symbol.asyncDispose]: () => Promise.resolve(),
-  };
-  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
-  fakeActPort({
-    [ACT_KIND.AGENTS_TRANSCRIPT]: () =>
-      new Promise((resolve) => {
-        open = resolve;
-      }),
-  } as unknown as Parameters<typeof fakeActPort>[0]);
-
-  const stop = windowTranscriptFollower(AGENT, () => undefined);
-  stop();
-  open(stream);
-  for (let tick = 0; tick < 12 && !closed; tick += 1) await Promise.resolve();
-  assert.equal(closed, true);
-});
-
-test("a page a read already out hands over after the tab let go of its stream is heard by no one", async () => {
-  let hand: (read: IteratorResult<AgentTranscriptPage>) => void = () => undefined;
-  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
-    next: () =>
-      new Promise((resolve) => {
-        hand = resolve;
-      }),
-    return: () => Promise.resolve({ done: true, value: undefined }),
-    [Symbol.asyncIterator]: () => stream,
-    [Symbol.asyncDispose]: () => Promise.resolve(),
-  };
-  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
-  fakeActPort({
-    [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
-  } as unknown as Parameters<typeof fakeActPort>[0]);
-  const heard: HeardTranscriptPage[] = [];
-
-  const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
-  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  stop();
-  hand({ done: false, value: pageOf("m-1", "Too late.") });
-  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  assert.deepEqual(heard, []);
-});
-
-test("a stream that breaks while it is read is heard as a page that could not be read, with what broke it", async () => {
-  const broke = new Error("The act port closed.");
-  const stream: AsyncIteratorObject<AgentTranscriptPage> = {
-    next: () => Promise.reject(broke),
-    return: () => Promise.resolve({ done: true, value: undefined }),
-    [Symbol.asyncIterator]: () => stream,
-    [Symbol.asyncDispose]: () => Promise.resolve(),
-  };
-  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
-  fakeActPort({
-    [ACT_KIND.AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
-  } as unknown as Parameters<typeof fakeActPort>[0]);
-  const heard: HeardTranscriptPage[] = [];
-
-  const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
-  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  stop();
-  assert.deepEqual(heard, [{ failure: AGENT_CALL_FAILURE.UNANSWERED, cause: broke }]);
-});
-
-test("an agent that ended stays followed while its tab is shown, so the lines a call into it writes still reach the tab", () => {
-  const { follower, asked, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+test("an agent that ended stays held while its tab is shown, so the lines a call into it writes still reach the tab", async () => {
+  const { telling, seen, draw, push } = drawn();
   const ended = (id: string, text: string): AgentTranscriptPage => ({
     ...pageOf(id, text),
     status: AGENT_STATUS.COMPLETED,
   });
 
-  draw(true);
-  push(AGENT, ended("m-1", "Invites now expire after seven days."));
-  // A call into the ended agent writes its spoken lines, which the stream still pushes.
-  push(AGENT, ended("said-1", "Walk me through the expiry job."));
-  push(AGENT, ended("said-2", "It reads pending invites oldest first."));
+  await draw(true);
+  await push(AGENT, ended("m-1", "Invites now expire after seven days."));
+  // A call into the ended agent writes its spoken lines, which the host still lays.
+  await push(AGENT, ended("said-1", "Walk me through the expiry job."));
+  await push(AGENT, ended("said-2", "It reads pending invites oldest first."));
 
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "said-1", "said-2"],
-  );
-  assert.equal(seen.current?.pageStatus, AGENT_STATUS.COMPLETED);
-  assert.deepEqual(asked, ["follow:own"], "the ended agent's stream is never let go while shown");
+  assert.deepEqual(ids(seen()), ["m-1", "said-1", "said-2"]);
+  assert.equal(seen()?.pageStatus, AGENT_STATUS.COMPLETED);
+  assert.deepEqual(telling.closed, [], "the ended agent's hold is never let go while shown");
 });
 
-test("a follow is timed to its first page drawn and to the page that caught it up, by what they held", () => {
+test("a hold is timed to its first page drawn and to the page that caught it up, by what the transcript held", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(1_000_000);
   const spans: PanelSpan[] = [];
   const uninstall = installPanelSpanRecorder((span) => spans.push(span));
-  const { follower, push } = scriptedFollower();
-  const { draw } = drawn(follower);
+  const { draw, push } = drawn();
 
-  draw(true);
+  await draw(true);
   vi.setSystemTime(1_000_400);
   const first = newestOf(["m-1"], "1");
-  push(AGENT, first);
+  await push(AGENT, first);
   vi.setSystemTime(1_000_900);
-  const caughtUp: AgentTranscriptPage = {
-    ...pageOf("m-1", "x"),
-    messages: [],
-    caughtUp: true,
-  };
-  push(AGENT, caughtUp);
-  push(AGENT, pageOf("m-2", "Writing the expiry."));
+  const caughtUp: AgentTranscriptPage = { ...pageOf("m-1", "x"), messages: [], caughtUp: true };
+  await push(AGENT, caughtUp);
+  await push(AGENT, pageOf("m-2", "Writing the expiry."));
   uninstall();
 
   assert.deepEqual(
@@ -334,7 +294,7 @@ test("a follow is timed to its first page drawn and to the page that caught it u
         waited: 400,
         attributes: {
           [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
-          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(first),
+          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(transcriptTold([first]).rows),
           [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: 0,
         },
       },
@@ -343,7 +303,7 @@ test("a follow is timed to its first page drawn and to the page that caught it u
         waited: 900,
         attributes: {
           [PANEL_SPAN_ATTRIBUTE.MESSAGE_COUNT]: 1,
-          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(caughtUp),
+          [PANEL_SPAN_ATTRIBUTE.PAGE_BYTES]: jsonBytes(transcriptTold([first, caughtUp]).rows),
           [PANEL_SPAN_ATTRIBUTE.CACHE_HIT]: 0,
         },
       },
@@ -351,50 +311,55 @@ test("a follow is timed to its first page drawn and to the page that caught it u
   );
 });
 
-test("a follow whose first page is the window the host held draws it at once and is timed as a cache hit", () => {
+test("a hold whose transcript the host already held is timed as a cache hit, caught up only by a page read since", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(1_000_000);
+  const held: AgentTranscriptPage = { ...newestOf(["m-1", "m-2"], "1"), caughtUp: true };
+  heldOnFirstDocument(held);
   const spans: PanelSpan[] = [];
   const uninstall = installPanelSpanRecorder((span) => spans.push(span));
-  const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+  const { draw, push } = drawn();
 
-  draw(true);
-  push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
+  await draw(true);
+  const painted = spans.map((span) => [
+    span.name,
+    span.attributes()[PANEL_SPAN_ATTRIBUTE.CACHE_HIT],
+  ]);
+  // The host lays what it held again as it reads on, and then the page past its cursor.
+  await push(AGENT, held);
+  await push(AGENT, { ...pageOf("m-3", "Writing."), caughtUp: true });
   uninstall();
 
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2"],
-  );
+  assert.deepEqual(painted, [[PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, 1]]);
   assert.deepEqual(
     spans.map((span) => [span.name, span.attributes()[PANEL_SPAN_ATTRIBUTE.CACHE_HIT]]),
-    [[PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, 1]],
+    [
+      [PANEL_SPAN.TRANSCRIPT_FIRST_PAINT, 1],
+      [PANEL_SPAN.TRANSCRIPT_CAUGHT_UP, 1],
+    ],
   );
 });
 
-test("a transcript the account no longer reaches draws nothing the host held of it", () => {
-  const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
+test("a transcript the account no longer reaches draws nothing the host held of it", async () => {
+  const { seen, draw, push } = drawn();
 
-  draw(true);
-  push(AGENT, { ...newestOf(["m-1", "m-2"], "1"), held: true });
-  push(AGENT, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
+  await draw(true);
+  await push(AGENT, newestOf(["m-1", "m-2"], "1"));
+  await push(AGENT, { failure: AGENT_CALL_FAILURE.NOT_FOUND });
 
-  assert.deepEqual(seen.current?.messages, []);
-  assert.equal(seen.current?.hasOlder, false);
-  assert.equal(seen.current?.failed, true);
+  assert.deepEqual(seen()?.messages, []);
+  assert.equal(seen()?.hasOlder, false);
+  assert.equal(seen()?.failed, true);
 });
 
-test("a follow let go before its first page landed is timed by no span", () => {
+test("a hold let go before its first page landed is timed by no span", async () => {
   const spans: PanelSpan[] = [];
   const uninstall = installPanelSpanRecorder((span) => spans.push(span));
-  const { follower, push } = scriptedFollower();
-  const { draw } = drawn(follower);
+  const { draw, push } = drawn();
 
-  draw(true);
-  draw(false);
-  push(AGENT, pageOf("m-1", "Not heard."));
+  await draw(true);
+  await draw(false);
+  await push(AGENT, pageOf("m-1", "Not held."));
   uninstall();
 
   assert.deepEqual(spans, []);
@@ -413,114 +378,60 @@ function scriptedOlder() {
   const hand = (older: AgentTranscriptOlderAnswer) =>
     act(async () => {
       answer(older);
-      for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+      await settle();
     });
   return { older, asked, hand };
 }
 
-test("a tab opens on the newest page and reads older pages one at a time below it as it is asked, each put before what it holds", async () => {
-  const { follower, push } = scriptedFollower();
+test("older pages are asked for one at a time, each out until the host lays it before what is held", async () => {
   const { older, asked, hand } = scriptedOlder();
-  const { seen, draw } = drawn(follower, older);
+  const { telling, seen, draw, push } = drawn(older);
+  const laid = (older: Parameters<TranscriptsTelling["layOlder"]>[1]) =>
+    act(async () => {
+      telling.layOlder(AGENT, older);
+      await settle();
+    });
 
-  draw(true);
-  push(AGENT, newestOf(["m-3", "m-4"], "3"));
-  assert.equal(seen.current?.hasOlder, true);
-  act(() => seen.current?.loadOlder());
-  act(() => seen.current?.loadOlder());
+  await draw(true);
+  await push(AGENT, newestOf(["m-3", "m-4"], "3"));
+  assert.equal(seen()?.hasOlder, true);
+  act(() => seen()?.loadOlder());
+  act(() => seen()?.loadOlder());
   assert.deepEqual(asked, [{ ...AGENT, before: "3" }]);
-  assert.equal(seen.current?.loadingOlder, true);
+  assert.equal(seen()?.loadingOlder, true);
 
-  // A tail message landing while the read is out joins at the end, as ever.
-  push(AGENT, pageOf("m-5", "Writing the expiry."));
-  await hand({ messages: said(["m-1", "m-2"]), before: "1" });
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2", "m-3", "m-4", "m-5"],
-  );
-  assert.equal(seen.current?.loadingOlder, false);
+  // The read lands, and stays out until the page it laid reaches the window.
+  await hand({ landed: true });
+  assert.equal(seen()?.loadingOlder, true);
+  act(() => seen()?.loadOlder());
+  assert.equal(asked.length, 1);
+  await laid({ messages: said(["m-1", "m-2"]), before: "1" });
+  assert.deepEqual(ids(seen()), ["m-1", "m-2", "m-3", "m-4"]);
+  assert.equal(seen()?.loadingOlder, false);
 
-  act(() => seen.current?.loadOlder());
+  act(() => seen()?.loadOlder());
   assert.deepEqual(asked.at(-1), { ...AGENT, before: "1" });
-  await hand({ messages: said(["m-0"]) });
-  assert.equal(seen.current?.messages[0]?.id, "m-0");
-  assert.equal(seen.current?.hasOlder, false);
-  act(() => seen.current?.loadOlder());
-  assert.equal(asked.length, 2);
-  assert.equal(seen.current?.olderFailed, false);
+  await hand({ landed: false });
+  assert.equal(seen()?.loadingOlder, false, "a page the host did not lay is out no longer");
+  assert.equal(seen()?.olderFailed, false);
 });
 
-test("an older read that failed leaves what is held and may be asked again", async () => {
-  const { follower, push } = scriptedFollower();
+test("an older read that failed leaves what is held and may be asked again, its failure the cursor's alone", async () => {
   const { older, asked, hand } = scriptedOlder();
-  const { seen, draw } = drawn(follower, older);
+  const { seen, draw, push } = drawn(older);
 
-  draw(true);
-  push(AGENT, newestOf(["m-3"], "3"));
-  act(() => seen.current?.loadOlder());
+  await draw(true);
+  await push(AGENT, newestOf(["m-3"], "3"));
+  act(() => seen()?.loadOlder());
   await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.equal(seen.current?.olderFailed, true);
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-3"],
-  );
-  assert.equal(seen.current?.hasOlder, true);
-  act(() => seen.current?.loadOlder());
+  assert.equal(seen()?.olderFailed, true);
+  assert.deepEqual(ids(seen()), ["m-3"]);
+  assert.equal(seen()?.hasOlder, true);
+  act(() => seen()?.loadOlder());
   assert.equal(asked.length, 2);
-});
-
-test("a newest page that meets what is held joins it, older pages and all; one that does not takes its place, so nothing between them is left out", async () => {
-  const { follower, push } = scriptedFollower();
-  const { older, hand } = scriptedOlder();
-  const { seen, draw } = drawn(follower, older);
-
-  draw(true);
-  push(AGENT, newestOf(["m-3", "m-4"], "3"));
-  push(AGENT, pageOf("m-5", "Writing."));
-  draw(false);
-  draw(true);
-  // Shown again with little written meanwhile: the newest page holds the last message held.
-  push(AGENT, newestOf(["m-4", "m-5", "m-6"], "4"));
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-3", "m-4", "m-5", "m-6"],
-  );
-  assert.equal(seen.current?.hasOlder, true);
-
-  draw(false);
-  draw(true);
-  // An older read that failed is the failed cursor's alone.
-  act(() => seen.current?.loadOlder());
   await hand({ failure: AGENT_CALL_FAILURE.UNANSWERED });
-  assert.equal(seen.current?.olderFailed, true);
-  draw(false);
-  draw(true);
-  // Shown again after more than a page was written: nothing held is on it.
-  push(AGENT, newestOf(["m-90", "m-91"], "90"));
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-90", "m-91"],
-  );
-  assert.equal(seen.current?.olderFailed, false);
-});
 
-test("a newest page read at another rewind takes the place of what is held, though it meets it, so the messages the rewind dropped go", () => {
-  const { follower, push } = scriptedFollower();
-  const { seen, draw } = drawn(follower);
-
-  draw(true);
-  push(AGENT, newestOf(["m-1", "m-2", "m-3", "m-4"]));
-  push(AGENT, { ...newestOf(["m-1", "m-2"]), rewound: 7 });
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2"],
-  );
-
-  // A page past the cursor of the same rewind joins what is held as any does.
-  push(AGENT, { ...pageOf("m-5", "Writing."), rewound: 7 });
-  push(AGENT, { ...newestOf(["m-2", "m-5"]), rewound: 7 });
-  assert.deepEqual(
-    seen.current?.messages.map((message) => message.id),
-    ["m-1", "m-2", "m-5"],
-  );
+  // A newest page that takes the place of what was held lets the failed cursor go.
+  await push(AGENT, newestOf(["m-90"], "90"));
+  assert.equal(seen()?.olderFailed, false);
 });

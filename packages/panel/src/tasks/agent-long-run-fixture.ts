@@ -10,18 +10,20 @@
  * three thousand entries. Among them stand hundreds of message and Inbox calls,
  * sixty coding agents it started and twenty workers it delegated to,
  * hundreds of mention chips in long Markdown with tables and links, and
- * thirty sets of pictures, each a screenshot's size. After the first page,
- * the stream pushes the running turn's journal again every
- * `LONG_RUN.STEP_MS`, a step longer each time, as a running agent's follow
- * does. Every name, address, and line here is invented.
+ * thirty sets of pictures, each a screenshot's size. While its tab holds
+ * it, the running turn's journal is written a step longer every
+ * `LONG_RUN.STEP_MS`, and staged again on the window's document, as a
+ * running agent's held transcript moves. Every name, address, and line here
+ * is invented.
  */
 
-import type { AgentTranscriptPage } from "@repo/features/agent-view";
+import { AsyncIteratorClass } from "@orpc/client";
 import { AGENT_STATUS, type AgentTranscriptMessage } from "@repo/features/agent-wire";
+import type { AppTranscript } from "@repo/host/app-state";
 import { FIXTURE_IDS } from "@repo/host/fixture-stage";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@repo/wire";
-import { AsyncIteratorClass } from "@orpc/client";
 import { rendererPause } from "../renderer-runtime.js";
+import { fixtureMoved } from "./fixture-moves.js";
 
 /** How big the run is, and how fast its newest turn is written. */
 export const LONG_RUN = {
@@ -327,43 +329,51 @@ function isRecord(value: WireValue | undefined): value is WireRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** A page of the run as the stream pushes it: running, caught up. */
-function runPage(
-  messages: readonly AgentTranscriptMessage[],
-  step: number,
-  newest: boolean,
-): AgentTranscriptPage {
-  return {
-    messages,
-    cursor: `${step}:0`,
-    status: AGENT_STATUS.RUNNING,
-    runStartedAt: RUN_STARTED_AT + (LONG_RUN.TURNS - 1) * 70 * MINUTE,
-    title: "Roll out the polish waves",
-    ...(newest ? { newest: true } : undefined),
-    caughtUp: true,
-  };
-}
+/** How many steps the newest turn has taken, which its tab's hold moves on (`longRunHold`). */
+let step = 1;
 
-/** The run's whole transcript as its first page opens on it. */
-export function longRunMessages(): readonly AgentTranscriptMessage[] {
-  return [...SETTLED, newestJournal(1), ...ARRIVED];
+/** The run's transcript at the step it last reached, so a document staged again at it holds the very one. */
+let staged: { readonly step: number; readonly transcript: AppTranscript } | undefined;
+
+/**
+ * The run's transcript as the host would hold it at the step it reached:
+ * every turn, the newest journal a step long each, and the teammates' lines
+ * that arrived during it, running and caught up.
+ */
+export function longRunTranscript(): AppTranscript {
+  if (staged?.step === step) return staged.transcript;
+  const transcript: AppTranscript = {
+    messages: [...SETTLED, newestJournal(step), ...ARRIVED],
+    cursor: `${step}:0`,
+    word: {
+      status: AGENT_STATUS.RUNNING,
+      runStartedAt: RUN_STARTED_AT + (LONG_RUN.TURNS - 1) * 70 * MINUTE,
+      title: "Roll out the polish waves",
+      caughtUp: true,
+    },
+    pages: step,
+  };
+  staged = { step, transcript };
+  return transcript;
 }
 
 /**
- * The run's stream, as main opens one on a running agent: the whole
- * transcript, then its newest journal again every `LONG_RUN.STEP_MS`, a step
- * longer, until the tab closes it.
+ * The run's hold, as main holds a running agent's for its tab: its newest
+ * journal written a step longer every `LONG_RUN.STEP_MS`, the window's
+ * document staged again on each (`fixture-moves.ts`), until the tab lets it
+ * go. It carries nothing, as a hold does.
  */
-export function longRunStream(): AsyncIteratorClass<AgentTranscriptPage, void> {
-  let step = 0;
+export function longRunHold(): AsyncIteratorClass<never, void> {
   let closed = false;
-  return new AsyncIteratorClass<AgentTranscriptPage, void>(
+  return new AsyncIteratorClass<never, void>(
     async () => {
-      if (closed) return { done: true, value: undefined };
-      step += 1;
-      if (step === 1) return { done: false, value: runPage(longRunMessages(), step, true) };
-      await rendererPause(LONG_RUN.STEP_MS);
-      return { done: false, value: runPage([newestJournal(step)], step, false) };
+      while (!closed) {
+        await rendererPause(LONG_RUN.STEP_MS);
+        if (closed) break;
+        step += 1;
+        fixtureMoved();
+      }
+      return { done: true, value: undefined };
     },
     async () => {
       closed = true;

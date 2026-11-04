@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentMessagesAnswerView, AgentTranscriptPage } from "@repo/features/agent-view";
+import {
+  type AgentMessagesAnswerView,
+  type AgentTranscriptKey,
+  TRANSCRIPT_KIND,
+} from "@repo/features/agent-view";
 import {
   AGENT_STATUS,
   type AgentStatus,
@@ -17,11 +21,10 @@ import { taskCards } from "../desktop/side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { focusRestOn } from "../testing/hint-rest.js";
-import { agentsControl, pushedPage } from "../testing/tasks-control.js";
+import { agentsControl, tellingTranscripts } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
-import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
  * agent-tab-kept.test.ts -- a running agent's tab draws again only the
@@ -71,6 +74,9 @@ function listed(id: string, title: string): AgentSummary {
 }
 
 const AGENT = listed(AGENT_ID, "Planning stack");
+
+/** The agent's own transcript, which its tab holds. */
+const TRANSCRIPT: AgentTranscriptKey = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID };
 
 function tool(tool: string, callId: string, input: WireRecord, output: WireRecord): WireRecord {
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
@@ -170,21 +176,14 @@ function cardOn(row: HTMLElement | null): readonly (string | boolean | null | un
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
-  let hear: ((page: AgentTranscriptPage) => void) | undefined;
-  const transcripts: TranscriptFollower = (_transcript, heard) => {
-    hear = heard;
-    heard(pushedPage(page([PLAN, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1")));
-    return () => {
-      hear = undefined;
-    };
-  };
+  const telling = tellingTranscripts();
+  telling.tell(TRANSCRIPT, page([PLAN, EARLIER, newest("Reading.")], AGENT_STATUS.RUNNING, "1:1"));
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   const controlOf = (otherTitle: string) =>
     agentsControl({
       agents: [AGENT, listed("agent-7", otherTitle)],
-      transcripts,
     });
   const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
@@ -223,7 +222,7 @@ function runningTab() {
     },
     async answer(next: AgentMessagesAnswerView) {
       await act(async () => {
-        hear?.(pushedPage(next));
+        telling.tell(TRANSCRIPT, next);
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
     },
@@ -320,14 +319,8 @@ test("a page that adds a call to a running turn draws that call alone, the calls
     ]).flat(),
     startedAt: 3_000,
   });
-  let hear: ((page: AgentTranscriptPage) => void) | undefined;
-  const transcripts: TranscriptFollower = (_transcript, heard) => {
-    hear = heard;
-    heard(pushedPage(page([PLAN, messaged(5)], AGENT_STATUS.RUNNING, "1:1")));
-    return () => {
-      hear = undefined;
-    };
-  };
+  const telling = tellingTranscripts();
+  telling.tell(TRANSCRIPT, page([PLAN, messaged(5)], AGENT_STATUS.RUNNING, "1:1"));
   // Each call about an agent asks for that agent's card as its row is drawn, so the cards asked for are the rows drawn.
   const asked: string[] = [];
   const cards: TranscriptCards = {
@@ -345,7 +338,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
         AtomRegistry.make(),
         createElement(AgentTab, {
           agent: AGENT,
-          control: agentsControl({ agents: [AGENT], transcripts }),
+          control: agentsControl({ agents: [AGENT] }),
           shown: true,
           cards,
           onOpenSubagent: () => undefined,
@@ -362,7 +355,7 @@ test("a page that adds a call to a running turn draws that call alone, the calls
 
   asked.length = 0;
   await act(async () => {
-    hear?.(pushedPage(page([messaged(6)], AGENT_STATUS.RUNNING, "1:2")));
+    telling.tell(TRANSCRIPT, page([messaged(6)], AGENT_STATUS.RUNNING, "1:2"));
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   assert.deepEqual(asked, ["agent-5"]);

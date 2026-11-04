@@ -4,20 +4,26 @@ import {
   type AgentTranscriptKey,
   type AgentTranscriptPage,
 } from "@repo/features/agent-view";
-import type { AgentSummary, ListedAgent } from "@repo/features/agent-wire";
+import {
+  type AgentOlderAnswer,
+  type AgentSummary,
+  applyMessagesPage,
+  type ListedAgent,
+} from "@repo/features/agent-wire";
 import type { InboxItem } from "@repo/features/inbox-wire";
 import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import type {
+  AppHostRead,
   AppInboxAgentHolding,
   AppInboxTasklessItem,
   AppInboxWaitingItem,
+  AppTranscript,
 } from "@repo/host/app-state";
 import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { KEPT } from "../act.js";
 import type { SummaryPin } from "../desktop/task-summary.js";
-import type { TranscriptFollower } from "../tasks/use-agent-transcript.js";
 import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
@@ -27,6 +33,7 @@ import {
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
+import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
 
 const ignore = () => undefined;
 
@@ -54,30 +61,128 @@ export function pushedPage(
   return { ...page, caughtUp: page.messages.length === 0 };
 }
 
+/** A page a test's host tells of a transcript, as the service answers one or as the host's follow tells it. */
+export type ToldPage = AgentMessagesAnswerView | AgentTranscriptPage;
+
 /**
- * A follower that answers each follow as the host would: the pages `pagesOf`
- * names for the transcript, pushed to the window in turn, at once; or, where
- * `held` names one of them, that page and those after it once its release
- * lands.
+ * A transcript as a test's host holds it once `pages` were told on it in
+ * turn: each readable page's messages joined on by id, its word on the agent
+ * the last's, and each counted; a page that could not be read standing
+ * beside what was held, and one the account does not reach in its place.
+ */
+export function transcriptTold(pages: readonly ToldPage[]): AppHostRead<AppTranscript> {
+  let held: AppTranscript = { messages: [], pages: 0 };
+  for (const page of pages.map(pushedPage)) {
+    if ("failure" in page) {
+      held =
+        page.failure === AGENT_CALL_FAILURE.NOT_FOUND
+          ? { messages: [], pages: held.pages, failure: page }
+          : { ...held, failure: page };
+      continue;
+    }
+    const { messages, cursor, before, newest: _newest, ...word } = page;
+    const { failure: _failure, ...standing } = held;
+    held = {
+      ...standing,
+      messages: applyMessagesPage(held.messages, messages),
+      ...(before === undefined ? undefined : { before }),
+      cursor,
+      word,
+      pages: held.pages + 1,
+    };
+  }
+  return { rows: held };
+}
+
+/**
+ * Answers the window's holds on transcripts as the host would, beside the
+ * document and acts handed by now: the pages `pagesOf` names for a
+ * transcript, told on it in turn and laid once it is held; or, where `held`
+ * names one of them, the pages before it, and the rest once its release
+ * lands. Answers with how the test's host lays a transcript anew, and the
+ * holds asked.
  */
 export function pushedTranscripts(
-  pagesOf: (
-    transcript: AgentTranscriptKey,
-  ) => readonly (AgentMessagesAnswerView | AgentTranscriptPage)[],
+  pagesOf: (transcript: AgentTranscriptKey) => readonly ToldPage[],
   held?: { readonly page: number; readonly release: Promise<void> },
-): TranscriptFollower {
-  return (transcript, hear) => {
-    let stopped = false;
-    const pages = pagesOf(transcript);
-    const cut = held?.page ?? pages.length;
-    for (const page of pages.slice(0, cut)) hear(pushedPage(page));
-    void held?.release.then(() => {
-      if (stopped) return;
-      for (const page of pages.slice(cut)) hear(pushedPage(page));
-    });
-    return () => {
-      stopped = true;
-    };
+): TranscriptsHeld {
+  const told: TranscriptsHeld = holdTranscripts(
+    handHostReads({}).deliverTranscripts,
+    (transcript) => {
+      const pages = pagesOf(transcript);
+      if (held !== undefined) {
+        void held.release.then(() => told.lay(transcript, transcriptTold(pages)));
+      }
+      const first = pages.slice(0, held?.page ?? pages.length);
+      return first.length === 0 ? undefined : transcriptTold(first);
+    },
+  );
+  return told;
+}
+
+/** A test's host telling a transcript's pages as it reads them, and the holds the window asked of it, in order. */
+export interface TranscriptsTelling {
+  /** Tells `page` on what the host holds of `transcript`, laid on the document at once. */
+  readonly tell: (transcript: AgentTranscriptKey, page: ToldPage) => void;
+  /** Lays an older page before the messages the host holds of `transcript`, as the host lays one a window read. */
+  readonly layOlder: (transcript: AgentTranscriptKey, older: AgentOlderAnswer) => void;
+  readonly asked: readonly AgentTranscriptKey[];
+  readonly closed: readonly AgentTranscriptKey[];
+}
+
+/** What a test's host was told of one transcript: its pages, and the older pages laid before them, in turn. */
+interface Told {
+  readonly pages: readonly ToldPage[];
+  readonly older: readonly AgentOlderAnswer[];
+}
+
+/** A transcript as a test's host holds it once `told`: its pages told in turn, each older page laid before them. */
+function heldOf({ pages, older }: Told): AppHostRead<AppTranscript> {
+  const { rows = { messages: [], pages: 0 } } = transcriptTold(pages);
+  return {
+    rows: older.reduce<AppTranscript>((held, page) => {
+      const ids = new Set(held.messages.map((message) => message.id));
+      const { before: _laid, ...rest } = held;
+      return {
+        ...rest,
+        messages: [...page.messages.filter((message) => !ids.has(message.id)), ...held.messages],
+        ...(page.before === undefined ? undefined : { before: page.before }),
+      };
+    }, rows),
+  };
+}
+
+/**
+ * Answers the window's holds on transcripts as the host would, beside the
+ * document and acts handed by now, laying only what the test told: each
+ * page told on what the host holds of its transcript, laid as the window
+ * holds it, and at once once it has, as a page the host read lands.
+ */
+export function tellingTranscripts(): TranscriptsTelling {
+  /** What was told of each transcript, by its agent and then its worker's call or the agent's own. */
+  const told = new Map<string, Map<string | undefined, Told>>();
+  const toldOf = (transcript: AgentTranscriptKey) =>
+    told.get(transcript.agentId)?.get(transcript.callId);
+  const held = holdTranscripts(handHostReads({}).deliverTranscripts, (transcript) => {
+    const was = toldOf(transcript);
+    return was === undefined ? undefined : heldOf(was);
+  });
+  const tellOn = (transcript: AgentTranscriptKey, more: (was: Told) => Told) => {
+    const ofAgent = told.get(transcript.agentId) ?? new Map<string | undefined, Told>();
+    const next = more(ofAgent.get(transcript.callId) ?? { pages: [], older: [] });
+    told.set(transcript.agentId, ofAgent.set(transcript.callId, next));
+    const asked = held.asked.some(
+      (other) => other.agentId === transcript.agentId && other.callId === transcript.callId,
+    );
+    if (asked) held.lay(transcript, heldOf(next));
+  };
+  return {
+    asked: held.asked,
+    closed: held.closed,
+    tell: (transcript, page) =>
+      tellOn(transcript, (was) => ({ ...was, pages: [...was.pages, page] })),
+    layOlder: (transcript, older) =>
+      tellOn(transcript, (was) => ({ ...was, older: [...was.older, older] })),
   };
 }
 
@@ -189,7 +294,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
         ),
       ),
     readTranscript: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
-    transcripts: pushedTranscripts(() => []),
     pullRequests: new Map(),
     numberedPullRequests: new Map(),
     readChanges: () => Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED }),

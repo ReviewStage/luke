@@ -326,34 +326,47 @@ export function accountReads<Name extends string>(
 /** How many reads no window holds any longer stay open, the latest let go kept, so a window stepping back to one draws it from where it stands rather than from cold. */
 export const RECENT_READS = 8;
 
+/** How a held lifetime keeps the reads no window holds any longer. */
+interface LetGo<Key> {
+  /** Whether a read let go stops following, what it told standing until it is closed, so one nobody looks at moves nothing; it follows anew once held again. */
+  readonly pause: boolean;
+  /** Which of the reads let go lately stay, from those let go, the latest last, in that order. */
+  readonly kept: (recent: readonly Key[]) => readonly Key[];
+}
+
 /**
  * The reads the windows hold, as a plan's or an agent's inbox is: each
  * opened by the first window's hold and kept while any holds it; once the
- * last lets go it stays open among the `RECENT_READS` let go latest, until
- * later ones push it out, or the session ends.
+ * last lets go it stays among those let go lately that `LetGo` keeps, open
+ * or paused, until later ones push it out, or the session ends.
  */
 interface HeldReads<Key> {
   /** Holds `key`'s read for the caller's scope, opening it unless it stands. */
   readonly hold: (key: Key) => Effect.Effect<void, never, Scope.Scope>;
   /** Whether any window holds `key` now, rather than having let it go lately or never held it. */
   readonly held: (key: Key) => boolean;
-  /** Opens `key`'s read again at once, as Try again asks, where a window holds it or let it go lately; nothing otherwise. */
+  /** Opens `key`'s read again at once, as Try again asks, where a window holds it, or let it go lately and it stands open; nothing otherwise. */
   readonly reopen: (key: Key) => Effect.Effect<void>;
   /** Opens every read a window holds again, as the account signing in asks, so a hold taken while nobody was signed in reads now. */
   readonly reopenHeld: Effect.Effect<void>;
+  /** Closes every read let go lately that `which` names; one a window holds stands. */
+  readonly drop: (which: (key: Key) => boolean) => Effect.Effect<void>;
   /** Closes every read, those let go lately among them: the session ended. The windows' holds stand, for `reopenHeld`. */
   readonly end: Effect.Effect<void>;
 }
 
 /**
  * The held lifetime over `read`, each key's read run as its own fiber until
- * it is closed; `closed` runs as one key's read is closed for good, and
- * `ended` once every read is, so what each told is let go.
+ * it is closed, or paused where `letGo` says; `closed` runs as one key's
+ * read is closed for good, and `ended` once every read is, so what each
+ * told is let go.
  */
 function heldReads<Key>(
   read: (key: Key) => Effect.Effect<void>,
   closed: (key: Key) => Effect.Effect<void>,
   ended: Effect.Effect<void>,
+  /** How the reads let go lately are kept; the latest `RECENT_READS`, open, where none is said. */
+  letGo: LetGo<Key> = { pause: false, kept: (recent) => recent.slice(-RECENT_READS) },
 ): Effect.Effect<HeldReads<Key>, never, Scope.Scope> {
   return Effect.gen(function* () {
     const fibers = yield* FiberMap.make<Key>();
@@ -373,11 +386,13 @@ function heldReads<Key>(
         }
         MutableHashMap.remove(holders, key);
         recent = [...notRecent(key), key];
+        if (letGo.pause) yield* FiberMap.remove(fibers, key);
         // Note that a read let go is closed only once later ones push it out, so a window stepping back a few draws from where it stands.
-        for (const gone of recent.slice(0, Math.max(0, recent.length - RECENT_READS))) {
-          yield* close(gone);
+        const kept = letGo.kept(recent);
+        for (const gone of recent) {
+          if (!kept.some((other) => Equal.equals(other, gone))) yield* close(gone);
         }
-        recent = recent.slice(-RECENT_READS);
+        recent = [...kept];
       });
     return {
       hold: (key) =>
@@ -390,7 +405,7 @@ function heldReads<Key>(
       held: (key) => holdersOf(key) > 0,
       reopen: (key) =>
         Effect.suspend(() =>
-          holdersOf(key) > 0 || recent.some((other) => Equal.equals(other, key))
+          holdersOf(key) > 0 || (!letGo.pause && recent.some((other) => Equal.equals(other, key)))
             ? FiberMap.run(fibers, key, read(key))
             : Effect.void,
         ),
@@ -401,6 +416,12 @@ function heldReads<Key>(
           { discard: true },
         ),
       ),
+      drop: (which) =>
+        Effect.suspend(() => {
+          const gone = recent.filter(which);
+          recent = recent.filter((key) => !which(key));
+          return Effect.forEach(gone, close, { discard: true });
+        }),
       end: Effect.suspend(() => {
         recent = [];
         return Effect.andThen(FiberMap.clear(fibers), ended);
@@ -436,8 +457,22 @@ export interface HeldSlice<Key> {
   readonly retry: (key: Key) => Effect.Effect<void>;
   /** Follows every held key anew, as the account gate opening asks. */
   readonly open: Effect.Effect<void>;
+  /** Closes every key let go lately that `which` names, dropping what it holds, as an agent archived asks; one a window holds stands. */
+  readonly drop: HeldReads<Key>["drop"];
   /** Lets every follow go and tells no key held: the session ended. */
   readonly end: Effect.Effect<void>;
+}
+
+/**
+ * What the keys let go lately may come to, measured as each is let go: how
+ * many, how many bytes of JSON in all, and how many one may come to, one
+ * past that closed at once rather than crowd the rest out. A key a window
+ * holds counts against none of it, and is never closed.
+ */
+export interface HeldBudget {
+  readonly reads: number;
+  readonly bytes: number;
+  readonly bytesEach: number;
 }
 
 /** A held slice's rows by key, read and laid apart from its follows, as a write's answer lays a key's. */
@@ -478,14 +513,18 @@ function readAt(keyed: object, path: readonly string[]): AppHostRead<unknown> | 
   return level as AppHostRead<unknown> | undefined;
 }
 
+const encoder = new TextEncoder();
+
 /**
  * The held lifetime over one read the windows hold by key (`heldReads`),
  * told whole on its slice as each key's read moves: laid at the key's path
  * as its follow last answered it, kept where a later read does not answer,
  * and failed where it never answered; one let go for good is dropped, and
- * every one once the session ends. Behind a closed gate a held key is
- * followed only once the gate opens (`open`). Note that the slice is told
- * as a statement, the moment it moves, so a follow that answers from a
+ * every one once the session ends. A key let go stays among the latest
+ * `RECENT_READS`, open, or, where the read says so, paused, its rows
+ * standing, among those its budget keeps. Behind a closed gate a held key
+ * is followed only once the gate opens (`open`). Note that the slice is
+ * told as a statement, the moment it moves, so a follow that answers from a
  * callback tells it as one that answers from a fiber does.
  */
 export function heldSlice<Slice extends SliceKeyed, Key>(options: {
@@ -494,12 +533,18 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
   readonly path: (key: Key) => HostReadKeyPath<Slice>;
   /** Whether the account gate stands open, so a follow may read. */
   readonly gate: () => boolean;
-  /** `key`'s read followed until let go, each answer and each failure to answer told through `answers`. */
+  /** `key`'s read followed until let go, each answer and each failure to answer told through `answers`; one held again after a pause follows on from the rows it left. */
   readonly follow: (key: Key, answers: HeldAnswers<AppHostReads[Slice]>) => Effect.Effect<void>;
   readonly tell: (slice: AppState[Slice]) => void;
+  /** Whether a key let go stops following, its rows standing until it is closed, so one nobody looks at moves nothing; none keeps it open. */
+  readonly pause?: boolean;
+  /** What the keys let go lately may come to; none keeps the latest `RECENT_READS`. */
+  readonly budget?: HeldBudget;
 }): Effect.Effect<HeldSlice<Key> & HeldRows<Key, AppHostReads[Slice]>, never, Scope.Scope> {
   return Effect.gen(function* () {
     let held = options.empty;
+    /** How many bytes of JSON each key let go came to as it was let go. */
+    const sizes = MutableHashMap.empty<Key, number>();
     const lay = (key: Key, read: AppHostRead<AppHostReads[Slice]> | undefined) => {
       // SAFETY: a read laid at a key's path keeps the slice's own shape, which that path is declared by.
       held = withKeyLaid(held, options.path(key), read) as AppState[Slice];
@@ -518,22 +563,55 @@ export function heldSlice<Slice extends SliceKeyed, Key>(options: {
       // SAFETY: what a key's path holds is that key's read (`HostReadKeyPath`), whose rows are its slice's.
       rows: () => readOf(key)?.rows as AppHostReads[Slice] | undefined,
     });
+    const sizeOf = (key: Key) =>
+      Option.getOrElse(MutableHashMap.get(sizes, key), () => {
+        const size = encoder.encode(JSON.stringify(readOf(key) ?? null)).byteLength;
+        MutableHashMap.set(sizes, key, size);
+        return size;
+      });
+    const budget = options.budget;
+    /** The keys let go lately the budget keeps, the latest first in: each past `bytesEach` closed, and every one from the first past the count or the bytes on. */
+    const kept = (recent: readonly Key[]): readonly Key[] => {
+      if (budget === undefined) return recent.slice(-RECENT_READS);
+      const keeping: Key[] = [];
+      let bytes = 0;
+      for (const key of recent.toReversed()) {
+        const size = sizeOf(key);
+        if (size > budget.bytesEach) continue;
+        if (keeping.length >= budget.reads || bytes + size > budget.bytes) break;
+        keeping.push(key);
+        bytes += size;
+      }
+      return keeping.toReversed();
+    };
     const reads = yield* heldReads<Key>(
       (key) =>
         Effect.suspend(() => (options.gate() ? options.follow(key, answers(key)) : Effect.void)),
-      (key) => Effect.sync(() => lay(key, undefined)),
+      (key) =>
+        Effect.sync(() => {
+          MutableHashMap.remove(sizes, key);
+          lay(key, undefined);
+        }),
       Effect.sync(() => {
+        MutableHashMap.clear(sizes);
         held = options.empty;
         options.tell(held);
       }),
+      { pause: options.pause === true, kept },
     );
     return {
-      hold: reads.hold,
+      // Note that a key held again moves once more, so it is measured anew as it is next let go.
+      hold: (key) =>
+        Effect.andThen(
+          Effect.sync(() => MutableHashMap.remove(sizes, key)),
+          reads.hold(key),
+        ),
       held: reads.held,
       retry: (key) => Effect.andThen(Effect.sync(answers(key).retried), reads.reopen(key)),
       rowsOf: (key) => answers(key).rows(),
       lay: (key, rows) => lay(key, { rows }),
       open: reads.reopenHeld,
+      drop: reads.drop,
       end: reads.end,
     };
   });
