@@ -122,7 +122,7 @@
         });
       }
     }
-    return { width, height, ratio, dot, dots, copper: copperOf() };
+    return { width, height, ratio, size, dot, dots, copper: copperOf() };
   }
 
   const hint = millisecondsOf(
@@ -139,15 +139,32 @@
     delete frame.dataset.bootMark;
   }
 
-  function paint(now) {
-    if (!frame.isConnected) return;
+  /** Whether `layout` was laid out for the frame and the mark as they stand now. */
+  function current(laidOut) {
+    const mark = frame.querySelector(".boot-frame-mark");
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    return (
+      laidOut !== null &&
+      laidOut.ratio === ratio &&
+      laidOut.width === Math.round(frame.clientWidth * ratio) &&
+      laidOut.height === Math.round(frame.clientHeight * ratio) &&
+      laidOut.size === Math.round((mark?.clientWidth || 64) * ratio)
+    );
+  }
+
+  /** Draws one frame of the dots; answers whether there is another to draw. */
+  function drawn(now) {
+    if (!frame.isConnected) return false;
     // Note that motion is asked again on every frame before the dots leave, because a stylesheet that lands after this script can hold it still.
     if (leaveAt === null && motionHeld()) {
       standDown();
-      return;
+      return false;
     }
-    if (!layout || layout.width !== Math.round(frame.clientWidth * layout.ratio)) layout = layOut();
-    if (!layout) return;
+    if (!current(layout)) layout = layOut();
+    if (!layout) {
+      standDown();
+      return false;
+    }
     const { width, height, ratio, dot, dots, copper } = layout;
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, width, height);
@@ -157,7 +174,7 @@
       gathered = leaveFrom * (1 - clamp((now - leaveAt) / MOTION.LEAVE));
       if (gathered <= 0) {
         frame.remove();
-        return;
+        return false;
       }
     }
     const angle = ((now - start) / 1000) * LIGHT.TURN;
@@ -175,7 +192,17 @@
       context.fillRect(Math.round(d.x + sway), Math.round(from + (d.y - from) * eased), dot, dot);
     }
     context.globalAlpha = 1;
-    requestAnimationFrame(paint);
+    return true;
+  }
+
+  // Note that a frame that fails to draw gives the page back its still mark, or, once leaving, takes itself down, so a failure never hides the frame's mark nor leaves the frame over the panel.
+  function paint(now) {
+    try {
+      if (drawn(now)) requestAnimationFrame(paint);
+    } catch {
+      if (leaveAt === null) standDown();
+      else frame.remove();
+    }
   }
 
   canvas.className = "boot-frame-dots";
