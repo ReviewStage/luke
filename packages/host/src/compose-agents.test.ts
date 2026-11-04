@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import {
   AGENT_CALL_FAILURE,
-  ARCHIVE_DRAWN,
   type DevicePresenceAnswerView,
   INBOX_SCOPE_KIND,
   TRANSCRIPT_KIND,
@@ -416,7 +415,7 @@ function fakeService() {
         return { agent: AGENT };
       }),
     delete: (agentId) =>
-      Effect.sync(() => {
+      Effect.map(changeGate, () => {
         asked.push(`delete:${agentId}`);
         return { deleted: true as const, txid: "9102" };
       }),
@@ -887,21 +886,6 @@ function subject(
     };
   });
 }
-
-it.effect("a delete waits for the task list to carry its transaction before it answers", () =>
-  Effect.gen(function* () {
-    const waited: (string | undefined)[] = [];
-    const { call } = yield* subject({
-      listed: (txid) => Effect.sync(() => void waited.push(txid)),
-    });
-
-    assert.deepEqual(yield* call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }), {
-      deleted: true,
-      txid: "9102",
-    });
-    assert.deepEqual(waited, ["9102"]);
-  }),
-);
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
   Effect.gen(function* () {
@@ -2985,7 +2969,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and an archive a dialog waits on draws nothing until it is answered",
+  "a rename, an archive, a change of model, and a switch of MCP servers each stand on the agent's row of the task list from the press, and a delete draws the agent gone before the service answers",
   () =>
     Effect.gen(function* () {
       const drawn: (readonly AgentSummary[])[] = [];
@@ -3023,24 +3007,20 @@ it.effect(
 
       const held = yield* Deferred.make<void>();
       holdChanges(Deferred.await(held));
-      const asking = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.AGENTS_ARCHIVE, {
-          agentId: AGENT_ID,
-          archived: false,
-          drawn: ARCHIVE_DRAWN.ON_ANSWER,
-        }),
+      const deleting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_DELETE, { agentId: AGENT_ID }),
       );
       yield* settled;
-      const dialog = standing()?.archivedAt;
+      const deleted = standing();
       yield* Deferred.succeed(held, undefined);
-      yield* Fiber.join(asking);
+      yield* Fiber.join(deleting);
 
       assert.deepEqual(
         [pressed?.title, pressed?.archivedAt, pressed?.model, pressed?.effort],
         ["Sign-out button", NOW, "openai/gpt-6.1-sol", "low"],
       );
       assert.deepEqual(pressed?.disabledServers, ["linear"]);
-      assert.equal(dialog, NOW, "the dialog's unarchive is not drawn while it is out");
+      assert.equal(deleted, undefined, "the delete is drawn while it is out");
     }),
 );
 

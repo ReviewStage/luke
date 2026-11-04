@@ -14,6 +14,7 @@ import { confirmFailure } from "../failure-report.js";
 import { agentName } from "../tasks/agent-model.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
 import type { MenuAction } from "./action-menu.js";
+import { useRefusalHeard } from "./use-refusal-heard.js";
 
 /**
  * agent-delete.tsx -- a coding agent's Permanently delete, asked first, as a task's is.
@@ -23,10 +24,12 @@ import type { MenuAction } from "./action-menu.js";
  * page through `useAgentActions`, and its sidebar row beside its Archive.
  * It always asks, since nothing brings the agent back, naming the agent and
  * what goes with it, and, for one not archived, saying an archive would keep
- * it out of the way instead. A refusal is said in the dialog, which stays;
- * a delete that landed takes the agent out of its list and says so in a
- * toast (`use-agents.ts`), and the surface it was asked on closes its
- * tab or its page (`onDeleted`).
+ * it out of the way instead. Once asked, the host takes the agent out of its
+ * list at once. A refusal puts it back and is said in the dialog, which
+ * stays, or in a toast where the row it stood on took it away
+ * (`use-refusal-heard.ts`); a delete that landed says so in a toast
+ * (`use-agents.ts`), and the surface it was asked on closes its tab or its
+ * page (`onDeleted`).
  */
 
 /** What asking to delete an agent says: what goes, and, for one not archived, the archive that keeps it instead. */
@@ -59,12 +62,16 @@ export function useAgentDelete(
   input: { readonly shown: boolean; readonly onDeleted?: (() => void) | undefined },
 ): AgentDelete {
   const { shown, onDeleted } = input;
+  const heard = useRefusalHeard(shown, {
+    surface: FAILURE_SURFACE.AGENT_DELETE,
+    about: { agentId: agent.id },
+  });
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
     () =>
       agents.onDelete(agent.id).then((result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onDeleted?.();
-        return result;
+        return heard(result);
       }),
     confirmFailure(FAILURE_SURFACE.AGENT_DELETE, { agentId: agent.id }),
   );

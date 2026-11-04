@@ -9,8 +9,6 @@ import {
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentReviewOptionsAnswerView,
-  ARCHIVE_DRAWN,
-  type ArchiveDrawn,
 } from "@repo/features/agent-view";
 import {
   type AgentAttachment,
@@ -358,7 +356,7 @@ export interface AgentsControl {
    * than said, for the caller to say in its dialog or a toast of its own.
    */
   /** Archives or unarchives an agent, answering whether it was kept, with what refused it beneath a refusal. */
-  onArchive: (agentId: string, archived: boolean, drawn?: ArchiveDrawn) => Promise<ActedResult>;
+  onArchive: (agentId: string, archived: boolean) => Promise<ActedResult>;
   /**
    * Deletes one agent for good, a turn it still runs stopped first, taking
    * it out of the list and saying so in a toast; a refusal is answered
@@ -1360,19 +1358,10 @@ export function useAgents(input: {
 
   // Note that the archive is read through a ref from its toast's Undo,
   // because the press lands renders after the toast was raised. The host
-  // draws the agent moved at once, and back where the service refuses,
-  // unless a dialog that asked waits on it.
-  const onArchive = async (
-    agentId: string,
-    archived: boolean,
-    drawn: ArchiveDrawn = ARCHIVE_DRAWN.AT_ONCE,
-  ): Promise<ActedResult> => {
+  // draws the agent moved at once, and back where the service refuses.
+  const onArchive = async (agentId: string, archived: boolean): Promise<ActedResult> => {
     setArchivesOut((count) => count + 1);
-    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, {
-      agentId,
-      archived,
-      ...(drawn === ARCHIVE_DRAWN.ON_ANSWER ? { drawn } : undefined),
-    })
+    const answer: AgentActAnswer = await act(ACT_KIND.AGENTS_ARCHIVE, { agentId, archived })
       .catch(agentUnreached)
       .finally(() => setArchivesOut((count) => count - 1));
     const words = archiveWords(archived);
