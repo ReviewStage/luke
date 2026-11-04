@@ -19,6 +19,7 @@ import type {
 import type {
   ActivityFeature,
   AgentOrigin,
+  DayAccountCount,
   FunnelStep,
   MeaningfulAction,
   ReachFeature,
@@ -364,14 +365,40 @@ export interface AdminDayTotals {
   calls: number;
 }
 
+/**
+ * One account active on the day, by a meaningful action, with what it did:
+ * each count the rows of the Overview's daily counts it is attributed to.
+ */
+export interface AdminDayActiveAccount {
+  id: string;
+  name: string;
+  email: string;
+  /** The avatar URL the sign-in provider gave the account, when it gave one. */
+  image: string | null;
+  admin: boolean;
+  counts: Record<DayAccountCount, number>;
+}
+
+/** The day's live activity, read from the same rows as the Overview's activity chart. */
+export interface AdminDayActivity {
+  /** Each feature's count that day, equal to its segment of the chart's bar. */
+  features: Record<ActivityFeature, number>;
+  /** Distinct accounts with a meaningful action that day, counted past the row bound. */
+  activeDevelopers: number;
+  /** Those accounts, busiest first, cut at the detail's stated bound. */
+  accounts: AdminDayActiveAccount[];
+}
+
 export interface AdminDayDetail {
   generatedAt: number;
   /** The UTC day the counts cover, as YYYY-MM-DD. */
   day: string;
-  /** The bound `accounts` was read under, so the page can word a truncation. */
+  /** The bound `accounts` and `activity.accounts` were each read under, so the page can word a truncation. */
   limit: number;
+  activity: AdminDayActivity;
+  /** The retired hosted tier's counts for the day. */
   totals: AdminDayTotals;
-  /** The day's active accounts, busiest first, cut at the stated bound. */
+  /** The day's hosted-tier accounts, busiest first, cut at the stated bound. */
   accounts: AdminDayAccount[];
 }
 

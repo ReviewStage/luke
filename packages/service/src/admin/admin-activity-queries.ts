@@ -14,7 +14,7 @@ import { planRevision } from "@repo/database/schemas/plan-revision";
 import { task } from "@repo/database/schemas/task";
 import { MEANINGFUL_ACTION, type MeaningfulAction } from "@repo/features/admin-overview-vocabulary";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
-import { type AnyColumn, and, eq, gte, isNotNull, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, eq, gte, isNotNull, lt, type SQL, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 
 /** The UTC day an instant falls on, as the YYYY-MM-DD key the builders zero-fill by. */
@@ -38,15 +38,24 @@ function kindOf(kind: MeaningfulAction): SQL.Aliased<MeaningfulAction> {
 }
 
 /**
+ * A union arm's bound on the instant it is dated by: from `since`, and before
+ * `until` where one is given, so a read of one UTC day scans that day alone.
+ */
+export function within(column: AnyColumn, since: Date, until: Date | undefined) {
+  return and(gte(column, since), until === undefined ? undefined : lt(column, until));
+}
+
+/**
  * Every meaningful action since `since`, one row per action: the account that
  * took it, when, and what it was. This is the one definition of "active" on the admin
  * dashboard: the Overview's active-developer tiles, feature reach's base, the
  * most active accounts, and the meaningful retention grid, and the roster's
  * active days and ranking, all count through it. A plan revision counts only
  * as the developer's own, under their user id; the app's notes are the app's,
- * and an agent's revisions are the agent.
+ * and an agent's revisions are the agent. `until`, where given, ends the
+ * span, as the Day page's one UTC day does.
  */
-export function meaningfulActions(since: Date) {
+export function meaningfulActions(since: Date, until?: Date) {
   return unionAll(
     queryBuilder
       .select({
@@ -55,7 +64,7 @@ export function meaningfulActions(since: Date) {
         kind: kindOf(MEANINGFUL_ACTION.TASKS_CREATED),
       })
       .from(task)
-      .where(gte(task.createdAt, since)),
+      .where(within(task.createdAt, since, until)),
     queryBuilder
       .select({
         userId: userIdOf(planRevision.userId),
@@ -67,7 +76,7 @@ export function meaningfulActions(since: Date) {
         and(
           eq(planRevision.actor, PLAN_ACTOR.DEVELOPER),
           isNotNull(planRevision.userId),
-          gte(planRevision.at, since),
+          within(planRevision.at, since, until),
         ),
       ),
     queryBuilder
@@ -77,6 +86,6 @@ export function meaningfulActions(since: Date) {
         kind: kindOf(MEANINGFUL_ACTION.AGENTS_STARTED),
       })
       .from(agentTable)
-      .where(gte(agentTable.createdAt, since)),
+      .where(within(agentTable.createdAt, since, until)),
   ).as("meaningful_action");
 }
