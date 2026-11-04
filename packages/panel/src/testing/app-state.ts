@@ -30,6 +30,7 @@ import {
   type AppProviderKeyList,
   type AppStateDelivery,
   type AppStateSnapshot,
+  type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   type AppWorkspaceMembersRead,
   NO_AGENT_ORIGINS,
@@ -109,6 +110,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     [LIVE_READ.PULL_REQUEST_CHAPTERS]: NO_CHAPTERS,
     [LIVE_READ.BROWSER_TABS]: NO_BROWSER_TABS,
     [LIVE_READ.DEVICE_PRESENCE]: NO_KEYS_HELD,
+    [LIVE_READ.WORKSPACE_INVITATIONS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_MEMBERS]: NO_KEYS_HELD,
     [LIVE_READ.WORKSPACE_TOOLS]: NO_KEYS_HELD,
     [LIVE_READ.MCP_CLIENTS]: NO_KEYS_HELD,
@@ -217,6 +219,7 @@ export interface HostReadsHanded {
   /** The signed-in account's keys, held under its id. */
   readonly deliverKeys: (next: AppHostRead<AppProviderKeyList>) => void;
   readonly deliverMembers: (next: AppWorkspaceMembers) => void;
+  readonly deliverInvitations: (next: AppWorkspaceInvitations) => void;
 }
 
 /** The id the signed-in account of a test's document goes by where the document names none, since the host holds the account's own reads by it. */
@@ -296,6 +299,7 @@ export function handHostReads(first: {
     deliverTools: (next) => deliver({ [LIVE_READ.INTEGRATION_TOOLS]: next }),
     deliverKeys: (next) => deliver({ [LIVE_READ.PROVIDER_KEYS]: { [account]: next } }),
     deliverMembers: (next) => deliver({ [LIVE_READ.WORKSPACE_MEMBERS]: next }),
+    deliverInvitations: (next) => deliver({ [LIVE_READ.WORKSPACE_INVITATIONS]: next }),
   };
 }
 

@@ -325,9 +325,7 @@ import {
   tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
-  type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
-  workspaceInvitationsFollowedSchema,
 } from "@repo/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -383,6 +381,7 @@ import type {
   AppPages,
   AppPlanComments,
   AppProviderKeys,
+  AppWorkspaceInvitations,
   AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
@@ -637,14 +636,14 @@ export interface HostOperator {
   workspaceMembersRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
   /** Every workspace's people the host holds for the windows, whole, each time any of them moves. */
   onWorkspaceMembersChanged(listener: (held: AppWorkspaceMembers) => void): () => void;
-  /** A workspace's pending invitations followed from now until let go, heard through `onWorkspaceInvitationsChanged`; following again starts over. */
+  /** One workspace's pending invitations held followed for an owner's or an admin's windows from now until let go, and a while after among those let go lately; what they hold is heard through `onWorkspaceInvitationsChanged`. */
   workspaceInvitationsFollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's invitations let go. */
+  /** One workspace's invitations let go by the windows: they stay followed among those let go lately until later ones push them out. */
   workspaceInvitationsUnfollow(scope: WorkspacePeopleFollow): Effect.Effect<void>;
-  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
-  onWorkspaceInvitationsChanged(
-    listener: (followed: WorkspaceInvitationsFollowed) => void,
-  ): () => void;
+  /** One workspace's held invitations read again at once, as Try again asks. */
+  workspaceInvitationsRetry(scope: WorkspacePeopleFollow): Effect.Effect<void>;
+  /** Every workspace's pending invitations the host holds for the windows, whole, each time any of them moves or expires. */
+  onWorkspaceInvitationsChanged(listener: (held: AppWorkspaceInvitations) => void): () => void;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
   /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
@@ -669,10 +668,6 @@ export interface HostOperator {
   ): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace left; or why it was not. */
   workspaceLeave(params: TasksWorkspaceLeaveParams): Effect.Effect<TasksWorkspaceLeaveAnswer>;
-  /** One workspace's pending invitations; or why there are none. */
-  workspaceInvitations(
-    params: TasksWorkspaceParams,
-  ): Effect.Effect<TasksWorkspaceInvitationsAnswer>;
   /** An invitation made; it with its accept link, or why none was. */
   workspaceInvite(
     params: TasksWorkspaceInviteParams,
@@ -1644,16 +1639,28 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         listener,
       ),
     workspaceInvitationsFollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, scope)),
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
     workspaceInvitationsUnfollow: (scope) =>
-      fire(client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, scope)),
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
+    workspaceInvitationsRetry: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS_RETRY, {
+          workspaceId: scope.workspaceId,
+        }),
+      ),
     onWorkspaceInvitationsChanged: (listener) =>
       on(
         GATEWAY_EVENT.WORKSPACE_INVITATIONS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(workspaceInvitationsFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
+        // Note that the held invitations are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspaceInvitations>(payload) : undefined),
         listener,
       ),
     workspacePhoto: (params) =>
@@ -1706,11 +1713,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: params.workspaceId }),
         answerOf(tasksWorkspaceLeaveAnswerSchema, WORKSPACE_UNANSWERED),
-      ),
-    workspaceInvitations: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_INVITATIONS, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspaceInvitationsAnswerSchema, WORKSPACE_UNANSWERED),
       ),
     workspaceInvite: (params) =>
       Effect.map(

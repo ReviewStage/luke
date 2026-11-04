@@ -21,6 +21,7 @@ import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
 import type { ProviderKeysAnswer } from "@repo/features/provider-key-wire";
 import type { PullRequestChaptersAnswer } from "@repo/features/pull-request-chapters-wire";
 import { COMMENT_SUBJECT, type TasksView } from "@repo/features/tasks-view";
+import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import type { WorkspaceMembersAnswer } from "@repo/features/workspace-wire";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
@@ -401,6 +402,17 @@ export interface AppDevicePresence {
 /** The account's devices' beats the windows hold, by the account, as the host's read of them stands. */
 export type AppDevicePresences = Readonly<Record<string, AppHostRead<AppDevicePresence>>>;
 
+/**
+ * Each workspace's pending invitations the host holds for an owner's or an
+ * admin's windows (`workspace-invitations-read.ts`): those a window draws,
+ * and the few drawn lately, by the workspace's id, each as its own read
+ * stands, those not yet expired, soonest to expire first, once it answered.
+ * One absent is held by nobody.
+ */
+export type AppWorkspaceInvitations = Readonly<
+  Record<string, AppHostRead<readonly WorkspaceInvitation[]>>
+>;
+
 /** One workspace's people, as the host's read of them stands: its members and who its work names but left, once it answered. */
 export type AppWorkspaceMembersRead = AppHostRead<WorkspaceMembersAnswer>;
 
@@ -483,6 +495,7 @@ export interface AppHostReads {
   [LIVE_READ.PULL_REQUEST_CHAPTERS]: PullRequestChaptersAnswer;
   [LIVE_READ.BROWSER_TABS]: readonly AgentBrowserTab[];
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresence;
+  [LIVE_READ.WORKSPACE_INVITATIONS]: readonly WorkspaceInvitation[];
   [LIVE_READ.WORKSPACE_MEMBERS]: WorkspaceMembersAnswer;
   [LIVE_READ.WORKSPACE_TOOLS]: WorkspaceToolsAnswer;
   [LIVE_READ.MCP_CLIENTS]: McpClientsAnswer;
@@ -594,6 +607,8 @@ export interface AppState {
   [LIVE_READ.BROWSER_TABS]: AppBrowserTabs;
   /** The account's own devices' beats, held while a window draws a device's standing and a while after: what Settings › Hosts, an agent's place, and Runs on judge a device by. */
   [LIVE_READ.DEVICE_PRESENCE]: AppDevicePresences;
+  /** Each workspace's pending invitations an owner's or an admin's windows draw, held while a window draws them and a while after: what Settings › Workspace lists under Invitations. */
+  [LIVE_READ.WORKSPACE_INVITATIONS]: AppWorkspaceInvitations;
   /** Each workspace's people the windows draw, held while a window draws them and a while after: what every surface naming a workspace's members or who left reads. */
   [LIVE_READ.WORKSPACE_MEMBERS]: AppWorkspaceMembers;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
@@ -748,6 +763,11 @@ export const HOST_READ_SLICE = {
   },
   [LIVE_READ.BROWSER_TABS]: { keys: READ_KEYS.TWO, on: KEYS_ON.SLICE },
   [LIVE_READ.DEVICE_PRESENCE]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
+  [LIVE_READ.WORKSPACE_INVITATIONS]: {
+    keys: READ_KEYS.ONE,
+    on: KEYS_ON.SLICE,
+    rowId: "id" satisfies keyof WorkspaceInvitation,
+  },
   [LIVE_READ.WORKSPACE_MEMBERS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.WORKSPACE_TOOLS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },
   [LIVE_READ.MCP_CLIENTS]: { keys: READ_KEYS.ONE, on: KEYS_ON.SLICE },

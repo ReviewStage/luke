@@ -17,7 +17,6 @@ import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import type { WorkspaceSentry } from "@repo/features/sentry-install-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
-import type { TasksWorkspaceInvitationsAnswer } from "@repo/features/tasks-view";
 import { dayAndTimeText } from "@repo/features/time-format";
 import type { WorkspaceInvitation } from "@repo/features/workspace-invitation-wire";
 import {
@@ -31,9 +30,12 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@repo/host/acts";
-import { type AppWorkspaceMembers, NO_KEYS_HELD } from "@repo/host/app-state";
 import {
-  type ActPortClient,
+  type AppWorkspaceInvitations,
+  type AppWorkspaceMembers,
+  NO_KEYS_HELD,
+} from "@repo/host/app-state";
+import {
   type PortActKind,
   type PortActPayload,
   type PortActResult,
@@ -135,16 +137,16 @@ let refuseMembersRead = false;
 let deliverPeople: HostReadsHanded["deliverMembers"] = () => undefined;
 /** Each workspace's people the host holds for the window, as last laid. */
 let people: AppWorkspaceMembers = NO_KEYS_HELD;
+/** Lays each workspace's pending invitations on the window's document, as the host does once the page holds them. */
+let deliverInvitations: HostReadsHanded["deliverInvitations"] = () => undefined;
+/** Each workspace's pending invitations the host holds for the window, as last laid. */
+let heldInvitations: AppWorkspaceInvitations = NO_KEYS_HELD;
 /** Whether the service refuses the next removal for the account's role. */
 let refuseRemoval = false;
 /** The invitations the test's service holds pending. */
 let invitations: WorkspaceInvitation[] = [];
 /** Whether the service refuses the next invitation as the address already invited. */
 let refuseInvitation = false;
-/** Where the first invitations read waits before answering what it read, so a test can hold it on the wire. */
-let firstRead: Promise<void> | undefined;
-/** Whether every invitations read after the first is refused, as a service that stopped answering refuses it. */
-let refuseLaterReads = false;
 /** Where the next invitation waits before the service makes it, so a test can hold it on the wire. */
 let inviteHeld: Promise<void> | undefined;
 /** Whether the browser could not be opened on GitHub's page. */
@@ -242,7 +244,16 @@ function layPeople(workspaceId: string): void {
   deliverPeople(people);
 }
 
-/** The bridge, answering the section's acts the way the host would, a member write drawn on the document from its answer. */
+/** Lays a workspace's pending invitations on the window's document as the service holds them, or as refused where it refuses them. */
+function layInvitations(workspaceId: string): void {
+  heldInvitations = {
+    ...heldInvitations,
+    [workspaceId]: refuseInvitationsRead ? { failed: true } : { rows: invitations },
+  };
+  deliverInvitations(heldInvitations);
+}
+
+/** The bridge, answering the section's acts the way the host would, a member or invitation write drawn on the document from its answer. */
 function answer(request: Asked): Promise<Answered> {
   sent.push(request);
   switch (request.kind) {
@@ -259,19 +270,9 @@ function answer(request: Asked): Promise<Answered> {
       stored = stored.filter((member) => member.userId !== request.payload.userId);
       layPeople(request.payload.workspaceId);
       return Promise.resolve(done(stored));
-    case ACT_KIND.WORKSPACE_INVITATIONS_READ: {
-      if (refuseInvitationsRead) {
-        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
-      }
-      const read = invitations;
-      const held = firstRead;
-      firstRead = undefined;
-      const reads = sent.filter((one) => one.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length;
-      if (refuseLaterReads && reads > 1) {
-        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
-      }
-      return (held ?? Promise.resolve()).then(() => done(read));
-    }
+    case ACT_KIND.WORKSPACE_INVITATIONS_RETRY:
+      layInvitations(request.payload.workspaceId);
+      return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_INVITE: {
       if (inviteHeld !== undefined) {
         const held = inviteHeld;
@@ -292,10 +293,12 @@ function answer(request: Asked): Promise<Answered> {
         acceptUrl: `https://vespin.dev/accept-invitation.html?id=inv-${request.payload.email}`,
       };
       invitations = [...invitations, made];
+      layInvitations(request.payload.workspaceId);
       return Promise.resolve(done(made));
     }
     case ACT_KIND.WORKSPACE_INVITATION_CANCEL:
       invitations = invitations.filter((one) => one.id !== request.payload.invitationId);
+      layInvitations(request.payload.workspaceId);
       return Promise.resolve(done(invitations));
     case ACT_KIND.WORKSPACE_SENTRY_READ:
       if (sentry === undefined) {
@@ -458,43 +461,6 @@ function workspacePort(): Parameters<typeof fakeActPort>[0] {
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }
 
-/** What the act port answers a workspace's invitations' stream with. */
-type InvitationsStream = Awaited<ReturnType<ActPortClient[typeof ACT_KIND.WORKSPACE_INVITATIONS]>>;
-
-/** Each workspace's invitations' streams the page holds open, which a test pushes a word to. */
-let invitationStreams: {
-  readonly workspaceId: string;
-  push: (view: TasksWorkspaceInvitationsAnswer) => void;
-}[] = [];
-
-/** A stream the test pushes words into, as the host streams a followed workspace's invitations. */
-function pushableStream<A>() {
-  const held: A[] = [];
-  const waiting: ((read: IteratorResult<A, undefined>) => void)[] = [];
-  let ended = false;
-  const iterator: AsyncIteratorObject<A, undefined, unknown> = {
-    next: () => {
-      const value = held.shift();
-      if (value !== undefined) return Promise.resolve({ done: false, value });
-      if (ended) return Promise.resolve({ done: true, value: undefined });
-      return new Promise((resolve) => waiting.push(resolve));
-    },
-    return: () => {
-      ended = true;
-      for (const resolve of waiting.splice(0)) resolve({ done: true, value: undefined });
-      return Promise.resolve({ done: true, value: undefined });
-    },
-    [Symbol.asyncIterator]: () => iterator,
-    [Symbol.asyncDispose]: () => Promise.resolve(),
-  };
-  const push = (value: A) => {
-    const resolve = waiting.shift();
-    if (resolve === undefined) held.push(value);
-    else resolve({ done: false, value });
-  };
-  return { iterator, push };
-}
-
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
@@ -507,8 +473,6 @@ beforeEach(() => {
   refuseRemoval = false;
   invitations = [];
   refuseInvitation = false;
-  firstRead = undefined;
-  refuseLaterReads = false;
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   sentry = SENTRY_NOT_SET_UP;
@@ -528,7 +492,6 @@ beforeEach(() => {
   opened = [];
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
-  invitationStreams = [];
   fakeActPort({
     ...workspacePort(),
     // Note that the host lays what it read once the hold is taken, never inside it.
@@ -537,18 +500,18 @@ beforeEach(() => {
       void Promise.resolve().then(() => layPeople(input.workspaceId));
       return quietHold();
     },
-    [ACT_KIND.WORKSPACE_INVITATIONS]: (input) => {
-      sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS, payload: input });
-      const stream = pushableStream<TasksWorkspaceInvitationsAnswer>();
-      invitationStreams.push({ workspaceId: input.workspaceId, push: stream.push });
-      // SAFETY: the page only iterates the stream and ends it, which this iterator answers as oRPC's does.
-      return Promise.resolve(stream.iterator as InvitationsStream);
+    [ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]: (input) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW, payload: input });
+      void Promise.resolve().then(() => layInvitations(input.workspaceId));
+      return quietHold();
     },
   });
   handCapabilities(DESKTOP_CAPABILITIES);
   people = NO_KEYS_HELD;
+  heldInvitations = NO_KEYS_HELD;
   const reads = handHostReads({});
   deliverPeople = reads.deliverMembers;
+  deliverInvitations = reads.deliverInvitations;
   // Note that a workspace's automations are laid as the leave holds them, where the test names any.
   holdAutomations(reads.deliverAutomations, {
     [AUTOMATION_FOLLOW.WORKSPACE]: () =>
@@ -1956,30 +1919,6 @@ async function invite(page: HTMLElement, email: string, role: string, presses = 
   await settle();
 }
 
-test("the invitations the host streams are drawn, another Mac's invitation among them, with nothing read again", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const pushed = {
-    id: "inv-ola@example.com",
-    email: "ola@example.com",
-    role: WORKSPACE_ROLE.MEMBER,
-    expiresAt: "2026-10-16T12:00:00.000Z",
-    acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-ola@example.com",
-  };
-  act(() => {
-    for (const stream of invitationStreams) {
-      if (stream.workspaceId === ACME.id) stream.push({ invitations: [pushed] });
-    }
-  });
-  await settle();
-
-  assert.equal(invitationRows(page).length, 1);
-  assert.ok(invitationRows(page)[0]?.textContent?.includes("ola@example.com"));
-  assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
-    1,
-  );
-});
-
 test("the invite form's address field is named by a visible label, and, being required, is not marked Optional", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   const form =
@@ -2047,14 +1986,13 @@ test("the owner invites an address as a role, sees it pending with its link to c
       .filter(
         (request) =>
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_FOLLOW &&
+          request.kind !== ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           request.kind !== ACT_KIND.WORKSPACE_SLACK_BOT_READ,
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
     [
-      [ACT_KIND.WORKSPACE_INVITATIONS_READ, { workspaceId: ACME.id }],
-      [ACT_KIND.WORKSPACE_INVITATIONS, { workspaceId: ACME.id }],
       [
         ACT_KIND.WORKSPACE_INVITE,
         { workspaceId: ACME.id, email: "alan@example.com", role: WORKSPACE_ROLE.ADMIN },
@@ -2113,55 +2051,6 @@ test("an admin's role menu offers Admin dimmed, since only the owner invites adm
     ),
     [WORKSPACE_ROLE.MEMBER],
   );
-});
-
-test("a first read still out when an invitation lands does not take the new invitation away", async () => {
-  let release: () => void = () => undefined;
-  firstRead = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-  release();
-  await settle();
-
-  assert.deepEqual(
-    invitationRows(page).map((row) => addressOf(row)?.textContent),
-    ["alan@example.com"],
-  );
-});
-
-test("an invitation made stays listed with its link when the read after it fails", async () => {
-  refuseLaterReads = true;
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-
-  const row = invitationRows(page)[0] ?? assert.fail("the invitation was lost");
-  assert.equal(addressOf(row)?.textContent, "alan@example.com");
-  assert.ok(button(row, "Copy invite link"));
-});
-
-test("an invitation's answer that lands after the stream told a newer list does not bring back what another window canceled", async () => {
-  let release: () => void = () => undefined;
-  inviteHeld = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-  // Another window cancels the invitation the moment it is made, and the stream tells the list after it.
-  act(() => {
-    for (const stream of invitationStreams) {
-      if (stream.workspaceId === ACME.id) stream.push({ invitations: [] });
-    }
-  });
-  await settle();
-  release();
-  await settle();
-
-  assert.deepEqual(invitationRows(page), []);
 });
 
 test("Canceling an invitation asks first, in the accent rather than red, and sends nothing until it is answered", async () => {
@@ -2263,8 +2152,9 @@ test("an address already invited is said under the form, and a member is offered
   assert.deepEqual(invitationRows(admin.page), []);
   assert.equal(member.page.querySelector(".workspace-invite"), null);
   assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length,
+    sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW).length,
     1,
+    "a member holds no invitations",
   );
 });
 

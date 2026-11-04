@@ -38,7 +38,7 @@ export function fakeAppBridgeCalls(): Partial<AppBridge> {
   return answering;
 }
 
-/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the outside MCP clients, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, and a workspace's people. */
+/** The holds a window keeps on a read the host lays on app state: a task's or an agent's inbox, its pages and cloud Browser tabs, a pull request's chapters, the account's beats and provider keys, an agent's or a server's tools, the outside MCP clients, the automations' lists and histories, a plan's or a page's comments, the run that started an agent, and a workspace's people and invitations. */
 type HoldKind =
   | typeof AGENT_ACT_KIND.AGENTS_ORIGIN_FOLLOW
   | typeof AGENT_INBOX_ACT_KIND.AGENTS_INBOX_FOLLOW
@@ -52,7 +52,8 @@ type HoldKind =
   | typeof ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_FOLLOW
   | typeof AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW
   | typeof TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW
-  | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW;
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW
+  | typeof WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW;
 
 /** Every hold a window keeps on a read the host lays on app state, which a test's port holds quietly unless it answers it. */
 const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
@@ -69,6 +70,7 @@ const QUIET_HOLDS: ReadonlySet<PortActKind> = new Set<HoldKind>([
   AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW,
   TASKS_ACT_KIND.TASKS_COMMENTS_FOLLOW,
   WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW,
+  WORKSPACE_ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW,
 ]);
 
 /** A hold as the host answers it: a stream carrying nothing, standing until the window closes it. */

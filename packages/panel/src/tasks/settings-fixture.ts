@@ -67,6 +67,7 @@ import {
   type AppMcpClients,
   type AppProviderKeys,
   type AppStateSnapshot,
+  type AppWorkspaceInvitations,
   type AppWorkspaceMembers,
   RUN_PROFILE,
 } from "@repo/host/app-state";
@@ -209,6 +210,27 @@ export function settingsTasksView(profile: string, list: TasksView): TasksView |
 /** Each workspace's members as the host holds them read (`LIVE_READ.WORKSPACE_MEMBERS`), one object for every delivery. */
 const HELD_MEMBERS: AppWorkspaceMembers = Object.fromEntries(
   [...MEMBERS].map(([workspaceId, members]) => [workspaceId, { rows: { members } }]),
+);
+
+/** Each workspace's pending invitations as the host holds them read (`LIVE_READ.WORKSPACE_INVITATIONS`): one in Acme, none elsewhere, one object for every delivery. */
+const HELD_INVITATIONS: AppWorkspaceInvitations = Object.fromEntries(
+  [...MEMBERS.keys()].map((workspaceId) => [
+    workspaceId,
+    {
+      rows:
+        workspaceId === WORKSPACE.ACME
+          ? [
+              {
+                id: "invitation-sam",
+                email: "sam@example.com",
+                role: WORKSPACE_ROLE.MEMBER,
+                expiresAt: new Date(NOW + 5 * DAY).toISOString(),
+                acceptUrl: "https://vespin.dev/invite/fixture",
+              },
+            ]
+          : [],
+    },
+  ]),
 );
 
 /* ----- Settings › Integrations ----- */
@@ -697,18 +719,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
     accounts: INTEGRATION_ACCOUNTS,
     addable: [INTEGRATION_PROVIDER.NOTION, INTEGRATION_PROVIDER.SLACK],
   }),
-  [ACT_KIND.WORKSPACE_INVITATIONS_READ]: ({ workspaceId }) =>
-    workspaceId === WORKSPACE.ACME
-      ? [
-          {
-            id: "invitation-sam",
-            email: "sam@example.com",
-            role: WORKSPACE_ROLE.MEMBER,
-            expiresAt: new Date(NOW + 5 * DAY).toISOString(),
-            acceptUrl: "https://vespin.dev/invite/fixture",
-          },
-        ]
-      : [],
   [ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ]: ({ workspaceId }) =>
     workspaceId === WORKSPACE.ACME
       ? [
@@ -852,7 +862,8 @@ function beatsStaged(): AppDevicePresences {
  * Main's document as these profiles draw it: the fixture workspaces'
  * members held read, and under the signed-in profiles the account signed
  * in, an admin of the service, with the staged pages' experiments on, the
- * staged hosts beating, and its credentials and servers' tools held. The
+ * staged hosts beating, its workspaces' invitations, and its credentials and
+ * servers' tools held. The
  * members are held under every profile rather than only the signed-in
  * ones, because ⌘K's People, a task's assignee and creator faces, and the
  * person page read them wherever the window stands. Each slice laid over is
@@ -867,6 +878,7 @@ export function settingsAppState(profile: string, state: AppStateSnapshot): AppS
     account: ACCOUNT,
     access: ADMIN_ACCESS,
     [LIVE_READ.DEVICE_PRESENCE]: beatsStaged(),
+    [LIVE_READ.WORKSPACE_INVITATIONS]: HELD_INVITATIONS,
     [LIVE_READ.INTEGRATION_TOOLS]: STAGED_TOOLS,
     [LIVE_READ.PROVIDER_KEYS]: STAGED_KEYS,
     [LIVE_READ.MCP_CLIENTS]: STAGED_MCP_CLIENTS,

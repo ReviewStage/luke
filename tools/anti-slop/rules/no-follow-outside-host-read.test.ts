@@ -73,7 +73,7 @@ tester.run("no-follow-outside-host-read", noFollowOutsideHostReadRule, {
       errors: [{ messageId: "newRead" }],
     },
     {
-      code: "actPort()[ACT_KIND.WORKSPACE_INVITATIONS]({ workspaceId });",
+      code: "actPort()[ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW]({ workspaceId });",
       filename: NEW_FILE,
       errors: [{ messageId: "newRead" }],
     },
