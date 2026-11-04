@@ -46,6 +46,7 @@ function workspaceMenuGroups(
   const choices = tasks.workspaces.map(
     (workspace): MenuAction => ({
       label: workspace.name,
+      key: workspace.id,
       icon: <WorkspaceTile workspace={workspace} />,
       detail: sharedWords(workspace.memberCount, workspace.id === first),
       card: <WorkspaceCard workspace={workspace} personal={workspace.id === first} />,

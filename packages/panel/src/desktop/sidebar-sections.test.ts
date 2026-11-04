@@ -713,6 +713,41 @@ test("Move to section names a section without an icon with no glyph beside it", 
   assert.equal(item("Launch").querySelector(".ui-menu-item-glyph")?.textContent, "🚀");
 });
 
+test("two sections titled alike are two items in Move to section, on one task's menu and on a chosen pair's", async () => {
+  const twin = {
+    id: "0a1b2c3d-0000-4000-8000-000000000005",
+    workspaceId: WORKSPACE.id,
+    title: "Launch",
+    createdAt: 4,
+  };
+  const sidebar = await mountSidebar([], { ...SECTIONS, sections: [...SECTIONS.sections, twin] });
+
+  openMoveToSection(sidebar, RETRIES.name);
+  assert.deepEqual(
+    menuLabels().filter((label) => label === "Launch"),
+    ["Launch", "Launch"],
+  );
+
+  for (const name of [INVITES.name, RETRIES.name]) {
+    const row =
+      [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find((each) =>
+        each.textContent?.includes(name),
+      ) ?? assert.fail(`no ${name} row`);
+    act(() => {
+      row.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true }),
+      );
+    });
+  }
+  openRowMenu(sidebar, RETRIES.name);
+  assert.equal(document.querySelector(".ui-menu-heading")?.textContent, "2 tasks");
+  act(() => item("Move to section").click());
+  assert.deepEqual(
+    menuLabels().filter((label) => label === "Launch"),
+    ["Launch", "Launch"],
+  );
+});
+
 /** Presses the Tasks head's New section, which names a section in place. */
 function newSectionInPlace(sidebar: HTMLElement): HTMLInputElement {
   const button =

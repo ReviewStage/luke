@@ -520,6 +520,7 @@ export function moveToSectionEntry(
     const glyph = sectionGlyph(section.icon);
     return {
       label: section.title,
+      key: section.id,
       ...(glyph === undefined ? undefined : { icon: glyph }),
       checked: section.id === standing,
       onSelect: () => {

@@ -132,6 +132,7 @@ function selectionActs(
     [
       ...sections.map((section) => ({
         label: section.title,
+        key: section.id,
         icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
         onSelect: move(section.id),
       })),
