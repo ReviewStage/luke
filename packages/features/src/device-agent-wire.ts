@@ -23,9 +23,7 @@ import { wireUuidSchema } from "./service-wire.js";
  * offers This Mac at Start; it holds a read for its lines and one for its
  * requests, each answered as soon as one waits, claims each by its id, says
  * which step a launch it claimed has reached (`DEVICE_LAUNCH_STEP`), and
- * settles a line or answers a request. Its register and its beats say which
- * harnesses the Mac is signed in to itself (`deviceSignedInSchema`), which a
- * local agent's launch prefers to the account's saved credential. Claiming a launch line hands its
+ * settles a line or answers a request. Claiming a launch line hands its
  * secrets over once (`deviceAgentLaunchSecretsSchema`): the service opens them
  * from the row's seal and clears the row's copy in the same claim.
  *
@@ -109,46 +107,26 @@ export const DEVICE_CAPABILITY = {
 
 export type DeviceCapability = (typeof DEVICE_CAPABILITY)[keyof typeof DEVICE_CAPABILITY];
 
-/**
- * The capabilities named that this build knows, in `DEVICE_CAPABILITY`'s
- * order: a newer follower's register, and a device row a build since
- * retired a capability from, pass over the rest rather than fail on them.
- */
-export function knownDeviceCapabilities(named: readonly string[]): DeviceCapability[] {
-  return Object.values(DEVICE_CAPABILITY).filter((capability) => named.includes(capability));
-}
-
 /** The capability a device must have registered to be queued a line of the kind, for each kind that needs one. */
 export const DEVICE_AGENT_LINE_CAPABILITY: Partial<Record<DeviceAgentLineKind, DeviceCapability>> =
   {
     [DEVICE_AGENT_LINE_KIND.DISCARD]: DEVICE_CAPABILITY.DISCARD,
   };
 
-/** What program a device ran local agents through when its row was written, which nothing reads since every device runs the host program; still on the wire for clients that decode it. */
+/**
+ * What program a device runs local agents through, as a task's Runs on and
+ * the devices offered name it to clients that decode it: every device runs
+ * the host program, so the service names each `HOST`, keeps no kind on the
+ * device's row, and nothing on the client side draws from it.
+ */
 export const DEVICE_KIND = {
-  /** The desktop app, on the Mac its member is signed in at. */
+  /** The desktop app, on the Mac its member is signed in at; no device is named it any more. */
   DESKTOP: "desktop",
-  /** A headless host a member added, with nobody signed in at it. */
+  /** The host program, which every device runs. */
   HOST: "host",
 } as const;
 
 export type DeviceKind = (typeof DEVICE_KIND)[keyof typeof DEVICE_KIND];
-
-/**
- * How a device runs its local agents, as it registers: every host runs each
- * agent on the device itself, as the device's own user, with full access to
- * what that user reaches, on the sign-ins saved in the app and the GitHub
- * token we hand the device (`DIRECT`). A row from before the field reads
- * `BARE`, which no host registers.
- */
-export const DEVICE_ISOLATION = {
-  /** What a row from before the field reads; no host registers it. */
-  BARE: "bare",
-  /** Each agent directly on the device, in a folder of its own, on the sign-ins saved in the app and the GitHub token we hand it. */
-  DIRECT: "direct",
-} as const;
-
-export type DeviceIsolation = (typeof DEVICE_ISOLATION)[keyof typeof DEVICE_ISOLATION];
 
 /**
  * Where a device stands in setting itself up to run agents, as it registers
@@ -417,32 +395,16 @@ export const deviceAgentReadArgsSchema = EffectSchema.Struct({
   maxBytes: EffectSchema.Int,
 });
 
-/**
- * Which harnesses the device says it is signed in to by itself: every host
- * says none, since its agents launch on the account's saved credential, and
- * nothing reads it.
- */
-export const deviceSignedInSchema = EffectSchema.Struct({
-  claudeCode: EffectSchema.optionalKey(EffectSchema.Boolean),
-  codex: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type DeviceSignedIn = typeof deviceSignedInSchema.Type;
-
 /** The device a call names, by the id it enrolled under. */
 const deviceField = { deviceId: wireUuidSchema };
 
 /**
  * A register: the Mac's id, its name, its home folder, and the CLI it
  * bundles, both absolute, the Codex binary it runs, absent until it has one,
- * which harnesses it is signed in to (neither, from every host), its
- * platform and architecture, and how it runs its agents (`DEVICE_ISOLATION`),
- * absent for a row from before the field, and the capabilities its follower has
+ * its platform and architecture, and the capabilities its follower has
  * (`DEVICE_CAPABILITY`), absent for none. The device sends each key only when it names something
  * beyond the default, so a service from before it, which refuses a key it
- * does not know, never sees it from a device that has none; a capability
- * this service does not know is passed over rather than refused, so a newer
- * device's list never fails its register. A device names each executable
+ * does not know, never sees it from a device that has none. A device names each executable
  * by its path where its agents run: the CLIs it keeps on the device. A device not
  * ready to take an agent yet registers where its setup stands
  * (`DEVICE_SETUP`), and for one that failed, in words of its own naming no
@@ -463,14 +425,12 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
   platform: EffectSchema.Literals(Object.values(DEVICE_PLATFORM)),
   arch: EffectSchema.Literals(Object.values(DEVICE_ARCH)),
   ...deviceMachineFields,
-  isolation: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_ISOLATION))),
   home: macPath,
   agentsFolder: EffectSchema.optionalKey(macPath),
   claudeExecutable: macPath,
   codexExecutable: EffectSchema.optionalKey(macPath),
-  signedIn: EffectSchema.optionalKey(deviceSignedInSchema),
   capabilities: EffectSchema.optionalKey(
-    EffectSchema.Array(EffectSchema.String.check(EffectSchema.isMaxLength(64))).check(
+    EffectSchema.Array(EffectSchema.Literals(Object.values(DEVICE_CAPABILITY))).check(
       EffectSchema.isMaxLength(16),
     ),
   ),
@@ -487,16 +447,14 @@ export const deviceAgentRegisterRequestSchema = EffectSchema.Struct({
 export const deviceAgentDeviceRequestSchema = EffectSchema.Struct(deviceField);
 
 /**
- * A beat: the device, which harnesses it is signed in to now, where it
- * checked, and where its update stands (`HOST_UPDATE`), with why for one
- * that failed, while one is under way. A beat naming no update clears the
+ * A beat: the device, and where its update stands (`HOST_UPDATE`), with why
+ * for one that failed, while one is under way. A beat naming no update clears the
  * last one; a host sends the key only while it names one, so a service from
  * before the field, which refuses it, never sees it from a host updating
  * nothing.
  */
 export const deviceAgentBeatRequestSchema = EffectSchema.Struct({
   ...deviceField,
-  signedIn: EffectSchema.optionalKey(deviceSignedInSchema),
   update: EffectSchema.optionalKey(hostUpdateSchema),
   updateFailure: EffectSchema.optionalKey(
     EffectSchema.String.check(
@@ -520,19 +478,10 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
 });
 
 /** A line settled: its id, and for a launch line whose runner exited, its exit code. */
-/**
- * Why a device settled a launch without starting its runner, as a host
- * from before this build may still name it; the service takes it and reads
- * nothing of it, and no host of this build names one.
- */
-const DEVICE_LAUNCH_REFUSAL = { RAN_DIRECTLY: "ran-directly" } as const;
-
 export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
-  /** Why a launch was settled unstarted, where an older host names why; nothing reads it. */
-  refusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(DEVICE_LAUNCH_REFUSAL))),
 });
 
 /**

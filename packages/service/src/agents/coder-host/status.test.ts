@@ -8,7 +8,7 @@ import {
   AGENT_STATUS,
   CONTEXT_WINDOW,
 } from "@repo/features/agent-wire";
-import { DEVICE_KIND, DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
+import { DEVICE_PLATFORM } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { Duration } from "effect";
 import { expect, test } from "vitest";
@@ -169,12 +169,10 @@ test("a local agent's summary names its Mac and when it last beat; an agent in a
             id: DEVICE,
             userId: "charles",
             name: "Charles's MacBook Pro",
-            kind: DEVICE_KIND.DESKTOP,
             platform: DEVICE_PLATFORM.DARWIN,
             machineId: null,
             model: null,
             lastSeenAt: new Date(lastSeenAt),
-            signedIn: {},
             codexExecutable: null,
             setup: null,
             setupFailure: null,

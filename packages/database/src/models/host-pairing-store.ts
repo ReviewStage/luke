@@ -28,7 +28,6 @@
 
 import {
   DEVICE_ARCH,
-  DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
   type DevicePlatform,
@@ -334,7 +333,7 @@ const insertPairedHost = SqlSchema.void({
   execute: ({ now, ...host }) =>
     Database.use((db) =>
       // Note that this is a plain insert, so an id that stands fails it rather than being keyed.
-      db.insert(device).values({ ...host, kind: DEVICE_KIND.HOST, lastSeenAt: now }),
+      db.insert(device).values({ ...host, lastSeenAt: now }),
     ),
 });
 

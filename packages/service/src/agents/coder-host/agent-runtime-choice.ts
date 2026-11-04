@@ -56,7 +56,7 @@ import {
   type LocalAgentRefusal,
   MAC_PRESENCE,
 } from "@repo/features/agent-wire";
-import { DEVICE_SETUP, type DeviceSetup } from "@repo/features/device-agent-wire";
+import { DEVICE_KIND, DEVICE_SETUP, type DeviceSetup } from "@repo/features/device-agent-wire";
 import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -298,7 +298,8 @@ export const macOffers = /* @__PURE__ */ Effect.fnUntraced(function* (
     deviceId: device.id,
     name: device.name,
     providers: MAC_PROVIDERS.filter((provider) => macRunsProvider(device, provider, paid)),
-    kind: device.kind,
+    // Note that every device runs the host program, so each is offered as a host; the device row keeps no kind.
+    kind: DEVICE_KIND.HOST,
     platform: device.platform,
     seenAt: device.lastSeenAt.getTime(),
     ...(device.setup === null ? undefined : { setup: device.setup }),

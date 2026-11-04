@@ -175,11 +175,11 @@ it.layer(getTestDB())("what moves an account's task list notifies", (it) => {
           [],
         );
         const updating = { update: HOST_UPDATE.UPDATING };
-        yield* expectTopicsFire(beatDevice(teammate, deviceId, undefined, updating), [
+        yield* expectTopicsFire(beatDevice(teammate, deviceId, updating), [
           [TOPIC.ACCOUNT, teammate],
           [TOPIC.WORKSPACE, teamId],
         ]);
-        yield* expectTopicsFire(beatDevice(teammate, deviceId, undefined, updating), []);
+        yield* expectTopicsFire(beatDevice(teammate, deviceId, updating), []);
       }),
   );
 

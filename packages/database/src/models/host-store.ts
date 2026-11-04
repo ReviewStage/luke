@@ -9,7 +9,7 @@
  * machine (`../schemas/device.ts`).
  *
  * A machine is enrolled where its row holds a secret and was not removed,
- * whatever its kind or platform: a box its approved pairing
+ * whatever its platform: a box its approved pairing
  * keyed (`./host-pairing-store.ts`), and a member's own desktop converted in
  * place by its signed-in session (`enrollOwnDevice`), or created by it where
  * the account never registered the id, are read, listed, refused below the
@@ -31,7 +31,6 @@
 
 import {
   DEVICE_ARCH,
-  DEVICE_KIND,
   DEVICE_PLATFORM,
   type DeviceArch,
   type DeviceMachine,
@@ -135,7 +134,6 @@ const insertOwnDevice = SqlSchema.findAll({
           id,
           userId,
           name,
-          kind: DEVICE_KIND.HOST,
           platform,
           arch,
           ...machineColumns({ machineId, model }),
@@ -146,7 +144,6 @@ const insertOwnDevice = SqlSchema.findAll({
         .onConflictDoUpdate({
           target: device.id,
           set: {
-            kind: DEVICE_KIND.HOST,
             ...machineColumns({ machineId, model }),
             version,
             secretHash,
@@ -174,7 +171,6 @@ const keyOwnDevice = SqlSchema.findAll({
       db
         .update(device)
         .set({
-          kind: DEVICE_KIND.HOST,
           ...machineColumns({ machineId, model }),
           version,
           secretHash,
@@ -525,7 +521,7 @@ export function registerHost(
   );
 }
 
-/** The standing machine a device secret's hash names, of any kind, its account, and the version it last called with; nothing for a removed machine, an old secret, or none. */
+/** The standing machine a device secret's hash names, its account, and the version it last called with; nothing for a removed machine, an old secret, or none. */
 export function hostBySecret(secretHash: string): HostEffect<Option.Option<HostCaller>> {
   return findBySecret({ secretHash });
 }
@@ -535,7 +531,7 @@ export function recordHostVersion(id: string, version: string): HostEffect<void>
   return writeVersion({ id, version });
 }
 
-/** The account's enrolled machines, of every kind and platform, and the hosts its approves made whose boxes have yet to collect their secret, by name. */
+/** The account's enrolled machines, of every platform, and the hosts its approves made whose boxes have yet to collect their secret, by name. */
 export function hostsOf(userId: string): HostEffect<readonly HostRow[]> {
   return findHosts({ userId });
 }

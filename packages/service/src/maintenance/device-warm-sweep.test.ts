@@ -48,7 +48,7 @@ const passed = (
     yield* TestClock.adjust(Duration.sum(span, Duration.minutes(1)));
     for (const { userId, deviceId } of agents) yield* beatDevice(userId, deviceId);
     for (const { userId, deviceId } of waiting) {
-      yield* beatDevice(userId, deviceId, undefined, { update: HOST_UPDATE.WAITING });
+      yield* beatDevice(userId, deviceId, { update: HOST_UPDATE.WAITING });
     }
   });
 

@@ -20,8 +20,8 @@
  * and the register answers not found where the account holds no such Mac
  * (`agents/device-agent.ts`); a
  * register under an id another account holds writes nothing and answers
- * not found too, and a register keeps only the capabilities this service
- * knows (`DEVICE_CAPABILITY`), so a newer follower's list is never refused.
+ * not found too, and a register naming a capability this service does not
+ * know (`DEVICE_CAPABILITY`) is refused as invalid.
  * An own enroll, and a host's first register, which is a paired box's first
  * word naming its machine, fold the account's other Macs on that machine
  * into it (`@repo/database/models/host-store`), and the
@@ -72,7 +72,7 @@ import {
   pollHostPairing,
 } from "@repo/database/models/host-pairing-store";
 import { enrollOwnDevice, hostsOf, registerHost } from "@repo/database/models/host-store";
-import { type DeviceAgentRelease, knownDeviceCapabilities } from "@repo/features/device-agent-wire";
+import type { DeviceAgentRelease } from "@repo/features/device-agent-wire";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import {
   HOST_PAIRING_POLL_STATUS,
@@ -288,10 +288,9 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     register: deviceAgents.register.effect(function* ({ context, input }) {
       yield* ownDevice(context, input.deviceId);
       const { userId } = context;
-      const { deviceId, capabilities, ...device } = input;
-      const known = knownDeviceCapabilities(capabilities ?? []);
+      const { deviceId, ...device } = input;
       const registered = yield* hostedStoreOrUnavailable(
-        registerHost(userId, { id: deviceId, ...device, capabilities: known }),
+        registerHost(userId, { id: deviceId, ...device }),
       );
       if (Option.isNone(registered)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       yield* settleLostHostTurns(registered.value);
@@ -299,10 +298,10 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
     }),
     beat: deviceAgents.beat.effect(function* ({ context, input }) {
       yield* followed(context, input.deviceId);
-      const { deviceId, signedIn, update, updateFailure } = input;
+      const { deviceId, update, updateFailure } = input;
       yield* keptOrNotFound(
         yield* hostedStoreOrUnavailable(
-          beatDevice(context.userId, deviceId, signedIn, { update, updateFailure }),
+          beatDevice(context.userId, deviceId, { update, updateFailure }),
         ),
       );
       // Note that the launches are read after the beat is written, so a claim the device finished before it sent the beat is among them.

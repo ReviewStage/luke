@@ -1,16 +1,12 @@
-import {
-  DEVICE_ISOLATION,
-  type DeviceArch,
-  type DeviceCapability,
-  type DeviceIsolation,
-  type DeviceKind,
-  type DevicePlatform,
-  type DeviceSetup,
-  type DeviceSignedIn,
-  type HostUpdate,
+import type {
+  DeviceArch,
+  DeviceCapability,
+  DevicePlatform,
+  DeviceSetup,
+  HostUpdate,
 } from "@repo/features/device-agent-wire";
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -18,9 +14,7 @@ import { user } from "./auth.js";
  * device.ts -- one of an account's devices that can run its local agents, and when it last said it was there.
  *
  * A device is a member's machine running the host program, a Mac or a
- * Linux box alike, and says which platform and architecture it runs on, how it
- * runs its agents (`DEVICE_ISOLATION`), straight on the machine on our own
- * sign-ins for every host,
+ * Linux box alike, and says which platform and architecture it runs on,
  * and which lines beyond the first its follower takes (`DEVICE_CAPABILITY`).
  * The host keeps the id it enrolled under, and registers it under the account it enrolled for;
  * an id another account registered first is never moved onto this one. While the host runs local agents it beats
@@ -54,8 +48,6 @@ export const device = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The device's own name, as its host read it from the system, for the agent's label. */
     name: text("name").notNull(),
-    /** What program the device ran local agents through when it was written (`DEVICE_KIND`), kept for old rows; nothing reads it, since every device runs the host program. */
-    kind: text("kind").$type<DeviceKind>().notNull(),
     /** The device's operating system, as it last registered. */
     platform: text("platform").$type<DevicePlatform>().notNull(),
     /** The device's CPU architecture, as it last registered. */
@@ -70,8 +62,6 @@ export const device = pgTable(
     machineId: text("machine_id"),
     /** The machine's model as a person reads it ("MacBook Air (M2, 2022)"), as its host last reported it; null for a Linux box, and for a device whose host never reported one. */
     model: text("model"),
-    /** How the device runs its agents, as it last registered (`DEVICE_ISOLATION`); a row from before the column runs them bare, as every Mac did. */
-    isolation: text("isolation").$type<DeviceIsolation>().notNull().default(DEVICE_ISOLATION.BARE),
     /** The device's home folder, absolute, as its host read it: where a local agent's folder is (`~/.vespin/agents/<agent>`); null for a host that has not registered yet. */
     home: text("home"),
     /** The folder the device's own layout puts its local agents under, absolute, as it last registered (`deviceAgentsFolder`); null for a device whose host names none, whose agents are laid out under `home`. */
@@ -84,12 +74,11 @@ export const device = pgTable(
      * device that has none checked yet, which runs no Codex agent.
      */
     codexExecutable: text("codex_executable"),
-    /** Which harnesses the device says it is signed in to by itself, as its register and beats last said: none from every host, and nothing reads it. */
-    signedIn: jsonb("signed_in").$type<DeviceSignedIn>().notNull().default({}),
     /**
      * What the device's follower takes beyond the first lines, as it last
      * registered (`DEVICE_CAPABILITY`): a line that needs one is queued only
-     * for a device that has it. Empty for a row from before the column.
+     * for a device that has it. Empty for a row from before the column, and
+     * for a device that names none.
      */
     capabilities: text("capabilities").$type<DeviceCapability>().array().notNull().default([]),
     /**

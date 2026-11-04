@@ -26,8 +26,8 @@
  * its device secret, a Linux box and a Mac alike, read as a device caller
  * (`../../orpc/base.ts`'s `deviceCallerOf`) and held
  * to one rule (`deviceGithubToken`): the agent the member's own and pinned
- * to the caller's own device, and that device running its agents straight on
- * the box. It is
+ * to the caller's own device, and that device registered, as a device must
+ * be before any agent is offered or launched on it. It is
  * answered only an installation token the App mints for the agent's
  * repository, on the terms the cloud's checkout mints its sandbox's
  * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
@@ -51,7 +51,6 @@ import { parseKeyRing } from "@repo/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@repo/features";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
-import { DEVICE_ISOLATION } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { type HostGithubTokenAnswer, hostGithubTokenRequestSchema } from "@repo/features/host-wire";
 import { HTTP_METHOD } from "@repo/wire";
@@ -158,10 +157,10 @@ const repositoryTokenFor = /* @__PURE__ */ Effect.fn("web/repositoryTokenFor")(f
  * A GitHub token for a device's own agent named in the body, the one rule
  * every device caller is held to: an installation token for the agent's
  * repository, where the agent is the member's own and pinned to the caller's own device
- * (`actsForDevice`), that device last registered as running its agents on
- * our sign-ins straight on the box (`DEVICE_ISOLATION.DIRECT`), and the agent
- * works in a repository the installation of its task's workspace reaches;
- * refused otherwise.
+ * (`actsForDevice`), that device has registered the home and CLI its agents
+ * launch under and was not removed (`deviceLayout`), and the agent works in a
+ * repository the installation of its task's workspace reaches; refused
+ * otherwise, a device that enrolled but never registered among them.
  */
 const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(function* (
   caller: DeviceCaller,
@@ -184,11 +183,9 @@ const deviceGithubToken = /* @__PURE__ */ Effect.fn("web/deviceGithubToken")(fun
   if (Option.isNone(agent) || deviceId === undefined || !actsForDevice(caller, deviceId)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  // Note that the device is read under the member, so another member's device reads as none.
+  // Note that the device is read under the member, so another member's device reads as none, as does one that never registered.
   const standing = yield* hostedStoreOrUnavailable(deviceLayout(userId, deviceId));
-  if (!Option.exists(standing, (each) => each.isolation === DEVICE_ISOLATION.DIRECT)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  }
+  if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   return yield* repositoryTokenFor(userId, agent.value, brake);
 });
 
