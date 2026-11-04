@@ -1,4 +1,17 @@
-import { Badge, CheckIcon, GAP, Inline, STATUS_TONE, Text, VISUALLY_HIDDEN_UNDER } from "@repo/ui";
+import {
+  Badge,
+  BUTTON_VARIANT,
+  Button,
+  CheckIcon,
+  GAP,
+  Inline,
+  SETTINGS_ROW_INDENT,
+  SettingsRow,
+  SettingsSection,
+  STATUS_TONE,
+  Text,
+  VISUALLY_HIDDEN_UNDER,
+} from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -7,8 +20,10 @@ import { CatalogSection } from "../section";
  * labels each wearing its color as a dot, a dark one and one with no color
  * it can paint among them, the same labels filled with their color, a
  * badge lit as the reader's own, badges standing on a line of body words,
- * words given up to a glyph or a tone's dot in a narrow room, and a long
- * label in a narrow column.
+ * words given up to a glyph or a tone's dot in a narrow room, a long
+ * label in a narrow column, and a short badge beside a long row name in a
+ * settings column at a page's measure and narrower, where the name gives way
+ * and the badge stays whole.
  */
 
 const SAYS = {
@@ -27,6 +42,21 @@ const LABELS = [
   { name: "needs design", color: "1d1d1f" },
   { name: "imported", color: "not-a-color" },
 ] as const;
+
+/** A repository's row under GitHub's, its long name marked Token, as Settings draws one. */
+function TokenRow(): React.JSX.Element {
+  return (
+    <SettingsSection>
+      <SettingsRow
+        indent={SETTINGS_ROW_INDENT.MARK}
+        label="reviewstage/a-repository-with-a-long-name"
+        adornment={<Badge>Token</Badge>}
+      >
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Remove</Button>}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
 
 function Badges(): React.JSX.Element {
   return (
@@ -104,6 +134,22 @@ function Badges(): React.JSX.Element {
             <Badge tone={STATUS_TONE.ATTENTION}>Waiting for administrator approval</Badge>
             <Badge tone={STATUS_TONE.COMPLETE}>Connected</Badge>
           </Inline>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="badge-row" title="Beside a settings row's name, at a page's measure">
+        <div className="catalog-settings">
+          <TokenRow />
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="badge-row-narrow"
+        title="Beside a settings row's name, in a narrow column"
+      >
+        <div className="catalog-settings catalog-settings-between">
+          <TokenRow />
+        </div>
+        <div className="catalog-settings catalog-settings-narrow">
+          <TokenRow />
         </div>
       </CatalogSection>
     </>

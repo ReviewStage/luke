@@ -127,6 +127,16 @@ export interface SettingsRowControl {
   readonly "aria-invalid": true | undefined;
 }
 
+/**
+ * What the title wears where the label carries an adornment: a badge beside
+ * the name never shrinks, so the name gives way and the badge stays whole.
+ * Note that this is a utility rather than the sheet's `flex: none` for the
+ * title's other children, because the badge's own `flex-initial` is a utility
+ * too, which a rule in the components layer cannot undo. A filled badge is
+ * left out, since it cuts its words short where it is squeezed.
+ */
+const ADORNED_TITLE_CLASS = "[&>.ui-badge:not([data-fill])]:flex-none";
+
 /** Whether a row's words say anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
@@ -256,7 +266,7 @@ export function SettingsRow({
             ) : null}
             <ItemContent>
               {said(adornment) ? (
-                <ItemTitle>
+                <ItemTitle className={ADORNED_TITLE_CLASS}>
                   {name}
                   {adornment}
                 </ItemTitle>
