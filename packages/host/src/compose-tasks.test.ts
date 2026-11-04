@@ -230,6 +230,8 @@ interface FakeService extends TasksClient {
   sectionWrites: TaskSectionWrite[];
   /** The kind of section change the service refuses, where a test names one. */
   sectionRefused: TaskSectionWrite["kind"] | undefined;
+  /** What a section change's answer waits on once the service has it, so a test can ask another meanwhile. */
+  sectionAnswered: Effect.Effect<void>;
   /** The workspaces the account is a member of, as the service lists them. */
   memberships: Workspace[];
   /** Our GitHub App's install address a connection answers. */
@@ -615,6 +617,7 @@ function fakeService(tasks: Task[]): FakeService {
     sections: undefined,
     sectionWrites: [],
     sectionRefused: undefined,
+    sectionAnswered: Effect.void,
     get memberships() {
       return memberships;
     },
@@ -908,7 +911,7 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => {
         service.sectionWrites.push(write);
         return write.kind === service.sectionRefused ? undefined : service.sections;
-      }),
+      }).pipe(Effect.tap(() => service.sectionAnswered)),
     // The service writes the edit's value into the document's decisions and answers the task whole.
     edit: (taskId, edit) =>
       Effect.sync((): TaskCallResult<PlanEditAnswer, typeof TASK_CALL_FAILURE.NOT_FOUND> => {
@@ -1978,6 +1981,55 @@ it.effect(
         changed: false,
       });
       assert.deepEqual(last()?.taskSections, service.sections);
+    }),
+);
+
+it.effect(
+  "two quick drags draw at once, the later over the earlier, and reach the service in the order they were asked, each whole",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last, settled } = yield* subject(service);
+      service.sections = { sections: [], entries: [], agentEntries: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const create = {
+        kind: TASK_SECTION_WRITE.CREATE,
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+      };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const rename = {
+        kind: TASK_SECTION_WRITE.EDIT,
+        id: SECTION_ID,
+        title: "Launch week",
+        icon: null,
+      };
+      const answered = yield* Deferred.make<void>();
+      service.sectionAnswered = Deferred.await(answered);
+
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [create, place] }),
+      );
+      yield* settled;
+      const second = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_WRITE_SECTION, { writes: [rename] }),
+      );
+      yield* settled;
+      const drawn = last()?.taskSections;
+      yield* Deferred.succeed(answered, undefined);
+      yield* Fiber.join(first);
+      yield* Fiber.join(second);
+
+      assert.deepEqual(
+        [
+          drawn?.sections.map((section) => section.title),
+          drawn?.entries.map((each) => each.taskId),
+        ],
+        [["Launch week"], [INVITES]],
+      );
+      assert.deepEqual(service.sectionWrites, [create, place, rename]);
     }),
 );
 
