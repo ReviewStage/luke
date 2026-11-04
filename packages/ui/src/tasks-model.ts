@@ -153,6 +153,11 @@ export function repositoryPageUrl(repository: string): string {
   return `https://github.com/${repository}`;
 }
 
+/** The page of a GitHub account by its login, a person's profile or an organization's. */
+export function githubAccountPageUrl(login: string): string {
+  return `https://github.com/${encodeURIComponent(login)}`;
+}
+
 /**
  * The picture of a GitHub account by its login, an organization's logo or a
  * person's avatar: asked of github.com, which redirects to the picture's

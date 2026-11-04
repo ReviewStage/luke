@@ -2,7 +2,7 @@
  * admin-procedures.ts -- the admin dashboard's reads and its one star write, as one hosted resource.
  *
  * The reads answer the dashboard's screens (metrics, cost, reliability, the
- * roster, one account, one day, and the workspaces); the write is the Users
+ * roster, one account, one day, the workspaces, and one workspace); the write is the Users
  * tab's star, PUT to set it and DELETE to take it back. Each answers for its
  * own query and its own refusals (`admin-*.ts`) and is answered as it was
  * built, the bytes the old group wrote.
@@ -25,6 +25,7 @@ import { type AdminMetricsOptions, handleAdminMetrics } from "./admin-metrics.js
 import { type AdminReliabilityOptions, handleAdminReliability } from "./admin-reliability.js";
 import { type AdminUserOptions, handleAdminUser } from "./admin-user.js";
 import { type AdminUsersOptions, handleAdminUsers } from "./admin-users.js";
+import { type AdminWorkspaceOptions, handleAdminWorkspace } from "./admin-workspace.js";
 import { type AdminWorkspacesOptions, handleAdminWorkspaces } from "./admin-workspaces.js";
 import { type AdminViewerResolver, adminGateMiddleware } from "./gate.js";
 
@@ -39,6 +40,7 @@ export interface AdminProcedureSeams {
   readUser: AdminUserOptions["readUser"];
   readDay: AdminDayOptions["readDay"];
   readWorkspaces: AdminWorkspacesOptions["readWorkspaces"];
+  readWorkspace: AdminWorkspaceOptions["readWorkspace"];
   readReliability: AdminReliabilityOptions["readReliability"];
   writeFavorite: AdminFavoriteOptions["writeFavorite"];
 }
@@ -86,6 +88,9 @@ export function adminProcedures(seams: AdminProcedureSeams) {
         viewer: context.viewer,
         readUsers: seams.readUsers,
       });
+    }),
+    workspace: gated.workspace.effect(function* ({ input }) {
+      return yield* handleAdminWorkspace({ query: input, readWorkspace: seams.readWorkspace });
     }),
     workspaces: gated.workspaces.effect(function* ({ input }) {
       return yield* handleAdminWorkspaces({ query: input, readWorkspaces: seams.readWorkspaces });

@@ -28,6 +28,7 @@ export const ADMIN_ROUTE_PATH = {
   FAVORITE: "/api/admin/favorite",
   DAY: "/api/admin/day",
   WORKSPACES: "/api/admin/workspaces",
+  WORKSPACE: "/api/admin/workspace",
   RELIABILITY: "/api/admin/reliability",
 } as const;
 
@@ -47,6 +48,10 @@ export const ADMIN_ERROR = {
   INVALID_DAY: "invalid-day",
   /** The named account has no user row — deleted, or the id never existed. */
   USER_NOT_FOUND: "user-not-found",
+  /** A workspace read that named no workspace, or named one past the id bound. */
+  MISSING_WORKSPACE_ID: "missing-workspace-id",
+  /** The named workspace has no organization row — deleted, or the id never existed. */
+  WORKSPACE_NOT_FOUND: "workspace-not-found",
   /** A path no admin procedure is served at. */
   NOT_FOUND: "not-found",
   /** A seam (auth or the database) did not answer; the answer is a JSON refusal, never a crash. */
@@ -69,6 +74,8 @@ export const ADMIN_QUERY = {
   DAY: "date",
   /** The account a detail read or the star write names. */
   USER_ID: "id",
+  /** The workspace a workspace read names. */
+  WORKSPACE_ID: "id",
 } as const;
 
 /** The statuses an admin read is answered under, the hosted tier's and the dashboard's own. */
@@ -109,6 +116,11 @@ export interface AdminUsersQuery extends AdminWindowedQuery {
 export interface AdminUserQuery {
   readonly id?: string;
   readonly window?: string;
+}
+
+/** One workspace's read query: the workspace. */
+export interface AdminWorkspaceQuery {
+  readonly id?: string;
 }
 
 /** The day read's query: the day, and the scope. */
@@ -285,6 +297,13 @@ export function adminUserId(value: string | undefined): string | undefined {
   return id;
 }
 
+export const ADMIN_WORKSPACE_ID_PARAM = ADMIN_QUERY.WORKSPACE_ID;
+
+/** The workspace a workspace read named, on the account id's terms: Better Auth mints both. */
+export function adminWorkspaceId(value: string | undefined): string | undefined {
+  return adminUserId(value);
+}
+
 /**
  * The admin reads, by their procedure's name: what a screen asks, what the
  * app's host carries to the service for it, and where each is served.
@@ -296,6 +315,7 @@ export const ADMIN_READ = {
   RELIABILITY: "reliability",
   USER: "user",
   USERS: "users",
+  WORKSPACE: "workspace",
   WORKSPACES: "workspaces",
 } as const;
 
@@ -309,6 +329,7 @@ export const ADMIN_READ_PATH = {
   [ADMIN_READ.RELIABILITY]: ADMIN_ROUTE_PATH.RELIABILITY,
   [ADMIN_READ.USER]: ADMIN_ROUTE_PATH.USER,
   [ADMIN_READ.USERS]: ADMIN_ROUTE_PATH.USERS,
+  [ADMIN_READ.WORKSPACE]: ADMIN_ROUTE_PATH.WORKSPACE,
   [ADMIN_READ.WORKSPACES]: ADMIN_ROUTE_PATH.WORKSPACES,
 } as const satisfies Record<AdminReadProcedure, string>;
 

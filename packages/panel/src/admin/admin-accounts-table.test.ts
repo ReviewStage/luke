@@ -26,6 +26,7 @@ const ADDRESSED: AdminDoors = {
   gate: {} as AdminDoors["gate"],
   address: {
     accountHref: (id) => `/admin?user=${id}`,
+    workspaceHref: (id) => `/admin?workspace=${id}`,
     search: () => "",
     keepSearch: () => undefined,
     onSearchMoved: () => () => undefined,
