@@ -599,7 +599,7 @@ test("a sub-task's row opens the task where it was left, as a sidebar row does, 
   container.remove();
 });
 
-test("opening another task draws only its own sub-tasks, none of the task left behind", () => {
+test("opening another task draws only its own title and sub-tasks, none of the task left behind", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -647,6 +647,11 @@ test("opening another task draws only its own sub-tasks, none of the task left b
   open(TASK);
   open(other);
 
+  const titles = [...container.querySelectorAll("[role='textbox'][aria-label='Task name']")];
+  assert.deepEqual(
+    titles.map((title) => title.textContent),
+    ["Slack bot"],
+  );
   const rows = [...container.querySelectorAll("ul[aria-label='Sub-tasks'] > li[data-task-id]")];
   assert.deepEqual(
     rows.map((row) => row.getAttribute("data-task-id")),

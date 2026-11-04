@@ -34,7 +34,7 @@ import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { diffArrays } from "diff";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
@@ -447,6 +447,14 @@ const CHANGED_CLASS =
 
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
+
+/**
+ * The key the page's head stands under among the column's children. Note
+ * that the head is wrapped in a fragment of its own, because the page keys
+ * the head by the task's id, as the title is keyed, and React leaves the old
+ * task's title drawn once another opens where two siblings share one key.
+ */
+const HEAD_KEY = "head";
 
 /**
  * Each section of a newer document drawn under the id it had in the older
@@ -998,7 +1006,7 @@ export const PlanBody = memo(function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. */
+  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
   head?: React.ReactNode;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
@@ -1329,7 +1337,7 @@ export const PlanBody = memo(function PlanBody({
               onShowHistory={onShowHistory}
             />
             <ChangedLine looks={looks} marks={marks} />
-            {head}
+            <Fragment key={HEAD_KEY}>{head}</Fragment>
             {editing.editor === undefined ? (
               editable && views.length === 0 ? (
                 <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
