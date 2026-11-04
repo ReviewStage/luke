@@ -102,6 +102,8 @@ Threads open in the Inbox, which can be narrowed to one task.
 ([#6584](https://github.com/ReviewStage/vespin/pull/6584),
 [#6612](https://github.com/ReviewStage/vespin/pull/6612))
 
+![Vespin's whole window on the Teammate invitations task: its Overview and two agents' tabs on the top row, the Add teammate invitations agent's conversation in the middle, and Usage this month, a page from the Usage-based billing task, open on the right under a line naming that task with Open task.](apps/web/public/changelog/0.26.0/places-and-things.png)
+
 ### Pages in the conversation
 
 A page an agent shows draws in the transcript, and under its link in an
@@ -114,6 +116,8 @@ page may now hold up to 1 MB.
 [#6677](https://github.com/ReviewStage/vespin/pull/6677),
 [#6679](https://github.com/ReviewStage/vespin/pull/6679))
 
+![An agent's transcript where Showed a page draws the Invite funnel, beta week dashboard inline at its whole height in Vespin's dark theme: four stat tiles, a stacked bar chart of invites by day, and a table of where the rest stand, then the agent's answer.](apps/web/public/changelog/0.26.0/pages-in-the-conversation.png)
+
 ### Snooze
 
 Press H on an Inbox thread, or choose Snooze from its menu, to put it away
@@ -122,6 +126,8 @@ back to the top of the Inbox, unread, when its time comes, or sooner when
 someone writes on it. View options gain Snoozed, and the sidebar's Inbox
 count leaves snoozed threads out.
 ([#6686](https://github.com/ReviewStage/vespin/pull/6686))
+
+![The Inbox with the Teammate invitations question chosen and its Snooze menu open over the list: In 1 hour, Tomorrow, and Next week, each with its time, then Pick a date and time….](apps/web/public/changelog/0.26.0/snooze.png)
 
 ### Every agent works on a task
 
