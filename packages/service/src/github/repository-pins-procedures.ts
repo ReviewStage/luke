@@ -20,7 +20,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 
 export interface RepositoryPinsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -33,7 +33,7 @@ export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
     list: pins.list.effect(function* ({ context }) {
       return { pins: yield* hostedStoreOrUnavailable(listRepositoryPins(context.userId)) };
     }),
-    set: pins.set.effect(function* ({ input, context }) {
+    set: pins.set.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const set = yield* hostedStoreOrUnavailable(
         setRepositoryPin(context.userId, input.repository, input.pinned),
       );

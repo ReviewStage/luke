@@ -92,7 +92,7 @@ import {
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, writeReceiptMiddleware } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import {
@@ -541,7 +541,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * as invalid otherwise, and a runner of it that runs is handed the change
      * as a `model` line at once (`runnerChoiceApplied`).
      */
-    change: signedIn.change.effect(function* ({ input, context }) {
+    change: signedIn.change.use(writeReceiptMiddleware).effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
       const { body } = input;
       if ("title" in body) {
