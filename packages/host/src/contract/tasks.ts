@@ -15,10 +15,8 @@ import {
   adminReadAnswerSchema,
   adminReadParamsSchema,
 } from "@repo/features/admin-wire";
-import { agentBrowserTabsAnswerSchema } from "@repo/features/agent-browser-tab-wire";
 import {
   codeLinesSchema,
-  type TasksBrowserTabsAnswer,
   type TasksRevisionsAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -27,7 +25,6 @@ import {
   tasksBlockParamsSchema,
   tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabOpenParamsSchema,
-  tasksBrowserTabsParamsSchema,
   tasksChangeRelationAnswerSchema,
   tasksChangeRelationParamsSchema,
   tasksCommentActParamsSchema,
@@ -212,9 +209,6 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_ISSUE]: actProcedure("Could not read that issue on this system.")
     .input(exactInput(tasksIssueParamsSchema))
     .output(EffectSchema.flip(tasksIssueSchema)),
-  [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actProcedure("Could not read the task's Browser tabs.")
-    .input(exactInput(tasksBrowserTabsParamsSchema))
-    .output(EffectSchema.flip(agentBrowserTabsAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actProcedure(
     "Could not open a tab in that agent's browser on this system.",
   )
@@ -224,7 +218,7 @@ export const tasksActsContract = {
     "Could not follow the task's Browser tabs on this system.",
   )
     .input(exactInput(taskBrowserTabsFollowSchema))
-    .output(eventIterator(type<TasksBrowserTabsAnswer>())),
+    .output(eventIterator(type<never>())),
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: actProcedure("Could not color that code on this system.")
     .input(exactInput(colorCodeParamsSchema))
     .output(EffectSchema.flip(codeLinesSchema)),

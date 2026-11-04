@@ -10,10 +10,15 @@ import {
   type AgentDeleteAnswerView,
   type AgentGitHubImageView,
   type AgentInboxAnsweredView,
+  type AgentInboxAnswerParams,
   type AgentInboxAttachmentView,
+  type AgentInboxCloseParams,
   type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
+  type AgentInboxMessageParams,
+  type AgentInboxReadAllParams,
   type AgentInboxReadAllView,
+  type AgentInboxReadStateParams,
   type AgentInboxReadStateView,
   type AgentListAnswer,
   type AgentMessagesAnswerView,
@@ -164,10 +169,13 @@ import type { HostMethodTable } from "./gateway-door.js";
 import { type AccountHeld, accountHeld, type HeldFetch, heldFetch } from "./held-fetch.js";
 import type { HostKernel } from "./host-kernel.js";
 import {
+  type AccountWideReads,
+  accountWideReads,
   INBOX_CHANGE,
-  type InboxReads,
+  INBOX_ITEM,
+  type InboxChange,
   type InboxWritten,
-  inboxReads,
+  inboxSent,
 } from "./inbox-collections.js";
 import {
   AgentPictureKey,
@@ -416,7 +424,7 @@ export function composeAgents(
       accountId: dependencies.accountId,
     });
     const followed = yield* FiberMap.make<TranscriptKey>();
-    const reads = yield* inboxReads();
+    const accountWide = accountWideReads();
     const held = yield* transcriptHeld<TranscriptKey>();
     const inboxes = yield* scopeInboxes({
       seal: (scope, poll, userId, after) =>
@@ -426,11 +434,12 @@ export function composeAgents(
             : client.agentInboxLive(scope.id, userId, poll, after),
         ),
       accountId: dependencies.accountId,
-      reads,
+      pool: dependencies.pool,
     });
     const accounts = yield* accountInboxes({
       seal: (userId, poll, after) => asked(client.accountInboxLive(userId, poll, after)),
-      reads,
+      pool: dependencies.pool,
+      accountWide,
     });
     const gate = gateOf(dependencies);
     const tellItems = (read: AppHostRead<AppInboxItems>) =>
@@ -466,7 +475,8 @@ export function composeAgents(
         {
           seal: (account, since, poll, after) =>
             asked(client.accountInboxItemsLive(account, since, poll, after)),
-          reads,
+          pool: dependencies.pool,
+          accountWide,
         },
         userId,
         tellItems,
@@ -480,7 +490,7 @@ export function composeAgents(
       dependencies,
       http,
       { transcripts, followed, held },
-      { inboxes, holders, holds: inboxHolds, reads },
+      { inboxes, holders, holds: inboxHolds, accountWide },
       { accounts, followed: accountFollow },
       { reads: sessionReads, followItems },
       { chapters, holds: chapterHolds },
@@ -502,8 +512,8 @@ interface ScopeFollows {
   readonly inboxes: ScopeInboxes;
   readonly holders: HeldSlice<InboxScopeKey>;
   readonly holds: FiberMap.FiberMap<InboxScopeKey>;
-  /** The followed inboxes' waits, the account's among them, which a mark, an answer, or a close waits on. */
-  readonly reads: InboxReads;
+  /** The account's own reads, which a thread started, drawing nothing, waits on. */
+  readonly accountWide: AccountWideReads;
 }
 
 /** The account's subscriptions, and the one follow main asked for. */
@@ -643,7 +653,7 @@ function composed(
   dependencies: AgentsDependencies,
   http: HttpClient.HttpClient,
   { transcripts, followed, held }: Transcripts,
-  { inboxes, holders, holds: inboxHolds, reads }: ScopeFollows,
+  { inboxes, holders, holds: inboxHolds, accountWide }: ScopeFollows,
   /** What waits across the account, and main's one follow of it. */
   { accounts, followed: accountFollow }: AccountFollow,
   /** The session's account reads, every item the account reaches among them. */
@@ -782,6 +792,76 @@ function composed(
     "failure" in answer
       ? { txid: undefined, item: undefined, kept: false }
       : { txid: answer.txid, item: answer.item, kept: answer.taken !== false };
+
+  /**
+   * A member's write on inbox items, as the inbox's writes declare it: its
+   * change drawn at once over every read holding its items
+   * (`inbox-collections.ts`), sent as `send` asks, and kept, refused, or
+   * landed on the service's item as its answer says.
+   */
+  const inboxWrite = <Input, Answer extends Parameters<typeof writtenOf>[0]>(
+    keys: (input: Input) => readonly string[],
+    change: (input: Input) => InboxChange,
+    send: (input: Input) => Effect.Effect<Answer>,
+  ): WriteDeclaration<InboxItem, InboxChange, Input, WireValue> => ({
+    kind: INBOX_ITEM,
+    keys,
+    change,
+    send: (input) =>
+      Effect.map(send(input), (answer) => inboxSent(carried<Answer>(answer), writtenOf(answer))),
+  });
+  // Note that who and when are read once a write is asked, since its change is drawn again over each answer a read takes while it stands.
+  /** A nod to an item, settling it. */
+  const nodded = inboxWrite<AgentInboxAnswerParams, AgentInboxAnsweredView>(
+    ({ itemId }) => [itemId],
+    ({ itemId }) => {
+      const [by, at] = [reader(), kernel.now()];
+      return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) };
+    },
+    ({ itemId, ...request }) => asked(client.answerInbox(itemId, request)),
+  );
+  /** An open item closed without an answer, settling it. */
+  const closed = inboxWrite<AgentInboxCloseParams, AgentInboxAnsweredView>(
+    ({ itemId }) => [itemId],
+    ({ itemId }) => {
+      const [by, at] = [reader(), kernel.now()];
+      return { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) };
+    },
+    ({ itemId, ...request }) => asked(client.closeInbox(itemId, request)),
+  );
+  /**
+   * A message on an item's thread. Note that a reply carrying an answer
+   * settles the ask, where a plain one only leaves the item read, its words
+   * drawn by the window's own box while they go.
+   */
+  const messaged = inboxWrite<AgentInboxMessageParams, AgentInboxMessagedView>(
+    ({ itemId }) => [itemId],
+    ({ itemId, answers, clientKey: key, text }) => {
+      if (answers === undefined) {
+        return { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false };
+      }
+      const [by, at] = [reader(), kernel.now()];
+      return {
+        kind: INBOX_CHANGE.SETTLED,
+        itemId,
+        item: (item) => answeredNow(item, { key, text, answers }, by, at),
+      };
+    },
+    ({ itemId, ...request }) => asked(client.messageInbox(itemId, request)),
+  );
+  /** An item marked read or unread. */
+  const marked = inboxWrite<AgentInboxReadStateParams, AgentInboxReadStateView>(
+    ({ itemId }) => [itemId],
+    ({ itemId, unread }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread }),
+    ({ itemId, unread }) =>
+      asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
+  );
+  /** Every item the inbox lists marked read. */
+  const markedAll = inboxWrite<AgentInboxReadAllParams, AgentInboxReadAllView>(
+    ({ itemIds }) => itemIds,
+    ({ itemIds }) => ({ kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false }),
+    ({ itemIds: _listed, ...request }) => asked(client.markInboxRead(request)),
+  );
 
   /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
   const agentTranscriptOf = (
@@ -1448,60 +1528,36 @@ function composed(
         const answer = yield* asked(client.agentPart(agentId, messageId, index, callId));
         return carried<AgentPartView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_ANSWER]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, ...request } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_INBOX_ANSWER]: declaredMethod(
+      dependencies.pool,
+      nodded,
+      (params: WireRecord) =>
+        readParams(
           agentInboxAnswerParamsSchema,
           params,
           "acknowledging an inbox notice names the item, the revision it acknowledges, the acknowledgment, and the nod's key",
-        );
-        // Note that who and when are read once, since the change is drawn again over each answer a read takes while it stands.
-        const [by, at] = [reader(), kernel.now()];
-        const answer = yield* reads.write(
-          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => acknowledgedNow(item, by, at) },
-          asked(client.answerInbox(itemId, request)),
-          writtenOf,
-        );
-        return carried<AgentInboxAnsweredView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_INBOX_CLOSE]: declaredMethod(
+      dependencies.pool,
+      closed,
+      (params: WireRecord) =>
+        readParams(
           agentInboxCloseParamsSchema,
           params,
           "closing an inbox item names the item, the revision it closes, and the close's key",
-        );
-        const [by, at] = [reader(), kernel.now()];
-        const answer = yield* reads.write(
-          { kind: INBOX_CHANGE.SETTLED, itemId, item: (item) => closedNow(item, by, at) },
-          asked(client.closeInbox(itemId, request)),
-          writtenOf,
-        );
-        return carried<AgentInboxAnsweredView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, ...request } = yield* readParams(
+        ),
+    ),
+    [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
+      dependencies.pool,
+      messaged,
+      (params: WireRecord) =>
+        readParams(
           agentInboxMessageParamsSchema,
           params,
           "a message on an inbox item names the item, the words or files, and the message's key",
-        );
-        // Note that a reply carrying an answer settles the ask, where a plain one only leaves the item read, its words drawn by the window's own box while they go.
-        const { answers, clientKey: key, text } = request;
-        const [by, at] = [reader(), kernel.now()];
-        const answer = yield* reads.write(
-          answers === undefined
-            ? { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread: false }
-            : {
-                kind: INBOX_CHANGE.SETTLED,
-                itemId,
-                item: (item) => answeredNow(item, { key, text, answers }, by, at),
-              },
-          asked(client.messageInbox(itemId, request)),
-          writtenOf,
-        );
-        return carried<AgentInboxMessagedView>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.AGENTS_INBOX_START]: (params) =>
       Effect.gen(function* () {
         const request = yield* readParams(
@@ -1510,24 +1566,19 @@ function composed(
           "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
         );
         const answer = yield* asked(client.startInboxThread(request));
-        yield* reads.confirmAccountWide("failure" in answer ? undefined : answer.txid);
+        yield* accountWide.confirm("failure" in answer ? undefined : answer.txid);
         return carried<AgentInboxMessagedView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_STATE]: (params) =>
-      Effect.gen(function* () {
-        const { itemId, unread } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_INBOX_READ_STATE]: declaredMethod(
+      dependencies.pool,
+      marked,
+      (params: WireRecord) =>
+        readParams(
           agentInboxReadStateParamsSchema,
           params,
           "marking an inbox item names the item and whether it reads as unread",
-        );
-        const answer = yield* reads.write(
-          { kind: INBOX_CHANGE.MARKED, itemIds: new Set([itemId]), unread },
-          asked(unread ? client.markInboxItemUnread(itemId) : client.markInboxItemRead(itemId)),
-          writtenOf,
-          true,
-        );
-        return carried<AgentInboxReadStateView>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.AGENTS_INBOX_ITEM_HOME]: (params) =>
       Effect.gen(function* () {
         const { itemId } = yield* readParams(
@@ -1537,21 +1588,16 @@ function composed(
         );
         return carried<AgentInboxItemHomeView>(yield* asked(client.inboxItemHome(itemId)));
       }),
-    [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: (params) =>
-      Effect.gen(function* () {
-        const { itemIds, ...request } = yield* readParams(
+    [GATEWAY_METHOD.AGENTS_INBOX_READ_ALL]: declaredMethod(
+      dependencies.pool,
+      markedAll,
+      (params: WireRecord) =>
+        readParams(
           agentInboxReadAllParamsSchema,
           params,
           "marking the inbox read names the workspace it lists, where it lists one, and the items it lists there",
-        );
-        const answer = yield* reads.write(
-          { kind: INBOX_CHANGE.MARKED, itemIds: new Set(itemIds), unread: false },
-          asked(client.markInboxRead(request)),
-          writtenOf,
-          true,
-        );
-        return carried<AgentInboxReadAllView>(answer);
-      }),
+        ),
+    ),
     [GATEWAY_METHOD.AGENTS_ACCOUNT_INBOX_FOLLOW]: () =>
       Effect.gen(function* () {
         const tell = (answer: AgentAccountInboxAnswerView) =>

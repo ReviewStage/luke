@@ -9,10 +9,11 @@ import {
   inboxInOrder,
   inboxOfLiveRows,
 } from "@repo/features/live-wire";
+import type { EntityPool, HeldRows } from "@repo/sync";
 import { Effect, Ref } from "effect";
 import type { AppHostRead, AppInboxItems } from "./app-state.js";
-import { type InboxReads, itemsRead } from "./inbox-collections.js";
-import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
+import { type AccountWideReads, INBOX_ITEM, type InboxChange } from "./inbox-collections.js";
+import { confirmWrite, followTakingRows, restarting, type TxWait } from "./live-follow.js";
 
 /**
  * account-items-follow.ts -- every inbox item the account reaches, whole, followed over the service's one held poll for the signed-in session and told whole as it moves.
@@ -32,9 +33,9 @@ import { followTakingRows, restarting, type TxWait } from "./live-follow.js";
  * item's change, so it is resent. An item no stamp names any more is gone,
  * and dropped.
  *
- * The items stand in a read among those an inbox write reaches
- * (`inbox-collections.ts`), each answer taken as its poll answers, and are
- * told by plan and agent after each answer and each write drawn over them.
+ * The items stand in the sync engine's pool (`inbox-collections.ts`'s
+ * `INBOX_ITEM`), each answer taken as its poll answers, and are told by
+ * plan and agent after each answer and each write drawn over them.
  * Only a holder an item on it moved is ordered again, every other's list
  * told as the very one told before, so a change costs the holders it
  * moved rather than the feed's whole. A read the service refused, or a follow that stopped, is read
@@ -80,8 +81,10 @@ export interface AccountItemsDependencies {
     poll: boolean,
     after?: string,
   ) => Effect.Effect<AccountInboxItemsLiveAnswer | SealFailure>;
-  /** The reads an inbox write reaches, among which the account's stands while it is followed. */
-  readonly reads: InboxReads;
+  /** The sync engine's pool, which the items stand in while they are followed. */
+  readonly pool: EntityPool;
+  /** The account's own reads, among which the feed's wait stands while it is followed. */
+  readonly accountWide: AccountWideReads;
 }
 
 /** The plan an item's stamp names, or its agent where it has no task. */
@@ -222,7 +225,6 @@ export function followAccountItems(
         return true;
       }
       const asking = yield* Ref.make<Asking>({ since: undefined, again: false });
-      const read = yield* itemsRead(dependencies.reads);
       let wait: TxWait | undefined;
       /** Every item as the read last answered it, with the stamp it was sent with and its holder. */
       let held: Held | undefined;
@@ -240,31 +242,26 @@ export function followAccountItems(
       const drawn = (ids: readonly string[]) =>
         Effect.suspend(() => {
           if (held !== undefined) {
-            told = inboxItemsPatched(told, ids, held, held, read.drawnOf);
+            told = inboxItemsPatched(told, ids, held, held, items.row);
           }
           return toldNow;
         });
-      yield* dependencies.reads.stand({
-        shown: read.shown,
-        take: read.take,
-        txWait: () => wait,
-        drawn,
-        accountWide: true,
+      const items: HeldRows<InboxItem, InboxChange> = yield* dependencies.pool.stand(INBOX_ITEM, {
+        redraw: drawn,
+        confirmation: () => {
+          const handed = wait;
+          return handed === undefined ? undefined : (txid) => confirmWrite(handed, txid);
+        },
       });
+      yield* dependencies.accountWide.stand(() => wait);
       // Note that a poll already held when a stamp moved alone asks again only once it answers, by the hold's end at the latest.
       const landed = (decoded: AccountInboxItemsLiveRows) =>
         Effect.gen(function* () {
           const was = held ?? new Map<string, HeldItem>();
           const after = heldAfter(was, decoded);
           held = after.held;
-          const moved = read.items.answer([...after.held.values()].map((kept) => kept.item));
-          told = inboxItemsPatched(
-            told,
-            [...moved, ...after.placed],
-            was,
-            after.held,
-            read.drawnOf,
-          );
+          const moved = yield* items.answer([...after.held.values()].map((kept) => kept.item));
+          told = inboxItemsPatched(told, [...moved, ...after.placed], was, after.held, items.row);
           const unsent = after.unsent.length === 0 ? undefined : JSON.stringify(after.unsent);
           const again = unsent !== undefined && unsent !== askedFor;
           askedFor = unsent;

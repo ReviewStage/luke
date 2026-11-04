@@ -1,3 +1,8 @@
+import {
+  type BrowserTabsPlace,
+  browserTabsPlaceId,
+  browserTabsPlaceKind,
+} from "@repo/features/agent-browser-tab-wire";
 import type { AgentInboxScope } from "@repo/features/agent-view";
 import { AUTOMATION_FOLLOW, type AutomationFollow } from "@repo/features/automation-view";
 import type { IntegrationProviderParams } from "@repo/features/integration-view";
@@ -30,8 +35,9 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  * A read is loading until it first answers, failed where it said it could
  * not answer before it ever had, and ready from its first rows on: one that
  * holds rows never says loading again. A keyed read, a plan's or an agent's
- * own inbox, a task's or an agent's pages, a workspace's automations or
- * runs, or an automation's runs, is held by the surface that reads it: the host follows it while any surface holds it and a while
+ * own inbox, a task's or an agent's pages or cloud Browser tabs, a
+ * workspace's automations or runs, or an automation's runs, is held by the
+ * surface that reads it: the host follows it while any surface holds it and a while
  * after, so a holder chosen again, or a surface drawn again, draws from
  * where its read stands. Each read is one entry of `HOST_READS`, which the
  * one hook path reads, so a read added is an entry rather than a hook.
@@ -182,22 +188,24 @@ function automationsRead(kind: AutomationFollow["kind"]) {
  * inbox; one task's pages, or one agent's on no task, which the open task's
  * page, the panel beside an Inbox item, an agent's page, and a page's card
  * or frame each hold; one agent's pull request's chapters, by the number its
- * Pull request tab's own read of it found; the account's devices' beats, by
- * the account, which every surface drawing a device's standing holds; one
- * agent's own tools, which its servers popover holds; one integration
- * server's tools, by the account it stands for, which a list of the
- * servers holds; the account's provider keys, by the account, which the
- * window holds while signed in and Settings › Agents draws; one
- * workspace's automations, one workspace's runs, or one automation's runs,
- * by its id; one plan's comments, or one page's, which the open task's
- * plan and a page's tab each hold; and the run that started one agent,
- * which its page holds. Pages offer no Try again, because the
- * host reads pages that did not answer again on its own, and pages it was
- * refused, a plan's or an agent's the reader cannot reach, stand failed
- * until every surface lets them go and one holds them anew (`@repo/host`'s
- * `live-push.ts`). The beats, which the host asks for again every
- * `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer theirs
- * to the window coming back online (`device-presence.ts`), never to a press.
+ * Pull request tab's own read of it found; one task's cloud Browser tabs,
+ * every one of its agents', or one agent's, which a side panel listing them
+ * holds; the account's devices' beats, by the account, which every surface
+ * drawing a device's standing holds; one agent's own tools, which its
+ * servers popover holds; one integration server's tools, by the account it
+ * stands for, which a list of the servers holds; the account's provider
+ * keys, by the account, which the window holds while signed in and
+ * Settings › Agents draws; one workspace's automations, one workspace's
+ * runs, or one automation's runs, by its id; one plan's comments, or one
+ * page's, which the open task's plan and a page's tab each hold; and the run
+ * that started one agent, which its page holds. Pages and
+ * Browser tabs offer no Try again, because the host reads those that did
+ * not answer again on its own, and those it was refused, a plan's or an
+ * agent's the reader cannot reach, stand failed until every surface lets
+ * them go and one holds them anew (`@repo/host`'s `live-push.ts`). The
+ * beats, which the host asks for again every `MAC_PRESENCE.POLL_MS` while
+ * they are held (`held-fetch.ts`), offer theirs to the window coming back
+ * online (`device-presence.ts`), never to a press.
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -247,6 +255,16 @@ const HOST_READS = {
     path: (key: PullRequestChaptersReadParams) => [key.agentId, String(key.number)],
     hold: ({ agentId, number }) => askAct(ACT_KIND.CHAPTERS_FOLLOW, { agentId, number }),
     retry: ({ agentId, number }) => tellAct(ACT_KIND.CHAPTERS_RETRY, { agentId, number }),
+  }),
+  [LIVE_READ.BROWSER_TABS]: hostRead(LIVE_READ.BROWSER_TABS, {
+    slice: APP_SLICE.BROWSER_TABS,
+    path: (place: BrowserTabsPlace) => [browserTabsPlaceKind(place), browserTabsPlaceId(place)],
+    hold: (place) =>
+      askAct(
+        ACT_KIND.TASKS_BROWSER_TABS_FOLLOW,
+        "taskId" in place ? { taskId: place.taskId } : { agentId: place.agentId },
+      ),
+    retry: undefined,
   }),
   [LIVE_READ.DEVICE_PRESENCE]: hostRead(LIVE_READ.DEVICE_PRESENCE, {
     slice: APP_SLICE.DEVICE_PRESENCE,

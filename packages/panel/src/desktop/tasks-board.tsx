@@ -54,6 +54,7 @@ import {
   PAGE_WIDTH,
   PROGRESS_COUNT_LOOK,
   ProgressCount,
+  reachedKey,
   SCROLL_FADE,
   SCROLL_GUTTER,
   SCROLL_OVERSCROLL,
@@ -101,12 +102,22 @@ import {
   tasksBoardColumns,
 } from "@repo/ui/tasks-page-model";
 import { useInlineRename } from "@repo/ui/use-inline-rename";
+import {
+  useVirtualRuns,
+  VIRTUAL_ROW_KEY_ATTRIBUTE,
+  VIRTUAL_ROWS_ANCHOR,
+  type VirtualRowPlace,
+  VirtualRows,
+  type VirtualRowsHandle,
+  type VirtualRuns,
+} from "@repo/ui/virtual-rows";
 import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
-import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { unreadShown } from "../failure-report.js";
+import { useFindOpen } from "../find-in-tab.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -206,6 +217,14 @@ import { useTaskDrag } from "./use-row-drag.js";
  * as the List's does (`tasks-selection.tsx`), and a card chosen among
  * several offers those acts from its ⋯ and a right-click.
  *
+ * Each column draws only the cards near the view (`VirtualRows`), as the
+ * List draws its rows, those it leaves undrawn standing as the room they
+ * would take, so a column is as tall as its cards and a long workspace's
+ * Board draws as quickly as a short one; every card while a find bar stands
+ * open over it, and the card holding the keyboard wherever its column is
+ * scrolled. The keys, the choosing, and a drag still reach the cards left
+ * undrawn, each brought in where it is reached.
+ *
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a
  * time across the whole page, chosen by a tab for each column above it
@@ -239,6 +258,12 @@ function repositoryName(repository: string): string {
 
 /** What a press must land on to carry a card: the press that opens it, which reaches every edge of the card but its foot's controls. */
 const CARD_HANDLE = CARD_PRESS_SELECTOR;
+
+/** How tall a card is taken to be before it is drawn, in pixels: no taller than the shortest a card draws, its head and a line of its name, so a column whose cards fit shows no scroll bar for its first frame. */
+const CARD_ESTIMATE_PX = 64;
+
+/** The room between two cards, in pixels: the item gap (`--ui-item-gap`). */
+const CARD_GAP_PX = 6;
 
 /** The column a narrow board shows first, where it stands: where a task starts. */
 const FIRST_SHOWN: string = TASK_STATUS.TODO;
@@ -360,6 +385,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
   chosen,
   onSelect,
   onStanding,
+  place,
 }: {
   tasks: TaskRowTab;
   task: TaskSummary;
@@ -378,6 +404,8 @@ const TaskBoardCard = memo(function TaskBoardCard({
   /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
+  /** Where it stands in its column's run of cards (`VirtualRows`). */
+  place: VirtualRowPlace;
 }): React.JSX.Element {
   const maker = useTaskMaker(task);
   const unread = useMarkedUnread(task.id);
@@ -421,6 +449,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
       hover={CARD_HOVER.LIFT}
       lit={menu.open}
       className={BOARD_CARD}
+      {...place}
       data-task-id={task.id}
       {...motionKey(task.id)}
       {...menu.props}
@@ -627,11 +656,17 @@ function columnValue(head: TasksGroupHead): string {
   return head.kind;
 }
 
+/** The press of a card, which opens it and takes the keyboard. */
+function pressOf(card: Element | undefined): HTMLElement | undefined {
+  return card?.querySelector<HTMLElement>(CARD_HANDLE) ?? undefined;
+}
+
 /**
- * A column: its head, and its cards or the line saying it holds none. It
- * is a drop zone of the board, and its cards are dragged out of it onto
- * another; dropped there, a card's task is sent that column's status or
- * priority, or assigned to its person. Under an assignee's column a card
+ * A column: its head, and its cards, drawing only those near the view
+ * (`VirtualRows`), its quick add's lines standing over them, or the line
+ * saying it holds none. It is a drop zone of the board, and its cards are
+ * dragged out of it onto another; dropped there, a card's task is sent that
+ * column's status or priority, or assigned to its person. Under an assignee's column a card
  * leaves its assignee's chip off, as the column's head says who, but on a
  * phone, where a card is moved by its chips alone.
  */
@@ -649,6 +684,8 @@ function TaskBoardColumnView({
   waitingOn,
   subTasksOf,
   chosenOf,
+  finding,
+  holdRun,
   onSelect,
   onStanding,
   onShowOlder,
@@ -673,6 +710,10 @@ function TaskBoardColumnView({
   subTasksOf: ReadonlyMap<string, ChildTaskCount>;
   /** The selection a card of the task stands in, where it is one of several chosen (`useTasksSelection`). */
   chosenOf: (taskId: string) => ChosenTasks | undefined;
+  /** Whether a find bar stands open over the page, which draws every card so the find covers them. */
+  finding: boolean;
+  /** Holds the column's run of cards while it stands, so a card out of view can be brought in (`useVirtualRuns`). */
+  holdRun: VirtualRuns["hold"];
   /** Opens a task by its id. */
   onSelect: (taskId: string) => void;
   onStanding: (task: TaskSummary, standing: TaskStanding) => void;
@@ -705,12 +746,34 @@ function TaskBoardColumnView({
       ? unassigned
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
+  const keys = useMemo(() => cards.map(({ key }) => key), [cards]);
+  const run = useRef<VirtualRowsHandle>(null);
+  useLayoutEffect(() => holdRun(run), [holdRun]);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const body = useRef<HTMLElement | null>(null);
   const into = quickAddInto(column.head);
   const quick = useQuickAdd(tasks, into ?? {});
   // Note that the quick add's lines stand where the cards do, so a column with none draws them in their list rather than its empty line.
   const adding = quick.shown;
-  // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`).
-  const roving = useRovingKeys<HTMLDivElement>();
+  // A column's cards are one Tab stop that ↑↓ walk; ←→ cross to the next column's (`useRovingColumns`). A key reaching past
+  // the cards drawn goes on to the column's own first or last card, or the one after or before, brought in where it is not drawn.
+  const roving = useRovingKeys<HTMLDivElement>({
+    reach: (from, to) => {
+      const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
+      const id = reachedKey(
+        column.tasks.map(taskIdOf),
+        inHand?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? undefined,
+        to,
+      );
+      if (id === undefined) return false;
+      const press = pressOf(run.current?.rowElement(id));
+      if (press !== undefined) {
+        press.focus();
+        return true;
+      }
+      return run.current?.bringIn(id, (card) => pressOf(card)?.focus()) === true;
+    },
+  });
   return (
     <Card
       as={CARD_ELEMENT.SECTION}
@@ -755,36 +818,58 @@ function TaskBoardColumnView({
           {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           {/* Note that the gutter is kept, because the column is as tall as its cards measured without a scroll bar, so a bar that takes room and rewraps a card's pills taller would leave a column that fits scrolling and faded. */}
           <ScrollArea
+            ref={scroller}
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
             gutter={SCROLL_GUTTER.STABLE}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
-            <Stack
-              as={LAYOUT_ELEMENT.UL}
-              gap={GAP.ITEM}
-              inset={INSET.RING}
-              className="tasks-board-cards data-[dragging=true]:cursor-grabbing"
-              moves
-              onPointerDown={narrow ? undefined : drag}
-            >
-              <QuickAddLines quick={quick} line={boardQuickAddLine} />
-              {cards.map(({ value: task }) => (
-                <TaskBoardCard
-                  key={task.id}
-                  tasks={rowTab}
-                  task={task}
-                  opened={opened?.task.id === task.id ? opened : undefined}
-                  workspaceName={workspaceName}
-                  properties={drawn(task)}
-                  waiting={waitingOn.get(task.id) ?? 0}
-                  subTasksFinished={subTasksOf.get(task.id)?.finished ?? 0}
-                  subTasksTotal={subTasksOf.get(task.id)?.total ?? 0}
-                  chosen={chosenOf(task.id)}
-                  onSelect={onSelect}
-                  onStanding={onStanding}
-                />
-              ))}
+            {/* Note that the ring's room stands around the lists rather than on the run, whose own padding is the room of the cards it leaves undrawn. */}
+            <Stack ref={body} gap={GAP.ITEM} inset={INSET.RING} className="tasks-board-column-body">
+              {/* Note that the quick add's lines stand in a list of their own, over the run, because a run draws only its rows. */}
+              {adding ? (
+                <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} moves className="tasks-board-adds">
+                  <QuickAddLines quick={quick} line={boardQuickAddLine} />
+                </Stack>
+              ) : null}
+              {cards.length === 0 ? null : (
+                <VirtualRows
+                  scroller={scroller}
+                  shiftedBy={body}
+                  keys={keys}
+                  estimate={CARD_ESTIMATE_PX}
+                  gap={CARD_GAP_PX}
+                  overscan={finding ? keys.length : undefined}
+                  anchor={VIRTUAL_ROWS_ANCHOR.START}
+                  listItems
+                  moves
+                  holdsFocus
+                  className="tasks-board-cards data-[dragging=true]:cursor-grabbing"
+                  onPointerDown={narrow ? undefined : drag}
+                  handle={run}
+                >
+                  {(index, place) => {
+                    const task = cards[index]?.value;
+                    return task === undefined ? null : (
+                      <TaskBoardCard
+                        key={task.id}
+                        place={place}
+                        tasks={rowTab}
+                        task={task}
+                        opened={opened?.task.id === task.id ? opened : undefined}
+                        workspaceName={workspaceName}
+                        properties={drawn(task)}
+                        waiting={waitingOn.get(task.id) ?? 0}
+                        subTasksFinished={subTasksOf.get(task.id)?.finished ?? 0}
+                        subTasksTotal={subTasksOf.get(task.id)?.total ?? 0}
+                        chosen={chosenOf(task.id)}
+                        onSelect={onSelect}
+                        onStanding={onStanding}
+                      />
+                    );
+                  }}
+                </VirtualRows>
+              )}
             </Stack>
           </ScrollArea>
         </div>
@@ -864,11 +949,13 @@ export function TasksBoard({
   const drawnColumns = narrow
     ? columns.filter((column) => columnValue(column.head) === shown)
     : columns;
-  // Note that only cards drawn stay chosen, so a task the filter or another tab's column took away is never acted on.
-  const selection = useTasksSelection(
-    tasks,
-    new Set(drawnColumns.flatMap((column) => column.tasks.map(taskIdOf))),
-  );
+  // Each drawn column's tasks, in the order drawn down it, those its run leaves undrawn among them.
+  const order = drawnColumns.map((column) => column.tasks.map(taskIdOf));
+  const runs = useVirtualRuns();
+  // Note that the runs draw only the cards near the view, and every card while a find bar stands open over the page.
+  const finding = useFindOpen();
+  // Note that only cards a drawn column lists stay chosen, so a task the filter or another tab's column took away is never acted on.
+  const selection = useTasksSelection(tasks, new Set(order.flat()));
   const tabs =
     narrow && columns.length > 0 ? (
       <div className="tasks-board-tabs flex min-w-0 grow basis-full flex-col">
@@ -940,6 +1027,8 @@ export function TasksBoard({
         <SelectionRegion
           id={selection.regionId}
           selection={{ selected: selection.selected, onChange: selection.onChange }}
+          order={order}
+          bringIn={runs.bringIn}
         >
           <div ref={board} className={BOARD} data-row-drop-scope="" {...crossing}>
             {columns.length === 0 ? (
@@ -963,6 +1052,8 @@ export function TasksBoard({
                 waitingOn={waitingOn}
                 subTasksOf={subTasksOf}
                 chosenOf={selection.chosenOf}
+                finding={finding}
+                holdRun={runs.hold}
                 onSelect={tasks.onSelect}
                 onStanding={setStanding}
                 onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
