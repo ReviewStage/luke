@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { VIRTUAL_ROWS_ANCHOR, VirtualRows } from "./virtual-rows.js";
+import { VIRTUAL_ROWS_ANCHOR, VirtualRows, type VirtualRowsHandle } from "./virtual-rows.js";
 
 /**
  * virtual-rows.test.ts -- a run of rows is a list to a reader, and each row
@@ -123,4 +123,31 @@ test("a run read from its top, placed by a box inside its scroller, draws the ro
   const drawn = [...container.querySelectorAll("li")].map((row) => row.textContent);
   assert.equal(drawn[0], "row-6");
   assert.equal(drawn.at(-1), "row-21");
+});
+
+test("a row moved to another place, the run's length unchanged, is drawn under its own key", () => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+  const scroller = createRef<HTMLDivElement>();
+  const handle = createRef<VirtualRowsHandle>();
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const frame = (keys: readonly string[]) =>
+    createElement(
+      "div",
+      { ref: scroller },
+      createElement(VirtualRows, {
+        scroller,
+        keys,
+        estimate: 100,
+        handle,
+        children: (index: number) => createElement("p", null, keys[index]),
+      }),
+    );
+  act(() => root.render(frame(["a", "b", "c", "d"])));
+  // Note that the thread that moved to the top of an Inbox is one row taken from the foot, so the run holds as many rows as before.
+  act(() => root.render(frame(["d", "a", "b", "c"])));
+  const drawn = [...container.querySelectorAll("p")].map((row) => row.textContent);
+  assert.deepEqual(drawn, ["d", "a", "b", "c"]);
+  assert.deepEqual(handle.current?.drawnKeys(), drawn);
 });

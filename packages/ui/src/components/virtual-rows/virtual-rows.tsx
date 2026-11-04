@@ -210,6 +210,18 @@ function offsetWithin(block: HTMLElement, scroller: HTMLElement): number {
     : offsetTo(block, holder) - offsetTo(scroller, holder) - scroller.clientTop;
 }
 
+/** Whether two runs of keys name the same rows in the same order. */
+function sameKeys(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((key, at) => key === b[at]);
+}
+
+/** The keys as last handed, kept while they name the same rows in the same order, so a caller handing them anew on each draw has the virtualizer read nothing again. */
+function useSteadyKeys(keys: readonly string[]): readonly string[] {
+  const held = useRef(keys);
+  if (held.current !== keys && !sameKeys(held.current, keys)) held.current = keys;
+  return held.current;
+}
+
 /** The classes the row at `index` wears: the run's own, then the caller's for it. */
 function rowClassOf(
   rowClassName: string | ((index: number) => string) | undefined,
@@ -305,7 +317,9 @@ export function VirtualRows({
   const [margin, setMargin] = useState(0);
   const latestKeys = useRef(keys);
   latestKeys.current = keys;
-  const getItemKey = useCallback((index: number) => latestKeys.current[index] ?? index, []);
+  // Note that the key reader changes as the keys do, because the virtualizer reads every row's key again only when it does: a row moved to another place, the run as long as before, would otherwise stand under the key of the row that stood there, and two rows under one key leave a row drawn that no row is any longer.
+  const steady = useSteadyKeys(keys);
+  const getItemKey = useCallback((index: number) => steady[index] ?? index, [steady]);
   const fromEnd = anchor === VIRTUAL_ROWS_ANCHOR.END;
   // The row holding the keyboard, by its key, which is drawn wherever the run is scrolled.
   const focused = useRef<string | undefined>(undefined);
