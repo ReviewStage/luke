@@ -292,7 +292,12 @@ const answerPress = /* @__PURE__ */ Effect.fnUntraced(function* (press: BlockAct
   // A refused answer to an ask still open leaves the DM's buttons standing.
   if (outcome === INBOX_ASK_ANSWER.REFUSED && status === INBOX_ASK_STATUS.OPEN) return;
   const said = outcome === INBOX_ASK_ANSWER.REPEATED ? line : settledLine(status);
-  yield* rewriteThreadDm(dm, choice.item, { text: message?.text ?? "", ask: message?.ask }, said);
+  yield* rewriteThreadDm(
+    dm,
+    choice.item,
+    { id: choice.ask, text: message?.text ?? "", ask: message?.ask },
+    said,
+  );
 });
 
 /** POST: one request Connect forwarded, its bearer confirmed before anything of it is read. */

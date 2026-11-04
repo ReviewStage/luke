@@ -5,6 +5,7 @@ import { Database } from "@repo/database/core/query";
 import { createAgent } from "@repo/database/models/agent-store";
 import { linkSlackInstallation } from "@repo/database/models/slack-installation-store";
 import { organization, user } from "@repo/database/schemas/auth";
+import { inboxMessage } from "@repo/database/schemas/inbox-message";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, startTask } from "@repo/database/testing";
 import { INBOX_ASK, INBOX_ASK_STATUS, INBOX_REPLY } from "@repo/features/inbox-wire";
@@ -18,10 +19,11 @@ import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
  * on, over a real store and a fake Slack: the DM goes to that member's
- * Slack user, says the thread's title and the agent's Markdown in a
- * `markdown` block, a mention chip as a plain link, and links to the thread,
- * the post's picture shared under it; a follow-up lands in that DM's Slack
- * thread; and an answer rewrites the first DM to say it was answered.
+ * Slack user and says the thread's title alone; the post is the first reply
+ * in its Slack thread, the agent's Markdown in a `markdown` block, a mention
+ * chip as a plain link, and a link to the thread, the post's picture shared
+ * under it; a follow-up is another reply there; and an answer rewrites the
+ * post's reply to say it was answered.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -32,15 +34,22 @@ interface SlackCall {
   readonly args: Readonly<Record<string, string>>;
 }
 
-/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed. */
-function fakeSlack(calls: SlackCall[]): SlackWebApi {
+/** A Slack that knows every member by their email, as `U-<email>`, and posts every message it is handed, each at a timestamp of its own; with `refuseFirstReply`, it refuses the first reply in a thread. */
+function fakeSlack(calls: SlackCall[], refuseFirstReply = false): SlackWebApi {
+  let posted = 0;
+  let refused = !refuseFirstReply;
   return (method, args) => {
     calls.push({ method, args });
     switch (method) {
       case "users.lookupByEmail":
         return Effect.succeed({ ok: true, user: { id: `U-${args.email}` } });
       case "chat.postMessage":
-        return Effect.succeed({ ok: true, channel: "D0001", ts: "1700000000.000100" });
+        if (args.thread_ts !== undefined && !refused) {
+          refused = true;
+          return Effect.succeed({ ok: false, error: "ratelimited" });
+        }
+        posted += 1;
+        return Effect.succeed({ ok: true, channel: "D0001", ts: `1700000000.00010${posted}` });
       case "files.getUploadURLExternal":
         return Effect.succeed({
           ok: true,
@@ -103,7 +112,7 @@ const blocksOf = (call: SlackCall | undefined) => JSON.parse(call?.args.blocks ?
 
 it.layer(getTestDB())("a thread's Slack DM", (it) => {
   it.effect(
-    "writes the member it waits on, replies with a follow-up in that DM's thread, and says it was answered once they answer",
+    "writes the member it waits on the title, the post and a follow-up as replies under it, and says it was answered once they answer",
     () => {
       const calls: SlackCall[] = [];
       const sent: { url: string; bytes: Uint8Array }[] = [];
@@ -127,14 +136,21 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         yield* dmThreadPost({ organizationId, item: followUp, asked: false, wasOpen });
 
         const link = `https://vespin.dev/${slug}/inbox/${item.id}`;
-        const posted = calls.filter((call) => call.method === "chat.postMessage");
-        assert.equal(posted.length, 2);
-        assert.equal(posted[0]?.args.channel, `U-${email}`);
-        assert.equal(posted[0]?.args.thread_ts, undefined);
-        assert.equal(posted[1]?.args.channel, "D0001");
-        assert.equal(posted[1]?.args.thread_ts, "1700000000.000100");
-        assert.deepEqual(blocksOf(posted[1])[1], { type: "markdown", text: "Still needed." });
-        assert.equal(posted[0]?.args.text, "Require a review on main");
+        const [title, reply, later, ...more] = calls.filter(
+          (call) => call.method === "chat.postMessage",
+        );
+        assert.deepEqual(more, []);
+        assert.equal(title?.args.channel, `U-${email}`);
+        assert.equal(title?.args.thread_ts, undefined);
+        assert.equal(title?.args.text, "Require a review on main");
+        assert.deepEqual(blocksOf(title), [
+          { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+        ]);
+        assert.equal(reply?.args.channel, "D0001");
+        assert.equal(reply?.args.thread_ts, "1700000000.000101");
+        assert.equal(later?.args.channel, "D0001");
+        assert.equal(later?.args.thread_ts, "1700000000.000101");
+        assert.deepEqual(blocksOf(later)[0], { type: "markdown", text: "Still needed." });
         assert.deepEqual(sent, [
           { url: "https://files.slack.com/upload/v1/settings.png", bytes: SCREENSHOT.bytes },
         ]);
@@ -145,15 +161,11 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
             {
               files: JSON.stringify([{ id: "F0001", title: "settings.png" }]),
               channel_id: "D0001",
-              thread_ts: "1700000000.000100",
+              thread_ts: "1700000000.000101",
             },
           ],
         );
-        const [header, words, actions] = blocksOf(posted[0]);
-        assert.deepEqual(header, {
-          type: "header",
-          text: { type: "plain_text", text: "Require a review on main" },
-        });
+        const [words, actions] = blocksOf(reply);
         assert.deepEqual(words, {
           type: "markdown",
           text: "Turn it on in [settings](https://github.com/acme/relay/settings).",
@@ -178,13 +190,84 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         const updated = calls.filter((call) => call.method === "chat.update");
         assert.equal(updated.length, 1);
         assert.equal(updated[0]?.args.channel, "D0001");
-        assert.equal(updated[0]?.args.ts, "1700000000.000100");
+        assert.equal(updated[0]?.args.ts, "1700000000.000102");
         assert.equal(updated[0]?.args.text, "Require a review on main · Answered in Vespin");
-        assert.deepEqual(blocksOf(updated[0])[2], {
+        assert.deepEqual(blocksOf(updated[0])[1], {
           type: "context",
           elements: [{ type: "plain_text", text: "Answered in Vespin" }],
         });
       }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles(sent))));
     },
   );
+
+  it.effect(
+    "a post whose reply Slack refused leaves its title DM the thread's, so the next ask replies under it",
+    () => {
+      const calls: SlackCall[] = [];
+      return Effect.gen(function* () {
+        const { agent, organizationId } = yield* openConnectedAgent;
+        const ask = {
+          key: "invite-expiry",
+          title: "How long should an invitation last?",
+          body: "A week?",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "A week" }, { label: "A month" }] },
+          needsReply: true,
+        };
+        const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+        yield* dmThreadPost({ organizationId, item, asked: true, wasOpen: false });
+        yield* TestClock.adjust("1 second");
+        const again = Result.getOrThrow(
+          yield* postInboxThread(agent, { ...ask, body: "Or a month?" }),
+        );
+        yield* dmThreadPost({ organizationId, item: again, asked: true, wasOpen: true });
+
+        const posted = calls.filter((call) => call.method === "chat.postMessage");
+        assert.deepEqual(
+          posted.map((call) => call.args.thread_ts),
+          [undefined, "1700000000.000101", "1700000000.000101"],
+        );
+        assert.deepEqual(blocksOf(posted[2])[0], { type: "markdown", text: "Or a month?" });
+        assert.deepEqual(
+          calls.filter((call) => call.method === "chat.update"),
+          [],
+          "the title DM is never rewritten",
+        );
+      }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls, true), fakeFiles([]))));
+    },
+  );
+
+  it.effect("a DM from before the title stood alone keeps its title once its ask settles", () => {
+    const calls: SlackCall[] = [];
+    return Effect.gen(function* () {
+      const { agent } = yield* openConnectedAgent;
+      const ask = {
+        key: "branch-protection",
+        title: "Require a review on main",
+        body: "Turn it on.",
+        ask: { type: INBOX_ASK.DO, steps: [] },
+        needsReply: true,
+      };
+      const item = Result.getOrThrow(yield* postInboxThread(agent, ask));
+      const askId =
+        item.thread?.find((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id ?? "";
+      // The DM as it was kept before, the post's words in the thread's first message.
+      yield* (yield* Database)
+        .update(inboxMessage)
+        .set({ slackDm: { channel: "D0001", ts: "1700000000.000050", to: agent.userId } })
+        .where(eq(inboxMessage.id, askId));
+      yield* answerInboxAsk(agent.userId, item.id, {
+        answers: { ask: askId, reply: INBOX_REPLY.DONE },
+        text: "",
+        clientKey: randomUUID(),
+      });
+      yield* settleThreadDms(item.id);
+
+      const [updated] = calls.filter((call) => call.method === "chat.update");
+      assert.equal(updated?.args.ts, "1700000000.000050");
+      assert.deepEqual(blocksOf(updated).slice(0, 2), [
+        { type: "header", text: { type: "plain_text", text: "Require a review on main" } },
+        { type: "markdown", text: "Turn it on." },
+      ]);
+    }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls), fakeFiles([]))));
+  });
 });
