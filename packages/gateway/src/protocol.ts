@@ -34,8 +34,20 @@ export const GATEWAY_METHOD = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** The repositories the account reaches through our GitHub App, read from the service now. */
-  TASKS_REPOSITORIES: "tasks.repositories",
+  /**
+   * The repositories the account reaches in one workspace, or in every one
+   * where the params name none, held for a window from now until it is let
+   * go, asked of the service at once and again as a window comes forward, as
+   * the workspace's installations move, and as a token or a token repository
+   * changes, and a while after among the reads let go lately. What it holds is
+   * heard as `REPOSITORY_LISTS_CHANGED` events, on the app state every window
+   * draws, never answered.
+   */
+  TASKS_REPOSITORIES_FOLLOW: "tasks.repositoriesFollow",
+  /** One workspace's repositories let go by the window that held them. */
+  TASKS_REPOSITORIES_UNFOLLOW: "tasks.repositoriesUnfollow",
+  /** One workspace's held repositories asked again at once, as Try again asks; answered once the ask has landed. */
+  TASKS_REPOSITORIES_RETRY: "tasks.repositoriesRetry",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
   /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
@@ -56,10 +68,17 @@ export const GATEWAY_METHOD = {
   TASKS_TREE: "tasks.tree",
   /** The skills a developer may choose of one task's repository, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_SKILLS: "tasks.skills",
-  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_PULL_REQUEST: "tasks.pullRequest",
-  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
-  TASKS_ISSUE: "tasks.issue",
+  /**
+   * What GitHub holds of the pull request or issue a link names, through a
+   * workspace's installation, held for a window from now until it is let go
+   * and asked again as a window comes forward, no oftener than the host keeps
+   * a link's read, and a while after among the reads let go lately. What it
+   * holds is heard as `LINK_STANDINGS_CHANGED` events, on the app state every
+   * window draws, never answered.
+   */
+  TASKS_LINK_STANDING_FOLLOW: "tasks.linkStandingFollow",
+  /** One link's standing let go by the window that held it. */
+  TASKS_LINK_STANDING_UNFOLLOW: "tasks.linkStandingUnfollow",
   /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** The id of the task a link names by its workspace and its number, found by the service; answered to the caller, never held in the view. */
@@ -348,6 +367,22 @@ export const GATEWAY_METHOD = {
   /** One installed skill removed with its files, drawn gone at once over the held skills; or why it stands. */
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   AGENTS_PULL_REQUEST: "agents.pullRequest",
+  /**
+   * One part of one agent's pull request as its Pull request tab draws it,
+   * by the part, the agent, and the pull request's number, or no number for
+   * the agent's own: the pull request itself, its checks, its conversation,
+   * or what the agent published. Held for a window from now until it is let
+   * go, asked of the service at once, again as a window comes forward, and
+   * again with the tab's other parts as the agent ends or its listed pull
+   * request moves, and a while after among the reads let go lately. What it
+   * holds is heard as `PULL_REQUEST_PARTS_CHANGED` events, on the app state
+   * every window draws, never answered.
+   */
+  AGENTS_PULL_REQUEST_PART_FOLLOW: "agents.pullRequestPartFollow",
+  /** One pull request's part let go by the window that held it. */
+  AGENTS_PULL_REQUEST_PART_UNFOLLOW: "agents.pullRequestPartUnfollow",
+  /** One pull request's held part asked again at once, as Try again asks; answered once the ask has landed. */
+  AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   AGENTS_CHANGES: "agents.changes",
   /**
@@ -368,8 +403,6 @@ export const GATEWAY_METHOD = {
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
-  /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
-  AGENTS_OVERVIEW_PULL_REQUEST: "agents.overviewPullRequest",
   AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
    * Our own tools one agent is offered, held for a window from now until it
@@ -383,10 +416,6 @@ export const GATEWAY_METHOD = {
   AGENTS_WORKSPACE_TOOLS_UNFOLLOW: "agents.workspaceToolsUnfollow",
   /** One agent's held tools asked again at once, as Try again asks; answered once the ask has landed. */
   AGENTS_WORKSPACE_TOOLS_RETRY: "agents.workspaceToolsRetry",
-  /** The checks on one agent's pull request's head, as its overview draws them. */
-  AGENTS_OVERVIEW_CHECKS: "agents.overviewChecks",
-  /** One agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
-  AGENTS_OVERVIEW_CONVERSATION: "agents.overviewConversation",
   /** One image an agent's pull request's overview names, read by the service on the App's token: its bytes in base64 and their type. */
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
@@ -688,8 +717,12 @@ export const GATEWAY_EVENT = {
   AGENT_ORIGINS_CHANGED: "agentOrigins.changed",
   /** Every plan's or agent's inbox the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   HOLDER_INBOXES_CHANGED: "holderInboxes.changed",
+  /** Every link's standing the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  LINK_STANDINGS_CHANGED: "linkStandings.changed",
   /** Every agent's pull request's chapters the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
   CHAPTERS_CHANGED: "chapters.changed",
+  /** One of the Pull request tabs' held parts, every agent's pull request's the host holds for the windows, whole, by the read's name, as its reads stand, each time any of them moves. */
+  PULL_REQUEST_PARTS_CHANGED: "pullRequestParts.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
   /** Every inbox item the account reaches, whole, as the host's read of them for the session stands, each time it moves. */
@@ -718,6 +751,8 @@ export const GATEWAY_EVENT = {
   PROVIDER_KEYS_CHANGED: "providerKeys.changed",
   /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
   MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
+  /** Every workspace's repositories the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */
+  REPOSITORY_LISTS_CHANGED: "repositoryLists.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

@@ -116,11 +116,29 @@ function waitingSweep(waiting: InboxItem, workspaceId: string | undefined): AppI
   };
 }
 
-/** Each pull request the App answers, by repository and number, as it would through any workspace. */
-const PULL_REQUESTS = new Map([
-  ["acme/relay", { number: 42, title: "Send invitations in batches", url: PULL }],
-  ["globex/ledger", { number: 5, title: "Settle the ledger nightly", url: LEDGER_PULL }],
-]);
+/** What the host holds of each pull request linked, by its address, as the App answers it through any workspace. */
+const STANDINGS = {
+  [PULL]: {
+    rows: {
+      pullRequest: {
+        number: 42,
+        title: "Send invitations in batches",
+        url: PULL,
+        state: PULL_REQUEST_STATE.MERGED,
+      },
+    },
+  },
+  [LEDGER_PULL]: {
+    rows: {
+      pullRequest: {
+        number: 5,
+        title: "Settle the ledger nightly",
+        url: LEDGER_PULL,
+        state: PULL_REQUEST_STATE.MERGED,
+      },
+    },
+  },
+};
 
 let root: Root | undefined;
 
@@ -130,7 +148,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The window's Inbox listing `listed`, holding the plan's items and the agent's given, the first of them chosen, and every pull request read it asked. */
+/** The window's Inbox listing `listed`, holding the plan's items and the agent's given, the first of them chosen, and every act it asked. */
 async function inbox(options: {
   listed: Workspace | undefined;
   taskItems: readonly InboxItem[];
@@ -139,15 +157,17 @@ async function inbox(options: {
   workspaces?: readonly Workspace[];
 }) {
   const asked: AnyAct[] = [];
-  // The account's feed holds the task's items, and the sweep agent's, which the Inbox draws from.
+  const workspaces = options.workspaces ?? [ACME, GLOBEX];
+  // The account's feed holds the task's items, and the sweep agent's, which the Inbox draws from; the host holds each link's standing through every workspace.
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: {
       ...IDLE_TASKS_VIEW,
       tasks: [TASK],
       taskAgents: [],
-      workspaces: options.workspaces ?? [ACME, GLOBEX],
+      workspaces,
     },
+    [LIVE_READ.LINK_STANDINGS]: Object.fromEntries(workspaces.map(({ id }) => [id, STANDINGS])),
     [LIVE_READ.INBOX_ITEMS]: {
       rows: {
         [INBOX_SCOPE_KIND.PLAN]: { [TASK.id]: options.taskItems },
@@ -162,16 +182,9 @@ async function inbox(options: {
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
       switch (request.kind) {
-        case ACT_KIND.TASKS_PULL_REQUEST: {
-          const pullRequest = PULL_REQUESTS.get(request.payload.repository);
-          return Promise.resolve({
-            status: FAKE_ANSWER.DONE,
-            value:
-              pullRequest === undefined
-                ? null
-                : { ...pullRequest, state: PULL_REQUEST_STATE.MERGED },
-          });
-        }
+        // A link's standing is held quietly, as the host holds one, what it holds already on the document.
+        case ACT_KIND.TASKS_LINK_STANDING_FOLLOW:
+          return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
         default:
           return Promise.resolve({
             status: FAKE_ANSWER.REFUSED,
@@ -238,11 +251,11 @@ function chips(container: HTMLElement): [string | null, string | null][] {
   ]);
 }
 
-/** The workspaces each pull request read was asked through. */
+/** The workspace each link's standing was held through, with the link. */
 function readThrough(asked: readonly AnyAct[]): string[] {
   return asked.flatMap((each) =>
-    each.kind === ACT_KIND.TASKS_PULL_REQUEST
-      ? [`${each.payload.workspaceId} ${each.payload.repository}#${each.payload.number}`]
+    each.kind === ACT_KIND.TASKS_LINK_STANDING_FOLLOW
+      ? [`${each.payload.workspaceId} ${each.payload.address}`]
       : [],
   );
 }
@@ -255,7 +268,7 @@ test("a plan's item in the window's Inbox reads its links through the plan's wor
   });
 
   assert.deepEqual(chips(container), [["#42", "Merged"]]);
-  assert.deepEqual(readThrough(asked), ["workspace-acme acme/relay#42"]);
+  assert.deepEqual(readThrough(asked), [`workspace-acme ${PULL}`]);
 });
 
 test("an item of a workspace an older service answered with no slug still reads its links through that workspace, by its id", async () => {
@@ -271,7 +284,7 @@ test("an item of a workspace an older service answered with no slug still reads 
   });
 
   assert.deepEqual(chips(container), [["#5", "Merged"]]);
-  assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
+  assert.deepEqual(readThrough(asked), [`workspace-globex ${LEDGER_PULL}`]);
 });
 
 test("an item of an agent with no plan reads its links through the agent's own workspace, not the one the Inbox lists", async () => {
@@ -285,7 +298,7 @@ test("an item of an agent with no plan reads its links through the agent's own w
   });
 
   assert.deepEqual(chips(container), [["#5", "Merged"]]);
-  assert.deepEqual(readThrough(asked), ["workspace-globex globex/ledger#5"]);
+  assert.deepEqual(readThrough(asked), [`workspace-globex ${LEDGER_PULL}`]);
 });
 
 test("an item whose workspace the service did not name reads nothing, and its link says what its address says, though the Inbox lists a workspace", async () => {

@@ -23,9 +23,6 @@ import {
   type AgentListAnswer,
   type AgentMessagesAnswerView,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
   type AgentPinParams,
@@ -85,6 +82,7 @@ import {
   providerKeyForAgentsParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  pullRequestPartParamsSchema,
   TRANSCRIPT_KIND,
 } from "@repo/features/agent-view";
 import {
@@ -151,6 +149,7 @@ import {
   RcMap,
   Schema,
   type Scope,
+  Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { type AccountInboxes, accountInboxes, followAccountInbox } from "./account-inbox-follow.js";
@@ -197,6 +196,11 @@ import {
 import { type AccountReads, accountReads, type HeldSlice } from "./live-collection.js";
 import { heldMemories, memoryForget } from "./memory-follow.js";
 import { heldAgentOrigins } from "./origin-follow.js";
+import {
+  type PullRequestListing,
+  type PullRequestParts,
+  pullRequestParts,
+} from "./pull-request-parts.js";
 import { untaken } from "./queued-writes.js";
 import type { RunMode } from "./run-mode.js";
 import {
@@ -342,6 +346,8 @@ export interface AgentsDependencies {
    * Start is answered once the list carries it; none waits for nothing.
    */
   listed?: (txid: string | undefined) => Effect.Effect<void>;
+  /** The task list as each drawing of it stands, from the caller's listening on (`TasksComposer.pullRequestListings`), on which the Pull request tabs' parts are asked again; none moves nothing. */
+  pullRequestListings?: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
   /**
    * The sync engine's pool, which an agent's row of the task list stands in
    * and a rename, an archive, a pin, a change of model, or a switch of MCP
@@ -350,6 +356,8 @@ export interface AgentsDependencies {
   pool: EntityPool;
   /** The agent as the task list shows it now, which a rename or a pin waiting for the service answers its caller with; none where the list shows no such agent. */
   agentListed?: (agentId: string) => AgentSummary | undefined;
+  /** Every workspace's repositories the windows hold asked again, as a token saved or removed moves them (`TasksComposer.repositoriesMoved`); none asks nothing. */
+  repositoriesMoved?: Effect.Effect<void>;
 }
 
 export interface AgentsComposer extends Composer {
@@ -511,6 +519,19 @@ export function composeAgents(
     const originHolds = yield* FiberMap.make<string>();
     const accountFollow = yield* FiberHandle.make();
     const fetched = yield* fetchedReads(dependencies, asked);
+    const parts = yield* pullRequestParts({
+      gate,
+      focus: dependencies.focus,
+      ask: {
+        pullRequest: (key) => asked(client.overviewPullRequest(key.agentId, key.number)),
+        checks: (key) => asked(client.overviewChecks(key.agentId, key.number)),
+        conversation: (key) => asked(client.overviewConversation(key.agentId, key.number)),
+        published: (key) => asked(client.pullRequest(key.agentId, key.number)),
+      },
+      listings: dependencies.pullRequestListings ?? Effect.succeed(Stream.empty),
+      tell: (held) =>
+        dependencies.kernel.emit(GATEWAY_EVENT.PULL_REQUEST_PARTS_CHANGED, carried(held)),
+    });
     return composed(
       dependencies,
       http,
@@ -522,6 +543,7 @@ export function composeAgents(
       { memories, holds: memoryHolds },
       { origins, holds: originHolds },
       fetched,
+      parts,
     );
   });
 }
@@ -697,6 +719,8 @@ function composed(
   /** The agents' origins the windows hold. */
   { origins, holds: originHolds }: OriginFollows,
   { presence, presenceHold, tools, toolsHolds, keys, keysHold }: FetchedReads,
+  /** The parts of the pull requests the windows' Pull request tabs hold. */
+  parts: PullRequestParts,
 ): AgentsComposer {
   const { client, kernel, kept } = dependencies;
   const gate = gateOf(dependencies);
@@ -957,6 +981,13 @@ function composed(
         : keys.answered(userId, keyListOf(answer));
     });
 
+  /** A token's write answered whole to the window that asked, the repositories every list holds asked again where the service took it, since what the token reaches moved. */
+  const tokenWritten = (answer: GitHubTokenAnswerView) =>
+    Effect.as(
+      "failure" in answer ? Effect.void : (dependencies.repositoriesMoved ?? Effect.void),
+      carried<GitHubTokenAnswerView>(answer),
+    );
+
   const methods: HostMethodTable = {
     [GATEWAY_METHOD.AGENTS_MODELS]: () =>
       Effect.map(asked(client.models()), (answer) => carried<AgentModelsAnswer>(answer)),
@@ -1108,13 +1139,10 @@ function composed(
       Effect.gen(function* () {
         // Note that the sentence names the shape and never the value, because the value is a token.
         const save = yield* readParams(githubTokenSaveParamsSchema, params, "a save names a token");
-        const answer = yield* asked(client.saveGitHubToken(save));
-        return carried<GitHubTokenAnswerView>(answer);
+        return yield* tokenWritten(yield* asked(client.saveGitHubToken(save)));
       }),
     [GATEWAY_METHOD.GITHUB_TOKEN_REMOVE]: () =>
-      Effect.map(asked(client.removeGitHubToken()), (answer) =>
-        carried<GitHubTokenAnswerView>(answer),
-      ),
+      Effect.flatMap(asked(client.removeGitHubToken()), tokenWritten),
     [GATEWAY_METHOD.AGENTS_LIST]: (params) =>
       Effect.gen(function* () {
         const { taskId, includeArchived } = yield* readParams(
@@ -1353,6 +1381,43 @@ function composed(
         const answer = yield* asked(client.pullRequest(agentId, number));
         return carried<AgentPullRequestAnswerView>(answer);
       }),
+    // A Pull request tab's parts are held for the windows while the tab shows, and told only on the app state (`PULL_REQUEST_PARTS_CHANGED`). Note that the windows' hold on each is one fiber standing until let go, so a window holding it again holds nothing anew.
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_FOLLOW]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "following a pull request's part names the part and one agent",
+          ),
+          parts.follow,
+        ),
+        {},
+      ),
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_UNFOLLOW]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "letting a pull request's part go names the part and one agent",
+          ),
+          parts.unfollow,
+        ),
+        {},
+      ),
+    [GATEWAY_METHOD.AGENTS_PULL_REQUEST_PART_RETRY]: (params) =>
+      Effect.as(
+        Effect.flatMap(
+          readParams(
+            pullRequestPartParamsSchema,
+            params,
+            "reading a pull request's part again names the part and one agent",
+          ),
+          parts.retry,
+        ),
+        {},
+      ),
     [GATEWAY_METHOD.AGENTS_CHANGES]: (params) =>
       Effect.gen(function* () {
         const { agentId, number } = yield* readParams(
@@ -1429,16 +1494,6 @@ function composed(
         const answer = yield* asked(client.writeChaptersModel(model));
         return carried<ChaptersModelAnswerView>(answer);
       }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_PULL_REQUEST]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request names one agent",
-        );
-        const answer = yield* asked(client.overviewPullRequest(agentId, number));
-        return carried<AgentOverviewPullRequestAnswerView>(answer);
-      }),
     [GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(
@@ -1484,26 +1539,6 @@ function composed(
         );
         yield* tools.retry(agentId);
         return {};
-      }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_CHECKS]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request's checks names one agent",
-        );
-        const answer = yield* asked(client.overviewChecks(agentId, number));
-        return carried<AgentOverviewChecksAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.AGENTS_OVERVIEW_CONVERSATION]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, number } = yield* readParams(
-          agentPullRequestReadParamsSchema,
-          params,
-          "reading an agent's pull request's conversation names one agent",
-        );
-        const answer = yield* asked(client.overviewConversation(agentId, number));
-        return carried<AgentOverviewConversationAnswerView>(answer);
       }),
     [GATEWAY_METHOD.AGENTS_PULL_REQUEST_ACTION]: (params) =>
       Effect.gen(function* () {
@@ -1720,6 +1755,7 @@ function composed(
     yield* presence.end;
     yield* tools.end;
     yield* keys.end;
+    yield* parts.end;
   });
 
   // Note that the beats and the keys are held anew under whoever signed in, in place of the hold before, rather than followed again under the account they were held for.
@@ -1732,6 +1768,7 @@ function composed(
     yield* presenceHold.open;
     yield* keysHold.open;
     yield* tools.open;
+    yield* parts.open;
   });
 
   return {

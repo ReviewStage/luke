@@ -15,8 +15,11 @@
  * The DM says the thread's title, the post's words as Slack draws
  * Markdown (`slackMarkdownBlock`), and an
  * open button to the thread; a decide ask that takes one option offers each
- * as a button beside it (`SlackChoice`), which our Slack route answers the
- * ask with (`slack-events-app.ts`), and every other ask is the link alone.
+ * as a button beside it (`SlackChoice`), and one that takes several offers
+ * them as checkboxes with a Submit button, whose press names the ticked ones
+ * by their place among the options (`SLACK_PICKS_ACTION`); our Slack route
+ * answers the ask with either (`slack-events-app.ts`), and every other ask
+ * is the link alone.
  *
  * Each DM, a reply among them, is kept on the agent's message it said
  * (`inbox_message.slack_dm`), with the member it went to and, for a reply,
@@ -62,8 +65,21 @@ import {
 } from "./slack-bot.js";
 import { slackClipped, slackMarkdownBlock } from "./slack-markdown.js";
 
-/** Slack's own limits a DM's parts are clipped to: a header's text and a button's. */
-const SLACK_TEXT_BOUND = { HEADER: 150, BUTTON: 75 } as const;
+/** Slack's own limits a DM's parts are clipped to: a header's text, a button's, and a checkbox's. */
+const SLACK_TEXT_BOUND = { HEADER: 150, BUTTON: 75, OPTION: 75 } as const;
+
+/** What a ticked checkbox says beside its label where the agent recommends it. */
+const RECOMMENDED_NOTE = "Recommended";
+
+/** The words on the button that answers an ask taking several options with the ones ticked. */
+const SUBMIT_LABEL = "Submit";
+
+/**
+ * The action id of the checkboxes an ask taking several options is drawn
+ * with, which the route reads the ticked ones under in a press's state;
+ * each checkbox's value is its option's place among the ask's options.
+ */
+export const SLACK_PICKS_ACTION = "picks";
 
 /** What a settled DM says in its button's place, by where its ask now stands. */
 const SETTLED_LINE = {
@@ -75,22 +91,36 @@ const SETTLED_LINE = {
 /** Where a settled ask stands: every status but open. */
 type SettledAskStatus = keyof typeof SETTLED_LINE;
 
-/** What a settled DM says once its member chose an option from it. */
-export function chosenLine(label: string): string {
-  return `You chose ${label}`;
+/** What a settled DM says once its member chose options from it. */
+export function chosenLine(labels: readonly string[]): string {
+  return `You chose ${labels.join(", ")}`;
 }
 
 /**
- * What an option's button carries back when pressed: the item, the message
- * whose ask it answers, and the option's label, as JSON in the button's
- * value, which Slack bounds at 2,000 characters, far past two ids and a label.
+ * What a button carries back when pressed: the item, the message whose ask
+ * it answers, and an option's label, or none for the Submit of an ask
+ * taking several, whose picks the press's checkboxes hold; as JSON in the
+ * button's value, which Slack bounds at 2,000 characters, far past two ids
+ * and a label.
  */
 export const SlackChoiceSchema = Schema.fromJsonString(
-  Schema.Struct({ item: Schema.String, ask: Schema.String, choice: Schema.String }),
+  Schema.Struct({
+    item: Schema.String,
+    ask: Schema.String,
+    choice: Schema.optionalKey(Schema.String),
+  }),
 );
 
-/** A press of an option's button, as `SlackChoiceSchema` reads it. */
+/** A press of an option's button or a Submit, as `SlackChoiceSchema` reads it. */
 export type SlackChoice = typeof SlackChoiceSchema.Type;
+
+/** What an open decide ask is drawn with in its DM: blocks of their own above the buttons, and buttons beside the open one. */
+interface AskControls {
+  readonly blocks: readonly SlackBlock[];
+  readonly buttons: readonly SlackBlock[];
+}
+
+const NO_CONTROLS: AskControls = { blocks: [], buttons: [] };
 
 const SETTLED_STATUSES = [
   INBOX_ASK_STATUS.ANSWERED,
@@ -133,38 +163,75 @@ function postedMessage(item: InboxItem, asked: boolean): InboxMessage | undefine
 }
 
 /**
- * A button per option of an open decide ask that takes one, the recommended
- * ones primary, each under an action id of its own, which the route answers
- * the ask under, so a press Slack sends again is the same answer; none for
- * any other ask, or one that takes several, which the app alone answers.
+ * The controls of an open decide ask: a button per option where it takes
+ * one, the recommended ones primary, each under an action id of its own,
+ * which the route answers the ask under, so a press Slack sends again is the
+ * same answer; where it takes several, a checkbox per option, the
+ * recommended ones saying so, and a Submit button under an action id of its
+ * own on the same terms. None for any other ask.
  */
-function choiceButtons(itemId: string, message: InboxMessage): SlackBlock[] {
-  if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) return [];
+function askControls(itemId: string, message: InboxMessage): AskControls {
+  if (message.ask === undefined || message.ask.status !== INBOX_ASK_STATUS.OPEN) {
+    return NO_CONTROLS;
+  }
   const ask = knownAsk(message.ask);
-  if (ask?.type !== INBOX_ASK.DECIDE || ask.multiple === true) return [];
+  if (ask?.type !== INBOX_ASK.DECIDE) return NO_CONTROLS;
   const recommended = new Set([
     ...(ask.recommended === undefined ? [] : [ask.recommended]),
     ...(ask.recommendations ?? []),
   ]);
-  return ask.options.map(({ label }) => ({
-    type: "button",
-    text: { type: "plain_text", text: slackClipped(label, SLACK_TEXT_BOUND.BUTTON) },
-    action_id: randomUUID(),
-    value: Schema.encodeSync(SlackChoiceSchema)({ item: itemId, ask: message.id, choice: label }),
-    ...(recommended.has(label) ? { style: "primary" } : undefined),
+  const value = (choice?: string) =>
+    Schema.encodeSync(SlackChoiceSchema)({
+      item: itemId,
+      ask: message.id,
+      ...(choice === undefined ? undefined : { choice }),
+    });
+  if (ask.multiple !== true) {
+    const buttons = ask.options.map(({ label }) => ({
+      type: "button",
+      text: { type: "plain_text", text: slackClipped(label, SLACK_TEXT_BOUND.BUTTON) },
+      action_id: randomUUID(),
+      value: value(label),
+      ...(recommended.has(label) ? { style: "primary" } : undefined),
+    }));
+    return { blocks: [], buttons };
+  }
+  const options = ask.options.map(({ label }, index) => ({
+    text: { type: "plain_text", text: slackClipped(label, SLACK_TEXT_BOUND.OPTION) },
+    value: String(index),
+    ...(recommended.has(label)
+      ? { description: { type: "plain_text", text: RECOMMENDED_NOTE } }
+      : undefined),
   }));
+  return {
+    blocks: [
+      {
+        type: "actions",
+        elements: [{ type: "checkboxes", action_id: SLACK_PICKS_ACTION, options }],
+      },
+    ],
+    buttons: [
+      {
+        type: "button",
+        text: { type: "plain_text", text: SUBMIT_LABEL },
+        action_id: randomUUID(),
+        value: value(),
+        style: "primary",
+      },
+    ],
+  };
 }
 
 /**
  * The DM a thread is written as: its title as the header, the agent's words
- * in a `markdown` block, and the open
- * button after any option's; a settled one says where its ask stands, in
- * the line given, above the button.
+ * in a `markdown` block, any checkboxes of its ask, and the open
+ * button after any other button of its ask; a settled one says where its ask
+ * stands, in the line given, above the button.
  */
 function threadDmContent(
   view: ThreadDmView,
   line?: string,
-  choices: readonly SlackBlock[] = [],
+  controls: AskControls = NO_CONTROLS,
 ): SlackMessageContent {
   const title = slackClipped(view.title, SLACK_TEXT_BOUND.HEADER);
   const words = view.text.trim();
@@ -174,10 +241,11 @@ function threadDmContent(
     ...(line === undefined
       ? []
       : [{ type: "context", elements: [{ type: "plain_text", text: line }] }]),
+    ...controls.blocks,
     {
       type: "actions",
       elements: [
-        ...choices,
+        ...controls.buttons,
         {
           type: "button",
           text: { type: "plain_text", text: `Open in ${PRODUCT_NAME}` },
@@ -511,7 +579,7 @@ export function dmThreadPost(
     const place = yield* findItemPlace(item.id);
     if (Option.isNone(place)) return;
     const view = { title: item.title, text: message.text, link: threadLink(item.id, place.value) };
-    const content = threadDmContent(view, undefined, choiceButtons(item.id, message));
+    const content = threadDmContent(view, undefined, askControls(item.id, message));
     const sent = yield* bot.value.dm(organizationId, recipient, content, thread);
     if (Option.isNone(sent)) return;
     const dm = {

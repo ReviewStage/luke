@@ -436,19 +436,26 @@ export const attachmentSync = defineSyncTable(attachment, {
   log: LOG.EVERY,
 });
 
-/** An automation, on its workspace's topic and its creator's. */
+/**
+ * An automation, on its workspace's topic and its creator's. Its rows'
+ * arrival and removal alone are logged, since the task list reads only
+ * whether a run's automation starts a new agent each run (`run-tasks.ts`).
+ */
 export const automationSync = defineSyncTable(automation, {
   topics: [
     { kind: TOPIC.WORKSPACE, column: automation.organizationId },
     { kind: TOPIC.ACCOUNT, column: automation.userId },
   ],
+  log: LOG.ROWS,
 });
 
 /**
  * One run of an automation, on its account's topic and, through the
  * automation, its workspace's. Its rows' arrival and removal alone are
  * logged, since the task list reads only which automation a run is of,
- * which never changes.
+ * which never changes, and which task a run made, which the run names in
+ * the transaction that inserts the task, so the task's own row moving
+ * reads it.
  */
 export const automationRunSync = defineSyncTable(automationRun, {
   topics: [

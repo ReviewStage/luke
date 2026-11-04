@@ -272,6 +272,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         },
         client: agentClient,
         listed: tasks.listed,
+        pullRequestListings: tasks.pullRequestListings,
         pool,
         agentListed: (agentId) => {
           const { taskAgents = [], tasklessAgents = [] } = tasks.snapshot();
@@ -283,6 +284,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           const { automationId, ...agent } = taskless;
           return automationId === null ? agent : { ...agent, automationId };
         },
+        repositoriesMoved: tasks.repositoriesMoved,
       }),
     );
     const automations = yield* served(

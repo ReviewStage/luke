@@ -7,8 +7,8 @@ import type {
   ReactNode,
 } from "react";
 import { pulseOnPress } from "../../press-pulse.js";
-import { useClipped } from "../../use-clipped.js";
 import { useLinkAddress } from "../menu/link-address.js";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_TRUNCATE, TEXT_VARIANT, Text } from "../text/text.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -30,9 +30,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * does, words that wash under the pointer as a byline's actor does, or a
  * pill on a raised fill as a mention is drawn in prose. An inert pill on a
  * row that is itself a button lifts with that row's hover, since its fill
- * is the row's hover fill. The name gives way before anything else: fading
- * out where it is cut, at its end, or at its start for a path, so a file's
- * own name stays in sight.
+ * is the row's hover fill. The name gives way before anything else: ending
+ * in an ellipsis where it is cut, at its end, or at its start for a path, so
+ * a file's own name stays in sight.
  *
  * What is drawn here is the token. Its hint, the pill or card hung while the
  * pointer rests on it and when that shows and goes, is the window's tooltip
@@ -50,7 +50,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * box cutting the words right around it leaves room for (`inline-ref.css`)
  * rather than cutting it square, and hands the wash on
  * (`--ui-inline-ref-wash`) for a mark inside that rings itself in the
- * ground. A cut name's fade is `inline-ref.css`'s, as a chip's is.
+ * ground.
  */
 
 /** How a token is drawn, by the place it stands. */
@@ -161,7 +161,8 @@ function rootClass({
     // Note that a pill saying its standing is let wider, so its name is read rather than cut at its first word.
     parts.push(stated ? "max-w-inline-ref-pill-stated" : "max-w-inline-ref-pill");
     if (gone) parts.push("bg-transparent inset-ring inset-ring-border-strong");
-    else if (pressable) parts.push("bg-fill-strong hover:bg-fill-selected focus-visible:bg-fill-selected");
+    else if (pressable)
+      parts.push("bg-fill-strong hover:bg-fill-selected focus-visible:bg-fill-selected");
     // Note that the lift is what keeps an inert pill seen on a row that is itself a press, because its resting fill is the row's hover fill.
     else
       parts.push(
@@ -178,20 +179,17 @@ function glyphClass(look: InlineRefLook): string {
   return look === INLINE_REF_LOOK.PILL ? `${glyph} size-[1em] text-muted-foreground` : glyph;
 }
 
-/** A token's name, alone on the words' baseline: struck through where gone, a path in the code face cut from its left, a link's name underlined under the pointer, and a wash's at least a mark tall. */
+/** A token's name, alone on the words' baseline: struck through where gone, a link's name underlined under the pointer, and a wash's at least a mark tall. */
 function labelClass({
   look,
-  name,
   gone,
   pressable,
 }: {
   look: InlineRefLook;
-  name: InlineRefName;
   gone: boolean;
   pressable: boolean;
 }): string {
-  const parts = ["ui-inline-ref-label min-w-0 self-baseline overflow-hidden"];
-  if (name === INLINE_REF_NAME.PATH) parts.push("[direction:rtl] font-mono");
+  const parts = ["ui-inline-ref-label self-baseline"];
   if (gone) parts.push("line-through");
   if (look === INLINE_REF_LOOK.LINK && pressable) {
     parts.push("group-hover/inline-ref:underline group-hover/inline-ref:underline-offset-2");
@@ -258,7 +256,6 @@ function InlineRefRoot({
     carded: boolean;
   }): React.JSX.Element {
   const linkAddress = useLinkAddress(linkHref);
-  const [measured, clipped] = useClipped(label);
   const pressable = onPress !== undefined;
   const leaving = pressable && leaves && linkHref !== undefined;
   const stated = !(state === undefined || state === null || labelHidden);
@@ -270,15 +267,20 @@ function InlineRefRoot({
           {glyph}
         </span>
       )}
-      <span
-        ref={measured}
-        className={labelHidden ? "ui-visually-hidden" : labelClass({ look, name, gone, pressable })}
-        data-name={name}
-        data-overflow={String(clipped)}
-      >
-        {/* Note that a path is isolated, so the fade at its start never reorders it. */}
-        {name === INLINE_REF_NAME.PATH ? <bdi>{label}</bdi> : label}
-      </span>
+      {labelHidden ? (
+        <span className="ui-visually-hidden">{label}</span>
+      ) : (
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          font={name === INLINE_REF_NAME.PATH ? TEXT_FONT.MONO : TEXT_FONT.SANS}
+          truncate={name === INLINE_REF_NAME.PATH ? TEXT_TRUNCATE.START : true}
+          className={labelClass({ look, gone, pressable })}
+        >
+          {/* Note that a path is isolated, so the ellipsis at its start never reorders it. */}
+          {name === INLINE_REF_NAME.PATH ? <bdi>{label}</bdi> : label}
+        </Text>
+      )}
       {!stated ? null : <span className={stateClass(look)}>{state}</span>}
       {heard === undefined ? null : <span className="ui-visually-hidden">{heard}</span>}
       {gone ? <span className="ui-visually-hidden">{GONE_HEARD}</span> : null}

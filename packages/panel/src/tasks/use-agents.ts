@@ -3,9 +3,6 @@ import {
   type AgentChangesAnswerView,
   type AgentDefaultAnswer,
   type AgentModelsAnswer,
-  type AgentOverviewChecksAnswerView,
-  type AgentOverviewConversationAnswerView,
-  type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestViewedAnswerView,
   type AgentReviewOptionsAnswerView,
 } from "@repo/features/agent-view";
@@ -398,20 +395,8 @@ export interface AgentsControl {
   generateChapters: (agentId: string, number?: number) => Promise<PullRequestChaptersAnswerView>;
   /** Who each agent's pull request names, by agent, as its Changes tab last read them, with the pull request they were read for; none for an agent whose changes were not read, or name no pull request. */
   changesPeople: ReadonlyMap<string, HeldPeople>;
-  /** One read of an agent's pull request itself as its Pull request tab's overview draws it: its description, branches, mergeability, and people. */
-  readOverviewPullRequest: (
-    agentId: string,
-    number?: number,
-  ) => Promise<AgentOverviewPullRequestAnswerView>;
   /** One read of what the reviewer and label pickers of an agent's Pull request tab offer. */
   readReviewOptions: (agentId: string) => Promise<AgentReviewOptionsAnswerView>;
-  /** One read of the checks on an agent's pull request's head, as its overview draws them. */
-  readOverviewChecks: (agentId: string, number?: number) => Promise<AgentOverviewChecksAnswerView>;
-  /** One read of an agent's pull request's conversation and where its reviewers stand, as its overview draws them. */
-  readOverviewConversation: (
-    agentId: string,
-    number?: number,
-  ) => Promise<AgentOverviewConversationAnswerView>;
   /** One read of which of an agent's pull request's files the member marked viewed on GitHub, on their own GitHub sign-in. */
   readPullRequestViewed: (
     agentId: string,
@@ -1501,25 +1486,8 @@ export function useAgents(input: {
     [act],
   );
 
-  const readOverviewPullRequest = useCallback<AgentsControl["readOverviewPullRequest"]>(
-    (agentId, number) =>
-      act(ACT_KIND.AGENTS_OVERVIEW_PULL_REQUEST, pullRequestAsked(agentId, number)),
-    [act],
-  );
-
   const readReviewOptions = useCallback<AgentsControl["readReviewOptions"]>(
     (agentId) => act(ACT_KIND.AGENTS_REVIEW_OPTIONS, { agentId }),
-    [act],
-  );
-
-  const readOverviewChecks = useCallback<AgentsControl["readOverviewChecks"]>(
-    (agentId, number) => act(ACT_KIND.AGENTS_OVERVIEW_CHECKS, pullRequestAsked(agentId, number)),
-    [act],
-  );
-
-  const readOverviewConversation = useCallback<AgentsControl["readOverviewConversation"]>(
-    (agentId, number) =>
-      act(ACT_KIND.AGENTS_OVERVIEW_CONVERSATION, pullRequestAsked(agentId, number)),
     [act],
   );
 
@@ -1645,10 +1613,7 @@ export function useAgents(input: {
     readChanges,
     changesPeople,
     generateChapters,
-    readOverviewPullRequest,
     readReviewOptions,
-    readOverviewChecks,
-    readOverviewConversation,
     readPullRequestViewed,
     keywords: input.keywords ?? NO_KEYWORDS,
     readSkills,
