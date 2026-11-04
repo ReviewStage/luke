@@ -93,7 +93,6 @@ const DECLARED_TABLES = [
   "plan_comment_thread",
   "plan_page_version",
   "plan_revision",
-  "pull_request_chapters",
   "queued_message",
   "rate_limit",
   "repository_pin",

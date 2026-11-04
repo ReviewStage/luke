@@ -35,7 +35,6 @@ export * from "./plan-comment.js";
 export * from "./plan-page.js";
 export * from "./plan-revision.js";
 export * from "./preferences.js";
-export * from "./pull-request-chapters.js";
 export * from "./repository-pin.js";
 export * from "./runner-line.js";
 export * from "./sandbox-terminal-lease.js";

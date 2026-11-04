@@ -42,12 +42,6 @@ export const TOPIC = {
   /** A workspace, by organization id. */
   WORKSPACE: "workspace",
   /**
-   * A workspace's pull request chapters, by organization id: narrower than
-   * the workspace's own topic, so a Generate's claim and finish wake the open
-   * chapter reads of that workspace and never its members' task lists.
-   */
-  WORKSPACE_CHAPTERS: "workspace-chapters",
-  /**
    * A workspace's memories, by organization id: narrower than the
    * workspace's own topic, so an agent's `save_memory` wakes the open memory
    * reads of that workspace and never its members' task lists.

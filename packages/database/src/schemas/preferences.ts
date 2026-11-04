@@ -47,8 +47,6 @@ export const accountPreference = pgTable("account_preference", {
   agentModel: text("agent_model"),
   agentEffort: text("agent_effort"),
   agentContextWindow: text("agent_context_window").$type<ContextWindow>(),
-  /** The Claude model a Generate chapters ran on, kept unread since chapters were taken out. */
-  chaptersModel: text("chapters_model"),
   /**
    * Each experiment the account turned on or back off, by its key
    * (`@repo/settings`'s `EXPERIMENT`); null on a row that never chose one,
