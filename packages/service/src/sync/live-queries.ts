@@ -8,6 +8,7 @@
  */
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
@@ -46,6 +47,7 @@ import {
   inboxItemReadSync,
   inboxItemSync,
   inboxMessageSync,
+  installedSkillSync,
   integrationConnectionSync,
   integrationInstallationSync,
   invitationSync,
@@ -446,6 +448,28 @@ export const workspaceMemoriesLive = defineLiveQuery({
   ],
   statements: ({ userId, workspaceId }) =>
     Option.map(workspaceMemoriesLiveStatement(userId, workspaceId), (memories) => ({ memories })),
+  mode: LIVE_MODE.SNAPSHOT,
+});
+
+/**
+ * The skills the account sees in a workspace, the workspace's and its own,
+ * each with whether it may manage them, woken on the workspace's skills
+ * topic by one of the workspace's skills installed, changed, shared into
+ * it, or removed, on the account's own skills topic by one of its personal
+ * skills, and on the account's topic by its membership made, ended, or
+ * given another role, which decides what it reads and may manage.
+ */
+export const installedSkillsLive = defineLiveQuery({
+  name: LIVE_READ.INSTALLED_SKILLS,
+  params: ["userId", "workspaceId"],
+  reads: [installedSkillSync, memberSync],
+  topics: ({ userId, workspaceId }) => [
+    [TOPIC.WORKSPACE_SKILLS, workspaceId],
+    [TOPIC.ACCOUNT_SKILLS, userId],
+    [TOPIC.ACCOUNT, userId],
+  ],
+  statements: ({ userId, workspaceId }) =>
+    Option.map(installedSkillsLiveStatement(userId, workspaceId), (skills) => ({ skills })),
   mode: LIVE_MODE.SNAPSHOT,
 });
 
@@ -890,6 +914,7 @@ export const LIVE_QUERIES = liveQueryRegistry([
   workspaceMembersLive,
   workspaceInvitationsLive,
   workspaceMemoriesLive,
+  installedSkillsLive,
   workspaceIntegrationsLive,
   automationsLive,
   automationWorkspaceRunsLive,

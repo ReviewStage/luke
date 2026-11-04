@@ -344,6 +344,12 @@ const settledStatus = (status: AgentStatus) =>
 export const standsStopped = (agents: readonly TaskStandingAgent[]) =>
   Effect.map(standingTurns(agents), (read) => read.every(({ status }) => settledStatus(status)));
 
+/** Whether every agent finished well, as `standingTurns` reads each: completed, none starting, running, failed, or stopped. */
+export const standsFinishedWell = (agents: readonly TaskStandingAgent[]) =>
+  Effect.map(standingTurns(agents), (read) =>
+    read.every(({ status }) => status === AGENT_STATUS.COMPLETED),
+  );
+
 /**
  * The ids of the agents idle enough to archive, as `standingTurns` reads
  * each: stopped, and with no turn of theirs still queued or running, a Stop on

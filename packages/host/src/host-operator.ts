@@ -149,11 +149,10 @@ import {
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillContentView,
+  type InstalledSkillFollowParams,
   type InstalledSkillIdParams,
   type InstalledSkillInstallParams,
   type InstalledSkillInstallView,
-  type InstalledSkillListParams,
-  type InstalledSkillListView,
   type InstalledSkillPreviewFileParams,
   type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewParams,
@@ -167,7 +166,6 @@ import {
   type InstalledSkillView,
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
-  installedSkillListViewSchema,
   installedSkillPreviewFileViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
@@ -376,6 +374,7 @@ import type {
   AppHolderInboxes,
   AppHostRead,
   AppInboxItems,
+  AppInstalledSkills,
   AppIntegrations,
   AppIntegrationTools,
   AppMcpClients,
@@ -385,12 +384,12 @@ import type {
   AppPlanDocuments,
   AppProviderKeys,
   AppSlackChannels,
+  AppThisMacHosts,
   AppWorkspaceIntegrations,
   AppWorkspaceMembers,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
-import { type ThisMacHostRead, thisMacHostReadSchema } from "./contract/this-mac-host.js";
 import {
   type MacCommandAnswer,
   type MacCommandAsk,
@@ -427,8 +426,8 @@ export interface HostOperator {
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
   /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
   answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
-  /** The device This Mac's host's record names; none where the host could not answer. */
-  thisMacHost(): Effect.Effect<ThisMacHostRead | undefined>;
+  /** Which machine This Mac is and the device its host's record names, held by the host for the session, whole, each time it moves; never on a platform with no This Mac. */
+  onThisMacHostChanged(listener: (held: AppThisMacHosts) => void): () => void;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -809,8 +808,14 @@ export interface HostOperator {
   chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
   /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
-  /** The skills the account sees in a workspace, the workspace's then its own; or why there are none. */
-  installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+  /** The skills the account sees in a workspace, the workspace's and its own, held for the windows from now until let go and followed live; what they hold is heard through `onInstalledSkillsChanged`. */
+  installedSkillsFollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
+  /** A workspace's skills let go by the windows. */
+  installedSkillsUnfollow(params: InstalledSkillFollowParams): Effect.Effect<void>;
+  /** A workspace's held skills asked again at once, as Try again asks; done once the ask has landed. */
+  installedSkillsRetry(params: InstalledSkillFollowParams): Effect.Effect<void>;
+  /** Every workspace's skills the host holds for the windows, whole, each time any of them moves. */
+  onInstalledSkillsChanged(listener: (held: AppInstalledSkills) => void): () => void;
   /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
   installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
   /** What a paste would install, read by the service; or why it did not say. */
@@ -1232,10 +1237,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
       ),
-    thisMacHost: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.THIS_MAC_HOST_READ),
-        answerOf(thisMacHostReadSchema, undefined),
+    onThisMacHostChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.THIS_MAC_HOST_CHANGED,
+        // Note that This Mac is the host's own, handed over in this process, so it is passed on as built, as the held beats are.
+        (payload) => (isRecord(payload) ? answered<AppThisMacHosts>(payload) : undefined),
+        listener,
       ),
     answerMacCommand: (answer) =>
       Effect.map(
@@ -2151,10 +2158,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
         answerOf(chaptersModelAnswerViewSchema, AGENT_UNANSWERED),
       ),
-    installedSkillsList: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
-        answerOf(installedSkillListViewSchema, INSTALLED_SKILL_UNANSWERED),
+    installedSkillsFollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_FOLLOW, { workspaceId: params.workspaceId }),
+      ),
+    installedSkillsUnfollow: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UNFOLLOW, { workspaceId: params.workspaceId }),
+      ),
+    installedSkillsRetry: (params) =>
+      fire(client.call(GATEWAY_METHOD.INSTALLED_SKILLS_RETRY, { workspaceId: params.workspaceId })),
+    onInstalledSkillsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INSTALLED_SKILLS_CHANGED,
+        // Note that the held skills are the host's own, handed over in this process, so they are passed on as built, as the held memories are.
+        (payload) => (isRecord(payload) ? answered<AppInstalledSkills>(payload) : undefined),
+        listener,
       ),
     installedSkillsRead: (params) =>
       Effect.map(

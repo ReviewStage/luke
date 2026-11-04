@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
+import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
 import { workspaceMemoriesLiveStatement } from "@repo/database/models/memory-store";
@@ -111,6 +112,9 @@ function liveStatements() {
     ),
     "workspace-memories.memories": Option.getOrThrow(
       workspaceMemoriesLiveStatement(USER_ID, randomUUID()),
+    ),
+    "installed-skills.skills": Option.getOrThrow(
+      installedSkillsLiveStatement(USER_ID, randomUUID()),
     ),
     "workspace-integrations.sentryInstallations": Option.getOrThrow(
       sentryInstallationsLiveStatement(USER_ID, randomUUID()),

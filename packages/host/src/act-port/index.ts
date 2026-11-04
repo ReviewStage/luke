@@ -37,10 +37,6 @@ import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
-  type ThisMacHostProceduresDependencies,
-  thisMacHostProcedures,
-} from "./this-mac-host-procedures.js";
-import {
   type WorkspaceProceduresDependencies,
   workspaceProcedures,
 } from "./workspace-procedures.js";
@@ -118,7 +114,6 @@ export interface ActPortDependencies {
   readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
-  readonly thisMacHost: ThisMacHostProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
 
@@ -149,7 +144,6 @@ export function createActPortHandler<Sender>(
     ...macCommandProcedures(dependencies.macCommands),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
-    ...thisMacHostProcedures(dependencies.thisMacHost),
     ...workspaceProcedures(dependencies.workspaces),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });

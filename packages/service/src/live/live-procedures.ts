@@ -67,6 +67,11 @@
  * after the account is read as a member of it, so a workspace it is not in
  * is not found; woken by a memory kept, corrected, or forgotten, and by the
  * reader's own membership moving (`workspaceMemoriesLive`).
+ * `GET /api/live/installed-skills?workspaceId=` answers the skills the
+ * account sees there, the workspace's and its own, each with whether it may
+ * manage it, on the same membership check; woken by one of them installed,
+ * changed, shared, or removed, and by the reader's membership moving
+ * (`installedSkillsLive`).
  * `GET /api/live/workspace-integrations?workspaceId=` answers its active
  * Sentry installations, its Slack bot, and each Slack channel's repository
  * as three, to a member of it, so a workspace it is not in is not found,
@@ -192,6 +197,7 @@ import {
   automationWorkspaceRunsLive,
   inboxItemsLive,
   inboxLive,
+  installedSkillsLive,
   integrationStatusesLive,
   macCommandsLive,
   PLAN_THREADS,
@@ -955,6 +961,18 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return yield* liveQueryParts(
         workspaceMemoriesLive,
+        { userId: context.userId, workspaceId: input.workspaceId },
+        input,
+      );
+    }),
+    installedSkills: signedIn.installedSkills.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const member = yield* hostedStoreOrUnavailable(
+        isWorkspaceMember(context.userId, input.workspaceId),
+      );
+      if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return yield* liveQueryParts(
+        installedSkillsLive,
         { userId: context.userId, workspaceId: input.workspaceId },
         input,
       );

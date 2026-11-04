@@ -38,6 +38,7 @@ import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { inboxItemRead } from "../schemas/inbox-item-read.js";
 import { inboxMessage } from "../schemas/inbox-message.js";
+import { installedSkill } from "../schemas/installed-skill.js";
 import { integrationConnection } from "../schemas/integration.js";
 import { integrationInstallation } from "../schemas/integration-installation.js";
 import { macCommand } from "../schemas/mac-command.js";
@@ -553,6 +554,23 @@ export const slackChannelRepositorySync = defineSyncTable(slackChannelRepository
 });
 
 /**
+ * An installed skill, on its workspace's skills topic where it is a
+ * workspace's and on its owner's where it is personal, which only the open
+ * skills reads are woken on; each row names one, since the other's id is
+ * null, and a share, which moves a personal skill into a workspace, names
+ * both through the row before and after. No column is ignored, since every
+ * write moves one the page reads, its instant among them. Note that a
+ * skill's files are not captured: the list reads none of them,
+ * and an update rewrites them beside the skill's own row in one transaction.
+ */
+export const installedSkillSync = defineSyncTable(installedSkill, {
+  topics: [
+    { kind: TOPIC.WORKSPACE_SKILLS, column: installedSkill.organizationId },
+    { kind: TOPIC.ACCOUNT_SKILLS, column: installedSkill.ownerUserId },
+  ],
+});
+
+/**
  * A transcript's message, on its conversation's topic alone. Note that no
  * column is ignored and no wider topic is taken, because a journal is
  * rewritten in place on every streamed step: each write transaction
@@ -678,6 +696,7 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   agentBrowserTabSync,
   pullRequestChaptersSync,
   memorySync,
+  installedSkillSync,
   integrationInstallationSync,
   slackInstallationSync,
   slackChannelRepositorySync,

@@ -2134,11 +2134,15 @@ const finishTask = SqlSchema.findOneOption({
  * notices open until a member opens them (`inbox-settle.ts`). It archives
  * no agent, then or as a turn ends, since someone may be talking to one:
  * only a member's or an agent's move to Done does (`updateTaskCommitted`).
+ * A task an automation's run made for itself asks no merged pull request,
+ * `mergeRequired` false, since its run may publish nothing, and its caller's
+ * guard holds its agents to having finished well instead.
  */
 export function finishTaskWork<R = never>(
   userId: string,
   taskId: string,
   idle: TaskFinishGuard<R>,
+  mergeRequired = true,
 ): Effect.Effect<boolean, TaskStoreFailure, DatabaseServices | R> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -2149,7 +2153,8 @@ export function finishTaskWork<R = never>(
         const pullRequests = yield* findStandingPullRequestStates({ taskId });
         if (pullRequests.some(({ state }) => OPEN_PULL_REQUEST_STATES.includes(state)))
           return false;
-        if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
+        const merged = pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED);
+        if (mergeRequired && !merged) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
         const agents = yield* lockStandingAgents({ taskId });
         if (!(yield* idle(agents))) return false;

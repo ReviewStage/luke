@@ -53,10 +53,9 @@ function client(): HostedInstalledSkillClient {
 it.effect("each call goes to its own path under the account's bearer", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
-      "GET /api/installed-skills": { answer: () => ({ skills: [SUMMARY] }) },
       "POST /api/installed-skills": { answer: () => ({ skills: [SUMMARY] }), status: 201 },
       [`PATCH /api/installed-skills/${SKILL_ID}`]: {
-        answer: () => ({ skill: { ...SUMMARY, enabled: false } }),
+        answer: () => ({ skill: { ...SUMMARY, enabled: false }, txid: "41" }),
       },
       [`GET /api/installed-skills/${SKILL_ID}/update`]: { answer: () => ({ available: false }) },
       [`DELETE /api/installed-skills/${SKILL_ID}`]: { answer: () => ({ id: SKILL_ID }) },
@@ -67,7 +66,6 @@ it.effect("each call goes to its own path under the account's bearer", () =>
     });
     const ask = client();
 
-    const listed = yield* Effect.provide(ask.list(WORKSPACE_ID), api.layer);
     const installed = yield* Effect.provide(
       ask.install({
         workspaceId: WORKSPACE_ID,
@@ -82,18 +80,19 @@ it.effect("each call goes to its own path under the account's bearer", () =>
     const read = yield* Effect.provide(ask.read(SKILL_ID), api.layer);
     const shared = yield* Effect.provide(ask.share(WORKSPACE_ID, SKILL_ID), api.layer);
 
-    assert.deepEqual(listed, { ok: true, answer: [SUMMARY] });
-    assert.deepEqual(installed, { ok: true, answer: [SUMMARY] });
-    assert.deepEqual(toggled, { ok: true, answer: { ...SUMMARY, enabled: false } });
+    assert.deepEqual(installed, { ok: true, answer: { skills: [SUMMARY] } });
+    assert.deepEqual(toggled, {
+      ok: true,
+      answer: { skill: { ...SUMMARY, enabled: false }, txid: "41" },
+    });
     assert.deepEqual(checked, { ok: true, answer: { available: false } });
-    assert.deepEqual(removed, { ok: true, answer: SKILL_ID });
+    assert.deepEqual(removed, { ok: true, answer: { id: SKILL_ID } });
     assert.deepEqual(read, { ok: true, answer: CONTENT });
     assert.deepEqual(shared, {
       ok: true,
-      answer: { ...SUMMARY, scope: INSTALLED_SKILL_SCOPE.WORKSPACE },
+      answer: { skill: { ...SUMMARY, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } },
     });
-    const [list, , toggle, check, , , share] = api.requests();
-    assert.equal(new URL(list?.url ?? "").searchParams.get("workspaceId"), WORKSPACE_ID);
+    const [, toggle, check, , , share] = api.requests();
     assert.deepEqual(JSON.parse(toggle?.body ?? "{}"), { enabled: false });
     assert.equal(new URL(check?.url ?? "").searchParams.get("workspaceId"), WORKSPACE_ID);
     assert.deepEqual(JSON.parse(share?.body ?? "{}"), { workspaceId: WORKSPACE_ID });

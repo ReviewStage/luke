@@ -24,9 +24,11 @@
  * with whether the reader can generate them; and every integration row the
  * account holds, with the providers it is offered and those that take
  * several accounts; and one workspace's memories, named by `?workspaceId=`,
- * each with its keeper's name and whether the reader may forget it; and one
- * workspace's Sentry installations and Slack bot, named by `?workspaceId=`,
- * with whether this deployment holds each integration. Each
+ * each with its keeper's name and whether the reader may forget it; and the
+ * skills the account sees there, named the same way, each with whether it
+ * may manage it; and one workspace's Sentry installations and Slack bot,
+ * named by `?workspaceId=`, with whether this deployment holds each
+ * integration. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. The task
@@ -47,6 +49,7 @@ import {
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
+import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
 import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
 import {
   ACCOUNT_INBOX_ITEMS,
@@ -300,6 +303,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceMemoriesLiveAnswerSchema)),
+  installedSkills: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INSTALLED_SKILLS }))
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(installedSkillsLiveAnswerSchema)),
   workspaceIntegrations: hostedProcedure
     .meta(
       openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_INTEGRATIONS }),

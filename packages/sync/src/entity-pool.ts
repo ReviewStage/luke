@@ -138,6 +138,12 @@ export interface HeldRows<Row extends object, Change = unknown> {
   readonly row: (key: string) => Row | undefined;
   /** The keys of the rows the read shows that a write stands over. */
   readonly pending: () => readonly string[];
+  /**
+   * The rows the read answered, in the order it answered them, each as the
+   * service last answered it with no write drawn over it, as a store that
+   * keeps what the service holds reads them.
+   */
+  readonly synced: () => readonly Row[];
   /** Every change standing over the kind, oldest first, which a read beside the pool draws over its own rows. */
   readonly standing: () => readonly Change[];
 }
@@ -417,6 +423,10 @@ function stood<Row extends object, Change>(
       row: (key) =>
         holding.held.has(key) || holding.adopted.has(key) ? drawnRow(rows, key) : undefined,
       pending: () => shown(holding).filter((key) => standingOver(rows, key)),
+      synced: () => {
+        const synced = rows.synced.held();
+        return holding.order.flatMap((key) => synced.get(key) ?? []);
+      },
       standing: () => rows.standing.map((write) => write.change),
     }),
   );

@@ -1,7 +1,7 @@
 import { type HostedDeviceAgentClient, OWN_ENROLL_OUTCOME } from "@repo/features";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
-import { carried, GATEWAY_METHOD } from "@repo/gateway";
+import { carried, GATEWAY_EVENT } from "@repo/gateway";
 import { EXPERIMENT, type Experiment } from "@repo/settings";
 import { Duration, Effect, Option, type Path, Result, Schedule, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -9,9 +9,9 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import type { ChildProcessSpawner } from "effect/process";
+import { type AppThisMacHost, type AppThisMacHosts, NO_KEYS_HELD } from "./app-state.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
-import type { ThisMacHostRead } from "./contract/this-mac-host.js";
 import { Reporter, ThisMacHost } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import { type HostDevice, readHostDevice, writeHostDevice } from "./host-device-record.js";
@@ -54,6 +54,13 @@ import type { RunMode } from "./run-mode.js";
  * `RETRY`, for as long as what the app keeps the host at stands, and nothing
  * is shown of it: launchd and the host's own setup carry the rest. A Mac the
  * host cannot run on (`ThisMacHost`'s `runsHost`) is never enrolled.
+ *
+ * Which machine this Mac is, and the device its record names, are told to
+ * the windows under the account signed in (`LIVE_READ.THIS_MAC_HOST`) as
+ * the host starts, after its own enroll, and on every pass of `IDLE` where
+ * either or the account moved, so a record the install's own host writes
+ * as it pairs, or once its secret is refused, reaches them within a pass
+ * whether or not a window draws a machine.
  */
 
 /** How often what the app keeps This Mac's host at is read again. */
@@ -77,8 +84,12 @@ type Kept = { readonly userId: string; readonly running: boolean } | undefined;
 const sameKept = (one: Kept, other: Kept) =>
   one?.userId === other?.userId && one?.running === other?.running;
 
+/** Whether two reads of This Mac name the same device and machine. */
+const sameThisMac = (one: AppThisMacHost, other: AppThisMacHost) =>
+  one.deviceId === other.deviceId && one.machineId === other.machineId;
+
 export interface ThisMacHostDependencies {
-  kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "createId"> & {
+  kernel: Pick<HostKernel, "hostedServiceBaseUrl" | "createId" | "emit"> & {
     runMode: Pick<RunMode, "sendsNetwork">;
   };
   account: Pick<AccountComposer, "capabilitiesActive">;
@@ -117,6 +128,35 @@ export function composeThisMacHost(
 
     const ownServiceRecord = Effect.map(readHostDevice(host.stateRoot), Option.filter(ownService));
 
+    // Note that which machine this is never changes, so it is read once, as This Mac is first told.
+    const machineId = yield* Effect.cached(
+      Effect.map(host.machine, (machine) => machine.machineId),
+    );
+
+    /** This Mac as the windows draw it: which machine it is, and the device its record names, where it was enrolled with this app's service. */
+    const read = Effect.map(
+      Effect.all([ownServiceRecord, machineId]),
+      ([record, id]): AppThisMacHost => ({
+        ...(Option.isSome(record) ? { deviceId: record.value.deviceId } : undefined),
+        ...(id === undefined ? undefined : { machineId: id }),
+      }),
+    );
+
+    /** This Mac as last told the windows, and the account it was told under; none before the first. */
+    let told: { readonly userId: string | undefined; readonly thisMac: AppThisMacHost } | undefined;
+
+    /** This Mac told the windows under the account signed in, where it or the account moved since it was last told; nothing is held while nobody is signed in. */
+    const tellThisMac = Effect.gen(function* () {
+      const userId = dependencies.accountId();
+      const thisMac = yield* read;
+      if (told !== undefined && told.userId === userId && sameThisMac(told.thisMac, thisMac))
+        return;
+      told = { userId, thisMac };
+      const held: AppThisMacHosts =
+        userId === undefined ? NO_KEYS_HELD : { [userId]: { rows: thisMac } };
+      kernel.emit(GATEWAY_EVENT.THIS_MAC_HOST_CHANGED, carried(held));
+    });
+
     /** Whether the record's device is the account's, as the service lists its hosts. */
     const accountOwns = (record: HostDevice) =>
       Effect.flatMap(dependencies.hostListed(record.deviceId), (listed) =>
@@ -150,6 +190,7 @@ export function composeThisMacHost(
           serviceOrigin,
         }).pipe(Effect.mapError(() => "save its record"));
         report("this Mac's host was enrolled");
+        yield* tellThisMac;
         return true;
       }).pipe(Effect.uninterruptible);
 
@@ -215,9 +256,9 @@ export function composeThisMacHost(
             ),
           );
 
-    // Note that a change interrupts the keep under way, but for an enroll begun, which runs whole.
+    // Note that a change interrupts the keep under way, but for an enroll begun, which runs whole; This Mac is told on every pass.
     const lifetime = Effect.forkScoped(
-      Stream.fromEffectSchedule(keptNow, Schedule.spaced(IDLE)).pipe(
+      Stream.fromEffectSchedule(Effect.andThen(tellThisMac, keptNow), Schedule.spaced(IDLE)).pipe(
         Stream.changesWith(sameKept),
         Stream.switchMap((kept) => Stream.fromEffectDrain(keep(kept))),
         Stream.runDrain,
@@ -225,24 +266,7 @@ export function composeThisMacHost(
       ),
     );
 
-    // Note that which machine this is never changes, so it is read once, at the panel's first ask.
-    const machineId = yield* Effect.cached(
-      Effect.map(host.machine, (machine) => machine.machineId),
-    );
-
-    /** This Mac as the panel reads it: which machine it is, and the device its record names, where it was enrolled with this app's service. */
-    const read = Effect.map(
-      Effect.all([ownServiceRecord, machineId]),
-      ([record, id]): ThisMacHostRead => ({
-        ...(Option.isSome(record) ? { deviceId: record.value.deviceId } : undefined),
-        ...(id === undefined ? undefined : { machineId: id }),
-      }),
-    );
-
-    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {
-      [GATEWAY_METHOD.THIS_MAC_HOST_READ]: () =>
-        Effect.map(Effect.provideContext(read, services), carried),
-    };
+    const methods: PlatformConcernMethods<typeof HOST_PLATFORM_CONCERN.LOCAL_AGENTS> = {};
     return { methods, lifetime: Effect.asVoid(lifetime) } satisfies Composer;
   });
 }
