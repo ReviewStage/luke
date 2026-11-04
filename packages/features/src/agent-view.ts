@@ -523,12 +523,14 @@ export const agentPullRequestReadParamsSchema = EffectSchema.Struct({
 
 export type AgentPullRequestReadParams = typeof agentPullRequestReadParamsSchema.Type;
 
-/** The parts of a pull request its Pull request tab holds, each a read of its own: the pull request itself, its checks, its conversation, and what the agent published. */
+/** The parts of a pull request its Pull request tab holds, each a read of its own: the pull request itself, its checks, its conversation, what the agent published, what its reviewer and label pickers offer, and which of its files the member marked viewed. */
 export const PULL_REQUEST_PART = {
   PULL_REQUEST: "pullRequest",
   CHECKS: "checks",
   CONVERSATION: "conversation",
   PUBLISHED: "published",
+  REVIEW_OPTIONS: "reviewOptions",
+  VIEWED: "viewed",
 } as const;
 
 export type PullRequestPart = (typeof PULL_REQUEST_PART)[keyof typeof PULL_REQUEST_PART];

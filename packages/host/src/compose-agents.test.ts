@@ -1159,10 +1159,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { model: CHAPTERS_MODEL.OPUS },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: AGENT_ID }),
-      REVIEW_OPTIONS,
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_GITHUB_IMAGE, {
         agentId: AGENT_ID,
         src: "https://camo.githubusercontent.com/abc",
@@ -1176,10 +1172,6 @@ it.effect("each method asks the service once and answers what it said, whole", (
         request: { action: PULL_REQUEST_ACTION.READY_FOR_REVIEW },
       }),
       { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
-    );
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, { agentId: AGENT_ID }),
-      { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.AGENTS_INBOX_ATTACHMENT, {
@@ -1317,10 +1309,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `chapters-generate:${AGENT_ID}#11`,
       "chapters-model",
       `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
-      `review-options:${AGENT_ID}`,
       `github-image:${AGENT_ID}:https://camo.githubusercontent.com/abc`,
       `pull-request-action:${AGENT_ID}#11:${PULL_REQUEST_ACTION.READY_FOR_REVIEW}`,
-      `pull-request-viewed:${AGENT_ID}`,
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `part:${AGENT_ID}:message-1:2:`,

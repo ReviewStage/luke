@@ -196,8 +196,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_PULL_REQUEST_PART_RETRY: "agents.pullRequestPartRetry",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   AGENTS_CHANGES: "agents.changes",
-  /** What the reviewer and label pickers of an agent's Pull request tab offer. */
-  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
    * Our own tools one agent is offered, held for the window while it holds
    * the stream open and a while after among those let go lately, asked again
@@ -211,8 +209,6 @@ export const AGENT_ACT_KIND = {
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
-  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
-  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
 } as const;
 
 /**
@@ -626,7 +622,6 @@ export const WORKSPACE_ACT_KIND = {
   WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
   WORKSPACE_TRANSFER: "workspace.transfer",
   WORKSPACE_LEAVE: "workspace.leave",
-  WORKSPACE_PHOTO_READ: "workspace.photoRead",
   WORKSPACE_PHOTO_SET: "workspace.photoSet",
   WORKSPACE_SLUG_SET: "workspace.slugSet",
   /**
@@ -796,12 +791,10 @@ export const PORT_ACT_USE = {
   AGENTS_PULL_REQUEST_PART_FOLLOW: ACT_USE.READ,
   AGENTS_PULL_REQUEST_PART_RETRY: ACT_USE.READ,
   AGENTS_CHANGES: ACT_USE.FETCH,
-  AGENTS_REVIEW_OPTIONS: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_FOLLOW: ACT_USE.READ,
   AGENTS_WORKSPACE_TOOLS_RETRY: ACT_USE.READ,
   AGENTS_GITHUB_IMAGE: ACT_USE.FETCH,
   AGENTS_PULL_REQUEST_ACTION: ACT_USE.WRITE,
-  AGENTS_PULL_REQUEST_VIEWED: ACT_USE.READ,
 
   AGENTS_INBOX_FOLLOW: ACT_USE.READ,
   AGENTS_INBOX_RETRY: ACT_USE.READ,
@@ -969,7 +962,6 @@ export const PORT_ACT_USE = {
   WORKSPACE_MEMBER_ROLE: ACT_USE.WRITE,
   WORKSPACE_TRANSFER: ACT_USE.WRITE,
   WORKSPACE_LEAVE: ACT_USE.WRITE,
-  WORKSPACE_PHOTO_READ: ACT_USE.READ,
   WORKSPACE_PHOTO_SET: ACT_USE.WRITE,
   WORKSPACE_SLUG_SET: ACT_USE.WRITE,
   WORKSPACE_TOKEN_REPOSITORIES_FOLLOW: ACT_USE.READ,

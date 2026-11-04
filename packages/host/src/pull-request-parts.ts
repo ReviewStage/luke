@@ -1,22 +1,26 @@
 /**
  * pull-request-parts.ts -- the parts of each agent's pull request the windows' Pull request tabs hold, fetched while held and asked again together as the pull request moves.
  *
- * A Pull request tab holds four reads of its pull request: the pull request
- * itself, its checks, its conversation, and what the agent published, each
- * by the agent and then the pull request's number, or `OWN_PULL_REQUEST`
+ * A Pull request tab holds six reads of its pull request: the pull request
+ * itself, its checks, its conversation, what the agent published, what its
+ * reviewer and label pickers offer, and which of its files the member marked
+ * viewed, each by the agent and then the pull request's number, or `OWN_PULL_REQUEST`
  * for the agent's own, which the service resolves from the agent's branch.
  * Each is a fetch the host holds (`heldFetch`), asked as a window first
- * holds it, as a window comes forward, and on its own Try again. Every part
- * a window holds of one pull request is asked again together as its agent's
- * status moves, which is how its end is heard, or as the task list's line
- * for it moves: its state, checks, merge queue, or head commit, which a
- * push moves. Note that the line is found by the pull request's address,
+ * holds it, as a window comes forward, and on its own Try again. The first
+ * four parts a window holds of one pull request are asked again together as
+ * its agent's status moves, which is how its end is heard, or as the task
+ * list's line for it moves: its state, checks, merge queue, or head commit,
+ * which a push moves; the viewed marks only as its head moves, since a push
+ * is what unmarks a file; and the pickers' options on nothing but focus and
+ * Try again, since they are the repository's. Note that the line is found by the pull request's address,
  * from the pull request part's own answer, or from the agent's listed pull
  * request for its own, so a pull request no agent of the list published,
  * or one not answered yet, is asked again on nothing but focus and Try
  * again. A part whose ask fails after one answered keeps that answer, as a
  * fetch the host holds does; one that fails before any answered holds the
- * failure, so its tab says why.
+ * failure, so its tab says why; but the viewed marks hold every answer,
+ * since marks a read can no longer vouch for are taken away until one does.
  */
 
 import {
@@ -24,6 +28,8 @@ import {
   type AgentOverviewConversationAnswerView,
   type AgentOverviewPullRequestAnswerView,
   type AgentPullRequestAnswerView,
+  type AgentPullRequestViewedAnswerView,
+  type AgentReviewOptionsAnswerView,
   PULL_REQUEST_PART,
   type PullRequestPart,
   type PullRequestPartParams,
@@ -62,6 +68,8 @@ export interface PullRequestPartsDependencies {
       key: PullRequestKey,
     ) => Effect.Effect<AgentOverviewConversationAnswerView>;
     readonly published: (key: PullRequestKey) => Effect.Effect<AgentPullRequestAnswerView>;
+    readonly reviewOptions: (key: PullRequestKey) => Effect.Effect<AgentReviewOptionsAnswerView>;
+    readonly viewed: (key: PullRequestKey) => Effect.Effect<AgentPullRequestViewedAnswerView>;
   };
   /** The task list each time it is drawn, from the caller's listening on. */
   readonly listings: Effect.Effect<Stream.Stream<PullRequestListing>, never, Scope.Scope>;
@@ -123,21 +131,28 @@ function linesOf(listing: PullRequestListing): ReadonlyMap<string, AgentPullRequ
   return lines;
 }
 
-/** What moved from one drawing of the list to the next: the agents whose status moved, and the addresses of the pull requests whose line moved or left. */
+/** What moved from one drawing of the list to the next: the agents whose status moved, the addresses of the pull requests whose line moved or left, and of those whose head moved or left among them. */
 function movedOf(
   before: PullRequestListing,
   after: PullRequestListing,
-): { readonly agents: ReadonlySet<string>; readonly urls: ReadonlySet<string> } {
+): {
+  readonly agents: ReadonlySet<string>;
+  readonly urls: ReadonlySet<string>;
+  readonly heads: ReadonlySet<string>;
+} {
   const agents = new Set<string>();
   for (const [agentId, status] of before.statuses) {
     if (after.statuses.get(agentId) !== status) agents.add(agentId);
   }
   const urls = new Set<string>();
+  const heads = new Set<string>();
   const afterLines = linesOf(after);
   for (const [url, line] of linesOf(before)) {
-    if (lineMoved(line, afterLines.get(url))) urls.add(url);
+    const now = afterLines.get(url);
+    if (lineMoved(line, now)) urls.add(url);
+    if (now?.headSha !== line.headSha) heads.add(url);
   }
-  return { agents, urls };
+  return { agents, urls, heads };
 }
 
 /** The parts of the pull requests the windows hold, for as long as the scope that made them stands. */
@@ -189,19 +204,41 @@ export function pullRequestParts(
       fetch: (key, held) => Effect.map(ask.published(key), (answer) => keptOver(answer, held)),
       tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_PUBLISHED]: held }),
     });
+    const reviewOptions = yield* heldFetch<typeof LIVE_READ.REVIEW_OPTIONS, PullRequestKey>({
+      empty: NO_KEYS_HELD,
+      path: pathOf,
+      gate,
+      focus,
+      fetch: (key, held) => Effect.map(ask.reviewOptions(key), (answer) => keptOver(answer, held)),
+      tell: (held) => tell({ [LIVE_READ.REVIEW_OPTIONS]: held }),
+    });
+    const viewed = yield* heldFetch<typeof LIVE_READ.PULL_REQUEST_VIEWED, PullRequestKey>({
+      empty: NO_KEYS_HELD,
+      path: pathOf,
+      gate,
+      focus,
+      fetch: (key) => Effect.map(ask.viewed(key), Option.some),
+      tell: (held) => tell({ [LIVE_READ.PULL_REQUEST_VIEWED]: held }),
+    });
     const fetches: { readonly [Part in PullRequestPart]: PartFetch } = {
       [PULL_REQUEST_PART.PULL_REQUEST]: pullRequest,
       [PULL_REQUEST_PART.CHECKS]: checks,
       [PULL_REQUEST_PART.CONVERSATION]: conversation,
       [PULL_REQUEST_PART.PUBLISHED]: published,
+      [PULL_REQUEST_PART.REVIEW_OPTIONS]: reviewOptions,
+      [PULL_REQUEST_PART.VIEWED]: viewed,
     };
     const holds: { readonly [Part in PullRequestPart]: FiberMap.FiberMap<PullRequestKey> } = {
       [PULL_REQUEST_PART.PULL_REQUEST]: yield* FiberMap.make<PullRequestKey>(),
       [PULL_REQUEST_PART.CHECKS]: yield* FiberMap.make<PullRequestKey>(),
       [PULL_REQUEST_PART.CONVERSATION]: yield* FiberMap.make<PullRequestKey>(),
       [PULL_REQUEST_PART.PUBLISHED]: yield* FiberMap.make<PullRequestKey>(),
+      [PULL_REQUEST_PART.REVIEW_OPTIONS]: yield* FiberMap.make<PullRequestKey>(),
+      [PULL_REQUEST_PART.VIEWED]: yield* FiberMap.make<PullRequestKey>(),
     };
     const every = Object.values(fetches);
+    /** The parts asked again together as the pull request or its agent moves. */
+    const moving: readonly PartFetch[] = [pullRequest, checks, conversation, published];
 
     /** The address a key's pull request is listed by: its pull request part's answer, or for the agent's own, the pull request the list says it published. */
     const urlOf = (key: PullRequestKey, listing: PullRequestListing): string | undefined =>
@@ -224,7 +261,14 @@ export function pullRequestParts(
           const url = urlOf(key, was);
           return url !== undefined && moved.urls.has(url);
         };
-        return Effect.forEach(every, (fetch) => fetch.wake(named), { discard: true });
+        const pushed = (key: PullRequestKey) => {
+          const url = urlOf(key, was);
+          return url !== undefined && moved.heads.has(url);
+        };
+        return Effect.andThen(
+          Effect.forEach(moving, (fetch) => fetch.wake(named), { discard: true }),
+          viewed.wake(pushed),
+        );
       });
     yield* Effect.forkScoped(Stream.runForEach(yield* dependencies.listings, heard));
 

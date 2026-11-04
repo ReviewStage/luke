@@ -38,12 +38,10 @@ import {
   agentPullRequestAnswerViewSchema,
   agentPullRequestParamsSchema,
   agentPullRequestReadParamsSchema,
-  agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
   agentQueueParamsSchema,
   agentRenameParamsSchema,
-  agentReviewOptionsAnswerViewSchema,
   agentRewindParamsSchema,
   agentServersParamsSchema,
   agentStartParamsSchema,
@@ -225,11 +223,6 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestReadParamsSchema))
     .output(EffectSchema.flip(agentChangesAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_REVIEW_OPTIONS]: actProcedure(
-    "Could not read the repository's reviewers and labels on this system.",
-  )
-    .input(exactInput(agentPullRequestParamsSchema))
-    .output(EffectSchema.flip(agentReviewOptionsAnswerViewSchema)),
   // Note that the hold's stream carries nothing: the held tools reach the panel on app state, and the stream is the window's hold on them.
   [AGENT_ACT_KIND.AGENTS_WORKSPACE_TOOLS_FOLLOW]: actProcedure(
     `Could not follow the agent's ${PRODUCT_NAME} tools on this system.`,
@@ -251,9 +244,4 @@ export const agentActsContract = {
   )
     .input(exactInput(agentPullRequestActionParamsSchema))
     .output(EffectSchema.flip(agentPullRequestWriteAnswerViewSchema)),
-  [AGENT_ACT_KIND.AGENTS_PULL_REQUEST_VIEWED]: actProcedure(
-    "Could not read which files you viewed on this system.",
-  )
-    .input(exactInput(agentPullRequestReadParamsSchema))
-    .output(EffectSchema.flip(agentPullRequestViewedAnswerViewSchema)),
 };

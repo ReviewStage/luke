@@ -11,8 +11,6 @@ import {
   tasksWorkspaceMemberRemoveParamsSchema,
   tasksWorkspaceMemberRoleParamsSchema,
   tasksWorkspaceParamsSchema,
-  tasksWorkspacePhotoAnswerSchema,
-  tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
   tasksWorkspaceSentryDisconnectParamsSchema,
@@ -180,11 +178,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceLeaveParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_READ]: actProcedure(
-    "Could not read that workspace's photo on this system.",
-  )
-    .input(exactInput(tasksWorkspacePhotoParamsSchema))
-    .output(EffectSchema.flip(tasksWorkspacePhotoAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]: actProcedure(
     "Could not change that workspace's photo on this system.",
   )

@@ -251,8 +251,9 @@ function pullRequestPartRead(part: PullRequestPart) {
  * hold; one workspace's own integrations, its Sentry installations and its
  * Slack bot, which Settings › Workspace and an automation's editor hold; the
  * channels of one workspace's Slack team, which an owner's or an admin's
- * Settings › Workspace holds; and one task's plan, which the window's open
- * task holds. Pages and Browser tabs offer no Try again,
+ * Settings › Workspace holds; each listed workspace's photo, which the host
+ * fetches as its version moves and holds for the session; and one task's
+ * plan, which the window's open task holds. Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
  * stand failed until every surface lets them go and one holds them anew
@@ -260,7 +261,8 @@ function pullRequestPartRead(part: PullRequestPart) {
  * every `MAC_PRESENCE.POLL_MS` while they are held (`held-fetch.ts`), offer
  * theirs to the window coming back online (`device-presence.ts`), never to
  * a press. This Mac's host offers none, since the host reads it again every
- * few seconds on its own (`compose-this-mac-host.ts`).
+ * few seconds on its own (`compose-this-mac-host.ts`), and a workspace's
+ * photo none, since the host fetches it again as the workspaces next move.
  */
 const HOST_READS = {
   [LIVE_READ.AGENT_ORIGINS]: hostRead(LIVE_READ.AGENT_ORIGINS, {
@@ -347,6 +349,14 @@ const HOST_READS = {
     slice: APP_SLICE.PULL_REQUEST_PUBLISHED,
     ...pullRequestPartRead(PULL_REQUEST_PART.PUBLISHED),
   }),
+  [LIVE_READ.PULL_REQUEST_VIEWED]: hostRead(LIVE_READ.PULL_REQUEST_VIEWED, {
+    slice: APP_SLICE.PULL_REQUEST_VIEWED,
+    ...pullRequestPartRead(PULL_REQUEST_PART.VIEWED),
+  }),
+  [LIVE_READ.REVIEW_OPTIONS]: hostRead(LIVE_READ.REVIEW_OPTIONS, {
+    slice: APP_SLICE.REVIEW_OPTIONS,
+    ...pullRequestPartRead(PULL_REQUEST_PART.REVIEW_OPTIONS),
+  }),
   [LIVE_READ.REPOSITORY_LISTS]: hostRead(LIVE_READ.REPOSITORY_LISTS, {
     slice: APP_SLICE.REPOSITORY_LISTS,
     path: (workspace: string) => [workspace],
@@ -412,6 +422,12 @@ const HOST_READS = {
     path: (workspaceId: string) => [workspaceId],
     hold: (workspaceId) => askAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW, { workspaceId }),
     retry: (workspaceId) => tellAct(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_RETRY, { workspaceId }),
+  }),
+  [LIVE_READ.WORKSPACE_PHOTOS]: hostRead(LIVE_READ.WORKSPACE_PHOTOS, {
+    slice: APP_SLICE.WORKSPACE_PHOTOS,
+    path: (workspaceId: string) => [workspaceId],
+    hold: undefined,
+    retry: undefined,
   }),
   [LIVE_READ.WORKSPACE_TOOLS]: hostRead(LIVE_READ.WORKSPACE_TOOLS, {
     slice: APP_SLICE.WORKSPACE_TOOLS,

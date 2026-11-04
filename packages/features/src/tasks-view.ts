@@ -81,7 +81,6 @@ import {
   workspaceMemberRoleSchema,
   workspaceMemberSchema,
   workspacePhotoSetRequestSchema,
-  workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
   workspaceSchema,
   workspaceSlugSetRequestSchema,
@@ -922,25 +921,6 @@ export type TasksWorkspaceMembersAnswer = typeof tasksWorkspaceMembersAnswerSche
 export const workspacePeopleFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
 
 export type WorkspacePeopleFollow = typeof workspacePeopleFollowSchema.Type;
-
-/** A workspace's photo, as a window's tile asks for it: the workspace. */
-export const tasksWorkspacePhotoParamsSchema = workspaceLeaveRequestSchema;
-
-export type TasksWorkspacePhotoParams = typeof tasksWorkspacePhotoParamsSchema.Type;
-
-/**
- * A workspace's photo, as the window hears it: its bytes in base64 under
- * its media type, which the window draws from a `data:` URL of its own
- * making, or why there is none: not a member, no photo, or no answer. The
- * host fetched it under the account, so the window holds no bearer and no
- * address.
- */
-export const tasksWorkspacePhotoAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ contentType: workspacePhotoTypeSchema, base64: EffectSchema.String }),
-  workspaceCallFailureSchema,
-]);
-
-export type TasksWorkspacePhotoAnswer = typeof tasksWorkspacePhotoAnswerSchema.Type;
 
 /** A workspace's token repositories, as Settings › Workspace asks for them: the workspace. */
 export const tasksWorkspaceTokenRepositoriesParamsSchema = workspaceLeaveRequestSchema;

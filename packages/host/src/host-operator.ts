@@ -49,12 +49,10 @@ import {
   type AgentPullRequestAnswerView,
   type AgentPullRequestParams,
   type AgentPullRequestReadParams,
-  type AgentPullRequestViewedAnswerView,
   type AgentPullRequestWriteAnswerView,
   type AgentQueueAnswerView,
   type AgentQueueParams,
   type AgentRenameParams,
-  type AgentReviewOptionsAnswerView,
   type AgentRewindParams,
   type AgentServersParams,
   type AgentStartParams,
@@ -82,10 +80,8 @@ import {
   agentPageAnswerViewSchema,
   agentPartViewSchema,
   agentPullRequestAnswerViewSchema,
-  agentPullRequestViewedAnswerViewSchema,
   agentPullRequestWriteAnswerViewSchema,
   agentQueueAnswerViewSchema,
-  agentReviewOptionsAnswerViewSchema,
   agentTranscriptChangedSchema,
   agentTranscriptOlderAnswerSchema,
   type ChatGptSignInAnswerView,
@@ -262,8 +258,6 @@ import {
   type TasksWorkspaceMemberRoleParams,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspaceParams,
-  type TasksWorkspacePhotoAnswer,
-  type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceSentryAnswer,
@@ -304,7 +298,6 @@ import {
   tasksWorkspaceInvitationsAnswerSchema,
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
-  tasksWorkspacePhotoAnswerSchema,
   tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceSlackBotAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
@@ -381,6 +374,7 @@ import type {
   AppTokenRepositories,
   AppWorkspaceIntegrations,
   AppWorkspaceMembers,
+  AppWorkspacePhotos,
   AppWorkspaceTools,
   SessionReplayState,
 } from "./app-state.js";
@@ -681,8 +675,8 @@ export interface HostOperator {
   onWorkspaceInvitationsChanged(
     listener: (followed: WorkspaceInvitationsFollowed) => void,
   ): () => void;
-  /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
-  workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
+  /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
+  onWorkspacePhotosChanged(listener: (held: AppWorkspacePhotos) => void): () => void;
   /** The repositories members added to a workspace on their own GitHub tokens, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onTokenRepositoriesChanged`. */
   workspaceTokenRepositoriesFollow(
     params: TasksWorkspaceTokenRepositoriesParams,
@@ -874,12 +868,6 @@ export interface HostOperator {
   agentPullRequestAction(
     params: AgentPullRequestActionParams,
   ): Effect.Effect<AgentPullRequestWriteAnswerView>;
-  /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
-  agentPullRequestViewed(
-    params: AgentPullRequestReadParams,
-  ): Effect.Effect<AgentPullRequestViewedAnswerView>;
-  /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, assignable users, and teams; or why there is no answer. */
-  agentReviewOptions(params: AgentPullRequestParams): Effect.Effect<AgentReviewOptionsAnswerView>;
   /** Which of our own tools one agent is offered and whether its `run_on_mac` would run now, held for the windows from now until let go and asked again as a window comes forward; what they hold is heard through `onWorkspaceToolsChanged`. */
   agentWorkspaceToolsFollow(params: AgentPullRequestParams): Effect.Effect<void>;
   /** One agent's own tools let go by the windows. */
@@ -1802,10 +1790,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ),
         listener,
       ),
-    workspacePhoto: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
-        answerOf(tasksWorkspacePhotoAnswerSchema, WORKSPACE_UNANSWERED),
+    onWorkspacePhotosChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.WORKSPACE_PHOTOS_CHANGED,
+        // Note that the held photos are the host's own, handed over in this process, so they are passed on as built, as the held people are.
+        (payload) => (isRecord(payload) ? answered<AppWorkspacePhotos>(payload) : undefined),
+        listener,
       ),
     workspaceTokenRepositoriesFollow: (params) =>
       fire(
@@ -2305,16 +2295,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           request: params.request,
         }),
         answerOf(agentPullRequestWriteAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentPullRequestViewed: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
-        answerOf(agentPullRequestViewedAnswerViewSchema, AGENT_UNANSWERED),
-      ),
-    agentReviewOptions: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.AGENTS_REVIEW_OPTIONS, { agentId: params.agentId }),
-        answerOf(agentReviewOptionsAnswerViewSchema, AGENT_UNANSWERED),
       ),
     agentWorkspaceToolsFollow: (params) =>
       fire(client.call(GATEWAY_METHOD.AGENTS_WORKSPACE_TOOLS_FOLLOW, { agentId: params.agentId })),

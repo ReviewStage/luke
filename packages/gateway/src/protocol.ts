@@ -232,8 +232,6 @@ export const GATEWAY_METHOD = {
   WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
   /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
   WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
-  /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
-  WORKSPACES_PHOTO: "workspaces.photo",
   /**
    * The repositories members added to one workspace on their own GitHub
    * tokens, held for a window from now until it is let go, asked of the
@@ -436,7 +434,6 @@ export const GATEWAY_METHOD = {
   CHAPTERS_MODEL_READ: "chapters.modelRead",
   /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
   CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
-  AGENTS_REVIEW_OPTIONS: "agents.reviewOptions",
   /**
    * Our own tools one agent is offered, held for a window from now until it
    * is let go, asked of the service at once and again as a window comes
@@ -453,8 +450,6 @@ export const GATEWAY_METHOD = {
   AGENTS_GITHUB_IMAGE: "agents.githubImage",
   /** One change to an agent's pull request, made on GitHub by the service as the account on its own GitHub sign-in: how GitHub took it. */
   AGENTS_PULL_REQUEST_ACTION: "agents.pullRequestAction",
-  /** Which of an agent's pull request's files the account marked viewed on GitHub, read by the service on its own GitHub sign-in. */
-  AGENTS_PULL_REQUEST_VIEWED: "agents.pullRequestViewed",
   /**
    * The account's own provider keys an agent runs on, as hints and statuses
    * and never a key, held for a window from now until it is let go, asked
@@ -759,6 +754,8 @@ export const GATEWAY_EVENT = {
   WORKSPACE_INTEGRATIONS_CHANGED: "workspaceIntegrations.changed",
   /** Every workspace's Slack channels the host holds for the windows, whole, as its asks of them stand, each time any of them moves. */
   SLACK_CHANNELS_CHANGED: "slackChannels.changed",
+  /** Every listed workspace's photo the host holds, whole, each time one is fetched or let go. */
+  WORKSPACE_PHOTOS_CHANGED: "workspacePhotos.changed",
   /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
   WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
   /** Every agent's origin the host holds for the windows, whole, as its reads of them stand, each time any of them moves. */

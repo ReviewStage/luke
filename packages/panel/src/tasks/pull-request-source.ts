@@ -1,8 +1,6 @@
 import type {
   AgentChangesAnswerView,
-  AgentPullRequestViewedAnswerView,
   AgentPullRequestWriteAnswerView,
-  AgentReviewOptionsAnswerView,
 } from "@repo/features/agent-view";
 import { AGENT_STATUS, type AgentPullRequest } from "@repo/features/agent-wire";
 import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
@@ -37,12 +35,10 @@ export interface PullRequestSource {
   readonly place: WritePlace;
   /** The pull request as last read, which names the tab before its overview lands; none before it is read. */
   readonly published: AgentPullRequest | undefined;
-  /** What the reviewer and label pickers offer. */
-  readonly readReviewOptions: () => Promise<AgentReviewOptionsAnswerView>;
+  /** The pull request's number where the tab names one; none for the agent's own, which its reads, held by the host, stand under (`OWN_PULL_REQUEST`). */
+  readonly number: number | undefined;
   /** Its changed files, as Files changed draws them. */
   readonly readChanges: () => Promise<AgentChangesAnswerView>;
-  /** Which of its files the member marked viewed on GitHub. */
-  readonly readViewed: () => Promise<AgentPullRequestViewedAnswerView>;
   /** Its chapters generated for its head now, answering once they land. */
   readonly generateChapters: () => Promise<PullRequestChaptersAnswerView>;
   /** One change to it, a viewed mark and a review among them. */
@@ -88,19 +84,20 @@ export function useAgentPullRequestSource(
   const taskId = agent?.planId ?? null;
   const { workspaceId } = control;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const { readReviewOptions, readChanges, readPullRequestViewed, generateChapters } = control;
+  const { readChanges, generateChapters } = control;
   // Note that the doors are kept while what they name stands, because every part under the tab that hears the source draws anew on a new one.
   const doors = useMemo(
     () => ({
-      readReviewOptions: () => readReviewOptions(agentId),
       readChanges: () => readChanges(agentId, number),
-      readViewed: () => readPullRequestViewed(agentId, number),
       generateChapters: () => generateChapters(agentId, number),
       write: agentPullRequestWrite(act, agentId, number),
     }),
-    [act, agentId, number, readReviewOptions, readChanges, readPullRequestViewed, generateChapters],
+    [act, agentId, number, readChanges, generateChapters],
   );
   // Note that a repository out of reach is mended in the agent's own workspace, by its task or, on none, its page's.
   const place = useMemo(() => ({ taskId, workspaceId }), [taskId, workspaceId]);
-  return useMemo(() => ({ ...doors, ended, place, published }), [doors, ended, place, published]);
+  return useMemo(
+    () => ({ ...doors, ended, place, published, number }),
+    [doors, ended, place, published, number],
+  );
 }

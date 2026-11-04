@@ -3166,7 +3166,7 @@ function PullRequestTabBody({
   const pendingReview = landed(parts.conversation)?.pendingReview;
   const picture = usePictureDrawer(agentId);
   const comment = usePullRequestComment(agentId, written);
-  const options = useReviewOptions(agentId, source.readReviewOptions);
+  const options = useReviewOptions(agentId);
   const picks = usePullRequestPicks(overview, writes);
   // Note that Files changed is handed the same threads while the conversation
   // and the minute stand, because a file a thread is on draws its notes anew
