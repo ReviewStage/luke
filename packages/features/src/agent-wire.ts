@@ -89,6 +89,8 @@ export const AGENT_BOUNDS = {
   MAX_ARCHIVE_REASON_CHARS: 500,
   /** The most characters the words a workspace's agents are found by may spell. */
   MAX_SEARCH_CHARS: 200,
+  /** The most agents a workspace's list offers, newest first: enough to choose one an automation's runs go to. */
+  MAX_WORKSPACE_AGENTS: 50,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
   MAX_SERVER_CHARS: 64,

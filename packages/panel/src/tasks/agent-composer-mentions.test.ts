@@ -29,7 +29,7 @@ import {
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_OWNER } from "@repo/features/page-wire";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@repo/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
+import { IDLE_TASKS_VIEW, TASKS_READ, type TasksView } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
@@ -162,11 +162,10 @@ function workspaceAgent(
 }
 
 /** The workspace's agents beside the plan's own: one on another task, one on none, and one archived. */
-const BILLING_AGENT = workspaceAgent(
-  "3c3c3c3c-0000-4000-8000-000000000000",
-  "Bill by seat",
-  BILLING.id,
-);
+const BILLING_AGENT = {
+  ...workspaceAgent("3c3c3c3c-0000-4000-8000-000000000000", "Bill by seat", BILLING.id),
+  createdAt: 2_000,
+};
 const SWEEPER = workspaceAgent("4d4d4d4d-0000-4000-8000-000000000000", "Sweep flaky tests", null);
 const OLD_AGENT = workspaceAgent(
   "5e5e5e5e-0000-4000-8000-000000000000",
@@ -177,18 +176,45 @@ const OLD_AGENT = workspaceAgent(
 /** An agent past the newest the workspace's list answers, which only a search finds. */
 const LEDGER = workspaceAgent("6f6f6f6f-0000-4000-8000-000000000000", "Old ledger", null);
 
-/** The newest agents the workspace's list answers, archived ones left out. */
+/** The newest agents the task list carries, archived ones left out. */
 const NEWEST_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER];
 
 /** Every agent of the workspace, which a search finds among, archived ones included. */
 const WORKSPACE_AGENTS: readonly AgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
-/** The newest agents the workspace's list answers now. */
+/** The newest agents the task list carries now, beside the archived one. */
 let newest: readonly AgentSummary[] = NEWEST_AGENTS;
 
-/** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
-function workspaceAnswer({ words }: AgentWorkspaceListParams): readonly AgentSummary[] {
-  if (words === undefined) return newest;
+/** Whether the task list failed before it carried the workspace's agents. */
+let listFailed = false;
+
+/** Lays the task list on the window again, as the host does once it reads it. */
+let deliverTasks: (next: TasksView) => void = () => undefined;
+
+/**
+ * The task list as the host lays it: the newest agents and the archived
+ * one, each on its task or on none, in the workspace the plan stands in,
+ * or failed before it carried any.
+ */
+function tasksView(): TasksView {
+  if (listFailed) return { ...IDLE_TASKS_VIEW, listStatus: TASKS_READ.FAILED };
+  const listed = [...newest, OLD_AGENT].map((agent) => ({
+    ...agent,
+    workspaceId: "workspace-1",
+    repository: PLACE.repository,
+  }));
+  return {
+    ...IDLE_TASKS_VIEW,
+    listStatus: TASKS_READ.READY,
+    taskAgents: listed.filter((agent) => agent.planId !== null),
+    tasklessAgents: listed
+      .filter((agent) => agent.planId === null)
+      .map((agent) => ({ ...agent, automationId: null, activityAt: agent.createdAt })),
+  };
+}
+
+/** The workspace's search as the service answers it: those whose title or task's name holds the words, as the store finds them. */
+function workspaceAnswer({ words = "" }: AgentWorkspaceListParams): readonly AgentSummary[] {
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
     (agent) =>
@@ -246,6 +272,11 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
   if (refusing.has(request.kind)) {
     return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not reach it." });
   }
+  if (request.kind === ACT_KIND.TASKS_REFRESH) {
+    listFailed = false;
+    deliverTasks(tasksView());
+    return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
+  }
   return Promise.resolve(
     request.kind === ACT_KIND.AGENTS_WORKSPACE_LIST
       ? {
@@ -275,13 +306,18 @@ beforeEach(() => {
   standing = "acme/relay";
   refusing.clear();
   newest = NEWEST_AGENTS;
+  listFailed = false;
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeActs({ act: answer });
+  fakeActs({
+    act: answer,
+    requestAppState: () => Promise.resolve(stateWith({}, { tasks: tasksView() })),
+  });
   // Every connected server lists the same tools, three of them under names a mention cannot carry.
   const reads = handHostReads({});
+  deliverTasks = reads.deliverTasks;
   holdIntegrationTools(reads.deliverTools, () => ({ tools: LISTED_TOOLS }));
   holdMembers(reads.deliverMembers, () => ({ rows: { members: MEMBERS } }));
   holdIntegrations(() => ({ rows: { integrations: LINEAR_CONNECTED } }));
@@ -997,7 +1033,7 @@ function agentsListed(container: HTMLElement): [string, string][] {
   );
 }
 
-/** The workspace lists the list read, by whether each asked for the archived agents. */
+/** The searches of the workspace's agents the list asked, each as the act carried it. */
 function workspaceReads(): unknown[] {
   return told
     .filter((each) => each.kind === ACT_KIND.AGENTS_WORKSPACE_LIST)
@@ -1015,7 +1051,6 @@ test("an @ offers the workspace's agents after the task's own, each labeled by i
     ["Bill by seat", "Billing"],
     ["Sweep flaky tests", "No task"],
   ]);
-  assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }]);
 });
 
 /** What the open list says after its rows, and the press that reads again. */
@@ -1030,8 +1065,9 @@ function listNote(container: HTMLElement): { words: string; retry: HTMLButtonEle
   };
 }
 
-test("an @ whose read of the workspace's agents failed says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
-  refusing.add(ACT_KIND.AGENTS_WORKSPACE_LIST);
+test("an @ whose task list failed to carry the workspace's agents says they could not be read, with Retry, never that none match, and Retry reads them again", async () => {
+  listFailed = true;
+  refusing.add(ACT_KIND.TASKS_REFRESH);
   const { container } = await workspaceBox();
 
   typeInComposer(container, "See @");
@@ -1097,7 +1133,7 @@ it.effect(
 );
 
 it.effect(
-  "words typed after @ ask the service once the typing rests on them, never letter by letter, while the bare @ asks at once",
+  "words typed after @ ask the service once the typing rests on them, never letter by letter, while the bare @ asks it nothing",
   () =>
     Effect.gen(function* () {
       const registry = registryOn(yield* Clock.Clock);
@@ -1105,7 +1141,7 @@ it.effect(
 
       typeInComposer(container, "See @");
       yield* Effect.promise(settle);
-      assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }]);
+      assert.deepEqual(workspaceReads(), []);
 
       typeInComposer(container, "b");
       yield* Effect.promise(settle);
@@ -1114,11 +1150,10 @@ it.effect(
       yield* Effect.promise(settle);
       yield* TestClock.adjust("200 millis");
       yield* Effect.promise(settle);
-      assert.deepEqual(workspaceReads(), [{ workspaceId: "workspace-1" }], "nothing asked yet");
+      assert.deepEqual(workspaceReads(), [], "nothing asked yet");
 
       yield* rest;
       assert.deepEqual(workspaceReads(), [
-        { workspaceId: "workspace-1" },
         { workspaceId: "workspace-1", words: "bill", includeArchived: true },
       ]);
       assert.deepEqual(agentsListed(container), [
