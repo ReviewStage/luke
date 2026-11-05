@@ -532,6 +532,26 @@ export function NextFrameIcon(): React.JSX.Element {
   );
 }
 
+/** A video sent back a few seconds: the two triangles every transport draws for rewind, at the play triangle's weight. */
+export function RewindIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M11.6 6.4v11.2L3.2 12z" fill="currentColor" stroke="none" />
+      <path d="M20.4 6.4v11.2L12 12z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** A video sent on a few seconds: the mirror of `RewindIcon`, every transport's fast-forward. */
+export function FastForwardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M3.6 6.4v11.2L12 12z" fill="currentColor" stroke="none" />
+      <path d="M12.4 6.4v11.2l8.4-5.6z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 /** Four corners turned out: a video grown to fill the screen. */
 export function FullScreenIcon(): React.JSX.Element {
   return (

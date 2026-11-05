@@ -6,11 +6,13 @@ import { cssCustomProperties } from "../../css.js";
 import {
   ExitFullScreenIcon,
   ExpandIcon,
+  FastForwardIcon,
   FullScreenIcon,
   NextFrameIcon,
   PauseIcon,
   PlayIcon,
   PreviousFrameIcon,
+  RewindIcon,
 } from "../../face/glyphs.js";
 import { motionHeld } from "../../motion-timing.js";
 import { notePictureOrigin } from "../../picture-expand.js";
@@ -32,7 +34,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * five seconds, comma and period step a frame back or on, pausing first,
  * Home and End go to the start and the end, and < and > slow it or speed
  * it, all kept from the place around it, such as the viewer whose arrows
- * walk its files; a button's own Space presses the button.
+ * walk its files; a button's own Space presses the button. An arrow's jump
+ * flashes on the side it went, as on the video sites, how far in seconds,
+ * and presses in one direction while it stands add up ("10 seconds").
  *
  * A frame step lands in the middle of the frame it goes to, never on its
  * edge, so a time a hair off either way still shows that frame, and the
@@ -110,6 +114,9 @@ const HEADER_BASE64_CHARS = 16_384;
 /** How far an arrow key seeks, in seconds. */
 const ARROW_SEEK_S = 5;
 
+/** The keyframes whose end takes a jump's flash, its fade (`video-player.css`). */
+const JUMP_OUT = "ui-video-player-jump-out";
+
 /** The speeds the player plays at, slowest first; the bar's speed button walks them round, and < and > step along them. */
 const SPEEDS: readonly number[] = [0.25, 0.5, 1, 1.5, 2];
 
@@ -153,6 +160,12 @@ export const VIDEO_PLAYER_PLACE = {
 } as const;
 
 export type VideoPlayerPlace = (typeof VIDEO_PLAYER_PLACE)[keyof typeof VIDEO_PLAYER_PLACE];
+
+/** The jump an arrow made, flashed over the video: how far in seconds, signed, and which flash it is, so each press plays its motion over. */
+interface Jump {
+  readonly seconds: number;
+  readonly count: number;
+}
 
 /** A video's size in pixels, as its file states it. */
 export interface VideoSize {
@@ -327,6 +340,7 @@ function playerKey(
   event: React.KeyboardEvent<HTMLElement>,
   video: HTMLVideoElement | null,
   frame: number,
+  onJump: (seconds: number) => void,
 ): void {
   if (video === null || event.metaKey || event.ctrlKey || event.altKey) return;
   const onButton = event.target instanceof HTMLButtonElement;
@@ -338,6 +352,7 @@ function playerKey(
     if (!event.repeat) toggleOf(video);
   } else if (seek !== undefined) {
     video.currentTime = Math.min(endOf(video), Math.max(0, video.currentTime + seek));
+    onJump(seek);
   } else if (step !== undefined) {
     stepFrame(video, frame, step);
   } else if (event.key === END_KEYS.START || event.key === END_KEYS.END) {
@@ -367,6 +382,42 @@ function BarButton({
     <Tooltip label={label} chord={chord}>
       <IconButton icon={icon} label={label} variant={BUTTON_VARIANT.MEDIA} onClick={onPress} />
     </Tooltip>
+  );
+}
+
+/** The jump `seconds` makes on from `was`: added to it where it stands in the same direction, else a jump of its own. */
+function jumpOn(was: Jump | undefined, seconds: number): Jump {
+  const count = (was?.count ?? 0) + 1;
+  if (was === undefined || Math.sign(was.seconds) !== Math.sign(seconds)) return { seconds, count };
+  return { seconds: was.seconds + seconds, count };
+}
+
+/**
+ * The flash over the video an arrow's jump gives: a pill on the veil on the
+ * side it went, its glyph and how far, which springs in, stands, and fades
+ * (`video-player.css`), and is taken as its fade ends. Note that it is
+ * hidden from a reader, because the scrubber already tells where the video
+ * stands, and lets a press through to the video under it.
+ */
+function JumpFlash({ jump, onGone }: { jump: Jump; onGone: () => void }): React.JSX.Element {
+  const back = jump.seconds < 0;
+  return (
+    <span
+      className={`ui-video-player-jumps pointer-events-none absolute inset-0 flex items-center px-ui-24 ${back ? "justify-start" : "justify-end"}`}
+      aria-hidden="true"
+    >
+      <span
+        key={jump.count}
+        className="ui-video-player-jump flex items-center gap-ui-6 rounded-ui-full bg-veil px-ui-12 py-ui-6 text-caption whitespace-nowrap tabular-nums text-on-veil [&>svg]:size-caption-leading [&>svg]:flex-none"
+        onAnimationEnd={(event) => {
+          if (event.animationName === JUMP_OUT) onGone();
+        }}
+      >
+        {back ? <RewindIcon /> : null}
+        {`${String(Math.abs(jump.seconds))} seconds`}
+        {back ? null : <FastForwardIcon />}
+      </span>
+    </span>
   );
 }
 
@@ -518,6 +569,7 @@ export function VideoPlayer({
     speed: NORMAL_SPEED,
   });
   const frameSeconds = useMemo(() => frameSecondsOf(dataUrl), [dataUrl]);
+  const [jump, setJump] = useState<Jump>();
   // The video's own pixels once its size is read, which the viewer fits it by.
   const [natural, setNatural] = useState<VideoSize>();
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
@@ -560,7 +612,11 @@ export function VideoPlayer({
       aria-label={VIDEO_LABEL.PLAYER}
       // Note that the player hears a key before the control it lands on, because the scrubber's
       // slider steps on an arrow itself and stands down only for a key already taken.
-      onKeyDownCapture={(event) => playerKey(event, video.current, frameSeconds)}
+      onKeyDownCapture={(event) =>
+        playerKey(event, video.current, frameSeconds, (seconds) =>
+          setJump((was) => jumpOn(was, seconds)),
+        )
+      }
     >
       {url === undefined ? null : (
         // Note that the player carries no captions track, because an agent's recording of its screen has no sound.
@@ -600,6 +656,7 @@ export function VideoPlayer({
           onRateChange={(event) => read(event.currentTarget)}
         />
       )}
+      {jump === undefined ? null : <JumpFlash jump={jump} onGone={() => setJump(undefined)} />}
       <VideoBar
         playback={playback}
         frame={frameSeconds}

@@ -7,7 +7,8 @@ import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
 
 /**
  * video-player.test.ts -- while focus is in a video's player, Space or K
- * plays and pauses it, the arrows seek five seconds within its length, and
+ * plays and pauses it, the arrows seek five seconds within its length,
+ * flashing how far, presses one way adding up, and
  * comma and period, like the bar's frame buttons, pause it and step one
  * frame of the length its header states, none of them reaching the place
  * around it, whose arrows may walk files; a button's own Space is left to
@@ -134,13 +135,17 @@ test("Space and K play and pause the video while focus is in its player, and nei
   expect(reached).toEqual([]);
 });
 
-test("the arrows seek five seconds within the video's length, from its scrubber too, and never reach the place around it", () => {
+test("the arrows seek five seconds within the video's length, flashing how far, from its scrubber too, and never reach the place around it", () => {
   const { container, press, seekAt, reached } = mountPlayer();
+  const flash = () => container.querySelector(".ui-video-player-jump")?.textContent;
   press("ArrowRight");
   expect(seekAt()).toBe("5");
+  expect(flash()).toBe("5 seconds");
+  // A turn starts the flash over; presses one way while it stands add up.
   press("ArrowLeft");
   press("ArrowLeft");
   expect(seekAt()).toBe("0");
+  expect(flash()).toBe("10 seconds");
   const seek = container.querySelector<HTMLInputElement>('input[aria-label="Seek"]');
   if (seek === null) throw new Error("the bar has a scrubber");
   for (const _ of [1, 2, 3, 4, 5]) press("ArrowRight", seek);
