@@ -55,7 +55,9 @@
  * `resend` asks and each time one is laid behind them, until one is still
  * unanswered; one the service took already under its key
  * (`Written.settled`) stands down at once, and one it refused is taken back
- * and counted (`PoolOptions.replayRefused`). At most `QUEUE_BOUND` wait;
+ * and counted (`PoolOptions.replayRefused`). One whose declaration holds its
+ * caller (`QueuedWrite.holds`) answers it only once it is sent again, as a
+ * start whose outcome its window draws does. At most `QUEUE_BOUND` wait;
  * past them a write unanswered is taken back. They are handed out to be
  * kept (`queued`) and laid back over the rows (`requeue`) in a form of the
  * declaration's own, which names nothing of how they are kept.
@@ -213,8 +215,10 @@ export interface QueuedWrite<Input, Answer> {
   readonly name: string;
   /** Its input as it is kept while it waits, and read back. */
   readonly input: Schema.Codec<Input, unknown>;
-  /** What its caller hears where it waits rather than being answered. */
+  /** What its caller hears where it waits rather than being answered, or where a write that holds its caller is let go. */
   readonly queued: (input: Input) => Answer;
+  /** Whether its caller is answered only once the write is sent again rather than hearing `queued` at once; none holds none. */
+  readonly holds?: (input: Input) => boolean;
 }
 
 /** What one attempt of a write is sent with: the idempotency key of a write that may wait, the same on every attempt, none for any other; and whether the write waited before it, so what its asking did at once is not done again. */
@@ -728,8 +732,10 @@ function written<Row extends object, Change, Input, Answer>(
         }
         yield* drop;
       });
-    /** The write laid behind those waiting, still standing, sent again as they are. */
-    const waits = (kept: QueuedEntry) =>
+    /** What a caller the write holds hears once it is sent again: the service's answer, its refusal, or, let go, what it hears meanwhile. */
+    const heard = yield* Deferred.make<Answer>();
+    /** The write laid behind those waiting, still standing, sent again as they are; let go, its caller hears `meanwhile`. */
+    const waits = (kept: QueuedEntry, meanwhile: Answer) =>
       Effect.sync(() => {
         const waiting: Waiting = {
           entry: kept,
@@ -738,26 +744,33 @@ function written<Row extends object, Change, Input, Answer>(
             if ("refused" in answered) {
               if (answered.unanswered === true) return RETRIED.UNANSWERED;
               yield* takenBack(answered);
+              yield* Deferred.succeed(heard, answered.refused);
               return RETRIED.REFUSED;
             }
             yield* FiberSet.run(queue.confirming, settled(answered));
+            yield* Deferred.succeed(heard, answered.answer);
             return RETRIED.KEPT;
           }),
-          letGo: drop,
+          letGo: Effect.andThen(drop, Deferred.succeed(heard, meanwhile)),
         };
         queue.waiting = [...queue.waiting, waiting];
       });
     const room = () => queue.waiting.length < QUEUE_BOUND;
-    // Note that a kept write answers before its reads carry it, standing on in a fiber of the pool's; a refused one answers once it is taken back, on the service's word where it gave one; one unanswered that may wait answers at once that it waits.
+    // Note that a kept write answers before its reads carry it, standing on in a fiber of the pool's; a refused one answers once it is taken back, on the service's word where it gave one; one unanswered that may wait answers at once that it waits, or, holding its caller, once it is sent again.
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        // Note that a caller the write holds waits for it interruptibly, so one that gives up leaves it waiting; one laid back holds nobody.
+        const heardAs = (waiting: QueuedWrite<Input, Answer>) =>
+          waiting.holds?.(input) === true && restored === undefined
+            ? restore(Deferred.await(heard))
+            : Effect.succeed(waiting.queued(input));
         if (plan !== undefined && entry !== undefined && room()) {
           if (restored !== undefined || queue.waiting.length > 0) {
             yield* drawnOn;
             yield* Deferred.succeed(turn.answered, undefined);
-            yield* waits(entry);
+            yield* waits(entry, plan.queued(input));
             if (restored === undefined) yield* FiberSet.run(queue.confirming, resent(queue));
-            return plan.queued(input);
+            return yield* heardAs(plan);
           }
         }
         const answered = yield* Effect.onExit(restore(sent), (exit) =>
@@ -765,8 +778,8 @@ function written<Row extends object, Change, Input, Answer>(
         );
         if ("refused" in answered) {
           if (answered.unanswered === true && plan !== undefined && entry !== undefined && room()) {
-            yield* waits(entry);
-            return plan.queued(input);
+            yield* waits(entry, plan.queued(input));
+            return yield* heardAs(plan);
           }
           yield* takenBack(answered);
           return answered.refused;

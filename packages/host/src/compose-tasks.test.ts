@@ -1829,7 +1829,7 @@ it.effect(
 );
 
 it.effect(
-  "a start that names an agent never waits: one the service did not answer is taken back",
+  "a start that names an agent waits where the service did not answer, its call held until it is sent again, and then answers its agent's start",
   () =>
     Effect.gen(function* () {
       const billing = task(BILLING, "Billing export", "# Billing", 20);
@@ -1840,20 +1840,44 @@ it.effect(
         untaken: WRITE_UNTAKEN.UNANSWERED,
       };
       const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
-      const { call, listed, last } = yield* subject(service, { pool });
+      const { call, listed, last, settled } = yield* subject(service, { pool });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
 
-      const refused = yield* call(GATEWAY_METHOD.TASKS_START, {
-        workspaceId: billing.workspaceId,
-        agent: { idempotencyKey: "agent-key", prompt: "Expire invitations." },
-        quiet: true,
-      });
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, {
+          workspaceId: billing.workspaceId,
+          agent: { idempotencyKey: "agent-key", prompt: "Expire invitations." },
+          quiet: true,
+        }),
+      );
+      yield* settled;
+      const meanwhile = starting.pollUnsafe();
+      const drawn = last()?.tasks.some((row) => row.id === INVITES);
+      const made = task(INVITES, "Untitled", "", 30);
+      const agentStart = {
+        agent: {
+          id: "3c9e1d2a-6b7f-4e8a-9c0d-1e2f3a4b5c6d",
+          planId: INVITES,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: null,
+          createdAt: 31,
+          status: AGENT_STATUS.STARTING,
+          turnId: null,
+        },
+      };
+      service.tasks = [...service.tasks, made];
+      service.createAnswer = { ok: true, answer: { task: made, agent: agentStart } };
+      yield* listed();
 
-      assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.equal(meanwhile, undefined, "no answer while it waits");
+      assert.equal(drawn, true, "its row is drawn while it waits");
+      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES, agentStart });
       assert.deepEqual(
-        last()?.tasks.map((row) => row.id),
-        [BILLING],
+        service.createKeys,
+        [undefined, undefined],
+        "sent under the agent's key alone",
       );
       assert.deepEqual(pool.queued(), []);
     }),

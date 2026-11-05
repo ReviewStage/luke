@@ -456,9 +456,9 @@ interface StartOpened {
   readonly before: string | undefined;
 }
 
-/** Whether a start may wait for the service: one that draws its row and names no agent, since an agent's start is remote work. */
+/** Whether a start may wait for the service: one that draws its row. */
 function startMayWait(start: Start): boolean {
-  return start.request.agent === undefined && start.row !== undefined;
+  return start.row !== undefined;
 }
 
 /** A start as it waits for the service, which only one that may wait keeps as, since a write that does not keep never waits (`WriteDeclaration.queue`). */
@@ -2424,10 +2424,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * agent a start asks for waits on the service, as remote work does. Where
    * the list hands no wait, or the service answers a start sent again with
    * no transaction, the row as the service answered it is taken in the
-   * list's place. One that names no agent and draws its row waits where the
-   * service did not answer it, its row drawn and its task open, and is sent
-   * again with the other writes waiting; sent so, it opens nothing, and its
-   * answer reaches its task only where the task stands open.
+   * list's place. One that draws its row waits where the service did not
+   * answer it, its row drawn and its task open, and is sent again with the
+   * other writes waiting; sent so, it opens nothing, and its answer reaches
+   * its task only where the task stands open. One that names an agent holds
+   * its window's call until it is sent, since the window draws its agent
+   * from the answer, and is sent under that agent's own key alone, which
+   * the service answers a start sent again with its agent by.
    */
   const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
     kind: PLAN,
@@ -2445,7 +2448,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 : yield* startOpened(id);
             return yield* serial(
               Effect.gen(function* () {
-                const created = yield* served(client.create(start.request, key));
+                const created = yield* served(
+                  client.create(start.request, start.request.agent === undefined ? key : undefined),
+                );
                 if (!created.ok) {
                   const { failure, localAgentRefusal } = created;
                   const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
@@ -2487,6 +2492,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       name: GATEWAY_METHOD.TASKS_START,
       input: startKeptSchema,
       queued: ({ request }) => carried<TasksStartAnswer>({ planId: request.id }),
+      holds: ({ request }) => request.agent !== undefined,
     },
   };
 

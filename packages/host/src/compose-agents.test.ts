@@ -5,6 +5,7 @@ import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
   AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
   type AgentQueueAnswerView,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
@@ -306,6 +307,8 @@ function fakeService() {
   let newestPage: AgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
   let startTxid: string | undefined;
+  // Whether a Start goes unanswered, as one sent offline does.
+  let startsUnanswered = false;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
   /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
@@ -389,8 +392,14 @@ function fakeService() {
         return { agents: [AGENT] };
       }),
     start: (taskId, request) =>
-      Effect.sync(() => {
+      Effect.sync((): AgentAgentAnswer => {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
+        if (startsUnanswered) {
+          return {
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+            cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
+          };
+        }
         const agent = { ...AGENT, status: AGENT_STATUS.STARTING };
         return startTxid === undefined ? { agent } : { agent, txid: startTxid };
       }),
@@ -840,6 +849,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** Whether each Start from now on goes unanswered, as one sent offline does. */
+    leaveStartsUnanswered: (unanswered: boolean) => {
+      startsUnanswered = unanswered;
+    },
     /** What each host's removal answers from now on, and what it waits on before it does. */
     answerRemoves: (answer: HostDoneAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       removeAnswer = answer;
@@ -1061,6 +1074,7 @@ function subject(
         transcripts(transcript).map((each) => each.rows),
       asked: service.asked,
       startCommits: service.startCommits,
+      leaveStartsUnanswered: service.leaveStartsUnanswered,
       answerRemoves: service.answerRemoves,
       answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
@@ -3454,6 +3468,36 @@ it.effect(
         agent: { ...AGENT, status: AGENT_STATUS.STARTING },
         txid: "9104",
       });
+    }),
+);
+
+it.effect(
+  "a Start the service did not answer waits, its call held until it is sent again, and then answers its agent",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
+      const { call, asked, leaveStartsUnanswered } = yield* subject({ pool });
+      leaveStartsUnanswered(true);
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+      );
+      yield* settled;
+      const meanwhile = starting.pollUnsafe();
+      const waiting = pool.queued().length;
+      leaveStartsUnanswered(false);
+      yield* pool.resend;
+
+      assert.equal(meanwhile, undefined, "no answer while it waits");
+      assert.equal(waiting, 1);
+      assert.deepEqual(yield* Fiber.join(starting), {
+        agent: { ...AGENT, status: AGENT_STATUS.STARTING },
+      });
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("start:")),
+        [`start:${TASK_ID}:press-1:default`, `start:${TASK_ID}:press-1:default`],
+      );
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 
