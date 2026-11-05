@@ -20,9 +20,13 @@
  * exiting for its service to start it over; one that did runs the daemon
  * (`@repo/host/daemon`) until the service is stopped, which stops every
  * runner it started with it. Once the service settles the box's secret as
- * refused, the host removed, it stops them, marks its record refused, and
- * rests (`hostRefusedRest`) until the box is connected again; a start on a
- * refused record rests the same way. A daemon the account install runs, its
+ * refused, the host removed in Settings › Hosts, it stops them and marks its
+ * record refused; the account install then removes itself, as `vespin-host
+ * uninstall` does, run apart from its own service (`removeItself`), and any
+ * other run rests (`hostRefusedRest`) until the box is connected again. A
+ * start on a refused record rests the same way, never removing anything,
+ * since the install script starts the service before it connects the box
+ * again. A daemon the account install runs, its
  * own real path in a version folder of the install's releases
  * (`accountReleases`), updates itself to the newer release the service names
  * (`host-update.ts`): once it switched `current` to it, every runner
@@ -33,6 +37,11 @@
  * on the box (`hostPlatform`), as a child of this process, on its Node,
  * and as its user.
  *
+ * `leave` removes the box from its account on its own secret, which
+ * `vespin-host uninstall` runs before it deletes that secret
+ * (`@repo/host/daemon`'s `leaveHostDevice`), and exits by whether the
+ * service took it (`LEAVE_EXIT`).
+ *
  * `connect` is run as the box is set up or by hand: it prints the link and
  * the code a member approves in the app, waits for them to, and exits by how
  * the connect ended (`CONNECT_EXIT`), never printing the poll secret or the
@@ -41,6 +50,7 @@
  * box was not connected.
  */
 
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,6 +68,7 @@ import {
   connectHostDevice,
   HOST_CONNECT_OUTCOME,
   HOST_DAEMON_END,
+  HOST_LEAVE_OUTCOME,
   HOST_SERVICE,
   type HostPairingCode,
   type HostReleases,
@@ -70,6 +81,7 @@ import {
   hostRuntime,
   hostServiceOf,
   LINUX_HOST,
+  leaveHostDevice,
   readHostDevice,
 } from "@repo/host/daemon";
 import { Environment, reporterLayer } from "@repo/host/effect";
@@ -115,7 +127,19 @@ const CONNECT_EXIT = {
   USAGE: 64,
 } as const;
 
-const COMMAND = { RUN: "run", CONNECT: "connect", VERSION: "version" } as const;
+/** The exit codes of `leave`, which `vespin-host uninstall` reads: a box that never joined has nothing to leave. */
+const LEAVE_EXIT = { LEFT: 0, UNANSWERED: 1 } as const;
+
+/** The release's command, beside its `lib/`, whose `uninstall` removes the account install (`vespin-host.sh`). */
+const RELEASE_COMMAND = "bin/vespin-host";
+
+/** The transient systemd unit a removed box's uninstall runs in, apart from the daemon's own unit, which it stops. */
+const UNINSTALL_UNIT = "vespin-host-uninstall";
+
+/** How long a removed daemon waits for the uninstall it started to stop its service, before it exits for its service to start it again. */
+const UNINSTALL_WAIT = Duration.minutes(5);
+
+const COMMAND = { RUN: "run", CONNECT: "connect", LEAVE: "leave", VERSION: "version" } as const;
 
 /** The release's own folder: this bundle stands in its `lib/`. */
 const installFolder = path.resolve(path.dirname(process.argv[1] ?? "."), "..");
@@ -222,7 +246,8 @@ const follow = (runtime: HostRuntime) =>
     });
     if (ended === HOST_DAEMON_END.REMOVED) {
       reportToStderr(`${PRODUCT_NAME} host: every agent it ran is stopped.`);
-      return undefined;
+      // Note that only the account install removes itself, since a run of any other build has no install to remove, and rests as a refused box does.
+      return accountReleases() === undefined ? undefined : ended;
     }
     return ended;
   }).pipe(Effect.repeat({ until: (ended) => ended !== undefined }));
@@ -281,13 +306,89 @@ const restartAsked = (service: HostService | undefined) =>
         ),
       );
 
-/** `vespin-host run`: the daemon, resting while the service refuses the box's secret, until it switched to a newer release, which its service is asked to start at once. */
+/**
+ * The account install's `uninstall` started apart from the daemon, so that
+ * stopping the daemon's service, its first step, does not stop it too: in a
+ * transient systemd unit of its own beside a unit, which a stop of the
+ * unit's control group does not reach, and otherwise in a session of its
+ * own, its words in the daemon's own log. Its input is no terminal, so it
+ * asks nothing and removes every agent's folder. Whether it started.
+ */
+const uninstallApart = (service: HostService | undefined) => {
+  const command = path.join(installFolder, RELEASE_COMMAND);
+  if (service === HOST_SERVICE.UNIT) {
+    return Effect.scoped(
+      Effect.flatMap(
+        ChildProcess.make(
+          "systemd-run",
+          ["--user", "--collect", "--quiet", "--unit", UNINSTALL_UNIT, command, "uninstall"],
+          { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+        ),
+        (handle) => handle.exitCode,
+      ),
+    ).pipe(
+      Effect.map((code) => Number(code) === 0),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+  // Note that a command that cannot start fails as an `error` event after the spawn returns, so the answer waits on `spawn` or `error`, whichever comes first.
+  return Effect.callback<boolean>((resume) => {
+    try {
+      const child = spawn(command, ["uninstall"], {
+        detached: true,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      child.once("spawn", () => {
+        child.unref();
+        resume(Effect.succeed(true));
+      });
+      child.once("error", () => resume(Effect.succeed(false)));
+    } catch {
+      resume(Effect.succeed(false));
+    }
+  });
+};
+
+/**
+ * A box removed in Settings › Hosts removing itself, as `vespin-host
+ * uninstall` would: its service, its agents' folders, its state and its
+ * releases. The daemon then waits for the uninstall to stop it; one that
+ * did not start, or did not stop it in time, is said, and the daemon exits
+ * for its service to start it again, where it rests on its refused record.
+ */
+const removeItself = (service: HostService | undefined) =>
+  Effect.gen(function* () {
+    reportToStderr(
+      `${PRODUCT_NAME} host: removed in Settings › Hosts, so it removes itself from this account: its service, its agents' folders, its state and its releases.`,
+    );
+    if (!(yield* uninstallApart(service))) {
+      reportToStderr(
+        `${PRODUCT_NAME} host: could not start its uninstall. Run ${HOST_COMMAND} uninstall to remove it.`,
+      );
+      return;
+    }
+    yield* Effect.sleep(UNINSTALL_WAIT);
+    reportToStderr(
+      `${PRODUCT_NAME} host: its uninstall did not finish. Run ${HOST_COMMAND} uninstall to remove it.`,
+    );
+  });
+
+/** `vespin-host run`: the daemon, resting while the service refuses the box's secret, until it switched to a newer release, which its service is asked to start at once, or the box was removed, which it removes itself from. */
 const run = (runtime: HostRuntime) =>
   Effect.gen(function* () {
     const service = yield* serviceRunning(runtime);
     const ended = yield* follow(runtime);
     if (ended === HOST_DAEMON_END.UPDATED) yield* restartAsked(service);
+    if (ended === HOST_DAEMON_END.REMOVED) yield* removeItself(service);
     return 0;
+  });
+
+/** `vespin-host leave`: the box removed from its account on its own secret, as `vespin-host uninstall` asks before it deletes that secret; only a call the service did not take is said, since the uninstall says the rest. */
+const leave = (runtime: HostRuntime) =>
+  Effect.map(leaveHostDevice({ stateRoot: runtime.stateRoot, version: VERSION }), (outcome) => {
+    if (outcome !== HOST_LEAVE_OUTCOME.UNANSWERED) return LEAVE_EXIT.LEFT;
+    process.stderr.write(`Could not reach ${PRODUCT_NAME} to remove this box from it.\n`);
+    return LEAVE_EXIT.UNANSWERED;
   });
 
 /** The command that connects this box to the service given: its origin named where it is not the one `connect` takes by default. */
@@ -388,6 +489,7 @@ function main(argv: readonly string[]): Effect.Effect<number, unknown, HostServi
     ).pipe(Effect.as(1));
   }
   if (command === COMMAND.RUN) return run(runtime);
+  if (command === COMMAND.LEAVE) return leave(runtime);
   if (command === COMMAND.CONNECT) {
     const { values } = parseArgs({
       args: [...rest],

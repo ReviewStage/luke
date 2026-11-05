@@ -290,6 +290,23 @@ export class HostedDeviceAgentClient {
     );
   }
 
+  /**
+   * This host removed from its account on its own secret: whether it is
+   * gone. Note that a secret the service refuses as unauthenticated is one
+   * no standing host holds (`auth/device-secret.ts`), so a host the service
+   * had already removed is gone too.
+   */
+  leave(deviceId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.deviceAgents.leave, { deviceId }).pipe(
+      Effect.as(true),
+      Effect.catch((failed) =>
+        Effect.succeed(
+          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+        ),
+      ),
+    );
+  }
+
   /** This Mac registered under its id; whether the service took it. */
   register(
     deviceId: string,

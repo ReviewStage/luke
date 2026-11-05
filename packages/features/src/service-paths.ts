@@ -188,6 +188,8 @@ export const HOSTED_SERVICE_PATH = {
   DEVICE_AGENT_LIVE_AGENTS: "/api/device-agents/live-agents",
   /** One of the account's own registered devices enrolled on its signed-in session, traded for a device secret answered once (POST). `host-wire.ts` declares the bodies. */
   DEVICE_AGENT_ENROLL_OWN: "/api/device-agents/devices/enroll",
+  /** A host removing itself from its account, on its own device secret, as Settings › Hosts' Remove does (POST): `vespin-host uninstall` calls it before it deletes the secret. */
+  DEVICE_AGENT_LEAVE: "/api/device-agents/devices/leave",
   /** A box's pairing started with no credential: its poll secret, the code it shows and the link that opens it, how long the code lasts, and how often to poll (POST). `host-wire.ts` declares the bodies. */
   HOST_PAIRING_START: "/api/device-agents/pairing",
   /** A pairing box's poll on its poll secret: pending, slow down, denied, expired, or approved with its device secret, answered once (POST). */
