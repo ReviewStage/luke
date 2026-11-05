@@ -879,6 +879,19 @@ the variables' names and nothing is emailed, which is the intended state for
 a Preview. A send Resend refuses is logged by its status alone, and the
 invitation stands. Canceling an invitation emails nothing.
 
+## Welcome email
+
+A new account is emailed one short note from Charles, one of the founders,
+as it signs up (`packages/service/src/accounts/welcome-mail.ts`, sent from
+the auth route's sign-up step in `packages/service/src/auth/auth-app.ts`),
+through Resend: plain text, no branding, and replies go to the sender. It
+needs `RESEND_API_KEY` and `WELCOME_FROM`, the sender, such as
+`Charles Pan <charles@vespin.dev>` on a domain Resend has verified. Without
+either the build logs it once by the variables' names and nothing is emailed,
+which is the intended state for a Preview. Signing in again, or linking
+GitHub to an account, emails nothing, and a send Resend refuses is logged by
+its status alone while the sign-up stands.
+
 ## Sentry
 
 The functions report to Sentry's `vespin-web` project, set

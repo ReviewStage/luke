@@ -2,8 +2,10 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { catchAllButInterrupt, causeKind } from "@repo/runtime/effect";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { type HttpMethod, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { readAccountPerson } from "../accounts/account-person.js";
+import { WelcomeMail } from "../accounts/welcome-mail.js";
 import { SERVER_EVENT } from "../events/server-events.js";
 import { hostedNotFoundRoute } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -105,6 +107,25 @@ function workspaceOfSignUp(
 }
 
 /**
+ * The founder's welcome note to the account a sign-up count names
+ * (`welcome-mail.ts`), read from its own user row. A runtime without a sender
+ * emails nothing, and a row that cannot be read is logged by its kind alone,
+ * since the sign-up stands either way.
+ */
+function welcomeOfSignUp(count: AuthCount): Effect.Effect<void, never, DatabaseServices> {
+  if (count.name !== SERVER_EVENT.ACCOUNT_SIGN_UP) return Effect.void;
+  return Effect.gen(function* () {
+    const mail = yield* Effect.serviceOption(WelcomeMail);
+    if (Option.isNone(mail)) return;
+    const person = yield* catchAllButInterrupt(readAccountPerson(count.actor.userId), (cause) =>
+      Effect.as(Effect.logWarning(`Welcome email not sent: ${causeKind(cause)}`), undefined),
+    );
+    if (person === undefined) return;
+    yield* mail.value.send(person);
+  });
+}
+
+/**
  * The handler's own `Response`, answered unchanged.
  *
  * The request handed over is the very `Request` this edge was invoked with,
@@ -118,7 +139,8 @@ function workspaceOfSignUp(
  * OAuth callbacks are made of. A HEAD is the exception the helper above
  * covers, since there the record is all the web handler reads. An account
  * the request signed up has its personal workspace made before it is
- * answered (`workspaceOfSignUp`).
+ * answered (`workspaceOfSignUp`), and is sent the founder's welcome note
+ * (`welcomeOfSignUp`).
  */
 const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(function* (
   handle: WebRequestHandler,
@@ -135,6 +157,7 @@ const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(functio
   yield* Effect.forEach(counts, (count) => workspaceOfSignUp(count, workspaces), {
     discard: true,
   });
+  yield* Effect.forEach(counts, welcomeOfSignUp, { discard: true });
   yield* Effect.forEach(counts, recordAuthCount, { discard: true });
   return incoming.method === BODYLESS_METHOD.HEAD
     ? bodylessAnswer(answer)
