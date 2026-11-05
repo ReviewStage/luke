@@ -881,6 +881,13 @@ export const inboxItemSchema = EffectSchema.Struct({
    */
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
+   * Whether the member reading it marked the item unread and has not read
+   * it since, which leaves it `unread` whatever else does: what brings a
+   * thread closed without an answer back to their Inbox's Open. Absent
+   * where they did not, and from a service before it.
+   */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
+  /**
    * Until when the member reading it snoozed the item, in epoch
    * milliseconds, which snoozing marked it read for them: it stays out of
    * their Inbox while it is read and this is ahead, and comes back unread

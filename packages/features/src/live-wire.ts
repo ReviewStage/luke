@@ -797,6 +797,7 @@ function inboxItemOfLiveRow(
     closedByName,
     openAskMessageId,
     settledAt,
+    markedUnread,
     snoozedUntil,
     ...item
   } = row;
@@ -824,6 +825,7 @@ function inboxItemOfLiveRow(
       : { closedBy: { userId: closedBy, name: closedByName } }),
     ...(thread.length === 0 ? undefined : { thread: thread.map(message) }),
     ...(settledAt === null ? undefined : { settledAt }),
+    ...(markedUnread === true ? { markedUnread } : undefined),
     ...(snoozedUntil === undefined || snoozedUntil === null ? undefined : { snoozedUntil }),
   };
 }
