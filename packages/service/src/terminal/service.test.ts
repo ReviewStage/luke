@@ -70,6 +70,7 @@ function agents() {
     kill: unused,
     resume: unused,
     attach: unused,
+    open: unused,
     setCredential: unused,
     withdrawCredential: unused,
   };
