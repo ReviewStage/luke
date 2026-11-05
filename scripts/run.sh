@@ -24,9 +24,6 @@ DEMO_HOST_HOME=host-home
 DEMO_SERVER_WAIT_SECONDS=120
 DEMO_LINK=vespin://vespin.dev/acme/inbox
 
-# The instance `--onboarding` launches, whose profile every run clears.
-ONBOARDING_INSTANCE=onboarding
-
 # 32 random bytes in standard base64: a secret, or a key of the provider
 # keys' ring (`PROVIDER_KEY_ENCRYPTION_KEYS`).
 demo_random_key() {
@@ -52,18 +49,11 @@ demo_free_port() {
 # open (see "The demo" below); it takes none of the three flags above. Dean's
 # agents run on the Claude credential this shell already holds,
 # `CLAUDE_CODE_OAUTH_TOKEN` or else `ANTHROPIC_API_KEY`, so there is nothing
-# to set; with neither, they do not run. `--onboarding` launches the
-# `onboarding` instance with its profile cleared, so it opens signed out and
-# keeps nothing of an earlier run, against production or, with `--preview`,
-# this branch's Preview: sign in with a test account, which a new account
-# sees setup's steps as, and delete it in Settings › Account at the end, so
-# the next run's sign-in with the same test account makes a new one. It takes
-# no `--demo`, `--instance`, or `--keep-running`. Every other argument is
-# forwarded to Electron.
+# to set; with neither, they do not run. Every other argument is forwarded
+# to Electron.
 replace_running_app=true
 use_preview=false
 use_demo=false
-use_onboarding=false
 preview_address=
 preview_address_given=false
 instance=
@@ -87,10 +77,6 @@ while ((remaining_arguments-- > 0)); do
     fi
     if [[ $argument == --demo ]]; then
         use_demo=true
-        continue
-    fi
-    if [[ $argument == --onboarding ]]; then
-        use_onboarding=true
         continue
     fi
     if [[ $argument == --instance ]]; then
@@ -117,23 +103,10 @@ if [[ $use_demo == true ]]; then
     instance=$DEMO_INSTANCE
 fi
 
-# The onboarding run is an instance of its own whose profile it is about to
-# clear, so it always replaces its own earlier run, and is named before the
-# preview's lookup, which names only a run that has no name.
-if [[ $use_onboarding == true ]]; then
-    if [[ $use_demo == true || -n $instance || $replace_running_app == false ]]; then
-        printf 'error: --onboarding runs its own instance, so it takes no --demo, --instance, or --keep-running\n' >&2
-        exit 2
-    fi
-    instance=$ONBOARDING_INSTANCE
-fi
-
 # The preview stands in for production through the one development override
 # the build honors (`APP_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
 # which a packaged build ignores. The preview's
-# Neon branch is its own database, a copy of production's data as it stood
-# when the branch's first Preview was built, so the account there starts with
-# what it held then and nothing written there reaches production; and no
+# Neon branch is its own database, so the account there starts empty, and no
 # cron tick runs on a preview.
 if [[ $use_preview == true ]]; then
     if [[ -z $preview_address ]]; then
@@ -165,17 +138,6 @@ fi
 
 if [[ $replace_running_app == true ]]; then
     app_stop_running_app "$instance"
-fi
-
-# Note that the whole profile goes, once the instance has stopped, because
-# its signed-in session, sealed under the instance's own Keychain entry,
-# and setup's place and finish on this machine are all kept there.
-if [[ $use_onboarding == true ]]; then
-    onboarding_app_name=$(app_instance_app_name "$instance")
-    onboarding_profile="$HOME/Library/Application Support/${onboarding_app_name:?}"
-    rm -rf -- "$onboarding_profile"
-    printf 'onboarding: cleared %s; sign in with a test account, and delete it in Settings › Account when done\n' \
-        "$onboarding_profile" >&2
 fi
 
 # Live sessions are the default. Pass `--fixture smoke` for deterministic data;

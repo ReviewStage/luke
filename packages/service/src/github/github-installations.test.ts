@@ -6,7 +6,6 @@ import {
   GITHUB_ACCOUNT_TYPE,
   GITHUB_INSTALLATION_STATUS,
 } from "@repo/database/github-installation-vocabulary";
-import { deleteAccount } from "@repo/database/models/account-store";
 import { listWorkspaces, workspaceOf } from "@repo/database/models/workspace-store";
 import { member } from "@repo/database/schemas/auth";
 import { githubInstallation } from "@repo/database/schemas/github-installation";
@@ -32,8 +31,7 @@ import {
  * names, a reinstall on the account moves the account's own row onto the new
  * installation within its workspace, and an account that stands for one
  * workspace is never taken by another, however the two race, until our App is
- * uninstalled from it or the workspace's last member deletes their account,
- * when another workspace's install takes it; the callback's
+ * uninstalled from it, when another workspace's install takes it; the callback's
  * link reads the account's role again before it writes; a webhook's status
  * reaches its own installation alone; and a workspace's GitHub accounts are
  * read by its members and nobody else.
@@ -316,27 +314,6 @@ it.layer(getTestDB())("a workspace's GitHub installations in the store", (it) =>
         );
         const [row] = yield* rowsOfAccount(installation.accountId);
         assert.equal(row?.createdAt.getTime(), (yield* DateTime.nowAsDate).getTime());
-      }),
-  );
-
-  it.effect(
-    "an account whose workspace has no member left, its only one's account deleted, is taken over by another workspace's install",
-    () =>
-      Effect.gen(function* () {
-        const leaving = yield* openGithubUser();
-        const left = yield* openWorkspace(leaving);
-        const installation = freshInstallation();
-        yield* linkInstallation(left, installation);
-        yield* deleteAccount(leaving);
-        const next = yield* openWorkspace(yield* openGithubUser());
-
-        const outcome = yield* linkInstallation(next, installation);
-
-        assert.equal(outcome, LINK_OUTCOME.LINKED);
-        assert.deepEqual(
-          (yield* installationsOfWorkspace(next)).map(({ installationId }) => installationId),
-          [installation.installationId],
-        );
       }),
   );
 
