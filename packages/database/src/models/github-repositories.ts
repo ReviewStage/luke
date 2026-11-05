@@ -134,20 +134,12 @@ const relabelTasks = SqlSchema.void({
 
 const relabelAgents = SqlSchema.void({
   Request: RelabelSchema,
-  execute: (move) =>
+  execute: ({ from, to }) =>
     Database.use((db) =>
       db
         .update(agentTable)
-        .set({
-          repository: sql`case when ${namedAs(agentTable.repository, move.from)} then ${move.to} else ${agentTable.repository} end`,
-          repositories: relabeledList(agentTable.repositories, move),
-        })
-        .where(
-          or(
-            and(namedAs(agentTable.repository, move.from), ne(agentTable.repository, move.to)),
-            listsName(agentTable.repositories, move),
-          ),
-        ),
+        .set({ repository: to })
+        .where(and(namedAs(agentTable.repository, from), ne(agentTable.repository, to))),
     ),
 });
 

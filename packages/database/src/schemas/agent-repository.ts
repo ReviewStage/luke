@@ -1,4 +1,5 @@
-import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { agentTable, type StoredPublishedRead, type StoredPullRequest } from "./agent.js";
 
 /**
@@ -38,5 +39,15 @@ export const agentRepository = pgTable(
     /** When the read that wrote `published` was, and of which branch; null before one. */
     publishedRead: jsonb("published_read").$type<StoredPublishedRead>(),
   },
-  (table) => [primaryKey({ columns: [table.agentId, table.position] })],
+  (table) => [
+    primaryKey({ columns: [table.agentId, table.position] }),
+    // GitHub's deliveries find the agents on a branch or a pull request of a repository, of any
+    // account, by the repository as GitHub matches one, its case aside, as the agent row's own
+    // lookup does (`agent-store.ts`'s `listAgentsOnBranches` and `listAgentsOnPullRequest`).
+    index("agent_repository_on_head").on(sql`lower(${table.repository})`, table.headBranch),
+    index("agent_repository_on_pull_request").on(
+      sql`lower(${table.repository})`,
+      sql`((${table.published}->>'number')::int)`,
+    ),
+  ],
 );

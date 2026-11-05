@@ -280,10 +280,8 @@ export const agentTable = pgTable(
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan, or started blank. */
     prompt: text("prompt"),
-    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`; null for an agent with none. */
+    /** The GitHub repository the agent works in, as `owner/name`, the one it starts in; null for an agent with none. Any others are its `agent_repository` rows. */
     repository: text("repository"),
-    /** Every repository the agent works in, `owner/name` each, the first where it starts; empty for an agent with none. */
-    repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
     /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
@@ -366,6 +364,12 @@ export const agentTable = pgTable(
     index("agent_device_live")
       .on(table.deviceId)
       .where(sql`${table.deviceId} is not null and ${table.archivedAt} is null`),
+    // GitHub's check and push deliveries find the agents on a branch, of any account, by the
+    // repository as GitHub matches one, its case aside, and the branch exactly
+    // (`agent-store.ts`'s `listAgentsOnBranches`); only an agent that opened a pull request has one.
+    index("agent_on_branch")
+      .on(sql`lower(${table.repository})`, table.branch)
+      .where(sql`${table.branch} is not null`),
   ],
 );
 

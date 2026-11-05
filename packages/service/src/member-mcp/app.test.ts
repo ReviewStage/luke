@@ -820,7 +820,6 @@ it.effect(
             .update(agentTable)
             .set({
               repository: RELAY_FULL_NAME,
-              repositories: [RELAY_FULL_NAME],
               branch: PUBLISHED.branch,
             })
             .where(eq(agentTable.id, id)),

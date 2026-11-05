@@ -17,6 +17,7 @@ import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import type { StoredPullRequest } from "../../schemas/agent.js";
+import { agentRepository } from "../../schemas/agent-repository.js";
 import { user } from "../../schemas/auth.js";
 import { inboxItem } from "../../schemas/inbox.js";
 import { task } from "../../schemas/task.js";
@@ -29,7 +30,13 @@ import {
   openTaskAgent,
   openWorkspace,
 } from "../../testing/index.js";
-import { archiveAgent, readAgent, recordAgentPublished } from "../agent-store.js";
+import { recordAgentRepositoryPublished } from "../agent-repositories.js";
+import {
+  archiveAgent,
+  readAgent,
+  recordAgentPublished,
+  taskHasMergedPullRequest,
+} from "../agent-store.js";
 import {
   archiveAgentOfDoneTask,
   assignUnassignedTask,
@@ -1084,6 +1091,52 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         );
         assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), true);
         assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
+      }),
+  );
+
+  it.effect(
+    "waits on a pull request an agent opened in a repository it works in beside its own, and is done once each merged or closed with one merged",
+    () =>
+      Effect.gen(function* () {
+        const { dean, taskId, workspace } = yield* openSharedTask;
+        const agent = yield* openTaskAgent(dean, workspace, taskId);
+        yield* Database.use((db) =>
+          db
+            .insert(agentRepository)
+            .values({ agentId: agent, position: 1, repository: "acme/web" }),
+        );
+        const read = { at: 0, branch: "agent/invite", pushed: true };
+        yield* recordAgentPublished(dean, agent, pullRequestIn(PULL_REQUEST_STATE.MERGED));
+        yield* recordAgentRepositoryPublished(
+          dean,
+          agent,
+          "acme/web",
+          pullRequestIn(PULL_REQUEST_STATE.OPEN),
+          read,
+        );
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), false);
+
+        yield* recordAgentRepositoryPublished(
+          dean,
+          agent,
+          "acme/web",
+          pullRequestIn(PULL_REQUEST_STATE.CLOSED),
+          read,
+        );
+        assert.equal(yield* finishTaskWork(dean, taskId, everyoneIdle), true);
+        assert.equal((yield* standingOf(dean, taskId)).status, TASK_STATUS.DONE);
+
+        // The extra's merge alone is a merged pull request of the task.
+        yield* recordAgentPublished(dean, agent, null);
+        assert.equal(yield* taskHasMergedPullRequest(dean, taskId), false);
+        yield* recordAgentRepositoryPublished(
+          dean,
+          agent,
+          "acme/web",
+          { ...pullRequestIn(PULL_REQUEST_STATE.MERGED), mergedAt: 1 },
+          read,
+        );
+        assert.equal(yield* taskHasMergedPullRequest(dean, taskId), true);
       }),
   );
 

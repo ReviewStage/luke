@@ -64,7 +64,6 @@ const openAgent = (
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/api",
-      repositories: ["acme/api"],
       githubAccess,
       idempotencyKey: randomUUID(),
     });

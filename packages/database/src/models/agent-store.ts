@@ -49,6 +49,7 @@ import {
   notInArray,
   or,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -857,7 +858,6 @@ const insertAgent = SqlSchema.findOne({
           planSnapshot: write.planSnapshot,
           prompt: write.prompt,
           repository: write.repository,
-          repositories: write.repository === null ? [] : [write.repository],
           startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
@@ -1869,7 +1869,7 @@ export const PublishedColumnSchema = Schema.Struct({
 });
 
 /** The `published_read` column (`StoredPublishedRead`). */
-const PublishedReadColumnSchema = Schema.Struct({
+export const PublishedReadColumnSchema = Schema.Struct({
   at: Schema.Number,
   branch: Schema.NullOr(Schema.String),
   pushed: Schema.Boolean,
@@ -1977,7 +1977,21 @@ const findMergedAgentOfTask = SqlSchema.findOneOption({
           and(
             eq(task.id, taskId),
             taskReachableBy(userId),
-            isNotNull(sql`${agentTable.published} ->> 'mergedAt'`),
+            or(
+              isNotNull(sql`${agentTable.published} ->> 'mergedAt'`),
+              // Note that a pull request in a repository the agent works in beside its own counts as its own does.
+              exists(
+                queryBuilder
+                  .select({ one: agentRepository.agentId })
+                  .from(agentRepository)
+                  .where(
+                    and(
+                      eq(agentRepository.agentId, agentTable.id),
+                      isNotNull(sql`${agentRepository.published} ->> 'mergedAt'`),
+                    ),
+                  ),
+              ),
+            ),
           ),
         )
         .limit(1),
@@ -2041,20 +2055,85 @@ const findStartedFrom = SqlSchema.findAll({
     }),
 });
 
+/**
+ * The condition that a repository column names the repository a delivery
+ * names, as GitHub matches one, its case aside: the one expression every
+ * lookup by a delivery's repository is written in, so each is served by the
+ * index built on it (`agent_on_branch`, `agent_repository_on_head`,
+ * `agent_repository_on_pull_request`).
+ */
+function namesDeliveredRepository(column: SQLWrapper, repository: string): SQL {
+  return eq(sql`lower(${column})`, repository.toLowerCase());
+}
+
+/** The number of the pull request a `published` column keeps, as its lookup's index is built on it. */
+function publishedNumber(column: SQLWrapper): SQL {
+  return sql`(${column}->>'number')::int`;
+}
+
+/** An agent a delivery found, with the repository of its it was found on: its own, or one it works in beside it, and that repository's head branch. */
+const AgentOnRepositoryRowSchema = Schema.Struct({
+  ...AgentRowSchema.fields,
+  onRepository: Schema.String,
+  onBranch: Schema.NullOr(Schema.String),
+});
+
+const OnBranchesSchema = Schema.Struct({
+  repository: Schema.String,
+  branches: Schema.Array(Schema.String),
+  limit: Schema.Number,
+});
+
+const OnPullRequestSchema = Schema.Struct({
+  repository: Schema.String,
+  number: Schema.Number,
+  limit: Schema.Number,
+});
+
 const findAgentsOnBranches = SqlSchema.findAll({
-  Request: Schema.Struct({
-    repository: Schema.String,
-    branches: Schema.Array(Schema.String),
-    limit: Schema.Number,
-  }),
-  Result: AgentRowSchema,
+  Request: OnBranchesSchema,
+  Result: AgentOnRepositoryRowSchema,
   execute: ({ repository, branches, limit }) =>
     Database.use((db) =>
       db
-        .select({ ...AGENT_COLUMNS, userId: agentTable.userId })
+        .select({
+          ...AGENT_COLUMNS,
+          userId: agentTable.userId,
+          onRepository: sql<string>`${agentTable.repository}`,
+          onBranch: agentTable.branch,
+        })
         .from(agentTable)
         .where(
-          and(eq(agentTable.repository, repository), inArray(agentTable.branch, [...branches])),
+          and(
+            namesDeliveredRepository(agentTable.repository, repository),
+            inArray(agentTable.branch, [...branches]),
+          ),
+        )
+        .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
+        .limit(limit),
+    ),
+});
+
+/** The agents whose extra repository a delivery names stands on one of its branches, as `findAgentsOnBranches` finds them by their own. */
+const findAgentsOnExtraBranches = SqlSchema.findAll({
+  Request: OnBranchesSchema,
+  Result: AgentOnRepositoryRowSchema,
+  execute: ({ repository, branches, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          ...AGENT_COLUMNS,
+          userId: agentTable.userId,
+          onRepository: agentRepository.repository,
+          onBranch: agentRepository.headBranch,
+        })
+        .from(agentRepository)
+        .innerJoin(agentTable, eq(agentTable.id, agentRepository.agentId))
+        .where(
+          and(
+            namesDeliveredRepository(agentRepository.repository, repository),
+            inArray(agentRepository.headBranch, [...branches]),
+          ),
         )
         .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
         .limit(limit),
@@ -2062,21 +2141,48 @@ const findAgentsOnBranches = SqlSchema.findAll({
 });
 
 const findAgentsOnPullRequest = SqlSchema.findAll({
-  Request: Schema.Struct({
-    repository: Schema.String,
-    number: Schema.Number,
-    limit: Schema.Number,
-  }),
-  Result: AgentRowSchema,
+  Request: OnPullRequestSchema,
+  Result: AgentOnRepositoryRowSchema,
   execute: ({ repository, number, limit }) =>
     Database.use((db) =>
       db
-        .select({ ...AGENT_COLUMNS, userId: agentTable.userId })
+        .select({
+          ...AGENT_COLUMNS,
+          userId: agentTable.userId,
+          onRepository: sql<string>`${agentTable.repository}`,
+          onBranch: agentTable.branch,
+        })
         .from(agentTable)
         .where(
           and(
-            eq(sql`lower(${agentTable.repository})`, repository.toLowerCase()),
-            eq(sql`(${agentTable.published}->>'number')::int`, number),
+            namesDeliveredRepository(agentTable.repository, repository),
+            eq(publishedNumber(agentTable.published), number),
+          ),
+        )
+        .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
+        .limit(limit),
+    ),
+});
+
+/** The agents whose extra repository a delivery names keeps its pull request numbered, as `findAgentsOnPullRequest` finds them by their own. */
+const findAgentsOnExtraPullRequest = SqlSchema.findAll({
+  Request: OnPullRequestSchema,
+  Result: AgentOnRepositoryRowSchema,
+  execute: ({ repository, number, limit }) =>
+    Database.use((db) =>
+      db
+        .select({
+          ...AGENT_COLUMNS,
+          userId: agentTable.userId,
+          onRepository: agentRepository.repository,
+          onBranch: agentRepository.headBranch,
+        })
+        .from(agentRepository)
+        .innerJoin(agentTable, eq(agentTable.id, agentRepository.agentId))
+        .where(
+          and(
+            namesDeliveredRepository(agentRepository.repository, repository),
+            eq(publishedNumber(agentRepository.published), number),
           ),
         )
         .orderBy(desc(agentTable.createdAt), asc(agentTable.id))
@@ -2711,7 +2817,10 @@ export function continuationsOf(
 }
 
 /** Whether a pull request is a merge the row did not already keep as that pull request merged. */
-function newlyMerged(kept: StoredPullRequest | null, published: StoredPullRequest | null): boolean {
+export function newlyMerged(
+  kept: StoredPullRequest | null,
+  published: StoredPullRequest | null,
+): boolean {
   if (published?.state !== PULL_REQUEST_STATE.MERGED) return false;
   return kept?.number !== published.number || kept.state !== PULL_REQUEST_STATE.MERGED;
 }
@@ -2747,7 +2856,7 @@ export function forgetAgentPublishedRead(userId: string, agentId: string): Agent
   return updateAgentPublishedReadForgotten({ userId, agentId });
 }
 
-/** Whether any coding agent on the task, archived ones and a teammate's on their own token among them, has a pull request GitHub reported merged; false for a task the account does not reach. */
+/** Whether any coding agent on the task, archived ones and a teammate's on their own token among them, has a pull request GitHub reported merged, in its own repository or one it works in beside it; false for a task the account does not reach. */
 export function taskHasMergedPullRequest(
   userId: string,
   taskId: string,
@@ -2783,16 +2892,57 @@ export function readAgentKeptPublished(
   );
 }
 
-/** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it. */
+/** Which of an agent's repositories a delivery from GitHub found it on: its own, or one it works in beside it, as `owner/name` the agent keeps it, with that repository's pull request head branch, none before one opened. */
+export interface AgentFoundOn {
+  readonly repository: string;
+  readonly branch: string | null;
+  /** Whether it is a repository the agent works in beside its own (`agent-repositories.ts`). */
+  readonly extra: boolean;
+}
+
+/** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it, with the repository of its it was found on. */
 export interface OwnedAgent {
   readonly userId: string;
   readonly agent: Agent;
+  readonly on: AgentFoundOn;
 }
 
 /**
- * The agents of any account whose row stands on one of the repository's
+ * The agents found on their own repository, then those found on an extra
+ * one, as one list newest started first and at most `limit` long, as one
+ * query ordered so would have answered it.
+ */
+function ownedNewestFirst(
+  own: readonly (typeof AgentOnRepositoryRowSchema.Type)[],
+  extra: readonly (typeof AgentOnRepositoryRowSchema.Type)[],
+  limit: number,
+): readonly OwnedAgent[] {
+  const found = [
+    ...own.map((row) => ({ row, extra: false })),
+    ...extra.map((row) => ({ row, extra: true })),
+  ];
+  found.sort(
+    (a, b) =>
+      b.row.createdAt.getTime() - a.row.createdAt.getTime() ||
+      (a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0),
+  );
+  return found.slice(0, limit).map(({ row, extra: onExtra }) => {
+    const { onRepository, onBranch, ...agent } = row;
+    return {
+      userId: agent.userId,
+      agent,
+      on: { repository: onRepository, branch: onBranch, extra: onExtra },
+    };
+  });
+}
+
+/**
+ * The agents of any account with a repository on one of the repository's
  * branches named, newest started first and at most `limit` of them; none for
- * no branch. This is the one read that names no account, since GitHub's
+ * no branch: the row's own repository and branch, and each extra repository
+ * it works in beside it and that one's pull request head branch, the
+ * repository matched as GitHub matches one, its case aside, and the branch
+ * exactly. This is the one read that names no account, since GitHub's
  * delivery names a repository and a branch and nothing of who started an
  * agent on them; what each answers is read again on its owner's own token.
  */
@@ -2802,16 +2952,19 @@ export function listAgentsOnBranches(
   limit: number,
 ): AgentStoreEffect<readonly OwnedAgent[]> {
   if (branches.length === 0) return Effect.succeed([]);
-  return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
-    rows.map((agent) => ({ userId: agent.userId, agent })),
+  const request = { repository, branches, limit };
+  return Effect.map(
+    Effect.all([findAgentsOnBranches(request), findAgentsOnExtraBranches(request)]),
+    ([own, extra]) => ownedNewestFirst(own, extra, limit),
   );
 }
 
 /**
- * The agents of any account whose pull request, as GitHub last answered it,
- * is the repository's one numbered, newest started first and at most
- * `limit` of them: what a delivery about a pull request finds them by where
- * it names no branch, as a comment's does. Like the read by branches, it
+ * The agents of any account with a pull request, as GitHub last answered
+ * it, that is the repository's one numbered, newest started first and at
+ * most `limit` of them: what a delivery about a pull request finds them by
+ * where it names no branch, as a comment's does, on their own repository or
+ * an extra one, matched as the read by branches matches. Like that read, it
  * names no account.
  */
 export function listAgentsOnPullRequest(
@@ -2819,8 +2972,10 @@ export function listAgentsOnPullRequest(
   number: number,
   limit: number,
 ): AgentStoreEffect<readonly OwnedAgent[]> {
-  return Effect.map(findAgentsOnPullRequest({ repository, number, limit }), (rows) =>
-    rows.map((agent) => ({ userId: agent.userId, agent })),
+  const request = { repository, number, limit };
+  return Effect.map(
+    Effect.all([findAgentsOnPullRequest(request), findAgentsOnExtraPullRequest(request)]),
+    ([own, extra]) => ownedNewestFirst(own, extra, limit),
   );
 }
 

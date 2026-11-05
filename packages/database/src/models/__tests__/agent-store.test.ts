@@ -33,6 +33,7 @@ import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { agentDelegationTable, agentTable, type StoredStartedFrom } from "../../schemas/agent.js";
 import { agentPin } from "../../schemas/agent-pin.js";
+import { agentRepository } from "../../schemas/agent-repository.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { inboxItem } from "../../schemas/inbox.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
@@ -43,6 +44,10 @@ import {
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openInboxItem } from "../../testing/index.js";
+import {
+  recordAgentRepositoryHead,
+  recordAgentRepositoryPublished,
+} from "../agent-repositories.js";
 import {
   type Agent,
   type AgentLine,
@@ -61,6 +66,7 @@ import {
   linePlacesOf,
   lineSendersOf,
   listAgentLines,
+  listAgentsOnBranches,
   listAgentsOnPullRequest,
   listPublishedAgents,
   listPublishedAgentsById,
@@ -98,6 +104,7 @@ import {
   taskNamesOf,
   turnUsagesOf,
   unarchiveAgentFrom,
+  updateAgentBranch,
 } from "../agent-store.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
@@ -577,7 +584,6 @@ const tasklessAgent = (
       effort: "high",
       prompt: "Sweep the flaky tests.",
       repository: patch.repository ?? "acme/api",
-      repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
       ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
       ...(patch.taskId === undefined ? undefined : { planId: patch.taskId }),
@@ -1332,6 +1338,70 @@ it.layer(getTestDB())("the coding-agent store's agents by their pull request", (
         // GitHub may spell the repository in another case than the agent's row does.
         assert.equal((yield* listAgentsOnPullRequest("Acme/API", 12, 10)).length, 2);
         assert.deepEqual(yield* listAgentsOnPullRequest("acme/api", 99, 10), []);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agents on a branch", (it) => {
+  it.effect(
+    "a delivery about a repository's branch finds the agents standing on it in their own repository whatever case either spells it in, and those whose extra repository's pull request is from it, the branch matched exactly",
+    () =>
+      Effect.gen(function* () {
+        const dean = yield* openAccount;
+        const workspace = yield* openWorkspace(dean);
+        const own = yield* tasklessAgent(dean, workspace, {
+          repository: "Acme/API",
+          createdAt: new Date(1_000),
+        });
+        const beside = yield* tasklessAgent(dean, workspace, {
+          repository: "acme/web",
+          createdAt: new Date(2_000),
+        });
+        const elsewhere = yield* tasklessAgent(dean, workspace, { repository: "acme/web" });
+        yield* updateAgentBranch(dean, own.agentId, "agent/invite");
+        yield* updateAgentBranch(dean, elsewhere.agentId, "agent/invite");
+        yield* Database.use((db) =>
+          db.insert(agentRepository).values({
+            agentId: beside.agentId,
+            position: 1,
+            repository: "acme/api",
+          }),
+        );
+        yield* recordAgentRepositoryHead(dean, beside.agentId, "ACME/api", "agent/invite");
+
+        const found = yield* listAgentsOnBranches("acme/api", ["agent/invite"], 10);
+        assert.deepEqual(
+          found.map(({ agent, on }) => [agent.id, on]),
+          [
+            [beside.agentId, { repository: "acme/api", branch: "agent/invite", extra: true }],
+            [own.agentId, { repository: "Acme/API", branch: "agent/invite", extra: false }],
+          ],
+        );
+        assert.equal((yield* listAgentsOnBranches("acme/api", ["agent/invite"], 1)).length, 1);
+        assert.deepEqual(yield* listAgentsOnBranches("acme/api", ["Agent/Invite"], 10), []);
+
+        // The extra's pull request, as GitHub last answered it, finds the agent by its number too.
+        yield* recordAgentRepositoryPublished(
+          dean,
+          beside.agentId,
+          "acme/api",
+          {
+            number: 12,
+            title: "Invite flow",
+            url: "https://github.com/acme/api/pull/12",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 1,
+            deletions: 0,
+            changedFiles: 1,
+          },
+          { at: 0, branch: "agent/invite", pushed: true },
+        );
+        const numbered = yield* listAgentsOnPullRequest("Acme/Api", 12, 10);
+        assert.deepEqual(
+          numbered.map(({ agent, on }) => [agent.id, on.extra]),
+          [[beside.agentId, true]],
+        );
       }),
   );
 });

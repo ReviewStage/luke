@@ -1,5 +1,10 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
+  type AgentRepositoryEntry,
+  readAgentRepositories,
+  recordAgentRepositoryPublished,
+} from "@repo/database/models/agent-repositories";
+import {
   type Agent,
   hasRepository,
   type KeptPublished,
@@ -16,6 +21,7 @@ import {
   PULL_REQUEST_STATE,
   pullRequestAuthorOf,
 } from "@repo/features/agent-wire";
+import { failureKind } from "@repo/runtime/effect";
 import { Cache, Clock, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { recordServerEvent, SERVER_EVENT } from "../../events/server-events.js";
@@ -82,6 +88,15 @@ import { CODER } from "./bounds.js";
  * read go (`forgetPublished`). Opening a task of a hundred agents once asked
  * GitHub some four hundred times at once and was refused for twenty minutes;
  * the webhook, the token sweep, the brain, and an opening still read GitHub.
+ *
+ * An agent that works in other repositories beside its own
+ * (`readAgentRepositories`) has each pull request it opened in one read
+ * again with every read of its own, on a token for that repository, and
+ * written on that repository's row (`recordAgentRepositoryPublished`), a
+ * merge first seen there counted and its task asked to settle as its own
+ * would be; what a read answers stays the agent's own pull request, which
+ * the Changes tab and the sidebar show. A read of an extra that fails is
+ * logged and fails nothing else.
  */
 
 /** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
@@ -147,13 +162,13 @@ function queuedOf(
 /** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
 function withChecks(
   token: Redacted.Redacted,
-  agent: WithRepository<Agent>,
+  repository: string,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
   const read = Effect.all([
-    checkSummaryOf(token, agent.repository, found.headSha),
-    queuedOf(token, agent.repository, found, kept),
+    checkSummaryOf(token, repository, found.headSha),
+    queuedOf(token, repository, found, kept),
   ]);
   return Effect.map(read, ([checks, queued]) => {
     const pullRequest = wirePullRequestOf(found, checks, queued);
@@ -163,7 +178,7 @@ function withChecks(
       ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
     };
     return {
-      answer: { repository: agent.repository, branch: found.headRef, pullRequest },
+      answer: { repository, branch: found.headRef, pullRequest },
       stored,
       ended: firstSeenEnd(found, kept),
     };
@@ -193,21 +208,22 @@ function nothing(agent: Agent): Published {
 
 /**
  * A token that reads the agent's pull requests, minted for its one
- * repository on the installation of its workspace, as the account asking
- * is a member of it; refused as out of reach where either no longer
- * stands.
+ * repository, or the one named of those it works in beside it, on the
+ * installation of its workspace, as the account asking is a member of it;
+ * refused as out of reach where either no longer stands.
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: WithRepository<Agent>,
+  repository: string = agent.repository,
 ): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
   const workspace = yield* agentWorkspace(userId, agent);
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()
-    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository, agentMember(agent));
+    : yield* app.repositoryPullRequestToken(workspace.value, repository, agentMember(agent));
   if (Option.isNone(reached)) {
-    return yield* new RepositoryNotReachable({ repository: agent.repository });
+    return yield* new RepositoryNotReachable({ repository });
   }
   return reached.value;
 });
@@ -231,7 +247,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
   if (Option.isSome(ofBranch)) {
     const kept = yield* readAgentPublished(userId, agent.id);
-    return yield* withChecks(token, agent, ofBranch.value, kept);
+    return yield* withChecks(token, agent.repository, ofBranch.value, kept);
   }
   const pushed = yield* branchStands(token, agent.repository, agent.branch);
   return pushed
@@ -253,22 +269,104 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   userId: string,
   agent: Agent,
 ): Effect.fn.Return<AgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+  yield* extrasPublished(userId, agent);
   const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
   const at = yield* Clock.currentTimeMillis;
   const read = { at, branch: agent.branch, pushed: answer.branch !== null };
   const firstMerged = yield* recordAgentPublished(userId, agent.id, stored, read);
-  // Counted once per pull request, by the one write that first kept it merged, under the agent's starter.
-  if (firstMerged)
-    yield* recordServerEvent(
-      SERVER_EVENT.PULL_REQUEST_MERGE,
-      { userId: agent.userId, workspaceId: agent.organizationId },
-      {},
-    );
-  // A merge first seen may have finished the task's work; the task is asked once the row says merged.
-  const merged = ended === PULL_REQUEST_STATE.MERGED;
-  if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
+  yield* afterRecorded(userId, agent, firstMerged, ended);
   return answer;
 });
+
+/** What a pull request's write leaves to do: a merge counted by the one write that first kept it, and the task asked to settle where the read first saw it merged. */
+const afterRecorded = (
+  userId: string,
+  agent: Agent,
+  firstMerged: boolean,
+  ended: PullRequestEnd | undefined,
+) =>
+  Effect.gen(function* () {
+    // Counted once per pull request, by the one write that first kept it merged, under the agent's starter.
+    if (firstMerged)
+      yield* recordServerEvent(
+        SERVER_EVENT.PULL_REQUEST_MERGE,
+        { userId: agent.userId, workspaceId: agent.organizationId },
+        {},
+      );
+    // A merge first seen may have finished the task's work; the task is asked once the row says merged.
+    const merged = ended === PULL_REQUEST_STATE.MERGED;
+    if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
+  });
+
+/**
+ * What the agent published in one repository it works in beside its own,
+ * as GitHub holds it now: the newest pull request from the head branch its
+ * row holds, else none, as `publishedOnGitHub` reads its own; nothing read
+ * for one with no head branch yet, or still on its default branch.
+ */
+const extraPublishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agent: WithRepository<Agent>,
+  extra: AgentRepositoryEntry & { readonly headBranch: string },
+): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
+  const none: Published = {
+    answer: { repository: extra.repository, branch: null, pullRequest: null },
+    stored: null,
+    ended: undefined,
+  };
+  const reached = yield* agentPullRequestReach(userId, agent, extra.repository);
+  if (extra.headBranch === reached.repository.defaultBranch) return none;
+  const ofBranch = yield* pullRequestOfBranch(reached.token, extra.repository, extra.headBranch);
+  if (Option.isNone(ofBranch)) return none;
+  return yield* withChecks(reached.token, extra.repository, ofBranch.value, extra.pullRequest);
+});
+
+/**
+ * Each pull request the agent opened in a repository it works in beside its
+ * own (`readAgentRepositories`), read again from GitHub and written on that
+ * repository's row as the agent's own is on its row, a merge first seen
+ * counted and its task asked to settle; nothing for an agent in one
+ * repository, nor for an extra that opened none. Each read that fails is
+ * logged by its kind and leaves its row as it stood, since the agent's own
+ * pull request is still read and answered.
+ */
+const extrasPublished = (userId: string, agent: Agent) =>
+  Effect.gen(function* () {
+    if (!hasRepository(agent)) return;
+    const [, ...extras] = yield* readAgentRepositories(userId, agent.id);
+    yield* Effect.forEach(
+      extras,
+      (extra) => {
+        const { headBranch } = extra;
+        if (headBranch === null) return Effect.void;
+        return Effect.gen(function* () {
+          const { stored, answer, ended } = yield* extraPublishedOnGitHub(userId, agent, {
+            ...extra,
+            headBranch,
+          });
+          const at = yield* Clock.currentTimeMillis;
+          const read = { at, branch: headBranch, pushed: answer.branch !== null };
+          const firstMerged = yield* recordAgentRepositoryPublished(
+            userId,
+            agent.id,
+            extra.repository,
+            stored,
+            read,
+          );
+          yield* afterRecorded(userId, agent, firstMerged, ended);
+        }).pipe(Effect.catch(extraUnread));
+      },
+      // Note that an agent's extras are bounded at its Start, so they are read together.
+      { concurrency: "unbounded", discard: true },
+    );
+  }).pipe(Effect.catch(extraUnread));
+
+/** A read of an extra repository's pull request that failed, logged by its kind alone. */
+function extraUnread(failure: unknown): Effect.Effect<void> {
+  return Effect.logWarning(
+    `an extra repository's pull request could not be read again: ${failureKind(failure)}`,
+  );
+}
 
 /**
  * A pull request of a repository by its number, as GitHub holds it now, on

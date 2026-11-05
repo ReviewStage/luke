@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { type DatabaseServices, READ_CONCURRENCY } from "@repo/database/core/query";
 import { accountExperimentOn, readAccountPreferences } from "@repo/database/models/account-store";
 import { agentOwnerFactsOf } from "@repo/database/models/agent-owners";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   type AgentPlace,
@@ -1168,7 +1169,10 @@ const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
  * each refused by name where it is reached only on the starter's token or
  * through another installation, and as not reachable, with why, where
  * neither reaches it. A branch named is confirmed on GitHub as the agent's
- * own is.
+ * own is. Those a start from another agent carries from it (`inherited`)
+ * ask no experiment, since its starter turned it on already, and one whose
+ * branch GitHub no longer holds is cloned at its default branch, as the
+ * agent's own inherited branch is (`startBranchOf`).
  */
 const extraRepositoriesOf = Effect.fnUntraced(function* (
   userId: string,
@@ -1176,15 +1180,16 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
   landing: Pick<StartLanding, "workspaceId" | "repository">,
   where: StartMachine,
   member: string | undefined,
+  inherited: boolean,
 ): Effect.fn.Return<
   readonly { readonly repository: string; readonly baseBranch: string | undefined }[] | undefined,
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   if (named === undefined || named.length === 0) return undefined;
-  const on = yield* hostedStoreOrUnavailable(
-    accountExperimentOn(userId, EXPERIMENT.SEVERAL_REPOSITORIES),
-  );
+  const on =
+    inherited ||
+    (yield* hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.SEVERAL_REPOSITORIES)));
   if (!on)
     return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
   const own = landing.repository;
@@ -1221,13 +1226,45 @@ const extraRepositoriesOf = Effect.fnUntraced(function* (
     (each, index) =>
       Effect.gen(function* () {
         const repository = extras[index]?.fullName ?? each.repository;
-        if (each.branch !== undefined) {
-          yield* confirmedBranch(landing.workspaceId, repository, member, each.branch);
-        }
-        return { repository, baseBranch: each.branch };
+        if (each.branch === undefined) return { repository, baseBranch: undefined };
+        const confirmed = confirmedBranch(landing.workspaceId, repository, member, each.branch);
+        if (!inherited) return yield* Effect.as(confirmed, { repository, baseBranch: each.branch });
+        return yield* confirmed.pipe(
+          Effect.as<string | undefined>(each.branch),
+          Effect.catch((refusal) =>
+            refusal.error === HOSTED_REFUSAL.BRANCH_NOT_FOUND.error
+              ? Effect.succeed(undefined)
+              : Effect.fail(refusal),
+          ),
+          Effect.map((baseBranch) => ({ repository, baseBranch })),
+        );
       }),
     { concurrency: READ_CONCURRENCY },
   );
+});
+
+/**
+ * The repositories the source of a start from another agent works in beside
+ * its own (`readAgentRepositories`), each at the branch its checkout was
+ * cloned at, and with no pull request, which stays the source's; none where
+ * it works in one, or where the new agent works in no repository of its own
+ * for them to stand beside. One that is the new agent's own is left out.
+ */
+const carriedExtrasOf = Effect.fnUntraced(function* (
+  userId: string,
+  source: Agent,
+  own: string | null,
+): Effect.fn.Return<readonly AgentAlsoRepository[] | undefined, HostedRefusal, DatabaseServices> {
+  if (own === null) return undefined;
+  const [, ...extras] = yield* hostedStoreOrUnavailable(readAgentRepositories(userId, source.id));
+  const carried = extras
+    .filter((each) => each.repository.toLowerCase() !== own.toLowerCase())
+    .map((each) =>
+      each.baseBranch === null
+        ? { repository: each.repository }
+        : { repository: each.repository, branch: each.baseBranch },
+    );
+  return carried.length === 0 ? undefined : carried;
 });
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
@@ -1349,7 +1386,19 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the place it names or else its source or its starter's default, and its model, and never change.
   const where = yield* machineOfStart(userId, ask, from?.source, landing.task);
-  const extras = yield* extraRepositoriesOf(userId, ask.alsoRepositories, landing, where, member);
+  // A start from another agent works in the repositories its source worked in beside its own, unless it names others.
+  const carried =
+    ask.alsoRepositories === undefined && from !== undefined
+      ? yield* carriedExtrasOf(userId, from.source, landing.repository)
+      : undefined;
+  const extras = yield* extraRepositoriesOf(
+    userId,
+    ask.alsoRepositories ?? carried,
+    landing,
+    where,
+    member,
+    carried !== undefined,
+  );
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime, reached?.access);
   const started = yield* hostedStoreOrUnavailable(

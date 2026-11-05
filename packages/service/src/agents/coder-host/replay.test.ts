@@ -57,8 +57,8 @@ const source: Agent = {
   createdAt: new Date(0),
 };
 
-/** A continue of the source with `total` steps, none copied. */
-const startFrom = (total: number): StartFrom => ({
+/** A continue of the source with `total` steps, none copied, with the repositories it works in beside its own. */
+const startFrom = (total: number, extras: StartFrom["told"]["extras"] = []): StartFrom => ({
   source,
   lineage: [source],
   prompt: undefined,
@@ -76,8 +76,25 @@ const startFrom = (total: number): StartFrom => ({
     forked: { at: false, edited: undefined },
     unkept: [],
     inPullRequest: false,
+    extras,
     messageId: undefined,
   },
+});
+
+it("a source in other repositories beside its own is told to have left its unpushed work there behind, with the branch it pushed in one", () => {
+  const preamble = replayOf(
+    startFrom(1, [
+      { repository: "acme/web", baseBranch: null, headBranch: "agent/invite", pullRequest: null },
+      { repository: "acme/docs", baseBranch: "next", headBranch: null, pullRequest: null },
+    ]),
+    [],
+    undefined,
+  ).replay.preamble;
+
+  assert.match(preamble, /`acme\/web`, `acme\/docs` beside its own repository/u);
+  assert.match(preamble, /what it had not pushed in them did not come along/u);
+  assert.match(preamble, /In `acme\/web` it pushed `agent\/invite`/u);
+  assert.doesNotMatch(replayOf(startFrom(1), [], undefined).replay.preamble, /beside its own/u);
 });
 
 it("a summary beside steps left out is told as some of those that did not fit, never as the oldest", () => {

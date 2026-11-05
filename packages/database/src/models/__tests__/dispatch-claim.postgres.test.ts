@@ -284,7 +284,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/api",
-          repositories: ["acme/api"],
           idempotencyKey: randomUUID(),
         });
         yield* recordAgentPublished(target.userId, agentId, {
@@ -344,7 +343,6 @@ it.layer(getTestDB())("the conversation's dispatch claim", (it) => {
           model: "anthropic/claude-opus-5.5",
           effort: "high",
           repository: "acme/api",
-          repositories: ["acme/api"],
           idempotencyKey: randomUUID(),
         });
         // Stopped where no line of the conversation awaits a turn, as `standsStopped` reads it.
