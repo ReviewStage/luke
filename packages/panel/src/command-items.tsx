@@ -142,6 +142,7 @@ export const PANEL_COMMAND = {
   CANCEL_TASK: unkeyed("Cancel task", <TaskStatusMark status={TASK_STATUS.CANCELED} />),
   CHANGE_REPOSITORY: unkeyed("Change repository", <GLYPH.REPOSITORY />),
   MOVE_TO_WORKSPACE: unkeyed("Move to workspace", <GLYPH.MOVE />),
+  MOVE_AGENT: unkeyed("Move to", <GLYPH.MOVE />),
   NEW_CHILD_TASK: unkeyed("New sub-task", <GLYPH.ADD />),
   ADD_RELATION: unkeyed("Add task relation", <NetworkIcon />),
   REMOVE_PARENT: unkeyed("Remove parent", <UnlinkIcon />),
