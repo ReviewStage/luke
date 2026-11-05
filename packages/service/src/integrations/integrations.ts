@@ -375,6 +375,14 @@ export const INTEGRATION = {
     DESCRIPTION:
       "PostHog, the developer's product analytics, as their own account sees it: query events and insights with SQL, and read and change dashboards, feature flags, experiments, surveys, error tracking, and session recordings.",
   },
+  // Resend's server offers no tool that names the team its grant reached.
+  [INTEGRATION_PROVIDER.RESEND]: {
+    CONNECTOR_VARIABLE: "RESEND_CONNECTOR_UID",
+    ALLOWED_ACCOUNTS_VARIABLE: "RESEND_ALLOWED_ACCOUNTS",
+    MCP_URL: "https://mcp.resend.com/mcp",
+    DESCRIPTION:
+      "Resend, the developer's email API, as their own account sees it: send emails and broadcasts, read sent and received emails and logs, and read and manage domains, contacts, segments, templates, inboxes, automations, webhooks, and API keys.",
+  },
   [INTEGRATION_PROVIDER.SENTRY]: {
     CONNECTOR_VARIABLE: "SENTRY_CONNECTOR_UID",
     ALLOWED_ACCOUNTS_VARIABLE: "SENTRY_ALLOWED_ACCOUNTS",

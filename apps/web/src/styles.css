@@ -54,10 +54,15 @@
 /* An integration whose brand publishes its one-color mark in named inks
    wears them by the ground (`@repo/ui`'s `marks/provider-mark.tsx`). The one
    page that draws an integration's mark, its landing, is on the dark ground,
-   so these are the dark inks: Executor's, Notion's, and Sentry's white,
+   so these are the dark inks: Executor's, Notion's, Resend's, and Sentry's white,
    Mercury's near-white, and Neon's green for a dark ground. */
 [data-ui-theme="dark"]
-:is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+:is(
+  .integration-mark-executor,
+  .integration-mark-notion,
+  .integration-mark-resend,
+  .integration-mark-sentry
+) {
   color: #fff;
 }
 
