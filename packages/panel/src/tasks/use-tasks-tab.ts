@@ -2042,6 +2042,7 @@ export function useTasksTab(input: {
         return true;
       }
       toast({
+        replayUnmasked: true,
         words: MARK_FAILED_NOTES[mark],
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2061,6 +2062,7 @@ export function useTasksTab(input: {
     askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
       if (changed.kept) return;
       toast({
+        replayUnmasked: true,
         words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2119,6 +2121,7 @@ export function useTasksTab(input: {
       }
       if (asked === AGENT_PIN_ASKED.UNASKED) return;
       toast({
+        replayUnmasked: true,
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2198,6 +2201,7 @@ export function useTasksTab(input: {
       if (asked.every((answer) => answer.kept)) return;
       putBack?.();
       toast({
+        replayUnmasked: true,
         words: PIN_MOVE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2217,6 +2221,7 @@ export function useTasksTab(input: {
     askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
       if (changed.kept) return;
       toast({
+        replayUnmasked: true,
         words: SECTION_WRITE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2275,6 +2280,7 @@ export function useTasksTab(input: {
     sendStatuses(asked).then(({ landed, refused, cause }) => {
       if (landed.length === 0) {
         toast({
+          replayUnmasked: true,
           words: settleFailedNote(status, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2286,8 +2292,8 @@ export function useTasksTab(input: {
       const undo = pressed.keep(words, (taskId) => landed.includes(taskId));
       toast(
         undo === undefined
-          ? { words, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
-          : undoToast(words, undo),
+          ? { replayUnmasked: true, words, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
+          : { ...undoToast(words, undo), replayUnmasked: true },
       );
     });
   };
@@ -2438,6 +2444,7 @@ export function useTasksTab(input: {
           return;
         }
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2450,11 +2457,12 @@ export function useTasksTab(input: {
   // the service keeps it, a toast offers Undo, which adds the same block again.
   const removeTaskBlock = (taskId: string, relation: TaskBlockRelation, otherId: string) => {
     setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.REMOVE, relation, taskId: otherId }, () =>
-      toast(
-        undoToast(BLOCK_REMOVED_NOTE, () =>
+      toast({
+        ...undoToast(BLOCK_REMOVED_NOTE, () =>
           setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.ADD, relation, taskId: otherId }),
         ),
-      ),
+        replayUnmasked: true,
+      }),
     );
   };
 
@@ -2471,6 +2479,7 @@ export function useTasksTab(input: {
           return;
         }
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2489,7 +2498,10 @@ export function useTasksTab(input: {
         : undefined);
     if (parentTaskId === undefined) return;
     setTaskParent(taskId, null, () =>
-      toast(undoToast(PARENT_REMOVED_NOTE, () => setTaskParent(taskId, parentTaskId))),
+      toast({
+        ...undoToast(PARENT_REMOVED_NOTE, () => setTaskParent(taskId, parentTaskId)),
+        replayUnmasked: true,
+      }),
     );
   };
 
@@ -2502,6 +2514,7 @@ export function useTasksTab(input: {
       .then((answer) => {
         if (!("failure" in answer)) return;
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2534,6 +2547,7 @@ export function useTasksTab(input: {
         }
         if (told?.quiet !== true) {
           toast({
+            replayUnmasked: true,
             words: MOVE_REFUSED_NOTE,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
@@ -2773,9 +2787,14 @@ export function useTasksTab(input: {
   selectNow.current = guard(openUnpinned);
   const sayStarted = (planId: string, agentRan: boolean) =>
     toast({
+      replayUnmasked: true,
       words: agentRan ? TASK_STARTED_NOTE : TASK_STARTED_AGENT_REFUSED_NOTE,
       tone: agentRan ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION,
-      action: { label: OPEN_STARTED_TASK, onPress: () => selectNow.current(planId) },
+      action: {
+        label: OPEN_STARTED_TASK,
+        replayUnmasked: true,
+        onPress: () => selectNow.current(planId),
+      },
     });
 
   // A task started with an agent opens on the agent's tab, as a landed

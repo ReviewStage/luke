@@ -212,6 +212,7 @@ function relationRows(
       return {
         id: each.id,
         label: each.name,
+        replayMasked: true,
         ...(each.status === undefined ? {} : { icon: <TaskStatusMark status={each.status} /> }),
         ...(key === undefined ? {} : { detail: key, terms: [key] }),
         ...(disabled === undefined ? {} : { disabled }),
@@ -318,6 +319,7 @@ export function TaskRelationMenu({
   ];
   return (
     <SearchableMenu
+      replayUnmasked
       {...(embedded ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED } : { align })}
       id={id}
       label={TASK_RELATION_MENU}

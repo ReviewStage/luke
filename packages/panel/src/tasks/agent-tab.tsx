@@ -3188,6 +3188,7 @@ function AgentTabBody({
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
     gone: () =>
       toast({
+        replayUnmasked: true,
         words: MESSAGE_GONE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,

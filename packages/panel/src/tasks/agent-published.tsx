@@ -167,7 +167,13 @@ export function BranchChip({
         <MoreButton thing={BRANCH_THING} size={BUTTON_SIZE.COMPACT} {...menu.trigger()} />
       </span>
       {menu.drawn === undefined ? null : (
-        <ActionMenu menu={menu.drawn} groups={actions} label={MENU_LABEL} onClose={menu.close} />
+        <ActionMenu
+          replayUnmasked
+          menu={menu.drawn}
+          groups={actions}
+          label={MENU_LABEL}
+          onClose={menu.close}
+        />
       )}
     </>
   );
@@ -252,7 +258,7 @@ export function PublishedRow({
               if (inPanel === undefined) doors.openGitHub(pullRequest.url);
               else inPanel();
             }}
-            menu={rowMenu(PUBLISHED_THING, actions)}
+            menu={rowMenu(PUBLISHED_THING, actions, undefined, true)}
             more={!coarse}
           />
         </RowHintOptions>

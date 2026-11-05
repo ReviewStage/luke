@@ -563,7 +563,7 @@ export const InboxItemRow = memo(function InboxItemRow({
         hint={{ Hint: RowHint, label: title }}
         selectKey={selectKey}
         onPress={() => onChoose(listed)}
-        menu={rowMenu(ITEM_THING, groups())}
+        menu={rowMenu(ITEM_THING, groups(), undefined, true)}
         more={!coarse}
         place={place}
       />
@@ -578,6 +578,7 @@ function whoseEntries(
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuAction[] {
+  // Note that a teammate's row, the one keyed by their id, names them, so it stays masked.
   return peopleFilterActions({
     members: reader.members,
     readerId: reader.readerId ?? readerId,
@@ -596,7 +597,7 @@ function whoseEntries(
             : { kind: INBOX_WHOSE.PERSON, userId: filter.userId, name: filter.name },
       ),
     meWithoutId: true,
-  });
+  }).map((action) => (action.key === undefined ? action : { ...action, replayMasked: true }));
 }
 
 /**
@@ -634,6 +635,7 @@ function ViewOptions({
       ) : null}
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={VIEW_OPTIONS}
           menu={menu.drawn}
           groups={[scope, ...windowEntries(choices, reader, readerId)]}

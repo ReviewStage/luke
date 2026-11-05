@@ -118,6 +118,7 @@ export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser 
       const say = (words: string, cause: unknown) => {
         if (saying?.quiet !== true) {
           toast({
+            replayUnmasked: true,
             words,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,

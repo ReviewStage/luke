@@ -1111,6 +1111,7 @@ function phoneItemGroups(
             {
               label: OPEN_TASK,
               detail: holder.task.name,
+              replayMasked: true,
               icon: tabLook({
                 kind: TAB_KIND.PLAN,
                 name: holder.task.name,
@@ -1124,6 +1125,7 @@ function phoneItemGroups(
             {
               label: OPEN_AUTOMATION,
               detail: holderName(holder),
+              replayMasked: true,
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
@@ -1132,6 +1134,7 @@ function phoneItemGroups(
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
+    replayMasked: true,
     icon: <BotIcon />,
     onSelect: by.onOpen,
     ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
@@ -1196,6 +1199,7 @@ function InboxItemMenu({
       <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
           heading={heading}

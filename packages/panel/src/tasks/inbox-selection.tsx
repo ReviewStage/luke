@@ -91,6 +91,7 @@ export function InboxSelectionBar({
             const refused = taken.filter((each) => !each.kept).length;
             if (refused === 0) return;
             toast({
+              replayUnmasked: true,
               words: closedNote(taken.length - refused, refused),
               tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
@@ -114,11 +115,15 @@ export function InboxSelectionBar({
         const refused = marking.length - landed.length;
         if (undoable && landed.length > 0) {
           const note = markedNote(unread, landed.length, refused);
-          toast(undoToast(note, () => markAll(landed, !unread, false)));
+          toast({
+            ...undoToast(note, () => markAll(landed, !unread, false)),
+            replayUnmasked: true,
+          });
           return;
         }
         if (refused === 0) return;
         toast({
+          replayUnmasked: true,
           words: markedNote(unread, landed.length, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,

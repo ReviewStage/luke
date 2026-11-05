@@ -115,6 +115,7 @@ export function RelationKindPill<Kind extends string>({
       </Chip>
       {drawn.mounted ? (
         <SearchableMenu
+          replayUnmasked
           leaving={drawn.leaving}
           ref={drawn.ref}
           id={menuId}

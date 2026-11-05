@@ -806,6 +806,7 @@ function CommentEntry({
               )}
               {groups.length === 0 || menu.drawn === undefined ? null : (
                 <ActionMenu
+                  replayUnmasked
                   label={moreLabel(COMMENT_WORDS.THING)}
                   menu={menu.drawn}
                   groups={groups}

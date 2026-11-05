@@ -474,11 +474,13 @@ export function PullRequestStateMenu({
       action === PULL_REQUEST_ACTION.CLOSE
         ? () =>
             toast({
+              replayUnmasked: true,
               words: CLOSED_TOAST.WORDS,
               tone: STATUS_TONE.COMPLETE,
               subject: toastSubject,
               action: {
                 label: CLOSED_TOAST.REOPEN,
+                replayUnmasked: true,
                 onPress: () =>
                   void newestWrites.current.write({ action: PULL_REQUEST_ACTION.REOPEN }),
               },
@@ -509,7 +511,13 @@ export function PullRequestStateMenu({
         <ChipName>{shownWords}</ChipName>
       </Chip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+        <ActionMenu
+          replayUnmasked
+          label={label}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
       )}
       <ConfirmDialog
         open

@@ -615,6 +615,7 @@ function DatePickerPanel({
     if (!open) return null;
     return (
       <SearchableMenu
+        replayUnmasked
         id={zoneMenuId}
         ref={(element) => {
           zoneMenu.current = element;

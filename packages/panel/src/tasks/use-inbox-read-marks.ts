@@ -91,6 +91,7 @@ export function useInboxReadMarks({
   const refused = useCallback(
     (words: string, cause: unknown, about: FailureAbout) =>
       toast({
+        replayUnmasked: true,
         words,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -158,13 +159,14 @@ export function useInboxReadMarks({
             return;
           }
           if (until !== null) {
-            toast(
+            toast({
               // Note that snoozing marked the item read, so Undo marks an item that was unread unread again.
-              undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () => {
+              ...undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () => {
                 onSnooze(item, null);
                 if (isUnread(item)) void onMark(item, true);
               }),
-            );
+              replayUnmasked: true,
+            });
           }
         });
     },

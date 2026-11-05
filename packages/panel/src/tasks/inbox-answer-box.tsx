@@ -574,6 +574,7 @@ function AnswerCard({
     void onUnarchiveAgent().then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({
+          replayUnmasked: true,
           words: result.reason,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,

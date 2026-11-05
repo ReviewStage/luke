@@ -384,6 +384,7 @@ function MethodPress({
       </SplitButton>
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={BOX_WORDS.CHOOSE_METHOD}
           menu={menu.drawn}
           groups={[methodItems(methods, method, busy, onChoose)]}

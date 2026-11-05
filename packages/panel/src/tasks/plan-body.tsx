@@ -1147,6 +1147,7 @@ export const PlanBody = memo(function PlanBody({
   const sayNotSaved = useCallback(
     (taskId: string, cause: unknown) =>
       toast({
+        replayUnmasked: true,
         words: PLAN_NOT_SAVED,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
