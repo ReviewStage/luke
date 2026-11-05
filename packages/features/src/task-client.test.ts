@@ -222,6 +222,7 @@ it.effect("a start the service never answers carries what failed beneath it, by 
         errorName: "TypeError",
         traceId,
       },
+      untaken: WRITE_UNTAKEN.UNANSWERED,
     });
   }),
 );
@@ -290,10 +291,13 @@ it.effect(
 
       assert.deepEqual(unanswered, { ok: false, failure: WRITE_UNTAKEN.UNANSWERED });
       assert.deepEqual(written, { ok: false, failure: WRITE_UNTAKEN.ALREADY_WRITTEN });
+      // Note that the trace is the call's own, so only the start's own answer names it.
+      const traceId = started.ok ? undefined : started.cause?.traceId;
       assert.deepEqual(started, {
         ok: false,
         failure: TASK_CALL_FAILURE.UNANSWERED,
         untaken: WRITE_UNTAKEN.UNANSWERED,
+        cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, status: 503, traceId },
       });
       assert.deepEqual(
         api.requests().map((request) => request.headers.get(IDEMPOTENCY_KEY.HEADER)),
