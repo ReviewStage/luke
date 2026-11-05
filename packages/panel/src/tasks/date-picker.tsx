@@ -678,12 +678,14 @@ function DatePickerPanel({
               <SwitchRow
                 density={SETTINGS_ROW_DENSITY.COMPACT}
                 label={WORDS.END}
+                labelReplayUnmasked
                 checked={end !== undefined}
                 onChange={(on) => update(endSwitched(latest.current, on))}
               />
               <SwitchRow
                 density={SETTINGS_ROW_DENSITY.COMPACT}
                 label={WORDS.TIME}
+                labelReplayUnmasked
                 checked={timed}
                 onChange={(on) => update(timeSwitched(latest.current, on))}
               />

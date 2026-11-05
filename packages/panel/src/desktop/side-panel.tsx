@@ -2726,6 +2726,7 @@ export function SidePanel({
             <PanelPhoneHead
               back={phone}
               title={listing ? TABS : (label ?? PANEL_LABEL)}
+              titleReplayUnmasked={listing || label === undefined}
               listing={listing}
               shown={ownShown}
               onList={() => setOwnListed(true)}
@@ -2926,6 +2927,7 @@ const PANEL_LABEL = "Panel";
 function PanelPhoneHead({
   back,
   title,
+  titleReplayUnmasked,
   listing,
   shown,
   onList,
@@ -2933,6 +2935,8 @@ function PanelPhoneHead({
 }: {
   back: { readonly back: string; readonly onBack: () => void };
   title: string;
+  /** Whether the title is the app's own words, never a tab's. */
+  titleReplayUnmasked: boolean;
   listing: boolean;
   shown: ShownTab | undefined;
   onList: () => void;
@@ -2944,6 +2948,7 @@ function PanelPhoneHead({
       place="panel"
       start={<PhoneBack back={{ label: back.back, onPress: back.onBack }} />}
       title={title}
+      titleReplayUnmasked={titleReplayUnmasked}
       end={
         <PlaceMore
           thing={PANEL_THING}

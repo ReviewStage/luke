@@ -528,6 +528,7 @@ function OwnerRow({
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Owner"
+      labelReplayUnmasked
       detail={
         <ReplayUnmask>
           {owner === AUTOMATION_SCOPE.WORKSPACE ? (
@@ -834,6 +835,7 @@ function ScheduleRows({
       <SelectRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Repeats"
+        labelReplayUnmasked
         detail={nextRunsText(draft)}
         value={schedule.kind}
         options={SCHEDULE_KINDS}
@@ -927,6 +929,7 @@ function ScheduleRows({
       <PickerRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Time zone"
+        labelReplayUnmasked
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
@@ -1395,6 +1398,7 @@ function GitHubSettingsRows({
         <SwitchRow
           key={choice.value}
           label={choice.label}
+          labelReplayUnmasked
           detail={
             choice.detail === undefined ? undefined : <ReplayUnmask>{choice.detail}</ReplayUnmask>
           }
@@ -1409,6 +1413,7 @@ function GitHubSettingsRows({
           <SwitchRow
             key={choice.value}
             label={choice.label}
+            labelReplayUnmasked
             detail={
               choice.detail === undefined ? undefined : <ReplayUnmask>{choice.detail}</ReplayUnmask>
             }
@@ -1422,12 +1427,14 @@ function GitHubSettingsRows({
       <Reveal shown={PULL_REQUEST_EVENTS.has(event)}>
         <SwitchRow
           label="Skip drafts"
+          labelReplayUnmasked
           detail={<ReplayUnmask>A draft starts a run once it is marked ready.</ReplayUnmask>}
           checked={!settings.drafts}
           onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
         />
         <SwitchRow
           label="Include forks"
+          labelReplayUnmasked
           detail={
             <ReplayUnmask>
               A fork's pull request is code from outside the repository, read by an agent that can
@@ -1587,6 +1594,7 @@ function SentryRows({
       <SelectRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Event"
+        labelReplayUnmasked
         detail={SENTRY_EVENT_DETAIL[trigger.event]}
         value={trigger.event}
         options={SENTRY_EVENTS}
@@ -2028,6 +2036,7 @@ function AgentRow({
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
+      labelReplayUnmasked
       detail={<ReplayUnmask>{detail}</ReplayUnmask>}
       replayUnmasked
       value={draft.agentId ?? FIRST_RUN_ROW}
@@ -2148,6 +2157,7 @@ function RunsGroup({
       <SelectRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Runs land in"
+        labelReplayUnmasked
         value={draft.target}
         options={TARGETS}
         parse={targetOf}
@@ -2172,6 +2182,7 @@ function RunsGroup({
               />
               <SwitchRow
                 label="Archive finished runs"
+                labelReplayUnmasked
                 detail={<ReplayUnmask>Its transcript and pull request are kept.</ReplayUnmask>}
                 checked={draft.archiveSuccessful}
                 onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
@@ -2183,6 +2194,7 @@ function RunsGroup({
       {slackOffered ? (
         <SwitchRow
           label="Send the result to me on Slack"
+          labelReplayUnmasked
           detail={
             <ReplayUnmask>The workspace's Slack bot sends each run's final message.</ReplayUnmask>
           }
@@ -2286,6 +2298,7 @@ function EditorForm({
           <SelectRow
             width={CHIP_WIDTH.MIN_FIELD}
             label="Type"
+            labelReplayUnmasked
             detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
             value={draft.triggerKind}
             options={triggers}
@@ -2312,6 +2325,7 @@ function EditorForm({
                   <SelectRow
                     width={CHIP_WIDTH.MIN_FIELD}
                     label="Event"
+                    labelReplayUnmasked
                     value={draft.githubEvent}
                     options={GITHUB_EVENTS}
                     parse={githubEventOf}
