@@ -1,5 +1,5 @@
 /**
- * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account is refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install runs it.
+ * host-install-script.test.ts -- the host's install script (`apps/web/install/install.sh`) as a shell runs it: a computer it does not run on (an Intel Mac, an old macOS, WSL1, another kernel) is refused by name while an Apple silicon Mac and WSL2 are let through, a box without systemd or whose user manager cannot be reached is refused with how to fix it, a run under sudo from another account is refused, lingering is turned on with sudo only where the account may not turn it on itself, a download whose SHA-256 is not the one carried is refused, a Mac's LaunchAgent is written and started only where its user is logged in, and a whole run installs the release into the account, starts its service only once the box is connected, in the layout `vespin-host uninstall` removes, and keeps the pairing when run again, while its `cli` mode installs the `vespin` command alone and asks nothing of a service. Beside it, the host's own `vespin-host uninstall` (`apps/host/scripts/vespin-host.sh`) as an account install runs it.
  *
  * The script is run by `sh` in a temporary folder; `APP_HOST_INSTALL_LIBRARY`
  * has it stop after it defines what it carries and its functions, which the
@@ -33,6 +33,7 @@ import { afterEach, describe, expect, it } from "@effect/vitest";
 
 const SCRIPT = join(import.meta.dirname, "../../../../apps/web/install/install.sh");
 const UNINSTALL_SCRIPT = join(import.meta.dirname, "../../../../apps/host/scripts/vespin-host.sh");
+const CLI_LAUNCHER = join(import.meta.dirname, "../../../../apps/cli/scripts/vespin.sh");
 
 /** /proc/version as WSL2's own kernel writes it. */
 const WSL2_PROC_VERSION =
@@ -149,31 +150,50 @@ const accountName = () => spawnSync("id", ["-un"], { encoding: "utf8" }).stdout.
 
 /**
  * Packs a release of the version given into the folder given, as CI packs one
- * under a `vespin-host` folder, with the host's real launcher over the fake
- * Node, and answers the script with that
- * release written in, its tarball at one address for every target, as the
- * route that serves it writes one.
+ * under its top folder (`vespin-host`, or the command's `vespin`), with the
+ * real launcher over the fake Node, and answers its tarball's address and
+ * SHA-256.
+ */
+function packedTarball(served: string, version: string, top: string, launcher: string) {
+  const packed = folder();
+  const root = join(packed, top);
+  for (const each of ["bin", "node/bin", "lib"]) mkdirSync(join(root, each), { recursive: true });
+  writeFileSync(join(root, "bin", top), readFileSync(launcher), { mode: 0o755 });
+  writeFileSync(join(root, "node/bin/node"), FAKE_NODE, { mode: 0o755 });
+  writeFileSync(join(root, `lib/${top}.mjs`), "");
+  const name = `${top}-${version}.tar.gz`;
+  const tarball = join(served, name);
+  execFileSync("tar", ["-czf", tarball, "-C", packed, top]);
+  return {
+    url: `https://releases.test/${name}`,
+    sha256: createHash("sha256").update(readFileSync(tarball)).digest("hex"),
+  };
+}
+
+/**
+ * Packs a release of the host and of the command, of the version given, into
+ * the folder given, and answers the script with both written in, each tarball
+ * at one address for every target, as the route that serves it writes them.
  */
 function servedScript(served: string, version: string): string {
-  const packed = folder();
-  const top = join(packed, "vespin-host");
-  for (const each of ["bin", "node/bin", "lib"]) mkdirSync(join(top, each), { recursive: true });
-  writeFileSync(join(top, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), { mode: 0o755 });
-  writeFileSync(join(top, "node/bin/node"), FAKE_NODE, { mode: 0o755 });
-  writeFileSync(join(top, "lib/vespin-host.mjs"), "");
-  const tarball = join(served, `vespin-host-${version}.tar.gz`);
-  execFileSync("tar", ["-czf", tarball, "-C", packed, "vespin-host"]);
-  const sha256 = createHash("sha256").update(readFileSync(tarball)).digest("hex");
-  const url = `https://releases.test/vespin-host-${version}.tar.gz`;
+  const host = packedTarball(served, version, "vespin-host", UNINSTALL_SCRIPT);
+  const cli = packedTarball(served, version, "vespin", CLI_LAUNCHER);
   let script = readFileSync(SCRIPT, "utf8");
   for (const [placeholder, value] of Object.entries({
     "@@VERSION@@": version,
-    "@@SHA256_X64@@": sha256,
-    "@@SHA256_ARM64@@": sha256,
-    "@@SHA256_DARWIN_ARM64@@": sha256,
-    "@@URL_X64@@": url,
-    "@@URL_ARM64@@": url,
-    "@@URL_DARWIN_ARM64@@": url,
+    "@@SHA256_X64@@": host.sha256,
+    "@@SHA256_ARM64@@": host.sha256,
+    "@@SHA256_DARWIN_ARM64@@": host.sha256,
+    "@@URL_X64@@": host.url,
+    "@@URL_ARM64@@": host.url,
+    "@@URL_DARWIN_ARM64@@": host.url,
+    "@@CLI_VERSION@@": version,
+    "@@CLI_SHA256_X64@@": cli.sha256,
+    "@@CLI_SHA256_ARM64@@": cli.sha256,
+    "@@CLI_SHA256_DARWIN_ARM64@@": cli.sha256,
+    "@@CLI_URL_X64@@": cli.url,
+    "@@CLI_URL_ARM64@@": cli.url,
+    "@@CLI_URL_DARWIN_ARM64@@": cli.url,
     "@@ORIGIN@@": ORIGIN,
   })) {
     script = script.replaceAll(placeholder, value);
@@ -271,6 +291,8 @@ const box = (
     /** Serves the release of the version given, and runs the script it is written into. */
     install: (version: string, extra: Readonly<Record<string, string>> = {}) =>
       run([servedScript(served, version)], extra),
+    /** Serves the release of the version given, and runs the script it is written into in its `cli` mode. */
+    installCli: (version: string) => run([servedScript(served, version), "cli"]),
     asked: () => readFileSync(asked, "utf8").trim().split("\n").filter(Boolean),
   };
 };
@@ -656,6 +678,29 @@ describe("the host's install script", () => {
       ] as const) {
         expect(existsSync(place)).toBe(kept);
       }
+    },
+  );
+
+  it.each([OS.LINUX, OS.DARWIN])(
+    "in its cli mode on %s, installs the command's release into the account and links it, asks no service or sudo for anything, and run again, moves the link to the new release and removes the old one",
+    (os) => {
+      const computer = box(os, { lingers: false });
+      const releases = join(computer.home, ".local/share/vespin-cli");
+      const link = join(computer.home, ".local/bin/vespin");
+
+      const first = computer.installCli("0.1.0");
+      expect(first.status, first.stderr).toBe(0);
+      expect(readlinkSync(link)).toBe(join(releases, "versions/0.1.0/bin/vespin"));
+      const again = computer.installCli("0.1.0");
+      expect(again.stdout).toContain("Vespin CLI 0.1.0 is installed already");
+      const upgraded = computer.installCli("0.2.0");
+
+      expect(upgraded.status, upgraded.stderr).toBe(0);
+      expect(readlinkSync(link)).toBe(join(releases, "versions/0.2.0/bin/vespin"));
+      expect(readdirSync(join(releases, "versions"))).toEqual(["0.2.0"]);
+      expect(computer.run([link, "version"]).status).toBe(0);
+      expect(computer.asked()).toEqual(["vespin-host version"]);
+      expect(stands(computer.releases) || stands(computer.service)).toBe(false);
     },
   );
 

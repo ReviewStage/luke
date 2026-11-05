@@ -16,6 +16,7 @@ import { mcpCommand } from "./mcp.js";
 import { modelsCommand } from "./models.js";
 import { planCommand } from "./plan.js";
 import { taskCommand } from "./task.js";
+import { updateCommand } from "./update.js";
 import { versionCommand } from "./version.js";
 import { workspaceCommand } from "./workspace.js";
 
@@ -29,5 +30,6 @@ export const COMMANDS = [
   modelsCommand,
   mcpCommand,
   apiCommand,
+  updateCommand,
   versionCommand,
 ] as const;

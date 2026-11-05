@@ -1,5 +1,5 @@
 /**
- * host-install-script-app.ts -- the install script group: the host's install script, with the release it installs and the origin it was asked on written in.
+ * host-install-script-app.ts -- the install script group: the host's install script, with the releases it installs (the host's, and the `vespin` command's for its `cli` mode) and the origin it was asked on written in.
  *
  * The script's text is the web app's `install/install.sh`, handed in by the
  * route that serves it, which names what it is filled with only by
@@ -9,8 +9,11 @@
  * is published there is none to write, and every release placeholder is left
  * empty, which the script reads as no release yet; a target the release has
  * no tarball for (a Mac's, before the first Mac package) is left empty the
- * same way. A placeholder the script does not name is passed over, so a
- * target can be filled here before the script reads it.
+ * same way. The `vespin` command's release (`CLI_RELEASE`), which the
+ * script's `cli` mode installs, is written in beside it by placeholders of
+ * its own, empty the same way before its first release. A placeholder the
+ * script does not name is passed over, so a target can be filled here before
+ * the script reads it.
  *
  * The release is the same for every request and is written in once. The
  * origin is the request's own, so a Preview's install command enrolls the box
@@ -21,6 +24,7 @@
  * keeps the answer.
  */
 
+import { CLI_RELEASE, cliTarballUrl } from "@repo/features/cli-release";
 import {
   HOST_RELEASE,
   HOST_TARGET,
@@ -44,10 +48,15 @@ const SCRIPT_HEADERS = {
 } as const;
 
 const release = HOST_RELEASE;
+const cliRelease = CLI_RELEASE;
 
 /** The target's tarball address, where the release carries one. */
 const url = (target: HostTarget) =>
   release?.SHA256[target] === undefined ? "" : hostTarballUrl(release.VERSION, target);
+
+/** The command's tarball address for the target, where there is a release. */
+const cliUrl = (target: HostTarget) =>
+  cliRelease === undefined ? "" : cliTarballUrl(cliRelease.VERSION, target);
 
 const RELEASE_FILLED: Readonly<Record<string, string>> = {
   "@@VERSION@@": release?.VERSION ?? "",
@@ -57,6 +66,13 @@ const RELEASE_FILLED: Readonly<Record<string, string>> = {
   "@@URL_X64@@": url(HOST_TARGET.LINUX_X64),
   "@@URL_ARM64@@": url(HOST_TARGET.LINUX_ARM64),
   "@@URL_DARWIN_ARM64@@": url(HOST_TARGET.DARWIN_ARM64),
+  "@@CLI_VERSION@@": cliRelease?.VERSION ?? "",
+  "@@CLI_SHA256_X64@@": cliRelease?.SHA256[HOST_TARGET.LINUX_X64] ?? "",
+  "@@CLI_SHA256_ARM64@@": cliRelease?.SHA256[HOST_TARGET.LINUX_ARM64] ?? "",
+  "@@CLI_SHA256_DARWIN_ARM64@@": cliRelease?.SHA256[HOST_TARGET.DARWIN_ARM64] ?? "",
+  "@@CLI_URL_X64@@": cliUrl(HOST_TARGET.LINUX_X64),
+  "@@CLI_URL_ARM64@@": cliUrl(HOST_TARGET.LINUX_ARM64),
+  "@@CLI_URL_DARWIN_ARM64@@": cliUrl(HOST_TARGET.DARWIN_ARM64),
 };
 
 /** The script with the release written in and the origin left for each request. */
