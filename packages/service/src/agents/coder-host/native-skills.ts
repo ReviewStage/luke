@@ -2,7 +2,7 @@
  * native-skills.ts -- the skills a member installed into the app as a native harness finds them: whole skill folders, `SKILL.md` and its files, in one folder of the sandbox, written as it opens.
  *
  * Claude Code and Codex find skills on disk, so the launch writes the ones
- * `nativeSkills` answers (`../agent-runtime/skills.ts`), the repository's
+ * `nativeSkills` answers (`./skills.ts`), the repository's
  * left to the checkout, into the folder laid out as the
  * runner's protocol says (`INSTALLED_SKILLS`): a Claude Code local plugin,
  * whose `skills/` is Codex's extra skills root as it stands. Nothing is
