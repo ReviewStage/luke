@@ -163,6 +163,7 @@ export const PLAN_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the notes' schema.",
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
+  OFF: "Not saved: your developer has Plans off, so no plan is written. Say in your message what you would have noted.",
   NO_TASK_NAMED: `Not saved: name the task whose plan to edit as taskId, by the id ${AGENT_TOOL.LIST_TASKS} answered.`,
   NO_TASK: `Not saved: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   NO_TURN:

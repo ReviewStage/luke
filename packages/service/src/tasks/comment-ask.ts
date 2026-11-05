@@ -16,6 +16,7 @@ import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
+import { plansOnFor } from "../agents/plans-on.js";
 import { hostedStoreOrUnavailable } from "../http/http-effect.js";
 
 /**
@@ -160,15 +161,24 @@ export function reviewAskMessage(ask: ReviewAsk): string {
   return [lead, ...each, "", doing].join("\n");
 }
 
-/** The agent an ask names, where it is the plan's own and stands; nothing otherwise, which no ask is written for. */
+/**
+ * The agent an ask names, where it is the plan's own and stands, and, for a
+ * thread on the plan rather than a page, where its starter has Plans on
+ * (`plans-on.ts`), since an agent with Plans off is told nothing of the
+ * plan's comments; nothing otherwise, which no ask is written for.
+ */
 export const askableAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
   to: PlanCommentAsked,
+  thread: Pick<PlanCommentThread, "page">,
 ) {
   if (to.actor !== PLAN_COMMENT_ACTOR.AGENT || to.agentId === undefined) return undefined;
   const agent = yield* hostedStoreOrUnavailable(readAgent(userId, to.agentId));
   if (Option.isNone(agent) || agent.value.taskId !== taskId || agent.value.archivedAt !== null) {
+    return undefined;
+  }
+  if (thread.page === undefined && !(yield* plansOnFor(agent.value.userId, agent.value.kind))) {
     return undefined;
   }
   return agent.value;

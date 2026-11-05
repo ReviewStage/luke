@@ -71,10 +71,11 @@ const openThreadedTask = Effect.gen(function* () {
   return { owner, taskId, thread: started.answer.thread };
 });
 
-/** A call made as the owner. */
-const asOwner = (owner: string, taskId: string) => ({
+/** A call made as the owner, with Plans on unless said. */
+const asOwner = (owner: string, taskId: string, plansOn = true) => ({
   taskId,
   writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: owner } as const,
+  plansOn,
 });
 
 it.layer(getTestDB())("the comment tools", (it) => {
@@ -143,7 +144,7 @@ it.layer(getTestDB())("the comment tools", (it) => {
   );
 
   it.effect(
-    "a page's threads are read by naming the page, each with its version and element, and a resolved one takes no reply",
+    "a page's threads are read by naming the page, each with its version and element, and a resolved one takes no reply; with Plans off the page's alone are reached",
     () =>
       Effect.gen(function* () {
         const { owner, taskId, thread } = yield* openThreadedTask;
@@ -188,12 +189,47 @@ it.layer(getTestDB())("the comment tools", (it) => {
           [thread.id],
         );
 
+        const plansOff = asOwner(owner, taskId, false);
+        const offRefused = {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: COMMENT_TOOL_REFUSAL.PLANS_OFF,
+        };
+        assert.deepEqual(
+          yield* runCommentTool(AGENT_TOOL.READ_COMMENTS, plansOff, unparsedWire({ taskId })),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.REPLY_TO_COMMENT,
+            plansOff,
+            unparsedWire({ taskId, thread: thread.id, words: "Not in v1." }),
+          ),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.UPDATE_COMMENT,
+            plansOff,
+            unparsedWire({ taskId, thread: thread.id, resolved: true }),
+          ),
+          offRefused,
+        );
+        assert.deepEqual(
+          yield* runCommentTool(
+            AGENT_TOOL.READ_COMMENTS,
+            plansOff,
+            unparsedWire({ taskId, page: page.id }),
+          ),
+          onPage,
+        );
+
         const onThread = { taskId, thread: started.answer.thread.id };
-        yield* runCommentTool(
+        const resolvedOff = yield* runCommentTool(
           AGENT_TOOL.UPDATE_COMMENT,
-          writer,
+          plansOff,
           unparsedWire({ ...onThread, resolved: true }),
         );
+        assert.equal(resolvedOff.status, ACTION_RESULT_STATUS.ACCEPTED);
         assert.deepEqual(
           yield* runCommentTool(
             AGENT_TOOL.REPLY_TO_COMMENT,

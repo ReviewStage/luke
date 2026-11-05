@@ -167,6 +167,7 @@ import {
   SAVE_MEMORY_TOOL,
   SEARCH_MEMORY_TOOL,
 } from "../agents/memory-tools.js";
+import { plansOnFor } from "../agents/plans-on.js";
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
@@ -781,8 +782,14 @@ const MEMBER_EDIT_PLAN_TOOL = memberMcpTool({
     readAsMember(
       (userId) => readTaskWorkspace(userId, asked.taskId),
       PLAN_EDIT_REFUSAL.NO_TASK,
-      ({ caller }) =>
-        recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
+      ({ caller }) => {
+        const userId = callerUserId(caller);
+        return Effect.flatMap(plansOnFor(userId), (plansOn) =>
+          plansOn
+            ? recordMemberPlanNotes({ userId, taskId: asked.taskId }, asked)
+            : Effect.succeed(agentToolRejected(MEMBER_NOTE_REFUSAL.PLANS_OFF)),
+        );
+      },
     ),
 });
 
@@ -1376,6 +1383,9 @@ const MEMBER_NOTE_REFUSAL = {
   MEMORY_OFF:
     "Not run: the member you act for has Memory off; they turn it on in Settings › " +
     "Experimental. Carry on without it.",
+  PLANS_OFF:
+    "Not run: the member you act for has Plans off, so tasks have no plan to write or comment " +
+    "on; they turn it on in Settings › Experimental.",
   NOT_MEMBER: "Not forgotten: the member no longer belongs to that workspace.",
   NOT_FORGETTABLE:
     "Not forgotten: the member may forget a memory in their own words alone, unless they own " +
@@ -1388,15 +1398,20 @@ type MemberCommentWriter = Extract<
   { readonly actor: typeof PLAN_COMMENT_ACTOR.MEMBER }
 >;
 
-/** A comment call run as the member, on the task it names as the member reaches it; refused where they reach none. */
+/** A comment call run as the member, on the task it names as the member reaches it, told whether they have Plans on, which the plan's own threads stand on and a page's do not; refused where they reach no task. */
 const commentAsMember = <R>(
   taskId: string,
-  act: (writer: MemberCommentWriter) => Effect.Effect<WireRecord, never, R>,
+  act: (writer: MemberCommentWriter, plansOn: boolean) => Effect.Effect<WireRecord, never, R>,
 ) =>
   readAsMember(
     (userId) => readTaskWorkspace(userId, taskId),
     COMMENT_TOOL_REFUSAL.NO_TASK,
-    ({ caller }) => act({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId: callerUserId(caller) }),
+    ({ caller }) => {
+      const userId = callerUserId(caller);
+      return Effect.flatMap(plansOnFor(userId), (plansOn) =>
+        act({ actor: PLAN_COMMENT_ACTOR.MEMBER, userId }, plansOn),
+      );
+    },
   );
 
 /** A member's comment as the store came to it, answered as the window's own is, its thread handed to the agents it reaches; a task or thread not reached refused. */
@@ -1453,8 +1468,8 @@ const MEMBER_READ_COMMENTS_TOOL = memberMcpTool({
   input: ReadCommentsInputSchema,
   annotations: READ_ONLY,
   run: (asked) =>
-    commentAsMember(asked.taskId, (writer) =>
-      runCommentTool(READ_COMMENTS_TOOL.name, { taskId: asked.taskId, writer }, asked),
+    commentAsMember(asked.taskId, (writer, plansOn) =>
+      runCommentTool(READ_COMMENTS_TOOL.name, { taskId: asked.taskId, writer, plansOn }, asked),
     ),
 });
 
@@ -1523,7 +1538,12 @@ const MEMBER_COMMENT_ON_PLAN_TOOL = memberMcpTool({
     "`accepted` with the thread as it stands, or `rejected` and why nothing was posted.",
   input: CommentOnPlanInputSchema,
   annotations: ADDITIVE,
-  run: (asked) => commentAsMember(asked.taskId, (writer) => memberPlanComment(writer, asked)),
+  run: (asked) =>
+    commentAsMember(asked.taskId, (writer, plansOn) =>
+      plansOn
+        ? memberPlanComment(writer, asked)
+        : Effect.succeed(commentToolRejected(MEMBER_NOTE_REFUSAL.PLANS_OFF)),
+    ),
 });
 
 /** A reply names the task, the thread, and the member's words. */
@@ -1540,11 +1560,17 @@ type ReplyToCommentInput = typeof ReplyToCommentInputSchema.Type;
  * thread, which the window offers no reply on, and handed to every agent in
  * the thread and each one its words mention.
  */
-const memberReply = (writer: MemberCommentWriter, asked: ReplyToCommentInput) =>
+const memberReply = (writer: MemberCommentWriter, asked: ReplyToCommentInput, plansOn: boolean) =>
   orStoreRefusal(
     Effect.gen(function* () {
-      const standing = yield* readPlanCommentThread(writer.userId, asked.taskId, asked.thread);
-      if (Option.getOrUndefined(standing)?.status === PLAN_COMMENT_STATUS.RESOLVED) {
+      const standing = Option.getOrUndefined(
+        yield* readPlanCommentThread(writer.userId, asked.taskId, asked.thread),
+      );
+      // Note that a thread on no page is the plan's, which takes no reply while Plans is off.
+      if (!plansOn && standing !== undefined && standing.page === undefined) {
+        return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
+      }
+      if (standing?.status === PLAN_COMMENT_STATUS.RESOLVED) {
         return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
       }
       const clientKey = randomUUID();
@@ -1577,7 +1603,8 @@ const MEMBER_REPLY_TO_COMMENT_TOOL = memberMcpTool({
     "reply posted all the same; or `rejected` and why nothing was posted.",
   input: ReplyToCommentInputSchema,
   annotations: ADDITIVE,
-  run: (asked) => commentAsMember(asked.taskId, (writer) => memberReply(writer, asked)),
+  run: (asked) =>
+    commentAsMember(asked.taskId, (writer, plansOn) => memberReply(writer, asked, plansOn)),
 });
 
 /** A thread settled or brought back names the task, the thread, and which. */
@@ -1597,8 +1624,8 @@ const MEMBER_UPDATE_COMMENT_TOOL = memberMcpTool({
   input: UpdateCommentInputSchema,
   annotations: IDEMPOTENT_CHANGE,
   run: (asked) =>
-    commentAsMember(asked.taskId, (writer) =>
-      runCommentTool(UPDATE_COMMENT_TOOL.name, { taskId: asked.taskId, writer }, asked),
+    commentAsMember(asked.taskId, (writer, plansOn) =>
+      runCommentTool(UPDATE_COMMENT_TOOL.name, { taskId: asked.taskId, writer, plansOn }, asked),
     ),
 });
 

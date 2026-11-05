@@ -50,10 +50,11 @@ import { logStoreFailure } from "../http/store-failure.js";
  * answers what it did as the model reads it, never a failure.
  */
 
-/** Where a call reads and writes: the plan the door bound, and who writes, the member whose turn it is and the agent. */
+/** Where a call reads and writes: the plan the door bound, who writes, the member whose turn it is and the agent, and whether the plan's own threads are reached, which they are not while Plans is off (`EXPERIMENT.PLANS`), its pages' alone. */
 export interface CommentToolBinding {
   readonly taskId: string;
   readonly writer: PlanCommentWriterRef;
+  readonly plansOn: boolean;
 }
 
 /** Why a call took nothing, in the words its result says. */
@@ -64,6 +65,8 @@ export const COMMENT_TOOL_REFUSAL = {
   NO_TASK: `No task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
   RESOLVED: `The thread is resolved; reopen it with ${AGENT_TOOL.UPDATE_COMMENT} before replying.`,
   UNAVAILABLE: "The comments could not be reached; try again.",
+  PLANS_OFF:
+    "Plans is off, so the plan's comment threads are not reached; a page's threads still are, by the page's id.",
 } as const;
 
 /** The task a call names, whose plan's comments it acts on. */
@@ -239,15 +242,23 @@ export function runCommentTool(
   binding: CommentToolBinding,
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
-  const { taskId, writer } = binding;
+  const { taskId, writer, plansOn } = binding;
   const act = (thread: string, action: Parameters<typeof actOnPlanCommentThread>[3]) =>
     Effect.map(actOnPlanCommentThread(writer, taskId, thread, action), written);
+  const threadOf = (thread: string) =>
+    Effect.map(readPlanCommentThread(writer.userId, taskId, thread), Option.getOrUndefined);
+  // Note that a thread on no page is the plan's, which a call reaches only while Plans is on.
+  const planOff = (thread: PlanCommentThread | undefined) =>
+    !plansOn && thread !== undefined && thread.page === undefined;
   const run = Effect.gen(function* () {
     switch (name) {
       case AGENT_TOOL.READ_COMMENTS: {
         const read = readEither(READ_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
         const { page } = read.success;
+        if (page === undefined && !plansOn) {
+          return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
+        }
         const status = read.success.status ?? PLAN_COMMENT_STATUS.OPEN;
         const threads = yield* readPlanCommentThreads(writer.userId, taskId, page);
         if (Option.isNone(threads)) return commentToolRejected(COMMENT_TOOL_REFUSAL.NO_TASK);
@@ -259,9 +270,8 @@ export function runCommentTool(
       case AGENT_TOOL.REPLY_TO_COMMENT: {
         const read = readEither(REPLY_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
-        const thread = Option.getOrUndefined(
-          yield* readPlanCommentThread(writer.userId, taskId, read.success.thread),
-        );
+        const thread = yield* threadOf(read.success.thread);
+        if (planOff(thread)) return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
         if (thread?.status === PLAN_COMMENT_STATUS.RESOLVED)
           return commentToolRejected(COMMENT_TOOL_REFUSAL.RESOLVED);
         return yield* act(read.success.thread, {
@@ -273,6 +283,9 @@ export function runCommentTool(
       case AGENT_TOOL.UPDATE_COMMENT: {
         const read = readEither(UPDATE_INPUT)(input);
         if (Result.isFailure(read)) return commentToolRejected(COMMENT_TOOL_REFUSAL.UNREADABLE);
+        if (planOff(yield* threadOf(read.success.thread))) {
+          return commentToolRejected(COMMENT_TOOL_REFUSAL.PLANS_OFF);
+        }
         const action = read.success.resolved
           ? PLAN_COMMENT_ACTION.RESOLVE
           : PLAN_COMMENT_ACTION.REOPEN;

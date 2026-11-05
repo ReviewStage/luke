@@ -26,6 +26,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
 import type { EveHostTurn } from "../eve-host/bounds.js";
 import type { AdmittedConversation } from "../eve-host/conversation.js";
+import { plansOnFor } from "../plans-on.js";
 import {
   handedAfterCompaction,
   savedByAnotherSince,
@@ -80,7 +81,9 @@ const previousTurnStart = (target: ConversationTarget, turnId: string | undefine
  * so a save made while that turn ran, which none of its steps may have
  * read, is handed too; or where the rest of it is not what the session
  * last handed; never on a first turn, whose first message the plan, or the
- * prompt beside it, already is. A read that fails is logged and
+ * prompt beside it, already is. Where the agent's starter has Plans off, no
+ * save of the plan hands it, and it is handed without the plan
+ * (`standingContext`). A read that fails is logged and
  * hands nothing.
  */
 const taskOf = (
@@ -93,10 +96,12 @@ const taskOf = (
   Effect.gen(function* () {
     const { taskId } = agent;
     if (taskId === null) return undefined;
+    const plansOn = yield* plansOnFor(agent.userId, agent.kind);
     const [stored, comments, since] = yield* Effect.all(
       [
         readTask(admitted.caller, taskId),
-        readPlanCommentThreads(admitted.caller, taskId),
+        // Note that the plan's threads are neither read nor handed where its starter has Plans off.
+        plansOn ? readPlanCommentThreads(admitted.caller, taskId) : Effect.succeedNone,
         previousTurnStart(admitted.target, turn.turnId),
       ],
       { concurrency: "unbounded" },
@@ -106,6 +111,7 @@ const taskOf = (
     const key = taskKey(stored.value, threads);
     const opening = since === undefined;
     const saved =
+      plansOn &&
       since !== undefined &&
       savedByAnotherSince(
         (yield* listRevisions(admitted.caller, taskId)).revisions,
@@ -114,7 +120,7 @@ const taskOf = (
       );
     if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
     const clock = { now, timeZone: admitted.timeZone };
-    const text = taskWithLead(standingContext(stored.value, clock, threads));
+    const text = taskWithLead(standingContext(stored.value, clock, threads, plansOn));
     return { key, text };
   }).pipe(
     Effect.tapError(logStoreFailure),

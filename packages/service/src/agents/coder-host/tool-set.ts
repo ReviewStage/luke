@@ -141,14 +141,15 @@ export function macToolsOf(agent: Pick<Agent, "machine">): ReadonlySet<MacTool> 
 /** What of an agent decides which tools eve offers it. */
 export type CoderOfferedTo = Pick<Agent, "repository" | "machine">;
 
-/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on. */
+/** What beside its own row decides which tools an agent is offered: whether its starter has Memory on, and whether it has Plans on (`../plans-on.ts`). */
 export interface OfferedBeside {
   readonly memoryOn: boolean;
+  readonly plansOn: boolean;
 }
 
 /**
  * The coder's tools eve offers some agents and not others: each one some
- * agent's repository, machine, or Memory withholds. Note that
+ * agent's repository, machine, Memory, or Plans withholds. Note that
  * no tool is withheld by the agent's task, since every one that acts on a
  * task names it or acts on the agent itself where it works on none: the
  * plan's notes, pictures, and comments any task of its workspace, and a
@@ -160,14 +161,16 @@ const NARROWED_CODER_TOOLS: ReadonlySet<AgentTool> = new Set<AgentTool>([
   ...macToolsOf({ machine: AGENT_MACHINE.VERCEL }),
   CODER_TOOL.SAVE_MEMORY,
   CODER_TOOL.SEARCH_MEMORY,
+  CODER_TOOL.EDIT_PLAN,
+  CODER_TOOL.LOOK_AT_PICTURE,
 ]);
 
 /**
  * Every tool eve offered the agent on a turn, in the registry's order: each
  * coder's tool no agent is denied, and each narrowed one where its
- * repository or where it runs offers it, `run_on_mac` among them, and
- * `save_memory` and `search_memory` where
- * its starter has Memory on, the same rules eve's tool files read as each
+ * repository or where it runs offers it, `run_on_mac` among them,
+ * `save_memory` and `search_memory` where its starter has Memory on, and
+ * `edit_plan` and `look_at_picture` where it has Plans on, the same rules eve's tool files read as each
  * turn started; an eve agent's MCP popover reads it (`../workspace-tools.ts`).
  */
 export function offeredCoderTools(
@@ -179,6 +182,7 @@ export function offeredCoderTools(
     ...machineToolsOf(agent),
     ...macToolsOf(agent),
     ...(beside.memoryOn ? [CODER_TOOL.SAVE_MEMORY, CODER_TOOL.SEARCH_MEMORY] : []),
+    ...(beside.plansOn ? [CODER_TOOL.EDIT_PLAN, CODER_TOOL.LOOK_AT_PICTURE] : []),
   ]);
   return [...toolsOf(AGENT_ROLE.CODER)].filter(
     (tool) => !NARROWED_CODER_TOOLS.has(tool) || offered.has(tool),

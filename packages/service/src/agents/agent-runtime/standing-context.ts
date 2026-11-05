@@ -3,8 +3,8 @@
  *
  * What a coding agent is handed on a turn where its plan changed since its
  * last turn (`../coder-host/turn-context.ts`): the developer's own time, the
- * task's name and brief, its saved document, the agents' recent notes on it,
- * and the open comment threads. It is data,
+ * task's name and brief, and, where its starter has Plans on, its saved
+ * document, the agents' recent notes on it, and the open comment threads. It is data,
  * read again as each turn opens and remembered by none, so a turn reads
  * what was saved since the last one rather than a stale copy.
  */
@@ -133,12 +133,15 @@ function developerTimeText({ now, timeZone }: TurnClock): string {
  * raise what an agent asked or decided), and the plan's open comment threads
  * (so the agent can raise what a member asked), each read again
  * every turn so what the agent saved is what the next turn reads. A task that no
- * longer stands gets the heading and the developer's time alone.
+ * longer stands gets the heading and the developer's time alone, and one
+ * whose agent's starter has Plans off (`../plans-on.ts`) its name and brief
+ * without the plan's document, notes, or threads.
  */
 export function standingContext(
   stored: StoredTask | undefined,
   clock: TurnClock,
   comments: readonly PlanCommentThread[] = [],
+  plansOn = true,
 ): string {
   const heading = [
     `${TASK_MARKER} ${new Date(clock.now).toISOString()}`,
@@ -146,13 +149,13 @@ export function standingContext(
   ].join("\n");
   if (!stored) return heading;
   const { task } = stored;
-  return [
-    heading,
-    `Name: ${task.name}`,
-    ...briefText(stored),
-    DOCUMENT_MARKER,
-    JSON.stringify(task.document),
-    ...agentEditsText(stored.agentEdits),
-    ...openThreadsText(comments),
-  ].join("\n");
+  const plan = plansOn
+    ? [
+        DOCUMENT_MARKER,
+        JSON.stringify(task.document),
+        ...agentEditsText(stored.agentEdits),
+        ...openThreadsText(comments),
+      ]
+    : [];
+  return [heading, `Name: ${task.name}`, ...briefText(stored), ...plan].join("\n");
 }

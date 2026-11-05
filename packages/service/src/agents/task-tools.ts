@@ -53,6 +53,7 @@ import {
   workedRepository,
 } from "./agent-tools.js";
 import { calledId } from "./called-id.js";
+import { plansOnFor } from "./plans-on.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
@@ -116,7 +117,12 @@ export const READ_TASK_TOOL = {
   inputSchema: READ_TASK_INPUT,
 } as const;
 
-/** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none. */
+/** Whether the caller reaches tasks' plans: the coding agent's starter's Plans, or a pilot's Pilot, or the member's own Plans (`plansOnFor`). */
+function callerPlansOn(caller: AgentCall["caller"]) {
+  return plansOnFor(callerUserId(caller), callerAgent(caller)?.kind);
+}
+
+/** One call of `read_task`: a task of the caller's workspace, its plan cut to the bound, or why there is none; no plan where the caller has Plans off. */
 export function runReadTask(
   call: AgentReadCall,
   input: UnparsedWireValue,
@@ -141,6 +147,7 @@ export function runReadTask(
       const { task, text, saved, brief } = stored.value;
       const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const plan = cutOnLine(text, PLAN_TEXT_READ_CHARS);
+      const plansOn = yield* callerPlansOn(call.caller);
       const blocks = yield* taskBlockReadings(userId, task, step);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -155,7 +162,9 @@ export function runReadTask(
           brief: brief ?? null,
           ...blocks,
         },
-        plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars },
+        ...(plansOn
+          ? { plan: { text: plan.text, saved, leftOutChars: plan.leftOutChars } }
+          : undefined),
       };
     }),
   );
@@ -413,6 +422,8 @@ export function runCreateTask(
           : yield* workedRepository(call.caller);
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
+      // Note that a plan is written only for a caller with Plans on; the schema takes one alike, so the tool's words stay the same.
+      const plansOn = yield* callerPlansOn(call.caller);
       const made = Option.isSome(before)
         ? before.value.task
         : yield* createTaskAsked(
@@ -429,7 +440,7 @@ export function runCreateTask(
               ...(parentTaskId === undefined ? undefined : { parentTaskId }),
               ...(mode === undefined ? undefined : { mode }),
               ...originOf(call),
-              text: planTextOf(plan ?? ""),
+              text: plansOn ? planTextOf(plan ?? "") : "",
               writer: revisionWriterOf(call),
               relations: relation === undefined ? [] : [relation],
             },

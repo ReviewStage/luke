@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { type Agent, createAgent } from "@repo/database/models/agent-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -8,6 +9,7 @@ import { getTestDB, startTask } from "@repo/database/testing";
 import { AGENT_PAYER } from "@repo/features/agent-wire";
 import { RUN_STATUS, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
+import { EXPERIMENT } from "@repo/settings";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS, RUN_EVENT, TURN_ORIGIN, unparsedWire } from "../../core.js";
@@ -46,6 +48,7 @@ const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox 
 /** An account with one agent on Claude Code on a task, admitted as the MCP door admits it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
+  yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: true } });
   const task = yield* startTask(userId, { name: "Teammate invitations", repository: "acme/relay" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -121,7 +124,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
   );
 
   it.effect(
-    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the plan after its previous turn started, even where the agent then wrote over the same section, and never on its first turn or for its own notes",
+    "a typed turn's message hands the task as it stands once after the agent's first turn, then only once someone other than the agent saved the plan after its previous turn started, even where the agent then wrote over the same section, and never on its first turn, for its own notes, or once its starter turned Plans off",
     () =>
       Effect.gen(function* () {
         const { userId, agent, admitted } = yield* openAgent;
@@ -189,6 +192,12 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         const changed = (yield* typedAt(nextTurn)) ?? "";
         assert.ok(changed.includes("A withdrawn invite never grants access."), changed);
         assert.ok(!changed.includes("## This turn is spoken"), changed);
+
+        // With Plans off a save hands nothing, and the plan is never what a turn reads.
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: false } });
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
+        assert.equal(yield* typedAt(nextTurn), undefined);
       }),
   );
 });
