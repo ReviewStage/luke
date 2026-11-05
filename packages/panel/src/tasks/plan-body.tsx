@@ -707,10 +707,13 @@ function attributed(
  */
 function UnitLinkButton({
   link,
+  label,
   tabbable,
 }: {
   /** The unit's bare address, as every Copy link copies, so it pastes into Slack or a pull request as a link rather than as markdown. */
   link: string;
+  /** Its accessible name, which says whose link it copies where the plan holds several. */
+  label: string;
   /** Whether it is a Tab stop: only beside the document's one, its unit's block. */
   tabbable: boolean;
 }): React.JSX.Element {
@@ -720,7 +723,7 @@ function UnitLinkButton({
       <Tooltip label={LINK_COPY.LABEL}>
         <IconButton
           icon={<GLYPH.LINK />}
-          label={LINK_COPY.LABEL}
+          label={label}
           tabbable={tabbable}
           onClick={(event) => {
             // Note that the press stops here, because a click into a section opens its editor.
@@ -733,21 +736,25 @@ function UnitLinkButton({
   );
 }
 
-/** A section's Copy link button. */
+/** A section's Copy link button, named for its heading, so a reader listing the plan's buttons tells one section's from the next. */
 function SectionLink({
   linked,
   anchor,
+  heading,
   tabbable,
 }: {
   linked: LinkedTask;
   anchor: string;
+  heading: string;
   tabbable: boolean;
 }): React.JSX.Element {
   const link = linkOf(
     { kind: LINK_PLACE.SECTION, planId: linked.step, anchor },
     linked.place.workspace,
   );
-  return <UnitLinkButton link={link} tabbable={tabbable} />;
+  return (
+    <UnitLinkButton link={link} label={`${LINK_COPY.LABEL} to ${heading}`} tabbable={tabbable} />
+  );
 }
 
 /** The title's Copy link button, copying the plan's link as the plan's own menu does. */
@@ -759,7 +766,7 @@ function TitleLink({
   tabbable: boolean;
 }): React.JSX.Element {
   const link = linkOf({ kind: LINK_PLACE.TASK, planId: linked.step }, linked.place.workspace);
-  return <UnitLinkButton link={link} tabbable={tabbable} />;
+  return <UnitLinkButton link={link} label={LINK_COPY.LABEL} tabbable={tabbable} />;
 }
 
 /**
@@ -885,7 +892,7 @@ const DocumentUnit = memo(function DocumentUnit({
   );
   const menu =
     linked === undefined || anchor === "" ? null : (
-      <SectionLink linked={linked} anchor={anchor} tabbable={entry} />
+      <SectionLink linked={linked} anchor={anchor} heading={view.heading} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
 }, sameUnit);
