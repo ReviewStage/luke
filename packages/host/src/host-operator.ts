@@ -1,5 +1,6 @@
 import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
+import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
   ADMIN_UNANSWERED,
   type AdminFavoriteParams,
@@ -437,6 +438,8 @@ export interface HostOperator {
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
+  /** The member's grant of support access granted for seven days, or revoked: when it then runs out, or null. */
+  supportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
@@ -1331,6 +1334,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
     deleteAccount: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
+    supportAccess: (grant) =>
+      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, { grant }), (answer) => {
+        const until = record(answer)?.supportAccessUntil;
+        return until === null || isWireNumber(until)
+          ? Effect.succeed({ supportAccessUntil: until })
+          : unanswered(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, answer);
+      }),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -2596,6 +2606,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ...(payload.pending === true ? { pending: true } : undefined),
                 ...(payload.startsWithoutRepository === true
                   ? { startsWithoutRepository: true }
+                  : undefined),
+                ...(isWireNumber(payload.supportAccessUntil)
+                  ? { supportAccessUntil: payload.supportAccessUntil }
                   : undefined),
               }
             : undefined,

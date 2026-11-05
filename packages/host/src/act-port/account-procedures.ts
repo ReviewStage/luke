@@ -7,7 +7,8 @@ import { actPort } from "./base.js";
 /**
  * account-procedures.ts -- the account's asks, proxied to the host that owns the account.
  *
- * The sign-in flow, the refresh, the sign-out, and the deletion all run
+ * The sign-in flow, the refresh, the sign-out, the deletion, and the grant
+ * of support access all run
  * there, and the counts of them are recorded there, ahead of the action they
  * count. What stays here is what only the client can do about them —
  * stopping the recording its renderers run before the account they file
@@ -16,7 +17,13 @@ import { actPort } from "./base.js";
 export interface AccountProceduresDependencies {
   host: Pick<
     HostOperator,
-    "beginSignIn" | "signInAgain" | "cancelSignIn" | "signOut" | "deleteAccount" | "accountSnapshot"
+    | "beginSignIn"
+    | "signInAgain"
+    | "cancelSignIn"
+    | "signOut"
+    | "deleteAccount"
+    | "accountSnapshot"
+    | "supportAccess"
   >;
   /**
    * Asks before a sign-out while something would be lost, unsaved work,
@@ -85,5 +92,10 @@ export function accountProcedures(dependencies: AccountProceduresDependencies) {
         return yield* halted(host.deleteAccount());
       },
     ),
+    [ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS]: actPort[
+      ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS
+    ].effect(function* ({ input }) {
+      return yield* host.supportAccess(input.grant);
+    }),
   };
 }

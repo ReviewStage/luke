@@ -664,6 +664,12 @@ export const GATEWAY_METHOD = {
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
+  /**
+   * The member's grant of support access granted for seven days or revoked
+   * on the service, under the account's own session (`{ grant }`); the
+   * grant as it then stands, which the account's access is read again for.
+   */
+  ACCOUNT_SUPPORT_ACCESS: "account.supportAccess",
   ANALYTICS_RECORD: "analytics.record",
 } as const;
 

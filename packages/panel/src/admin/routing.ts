@@ -5,6 +5,7 @@ import {
   ADMIN_METRICS_WINDOW,
   ADMIN_METRICS_WINDOW_DEFAULT,
   ADMIN_METRICS_WINDOW_PARAM,
+  ADMIN_PAGE_PATH,
   ADMIN_RELIABILITY_WINDOWS,
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
@@ -176,6 +177,16 @@ function hrefWithWindow(params: URLSearchParams): string {
   }
   const query = params.toString();
   return query ? `${window.location.pathname}?${query}` : window.location.pathname;
+}
+
+/**
+ * An account's page of the dashboard from anywhere on the origin, at the
+ * default window: where a maintainer's sign-in as that account ends.
+ */
+export function accountPageHref(id: string): string {
+  const params = new URLSearchParams();
+  params.set(ACCOUNT_VIEW_PARAM, id);
+  return `${ADMIN_PAGE_PATH}?${params.toString()}`;
 }
 
 export function accountHref(id: string): string {

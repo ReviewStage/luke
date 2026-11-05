@@ -15,6 +15,7 @@ export * from "./components/avatar/avatar.js";
 export * from "./components/back-button/back-button.js";
 export * from "./components/badge/badge.js";
 export * from "./components/banner/banner.js";
+export * from "./components/banner/viewing-as-banner.js";
 export * from "./components/bar-item/bar-item.js";
 export * from "./components/block-list/block-list.js";
 export * from "./components/block-menu/block-menu.js";
