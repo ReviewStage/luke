@@ -105,7 +105,10 @@
    their own, where the read view draws every block as a margin-less
    paragraph, so these give them the read view's box; a heading keeps the
    read view's class and level, and a section's heading the gap the drawn
-   sections stand apart by. */
+   sections stand apart by. The margins are cleared at no weight of their
+   own (`:where`), so the spacing the two views share between a block's
+   children, a quote's paragraphs apart as the read view draws them, still
+   stands over the clearing. */
 .plan-document-text {
   --plan-section-gap: 1.5em;
   caret-color: var(--accent);
@@ -114,8 +117,7 @@
   word-wrap: break-word;
 }
 
-.plan-document-text :is(h1, h2, h3, h4, h5, h6),
-.plan-document-text p {
+.plan-document-text :where(h1, h2, h3, h4, h5, h6, p) {
   margin: 0;
 }
 
@@ -163,30 +165,10 @@
   pointer-events: none;
 }
 
-/* A task item as TipTap draws it: its box in a label and its words in a block
-   of their own after it. The label stands in the bullet's gutter exactly where
-   the read view stands its box (`@repo/ui`'s prose.css), in its size and accent, so
-   the words keep their place as the section opens to be edited. */
-.plan-document-text li[data-checked] {
-  position: relative;
-  list-style: none;
-}
-
-.plan-document-text li[data-checked] > label {
-  position: absolute;
-  top: calc((1lh - 0.95em) / 2);
-  left: -1.45em;
-}
-
-.plan-document-text li[data-checked] > label > input {
-  display: block;
-  width: 0.95em;
-  height: 0.95em;
-  margin: 0;
-  font: inherit;
-  accent-color: var(--ui-color-accent);
-}
-
+/* A task item as TipTap draws it: its box, which the panel draws as the read
+   view does and which stands in the read view's own place by its rules
+   (`@repo/ui`'s prose.css), and its words in a block of their own after it,
+   which start on the box's line. */
 .plan-document-text li[data-checked] > div {
   margin-top: 0;
 }
@@ -195,20 +177,6 @@
    which stand an item's gap apart, as the read view's one list does. */
 .plan-document-text ul[data-type="taskList"] + ul[data-type="taskList"] {
   margin-top: 0.25em;
-}
-
-/* The editor's box takes a finger's press around it on a coarse pointer, as
-   the read view's does (`@repo/ui`'s prose.css), its label holding the press. */
-@media (pointer: coarse) {
-  .plan-document-text li[data-checked] > label::before {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--ui-touch-target);
-    height: var(--ui-touch-target);
-    transform: translate(-50%, -50%);
-    content: "";
-  }
 }
 
 /* What the editor keeps byte for byte but does not draw as its own: inline
@@ -1498,14 +1466,11 @@
   padding-left: 0;
 }
 
+/* A task item open in the description's editor stands its box before its
+   words' block, the box apart from them by its own margin, as drawn below. */
 .pull-request-description-text.plan-document-text li[data-checked] {
   display: flex;
   align-items: baseline;
-  gap: var(--ui-item-gap);
-}
-
-.pull-request-description-text.plan-document-text li[data-checked] > label {
-  position: static;
 }
 
 /* A task list stands as GitHub draws one: its boxes, the shared read-only

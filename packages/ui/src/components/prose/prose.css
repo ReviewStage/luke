@@ -167,10 +167,10 @@
      (`markdown-tasks.tsx`), and the library's own disabled checkbox where
      words are drawn whole by Streamdown. The box stands in the bullet's gutter,
      out of the line, so the space after it folds away and the words, wrapped
-     lines included, start where a bullet's would; the plan's editor stands
-     its box in the same place (the panel's `tasks.css`), so opening a
-     section moves nothing. Note that the box takes the words' size, because
-     a control's own is the browser's. */
+     lines included, start where a bullet's would; the plan's editor's item
+     and box wear the same classes, so opening a section moves nothing. Note
+     that the box takes the words' size, because a control's own is the
+     browser's. */
   .ui-markdown li.task-list-item {
     position: relative;
     list-style: none;
@@ -191,9 +191,9 @@
      where the reader cannot tick it) stands in the bullet's gutter, exactly where the box alone stands, at
      the words' size; on a coarse pointer its label takes a press a finger's
      width across and as tall, centered on the box (`checkbox.css`). The
-     plan's editor gives its own label the same press. A loose list's item
-     holds its words in a paragraph, the box among them, which stands in the
-     same gutter. */
+     plan's editor draws its box the same, in the same place. A loose list's
+     item holds its words in a paragraph, the box among them, which stands in
+     the same gutter. */
   .ui-markdown li.task-list-item > .ui-markdown-task,
   .ui-markdown li.task-list-item > p:first-child > .ui-markdown-task {
     position: absolute;

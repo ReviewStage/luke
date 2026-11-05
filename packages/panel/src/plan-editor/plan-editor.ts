@@ -2,7 +2,7 @@ import { WRITING_BLOCK, WRITING_SHORTCUTS } from "@repo/settings/shortcuts";
 import { linkMarkAttributes } from "@repo/ui/link-face";
 import { MARKDOWN_CLASS } from "@repo/ui/markdown-class";
 import { QUOTE_CLASS } from "@repo/ui/quote-face";
-import { type AnyExtension, Editor, Extension } from "@tiptap/core";
+import { type AnyExtension, Editor, Extension, type NodeViewRenderer } from "@tiptap/core";
 import Heading from "@tiptap/extension-heading";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -27,6 +27,7 @@ import {
   type PlanEditorProps,
   rootAria,
   sameAria,
+  type TaskBoxDrawer,
 } from "./contract.js";
 import { diagramPreview } from "./diagram-preview.js";
 import {
@@ -149,7 +150,12 @@ const TASK_MARK_LENGTH = "- [ ] ".length;
  */
 const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
   addOptions() {
-    return { ...this.parent?.(), nested: true };
+    const parent = this.parent?.();
+    return {
+      ...parent,
+      nested: true,
+      HTMLAttributes: { ...parent?.HTMLAttributes, class: MARKDOWN_CLASS.TASK_ITEM },
+    };
   },
   parseMarkdown(token, helpers) {
     const empty = token.text === EMPTY_TASK_WORDS;
@@ -163,6 +169,88 @@ const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
     return written.slice(0, TASK_MARK_LENGTH) + EMPTY_TASK_WORDS + written.slice(TASK_MARK_LENGTH);
   },
 });
+
+/** What names a task item's box where its item holds no words, as the read view names it. */
+const UNNAMED_TASK = "Task";
+
+/** A task item's box as the panel draws it: its item's own words, without a list nested in it, whether it is ticked, and the door that ticks it. */
+function taskBoxOf(node: PmNode, toggle: (checked: boolean) => void) {
+  const words = node.firstChild?.textContent.trim() ?? "";
+  return {
+    label: words === "" ? UNNAMED_TASK : words,
+    checked: node.attrs.checked === true,
+    toggle,
+  };
+}
+
+/**
+ * TipTap's task item view with its box drawn by the panel, as the read view
+ * draws it, the shared `Checkbox` in the read view's box
+ * (`MARKDOWN_CLASS.TASK_BOX`), in place of TipTap's own label and the
+ * browser's checkbox in it, so the box looks and stands the same as the text
+ * opens to be edited. The item is otherwise TipTap's own view, its words and
+ * its attributes kept as TipTap keeps them. A tick is TipTap's own change,
+ * the attribute set on the item with the caret kept where it stood. Note
+ * that the box's own presses and keys are its own and not the editor's, and
+ * that its drawing changes nothing the editor reads.
+ */
+function drawnTaskView(tiptap: NodeViewRenderer, drawTaskBox: TaskBoxDrawer): NodeViewRenderer {
+  return (props) => {
+    const view = tiptap(props);
+    const { editor, getPos } = props;
+    const box = document.createElement("span");
+    box.className = MARKDOWN_CLASS.TASK_BOX;
+    box.contentEditable = "false";
+    // Note that a press keeps the caret where it stands, as TipTap's own box does.
+    box.addEventListener("mousedown", (event) => event.preventDefault());
+    view.dom.firstChild?.replaceWith(box);
+    const toggle = (checked: boolean) => {
+      const at = getPos();
+      if (!editor.isEditable || typeof at !== "number") return;
+      editor
+        .chain()
+        .focus(undefined, { scrollIntoView: false })
+        .command(({ tr }) => {
+          tr.setNodeMarkup(at, undefined, { ...tr.doc.nodeAt(at)?.attrs, checked });
+          return true;
+        })
+        .run();
+    };
+    let drawn = taskBoxOf(props.node, toggle);
+    let undraw = drawTaskBox(box, drawn);
+    return {
+      ...view,
+      update: (node, decorations, inner) => {
+        if (view.update?.(node, decorations, inner) !== true) return false;
+        const next = taskBoxOf(node, toggle);
+        if (next.label !== drawn.label || next.checked !== drawn.checked) {
+          undraw();
+          drawn = next;
+          undraw = drawTaskBox(box, drawn);
+        }
+        return true;
+      },
+      stopEvent: (event) => event.target instanceof Node && box.contains(event.target),
+      ignoreMutation: (mutation) => box.contains(mutation.target),
+      destroy: () => {
+        undraw();
+        view.destroy?.();
+      },
+    };
+  };
+}
+
+/** The task item, its box drawn by the panel where it draws one (`drawnTaskView`), and TipTap's own elsewhere. */
+function drawnTaskItem(drawTaskBox: TaskBoxDrawer | undefined) {
+  if (drawTaskBox === undefined) return DocumentTaskItem;
+  return DocumentTaskItem.extend({
+    // Note that `this` is named, because `extend` infers its config from this method, which then cannot infer `this` from the config.
+    addNodeView(this: { parent?: (() => NodeViewRenderer | null) | undefined }) {
+      const tiptap = this.parent?.();
+      return tiptap == null ? null : drawnTaskView(tiptap, drawTaskBox);
+    },
+  });
+}
 
 /** The class a link whose target names a mention wears in the editor, which `tasks.css` draws in a chip's light look. */
 const MENTION_LINK_CLASS = "plan-mention-link";
@@ -206,13 +294,15 @@ function linkLook(namesMention: ((target: string) => boolean) | undefined) {
 /**
  * What the text may hold, read and written as the editor reads and writes
  * it: the mention among the rest, drawn by the panel where it can draw one,
- * a link naming one in a chip's light look where the panel says which, and
- * every other link a plain one.
+ * a link naming one in a chip's light look where the panel says which,
+ * every other link a plain one, and a task item's box drawn by the panel
+ * where it draws one.
  */
 export function markdownExtensions(
   drawMention?: MentionDrawer | undefined,
   namesMention?: ((target: string) => boolean) | undefined,
   pictures?: PlanEditorPictures | undefined,
+  drawTaskBox?: TaskBoxDrawer | undefined,
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     blockquote: { HTMLAttributes: { class: QUOTE_CLASS } },
@@ -228,7 +318,7 @@ export function markdownExtensions(
     blockRulesOutOfCells(withoutTipTapChords(DocumentHeading)),
     Markdown,
     withoutTipTapChords(TaskList),
-    DocumentTaskItem,
+    drawnTaskItem(drawTaskBox),
     TableKit,
     pictureNode(pictures),
     RawBlock,
@@ -432,12 +522,18 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     onLeaveUp,
     mentions,
     drawDiagram,
+    drawTaskBox,
     pictures,
     anchors,
     format,
     blocks,
   } = props;
-  const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention, pictures);
+  const extensions = markdownExtensions(
+    mentions?.drawMention,
+    mentions?.namesMention,
+    pictures,
+    drawTaskBox,
+  );
   const manager = documentManager(extensions);
   // Filled once the editor is built, since a block's source is known by the node it opened as.
   let held: HeldSources = { sources: new Map(), lead: "", ending: "" };

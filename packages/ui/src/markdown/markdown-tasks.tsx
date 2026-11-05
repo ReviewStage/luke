@@ -7,9 +7,10 @@ import type { Element, ElementContent, Root } from "hast";
 import { useState } from "react";
 import type { Components } from "streamdown";
 import { Checkbox } from "../components/checkbox/checkbox.js";
+import { MARKDOWN_CLASS } from "./markdown-class.js";
 
-/** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`). */
-const TASK_BOX_CLASS = "ui-markdown-task";
+/** The class the box a reader can tick stands in, in the bullet's gutter (`prose.css`), the plan's editor's box alike. */
+const TASK_BOX_CLASS = MARKDOWN_CLASS.TASK_BOX;
 
 /** A task item's checkbox as drawn: the offset its item starts at in the words, where they say it, and the item's own words, which name it. */
 interface TaskItem {
