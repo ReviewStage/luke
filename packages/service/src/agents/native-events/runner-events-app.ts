@@ -25,7 +25,6 @@ import {
 } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/storage-vocabulary";
 import { AGENT_PAYER, type AgentPayer } from "@repo/features/agent-wire";
-import { redactCredentials } from "@repo/features/credential-redaction";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -90,6 +89,7 @@ import {
   projectMoments,
   withTurnServers,
 } from "./native-projection.js";
+import { redactKeepingPlanCodes } from "./runner-moments.js";
 
 /**
  * runner-events-app.ts -- where a native harness's runner posts its events, which land in the agent's transcript.
@@ -432,7 +432,7 @@ function sayTurnFailed(
     harness,
     turnId: failed.turnId,
     failure: failed.failure,
-    detail: redactCredentials(failed.detail),
+    detail: redactKeepingPlanCodes(failed.detail),
   };
   const issue = new NativeTurnFailed({
     message: `a ${harness} turn failed: ${failed.failure}`,

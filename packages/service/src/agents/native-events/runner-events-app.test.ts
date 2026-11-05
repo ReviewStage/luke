@@ -1938,6 +1938,53 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
+    "a turn OpenAI refused on the starter's ChatGPT plan is reported with OpenAI's error whole, its code as OpenAI said it",
+    () =>
+      Effect.gen(function* () {
+        const reported: Readonly<Record<string, unknown>>[] = [];
+        const reporting = ErrorReporter.layer([
+          ErrorReporter.make(({ attributes }) => {
+            reported.push(attributes);
+          }),
+        ]);
+        const post = yield* standingWith(
+          {},
+          Layer.merge(Layer.empty as Layer.Layer<AfterResponse>, reporting),
+        );
+        const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+        yield* signedIn(agent.userId);
+        // As OpenAI refused VESPIN-WEB-2R's turns: its JSON error, which Codex hands on as the turn's message and the runner as its end's.
+        const message = JSON.stringify(
+          {
+            error: {
+              message:
+                "User subscription sharing currently supports only text, image, and file messages, item references, additional tools, compaction summaries, reasoning items, Web Search call items, developer function and custom tool call items, and programmatic tool calling items.",
+              type: "invalid_request_error",
+              param: null,
+              code: "subscription_sharing_unsupported_capability",
+            },
+          },
+          null,
+          2,
+        );
+        const refused = refusedLaunch(agent.lineId, 0, {
+          message,
+          codexErrorInfo: "other",
+          additionalDetails: null,
+        });
+        // SAFETY: the runner's END, written in its JSON shape.
+        const end = {
+          sequence: refused.length - 1,
+          message: { type: RUNNER_EVENT.END, reason: RUNNER_END.FAILED, detail: message },
+        } as RunnerEvent;
+        yield* post(agent.bearer, [...refused.slice(0, -1), end]);
+
+        const detail = String(reported[0]?.detail);
+        assert.ok(detail.includes('"code": "subscription_sharing_unsupported_capability"'), detail);
+      }),
+  );
+
+  it.effect(
     "a turn that opened before its starter connected ChatGPT again leaves the new sign-in as it was saved",
     () =>
       Effect.gen(function* () {

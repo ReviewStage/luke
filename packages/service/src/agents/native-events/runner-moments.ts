@@ -35,6 +35,16 @@ import {
 /** How long the turn's record keeps a failure the harness reported, inside the writer's own bound. */
 export const FAILURE_CHARS = 300;
 
+/** How long the turn's record keeps the launch's own words for its end, long enough for a provider's whole JSON error, inside the writer's own bound. */
+const END_DETAIL_CHARS = 1000;
+
+/**
+ * OpenAI's codes for a refusal of a ChatGPT plan, such as
+ * `subscription_sharing_unsupported_capability`, each whole: its own words,
+ * never a secret, though a run that long reads as one to `redactCredentials`.
+ */
+const PLAN_CODE_SPLIT = /((?<![\w+/=-])(?:subscription_sharing|chatpass_v2)_[a-z_]+(?![\w+/=-]))/;
+
 /** What a picture in a tool's answer is kept as: the bytes went to the model once, and a transcript carries every byte it holds into each read. */
 export const PICTURE_STAND_IN = "[image]";
 
@@ -98,11 +108,26 @@ function endMoments(message: WireValue): readonly NativeMoment[] {
       ending: ENDING_OF_RUNNER_END[reason],
       ...(QUIET_ENDS.has(reason)
         ? undefined
-        : { detail: redactCredentials(said).slice(0, FAILURE_CHARS) }),
+        : { detail: redactKeepingPlanCodes(said).slice(0, END_DETAIL_CHARS) }),
       ...(reason === RUNNER_END.FAILED ? { launchFailed: true } : undefined),
       ...(wakeups === undefined ? undefined : { wakeups }),
     },
   ];
+}
+
+/**
+ * Text as a failed turn's record and its report keep it: every
+ * credential-shaped run replaced (`redactCredentials`), but OpenAI's plan
+ * codes word for word, so what refused a plan stays readable. Note that a
+ * code is set apart only where nothing a credential is spelled with touches
+ * it, so no credential's head or tail is left unredacted beside one.
+ */
+export function redactKeepingPlanCodes(text: string): string {
+  // Note that `split` puts each code its group caught at an odd index.
+  return text
+    .split(PLAN_CODE_SPLIT)
+    .map((part, index) => (index % 2 === 1 ? part : redactCredentials(part)))
+    .join("");
 }
 
 /**
