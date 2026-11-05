@@ -15,7 +15,7 @@
  * published, as `HOST_RELEASE` moves (`./host-release.ts`).
  */
 
-import type { HostTarget } from "./host-release.js";
+import { HOST_TARGET, type HostTarget } from "./host-release.js";
 
 /** The repository whose releases carry the command's tarballs. */
 const RELEASE_REPOSITORY = "ReviewStage/vespin";
@@ -30,7 +30,14 @@ export interface CliRelease {
  * The release the install script installs; none until the first is
  * published, and the script served meanwhile says there is none yet.
  */
-export const CLI_RELEASE: CliRelease | undefined = undefined;
+export const CLI_RELEASE: CliRelease | undefined = {
+  VERSION: "0.1.0",
+  SHA256: {
+    [HOST_TARGET.LINUX_X64]: "6538a6d8df7f93a40743592c0643de38f13ad393291532d5c3ac7d7da73b887f",
+    [HOST_TARGET.LINUX_ARM64]: "2b5d4789023f8c50abba34822c7b242d272b596dcd4e886fa850bc87e49e3104",
+    [HOST_TARGET.DARWIN_ARM64]: "df384d3f11aa3c3ad674f7ab824f4a0e74cd5e754064c0aa9fe317bf5d500ca2",
+  },
+};
 
 /** The release's tag, apart from the desktop's `v<version>` and the host's `host-v<version>`. */
 function cliReleaseTag(version: string): string {
