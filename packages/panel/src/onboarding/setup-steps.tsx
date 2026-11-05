@@ -37,7 +37,9 @@ import { ToolRows } from "./setup-tools.js";
  * setup-steps.tsx -- a new account's setup, alone in the window after sign-in: who it is for, a team's workspace where there is one, an agent, GitHub, and the tools, one card each.
  *
  * Each card is the sign-in's own, so setup reads as the sign-in going on.
- * The team's workspace, an agent, and GitHub may each be skipped; what an
+ * An account invited into a team's workspace starts on Connect an agent
+ * alone, which it may skip as any other account may. The team's workspace,
+ * an agent, and GitHub may each be skipped; what an
  * agent needs and was skipped is asked again on Home
  * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
@@ -72,8 +74,16 @@ const SETUP_FINISHED = keptKey(
   Schema.fromJsonString(Schema.Array(Schema.String)),
 );
 
-/** Where setup starts. */
+/** Where setup starts, for an account of its own or one a team invited. */
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
+const INVITED_START: SetupPlace = { audience: SETUP_AUDIENCE.INVITED, at: 0 };
+
+/** Whether the account belongs to a team's workspace; nothing before its workspaces are read, and none where that read failed. */
+function invitedOf(tasks: TasksControl): boolean | undefined {
+  const { workspaces } = tasks.newTask;
+  if (workspaces.length === 0) return tasks.workspacesFailed ? false : undefined;
+  return workspaces.some((workspace) => workspace.personal !== true);
+}
 
 /**
  * What the window does about setup for the account signed in (`setupGate`):
@@ -96,7 +106,7 @@ export function useSetupGate(
     finishedOnAccount ||
     (accountId !== undefined && finishedOnDevice.includes(accountId));
   // Note that the models are the ones the host holds for the account, so nothing here asks for them.
-  const { models, modelsFailed, workspaces } = tasks.newTask;
+  const { models, modelsFailed } = tasks.newTask;
   const fresh = welcomed(tasks);
   // Note that a read that failed is taken as an agent standing, so a hitch never stands setup before an account that has worked.
   const agent =
@@ -111,7 +121,7 @@ export function useSetupGate(
     finished,
     accountRead: settings?.accountRead === true,
     started: accountId !== undefined && places[accountId] !== undefined,
-    personalOnly: workspaces.every((workspace) => workspace.personal === true),
+    invited: invitedOf(tasks),
     agent,
   });
 }
@@ -135,21 +145,23 @@ export function SetupSteps({
   const { tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
-  const place = places[accountId] ?? SETUP_START;
+  // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
+  const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
+  const place = places[accountId] ?? start;
   const { audience, team } = place;
   const [creating, setCreating] = useState(false);
   const [refused, setRefused] = useState<readonly string[]>([]);
   const move = (change: Partial<SetupPlace>) =>
     changePlaces((kept) => ({
       ...kept,
-      [accountId]: { ...(kept[accountId] ?? SETUP_START), ...change },
+      [accountId]: { ...(kept[accountId] ?? start), ...change },
     }));
   // Setup starting is kept at once, so it stands until finished on a reload, whatever it connects meanwhile.
   useEffect(() => {
     changePlaces((kept) =>
-      kept[accountId] === undefined ? { ...kept, [accountId]: SETUP_START } : kept,
+      kept[accountId] === undefined ? { ...kept, [accountId]: start } : kept,
     );
-  }, [accountId, changePlaces]);
+  }, [accountId, changePlaces, start]);
   const setAudience = (chosen: SetupAudience) => move({ audience: chosen });
   const setAt = (step: number) => move({ at: step });
   const [agent, setAgent] = useState(false);
@@ -264,7 +276,7 @@ export function SetupSteps({
         mark={<ProductMark />}
         title="Connect an agent"
         description="Run agents on your ChatGPT or Claude plan, or an API key."
-        foot={foot(agent, true)}
+        foot={foot(agent, true, last ? "Finish" : "Continue")}
       >
         <AgentConnectSection onConnected={onConnected} />
       </AuthPage>

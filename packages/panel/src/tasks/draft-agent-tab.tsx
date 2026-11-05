@@ -4,11 +4,12 @@ import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { AgentComposer } from "./agent-composer.js";
-import { agentName } from "./agent-model.js";
+import { AgentComposer, COMPOSER_DOCK_CLASS } from "./agent-composer.js";
+import { agentName, unrunnableChoice } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
+import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl, ComposerNote } from "./use-agent-composer.js";
@@ -120,9 +121,15 @@ export function DraftAgentTab({
         );
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+  // Note that a model nothing of the account's pays for holds Send, with the press that connects one, rather than being refused once sent.
+  const unpaid =
+    control.models === undefined || choice === undefined
+      ? undefined
+      : unrunnableChoice(control.models, choice);
   const send = () => {
     const prompt = draft.prompt.trim();
-    if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
+    if (sending || unpaid !== undefined) return;
+    if (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments)) return;
     setSending(true);
     setNote(undefined);
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
@@ -175,10 +182,16 @@ export function DraftAgentTab({
         {fork === undefined ? null : (
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
+        {unpaid === undefined || control.models === undefined ? null : (
+          <div className={COMPOSER_DOCK_CLASS}>
+            <ConnectAgentBanner models={control.models} unpaid={unpaid} />
+          </div>
+        )}
         <AgentComposer
           status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
+          sendable={unpaid === undefined}
           model={
             choice === undefined
               ? undefined
