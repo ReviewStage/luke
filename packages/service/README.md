@@ -1785,6 +1785,26 @@ the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
 (`PUT /api/account/preferences`) changes the account's default.
 
+Every Start, a fresh one, one from another agent (`POST /api/agents/{id}/agents`,
+a continue or a fork), the agent a task's start names, and `start_agent`,
+takes an optional `runsOn`, `{ machine: "vercel" }` for the cloud or
+`{ machine: "device", deviceId }` for one of the starter's own devices, and
+its agent runs there (`machineOfStart` in `src/agents/coder-host/start.ts`).
+One that names none runs where the agent it is started from runs, for a
+continue or a fork; else where the starter's newest agent on the task runs,
+never a teammate's, since a device is one member's; else where the starter
+last named a place (`account_preference.runs_on_*`,
+`packages/database/src/models/runs-on-pick.ts`); else where the task runs;
+else in the cloud. An automation's run reads neither of its owner's own, so
+it runs where its task does. A device, named or defaulted, must be the
+starter's, registered, not removed, and there lately, or the Start is
+refused by name and makes no agent; nothing falls back to the cloud on its
+own. A place a Start names is kept as the starter's last pick once its agent
+is made, which is what a later Start naming none and a task an agent makes
+for them (`create_task`) run at; a task's start that names an agent and no
+`runsOn` of its own runs it where the task's `runsOn` names, which released
+desktops still send.
+
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its
 tab draws a plan as the plan's card and a prompt as the developer's message),

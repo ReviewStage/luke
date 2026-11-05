@@ -614,6 +614,26 @@ const findAgentByKey = SqlSchema.findOneOption({
     ),
 });
 
+/** Where an agent runs, as a Start naming no place reads it off the account's newest agent on its task. */
+const AgentPlaceRowSchema = Schema.Struct({
+  machine: Schema.Literals(Object.values(AGENT_MACHINE)),
+  deviceId: Schema.NullOr(Schema.String),
+});
+
+const findNewestAgentPlace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
+  Result: AgentPlaceRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({ machine: agentTable.machine, deviceId: agentTable.deviceId })
+        .from(agentTable)
+        .where(and(eq(agentTable.userId, userId), eq(agentTable.taskId, taskId)))
+        .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+        .limit(1),
+    ),
+});
+
 const findOwnAgentId = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: IdRowSchema,
@@ -2697,6 +2717,18 @@ export function readAgentByKey(
   idempotencyKey: string,
 ): AgentStoreEffect<Option.Option<Agent>> {
   return findAgentByKey({ userId, idempotencyKey });
+}
+
+/**
+ * Where the account's newest agent on the task runs, archived ones among
+ * them, or nothing where the account started none there; a teammate's
+ * agents on the task are never read, since a device is one member's.
+ */
+export function readNewestAgentPlace(
+  userId: string,
+  taskId: string,
+): AgentStoreEffect<Option.Option<typeof AgentPlaceRowSchema.Type>> {
+  return findNewestAgentPlace({ userId, taskId });
 }
 
 /** The agent under this id, or nothing for an agent of a workspace the account is not in: the read an agent makes of itself, under the member who started it. */

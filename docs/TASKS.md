@@ -686,6 +686,18 @@ the terminal picker's Start an agent, and the agent tabs ("Agent tabs"
 above), and Settings › Agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
+### Where an agent runs
+
+Each agent runs in the cloud or on one of its starter's own devices (a Mac
+or a host), chosen as it starts and kept for its life. A start may name the
+place; one from another agent that names another place is how an agent
+moves. A start that names none runs where the agent it continues or forks
+runs; else where the starter's newest agent on the task runs, never a
+teammate's; else where the starter last chose to run one; else where the
+task runs; else in the cloud. A device that is not the starter's, was
+removed, or is away refuses the start by name, and nothing moves it to the
+cloud on its own.
+
 ## Copy
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
