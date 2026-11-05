@@ -3,12 +3,12 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { task, taskNumberForward } from "../schemas/task.js";
-import { workspaceIdOfSlug } from "./workspace-slug-store.js";
 import {
   isWorkspaceMember,
   taskReachableBy,
   type WorkspaceStoreEffect,
 } from "./workspace-store.js";
+import { workspaceIdOfSlug } from "./workspace-slug-store.js";
 
 /**
  * task-number-store.ts -- a task found by its number in a workspace, as a link `/<slug>/task/<number>` names it, and the numbers a task left behind as it moved.
