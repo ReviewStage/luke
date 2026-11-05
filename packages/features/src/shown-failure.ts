@@ -176,8 +176,6 @@ export const FAILURE_SURFACE = {
   SKILL_PREVIEW: "skill.preview",
   SKILL_READ: "skill.read",
   SKILL_REMOVE: "skill.remove",
-  SKILL_SHARE: "skill.share",
-  SKILL_WRITE: "skill.write",
   TASKS_READ: "tasks.read",
   TASKS_REFRESH: "tasks.refresh",
   TASK_BLOCK: "task.block",

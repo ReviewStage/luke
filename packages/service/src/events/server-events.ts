@@ -269,10 +269,6 @@ export const SERVER_AGENT_SETTING = {
 /** What a member did to an installed skill. */
 export const SERVER_SKILL_ACTION = {
   INSTALL: "install",
-  ENABLE: "enable",
-  DISABLE: "disable",
-  UPDATE: "update",
-  SHARE: "share",
   REMOVE: "remove",
 } as const;
 

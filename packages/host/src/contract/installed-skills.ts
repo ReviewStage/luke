@@ -8,11 +8,6 @@ import {
   installedSkillPreviewParamsSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
-  installedSkillShareParamsSchema,
-  installedSkillToggleParamsSchema,
-  installedSkillUpdatedViewSchema,
-  installedSkillUpdateParamsSchema,
-  installedSkillViewSchema,
 } from "@repo/features/installed-skill-view";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -52,21 +47,6 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillInstallParamsSchema))
     .output(EffectSchema.flip(installedSkillInstallViewSchema)),
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SET_ENABLED]: actProcedure(
-    "Could not turn the skill on or off on this system.",
-  )
-    .input(exactInput(installedSkillToggleParamsSchema))
-    .output(EffectSchema.flip(installedSkillViewSchema)),
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_UPDATE]: actProcedure(
-    "Could not update the skill on this system.",
-  )
-    .input(exactInput(installedSkillUpdateParamsSchema))
-    .output(EffectSchema.flip(installedSkillUpdatedViewSchema)),
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SHARE]: actProcedure(
-    "Could not share the skill with the workspace on this system.",
-  )
-    .input(exactInput(installedSkillShareParamsSchema))
-    .output(EffectSchema.flip(installedSkillViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_REMOVE]: actProcedure(
     "Could not remove the skill on this system.",
   )

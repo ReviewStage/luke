@@ -57,14 +57,8 @@ it.effect("each call goes to its own path under the account's bearer", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
       "POST /api/installed-skills": { answer: () => ({ skills: [SUMMARY] }), status: 201 },
-      [`PATCH /api/installed-skills/${SKILL_ID}`]: {
-        answer: () => ({ skill: { ...SUMMARY, enabled: false }, txid: "41" }),
-      },
       [`DELETE /api/installed-skills/${SKILL_ID}`]: { answer: () => ({ id: SKILL_ID }) },
       [`GET /api/installed-skills/${SKILL_ID}`]: { answer: () => CONTENT },
-      [`POST /api/installed-skills/${SKILL_ID}/share`]: {
-        answer: () => ({ skill: { ...SUMMARY, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } }),
-      },
     });
     const ask = client();
 
@@ -76,25 +70,12 @@ it.effect("each call goes to its own path under the account's bearer", () =>
       }),
       api.layer,
     );
-    const toggled = yield* Effect.provide(ask.setEnabled(SKILL_ID, false), api.layer);
     const removed = yield* Effect.provide(ask.remove(SKILL_ID), api.layer);
     const read = yield* Effect.provide(ask.read(SKILL_ID), api.layer);
-    const shared = yield* Effect.provide(ask.share(WORKSPACE_ID, SKILL_ID), api.layer);
 
     assert.deepEqual(installed, { ok: true, answer: { skills: [SUMMARY] } });
-    assert.deepEqual(toggled, {
-      ok: true,
-      answer: { skill: { ...SUMMARY, enabled: false }, txid: "41" },
-    });
     assert.deepEqual(removed, { ok: true, answer: { id: SKILL_ID } });
     assert.deepEqual(read, { ok: true, answer: CONTENT });
-    assert.deepEqual(shared, {
-      ok: true,
-      answer: { skill: { ...SUMMARY, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } },
-    });
-    const [, toggle, , , share] = api.requests();
-    assert.deepEqual(JSON.parse(toggle?.body ?? "{}"), { enabled: false });
-    assert.deepEqual(JSON.parse(share?.body ?? "{}"), { workspaceId: WORKSPACE_ID });
     assert.deepEqual(new Set(api.credentials()), new Set(["token-1"]));
   }),
 );

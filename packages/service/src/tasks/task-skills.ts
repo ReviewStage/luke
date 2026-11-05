@@ -2,7 +2,7 @@
  * task-skills.ts -- the skills a developer may choose of a task: its repository's, read from GitHub as it stands now, then the member's installed ones.
  *
  * A coding agent of the task is offered its repository's agent skills
- * (`repository-skills.ts`) and the member's enabled installed skills, and
+ * (`repository-skills.ts`) and the member's installed skills, and
  * the developer names one to load with a `/name`, so the desktop reads the
  * ones a developer may choose to offer them. The repository's are read
  * exactly where and as the File tab reads a file (`task-file.ts`): the task
@@ -54,7 +54,7 @@ const SOURCE_OF_SCOPE = {
 
 /**
  * The installed skills a developer may choose beside the repository's: the
- * enabled ones a member may name, in the order the store lists them, the
+ * ones a member may name, in the order the store lists them, the
  * workspace's and then their own, each by name, any name an earlier one or any repository skill holds left out,
  * a model-only one left out, as many as the list carries.
  */
@@ -64,7 +64,7 @@ function mergedSkills(
   installed: readonly InstalledSkill[],
 ): readonly TaskSkill[] {
   const offered = installed
-    .filter((skill) => skill.enabled && skill.userInvocable)
+    .filter((skill) => skill.userInvocable)
     .map(
       (skill): TaskSkill => ({
         name: skill.name,

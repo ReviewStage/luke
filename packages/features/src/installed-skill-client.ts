@@ -13,11 +13,9 @@ import type { InstalledSkillsLiveAnswer } from "./installed-skill-live.js";
 import type {
   InstalledSkillContent,
   InstalledSkillPreview,
-  installedSkillAnswerSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillRemovedAnswerSchema,
-  installedSkillUpdatedAnswerSchema,
 } from "./installed-skill-route-wire.js";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
@@ -36,7 +34,7 @@ import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
  * there is no answer, never a failure, because every caller does the same
  * with one: says why, and offers to try again. A skill refused is answered
  * by the store's reason, with its name where the service said.
- * A preview, an install, and an update read GitHub on the service before
+ * A preview and an install read GitHub on the service before
  * they answer, so they wait as long as a Start does. Each write answers the
  * service's answer whole, the transaction it committed in among it, which
  * the host waits for on the skills it holds live (`installedSkillsLive`).
@@ -171,61 +169,6 @@ export class HostedInstalledSkillClient {
   > {
     return resultOf(
       askHosted(this.#hosted.installedSkills.install, params, HOSTED_DEADLINE.START),
-      (answer) => answer,
-    );
-  }
-
-  /** One skill turned on or off, as it then stands. */
-  setEnabled(
-    skillId: string,
-    enabled: boolean,
-  ): Effect.Effect<
-    InstalledSkillCallResult<typeof installedSkillAnswerSchema.Type>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return resultOf(
-      askHosted(this.#hosted.installedSkills.setEnabled, {
-        params: { id: skillId },
-        body: { enabled },
-      }),
-      (answer) => answer,
-    );
-  }
-
-  /** A GitHub skill's files read again at its ref and put in place of its own, with whether they changed. */
-  update(
-    workspaceId: string,
-    skillId: string,
-  ): Effect.Effect<
-    InstalledSkillCallResult<typeof installedSkillUpdatedAnswerSchema.Type>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return resultOf(
-      askHosted(
-        this.#hosted.installedSkills.update,
-        { params: { id: skillId }, body: { workspaceId } },
-        HOSTED_DEADLINE.START,
-      ),
-      (answer) => answer,
-    );
-  }
-
-  /** The account's own personal skill moved into the workspace, as it then stands. */
-  share(
-    workspaceId: string,
-    skillId: string,
-  ): Effect.Effect<
-    InstalledSkillCallResult<typeof installedSkillAnswerSchema.Type>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return resultOf(
-      askHosted(this.#hosted.installedSkills.share, {
-        params: { id: skillId },
-        body: { workspaceId },
-      }),
       (answer) => answer,
     );
   }

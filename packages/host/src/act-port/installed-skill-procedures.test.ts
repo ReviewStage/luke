@@ -10,7 +10,7 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * Settings › Skills' acts through the act port as a window calls them: a
- * panel's Try again, install, and share reach the host with what the page
+ * panel's Try again, install, and removal reach the host with what the page
  * names and hear its answer; any other window, and a frame this build does not
  * trust, are refused in each kind's own words before the host is asked;
  * and a payload off the kind's schema is refused at the port. Synthetic ids.
@@ -25,8 +25,7 @@ const WORKSPACE_ID = "workspace-stage";
 
 const RETRY_REFUSAL = "Could not read your skills again on this system.";
 const INSTALL_REFUSAL = "Could not install the skill on this system.";
-const TOGGLE_REFUSAL = "Could not turn the skill on or off on this system.";
-const SHARE_REFUSAL = "Could not share the skill with the workspace on this system.";
+const REMOVE_REFUSAL = "Could not remove the skill on this system.";
 
 const SKILL_ID = "5d3c2b1a-0f9e-4d8c-b7a6-123456789abc";
 
@@ -56,18 +55,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             asked.push(`install:${scope}`);
             return { skills: [] };
           }),
-        installedSkillsSetEnabled: ({ skillId }) =>
+        installedSkillsRemove: ({ skillId }) =>
           Effect.sync(() => {
-            asked.push(`toggle:${skillId}`);
+            asked.push(`remove:${skillId}`);
             return refused;
           }),
-        installedSkillsUpdate: () => Effect.succeed(refused),
-        installedSkillsShare: ({ workspaceId, skillId }) =>
-          Effect.sync(() => {
-            asked.push(`share:${workspaceId}:${skillId}`);
-            return refused;
-          }),
-        installedSkillsRemove: () => Effect.succeed(refused),
       },
     }),
   );
@@ -86,37 +78,25 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           scope: INSTALLED_SKILL_SCOPE.PERSONAL,
         }),
       ),
-    toggle: (skillId: string) =>
+    remove: (skillId = SKILL_ID) =>
       // SAFETY: an id is sent as a window might send it, one the kind's schema may refuse.
-      settledAct(
-        client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SET_ENABLED]({
-          skillId,
-          enabled: true,
-        } as never),
-      ),
-    share: () =>
-      settledAct(
-        client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SHARE]({
-          workspaceId: WORKSPACE_ID,
-          skillId: SKILL_ID,
-        }),
-      ),
+      settledAct(client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_REMOVE]({ skillId } as never)),
     asked,
   };
 }
 
-it("a panel's Try again, install, and share reach the host with what the page names, and it hears the answer", async () => {
-  const { retry, install, share, asked } = windowPort(PANEL);
+it("a panel's Try again, install, and removal reach the host with what the page names, and it hears the answer", async () => {
+  const { retry, install, remove, asked } = windowPort(PANEL);
 
   assert.deepEqual(await retry(), { answer: undefined });
   assert.deepEqual(await install(), { answer: { skills: [] } });
-  assert.deepEqual(await share(), {
+  assert.deepEqual(await remove(), {
     answer: { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
   });
   assert.deepEqual(asked, [
     `retry:${WORKSPACE_ID}`,
     `install:${INSTALLED_SKILL_SCOPE.PERSONAL}`,
-    `share:${WORKSPACE_ID}:${SKILL_ID}`,
+    `remove:${SKILL_ID}`,
   ]);
 });
 
@@ -125,17 +105,17 @@ it("a window that is not a panel, and a frame this build does not trust, are ref
     { actor: OTHER_WINDOW, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
-    const { retry, install, share, asked } = windowPort(actor, { trusted });
+    const { retry, install, remove, asked } = windowPort(actor, { trusted });
     assert.deepEqual(await retry(), { refused: RETRY_REFUSAL });
     assert.deepEqual(await install(), { refused: INSTALL_REFUSAL });
-    assert.deepEqual(await share(), { refused: SHARE_REFUSAL });
+    assert.deepEqual(await remove(), { refused: REMOVE_REFUSAL });
     assert.deepEqual(asked, []);
   }
 });
 
-it("a toggle naming no skill id is refused at the port before the host is asked", async () => {
-  const { toggle, asked } = windowPort(PANEL);
+it("a removal naming no skill id is refused at the port before the host is asked", async () => {
+  const { remove, asked } = windowPort(PANEL);
 
-  assert.deepEqual(await toggle("not-an-id"), { refused: TOGGLE_REFUSAL });
+  assert.deepEqual(await remove("not-an-id"), { refused: REMOVE_REFUSAL });
   assert.deepEqual(asked, []);
 });
