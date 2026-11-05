@@ -201,7 +201,7 @@ test("Send in the question takes the agent back before the edited message and se
   const tab = await drawnTab();
 
   await tab.editAndSend("middle", " and the light one");
-  await tab.press("Send");
+  await tab.press("Send message");
 
   assert.deepEqual(tab.calls, ["rewind:middle", "send:Use the dark variant. and the light one"]);
 });

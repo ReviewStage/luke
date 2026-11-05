@@ -67,7 +67,7 @@ const DESCRIPTION_WORDS = {
 const RELOAD_QUESTION: DialogQuestion = {
   title: "Reload the description?",
   body: `Your changes are discarded. ${IRREVERSIBLE_WORDS}`,
-  verb: "Reload",
+  verb: "Reload description",
   running: "Reloading",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };

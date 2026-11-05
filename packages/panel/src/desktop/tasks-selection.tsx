@@ -166,7 +166,7 @@ function deleteChosenQuestion(count: number): DialogQuestion {
   return {
     title: `Permanently delete ${named}?`,
     body: `${one ? "The task and its board and transcript" : `The ${named} and their boards and transcripts`} will be deleted. ${IRREVERSIBLE_WORDS}`,
-    verb: "Permanently delete",
+    verb: `Permanently delete ${one ? TERM.TASK.one : TERM.TASK.many}`,
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

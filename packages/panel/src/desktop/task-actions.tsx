@@ -701,7 +701,7 @@ function deleteQuestion(name: string, settled: boolean): DialogQuestion {
   return {
     title: "Permanently delete task?",
     body: settled ? lost : `${lost} To keep it out of the way instead, mark it done.`,
-    verb: "Permanently delete",
+    verb: "Permanently delete task",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

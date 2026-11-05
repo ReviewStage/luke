@@ -319,6 +319,13 @@ What follows from this everywhere else:
   and keeps the title case every Mac app's menus are set in.
 - One wording per idea across the whole product. A confirmation, a sign-in
   failure, or a bound refused must not be phrased three ways in three files.
+- A confirm's act repeats its title's verb and noun: *Delete comment*,
+  *Discard review*, *Permanently delete task*, *Remove skill*, *Disconnect
+  Sentry*, so the button reads right on its own, as the one thing the eye
+  lands on. Where the noun is a person's or a thing's own name, the act names
+  its kind instead and stays short: *Remove member*, not *Remove Ada
+  Lovelace*. A verb that is already a whole phrase stays as it is (*Leave
+  Acme*, *Transfer ownership*).
 - A bound the developer hit is stated plainly: "That message is empty or too
   long." A poetic restatement of the same bound tells them nothing they can
   act on.

@@ -62,7 +62,7 @@ function sendQuestion(takes: string | undefined): DialogQuestion {
   return {
     title: "Send the edited message?",
     body: `Everything after it${takes === undefined ? "" : `, including ${takes},`} will be removed from the conversation, and the agent stopped if it is working. Changes the agent made to its files stay as they are.`,
-    verb: "Send",
+    verb: "Send message",
     running: "Sending",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

@@ -249,7 +249,7 @@ function answer(words: string): HTMLButtonElement {
 /** Answers the question Permanently delete asked, and lets the delete it starts settle. */
 async function confirmDelete(): Promise<void> {
   assert.equal(asking(), true, "Permanently delete asks first");
-  const remove = answer("Permanently delete");
+  const remove = answer("Permanently delete task");
   await act(async () => remove.click());
 }
 test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {

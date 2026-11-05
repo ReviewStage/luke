@@ -223,7 +223,10 @@ test("the dialog opens with the token field focused, and Remove's question going
   });
   await settle();
   act(() =>
-    button("Remove", dialog().querySelector<HTMLElement>('[role="group"]') ?? dialog()).click(),
+    button(
+      "Remove token",
+      dialog().querySelector<HTMLElement>('[role="group"]') ?? dialog(),
+    ).click(),
   );
   await settle();
   assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
@@ -258,7 +261,7 @@ test("a saved token's Manage opens it with Remove, which asks at the dialog's fo
 
   act(() => button("Remove", dialog()).click());
   await settle();
-  act(() => button("Remove", asked() ?? assert.fail()).click());
+  act(() => button("Remove token", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
   assert.ok(tokenField(), "the field stands again");

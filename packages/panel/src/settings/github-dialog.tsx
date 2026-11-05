@@ -170,7 +170,7 @@ function SavedToken({
         question={{
           title: "Remove your GitHub token?",
           body: `${PRODUCT_NAME} deletes the token it holds, and your pull requests stop using it until you add one again.`,
-          verb: "Remove",
+          verb: "Remove token",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}

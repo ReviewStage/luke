@@ -641,7 +641,7 @@ test("Remove asks first, red for a personal skill whose files go, then takes it 
   await choose("pr-style", "Remove");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Its files are deleted/u);
-  act(() => button("Remove", question).click());
+  act(() => button("Remove skill", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));

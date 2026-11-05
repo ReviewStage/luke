@@ -1313,7 +1313,7 @@ test("a deletion asks first, then goes back to the list without the automation",
   act(() => menuItem("Delete").click());
   await settle();
   assert.deepEqual(deletes, []);
-  act(() => dialogButton("Delete").click());
+  act(() => dialogButton("Delete automation").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
@@ -1338,7 +1338,7 @@ test("a row's Delete asks first, and once confirmed the row leaves the list and 
     new RegExp(`Delete ${SWEEP.name}\\?`, "u"),
   );
 
-  act(() => dialogButton("Delete").click());
+  act(() => dialogButton("Delete automation").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);

@@ -598,7 +598,7 @@ interface ThreadDoors {
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete this comment?",
   body: `The comment is deleted for everyone. ${IRREVERSIBLE_WORDS}`,
-  verb: "Delete",
+  verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
@@ -615,7 +615,7 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
 const DISCARD_QUESTION: DialogQuestion = {
   title: "Discard this comment?",
   body: `Its words and files are kept nowhere else. ${IRREVERSIBLE_WORDS}`,
-  verb: "Discard",
+  verb: "Discard comment",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
@@ -624,7 +624,7 @@ const DISCARD_QUESTION: DialogQuestion = {
 const DISCARD_MANY_QUESTION: DialogQuestion = {
   title: "Discard these comments?",
   body: `Their words and files are kept nowhere else. ${IRREVERSIBLE_WORDS}`,
-  verb: "Discard",
+  verb: "Discard comments",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };

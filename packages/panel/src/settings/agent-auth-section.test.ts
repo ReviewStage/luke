@@ -542,8 +542,8 @@ test("a Claude setup-token is saved by its kind, refused with why, and disconnec
 
   await press(plan, "Disconnect");
   assert.match(question().textContent ?? "", /Disconnect your Claude plan\?/u);
-  assert.equal(actLook("Disconnect"), "danger", "a deleted token is past undoing");
-  await press(question(), "Disconnect");
+  assert.equal(actLook("Disconnect Claude plan"), "danger", "a deleted token is past undoing");
+  await press(question(), "Disconnect Claude plan");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN }],
@@ -572,7 +572,7 @@ test("with both credentials kept, Disconnect's question giving way to the setup-
     button(row(dialog, "Claude plan"), "Disconnect").click();
   });
   await settle();
-  await press(question(), "Disconnect");
+  await press(question(), "Disconnect Claude plan");
   assert.ok(
     document.activeElement === labeled(dialog, "Claude setup-token"),
     "the field has focus",
@@ -623,8 +623,8 @@ test("Codex's ChatGPT plan continues with ChatGPT on the desktop, meets the firs
   assert.deepEqual(lineOf(row(dialog, "ChatGPT plan")), connectedWith("Connected"));
 
   await press(row(dialog, "ChatGPT plan"), "Disconnect");
-  assert.equal(actLook("Disconnect"), "danger", "an ended sign-in is past undoing");
-  await press(question(), "Disconnect");
+  assert.equal(actLook("Disconnect ChatGPT plan"), "danger", "an ended sign-in is past undoing");
+  await press(question(), "Disconnect ChatGPT plan");
   assert.deepEqual(
     sent.filter((each) => each.kind === ACT_KIND.PROVIDER_KEYS_REMOVE).map((each) => each.payload),
     [{ provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH }],

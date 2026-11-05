@@ -258,7 +258,7 @@ function RemoveHostDialog({
       question={{
         title: `Remove ${asked?.label ?? ""}?`,
         body: REMOVED,
-        verb: "Remove",
+        verb: "Remove host",
         running: "Removing",
         loss: CONFIRM_LOSS.IRREVERSIBLE,
       }}
