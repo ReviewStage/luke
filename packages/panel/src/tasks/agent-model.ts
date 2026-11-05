@@ -831,6 +831,10 @@ function extraRepositoryRefusalWords(
       return `${named} is reached on your own GitHub token. An agent's repositories must all be reached through the GitHub App.`;
     case EXTRA_REPOSITORY_REFUSAL.OTHER_INSTALLATION:
       return `${named} is on another GitHub account than the agent's repository. An agent's repositories must share one.`;
+    // Note that a Start is refused none of these, which only a repository added to a running agent is.
+    case EXTRA_REPOSITORY_REFUSAL.ALREADY:
+    case EXTRA_REPOSITORY_REFUSAL.FULL:
+    case EXTRA_REPOSITORY_REFUSAL.HEARD_ANOTHER_ACCOUNT:
     case undefined:
       return "These repositories can't be used together. Remove the others to start the agent.";
   }

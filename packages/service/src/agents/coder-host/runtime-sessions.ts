@@ -74,10 +74,23 @@ export const RUNNER_CHOICE = {
 
 export type RunnerChoice = (typeof RUNNER_CHOICE)[keyof typeof RUNNER_CHOICE];
 
-/** A native harness's sessions: eve's interface, and the agent's model and effort as they stand handed to a running runner. */
+/** What a repository added beside a native agent's own came to at the place it runs in. */
+export const RUNNER_CHECKOUT = {
+  /** The credential was set for the whole set and the repository cloned into the running place. */
+  CHECKED_OUT: "checked_out",
+  /** No place runs now; the next launch clones it with the credential it sets. */
+  NOT_LIVE: "not_live",
+  FAILED: "failed",
+} as const;
+
+export type RunnerCheckout = (typeof RUNNER_CHECKOUT)[keyof typeof RUNNER_CHECKOUT];
+
+/** A native harness's sessions: eve's interface, the agent's model and effort as they stand handed to a running runner, and its repositories as they stand checked out in the place it runs in. */
 export interface NativeSessions<Turn extends EveHostTurn = EveHostTurn>
   extends AgentSessions<Turn> {
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
+  /** The agent's credential set afresh for every repository it works in and each one the running place does not hold cloned there (`runner-sessions.ts`); not live where no place runs. */
+  readonly checkOut: (sessionId: string, conversationId: string) => Effect.Effect<RunnerCheckout>;
   /** The session's runner ended, keeping its sandbox and the harness's session, so the next message relaunches it; whether no runner runs now. */
   readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
   /** The message lines an ended launch never took handed to a runner launched for them, where none runs (`runner-sessions.ts`'s `LINES_WAITING`); whether one was launched. */
@@ -304,6 +317,48 @@ export const runnerChoiceApplied = (agent: {
           `a native agent's choice did not reach its runner: ${failureKind(failure)}`,
         ),
         RUNNER_CHOICE.FAILED,
+      ),
+    ),
+    Effect.annotateLogs(agentLogIds(agent)),
+  );
+
+/**
+ * A repository added beside the agent's own, already written among its
+ * repositories, handed to the place its session runs in now, acting for the
+ * agent's starter as every native call does: its credential set afresh for
+ * the whole set and the repository cloned there. An agent on no harness, one
+ * whose session never claimed its record, one whose place is not running,
+ * and a function that cannot reach the harness clone nothing now, since the
+ * next launch clones it. Nothing here fails its caller: the row already
+ * holds the repository.
+ */
+export const runnerCheckedOut = (agent: {
+  readonly id: string;
+  readonly userId: string;
+  readonly conversationId: string;
+}): Effect.Effect<RunnerCheckout, never, DatabaseServices> =>
+  Effect.gen(function* () {
+    const routing = yield* readAgentRouting(agent.userId, agent.id);
+    const runtime = harnessOf(Option.getOrUndefined(routing)?.runtime);
+    if (runtime === undefined) return RUNNER_CHECKOUT.NOT_LIVE;
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    const reached = Option.flatMap(native, (service) => service.sessions(runtime, agent.userId));
+    if (Option.isNone(reached)) return RUNNER_CHECKOUT.NOT_LIVE;
+    const sessionId = yield* recordedRuntimeSession({
+      userId: agent.userId,
+      conversationId: agent.conversationId,
+    });
+    if (sessionId === undefined || nativeRuntimeOfSession(sessionId) === undefined) {
+      return RUNNER_CHECKOUT.NOT_LIVE;
+    }
+    return yield* (yield* reached.value).checkOut(sessionId, agent.conversationId);
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(
+          `a native agent's added repository did not reach its place: ${failureKind(failure)}`,
+        ),
+        RUNNER_CHECKOUT.FAILED,
       ),
     ),
     Effect.annotateLogs(agentLogIds(agent)),

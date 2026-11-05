@@ -8,6 +8,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   archiveAgent,
   createAgent,
@@ -4528,5 +4529,160 @@ test("remember and recall are a coding agent's alone, never a worker's", () => {
       [true, false],
       [true, false],
     ],
+  );
+});
+
+const WEB = { owner: RELAY.owner, name: "Web" } as const;
+const DOCS = { owner: "Globex", name: "Docs" } as const;
+let severalConnected = 0;
+
+/**
+ * A workspace whose installation reaches the agents' repository and its
+ * neighbor, with another installation on another account reaching a third,
+ * its owner's Several repositories on, and the harness and GitHub its tools
+ * reach.
+ */
+async function openSeveralRepositories() {
+  const opened = await openWorkspaces();
+  severalConnected += 1;
+  const own: InstallationFixture = {
+    id: 9_100 + severalConnected,
+    login: RELAY.owner,
+    repositories: [RELAY, WEB],
+  };
+  const elsewhere: InstallationFixture = {
+    id: 9_200 + severalConnected,
+    login: DOCS.owner,
+    repositories: [DOCS],
+  };
+  for (const installation of [own, elsewhere]) {
+    assert.equal(
+      await database.run(connectWorkspaceGitHub(opened.workspaceId, installation)),
+      LINK_OUTCOME.LINKED,
+    );
+  }
+  await database.run(
+    writeAccountPreferences(opened.agents.caller.userId, {
+      experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: true },
+    }),
+  );
+  const sent: SentCall[] = [];
+  const services = Layer.merge(
+    harnessRecording(sent, () => false, EVE_CANCEL_OUTCOME.ACCEPTED),
+    githubReaching([own, elsewhere]).layer,
+  );
+  return { ...opened, sent, services };
+}
+
+/** The repositories the agent works in, by name, as its starter reads them. */
+async function repositoriesOf(agent: StartedAgent): Promise<readonly string[]> {
+  const read = await database.run(readAgentRepositories(agent.userId, agent.id));
+  return read.map((each) => each.repository);
+}
+
+test("update_agent adds a repository beside an agent's own, after the others, and tells it in one line of its conversation, or as its own answer where it added it to itself", async () => {
+  const { agents, plans, sent, services } = await openSeveralRepositories();
+  const { caller } = agents;
+  const helper = await agentOn(caller.userId, plans.invitations);
+  const call = await peerCaller(hostOf(), caller, services);
+  const line = `${WEB.owner}/${WEB.name} is now checked out at /workspace/${WEB.name}; your token reaches it.`;
+
+  const added = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: helper.id,
+    addRepository: { repository: "acme/web" },
+  });
+  const itself = await call(CODER_TOOL.UPDATE_AGENT, {
+    agentId: caller.id,
+    addRepository: { repository: "acme/web" },
+  });
+
+  assert.equal(added.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(added));
+  assert.deepEqual(added.added, {
+    repository: `${WEB.owner}/${WEB.name}`,
+    path: `/workspace/${WEB.name}`,
+    checkedOut: true,
+  });
+  assert.equal(added.told, undefined);
+  assert.equal(itself.told, line, JSON.stringify(itself));
+  assert.deepEqual(await repositoriesOf(helper), [RELAY_FULL_NAME, `${WEB.owner}/${WEB.name}`]);
+  assert.deepEqual(await repositoriesOf(caller), [RELAY_FULL_NAME, `${WEB.owner}/${WEB.name}`]);
+  // The helper is told in its own conversation; the caller, which read its answer, is sent nothing.
+  assert.deepEqual(
+    sent.map((each) => [each.headers.get(HEADER.CONVERSATION), sentWords(each.body)]),
+    [[helper.conversationId, line]],
+  );
+});
+
+test("update_agent refuses a repository added with Several repositories off, to another member's agent, to an agent in no repository or on a device, one already among its own, one on another installation, and one an agent adds after hearing another account, writing nothing", async () => {
+  const { workspaceId, agents, plans, sent, services } = await openSeveralRepositories();
+  const { caller, teammates } = agents;
+  const helper = await agentOn(caller.userId, plans.invitations);
+  const inNone = await claimed(caller.userId, {
+    ...AGENT_CHOICE,
+    repository: null,
+    idempotencyKey: randomUUID(),
+    taskId: null,
+    organizationId: workspaceId,
+    planSnapshot: null,
+    prompt: "Sweep the flaky tests.",
+    runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  });
+  const onDevice = await agentOn(caller.userId, plans.invitations);
+  const deviceId = randomUUID();
+  await database.run(
+    Effect.gen(function* () {
+      yield* registerDevice(caller.userId, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+      const db = yield* Database;
+      yield* db
+        .update(agentTable)
+        .set({ machine: AGENT_MACHINE.DEVICE, deviceId })
+        .where(eq(agentTable.id, onDevice.id));
+    }),
+  );
+  const call = await peerCaller(hostOf(), caller, services);
+  const add = async (agentId: string, repository: string) => {
+    const answer = await call(CODER_TOOL.UPDATE_AGENT, { agentId, addRepository: { repository } });
+    assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(answer));
+    return String(answer.reason);
+  };
+
+  const refused = [
+    await add(teammates.id, "acme/web"),
+    await add(inNone.id, "acme/web"),
+    await add(onDevice.id, "acme/web"),
+    await add(helper.id, "ACME/relay"),
+    await add(helper.id, `${DOCS.owner}/${DOCS.name}`),
+  ];
+  await directMessage(hostOf(), teammates, caller, services);
+  const afterOutsideWords = await add(caller.id, "acme/web");
+  await database.run(
+    writeAccountPreferences(caller.userId, {
+      experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: false },
+    }),
+  );
+  const experimentOff = await add(helper.id, "acme/web");
+
+  const says = [
+    "only",
+    "works in no repository of its own",
+    "runs only in the cloud",
+    "is already among that agent's repositories",
+    "another GitHub account's installation",
+    "words from another account",
+    "Several repositories experiment, which is off",
+  ];
+  const reasons = [...refused, afterOutsideWords, experimentOff];
+  assert.equal(reasons.length, says.length);
+  reasons.forEach((reason, index) => {
+    assert.ok(reason.startsWith("Not added: ") && reason.includes(says[index] ?? ""), reason);
+  });
+  for (const agent of [helper, caller, teammates, onDevice]) {
+    assert.deepEqual(await repositoriesOf(agent), [RELAY_FULL_NAME]);
+  }
+  assert.deepEqual(await repositoriesOf(inNone), []);
+  // Only the teammate's agent's message reached the caller; no agent was told of a repository.
+  assert.deepEqual(
+    sent.map((each) => each.headers.get(HEADER.CONVERSATION)),
+    [caller.conversationId],
   );
 });

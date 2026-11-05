@@ -290,7 +290,7 @@ export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_
  */
 export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL_AGENT_REFUSAL));
 
-/** Why a Start naming repositories beside its agent's own was refused, which the refusal names (`extra-repository-refused`). */
+/** Why a Start naming repositories beside its agent's own, or a repository added to a running agent, was refused, which the refusal names (`extra-repository-refused`). */
 export const EXTRA_REPOSITORY_REFUSAL = {
   /** The starter has the Several repositories experiment off. */
   EXPERIMENT_OFF: "experiment-off",
@@ -302,6 +302,12 @@ export const EXTRA_REPOSITORY_REFUSAL = {
   TOKEN: "token",
   /** The repository the refusal names is on another installation of the GitHub App than the agent's own, and one token reaches an agent's repositories only on one. */
   OTHER_INSTALLATION: "other-installation",
+  /** The repository the refusal names is already among the agent's, which a repository added later is refused for. */
+  ALREADY: "already",
+  /** The agent already works in as many repositories beside its own as a Start may name (`AGENT_BOUNDS.MAX_ALSO_REPOSITORIES`). */
+  FULL: "full",
+  /** The agent asking has heard words from another account, so it may not widen what an agent's token reaches (`heardFromAnotherAccount`). */
+  HEARD_ANOTHER_ACCOUNT: "heard-another-account",
 } as const;
 
 export type ExtraRepositoryRefusal =

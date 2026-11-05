@@ -1,7 +1,8 @@
 /**
  * agent-repositories.test.ts -- the repositories an agent works in, over a real dialect: its
  * primary first, then the extras its Start named in their order; one repository or none as an
- * agent in one or none was always stored, with no extra row; and none to another account.
+ * agent in one or none was always stored, with no extra row; and none to another account. A
+ * repository added once the agent stands goes after its extras, once, and only as its account.
  * Synthetic accounts throughout.
  */
 
@@ -16,7 +17,7 @@ import { agentRepository } from "../../schemas/agent-repository.js";
 import { user } from "../../schemas/auth.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
-import { readAgentRepositories } from "../agent-repositories.js";
+import { appendAgentRepository, readAgentRepositories } from "../agent-repositories.js";
 import { createAgent, type NewAgentRepository } from "../agent-store.js";
 
 const openAccount = Effect.gen(function* () {
@@ -99,5 +100,47 @@ it.layer(getTestDB())("the repositories an agent works in", (it) => {
 
       assert.deepEqual(yield* readAgentRepositories(other, agentId), []);
     }),
+  );
+
+  it.effect(
+    "take a repository added later after the extras, once in any case, and only as its account",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const other = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const agentId = yield* startedIn(owner, workspace, "acme/api", [
+          { repository: "acme/web" },
+        ]);
+        const inNone = yield* startedIn(owner, workspace, null);
+
+        const added = yield* appendAgentRepository(owner, agentId, {
+          repository: "acme/docs",
+          baseBranch: "next",
+        });
+        const refused = [
+          yield* appendAgentRepository(owner, agentId, {
+            repository: "Acme/API",
+            baseBranch: null,
+          }),
+          yield* appendAgentRepository(owner, agentId, {
+            repository: "ACME/docs",
+            baseBranch: null,
+          }),
+          yield* appendAgentRepository(other, agentId, {
+            repository: "acme/cli",
+            baseBranch: null,
+          }),
+          yield* appendAgentRepository(owner, inNone, { repository: "acme/cli", baseBranch: null }),
+        ];
+
+        assert.deepEqual(added, Option.some(2));
+        assert.deepEqual(refused, [Option.none(), Option.none(), Option.none(), Option.none()]);
+        assert.deepEqual(yield* readAgentRepositories(owner, agentId), [
+          { repository: "acme/api", baseBranch: "release", headBranch: null, pullRequest: null },
+          { repository: "acme/web", baseBranch: null, headBranch: null, pullRequest: null },
+          { repository: "acme/docs", baseBranch: "next", headBranch: null, pullRequest: null },
+        ]);
+      }),
   );
 });

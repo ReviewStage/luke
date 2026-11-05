@@ -41,7 +41,7 @@ import type { ConversationTarget } from "@repo/database/models/writer";
 import type { AgentMachineKind } from "@repo/features/agent-wire";
 import { type Brand, Context, Data, type Duration, type Effect } from "effect";
 import type { AgentSandboxImage } from "../agent-sandbox-image.js";
-import type { CheckoutServices } from "../coder-host/checkout.js";
+import type { CheckoutRefused, CheckoutServices } from "../coder-host/checkout.js";
 import type { RunnerBundle } from "../coder-host/runner-bundle.js";
 import type { KeyRefusal, PlanRefusal } from "../eve-host/eve-sessions.js";
 import type { FirewallEntry, FirewallSlot } from "../sandbox-firewall.js";
@@ -300,6 +300,20 @@ export interface AgentMachineService {
     place: MachinePlace,
     files: readonly SandboxFile[],
   ) => Effect.Effect<void, SandboxUnavailable | LaunchRefused>;
+  /**
+   * The repositories the agent works in beside its own that the running
+   * place does not hold yet cloned into their folders, on the token minted
+   * for each, the ones it holds left as they stand; where the runner already
+   * runs (`shared`), each folder is then shared with the runner's user as a
+   * launch shares it, which a launch to come does itself. Nothing on a
+   * machine that clones no extras, a device's, nor for an agent with none.
+   */
+  readonly checkOutExtras: (
+    place: MachinePlace,
+    target: ConversationTarget,
+    agent: Agent,
+    shared: boolean,
+  ) => Effect.Effect<void, CheckoutRefused | SandboxUnavailable, CheckoutServices>;
   /** The runner launched in the place once `ready` is done, recorded, and handed its first lines; ended again where they were not taken. */
   readonly launchRunner: <A, E, R, EL, RL>(
     place: MachinePlace,
@@ -355,8 +369,11 @@ export interface AgentMachineService {
   ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
 }
 
-/** What a machine does to a place it already opened: everything but where it keeps things, opening a place, and launching a runner in it. */
-export type MachineLifecycle = Omit<AgentMachineService, "layout" | "open" | "launchRunner">;
+/** What a machine does to a place it already opened: everything but where it keeps things, opening a place, checking out what it clones beside the agent's own, and launching a runner in it. */
+export type MachineLifecycle = Omit<
+  AgentMachineService,
+  "layout" | "open" | "checkOutExtras" | "launchRunner"
+>;
 
 export class AgentMachine extends Context.Service<AgentMachine, AgentMachineService>()(
   "AgentMachine",

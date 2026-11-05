@@ -207,7 +207,7 @@ import { agentRepositoryToken, CheckoutRefused, type CheckoutServices } from "./
 import { nativeSkillFiles } from "./native-skills.js";
 import type { RunnerBundle } from "./runner-bundle.js";
 import { holdingRunner, holdingRunnerIfFree } from "./runner-lease.js";
-import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
+import { type NativeSessions, RUNNER_CHECKOUT, RUNNER_CHOICE } from "./runtime-sessions.js";
 import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { coderTurnMessage, readNativeTurnHanded, recordNativeTurnHanded } from "./turn-message.js";
@@ -1123,9 +1123,11 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const target = { userId, conversationId: agent.conversationId };
-        const [, routing, credential] = yield* Effect.all(
+        // Note that a repository added beside the agent's own while its place stood is cloned here, which its launch then shares.
+        const [, , routing, credential] = yield* Effect.all(
           [
             renewCredential(target, agent, running),
+            machine.checkOutExtras(running, target, agent, false),
             readAgentRouting(userId, agent.id),
             harness.launch(agent),
           ],
@@ -1469,6 +1471,29 @@ export const runnerSessions = <
         // Note that it goes the way the runner's messages go, so it never overtakes, nor is overtaken by, a message's own model line.
         yield* delivered(agent, live, model);
         return RUNNER_CHOICE.WRITTEN;
+      });
+
+    /**
+     * A repository added beside the agent's own handed to the place it runs
+     * in now, under the agent's runner lease: the credential set afresh for
+     * the whole set, and every extra the place does not hold cloned and
+     * shared with the runner's user (`checkOutExtras`). Nothing where no place
+     * runs, since the next launch clones it, a fresh place's with the rest
+     * and a resumed one's as it relaunches (`relaunched`).
+     */
+    const checkOutHolding = (sessionId: string, conversationId: string) =>
+      Effect.gen(function* () {
+        const found = yield* firstPlace(machine, sessionId);
+        if (Option.isNone(found)) return RUNNER_CHECKOUT.NOT_LIVE;
+        const agent = yield* agentOf(conversationId);
+        const running = found.value.running;
+        if (found.value.agentId !== agent.id || running === undefined) {
+          return RUNNER_CHECKOUT.NOT_LIVE;
+        }
+        const target = { userId, conversationId: agent.conversationId };
+        yield* renewCredential(target, agent, running);
+        yield* machine.checkOutExtras(running, target, agent, true);
+        return RUNNER_CHECKOUT.CHECKED_OUT;
       });
 
     /**
@@ -1887,6 +1912,23 @@ export const runnerSessions = <
                 `A ${harness.name} hand-on of waiting lines failed: ${keptFailureWords(failureWords(failure))}`,
               ),
               false,
+            ),
+          ),
+          Effect.annotateLogs(agentLogIds({ conversationId }, sessionId)),
+          Effect.provideContext(context),
+        ),
+
+      checkOut: (sessionId, conversationId) =>
+        Effect.gen(function* () {
+          const { id } = yield* agentOf(conversationId);
+          return yield* holdingRunner(id, checkOutHolding(sessionId, conversationId));
+        }).pipe(
+          Effect.catch((failure) =>
+            Effect.as(
+              Effect.logWarning(
+                `A ${harness.name} checkout of an added repository failed: ${keptFailureWords(failureWords(failure))}`,
+              ),
+              RUNNER_CHECKOUT.FAILED,
             ),
           ),
           Effect.annotateLogs(agentLogIds({ conversationId }, sessionId)),

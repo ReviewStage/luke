@@ -246,6 +246,22 @@ function sharedCheckout(path: string): readonly string[] {
 }
 
 /**
+ * The checkouts given marked safe for git and shared with `agent`'s group,
+ * as the launch marks each, run by bash as root: for a checkout cloned into
+ * a sandbox whose runner already runs, whose launch marked only those that
+ * stood before it.
+ */
+function sharedCheckoutsScript(paths: readonly string[]): string {
+  return ["set -euo pipefail", ...paths.flatMap(sharedCheckout)].join("\n");
+}
+
+/** How long the marking of checkouts cloned under a running runner is waited on: `chmod -R` over a whole repository. */
+const SHARE_WAIT = Duration.minutes(2);
+
+/** Why checkouts cloned under a running runner were not shared with its user. */
+const NOT_SHARED = "the checkouts cloned beside the agent's could not be shared with its runner";
+
+/**
  * The launch, run by bash as root: the uploaded bundle installed where only
  * root writes and checked against the digest we computed, the member's
  * installed skills, where the sandbox's opening uploaded them, moved where
@@ -893,6 +909,24 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     // so a later call finds it. A runner started but never configured is ended, and the caller
     // undoes what it recorded of it, so the next message relaunches whole rather than writing to a
     // runner that waits for its config.
+    // Note that a clone run again finds the folder of a checkout already standing and clones nothing,
+    // so only a repository added since the place opened is cloned here.
+    checkOutExtras: (place, target, agent, shared) =>
+      Effect.gen(function* () {
+        if (!hasRepository(agent)) return;
+        const reads = yield* agentExtraReads(target, agent);
+        if (reads.length === 0) return;
+        yield* cloneAgentExtras(yield* checkoutIn(place.running, agent.userId), reads);
+        if (!shared) return;
+        const commandId = yield* api.start(place.running, {
+          command: "bash",
+          args: ["-c", sharedCheckoutsScript(reads.map((read) => read.path))],
+          sudo: true,
+        });
+        const exit = yield* api.commandExit(place.running, commandId, SHARE_WAIT);
+        if (exit !== 0) return yield* new CheckoutRefused({ reason: NOT_SHARED });
+      }),
+
     launchRunner: (place, launch) =>
       Effect.gen(function* () {
         const running = place.running;

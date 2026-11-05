@@ -18,6 +18,7 @@ import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import {
   NativeAgentSessions,
   type NativeAgentSessionsService,
+  RUNNER_CHECKOUT,
   RUNNER_CHOICE,
 } from "../agents/coder-host/runtime-sessions.js";
 import {
@@ -42,6 +43,7 @@ export function scriptedHarness(
         Effect.succeed({
           ...script(account),
           retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+          checkOut: () => Effect.succeed(RUNNER_CHECKOUT.NOT_LIVE),
           halt: () => Effect.succeed(true),
           deliverWaiting: () => Effect.succeed(false),
         }),
