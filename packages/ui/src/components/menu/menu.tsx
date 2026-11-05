@@ -1,4 +1,3 @@
-import type { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import type { BaseUIEvent } from "@base-ui/react/types";
 import {
   Fragment,
@@ -155,12 +154,6 @@ const MENU_ITEM =
   ':is([role="menuitem"], [role="menuitemcheckbox"]):not(:disabled, [aria-disabled="true"])';
 /** How a submenu finds room: the menu's other side where its own has none, and rising to end level with its item where the window's foot leaves no room below. */
 const BESIDE_OR_ACROSS = { side: "flip", align: "flip", fallbackAxisSide: "none" } as const;
-/**
- * Why Base UI opens or closes a submenu that is this menu's to follow: the
- * pointer resting on its item, or leaving the path to it. Note that every
- * other reason (a press, a key, a press elsewhere) is the menu's own.
- */
-const SUBMENU_HOVER: MenuPrimitive.SubmenuRoot.ChangeEventReason = "trigger-hover";
 /** How a menu is held inside what can be seen: never turned to its other side, only moved along either axis until it fits, as it was clamped. */
 const HELD_INSIDE = { side: "shift", align: "shift", fallbackAxisSide: "none" } as const;
 
@@ -1036,13 +1029,14 @@ function besideMenu(item: HTMLElement | null, side: string): number {
  * Escape closes it alone, fading out as its menu does (`DROPDOWN_MENU_SURFACE`
  * on Base UI's ending state).
  *
- * The pointer is Base UI's to follow, as a system menu's submenu follows it:
- * resting on the item opens the submenu after a moment, so passing over it
- * on the way elsewhere opens nothing, and while the pointer heads for the
- * submenu, across the menu's other items, it stays open (Base UI's safe
- * polygon). A finger's arrival opens nothing, since Base UI follows a mouse
- * alone: iOS plays a tap's arrival as a hover and spends the tap on what
- * comes in with it, so the tap itself opens it, the keyboard taken into it.
+ * The pointer is the menu's to follow, as a system menu's submenu follows
+ * it, and never Base UI's, whose own path to a submenu shuts while the
+ * pointer slows: resting on the item opens the submenu after a moment, so
+ * passing over it on the way elsewhere opens nothing, and while the pointer
+ * heads for the submenu, across the menu's other items, it stays open
+ * (`submenu-aim.ts`). A finger's arrival opens nothing: iOS plays a tap's
+ * arrival as a hover and spends the tap on what comes in with it, so the
+ * tap itself opens it, the keyboard taken into it.
  */
 function Submenu({
   entry,
@@ -1067,7 +1061,8 @@ function Submenu({
   leaving: boolean;
   /** The submenu's element, which the menu counts as its own when it hears a press. */
   surface: React.RefObject<HTMLDivElement | null>;
-  onOpen: (focus: boolean) => void;
+  /** Opens it with the keyboard taken in, as a press or Right does. */
+  onOpen: () => void;
   /** Closes the submenu alone, where it is still the one standing. */
   onBack: () => void;
   onChoose: (action: MenuAction) => void;
@@ -1103,7 +1098,7 @@ function Submenu({
       return;
     }
     focusInto.current = true;
-    onOpen(true);
+    onOpen();
   };
   const roving = useRovingKeys<HTMLDivElement>({ stop: ROVING_STOP.NONE });
   const keyDown = (event: BaseUIEvent<React.KeyboardEvent<HTMLDivElement>>) => {
@@ -1120,16 +1115,10 @@ function Submenu({
     event.preventBaseUIHandler();
   };
   return (
-    <DropdownMenuSub
-      open={open}
-      onOpenChange={(next, details) => {
-        if (details.reason !== SUBMENU_HOVER) return;
-        if (next) onOpen(false);
-        else onBack();
-      }}
-    >
+    <DropdownMenuSub open={open}>
       <DropdownMenuSubTrigger
         ref={trigger}
+        openOnHover={false}
         nativeButton
         render={<button type="button" />}
         label={entry.label}
@@ -1532,8 +1521,11 @@ function FloatingMenu({
     .find((entry): entry is MenuPanel => isPanel(entry) && entry.label === submenu);
   const panelStands = useRef(false);
   panelStands.current = panel !== undefined && !leaving;
-  // A move onto another item waits while the pointer heads for the panel standing beside its own, as Base UI keeps a submenu.
-  const aim = useSubmenuAim(panelElement, panel !== undefined && !leaving);
+  // A move onto another item waits while the pointer heads for the submenu or panel standing beside its own.
+  const aim = useSubmenuAim(
+    panel === undefined ? submenuElement : panelElement,
+    submenu !== undefined && !leaving,
+  );
 
   // Focus lands on the first item, or the checked one where it opens on
   // that, as the menu stands, and again as it is opened while it was
@@ -1618,22 +1610,26 @@ function FloatingMenu({
     action.onSelect();
   };
   // Resting on another of the menu's own items closes the submenu, as a
-  // system menu's does; resting on the submenu's items keeps it. Resting on
-  // an item that opens a panel opens it, though a finger's arrival opens
-  // none, as Base UI opens no submenu for one, so the tap is what opens it.
+  // system menu's does; resting on the submenu's items keeps it. Arriving
+  // on an item that opens a panel opens it, and resting on one that opens a
+  // submenu opens that, though a finger's arrival opens neither, so the tap
+  // is what opens it.
   const pointerOver = (event: React.PointerEvent<HTMLDivElement>) => {
     const item = event.target instanceof Element ? event.target.closest(MENU_ITEM) : null;
     if (item === null || item.closest('[role="menu"]') !== element.current) return;
-    if (item.getAttribute("aria-haspopup") === "menu") return;
-    const opens = item.getAttribute(PANEL_ATTRIBUTE) ?? undefined;
+    const submenuOf = item.getAttribute(SUBMENU_ITEM_ATTRIBUTE) ?? undefined;
+    const opens = item.getAttribute(PANEL_ATTRIBUTE) ?? submenuOf;
     if (opens !== undefined && event.pointerType === "touch") return;
-    aim(() => {
-      // Note that a panel going that held the keyboard hands it to the item the pointer rests on, so the arrows still walk the menu.
-      const holds = panelElement.current?.contains(document.activeElement) === true;
-      if (opens !== submenu && holds && item instanceof HTMLElement) item.focus();
-      if (opens !== submenu) setPanelEntered(false);
-      setSubmenu(opens);
-    });
+    aim(
+      () => {
+        // Note that a panel going that held the keyboard hands it to the item the pointer rests on, so the arrows still walk the menu.
+        const holds = panelElement.current?.contains(document.activeElement) === true;
+        if (opens !== submenu && holds && item instanceof HTMLElement) item.focus();
+        if (opens !== submenu) setPanelEntered(false);
+        setSubmenu(opens);
+      },
+      submenuOf === undefined ? undefined : item,
+    );
   };
   // Note that a press on an item whose panel the pointer already opened takes the keyboard in at once, since nothing draws again to take it there.
   const enterPanel = (label: string) => {
@@ -1706,10 +1702,7 @@ function FloatingMenu({
                     seen={seen}
                     leaving={leaving}
                     surface={submenuElement}
-                    // Note that the pointer resting on its item while it heads for a panel opens nothing until it rests there.
-                    onOpen={(focus) =>
-                      focus ? setSubmenu(entry.label) : aim(() => setSubmenu(entry.label))
-                    }
+                    onOpen={() => setSubmenu(entry.label)}
                     // Note that a late close of a submenu another has replaced leaves the other standing.
                     onBack={() =>
                       setSubmenu((standing) => (standing === entry.label ? undefined : standing))
