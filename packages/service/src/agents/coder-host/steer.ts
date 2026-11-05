@@ -3,12 +3,14 @@ import { settleEndedSessionTurn } from "@repo/database/models/abandoned-turns";
 import {
   type Agent,
   type AgentLatestTurn,
+  type AgentStoreEffect,
   dispatchMentioningServers,
   latestTurnsOfReached,
   RUNNING_TURN_STATUSES,
   readAgent,
   readAgentRouting,
   taskNamesOf,
+  unarchiveAgentFrom,
 } from "@repo/database/models/agent-store";
 import { sentLineStands } from "@repo/database/models/message-reads";
 import {
@@ -107,7 +109,8 @@ import { agentStatusOf } from "./status.js";
  * Who reaches the agent is the caller's; the agent's harness answers the
  * message (`runtime-sessions.ts`). An archived agent takes
  * no message, and is refused as one that names nothing, since every list
- * leaves it out until it is brought back; it is read again under the
+ * leaves it out until it is brought back, which a member's words from Slack
+ * or an inbox thread do first (`agentTakingMessage`); it is read again under the
  * conversation's dispatch claim just before the send, which is taken under
  * the row lock its archive takes, so a send claimed after the archive is
  * refused, and an archive after the claim finds the line awaiting. A
@@ -524,6 +527,29 @@ export const steerAgentWritten = /* @__PURE__ */ Effect.fn("web/steerAgent")(fun
   return txid === undefined
     ? { outcome: STEER_OUTCOME.SENT, ...sent }
     : { outcome: STEER_OUTCOME.SENT, txid, ...sent };
+});
+
+/**
+ * The agent a member's words are about to reach, as `read` reads it under
+ * the member: brought back first where it stands archived, from the very
+ * archive read (`unarchiveAgentFrom`), as the Archive agent menu's undo
+ * brings it back, so a member who writes to an archived agent, from Slack
+ * or on one of its inbox threads, reopens it as a chat tool reopens a
+ * conversation; nothing where it is gone. Note that it is read again after
+ * and answered as it then stands, because one brought back by someone else
+ * meanwhile takes the words too, and one archived again since takes none,
+ * which the steer refuses. Only a member's words bring an agent back:
+ * another agent's message, GitHub's, and an automation's are refused.
+ */
+export const agentTakingMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  agentId: string,
+  read: (userId: string, agentId: string) => AgentStoreEffect<Option.Option<Agent>>,
+) {
+  const agent = yield* read(userId, agentId);
+  if (Option.isNone(agent) || agent.value.archivedAt === null) return agent;
+  yield* unarchiveAgentFrom(userId, agentId, agent.value.archivedAt);
+  return yield* read(userId, agentId);
 });
 
 /**

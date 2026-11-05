@@ -19,7 +19,8 @@
  * A reply in the Slack thread of a DM the bot wrote a member about an inbox
  * thread (`threadDmAt`) is posted on that thread as the member's own reply,
  * as one in the app is (`messageAsMember`), keyed by Slack's event id, and
- * the agent hears it as a thread message; the bot reacts with 👀. Only the
+ * the agent, brought back first where it stands archived, hears it as a
+ * thread message; the bot reacts with 👀. Only the
  * member the DM went to, found as a press finds them (`SlackBot.memberOf`),
  * may reply there; anyone else is told so and nothing is posted.
  *
@@ -95,7 +96,6 @@ import {
   agentConversationSeq,
   readAgentOfConversation,
   readVisibleAgent,
-  unarchiveAgentFrom,
 } from "@repo/database/models/agent-store";
 import {
   claimRunSlackDelivery,
@@ -158,7 +158,7 @@ import {
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { placeOfAgent, type StartServices, startAgent } from "../agents/coder-host/start.js";
 import { lastSaid } from "../agents/coder-host/starter-report.js";
-import { steerAgent } from "../agents/coder-host/steer.js";
+import { agentTakingMessage, steerAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { fencedWithin } from "../agents/fenced-text.js";
 import { workspaceStepOf } from "../agents/written-mentions.js";
@@ -629,21 +629,6 @@ function continuedReply(link: string): SlackMessageContent {
 }
 
 /**
- * The thread's agent as it takes a message now: brought back where it stands
- * archived, from the very archive read (`unarchiveAgentFrom`), as the Archive
- * agent menu's undo brings it back; nothing where it is gone. Note that it is
- * read again after, because one brought back by someone else meanwhile takes
- * the message too, and one archived again since takes none.
- */
-const agentTaking = Effect.fnUntraced(function* (userId: string, agentId: string) {
-  const agent = yield* readVisibleAgent(userId, agentId);
-  if (Option.isNone(agent) || agent.value.archivedAt === null) return agent;
-  yield* unarchiveAgentFrom(userId, agentId, agent.value.archivedAt);
-  const now = yield* readVisibleAgent(userId, agentId);
-  return Option.filter(now, (read) => read.archivedAt === null);
-});
-
-/**
  * The ended agent continued in a new one as the member, as Continue and
  * `start_agent`'s `from` continue it: handed its work and its transcript, the
  * steps that do not fit summarized, with the member's message as its note
@@ -720,7 +705,11 @@ const sendToAgent = Effect.fnUntraced(function* (
   userId: string,
   agentId: string,
 ) {
-  const agent = yield* agentTaking(userId, agentId);
+  // One archived again as it was brought back takes no message, so it is answered as gone.
+  const agent = Option.filter(
+    yield* agentTakingMessage(userId, agentId, readVisibleAgent),
+    (read) => read.archivedAt === null,
+  );
   if (Option.isNone(agent)) {
     yield* bot.reply(addressed.channel, threadOf(addressed), plainReply("That agent is gone."));
     return;
