@@ -13,8 +13,11 @@
 // copper. The dots rise once the wait has run long enough to notice
 // (`--ui-hint-delay`), and the light keeps moving while the tab loads. When
 // the panel draws, `src/app/web-root.tsx` lifts the frame out of the root and
-// sends it `boot-frame-leave`: the dots sink away as the frame's ground clears
-// to the app, and the frame removes itself. Where motion is held still, as
+// sends it `boot-frame-leave`: the dots sink away over the frame's ground,
+// which only then clears to the app, and the frame removes itself once it
+// has. Note that the ground holds until the dots have gone, because the
+// panel's first screen (a sign-in card, most often) stands in the middle of
+// the window, right where the dots sink through. Where motion is held still, as
 // reduced motion and a capture run hold it (`@repo/ui`'s `motionHeld`, read
 // here the same way, off the motion tokens), or where a canvas cannot draw,
 // the SVG mark stands still as before.
@@ -132,11 +135,20 @@
   let leaveAt = null;
   let leaveFrom = 0;
   let gathered = 0;
+  let clearedAt = null;
+  let clearing = 0;
 
   /** Takes the dots down and gives the frame back its still SVG, for the root's first render to replace as before. */
   function standDown() {
     canvas.remove();
     delete frame.dataset.bootMark;
+  }
+
+  /** Clears the frame's ground to the panel beneath, once its dots have gone, for as long as the ground's transition runs. */
+  function clearGround(now) {
+    frame.dataset.leaving = "true";
+    clearedAt = now;
+    clearing = millisecondsOf(getComputedStyle(frame).transitionDuration);
   }
 
   /** Whether `layout` was laid out for the frame and the mark as they stand now. */
@@ -155,6 +167,11 @@
   /** Draws one frame of the dots; answers whether there is another to draw. */
   function drawn(now) {
     if (!frame.isConnected) return false;
+    if (clearedAt !== null) {
+      if (now - clearedAt < clearing) return true;
+      frame.remove();
+      return false;
+    }
     // Note that motion is asked again on every frame before the dots leave, because a stylesheet that lands after this script can hold it still.
     if (leaveAt === null && motionHeld()) {
       standDown();
@@ -171,10 +188,11 @@
     if (leaveAt === null) {
       gathered = clamp((now - start) / MOTION.RISE);
     } else {
-      gathered = leaveFrom * (1 - clamp((now - leaveAt) / MOTION.LEAVE));
+      // The dots sink at one pace from wherever they stood, so a mark half risen leaves in half the time and the panel waits no longer than it must.
+      gathered = leaveFrom - clamp((now - leaveAt) / MOTION.LEAVE);
       if (gathered <= 0) {
-        frame.remove();
-        return false;
+        clearGround(now);
+        return true;
       }
     }
     const angle = ((now - start) / 1000) * LIGHT.TURN;
@@ -214,7 +232,6 @@
     () => {
       leaveAt = performance.now();
       leaveFrom = gathered;
-      frame.dataset.leaving = "true";
       if (gathered <= 0) frame.remove();
     },
     { once: true },
