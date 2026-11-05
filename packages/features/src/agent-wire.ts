@@ -9,7 +9,7 @@ import {
 import { readEither, verbatimJsonSchema, wireKeys } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
-import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
+import { DEVICE_LAUNCH_STEP, DEVICE_LAUNCH_UNSTARTED } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -270,6 +270,8 @@ export const LOCAL_AGENT_REFUSAL = {
   SETUP_FAILED: "setup-failed",
   /** The device is another member's, and only its owner starts agents on it; the refusal carries the device and its owner (`refusedDeviceSchema`) where the service named them. */
   NOT_OWNER: "not-owner",
+  /** The repository is reached on the starter's own GitHub token, and the device's host is a build from before it runs such an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+  GITHUB_SIGN_IN: "github-sign-in",
 } as const;
 
 export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_AGENT_REFUSAL];
@@ -2497,6 +2499,16 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * service older than it.
    */
   launch: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_LAUNCH))),
+  /**
+   * Why the launch its host settled unstarted never started, where the host
+   * said a reason beyond the step (`DEVICE_LAUNCH_UNSTARTED`), beside the
+   * step in `launch`, which a build from before the field words alone.
+   * Absent wherever `launch` names no failed launch, and for one whose host
+   * said no reason.
+   */
+  launchUnstarted: EffectSchema.optionalKey(
+    EffectSchema.Literals(Object.values(DEVICE_LAUNCH_UNSTARTED)),
+  ),
   /**
    * The delegations the agent's newest turn still waits on, each by the
    * call that started it with when its worker began, so a running

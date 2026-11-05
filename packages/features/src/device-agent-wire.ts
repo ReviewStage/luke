@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { checkoutIdentitySchema } from "./checkout-identity.js";
+import type { GitHubAccess } from "./github-repositories-wire.js";
 import { HOST_TARGET } from "./host-release.js";
 import { wireUuidSchema } from "./service-wire.js";
 
@@ -84,7 +85,7 @@ export type DeviceAgentLineKind =
  * so no path, command's output, or credential rides with it.
  */
 export const DEVICE_LAUNCH_STEP = {
-  /** The launch taken and the agent's GitHub token fetched. */
+  /** The launch taken and the agent's GitHub token fetched, or, for an agent on the Mac's own GitHub sign-in, that sign-in found to reach its repository. */
   PREPARING: "preparing",
   /** The agent's repository being made, where its folder holds none. */
   FETCHING: "fetching",
@@ -96,6 +97,30 @@ export type DeviceLaunchStep = (typeof DEVICE_LAUNCH_STEP)[keyof typeof DEVICE_L
 
 /** A launch's steps in the order a launch passes them. */
 export const DEVICE_LAUNCH_STEPS: readonly DeviceLaunchStep[] = Object.values(DEVICE_LAUNCH_STEP);
+
+/**
+ * Why a host settled a launch unstarted, where it knows a reason the
+ * transcript words beyond the step it stopped at, as its settle says it
+ * (`deviceAgentSettleRequestSchema`). One word of this set, never free text,
+ * so nothing the host printed rides with it.
+ */
+export const DEVICE_LAUNCH_UNSTARTED = {
+  /** The agent runs on the Mac's own GitHub sign-in, which could not reach its repository. */
+  GITHUB_SIGN_IN: "github-sign-in",
+} as const;
+
+export type DeviceLaunchUnstarted =
+  (typeof DEVICE_LAUNCH_UNSTARTED)[keyof typeof DEVICE_LAUNCH_UNSTARTED];
+
+/**
+ * How a launch's repository is reached where the App's installation does
+ * not reach it: on the member's own token, which never leaves the service
+ * for a device, so the device reaches the repository on its own GitHub
+ * sign-in instead (`deviceAgentLaunchPayloadSchema`'s `githubAccess`).
+ */
+export const DEVICE_GITHUB_ACCESS = {
+  TOKEN: "token",
+} as const satisfies Record<string, GitHubAccess>;
 
 /** What one of an agent's tools asks of its Mac. */
 export const DEVICE_AGENT_REQUEST_KIND = {
@@ -116,6 +141,14 @@ export type DeviceAgentRequestKind =
 export const DEVICE_CAPABILITY = {
   /** It takes a discard line (`DEVICE_AGENT_LINE_KIND.DISCARD`). */
   DISCARD: "discard",
+  /**
+   * It launches an agent whose repository is reached on its member's own
+   * token on the device's own GitHub sign-in (`DEVICE_GITHUB_ACCESS`),
+   * asking the service for no token. A follower from before it reads such
+   * a launch as the App's and asks for a token the service refuses, so no
+   * such agent is started on, or launched to, a device without it.
+   */
+  GITHUB_SIGN_IN: "github-sign-in",
 } as const;
 
 export type DeviceCapability = (typeof DEVICE_CAPABILITY)[keyof typeof DEVICE_CAPABILITY];
@@ -264,7 +297,7 @@ export const DEVICE_AGENT_FOLDER = {
   ATTACHMENTS: "attachments",
   /** The skills the member installed into the app, as the harness's local plugin. */
   INSTALLED_SKILLS: "installed-skills",
-  /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from. */
+  /** The agent's own `gh` sign-in on a host (`GH_CONFIG_DIR`), which no read of the agent's tools answers from; for an agent on the device's own GitHub sign-in, none of the agent's, since its `gh` reads the device user's. */
   GITHUB_CONFIG: "gh",
   /** The agent's temp folder (`TMPDIR`), made `0700`, which its runner and its commands write to, and where it saves what we read back. */
   TEMP: "tmp",
@@ -316,7 +349,8 @@ const macPath = EffectSchema.String.check(
  * A launch line's payload: where its worktree goes and what it checks out,
  * the repository as `owner/name` and the branch it starts from, none for an
  * agent with no repository or on the default branch, and who its commits
- * are by. Its environment and
+ * are by, and, for one the App's installation does not reach, that it is
+ * reached on the device's own GitHub sign-in. Its environment and
  * its first lines are its secrets, handed over by the claim alone.
  */
 export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
@@ -334,6 +368,16 @@ export const deviceAgentLaunchPayloadSchema = EffectSchema.Struct({
    * repository, and from a service before the field, whose launch sets none.
    */
   identity: EffectSchema.optionalKey(checkoutIdentitySchema),
+  /**
+   * That the agent's repository is reached on its member's own token
+   * (`DEVICE_GITHUB_ACCESS.TOKEN`), so the device reaches it on its own
+   * GitHub sign-in and asks the service for no token; absent for one the
+   * App's installation reaches, whose device asks for an installation token
+   * as ever. Only a device that registered `GITHUB_SIGN_IN` is launched one.
+   */
+  githubAccess: EffectSchema.optionalKey(
+    EffectSchema.Literals(Object.values(DEVICE_GITHUB_ACCESS)),
+  ),
 });
 
 export type DeviceAgentLaunchPayload = typeof deviceAgentLaunchPayloadSchema.Type;
@@ -490,11 +534,19 @@ export const deviceAgentClaimRequestSchema = EffectSchema.Struct({
   claimToken: EffectSchema.optionalKey(wireUuidSchema),
 });
 
-/** A line settled: its id, and for a launch line whose runner exited, its exit code. */
+/**
+ * A line settled: its id, for a launch line whose runner exited, its exit
+ * code, and for one it settled unstarted for a reason it knows, that reason
+ * (`DEVICE_LAUNCH_UNSTARTED`). A host sends the reason only where it has
+ * one, so a service from before the field never sees it on any other settle.
+ */
 export const deviceAgentSettleRequestSchema = EffectSchema.Struct({
   ...deviceField,
   id: wireUuidSchema,
   exitCode: EffectSchema.optionalKey(EffectSchema.Int),
+  unstarted: EffectSchema.optionalKey(
+    EffectSchema.Literals(Object.values(DEVICE_LAUNCH_UNSTARTED)),
+  ),
 });
 
 /**

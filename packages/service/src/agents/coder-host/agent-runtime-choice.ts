@@ -38,7 +38,7 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { type Device, devicesSeenSince } from "@repo/database/models/device-store";
+import { type Device, deviceLayout, devicesSeenSince } from "@repo/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
   listAccountProviderKeyRows,
@@ -54,7 +54,13 @@ import {
   type LocalAgentRefusal,
   MAC_PRESENCE,
 } from "@repo/features/agent-wire";
-import { DEVICE_KIND, DEVICE_SETUP, type DeviceSetup } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_CAPABILITY,
+  DEVICE_KIND,
+  DEVICE_SETUP,
+  type DeviceSetup,
+} from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -327,7 +333,11 @@ export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Start asks: a sandbox where it asks for none, or the Mac it names, where
  * that Mac is one the account is offered and there now (`freshOffer`) and lists the
  * provider the runtime runs; refused by name otherwise: a Mac that is
- * another account's or is not there as away, and Codex on a Mac that runs none.
+ * another account's or is not there as away, Codex on a Mac that runs none,
+ * and a repository reached on the starter's own token (`githubAccess`) on a
+ * host from before it works in one on its own GitHub sign-in
+ * (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`), whose launch would ask for a token
+ * the service never hands a device.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -336,6 +346,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly deviceId?: string | undefined;
   },
   runtime: NativeRuntime,
+  githubAccess?: GitHubAccess | undefined,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
   if (asked.machine !== AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
   const offer = yield* freshOffer(userId, asked.deviceId);
@@ -349,8 +360,19 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
   }
+  if (githubAccess === GITHUB_ACCESS.TOKEN && !(yield* signsInOwnGithub(userId, offer.deviceId))) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN });
+  }
   return { machine: AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });
+
+/** Whether the account's device registered that it launches an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+const signsInOwnGithub = (userId: string, deviceId: string) =>
+  Effect.map(deviceLayout(userId, deviceId), (standing) =>
+    Option.exists(standing, (device) =>
+      device.capabilities.includes(DEVICE_CAPABILITY.GITHUB_SIGN_IN),
+    ),
+  );
 
 /**
  * The provider whose credential an agent lacks to take a message, or none

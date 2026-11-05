@@ -33,6 +33,7 @@ import { type SyncTopic, TOPIC } from "@repo/database/sync/notification";
 import {
   DEVICE_AGENT_LINE_KIND,
   type DeviceAgentLaunchSecrets,
+  type DeviceLaunchUnstarted,
   deviceAgentLaunchSecretsSchema,
 } from "@repo/features/device-agent-wire";
 import { Clock, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
@@ -207,7 +208,8 @@ export const queuedUnopenedTurn = (
  * failed before its runner is (`coder-host/runner-sessions.ts`'s
  * `launchFailed`), so that turn is settled the same way, whatever the Mac
  * said of why, and in words naming the step its host last reported where
- * it reported one (`launchStoppedDetail`). A turn the runner ended itself
+ * it reported one, and by the reason the Mac said where it said one
+ * (`launchStoppedDetail`). A turn the runner ended itself
  * is already settled, and is left as it stands. An older launch a newer one
  * replaced settles nothing of the newer one's turn.
  *
@@ -222,6 +224,7 @@ export function settledDeviceAgentLine(
   deviceId: string,
   id: string,
   exitCode?: number,
+  unstarted?: DeviceLaunchUnstarted,
 ) {
   return Effect.gen(function* () {
     const fresh = yield* settleDeviceAgentLine(userId, deviceId, id, exitCode);
@@ -246,7 +249,7 @@ export function settledDeviceAgentLine(
       newest.value,
     );
     // Note that a launch whose turn opened is a runner gone however it ended, and one that never opened its turn is worded by the step it stopped at.
-    const detail = unopened ? launchStoppedDetail(newest.value.step) : undefined;
+    const detail = unopened ? launchStoppedDetail(newest.value.step, unstarted) : undefined;
     yield* settleRunnerLostTurns(
       writer,
       agent.value.conversationId,

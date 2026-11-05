@@ -1,9 +1,18 @@
 import { RUNNER_ENV, RUNNER_PLACE } from "@repo/agent-runner/protocol";
-import { DEVICE_CAPABILITY, type DeviceArch } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_CAPABILITY,
+  DEVICE_PLATFORM,
+  type DeviceArch,
+} from "@repo/features/device-agent-wire";
 import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js";
 import { agentOnBox } from "../local-agent-box.js";
 import { localAgentClis } from "../local-agent-setup.js";
-import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
+import {
+  agentWorktreeScript,
+  cloneFolder,
+  repositoryReachedScript,
+  worktreesRoot,
+} from "../node/open-on-mac.js";
 import type { HostOs } from "./host-os.js";
 
 /**
@@ -79,8 +88,11 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     deviceName: options.os.deviceName(),
     deviceMachine: options.os.machine(),
     devicePlatform: options.os.platform,
-    // Note that a host lets go of an archived agent's folder (`discard`).
-    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
+    // Note that a host lets go of an archived agent's folder (`discard`), and a Mac alone runs an agent on its starter's own token on its own GitHub sign-in, the machine its member signs in at themselves.
+    deviceCapabilities: [
+      DEVICE_CAPABILITY.DISCARD,
+      ...(options.os.platform === DEVICE_PLATFORM.DARWIN ? [DEVICE_CAPABILITY.GITHUB_SIGN_IN] : []),
+    ],
     deviceArch: options.arch,
     worktreeScript: ({ home, repository, worktree, branch }) =>
       agentWorktreeScript({
@@ -89,5 +101,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         worktree,
         branch,
       }),
+    repositoryReachedScript: (repository) => repositoryReachedScript({ repository }),
   };
 }

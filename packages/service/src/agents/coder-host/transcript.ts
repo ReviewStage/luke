@@ -56,7 +56,7 @@ import {
   type AgentUsage,
   type TurnRecord,
 } from "@repo/features/agent-wire";
-import { DEVICE_LAUNCH_STEPS } from "@repo/features/device-agent-wire";
+import { DEVICE_LAUNCH_STEPS, type DeviceLaunchUnstarted } from "@repo/features/device-agent-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { turnRecordOf } from "@repo/features/turn-record";
 import type { ToolSet } from "ai";
@@ -82,6 +82,7 @@ import {
   agentStatusOf,
   hostLostOf,
   launchStoppedOf,
+  launchUnstartedOf,
   statusClockEdge,
 } from "./status.js";
 import { usageOfTurns } from "./usage.js";
@@ -186,6 +187,8 @@ export interface TranscriptPage {
   readonly queue?: AgentQueue;
   /** Where the launch it waits on stands, on its own transcript while it runs on a device and that launch's turn has not opened; absent otherwise and on a worker's. */
   readonly launch?: AgentLaunch;
+  /** Why a failed launch never started, where its host said a reason beside the step in `launch`; absent otherwise. */
+  readonly launchUnstarted?: DeviceLaunchUnstarted;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -542,6 +545,13 @@ const withUsage = (
         },
         { concurrency: CODER.READ_CONCURRENCY },
       );
+    // Note that why a launch never started is said only beside the step it stopped at, as its failed turn records both.
+    const launchUnstarted =
+      launch !== undefined &&
+      own?.machine === AGENT_MACHINE.DEVICE &&
+      page.status === AGENT_STATUS.FAILED
+        ? launchUnstartedOf(turn)
+        : undefined;
     const priced = usageOfTurns(rows, offered);
     // Note that the payer rides on the usage, because the one line that draws a price is the one that says who paid.
     const usage = priced === undefined || payer === null ? priced : { ...priced, payer };
@@ -556,6 +566,7 @@ const withUsage = (
       ...(subagents.length === 0 ? undefined : { subagents }),
       ...(queue === undefined ? undefined : { queue }),
       ...(launch === undefined ? undefined : { launch }),
+      ...(launchUnstarted === undefined ? undefined : { launchUnstarted }),
     };
   });
 

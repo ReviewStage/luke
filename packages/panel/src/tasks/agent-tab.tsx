@@ -2908,7 +2908,11 @@ function AgentTabView({
                               transcript.hostLost,
                               transcript.launchStopped === undefined
                                 ? undefined
-                                : { step: transcript.launchStopped, runtime: agent.runtime },
+                                : {
+                                    step: transcript.launchStopped,
+                                    runtime: agent.runtime,
+                                    unstarted: transcript.launchUnstarted,
+                                  },
                             )
                       }
                       endReason={endLineReason(transcript.failure, starter)}

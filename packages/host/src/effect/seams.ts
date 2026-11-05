@@ -222,6 +222,8 @@ export interface LocalAgentPlatformSeam {
     readonly worktree: string;
     readonly branch: string | null;
   }) => string;
+  /** The script that exits 0 only where the Git it runs as reaches the repository given, as `owner/name`, prompting for nothing: the check of the box's own GitHub sign-in an agent on its starter's own token launches on. */
+  readonly repositoryReachedScript: (repository: string) => string;
   /** The agent CLIs the device keeps of its own, had before it registers ready (`LocalAgentClis`). */
   readonly clis: LocalAgentClis;
 }

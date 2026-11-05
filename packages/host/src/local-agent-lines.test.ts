@@ -98,6 +98,7 @@ const directMac = () => ({
   deviceArch: DEVICE_ARCH.ARM64,
   deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
   worktreeScript: () => WORKTREE_SCRIPT,
+  repositoryReachedScript: () => "exit 0",
 });
 
 /**

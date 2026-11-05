@@ -13,7 +13,9 @@ import {
 } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_GITHUB_ACCESS,
   DEVICE_LAUNCH_STEP,
+  DEVICE_LAUNCH_UNSTARTED,
   DEVICE_SETUP,
   type DeviceAgentLaunchSecrets,
   type DeviceAgentLayout,
@@ -21,6 +23,7 @@ import {
   type DeviceAgentRelease,
   type DeviceAgentRequest,
   type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
   deviceAgentFilesPayloadSchema,
   deviceAgentLaunchPayloadSchema,
   deviceAgentLayout,
@@ -61,6 +64,7 @@ import {
   agentGithubForgotten,
   agentGithubWritten,
   agentOnBox,
+  agentOwnSignInWritten,
 } from "./local-agent-box.js";
 import { LAUNCH_NOTE, notedFirstLines, sessionResumed } from "./local-agent-first-lines.js";
 import { answeredLocalAgentRequest } from "./local-agent-requests.js";
@@ -83,7 +87,8 @@ import { forgetOwnedAgent, keepOwnedAgent, ownedAgents } from "./local-agent-sta
  * stands. Once it has them it registers with
  * its home folder and the Claude Code and Codex its agents run on
  * (`LocalAgentPlatformSeam.tools`); no login of the device's is what its
- * agents run on, so every launch carries the sign-in saved in the account.
+ * agents' harnesses run on, so every launch carries the sign-in saved in the
+ * account.
  * Then it beats every `BEAT_EVERY` from then on, while it lets go of what the
  * run before left and while it follows, each beat given `BEAT_DEADLINE` to
  * be answered, on a fiber of its own, so nothing the device does with an
@@ -147,7 +152,19 @@ import { forgetOwnedAgent, keepOwnedAgent, ownedAgents } from "./local-agent-sta
  * last a day, and a sleeping machine stretches a long wait but not the
  * hour; it writes it into gh's config in the agent's home, which its `gh`
  * and its repository's `git` read on every call, so a renewal reaches a
- * turn already running.
+ * turn already running. An agent whose repository is reached on its
+ * starter's own token (`DEVICE_GITHUB_ACCESS.TOKEN`), which never leaves
+ * the service for a device, is handed no token and none is renewed: it
+ * reaches GitHub as whoever is signed in on the box, its home's Git
+ * settings and gh config set to the box user's own and their SSH agent
+ * handed on (`local-agent-box.ts`'s `agentOwnSignInWritten`), its
+ * repository made in the host's own environment, and no gh helper set in
+ * it. Before its repository is made, the launch checks as the agent that
+ * the box's sign-in reaches the repository, prompting for nothing
+ * (`LocalAgentPlatformSeam.repositoryReachedScript`), and a launch it does
+ * not reach is settled as not started for that reason
+ * (`DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN`), which its transcript words as
+ * signing in with `gh auth login` or setting up SSH.
  *
  * A runner ends with the host, or with the gate, so none runs as the gate
  * opens, and every agent this machine made (`ownedAgents`) has its turn let
@@ -209,6 +226,8 @@ const WORKTREE_DEADLINE = Duration.minutes(25);
 const NOT_STARTED = 1;
 /** How often an agent's GitHub token's age is read off the wall clock, and so how soon one the service did not hand is asked for again, well inside the hour the last one lasts. */
 const GITHUB_TOKEN_CHECK = Duration.minutes(1);
+/** How long the check that the box's own GitHub sign-in reaches an agent's repository may take, its own steps bounded sooner, before the launch is given up as unreached. */
+const SIGN_IN_CHECK_DEADLINE = Duration.minutes(2);
 
 const VARIABLE = {
   HOME: "HOME",
@@ -217,6 +236,7 @@ const VARIABLE = {
   LOGNAME: "LOGNAME",
   LANG: "LANG",
   PATH: "PATH",
+  SSH_AUTH_SOCK: "SSH_AUTH_SOCK",
 } as const;
 
 /** The variables of the host's user a runner and a command are started with, read from the host's environment; nothing else of the host's is handed on. */
@@ -322,6 +342,14 @@ export function composeLocalAgents(
       const value = yield* Effect.orDie(Config.option(Config.String(name)).parse(environment));
       if (Option.isSome(value)) handedOn[name] = value.value;
     }
+    /** The host user's SSH agent, handed on only to an agent on the box's own GitHub sign-in, whose Git may reach GitHub over SSH with the keys it holds. */
+    const sshAgent = Option.match(
+      yield* Effect.orDie(Config.option(Config.String(VARIABLE.SSH_AUTH_SOCK)).parse(environment)),
+      {
+        onNone: (): Readonly<Record<string, string>> => ({}),
+        onSome: (socket) => ({ [VARIABLE.SSH_AUTH_SOCK]: socket }),
+      },
+    );
     const { kernel, deviceId, switchedOn, client } = dependencies;
 
     // -- a turn's end ------------------------------------------------------------
@@ -503,8 +531,9 @@ export function composeLocalAgents(
         const stepReported = (agentScope: Scope.Scope, id: string, step: DeviceLaunchStep) =>
           Effect.asVoid(Effect.forkIn(asked(client.lineStep(deviceId, id, step)), agentScope));
 
-        /** A launch whose runner never started, settled as not started. */
-        const notStarted = (id: string) => settle(id, NOT_STARTED);
+        /** A launch whose runner never started, settled as not started, with why where the device knows a reason the transcript words. */
+        const notStarted = (id: string, unstarted?: DeviceLaunchUnstarted) =>
+          asked(client.settleLine(deviceId, id, NOT_STARTED, unstarted));
 
         /**
          * The agent's worktree made where it has none, reading the
@@ -569,17 +598,24 @@ export function composeLocalAgents(
          * worktree with its home and caches in its folder, never as the
          * device's own git, which a repository the agent rigged could steer;
          * and on every launch, since a clone made before the launch line
-         * carried an identity holds none.
+         * carried an identity holds none. An agent on the box's own GitHub
+         * sign-in has no helper set (`withHelper`), so its Git reads the
+         * box user's own.
          */
-        const checkoutSet = (layout: DeviceAgentLayout, identity: CheckoutIdentity | undefined) => {
+        const checkoutSet = (
+          layout: DeviceAgentLayout,
+          identity: CheckoutIdentity | undefined,
+          withHelper: boolean,
+        ) => {
           const script = [
             ...(identity === undefined ? [] : [CHECKOUT_IDENTITY_SCRIPT]),
-            AGENT_GIT_HELPER_SCRIPT,
+            ...(withHelper ? [AGENT_GIT_HELPER_SCRIPT] : []),
+            "true",
           ].join("\n");
           const env = {
             ...shellVariables,
             ...(identity === undefined ? {} : checkoutIdentityEnv(identity)),
-            ...agentGitHelperEnv(platform.clis.paths.gh),
+            ...(withHelper ? agentGitHelperEnv(platform.clis.paths.gh) : {}),
           };
           const run = agentOnBox(
             { folder: layout.folder, command: "/bin/bash", args: ["-c", script], env },
@@ -648,6 +684,48 @@ export function composeLocalAgents(
             }
           });
 
+        /**
+         * Whether the box's own GitHub sign-in reaches the repository of an
+         * agent on its starter's own token, checked as the agent: its home's
+         * Git settings and gh config set to the box user's own first
+         * (`agentOwnSignInWritten`), then `repositoryReachedScript` run in
+         * its folder with its home and the box user's SSH agent, prompting
+         * for nothing, within `SIGN_IN_CHECK_DEADLINE`. Nothing it prints is
+         * kept.
+         */
+        const ownSignInReaches = (layout: DeviceAgentLayout, repository: string) =>
+          Effect.gen(function* () {
+            yield* agentFoldersMade(layout.folder, {
+              stateRoot: kernel.stateRoot,
+              platform: platform.devicePlatform,
+            });
+            yield* agentOwnSignInWritten(layout.folder, folder);
+            const run = agentOnBox(
+              {
+                folder: layout.folder,
+                command: "/bin/bash",
+                args: ["-c", platform.repositoryReachedScript(repository)],
+                env: { ...shellVariables, ...sshAgent },
+              },
+              platform.clis.paths.gh,
+            );
+            const code = yield* Effect.scoped(
+              Effect.flatMap(
+                ChildProcess.make(run.command, [...run.args], {
+                  cwd: layout.folder,
+                  env: run.env,
+                  extendEnv: false,
+                  stdin: "ignore",
+                  stdout: "ignore",
+                  stderr: "ignore",
+                  forceKillAfter: KILL_GRACE,
+                }),
+                (handle) => handle.exitCode,
+              ),
+            ).pipe(Effect.timeoutOption(SIGN_IN_CHECK_DEADLINE));
+            return Option.isSome(code) && Number(code.value) === 0;
+          }).pipe(Effect.orElseSucceed(() => false));
+
         /** Whether the agent's work stands in its folder: its repository, or its checkout folder for an agent with none. */
         const workExists = (layout: DeviceAgentLayout, withRepository: boolean) =>
           Effect.orElseSucceed(
@@ -683,7 +761,12 @@ export function composeLocalAgents(
             ) {
               return yield* notStarted(line.id);
             }
-            const withRepository = payload.value.repository !== null;
+            const { repository } = payload.value;
+            const withRepository = repository !== null;
+            // Note that an agent on its starter's own token is handed no token, since that token never leaves the service, and reaches GitHub on the box's own sign-in instead.
+            const onOwnSignIn =
+              withRepository && payload.value.githubAccess === DEVICE_GITHUB_ACCESS.TOKEN;
+            const withToken = withRepository && !onOwnSignIn;
             // Note that the agent is kept as this machine's before its folder is made, so an uninstall finds whatever a launch cut off left.
             yield* keepOwnedAgent(kernel.stateRoot, agentId);
             const cleared =
@@ -692,12 +775,20 @@ export function composeLocalAgents(
               report("a local agent's folder was cleared since its last turn, so it starts afresh");
             }
             // Note that the token is had before the repository is made, since the clone reads it too, through gh's helper.
-            const hadToken = withRepository && (yield* gaveGithubToken(agentId));
+            const hadToken = withToken && (yield* gaveGithubToken(agentId));
+            // Note that the box's own sign-in is checked before the repository is made, so a sign-in that cannot reach it fails the launch in words of its own rather than as a fetch.
+            if (onOwnSignIn && !(yield* ownSignInReaches(layout, repository))) {
+              report(
+                "a local agent's repository is not reached on this machine's own GitHub sign-in, so its launch was not started",
+              );
+              return yield* notStarted(line.id, DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN);
+            }
+            // Note that the repository of an agent on the box's own sign-in is made in the host's own environment, which is the box user's.
             const made = yield* madeWorktree(
               layout,
-              payload.value.repository,
+              repository,
               payload.value.startBranch,
-              withRepository ? agentGithubEnv(layout.folder, platform.clis.paths.gh) : undefined,
+              withToken ? agentGithubEnv(layout.folder, platform.clis.paths.gh) : undefined,
               stepReported(agentScope, line.id, DEVICE_LAUNCH_STEP.FETCHING),
             );
             if (!made) {
@@ -729,7 +820,10 @@ export function composeLocalAgents(
               report(`a local agent could not be readied to start: ${refused.value}`);
               return yield* notStarted(line.id);
             }
-            if (withRepository && !(yield* checkoutSet(layout, payload.value.identity))) {
+            if (
+              withRepository &&
+              !(yield* checkoutSet(layout, payload.value.identity, withToken))
+            ) {
               yield* Scope.close(runnerScope, Exit.void);
               report(
                 "a local agent's commit identity or GitHub helper could not be set in its repository",
@@ -744,7 +838,13 @@ export function composeLocalAgents(
               checkout: layout.checkoutPath,
               node: platform.tools.node,
               bundle: platform.runnerBundle,
-              env: { ...shellVariables, TMPDIR: temp, ...platform.runnerEnv, ...secrets.env },
+              env: {
+                ...shellVariables,
+                ...(onOwnSignIn ? sshAgent : {}),
+                TMPDIR: temp,
+                ...platform.runnerEnv,
+                ...secrets.env,
+              },
             });
             const started = yield* ChildProcess.make(command.command, [...command.args], {
               cwd: layout.checkoutPath,
@@ -765,8 +865,7 @@ export function composeLocalAgents(
               return yield* notStarted(line.id);
             }
             const handle = started.value;
-            if (withRepository)
-              yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
+            if (withToken) yield* Effect.forkIn(renewingGithub(agentId, hadToken), runnerScope);
             yield* Queue.offer(
               stdin,
               notedFirstLines(secrets.stdin, cleared ? [LAUNCH_NOTE.CLEARED] : [], cleared),

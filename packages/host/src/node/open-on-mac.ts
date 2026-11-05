@@ -8,8 +8,10 @@ import path from "node:path";
  * works in a worktree of that clone, so the repository's files are had
  * once per box rather than once per agent, and its branches stand in the
  * clone. The clone is made over HTTPS, reading the agent's GitHub token
- * through gh's helper, without checking anything out. Every value in a
- * script is quoted for the shell, never spliced in bare.
+ * through gh's helper, or, for an agent on the box's own GitHub sign-in,
+ * whatever the box's own Git configuration reaches GitHub with, without
+ * checking anything out. Every value in a script is quoted for the shell,
+ * never spliced in bare.
  */
 
 /**
@@ -123,6 +125,28 @@ const SHARED_CLONE = [
  * script runs it in the shared clone, with `making` set.
  */
 const UNMADE = ["unmade() {", '  rm -rf "$making"', "  git worktree prune", "}"];
+
+/**
+ * The script, its values quoted, that exits 0 only where the Git it runs as
+ * reaches the repository on GitHub over HTTPS, as a clone of it would, the
+ * box's own URL rewrites to SSH among it: one `git ls-remote` for GitHub's
+ * HEAD, non-interactive and bounded as every step of a worktree's script is
+ * (`nonInteractiveGit`), so a sign-in missing fails it rather than prompting.
+ * It prints nothing the host keeps.
+ */
+export function repositoryReachedScript(input: {
+  /** The repository as `owner/name`. */
+  readonly repository: string;
+  /** Where the repository is read from; GitHub's over HTTPS unless a test names its own. */
+  readonly remote?: string | undefined;
+}): string {
+  return [
+    ...nonInteractiveGit(WORKTREE_TIMING.STALL_SECONDS),
+    `https=${shellQuoted(input.remote ?? `https://github.com/${input.repository}.git`)}`,
+    'git ls-remote --quiet "$https" HEAD >/dev/null',
+    "",
+  ].join("\n");
+}
 
 /**
  * The script, its values quoted, that makes a local agent's worktree
