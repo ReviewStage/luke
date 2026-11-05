@@ -12,3 +12,4 @@ export {
   type LoopbackConsentOptions,
   type OpenConsent,
 } from "./consent.js";
+export { PASTE_BACK_REASON, pasteBackConsent } from "./paste-back-consent.js";
