@@ -328,7 +328,7 @@ export function Conversation({
       const down = element.scrollTop >= lastTop.current;
       const asked =
         pressing.current ||
-        overFrame.current?.isConnected === true ||
+        overFrame.current?.checkVisibility() === true ||
         event.timeStamp - readerAt.current < READER_SCROLL_MS ||
         scrollAsked(element);
       if (following.current && !down && !asked && !followsNewest(element)) {
