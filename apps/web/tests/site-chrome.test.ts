@@ -67,7 +67,7 @@ for (const { path, page, marked } of PAGES) {
       "Changelog -> /changelog",
       "RSS -> /changelog/rss.xml",
       "Privacy -> /privacy",
-      "Contact -> mailto:founders@stagereview.app",
+      "Contact -> mailto:founders@vespin.dev",
     ]);
   });
 
