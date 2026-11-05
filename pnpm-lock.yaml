@@ -425,9 +425,6 @@ importers:
       '@vercel/functions':
         specifier: 3.10.1
         version: 3.10.1(ws@8.22.0)
-      '@vercel/sandbox':
-        specifier: 'catalog:'
-        version: 3.9.1
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
