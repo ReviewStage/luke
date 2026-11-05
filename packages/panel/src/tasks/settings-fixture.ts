@@ -673,7 +673,7 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   [ACT_KIND.CLI_INSTALL]: () => ({
     outcome: CLI_INSTALL_OUTCOME.INSTALLED,
     version: "0.1.0",
-    onPath: false,
+    onPath: true,
   }),
   [ACT_KIND.ADMIN_READ]: ({ procedure, query }) =>
     procedure === ADMIN_READ.METRICS

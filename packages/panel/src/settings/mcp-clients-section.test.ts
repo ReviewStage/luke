@@ -22,7 +22,7 @@ import { McpClientsSections } from "./mcp-clients-section.js";
  * agents: a revoke that did not finish leaves its row standing with its
  * Disconnect and says so, never that it landed, and one that lands leaves the
  * row saying how long the access the agent already holds lasts; and the
- * command-line tool's install, which only the desktop offers. Synthetic ids
+ * command-line tool's Install, which only the desktop offers. Synthetic ids
  * and addresses.
  */
 
@@ -182,10 +182,13 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);
 });
 
-test("the desktop's install says why it failed, then the version installed and the PATH line where the shell lacks ~/.local/bin", async () => {
+test("the desktop's Install says why it failed, then the version installed, and offers Reinstall", async () => {
   const answers = [
-    { outcome: CLI_INSTALL_OUTCOME.FAILED, reason: "Vespin CLI has no release yet." },
-    { outcome: CLI_INSTALL_OUTCOME.INSTALLED, version: "0.3.0", onPath: false },
+    {
+      outcome: CLI_INSTALL_OUTCOME.FAILED,
+      reason: "Could not download https://app.test/install.sh.",
+    },
+    { outcome: CLI_INSTALL_OUTCOME.INSTALLED, version: "0.3.0", onPath: true },
   ] as const;
   let asked = 0;
   fakeActPort({
@@ -193,29 +196,26 @@ test("the desktop's install says why it failed, then the version installed and t
   });
   await drawPage(DESKTOP_CAPABILITIES);
 
-  await press("Install command-line tool");
-  assert.ok(pageText().includes("Vespin CLI has no release yet."), pageText());
-  assert.ok(!pageText().includes("Installed vespin"), "a failed install never says it landed");
+  await press("Install");
+  assert.ok(pageText().includes("Could not download https://app.test/install.sh."), pageText());
+  assert.ok(!pageText().includes("Installed"), "a failed install never says it landed");
 
-  await press("Install command-line tool");
-  assert.ok(pageText().includes("Installed vespin 0.3.0."), pageText());
-  assert.ok(!pageText().includes("no release yet"), pageText());
-  assert.ok(copyable().includes(`export PATH="$HOME/.local/bin:$PATH"`), copyable().join("\n"));
+  await press("Install");
+  assert.ok(pageText().includes("Installed · v0.3.0"), pageText());
+  assert.ok(!pageText().includes("Could not download"), pageText());
+  assert.ok(
+    [...document.querySelectorAll("button")].some((each) => each.textContent === "Reinstall"),
+    "an installed command offers Reinstall",
+  );
 });
 
-test("a browser tab offers the commands, its install script at the server's origin, and no install", async () => {
+test("a browser tab offers the npm install to copy, and no Install", async () => {
   fakeActPort({});
   await drawPage(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CLI_INSTALL));
 
   assert.ok(copyable().includes("npm i -g vespin"), copyable().join("\n"));
-  assert.ok(
-    copyable().includes("curl -fsSL https://app.test/install.sh | sh -s cli"),
-    copyable().join("\n"),
-  );
   assert.equal(
-    [...document.querySelectorAll("button")].some(
-      (each) => each.textContent === "Install command-line tool",
-    ),
+    [...document.querySelectorAll("button")].some((each) => each.textContent === "Install"),
     false,
     "a tab cannot run the install",
   );

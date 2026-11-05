@@ -83,7 +83,7 @@ import { MenuRow } from "./menu-row.js";
  * the browser, lights its row and is said to be connected under the step.
  * While the account has none, Connect an agent stands first. The
  * `vespin` command-line tool's section stands last either way
- * (`cli-section.tsx`), its install script named at the server's origin.
+ * (`cli-section.tsx`).
  *
  * Each agent is led by its brand's mark, in the picker and on its row, an
  * allowed agent's found by the name it registered under; Other stands in
@@ -509,7 +509,7 @@ export function McpClientsSections(): React.JSX.Element {
   );
   const connect = <ConnectSection serverUrl={rows.serverUrl} arrived={shown.find(isNew)} />;
   // Note that an account with no agent yet is led to connect one, rather than to an empty list.
-  const cli = <CliSection serverUrl={rows.serverUrl} />;
+  const cli = <CliSection />;
   return shown.length === 0 ? (
     <>
       {connect}

@@ -270,10 +270,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.MCP_CLI,
           label: "Command-line tool",
           page: SETTINGS_VIEW.MCP,
-          haystack: [
-            "Command-line tool",
-            "cli vespin command terminal shell install npm npx curl login path",
-          ],
+          haystack: ["Command-line tool", "cli vespin command terminal shell install npm login"],
         }
       : undefined,
     input.accountDrawn
