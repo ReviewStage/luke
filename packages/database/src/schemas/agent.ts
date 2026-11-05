@@ -366,6 +366,12 @@ export const agentTable = pgTable(
     index("agent_device_live")
       .on(table.deviceId)
       .where(sql`${table.deviceId} is not null and ${table.archivedAt} is null`),
+    // GitHub's check and push deliveries find the agents on a branch, of any account, by the
+    // repository as GitHub matches one, its case aside, and the branch exactly
+    // (`agent-store.ts`'s `listAgentsOnBranches`); only an agent that opened a pull request has one.
+    index("agent_on_branch")
+      .on(sql`lower(${table.repository})`, table.branch)
+      .where(sql`${table.branch} is not null`),
   ],
 );
 

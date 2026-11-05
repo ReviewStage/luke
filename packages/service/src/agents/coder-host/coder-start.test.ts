@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
-import { readAgentRepositories } from "@repo/database/models/agent-repositories";
+import {
+  readAgentRepositories,
+  recordAgentRepositoryHead,
+} from "@repo/database/models/agent-repositories";
 import { listAgents, readAgent, readAgentByKey } from "@repo/database/models/agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
@@ -569,6 +572,35 @@ it.layer(getTestDB())("an agent started in several repositories", (it) => {
           (yield* readAgentRepositories(owner, started.agent.id)).map((each) => each.repository),
           [RELAY_REPOSITORY, `${WEB.owner}/${WEB.name}`],
         );
+      }),
+  );
+
+  it.effect(
+    "a continue works in the repositories its source worked in beside its own, at the branches they started on and with none of its pull requests, its starter's experiment since turned off asking nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openSeveralWorkspace();
+        const { eve } = fakeEve();
+        const web = `${WEB.owner}/${WEB.name}`;
+        const source = yield* startAgent(eve, owner, {
+          ...workspaceAsk(workspaceId),
+          alsoRepositories: [{ repository: web }],
+        }).pipe(Effect.provide(severalServices));
+        yield* recordAgentRepositoryHead(owner, source.agent.id, web, "agent/invite");
+        yield* writeAccountPreferences(owner, {
+          experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: false },
+        });
+
+        const continued = yield* startAgent(eve, owner, {
+          ...workspaceAsk(workspaceId),
+          prompt: undefined,
+          from: { agentId: source.agent.id },
+        }).pipe(Effect.provide(severalServices));
+
+        assert.deepEqual(yield* readAgentRepositories(owner, continued.agent.id), [
+          { repository: RELAY_REPOSITORY, baseBranch: null, headBranch: null, pullRequest: null },
+          { repository: web, baseBranch: null, headBranch: null, pullRequest: null },
+        ]);
       }),
   );
 

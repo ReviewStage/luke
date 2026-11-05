@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@repo/database/core/query";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -912,11 +913,9 @@ function inlineCommentsOf(
   ) {
     return Effect.succeed(Option.some([]));
   }
-  const agent = told.agent;
-  return agentPullRequestReach(told.userId, agent).pipe(
-    Effect.flatMap(({ token }) =>
-      reviewLineComments(token, agent.repository, pullRequest, reviewId),
-    ),
+  const { repository } = told.on;
+  return agentPullRequestReach(told.userId, told.agent, repository).pipe(
+    Effect.flatMap(({ token }) => reviewLineComments(token, repository, pullRequest, reviewId)),
     Effect.map(Option.some),
     // The kind alone: nothing of the review or the token rides the line.
     Effect.catch((failure) =>
@@ -973,9 +972,9 @@ export type HeadChecksRead = (
  */
 export const headChecksFor: HeadChecksRead = (told, sha) => {
   if (!hasRepository(told.agent) || sha === undefined) return Effect.succeed(Option.none());
-  const agent = told.agent;
-  return agentPullRequestReach(told.userId, agent).pipe(
-    Effect.flatMap(({ token }) => headChecksOf(token, agent.repository, sha)),
+  const { repository } = told.on;
+  return agentPullRequestReach(told.userId, told.agent, repository).pipe(
+    Effect.flatMap(({ token }) => headChecksOf(token, repository, sha)),
     Effect.map(Option.some),
     // The kind alone: nothing of the checks or the token rides the line.
     Effect.catch((failure) =>
@@ -1028,10 +1027,19 @@ function checksOfWake(
   }
 }
 
-/** Whether the agent's row keeps the wake's commit as its pull request's head, as the read of its pull request this delivery made left it. */
-const standsOnHead = (wake: AgentWake, { userId, agent }: OwnedAgent) =>
+/** Whether the row of the repository the agent was found on keeps the wake's commit as its pull request's head, as the read of its pull request this delivery made left it: the agent's own row, or that extra repository's (`readAgentRepositories`). */
+const standsOnHead = (wake: AgentWake, { userId, agent, on }: OwnedAgent) =>
   Effect.map(
-    readAgentPublished(userId, agent.id),
+    on.extra
+      ? Effect.map(
+          readAgentRepositories(userId, agent.id),
+          (repositories) =>
+            repositories
+              .slice(1)
+              .find((each) => each.repository.toLowerCase() === on.repository.toLowerCase())
+              ?.pullRequest ?? null,
+        )
+      : readAgentPublished(userId, agent.id),
     (published) => published?.headSha !== undefined && published.headSha === wake.sha,
   );
 
@@ -1095,12 +1103,12 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       checksCompleted && Option.isSome(checks)
         ? checksCompletedKey(wake, checks.value)
         : deliveryId;
-    return yield* Effect.forEach(woken, ({ userId, agent }) =>
+    return yield* Effect.forEach(woken, ({ userId, agent, on }) =>
       Effect.gen(function* () {
         const eve = yield* sessionsFor(userId);
         const outside = yield* hostedStoreOrUnavailable(outsideWordsFor(wake, inline, userId));
         yield* steerAgent(eve, storeWriter({ tools: CODER_TOOL_SET }), userId, agent, {
-          text: agentWakeText(wake, agent.branch, inline, checks, agent.githubAccess),
+          text: agentWakeText(wake, on.branch, inline, checks, agent.githubAccess),
           clientKey,
           sender: { kind: MESSAGE_SENDER.GITHUB, login: wake.by },
           metadata: githubLine(wake, inline, checks, outside),

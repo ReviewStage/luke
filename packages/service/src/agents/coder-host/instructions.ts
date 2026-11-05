@@ -684,15 +684,11 @@ export interface ExtraCheckout {
  * What an agent that works in other repositories beside its own is told of
  * them, after its own checkout: each by name, where it stands, and its
  * branch, read as its own repository is, and for an agent that builds, how
- * its work there is published while its pull request opens in its own
- * repository alone; nothing for an agent in one repository, whose words are
+ * it opens a pull request in each, naming the repository, which is tracked
+ * as its own is; nothing for an agent in one repository, whose words are
  * then the text they always were, which the prompt cache depends on.
  */
-function extraCheckoutsWords(
-  extras: readonly ExtraCheckout[],
-  repository: string,
-  builds: boolean,
-): string {
+function extraCheckoutsWords(extras: readonly ExtraCheckout[], builds: boolean): string {
   if (extras.length === 0) return "";
   const listed = extras
     .map(
@@ -703,7 +699,7 @@ function extraCheckoutsWords(
   const reading =
     "Read each one's `AGENTS.md` and `CLAUDE.md` before you change it, and run its own checks.";
   const publishing = builds
-    ? ` Commit in each on a branch of your own cut from the branch it is checked out on, and push it; your pull request opens in \`${repository}\` alone, so name what you pushed in the others in its description and in your final message.`
+    ? ` Commit in each on a branch of your own cut from the branch it is checked out on, push it from that repository's folder, and open its pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\` naming that repository as \`repository\`; it merges into the branch the repository is checked out on unless you name another \`base\`. Its reviews, comments, and checks reach you as your own pull request's do, and the task waits on every pull request you open. Name each pull request in the others' descriptions and in your final message.`
     : "";
   return `
 
@@ -711,6 +707,12 @@ You work in other repositories beside it too, each checked out whole in a folder
 ${listed}
 
 ${reading}${publishing}`;
+}
+
+/** What the step that opens a pull request adds for an agent that works in other repositories beside its own: to name the repository on every call; nothing for an agent in one, whose step is then the text it always was. */
+function extrasPublishWords(extras: readonly ExtraCheckout[], repository: string): string {
+  if (extras.length === 0) return "";
+  return ` You work in several repositories, so every \`${CODER_TOOL.OPEN_PULL_REQUEST}\` call names the one it opens in as \`repository\`, \`${repository}\` for this checkout's.`;
 }
 
 /** Where an agent with a repository works: its checkout, its branch, its commits, its pull request, and its checks. */
@@ -729,7 +731,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(machine)}${extraCheckoutsWords(extras, repository, true)}
+The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(machine)}${extraCheckoutsWords(extras, true)}
 
 ## How to work
 
@@ -739,7 +741,7 @@ The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}
 4. ${build.authorship}
 5. ${build.change}
 6. ${build.check}
-7. ${build.publish} Once it is ready for the developer to review, post it in a thread, as the threads section below says.
+7. ${build.publish}${extrasPublishWords(extras, repository)} Once it is ready for the developer to review, post it in a thread, as the threads section below says.
    ${build.writeUp}
 8. ${build.ci}
 
@@ -921,7 +923,7 @@ function pilotWords(
       ? sandboxSection(tools, machine)
       : `## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(machine)} You commit, push, and open a pull request only on a task you do yourself.${extraCheckoutsWords(extras, repository, false)}`;
+The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(machine)} You commit, push, and open a pull request only on a task you do yourself.${extraCheckoutsWords(extras, false)}`;
   const rules =
     repository === null
       ? ""
