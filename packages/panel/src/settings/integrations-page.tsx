@@ -460,6 +460,8 @@ function RowToolsPanel({
 }): React.JSX.Element {
   // Note that a catalog integration's tools are named and described by the provider, which a screen recording shows; Executor's are the apps a member set up, which stay masked.
   const toolWordsShown = provider !== INTEGRATION_PROVIDER.EXECUTOR;
+  // Note that the row's name is the provider's own unless an account's label rides it.
+  const serverReplayMasked = name !== INTEGRATION_NAME[provider];
   const shown = byName(tools.shown);
   const [held, setHeld] = useState<string | undefined>(undefined);
   const rows = useRef(new Map<string, HTMLElement>());
@@ -526,6 +528,7 @@ function RowToolsPanel({
           <IntegrationToolDetail
             key={current.name}
             server={name}
+            serverReplayMasked={serverReplayMasked}
             toolWordsShown={toolWordsShown}
             tool={current}
             tokens={tools.tokens}

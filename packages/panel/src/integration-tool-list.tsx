@@ -139,10 +139,18 @@ function ToolWords({
   );
 }
 
-/** A hint's words, the integration's name among them masked in a screen recording, since it carries the account's label. */
-function HintWords({ words, server }: { words: string; server: string }): React.JSX.Element {
+/** A hint's words, the integration's name among them masked in a screen recording where it carries the account's label. */
+function HintWords({
+  words,
+  server,
+  masked,
+}: {
+  words: string;
+  server: string;
+  masked: boolean;
+}): React.JSX.Element {
   const at = words.indexOf(server);
-  if (at < 0) return <>{words}</>;
+  if (!masked || at < 0) return <>{words}</>;
   return (
     <>
       {words.slice(0, at)}
@@ -363,6 +371,7 @@ function ParameterValues({
 
 export function IntegrationToolDetail({
   server,
+  serverReplayMasked = true,
   toolWordsShown = false,
   tool,
   tokens,
@@ -374,6 +383,8 @@ export function IntegrationToolDetail({
 }: {
   /** The integration's name, which the hints and the badge's title say. */
   server: string;
+  /** Whether that name carries an account's label, a person's words, kept masked in a screen recording; a catalog integration's bare name shows. */
+  serverReplayMasked?: boolean;
   /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
   toolWordsShown?: boolean;
   tool: IntegrationTool;
@@ -438,7 +449,11 @@ export function IntegrationToolDetail({
               {hints.map((hint) => (
                 <li key={hint}>
                   <Badge tone={hintTone(hint)}>
-                    <HintWords words={toolHintWords(hint, server)} server={server} />
+                    <HintWords
+                      words={toolHintWords(hint, server)}
+                      server={server}
+                      masked={serverReplayMasked}
+                    />
                   </Badge>
                 </li>
               ))}
