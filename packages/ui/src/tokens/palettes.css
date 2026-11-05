@@ -111,6 +111,12 @@
   --ui-color-shadow-soft: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
   --ui-color-shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
   --ui-color-shadow-deep: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6));
+  /* A pane floating over the work as glass, the folded sidebar's float: its
+     ground opaque, for what must stand still while it slides beneath, and
+     that ground with the work showing blurred through it. It is lighter than
+     the work in the dark, where a shadow alone falls black on black. */
+  --ui-color-float-solid: light-dark(var(--ui-color-sidebar), var(--ui-color-overlay));
+  --ui-color-float: color-mix(in srgb, var(--ui-color-float-solid) 80%, transparent);
   /* The system's own switch lifts a white thumb off a gray track in the light, and draws none in the dark. */
   --ui-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
@@ -195,6 +201,8 @@
   --ui-color-shadow-soft: rgba(0, 0, 0, 0.08);
   --ui-color-shadow: rgba(0, 0, 0, 0.12);
   --ui-color-shadow-deep: rgba(0, 0, 0, 0.2);
+  --ui-color-float-solid: var(--ui-color-sidebar);
+  --ui-color-float: color-mix(in srgb, var(--ui-color-float-solid) 80%, transparent);
   --ui-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
 
   /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
@@ -269,6 +277,7 @@
   --ui-color-shadow-soft: rgba(0, 0, 0, 0.4);
   --ui-color-shadow: rgba(0, 0, 0, 0.5);
   --ui-color-shadow-deep: rgba(0, 0, 0, 0.6);
+  --ui-color-float-solid: var(--ui-color-overlay);
   --ui-shadow-switch-thumb: none;
 
   /* A person's disc (`avatar.tsx`): six muted hues read off their id, each

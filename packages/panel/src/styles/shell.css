@@ -561,6 +561,48 @@
   transform: none;
 }
 
+/* Beside a wide room's work, the folded sidebar floats as a pane of glass
+   rather than a column cut off at the work: a sheet's gap in from the
+   window's edges with a sheet's corners, so it reads as one more sheet
+   lifted over the work, the work blurred through it. It keeps that shape
+   folded away too, so its slide in and out is the card's own; folded, it
+   slides past the gap as well as its width. Its top row is a gap shorter,
+   so the back and forward it holds stay level with the title bar's other
+   buttons, and those buttons rest on the glass's own ground. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar {
+  margin: var(--sheet-gap) 0 var(--sheet-gap) var(--sheet-gap);
+  border-radius: var(--sheet-radius);
+  transform: translateX(calc(-100% - var(--sheet-gap)));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar
+  > .desktop-drag-strip {
+  height: calc(var(--desktop-bar-height) - var(--sheet-gap));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell[data-sidebar-collapsed="true"]
+  .desktop-sidebar
+  > .title-bar-controls[data-edge="column"] {
+  --title-bar-ground: var(--ui-color-float-solid);
+  top: calc(var(--title-bar-middle) - var(--ui-control-height) / 2 - var(--sheet-gap));
+}
+
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .desktop-sidebar {
+  --ui-list-row-ground: var(--ui-color-float-solid);
+
+  background: var(--ui-color-float);
+  box-shadow: var(--ui-float-shadow);
+  backdrop-filter: var(--ui-float-backdrop);
+  transform: none;
+}
+
 /* A narrow room's sidebar is a drawer: the same float, standing on the
    window's left edge over the work, as wide as a phone's drawer stands
    rather than the sidebar's dragged width, which a drawer has no edge to
@@ -705,6 +747,13 @@
 .desktop-shell[data-sidebar-overlay="peek"] .title-bar-controls:not([data-edge]),
 .desktop-shell[data-sidebar-overlay="open"] .title-bar-controls:not([data-edge]) {
   --title-bar-ground: var(--ui-color-sidebar);
+}
+
+/* Over a wide room's floating sidebar, its glass's ground. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .title-bar-controls:not([data-edge]) {
+  --title-bar-ground: var(--ui-color-float-solid);
 }
 
 .desktop-sidebar {

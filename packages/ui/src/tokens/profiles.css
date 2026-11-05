@@ -252,6 +252,13 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --ui-menu-glyph: 16px;
   --ui-menu-shadow: 0 8px 32px var(--ui-color-shadow-soft);
+  /* A pane floating over the work (the folded sidebar's float): a hairline
+     round it, then a near shadow and a far one, and the work blurred and
+     brightened through its glass (`--ui-color-float`). */
+  --ui-float-shadow:
+    0 0 0 1px var(--ui-color-border-strong), 0 2px 4px var(--ui-color-shadow-soft),
+    0 12px 24px -6px var(--ui-color-shadow), 0 32px 80px -8px var(--ui-color-shadow-deep);
+  --ui-float-backdrop: blur(32px) saturate(170%);
   /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
      a Settings picker's, the composer's, and one that holds an issue's title
      with its key and state after it. */
@@ -517,6 +524,13 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --ui-menu-glyph: 16px;
   --ui-menu-shadow: 0 8px 32px var(--ui-color-shadow-soft);
+  /* A pane floating over the work (the folded sidebar's float): a hairline
+     round it, then a near shadow and a far one, and the work blurred and
+     brightened through its glass (`--ui-color-float`). */
+  --ui-float-shadow:
+    0 0 0 1px var(--ui-color-border-strong), 0 2px 4px var(--ui-color-shadow-soft),
+    0 12px 24px -6px var(--ui-color-shadow), 0 32px 80px -8px var(--ui-color-shadow-deep);
+  --ui-float-backdrop: blur(32px) saturate(170%);
   /* The three widths a menu hung from its button asks for (`POPOVER_WIDTH`):
      a Settings picker's, the composer's, and one that holds an issue's title
      with its key and state after it. */
