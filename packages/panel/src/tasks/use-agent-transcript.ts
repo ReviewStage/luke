@@ -19,7 +19,7 @@ import {
   type AgentTranscriptMessage,
   type AgentUsage,
 } from "@repo/features/agent-wire";
-import type { DeviceLaunchStep } from "@repo/features/device-agent-wire";
+import type { DeviceLaunchStep, DeviceLaunchUnstarted } from "@repo/features/device-agent-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppTranscript } from "@repo/host/app-state";
@@ -111,6 +111,8 @@ export interface AgentTranscriptControl {
   launch: AgentLaunch | undefined;
   /** Where the launch of a failed local agent its host settled unstarted stopped, as the last page said; nothing for any other failure. */
   launchStopped: DeviceLaunchStep | undefined;
+  /** Why that launch never started, where its host said a reason beyond the step, as the last page said; nothing for any other launch. */
+  launchUnstarted: DeviceLaunchUnstarted | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the transcript could not be read, so the tab offers to try again. */
@@ -305,6 +307,7 @@ export function useAgentTranscript(input: {
       word?.status === AGENT_STATUS.FAILED && word.launch !== AGENT_LAUNCH.WAITING
         ? word.launch
         : undefined,
+    launchUnstarted: word?.status === AGENT_STATUS.FAILED ? word.launchUnstarted : undefined,
     reading: shown && !failed && messages.length === 0 && writing,
     failed,
     failedWith: held?.failure,

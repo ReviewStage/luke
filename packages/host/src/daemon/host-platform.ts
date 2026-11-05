@@ -3,7 +3,12 @@ import { DEVICE_CAPABILITY, type DeviceArch } from "@repo/features/device-agent-
 import type { LocalAgentClis, LocalAgentPlatformSeam } from "../effect/seams.js";
 import { agentOnBox } from "../local-agent-box.js";
 import { localAgentClis } from "../local-agent-setup.js";
-import { agentWorktreeScript, cloneFolder, worktreesRoot } from "../node/open-on-mac.js";
+import {
+  agentWorktreeScript,
+  cloneFolder,
+  repositoryReachedScript,
+  worktreesRoot,
+} from "../node/open-on-mac.js";
 import type { HostOs } from "./host-os.js";
 
 /**
@@ -79,8 +84,8 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
     deviceName: options.os.deviceName(),
     deviceMachine: options.os.machine(),
     devicePlatform: options.os.platform,
-    // Note that a host lets go of an archived agent's folder (`discard`).
-    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD],
+    // Note that a host lets go of an archived agent's folder (`discard`), and runs an agent on its starter's own token on the box's own GitHub sign-in.
+    deviceCapabilities: [DEVICE_CAPABILITY.DISCARD, DEVICE_CAPABILITY.GITHUB_SIGN_IN],
     deviceArch: options.arch,
     worktreeScript: ({ home, repository, worktree, branch }) =>
       agentWorktreeScript({
@@ -89,5 +94,6 @@ export function hostPlatform(options: HostPlatformOptions): LocalAgentPlatformSe
         worktree,
         branch,
       }),
+    repositoryReachedScript: (repository) => repositoryReachedScript({ repository }),
   };
 }

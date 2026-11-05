@@ -168,6 +168,27 @@ only its `Co-authored-by` line (`agentCoAuthor` in
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
+An agent on a member's own machine (a host) reaches GitHub without the
+sandbox's firewall. Where the App reaches its repository, its host asks
+`POST /api/agents/runner-token` on its device secret for an installation
+token, which lasts an hour and is cut to that one repository
+(`src/agents/native-events/runner-token-app.ts`). That endpoint never answers
+a member's own token, which does not expire and reaches every repository the
+member can reach. So an agent whose repository only that token reaches
+(`githubAccess` is `token`) gets no token from the service. Its launch line
+says so (`deviceAgentLaunchPayloadSchema`'s `githubAccess`), and its host runs
+it on the machine's own GitHub sign-in: the machine user's `gh` login, Git
+credential helper and settings, and SSH keys and agent. **Such an agent acts as
+whoever is signed in on that machine, with everything that sign-in reaches, not
+one repository.** Before the repository is made, the host checks that the
+sign-in reaches it. Where it doesn't, the host settles the launch unstarted
+with the reason `github-sign-in` (`DEVICE_LAUNCH_UNSTARTED`), which the
+transcript words as signing in with `gh auth login` or setting up SSH. Only a
+host that registered `DEVICE_CAPABILITY.GITHUB_SIGN_IN` is started on (refused
+as `LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN` by `agentMachineChoice`) or launched
+(`device-machine.ts`'s `launchRunner`) such an agent, since an older host would
+ask for a token the service refuses.
+
 `GET /api/github/repositories` (`src/github/github-procedures.ts`, on the
 hosted oRPC router) is that
 listing under the account bearer, answered as

@@ -500,6 +500,8 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
     "Not started: the device this task runs its agents on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes.",
   [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
     "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to turn Bring your own host off and on in Settings › Hosts on that Mac, or to restart vespin-host on that Linux server, to try again, or to start a new task in the cloud.",
+  [LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN]:
+    "Not started: this task's repository is reached on the member's own GitHub token, and the device this task runs its agents on has a vespin-host too old to work in such a repository on its own GitHub sign-in. Ask the member to update that host, or to start a new task in the cloud.",
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string

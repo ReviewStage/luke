@@ -4,7 +4,12 @@ import {
   type AgentFailure,
   type NativeAgentRuntime,
 } from "./agent-wire.js";
-import { DEVICE_LAUNCH_STEP, type DeviceLaunchStep } from "./device-agent-wire.js";
+import {
+  DEVICE_LAUNCH_STEP,
+  DEVICE_LAUNCH_UNSTARTED,
+  type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
+} from "./device-agent-wire.js";
 
 /**
  * agent-failure-words.ts -- why an agent's turn failed, in the words the window says it in: one phrase per failure word the service answers.
@@ -75,16 +80,25 @@ const HARNESS_NAMES = {
   [AGENT_RUNTIME.CODEX]: "Codex",
 } as const satisfies Record<NativeAgentRuntime, string>;
 
+/** Why a host's launch never started, by the reason the host said, as the sentence that says it and how to mend it. */
+const LAUNCH_UNSTARTED_WORDS = {
+  [DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN]:
+    "The host couldn't start this agent: this Mac's GitHub sign-in can't reach the repository. Sign in with gh auth login, or set up SSH for the repository, then send a message to try again.",
+} as const satisfies Record<DeviceLaunchUnstarted, string>;
+
 /**
  * Why an agent whose host settled its launch unstarted failed, said whole
- * in place of a failure's words: the step the host last reported, the
- * harness by name where it stopped as it started it, and that a message
- * tries again, since its next message launches it anew.
+ * in place of a failure's words: the reason the host said where it said
+ * one, else the step it last reported, the harness by name where it
+ * stopped as it started it, and that a message tries again, since its next
+ * message launches it anew.
  */
 export function launchStoppedWords(
   step: DeviceLaunchStep,
   runtime: NativeAgentRuntime | undefined,
+  unstarted?: DeviceLaunchUnstarted,
 ): string {
+  if (unstarted !== undefined) return LAUNCH_UNSTARTED_WORDS[unstarted];
   const doing =
     step === DEVICE_LAUNCH_STEP.STARTING && runtime !== undefined
       ? `starting ${HARNESS_NAMES[runtime]}`

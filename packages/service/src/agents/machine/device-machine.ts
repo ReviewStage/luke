@@ -81,6 +81,8 @@ import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
+  DEVICE_GITHUB_ACCESS,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchPayload,
   type DeviceAgentObject,
@@ -90,6 +92,7 @@ import {
   deviceAgentLayoutIn,
   deviceAgentsFolder,
 } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   Brand,
   Clock,
@@ -340,6 +343,16 @@ function deviceMachineOver(
       },
     );
 
+  /** Whether the agent's Mac registered that it launches an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+  const signsInOwnGithub = (pin: DeviceAgentPin) =>
+    pin.deviceId === null
+      ? Effect.succeed(false)
+      : Effect.map(stored(deviceLayout(pin.userId, pin.deviceId)), (standing) =>
+          Option.exists(standing, (device) =>
+            device.capabilities.includes(DEVICE_CAPABILITY.GITHUB_SIGN_IN),
+          ),
+        );
+
   /** The deployment's key ring, which a launch's secrets are sealed under; refused where it has none. */
   const keyRing = Effect.gen(function* () {
     const keys = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
@@ -356,7 +369,8 @@ function deviceMachineOver(
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
 
     // The worktree is the device's to make of its shared clone as it takes the launch line, on the
-    // agent's own GitHub token, so the open asks the device nothing and leaves nothing to finish.
+    // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's
+    // token, so the open asks the device nothing and leaves nothing to finish.
     open: (ask, use) =>
       Effect.gen(function* () {
         const [layout, beside] = yield* Effect.all(
@@ -478,6 +492,13 @@ function deviceMachineOver(
           { concurrency: "unbounded" },
         );
         if (Option.isNone(agent)) return yield* new LaunchRefused({ reason: "no agent" });
+        const onOwnSignIn =
+          hasRepository(agent.value) && agent.value.githubAccess === GITHUB_ACCESS.TOKEN;
+        // Note that an agent on its starter's own token whose host is a build from before it, as one whose host went back to an older release since its Start, is refused here too, since that host would ask for a token the service never hands a device.
+        if (onOwnSignIn && !(yield* signsInOwnGithub(pin))) {
+          yield* Effect.ignore(launch.abandon(ready));
+          return yield* new LaunchRefused({ reason: "host predates its own github sign-in" });
+        }
         const id = randomUUID();
         const handle: RunnerHandle = { ...place, command: id };
         yield* Effect.gen(function* () {
@@ -496,6 +517,7 @@ function deviceMachineOver(
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
             ...(commitsBy === undefined ? {} : { identity: commitsBy }),
+            ...(onOwnSignIn ? { githubAccess: DEVICE_GITHUB_ACCESS.TOKEN } : {}),
           };
           yield* queued(pin, {
             id,

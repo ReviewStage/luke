@@ -49,6 +49,7 @@ import {
 import {
   DEVICE_PLATFORM,
   type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
   type DevicePlatform,
 } from "@repo/features/device-agent-wire";
 import {
@@ -400,10 +401,11 @@ export interface EndLineParts {
   readonly failure?: AgentFailure | undefined;
 }
 
-/** Where a launch its host settled unstarted stopped, as the page said, and the harness the agent runs, as its summary says. */
+/** Where a launch its host settled unstarted stopped, and why where its host said, as the page said, and the harness the agent runs, as its summary says. */
 export interface LaunchStopped {
   readonly step: DeviceLaunchStep;
   readonly runtime?: NativeAgentRuntime | undefined;
+  readonly unstarted?: DeviceLaunchUnstarted | undefined;
 }
 
 /**
@@ -435,7 +437,11 @@ export function endLineParts(
       if (hostLost !== undefined)
         return { words: hostLostWords(hostLost.host), failed: true, failure };
       if (launchStopped !== undefined) {
-        const words = launchStoppedWords(launchStopped.step, launchStopped.runtime);
+        const words = launchStoppedWords(
+          launchStopped.step,
+          launchStopped.runtime,
+          launchStopped.unstarted,
+        );
         return { words, failed: true, failure };
       }
       const words =
@@ -781,6 +787,8 @@ export function localAgentRefusalWords(
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
     case LOCAL_AGENT_REFUSAL.NOT_OWNER:
       return `This task runs on ${device?.name ?? "another member's device"}. Only ${device?.owner ?? "its owner"} can start agents on it.`;
+    case LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN:
+      return `${name} runs an older vespin-host, which can't work in a repository reached on your own GitHub token. Update its host, ${RUN_IN_CLOUD}.`;
     case undefined:
       return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
   }

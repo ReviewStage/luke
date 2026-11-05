@@ -921,8 +921,10 @@ function startRuntimeOf(userId: string, model: string, keys: AccountKeyRows) {
 
 /**
  * Where a new agent runs (`agentMachineChoice`): a sandbox, or the starter's
- * Mac the Start names where it is one Start offers them; refused by name
- * where it is not, and nothing is written.
+ * Mac the Start names where it is one Start offers them, and one that works
+ * in a repository reached on the starter's own token where its host does so
+ * on its own GitHub sign-in; refused by name where it is not, and nothing is
+ * written.
  */
 function startMachineOf(
   userId: string,
@@ -931,8 +933,9 @@ function startMachineOf(
     readonly deviceId?: string | undefined;
   },
   runtime: NativeRuntime,
+  githubAccess: GitHubAccess | undefined,
 ) {
-  return Effect.catch(agentMachineChoice(userId, asked, runtime), (failure) =>
+  return Effect.catch(agentMachineChoice(userId, asked, runtime, githubAccess), (failure) =>
     failure instanceof LocalAgentRefused
       ? Effect.fail(localAgentRefused(failure.reason))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1229,7 +1232,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
-  const placed = yield* startMachineOf(userId, where.asked, runtime.runtime);
+  const placed = yield* startMachineOf(userId, where.asked, runtime.runtime, reached?.access);
   const started = yield* hostedStoreOrUnavailable(
     createAgent(userId, {
       ...place,

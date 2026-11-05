@@ -39,9 +39,11 @@ import {
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import {
   DEVICE_AGENT_LINE_KIND,
+  DEVICE_CAPABILITY,
   DEVICE_SETUP,
   deviceAgentLaunchPayloadSchema,
 } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -1188,7 +1190,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by a plan in Vespin; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
+      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by a plan in Vespin; Codex on a device with none checked, a repository reached on the starter's own token on a host from before it works in one on its own GitHub sign-in, or the device gone or away, is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1239,6 +1241,24 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               model: "anthropic/claude-opus-5.5",
               refused: LOCAL_AGENT_REFUSAL.PREPARING,
             },
+            {
+              name: "a repository reached on the starter's own token, on a host that works in one on its own GitHub sign-in",
+              mac: true,
+              ownToken: true,
+              signsIn: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: undefined,
+              runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+            },
+            {
+              name: "a repository reached on the starter's own token, on a host from before it works in one on its own GitHub sign-in",
+              mac: true,
+              ownToken: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN,
+            },
           ] as const;
           for (const each of cases) {
             const { owner, workspaceId } = yield* openStarter(true, each.chatGpt);
@@ -1250,6 +1270,9 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
                 ...("setup" in each ? { setup: each.setup } : undefined),
+                ...("signsIn" in each
+                  ? { capabilities: [DEVICE_CAPABILITY.GITHUB_SIGN_IN] }
+                  : undefined),
               });
             }
             // A device whose row is gone leaves the task naming none.
@@ -1265,7 +1288,18 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             if ("away" in each)
               yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
             const { native } = runtimes();
-            const ask = { ...startOn(task.id, each.model) };
+            // Note that a repository reached on the starter's own token is handed as the task's own start reached it, so no GitHub read decides its access.
+            const ask = {
+              ...startOn(task.id, each.model),
+              ...("ownToken" in each
+                ? {
+                    reached: {
+                      repository: `${RELAY.owner}/${RELAY.name}`,
+                      access: GITHUB_ACCESS.TOKEN,
+                    },
+                  }
+                : undefined),
+            };
             const started = yield* Effect.result(
               startAgent(routedSessions(owner), owner, ask).pipe(
                 Effect.provide(

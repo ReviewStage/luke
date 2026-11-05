@@ -99,6 +99,17 @@ stored like any other. To tell your machines apart, each sends us a keyed hash
 of its hardware or machine id, never the id itself, and a Mac sends its model
 name.
 
+For a repository the Vespin GitHub App reaches, an agent on your machine gets
+a GitHub token from us that lasts an hour and works only for that repository.
+For a repository reached only on your own GitHub token, we never send that
+token to any machine. Instead, the agent uses the GitHub sign-in already set up
+on that machine for its account: your `gh` login, your Git credential helper and
+settings, and your SSH keys and SSH agent. **Such an agent acts as whoever is
+signed in on that machine, with every repository and permission that sign-in
+has, not just the task's repository.** Before it starts, it checks that the
+sign-in reaches the repository. If it doesn't, the agent doesn't start, and its
+transcript says to sign in with `gh auth login` or set up SSH.
+
 ### Usage data and screen recordings
 
 The Mac app and the web app send counts of which features you use, from a
