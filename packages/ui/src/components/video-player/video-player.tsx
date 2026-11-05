@@ -351,8 +351,10 @@ function playerKey(
     // A held key plays or pauses once, not again with each repeat; a held arrow or frame key goes on.
     if (!event.repeat) toggleOf(video);
   } else if (seek !== undefined) {
-    video.currentTime = Math.min(endOf(video), Math.max(0, video.currentTime + seek));
-    onJump(seek);
+    const from = video.currentTime;
+    video.currentTime = Math.min(endOf(video), Math.max(0, from + seek));
+    // A jump at an end that moves nothing flashes nothing; one cut short by an end still says the key's step, as the video sites do.
+    if (video.currentTime !== from) onJump(seek);
   } else if (step !== undefined) {
     stepFrame(video, frame, step);
   } else if (event.key === END_KEYS.START || event.key === END_KEYS.END) {

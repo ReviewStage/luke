@@ -139,9 +139,11 @@ test("the arrows seek five seconds within the video's length, flashing how far, 
   const { container, press, seekAt, reached } = mountPlayer();
   const flash = () => container.querySelector(".ui-video-player-jump")?.textContent;
   press("ArrowRight");
-  expect(seekAt()).toBe("5");
-  expect(flash()).toBe("5 seconds");
-  // A turn starts the flash over; presses one way while it stands add up.
+  press("ArrowRight");
+  expect(seekAt()).toBe("10");
+  expect(flash()).toBe("10 seconds");
+  // A turn starts the flash over, presses one way while it stands add up, and one at the start that moves nothing adds nothing.
+  press("ArrowLeft");
   press("ArrowLeft");
   press("ArrowLeft");
   expect(seekAt()).toBe("0");
