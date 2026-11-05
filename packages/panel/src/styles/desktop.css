@@ -1521,32 +1521,11 @@ body,
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: the model chip's words are what give way, cut short, and the microphone stands in the row in place
-   of a ⋯ that would hold it alone. */
+   round Start at the row's end: the model chip's words are what give way, cut short. */
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {
     flex-shrink: 1;
-  }
-
-  .new-task-composer .agent-composer > form:not(.inbox-answer) .dictate-button {
-    display: flex;
-  }
-
-  .new-task-composer .agent-composer-actions .agent-composer-more {
-    display: none;
-  }
-}
-
-/* The narrowest, where the + goes into the ⋯ too, the ⋯ stands again and
-   takes the microphone in with it. */
-@container composer (width < 240px) {
-  .new-task-composer .agent-composer > form:not(.inbox-answer) .dictate-button {
-    display: none;
-  }
-
-  .new-task-composer .agent-composer-actions .agent-composer-more {
-    display: inline-flex;
   }
 }
 

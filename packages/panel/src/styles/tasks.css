@@ -2153,12 +2153,17 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
 }
 
 /* Too narrow for every press: the ⋯ takes in the context ring and the
-   microphone. The ring's box stays, out of the row at its right end, so
-   the popover the ⋯ opens for it hangs where the ⋯ stands. */
+   microphone, but only where the ring stands, since a ⋯ holding the
+   microphone alone is one press behind two. The ring's box stays, out of
+   the row at its right end, so the popover the ⋯ opens for it hangs where
+   the ⋯ stands. */
 /* off-scale: 400px, a card under which the box folds its own presses into its ⋯ (composer-foot.css) */
 @container composer (width < 400px) {
   .agent-composer .agent-context-button,
-  .agent-composer > form:not(.inbox-answer) .dictate-button {
+  .agent-composer
+    > form:not(.inbox-answer)
+    .agent-composer-actions:has(.agent-context-button)
+    .dictate-button {
     display: none;
   }
 
@@ -2169,16 +2174,22 @@ li:is(:hover, [data-dragging]) .agent-queue-lead[data-queue-handle] > :last-chil
     height: 100%;
   }
 
-  .agent-composer-actions .agent-composer-more {
+  .agent-composer-actions:has(.agent-context-button) .agent-composer-more {
     display: inline-flex;
   }
 }
 
-/* The narrowest: the + goes into the ⋯ too, its menu's rows with it,
-   leaving what the agent published, the model, the ⋯, and Send. */
+/* The narrowest: the + goes into the ⋯ too, its menu's rows with it, and
+   the microphone with them, leaving what the agent published, the model,
+   the ⋯, and Send. */
 @container composer (width < 240px) {
-  .agent-composer .agent-composer-attach {
+  .agent-composer .agent-composer-attach,
+  .agent-composer > form:not(.inbox-answer) .dictate-button {
     display: none;
+  }
+
+  .agent-composer-actions .agent-composer-more {
+    display: inline-flex;
   }
 }
 
