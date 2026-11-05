@@ -78,6 +78,8 @@ import { openPageInBrowserItem } from "../open-in-browser-item.js";
 import { usePhoneRoom } from "../stage-room.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import {
+  COMMENTS_FILTER,
+  type CommentsFilter,
   ownWordsIn,
   PAGE_COMMENT_WORDS,
   PageCommentLayer,
@@ -681,8 +683,17 @@ function useCommenting(place: PlanCommentPlace | undefined) {
   };
 }
 
-/** What a drag of the comments pane leaves the page beside it, in CSS pixels: a narrow page's room. */
-const PAGE_RESERVE = 320;
+/**
+ * The most of the row it stands in the comments pane takes, which the
+ * stylesheet holds it to as well (`.page-comments-column`'s 50%), so a drag
+ * starts from the width drawn and the page keeps at least half the row.
+ */
+const COMMENTS_SHARE = 0.5;
+
+/** What a drag of the comments pane leaves the page beside it in their row, in CSS pixels: the rest of the row past the pane's share. */
+function pageReserve(row: HTMLElement): number {
+  return row.getBoundingClientRect().width * (1 - COMMENTS_SHARE);
+}
 
 /** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected. */
 function threadMarks(threads: readonly PlanCommentThread[]): readonly PageMark[] {
@@ -758,13 +769,15 @@ export function PagePane({
   const toggleLabel = showingSource ? "View page" : "View source";
   const toggleView = () => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE);
   const commentsLabel = commenting.column ? "Hide comments" : "Show comments";
+  // Note that the pane's filter is the tab's, so the pane shut and opened again lists what it listed.
+  const [commentsFilter, setCommentsFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
   const commentsWidth = usePageCommentsWidth();
   // Note that the edge is the tab's, which outlives the pane a drag shuts.
   const commentsEdge = useResizeEdge({
     side: RESIZE_EDGE_SIDE.LEFT,
     width: commentsWidth.width,
     bounds: PAGE_COMMENTS_WIDTH,
-    reserve: () => PAGE_RESERVE,
+    reserve: pageReserve,
     label: "Resize comments",
     onResize: commentsWidth.onResize,
     onToggleCollapsed: commenting.toggleColumn,
@@ -993,6 +1006,8 @@ export function PagePane({
                 control={comments.control}
                 doors={comments.doors}
                 open={commenting.open}
+                filter={commentsFilter}
+                onFilter={setCommentsFilter}
                 onOpen={(thread) =>
                   commenting.setOpen(thread === undefined ? undefined : [thread.id])
                 }

@@ -2523,10 +2523,10 @@ export function CommentFocusScope({
   );
 }
 
-/** Which of the plan's threads the Comments tab lists. */
-const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
+/** Which of the threads a list of them shows: the plan's Comments tab, or a page's comments pane. */
+export const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
-type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
+export type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 
 /** The Comments tab's filter, kept on this Mac, one for every plan. */
 const KEPT = {
@@ -2894,6 +2894,8 @@ export function PageComments({
   control,
   doors,
   open,
+  filter,
+  onFilter,
   onOpen,
 }: {
   /** The page's threads, as `usePlanComments` holds them for the page. */
@@ -2901,10 +2903,12 @@ export function PageComments({
   doors: Omit<ThreadDoors, "control">;
   /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
+  /** Which threads the pane lists, kept by its tab so the pane shut and opened again lists the same. */
+  filter: CommentsFilter;
+  onFilter: (filter: CommentsFilter) => void;
   /** Outlines the thread's element, or lets the one outlined go where none is handed. */
   onOpen: (thread: PlanCommentThread | undefined) => void;
 }): React.JSX.Element {
-  const [filter, setFilter] = useState<CommentsFilter>(COMMENTS_FILTER.OPEN);
   const list = useRef<HTMLDivElement>(null);
   usePressAway(NO_LAYER, () => undefined, {
     onPressAway: open === undefined ? undefined : () => onOpen(undefined),
@@ -2920,8 +2924,8 @@ export function PageComments({
         ? COMMENTS_FILTER.OPEN
         : COMMENTS_FILTER.RESOLVED;
   useEffect(() => {
-    if (openedFilter !== undefined) setFilter(openedFilter);
-  }, [first, openedFilter]);
+    if (openedFilter !== undefined) onFilter(openedFilter);
+  }, [first, openedFilter, onFilter]);
   useLayoutEffect(() => {
     const card = list.current?.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
     if (first === undefined || list.current === null || card === null || card === undefined) return;
@@ -2932,7 +2936,7 @@ export function PageComments({
       control={control}
       doors={{ ...doors, control }}
       filter={filter}
-      onFilter={setFilter}
+      onFilter={onFilter}
       empty={NO_PAGE_COMMENTS}
       list={list}
       className="page-comments relative h-full"
