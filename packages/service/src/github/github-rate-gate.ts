@@ -440,9 +440,13 @@ export const githubRateGate: Layer.Layer<
       const writes = MUTATIVE_METHODS.has(request.method);
       const send = Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const local = holds.get(identity);
-        const held =
-          local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
+        const local = () => {
+          const standing = holds.get(identity);
+          return standing !== undefined && now < standing.until ? standing : undefined;
+        };
+        // Note that the local hold is read again after the shared one, because the other lane may have been refused while that read was out.
+        const shared = local() === undefined ? yield* sharedHold(identity, now) : undefined;
+        const held = local() ?? shared;
         if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
         // Note that a write books its start only now, as it is sent, so a
         // write that waited for its lane still starts a second after the
