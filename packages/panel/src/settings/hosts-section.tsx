@@ -77,9 +77,10 @@ import { MenuRow } from "./menu-row.js";
  * the service's floor is refused and reads offline. Remove, on the row,
  * refuses that machine at once, after asking; the host removes itself from
  * the machine as it hears so, at once or, for one that reads offline, once
- * it is online again, so only that one is shown the command to run on a
- * machine that never will be. A host removed on its machine by `vespin-host
- * uninstall` leaves the list by itself. Adding takes a Linux server and a
+ * it is online again. The question still shows the command that removes it
+ * by hand, since the list names no host's release, and one from before
+ * hosts removed themselves does not until it updates. A host removed on its
+ * machine by `vespin-host uninstall` leaves the list by itself. Adding takes a Linux server and a
  * Mac alike, through one command.
  *
  * In the desktop app, This Mac always stands first, and offers no Remove,
@@ -196,7 +197,14 @@ function StandingLine({ host, book }: { host: HostLine; book: PresenceBook }): R
 const REMOVED = `It stops taking agents now, and ${PRODUCT_NAME} removes itself from the machine, its agents' folders included. Their tasks and transcripts stay in ${PRODUCT_NAME}.`;
 
 /** What Remove adds for a host that reads offline, which hears it was removed only once it is online again. */
-const REMOVED_OFFLINE = `It's offline, so it does that the next time it's online. If it never will be, run ${HOST_UNINSTALL_COMMAND} on it.`;
+const REMOVED_OFFLINE = "It's offline, so it does that the next time it's online.";
+
+/**
+ * The title of the uninstall command Remove shows every machine, for one
+ * that does not remove itself: a host on a release from before it would,
+ * until it updates, or one that never comes online again.
+ */
+const UNINSTALL_TITLE = "If it's still installed, run this on it";
 
 /** One machine's row: what it is called, whether it is online and what it is, and Remove behind its ⋯, which the This Mac the app keeps offers none of. */
 function HostRow({
@@ -251,7 +259,7 @@ interface RemoveAsked {
   readonly offline: boolean;
 }
 
-/** Remove's question over the machine it was asked of, which removes itself from the machine once it hears so, and what to run on one that reads offline. */
+/** Remove's question over the machine it was asked of, which removes itself from the machine once it hears so, and the command for one that does not. */
 function RemoveHostDialog({
   asked,
   confirm,
@@ -274,6 +282,12 @@ function RemoveHostDialog({
       }}
     >
       {asked?.offline === true ? <Text tone={TEXT_TONE.MUTED}>{REMOVED_OFFLINE}</Text> : null}
+      <CodeCard
+        title={UNINSTALL_TITLE}
+        titleIs={CODE_CARD_TITLE.WORDS}
+        code={HOST_UNINSTALL_COMMAND}
+        copy={copyThroughShell}
+      />
     </ConfirmDialog>
   );
 }
