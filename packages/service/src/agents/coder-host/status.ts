@@ -34,6 +34,7 @@ import {
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
 import {
+  DEVICE_LAUNCH_STEP,
   DEVICE_LAUNCH_STEPS,
   DEVICE_LAUNCH_UNSTARTED,
   type DeviceLaunchStep,
@@ -249,12 +250,22 @@ export function hostLostOf(
   return host.length > 0 ? { host } : undefined;
 }
 
-/** What the turn of a launch its host settled unstarted records, by the step the line last held and the reason its host said, where it said one; nothing where it held no step this build knows, which leaves a runner gone's words. */
+/**
+ * What the turn of a launch its host settled unstarted records, by the step
+ * the line last held and the reason its host said, where it said one;
+ * nothing where it held no step this build knows and said no reason, which
+ * leaves a runner gone's words. Note that a reason with no step is recorded
+ * at the first step, because the host reports each step apart from its
+ * settle, so the step may land after it, and every reason is one the host
+ * finds while it prepares.
+ */
 export function launchStoppedDetail(
   step: string | null,
   unstarted?: DeviceLaunchUnstarted,
 ): string | undefined {
-  const known = DEVICE_LAUNCH_STEPS.find((each) => each === step);
+  const known =
+    DEVICE_LAUNCH_STEPS.find((each) => each === step) ??
+    (unstarted === undefined ? undefined : DEVICE_LAUNCH_STEP.PREPARING);
   if (known === undefined) return undefined;
   const why = unstarted === undefined ? "" : `${LAUNCH_UNSTARTED_DETAIL}${unstarted}`;
   return `${LAUNCH_STOPPED_DETAIL}${known}${why}`;

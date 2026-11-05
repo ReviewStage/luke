@@ -280,6 +280,7 @@ function transcriptAnswer(
     ...(page.context === undefined ? undefined : { context: page.context }),
     ...(page.queue === undefined ? undefined : { queue: page.queue }),
     ...(page.launch === undefined ? undefined : { launch: page.launch }),
+    ...(page.launchUnstarted === undefined ? undefined : { launchUnstarted: page.launchUnstarted }),
   };
 }
 

@@ -213,6 +213,10 @@ export const agentGithubWritten = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const config = agentFolders(folder).gh;
+    // Note that a link left by a launch on the box's own sign-in is taken away first, never written through, so a token never lands in the box user's own gh config.
+    if (Exit.isSuccess(yield* Effect.exit(fileSystem.readLink(config)))) {
+      yield* fileSystem.remove(config);
+    }
     yield* fileSystem.makeDirectory(config, { recursive: true, mode: 0o700 });
     const quoted = JSON.stringify(token);
     yield* replaced(

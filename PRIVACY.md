@@ -102,11 +102,12 @@ name.
 For a repository the Vespin GitHub App reaches, an agent on your machine gets
 a GitHub token from us that lasts an hour and works only for that repository.
 For a repository reached only on your own GitHub token, we never send that
-token to any machine. Instead, the agent uses the GitHub sign-in already set up
-on that machine for its account: your `gh` login, your Git credential helper and
+token to your Mac. Instead, the agent uses the GitHub sign-in already set up on
+that Mac for its account: your `gh` login, your Git credential helper and
 settings, and your SSH keys and SSH agent. **Such an agent acts as whoever is
-signed in on that machine, with every repository and permission that sign-in
-has, not just the task's repository.** Before it starts, it checks that the
+signed in on that Mac, with every repository and permission that sign-in has,
+not just the task's repository.** Such an agent runs only on a Mac, never on
+another machine you add. Before it starts, it checks that the
 sign-in reaches the repository. If it doesn't, the agent doesn't start, and its
 transcript says to sign in with `gh auth login` or set up SSH.
 

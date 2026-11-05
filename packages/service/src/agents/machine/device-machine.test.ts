@@ -274,6 +274,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
           const refused = yield* Effect.flip(launched(opened).pipe(Effect.provide(github.layer)));
 
           assert.ok(refused instanceof LaunchRefused);
+          assert.equal(refused.reason, "host predates its own github sign-in");
           assert.deepEqual(yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId), []);
         }),
     );
@@ -495,13 +496,10 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
     );
 
     it.effect(
-      "a launch its Mac settled unstarted for a reason it said fails the agent's turn naming both the step and that reason",
+      "a launch its Mac settled unstarted for a reason it said, before its step report landed, fails the agent's turn naming that reason at the first step",
       () =>
         Effect.gen(function* () {
-          const { turn } = yield* unstartedTurn(
-            DEVICE_LAUNCH_STEP.PREPARING,
-            DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN,
-          );
+          const { turn } = yield* unstartedTurn(undefined, DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN);
 
           assert.equal(launchStoppedOf(turn), DEVICE_LAUNCH_STEP.PREPARING);
           assert.equal(launchUnstartedOf(turn), DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN);

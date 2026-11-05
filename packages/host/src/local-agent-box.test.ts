@@ -13,6 +13,7 @@ import {
   agentFolders,
   agentFoldersMade,
   agentGithubForgotten,
+  agentGithubWritten,
   agentOwnSignInWritten,
 } from "./local-agent-box.js";
 
@@ -59,7 +60,7 @@ describe("an agent's folders made on the box", () => {
 
 describe("an agent on the box's own GitHub sign-in", () => {
   it.effect(
-    "reads the box user's Git settings and gh sign-in, its repository's commit identity winning, and keeps their sign-in when its turn is let go of",
+    "reads the box user's Git settings and gh sign-in, its repository's commit identity winning, and keeps their sign-in when its turn is let go of or a token is written for it",
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -93,14 +94,20 @@ describe("an agent on the box's own GitHub sign-in", () => {
         expect(git(["config", "user.name"])).toBe(IDENTITY.name);
         expect(git(["config", "user.email"])).toBe(IDENTITY.email);
         expect(git(["config", "credential.helper"])).toBe("box-helper");
+        expect(yield* fileSystem.readLink(agentFolders(folder).gh)).toBe(`${boxHome}/.config/gh`);
         expect(yield* fileSystem.readFileString(`${agentFolders(folder).gh}/hosts.yml`)).toBe(
           BOX_GH_HOSTS,
         );
 
         yield* agentGithubForgotten(folder);
+        // Note that a token written for the agent after, as an App launch would, lands in its own folder.
+        yield* agentGithubWritten(folder, "ghs_fixture_token");
 
         expect(yield* fileSystem.readFileString(`${boxHome}/.config/gh/hosts.yml`)).toBe(
           BOX_GH_HOSTS,
+        );
+        expect(yield* fileSystem.readFileString(`${agentFolders(folder).gh}/hosts.yml`)).toContain(
+          "ghs_fixture_token",
         );
       }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
     GIT_DEADLINE,

@@ -56,7 +56,7 @@ import {
   type AgentUsage,
   type TurnRecord,
 } from "@repo/features/agent-wire";
-import { DEVICE_LAUNCH_STEPS } from "@repo/features/device-agent-wire";
+import { DEVICE_LAUNCH_STEPS, type DeviceLaunchUnstarted } from "@repo/features/device-agent-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { turnRecordOf } from "@repo/features/turn-record";
 import type { ToolSet } from "ai";
@@ -187,6 +187,8 @@ export interface TranscriptPage {
   readonly queue?: AgentQueue;
   /** Where the launch it waits on stands, on its own transcript while it runs on a device and that launch's turn has not opened; absent otherwise and on a worker's. */
   readonly launch?: AgentLaunch;
+  /** Why a failed launch never started, where its host said a reason beside the step in `launch`; absent otherwise. */
+  readonly launchUnstarted?: DeviceLaunchUnstarted;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
