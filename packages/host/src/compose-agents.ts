@@ -1855,7 +1855,7 @@ function composed(
         readParams(
           agentInboxCloseParamsSchema,
           params,
-          "closing an inbox item names the item, the revision it closes, and the close's key",
+          "closing an inbox item names the item, the revision it closes, the close's key, and the note it may carry",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(

@@ -2437,6 +2437,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           revision: params.revision,
           clientKey: params.clientKey,
+          ...(params.text === undefined ? undefined : { text: params.text }),
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
         }),
         answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
       ),
