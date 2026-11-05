@@ -132,6 +132,7 @@
     "./sign-in-provider": "./src/sign-in-provider.js",
     "./oauth-consent": "./src/oauth-consent.js",
     "./mcp-client-wire": "./src/mcp-client-wire.js",
+    "./oauth-client-ids": "./src/oauth-client-ids.js",
     "./mcp-client-view": "./src/mcp-client-view.js",
     "./skill-file": "./src/skill-file.js",
     "./connect-github-step": "./src/connect-github-step.js",

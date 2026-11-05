@@ -1,8 +1,9 @@
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 
 /**
- * Our own native client, and the record shape it is provisioned under: a
- * public PKCE client with no secret.
+ * Our own native clients, and the record shape they are provisioned under:
+ * public PKCE clients with no secret.
  */
 
 /** A client as this build provisions one: public, with no secret, under the scopes and redirects it names. */
@@ -18,8 +19,24 @@ export interface OAuthClient {
 }
 
 export const DESKTOP_OAUTH_CLIENT = {
-  id: "desktop",
+  id: FIRST_PARTY_OAUTH_CLIENT_ID.DESKTOP,
   name: `${PRODUCT_NAME} for macOS`,
+  scopes: ["openid", "profile", "email", "offline_access"],
+  redirectUris: ["http://127.0.0.1/callback"],
+  tokenEndpointAuthMethod: "none",
+  grantTypes: ["authorization_code", "refresh_token"],
+  responseTypes: ["code"],
+  type: "native",
+} as const satisfies OAuthClient;
+
+/**
+ * The command-line tool, signed in as the Mac is: the same scopes, so its
+ * token resolves through userinfo at the account routes, and the same
+ * loopback redirect, which the provider matches on any port.
+ */
+export const CLI_OAUTH_CLIENT = {
+  id: FIRST_PARTY_OAUTH_CLIENT_ID.CLI,
+  name: `${PRODUCT_NAME} CLI`,
   scopes: ["openid", "profile", "email", "offline_access"],
   redirectUris: ["http://127.0.0.1/callback"],
   tokenEndpointAuthMethod: "none",

@@ -6,6 +6,7 @@ import {
   accountBearer,
   sessionBearer,
 } from "@repo/features";
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
 import { Effect, Layer } from "effect";
 import type { AccountSession, AccountSourceHost } from "./account-source.js";
 import {
@@ -14,8 +15,6 @@ import {
   SignInConsent,
   type SignInConsentSeam,
 } from "./effect/seams.js";
-
-const ACCOUNT_CLIENT_ID = "desktop";
 
 /**
  * The desktop's account: an OAuth sign-in through the developer's browser,
@@ -48,7 +47,7 @@ const openOAuthSession = /* @__PURE__ */ Effect.fnUntraced(function* (
 
   const client = new AccountClient({
     baseUrl: host.accountBaseUrl,
-    clientId: ACCOUNT_CLIENT_ID,
+    clientId: FIRST_PARTY_OAUTH_CLIENT_ID.DESKTOP,
   });
 
   const session = yield* AccountSessionManager.make({
