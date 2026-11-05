@@ -1,16 +1,18 @@
 /**
  * feedback-dialog.tsx -- a note to the people who make the app, written in a modal over the window: words, screenshots, and whether to sign it.
  *
- * The window asks the way every desktop app's "Send feedback" asks: it dims,
- * a card holds one field and the few things that go with it, and Cancel and
- * Send sit at its foot. The field takes focus, Tab stays inside the card, and
- * focus goes back to whatever opened it. Enter in the field sends, as every
- * box's does (`enter-sends.ts`), and Shift+Enter adds a line.
+ * The window dims and a card holds the window's one composer, as New task's
+ * does: the screenshots over the words, the + that attaches more and the
+ * round send at its foot, and whether to sign it under it. The field takes
+ * focus, Tab stays inside the card, and focus goes back to whatever opened
+ * it. Enter in the field sends, as every box's does (`enter-sends.ts`), and
+ * Shift+Enter adds a line.
  *
- * One door opens it, Send feedback; a choice at the card's head turns the note
- * into a feature suggestion and back, so the menus hold one item rather than
- * one per kind. Each kind keeps its own draft, so a note is always sent as the
- * kind it was written as. One rule keeps it: only a delivered send discards it; Cancel,
+ * One door opens it, Send feedback; a choice at the card's head turns the
+ * note into a prompt, written as an agent would be asked to build what the
+ * reader wants, and back, so the menus hold one item rather than one per
+ * kind. Each kind keeps its own draft, so a note is always sent as the kind
+ * it was written as. One rule keeps it: only a delivered send discards it;
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
@@ -45,27 +47,26 @@ import { EXPERIMENTS, type Experiment } from "@repo/settings";
 import {
   ALIGN,
   AttachmentChip,
-  BUTTON_VARIANT,
-  Button,
   CHOICE_BAR_LOOK,
   Checkbox,
   ChoiceBar,
+  ComposerBody,
+  ComposerFoot,
+  ComposerFrame,
+  type ComposerNote,
   DIALOG_SIZE,
   Dialog,
-  ErrorState,
   GAP,
-  ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
-  LengthCounter,
   LIST_MOTION_WAY,
   ListMotion,
+  TEXT_AREA_LOOK,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
-  useFilePicker,
   useLeaving,
 } from "@repo/ui";
 import { UNREPORTED } from "@repo/ui/reported-failure";
@@ -75,6 +76,7 @@ import { useAct } from "./act.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
 import { failureShown } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
+import { AttachFilesButton } from "./tasks/attach-files-button.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /** What the dialog is called, whichever kind of note it holds, the choice at its head naming the kind. */
@@ -92,13 +94,13 @@ const FEEDBACK_COPY = {
     placeholder: "What happened, and what did you expect?",
   },
   [FEEDBACK_KIND.PROMPT]: {
-    field: "Feature idea",
-    placeholder: `What would you want ${PRODUCT_NAME} to do?`,
+    field: "Prompt",
+    placeholder: `Write a prompt for what you would want built into ${PRODUCT_NAME}`,
   },
 } as const;
 
-/** What the line under the field says while nothing is wrong: that a screenshot is pasted or dropped in. */
-const ATTACH_HINT = "Paste or drop screenshots to attach them.";
+/** What the + at the composer's foot says, which takes pictures alone. */
+const ATTACH_SCREENSHOTS = "Attach screenshots";
 
 /** What the signature's line says while the note goes unsigned. */
 const UNSIGNED = "Sent without your name or email";
@@ -117,10 +119,14 @@ const IMAGE_REFUSALS: ReadonlySet<string> = new Set(Object.values(IMAGE_REFUSAL)
 
 const SEND_REFUSAL = "Could not send that. Try again.";
 
+/** What the round send is named, and named while a send is out. */
+const SEND = "Send";
+const SENDING = "Sending";
+
 /** The choice at the card's head, one option per kind, named as the person writing it would. */
 const KIND_CHOICES = [
   { value: FEEDBACK_KIND.FEEDBACK, label: "Feedback" },
-  { value: FEEDBACK_KIND.PROMPT, label: "Feature idea" },
+  { value: FEEDBACK_KIND.PROMPT, label: "Prompt" },
 ] as const;
 
 /** How many lines the empty note stands tall before it grows with its words. */
@@ -273,6 +279,29 @@ async function takenImages(
 }
 
 /**
+ * The one line under the composer's foot: why the last send or attachment
+ * did not go, a screenshot refused being the person's input checked and a
+ * send refused the app's failure; else a paste cut to the room left.
+ */
+function composerNote(rejection: string | undefined, cut: boolean): ComposerNote | undefined {
+  if (rejection !== undefined) {
+    return {
+      words: rejection,
+      failure: IMAGE_REFUSALS.has(rejection)
+        ? UNREPORTED.INPUT
+        : failureShown({
+            surface: FAILURE_SURFACE.FEEDBACK_SEND,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          }),
+    };
+  }
+  return cut
+    ? { words: pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH), failure: UNREPORTED.INPUT }
+    : undefined;
+}
+
+/**
  * The dialog for the kind asked for, while one is, and the thank-you after a
  * send lands. Always mounted by the app, because the drafts it keeps between
  * openings live here.
@@ -316,7 +345,6 @@ export function FeedbackDialog({
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const signatureId = useId();
-  const footId = useId();
   const signature = accountSignature(account);
 
   /**
@@ -399,12 +427,6 @@ export function FeedbackDialog({
     if (shownKind.current === of) setRejection(taken.refusal);
   };
 
-  const picker = useFilePicker({
-    accept: "image/*",
-    multiple: true,
-    onFiles: (picked) => void attach(imageFiles(picked)),
-  });
-
   const send = async () => {
     if (kind === undefined) return;
     const current = latestDrafts()[kind];
@@ -450,35 +472,6 @@ export function FeedbackDialog({
       onDismiss={close}
       dropping={fileDrop.dropping}
       dropTarget={fileDrop.target}
-      actionsStart={
-        <>
-          <Button
-            variant={BUTTON_VARIANT.QUIET}
-            icon={<ImageIcon />}
-            disabled={busy || full}
-            onClick={picker.open}
-          >
-            Attach screenshot
-          </Button>
-          {picker.input}
-        </>
-      }
-      actions={
-        <>
-          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={!hasWords(draft)}
-            busy={busy}
-            busyLabel="Sending"
-            onClick={() => void send()}
-          >
-            Send
-          </Button>
-        </>
-      }
     >
       <div className="feedback-dialog ph-no-capture flex min-h-0 flex-col gap-block-gap">
         {shown.about === undefined ? (
@@ -491,60 +484,78 @@ export function FeedbackDialog({
             onChange={onKind}
           />
         ) : null}
-        <div className="feedback-dialog-note flex min-w-0 flex-col gap-ui-6">
-          <TextArea
-            ref={field}
-            label={FEEDBACK_COPY[shown.kind].field}
-            describedBy={footId}
-            placeholder={FEEDBACK_COPY[shown.kind].placeholder}
-            maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-            value={shown.draft.message}
-            disabled={busy}
-            rows={MESSAGE_ROWS}
-            grow
-            enterKeyHint={enterKeyHint()}
-            submitKey={enterSubmitKey()}
-            onSubmit={() => void send()}
-            onChange={(message) => changeDraft({ message })}
-            onPaste={(event) => {
-              // A screenshot on the clipboard is an attachment, not text
-              // that failed to paste; text pastes as it always does.
-              const pasted = imageFiles(event.clipboardData.files);
-              if (pasted.length === 0) {
-                noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
-                return;
-              }
-              event.preventDefault();
-              void attach(pasted);
+        {/* Note that the note is written in the window's one composer, its screenshots over its words and the + and the round send at its foot, as an agent's box and New task's are. */}
+        <ComposerFrame
+          className="feedback-dialog-composer flex min-w-0 flex-col"
+          dropping={fileDrop.dropping}
+        >
+          <ComposerBody
+            files={
+              <FeedbackImages
+                kind={shown.kind}
+                images={shown.draft.images}
+                busy={busy}
+                onRemove={(image) =>
+                  changeDraft({
+                    images: latestDrafts()[shown.kind].images.filter((held) => held !== image),
+                  })
+                }
+              />
+            }
+          >
+            {/* Note that the bare field stands at the card's inset, as the files over it and the foot under it do. */}
+            <div className="feedback-dialog-field px-ui-12 pt-ui-12">
+              <TextArea
+                ref={field}
+                label={FEEDBACK_COPY[shown.kind].field}
+                look={TEXT_AREA_LOOK.BARE}
+                placeholder={FEEDBACK_COPY[shown.kind].placeholder}
+                maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+                value={shown.draft.message}
+                disabled={busy}
+                rows={MESSAGE_ROWS}
+                grow
+                enterKeyHint={enterKeyHint()}
+                submitKey={enterSubmitKey()}
+                onSubmit={() => void send()}
+                onChange={(message) => changeDraft({ message })}
+                onPaste={(event) => {
+                  // A screenshot on the clipboard is an attachment, not text
+                  // that failed to paste; text pastes as it always does.
+                  const pasted = imageFiles(event.clipboardData.files);
+                  if (pasted.length === 0) {
+                    noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
+                    return;
+                  }
+                  event.preventDefault();
+                  void attach(pasted);
+                }}
+              />
+            </div>
+          </ComposerBody>
+          <ComposerFoot
+            tools={
+              <AttachFilesButton
+                label={ATTACH_SCREENSHOTS}
+                accept="image/*"
+                disabled={busy || full}
+                onFiles={(picked) => void attach(imageFiles(picked))}
+              />
+            }
+            counter={{
+              length: shown.draft.message.length,
+              limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
             }}
+            send={{
+              label: SEND,
+              empty: !hasWords(draft),
+              onSend: () => void send(),
+              busy,
+              busyLabel: SENDING,
+            }}
+            note={composerNote(rejection, cutWords === shown.draft.message)}
           />
-          <div className="feedback-dialog-foot flex min-w-0 items-baseline justify-between gap-control-gap">
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.CAPTION}
-              tone={TEXT_TONE.MUTED}
-              id={footId}
-            >
-              {cutWords === shown.draft.message
-                ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
-                : ATTACH_HINT}
-            </Text>
-            <LengthCounter
-              length={shown.draft.message.length}
-              limit={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-            />
-          </div>
-        </div>
-        <FeedbackImages
-          kind={shown.kind}
-          images={shown.draft.images}
-          busy={busy}
-          onRemove={(image) =>
-            changeDraft({
-              images: latestDrafts()[shown.kind].images.filter((held) => held !== image),
-            })
-          }
-        />
+        </ComposerFrame>
         {signature ? (
           // Note that who the note is signed by stands under the box's words, so a long address is cut there rather than squeezing the words onto two lines.
           <Checkbox
@@ -569,21 +580,6 @@ export function FeedbackDialog({
             Include my name and email
           </Checkbox>
         ) : null}
-        {rejection === undefined ? null : (
-          <ErrorState
-            failure={
-              IMAGE_REFUSALS.has(rejection)
-                ? UNREPORTED.INPUT
-                : failureShown({
-                    surface: FAILURE_SURFACE.FEEDBACK_SEND,
-                    cause: FAILURE_CONDITION.REFUSED,
-                    refused: true,
-                  })
-            }
-          >
-            {rejection}
-          </ErrorState>
-        )}
       </div>
     </Dialog>
   );

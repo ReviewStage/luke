@@ -127,7 +127,7 @@ function field(): HTMLTextAreaElement {
   assert.ok(found, "the dialog draws its field");
   return found;
 }
-test("Help's item opens the feedback dialog, with the field taking the keyboard, and its head turns the note into a feature suggestion", () => {
+test("Help's item opens the feedback dialog, with the field taking the keyboard, and its head turns the note into a prompt", () => {
   mount();
 
   const feedback = openFromHelp();
@@ -140,10 +140,10 @@ test("Help's item opens the feedback dialog, with the field taking the keyboard,
     "the note and its signature are left out of the screen recording",
   );
 
-  act(() => button("Feature idea").click());
+  act(() => button("Prompt").click());
   assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
-  assert.equal(field().getAttribute("aria-label"), "Feature idea");
-  assert.equal(field().placeholder, "What would you want Vespin to do?");
+  assert.equal(field().getAttribute("aria-label"), "Prompt");
+  assert.equal(field().placeholder, "Write a prompt for what you would want built into Vespin");
 });
 
 test("opened from an experiment's row, the dialog is titled for it and its note names the experiment", async () => {
@@ -307,18 +307,6 @@ test("a paste past the cap says it was cut until the words change", () => {
 
   write("x".repeat(limit - 4));
   assert.equal(dialog()?.textContent?.includes(note), false);
-});
-
-test("Cancel closes the card and keeps the note for the next opening", () => {
-  mount();
-  openFromHelp();
-  write("The board missed a plan.");
-  act(() => button("Cancel").click());
-  const closed = dialog() === null;
-  openFromHelp();
-
-  assert.equal(closed, true, "Cancel closes the card");
-  assert.equal(field().value, "The board missed a plan.");
 });
 
 test("an empty note is closed by the first Escape", () => {
