@@ -1146,13 +1146,11 @@ function RepositorySection({
           repository === null ? (
             <NoRepositoryGlyph />
           ) : (
-            <ReplayMask>
-              <RepositoryPicture
-                repository={repository}
-                pictures={context.tasks.repositories.pictures}
-                size={AVATAR_SIZE.GLYPH}
-              />
-            </ReplayMask>
+            <RepositoryPicture
+              repository={repository}
+              pictures={context.tasks.repositories.pictures}
+              size={AVATAR_SIZE.GLYPH}
+            />
           )
         }
         label={repository === null ? named : <ReplayMask>{named}</ReplayMask>}

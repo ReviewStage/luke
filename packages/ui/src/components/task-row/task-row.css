@@ -96,7 +96,7 @@
     gap: var(--ui-item-gap);
   }
 
-  .ui-task-row-draft .ui-task-row-press > [data-slot="input"] {
+  .ui-task-row-draft .ui-task-row-press [data-slot="input"] {
     min-inline-size: 0;
     flex: 1 1 auto;
   }

@@ -953,8 +953,10 @@ body,
 /* Automations ---------------------------------------------------------------- */
 
 /* A narrow room's row says when it runs next in the line under its name,
-   a failure's mark leading the line as it leads an agent's end line. */
-.automation-group .ui-list-row-description > .failed-mark {
+   a failure's mark leading the line as it leads an agent's end line. Note
+   that the mark stands inside the line's replay mark, a box of its own in
+   the tree though not on the screen, so it is reached as a descendant. */
+.automation-group .ui-list-row-description .failed-mark {
   margin-right: var(--ui-tight-gap);
   vertical-align: -3px; /* off-scale: centers a 14px mark on 12px words */
 }
@@ -1607,7 +1609,7 @@ body,
   gap: var(--ui-item-gap);
 }
 
-.tasks-board-draft .tasks-board-name > [data-slot="input"] {
+.tasks-board-draft .tasks-board-name [data-slot="input"] {
   min-inline-size: 0;
   flex: 1 1 auto;
 }
