@@ -2356,7 +2356,7 @@ test("an agent whose starter no longer sees its task keeps its own tools: it rea
   assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
 });
 
-test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done, and brings it back with the record cleared", async () => {
+test("update_agent archives a teammate's idle agent on another task for the caller's starter, recording the calling agent and its reason, answers a call run again as done with the first record kept, and brings it back with the record cleared", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
@@ -2381,7 +2381,8 @@ test("update_agent archives a teammate's idle agent on another task for the call
   };
   assert.ok((await row()).archivedAt !== null);
   assert.deepEqual((await row()).archivedBy, record);
-  assert.equal(archivedAs(await archive({ archived: true, reason }, "call-2")), true);
+  assert.equal(archivedAs(await archive({ archived: true, reason: "Again." }, "call-2")), true);
+  assert.deepEqual((await row()).archivedBy, record, "a second archive keeps the first record");
 
   // An unarchive, here beside a rename, brings it back with the record cleared, and again is done.
   assert.equal(archivedAs(await archive({ archived: false, title: "Billing" }, "call-3")), false);

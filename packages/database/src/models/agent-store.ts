@@ -3276,7 +3276,9 @@ const lockAgentArchivedAt = SqlSchema.findOneOption({
  * The agent archived or brought back, as `archiveAgent` does it, and the
  * transaction its row was written in; an archive reads the row under its
  * lock first, so of two archives at once only the first answers that it
- * archived the agent.
+ * archived the agent, and an archive already standing is kept as it stands,
+ * its stamp and record unmoved, so bringing the agent back opens again every
+ * item it settled.
  */
 export function archiveAgentCommitted(
   userId: string,
@@ -3292,6 +3294,11 @@ export function archiveAgentCommitted(
         const archivedBefore = archived
           ? Option.getOrUndefined(yield* lockAgentArchivedAt({ userId, agentId }))?.archivedAt
           : undefined;
+        // An archive already standing is kept as it stands, so its stamp still names the items it settled.
+        if (archived && archivedBefore !== undefined && archivedBefore !== null) {
+          const kept = yield* findAgent({ userId, agentId });
+          return Option.map(kept, (agent) => ({ agent, archivedNow: false }));
+        }
         // The archive standing before the write, whose stamp names the items it settled.
         const standing = archived ? Option.none() : yield* findAgent({ userId, agentId });
         const written = yield* updateAgentArchived({
