@@ -21,6 +21,10 @@ it.each([
   ["https://github.com/o/r", source()],
   ["https://github.com/o/r/tree/main/skills/x", source({ ref: "main", path: "skills/x" })],
   ["https://github.com/o/r/blob/v2/skills/x/SKILL.md", source({ ref: "v2", path: "skills/x" })],
+  [
+    "https://github.com/o/r/tree/main/skills/x?plain=1#readme",
+    source({ ref: "main", path: "skills/x" }),
+  ],
   ["npx skills add o/r --skill a b -s c", source({ skills: ["a", "b", "c"] })],
   ["npx skills add -y https://github.com/o/r/tree/dev", source({ ref: "dev" })],
   [

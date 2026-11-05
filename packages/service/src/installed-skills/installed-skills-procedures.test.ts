@@ -309,6 +309,7 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           "skills/review/scripts/check.sh": "echo check",
           "skills/review/examples/SKILL.md": skillFile("example", "Part of review."),
           "skills/release/SKILL.md": skillFile("release", "Write release notes."),
+          "vendor/review/SKILL.md": skillFile("review", "A second copy."),
           "node_modules/dep/SKILL.md": skillFile("dep", "A dependency's own."),
         });
         const owner = yield* openGithubUser();
@@ -456,12 +457,10 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         const strangers = yield* openGithubUser();
         const notMember = yield* ask(`${SKILLS}/preview`, strangers, preview(connected, paste));
         assert.equal(notMember.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-        const missingRef = yield* ask(
-          `${SKILLS}/preview`,
-          owner,
-          preview(connected, `${paste}/tree/nowhere`),
+        assert.deepEqual(
+          yield* ask(`${SKILLS}/preview`, owner, preview(connected, `${paste}/tree/nowhere`)),
+          { status: HOSTED_HTTP_STATUS.FORBIDDEN, body: unreached },
         );
-        assert.deepEqual(missingRef.body, unreached);
       }),
   );
 

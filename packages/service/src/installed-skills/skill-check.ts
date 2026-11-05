@@ -77,7 +77,8 @@ export function skillRefusal(
   if (!SKILL_NAME_RULE.test(head.name) || head.description === "") {
     return INSTALLED_SKILL_REFUSAL.SKILL_FILE_INVALID;
   }
-  if (files.some((file) => CREDENTIAL_SHAPES.some((shape) => shape.test(fileText(file.bytes))))) {
+  const texts = files.map((file) => fileText(file.bytes));
+  if (texts.some((text) => CREDENTIAL_SHAPES.some((shape) => shape.test(text)))) {
     return INSTALLED_SKILL_REFUSAL.CREDENTIAL;
   }
   return undefined;

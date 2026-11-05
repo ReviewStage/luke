@@ -290,10 +290,9 @@ export const CHAPTERS_ACT_KIND = {
 
 /**
  * Settings' Skills: the skills the account sees in a workspace held for the
- * window while it holds the stream open, a pasted `skills add` command or
- * skill text previewed, one of its skills' `SKILL.md` read, and installed
- * for the account or its workspace, and one toggled, checked for an
- * update, updated, shared, or removed. The hold's stream carries nothing:
+ * window while it holds the stream open, a pasted GitHub source or skill
+ * text previewed and installed for the account or its workspace, and one
+ * toggled, updated, shared, or removed. The hold's stream carries nothing:
  * what it holds reaches the panel on app state (`LIVE_READ.INSTALLED_SKILLS`),
  * and each write is drawn there as it is asked or answered.
  */

@@ -33,7 +33,8 @@ export type SkillPaste =
 const OWNER = /^[A-Za-z0-9-]+$/u;
 const REPO = /^[A-Za-z0-9._-]+$/u;
 
-const GITHUB_LINK = /^https?:\/\/(?:www\.)?github\.com\/(.*)$/u;
+/** A github.com link, its path captured without any query or fragment after it. */
+const GITHUB_LINK = /^https?:\/\/(?:www\.)?github\.com\/([^?#]*)/u;
 
 /** The words that open a `skills add` line's skill names. */
 const SKILL_FLAGS: ReadonlySet<string> = new Set(["--skill", "-s"]);

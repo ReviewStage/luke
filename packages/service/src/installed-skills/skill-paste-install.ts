@@ -85,7 +85,9 @@ const readSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   const repository = yield* reachSkillRepository(workspaceId, paste.owner, paste.repo, userId);
   const ref = paste.ref ?? repository.defaultBranch;
   const archive = yield* readSkillArchive(repository, sha ?? ref);
-  const skills = skillFolders(archive, paste.path).map((folder) => foundSkill(repository, folder));
+  const found = skillFolders(archive, paste.path).map((folder) => foundSkill(repository, folder));
+  // Note that a name stands once, its first folder's, since an install chooses skills by name.
+  const skills = found.filter((one, at) => found.findIndex(({ name }) => name === one.name) === at);
   return { repository, ref, sha: archive.sha, skills };
 });
 

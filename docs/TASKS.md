@@ -409,10 +409,11 @@ to one of its folders, or an `npx skills add` line naming one, its `--skill`
 names ticked; or a skill's own text, frontmatter and all. Vespin never runs
 the command. The service reads the repository's archive, on the workspace's
 GitHub App, the member's own token, or anonymously for a public repository,
-lists every skill folder it holds to tick before anything is installed, and
+lists its outermost skill folders, outside `node_modules`, `.git`, `dist`,
+and `build`, to tick before anything is installed, and
 pins the files to the commit it read; a later commit on the source is never
 taken on its own. Pasted text installs under the name and description the
-member confirms, its frontmatter's to start with. A skill needs a valid name
+member confirms, which start as its frontmatter's. A skill needs a valid name
 and a description, and a file shaped like a credential is refused. Only GitHub
 repositories are read.
 

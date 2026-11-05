@@ -169,8 +169,8 @@ function refPath(ref: string): string {
 /**
  * The repository's commit at the ref, read whole from its archive: a
  * public repository's from codeload with no token, a private one's through
- * the API on the bearer given; refused for why it was not, which is logged
- * by its kind alone.
+ * the API on the bearer given; refused for why it was not, an answer
+ * GitHub gave otherwise logged by its status or its kind alone.
  */
 export function readRepositoryArchive(
   repository: { readonly fullName: string; readonly public: boolean },
