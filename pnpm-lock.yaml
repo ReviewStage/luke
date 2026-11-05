@@ -203,6 +203,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@repo/agent-runner':
+        specifier: workspace:*
+        version: link:../../packages/agent-runner
       '@repo/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -212,6 +215,9 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.12
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

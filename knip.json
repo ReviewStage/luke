@@ -29,8 +29,8 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/cli": {
-      "entry": ["src/main.ts"],
-      "project": ["src/**"]
+      "entry": ["src/main.ts", "scripts/*.ts"],
+      "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
       "project": ["src/**"],
