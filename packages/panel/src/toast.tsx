@@ -541,7 +541,8 @@ function ToastCard({
   const hold = holdOf(notice);
   const dismiss = () => {
     step({ kind: TOAST_STEP.DISMISS, id });
-    notice.onDismiss?.();
+    // Note that a toast on its way out still draws its controls, so only the first dismissal is told.
+    if (!leaving) notice.onDismiss?.();
   };
   const copy: ToastCopy | undefined =
     details === undefined
