@@ -18,6 +18,8 @@ export const EXPERIMENT = {
   SKILLS: "skills",
   /** Bring your own host: agents that run on the member's own Macs and Linux machines, This Mac among them, set up in Settings › Hosts, rather than only in our cloud. */
   BRING_YOUR_OWN_HOST: "bring-your-own-host",
+  /** Several repositories: an agent started in the cloud works in other repositories beside its own, each cloned beside its checkout. */
+  SEVERAL_REPOSITORIES: "several-repositories",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -41,6 +43,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.SEVERAL_REPOSITORIES,
+    name: "Several repositories",
+    detail:
+      "Start an agent in other repositories beside its own, each checked out beside it. " +
+      "In the cloud only, for repositories reached through the GitHub App.",
+    owner: "Dean",
+    since: "2026-11-05",
+  },
   {
     key: EXPERIMENT.BRING_YOUR_OWN_HOST,
     name: "Bring your own host",

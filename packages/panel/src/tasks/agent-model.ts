@@ -37,6 +37,8 @@ import {
   type AgentTranscriptMessage,
   CONTEXT_WINDOW,
   type ContextWindow,
+  EXTRA_REPOSITORY_REFUSAL,
+  type ExtraRepositoryRefusal,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   type NativeAgentRuntime,
@@ -693,6 +695,7 @@ export function chooseFailureNote(failure: AgentCallFailure): string {
     case AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
     case AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE:
     case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
+    case AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -745,6 +748,8 @@ export interface RefusedCall {
   readonly provider?: ModelProvider | undefined;
   readonly localAgentRefusal?: LocalAgentRefusal | undefined;
   readonly refusedDevice?: RefusedDevice | undefined;
+  readonly extraRepositoryRefusal?: ExtraRepositoryRefusal | undefined;
+  readonly refusedRepository?: string | undefined;
 }
 
 /** The device a Start would run its agent on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
@@ -802,6 +807,32 @@ export function localAgentRefusalWords(
       return `${name} runs an older vespin-host, which can't work in a repository reached on your own GitHub token. Update its host, ${RUN_IN_CLOUD}.`;
     case undefined:
       return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
+  }
+}
+
+/**
+ * Why the repositories a Start named beside its agent's own were refused, as
+ * New task says it, naming the repository where the service named one. A
+ * refusal the service named no reason for says they could not be used.
+ */
+function extraRepositoryRefusalWords(
+  refusal: ExtraRepositoryRefusal | undefined,
+  repository: string | undefined,
+): string {
+  const named = repository ?? "One of the other repositories";
+  switch (refusal) {
+    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
+      return "Turn on Several repositories in Settings › Experimental to start an agent in more than one repository.";
+    case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
+      return "Choose the agent's repository before adding others.";
+    case EXTRA_REPOSITORY_REFUSAL.DEVICE:
+      return "An agent in several repositories runs only in the cloud. Start it in the cloud, or remove the other repositories.";
+    case EXTRA_REPOSITORY_REFUSAL.TOKEN:
+      return `${named} is reached on your own GitHub token. An agent's repositories must all be reached through the GitHub App.`;
+    case EXTRA_REPOSITORY_REFUSAL.OTHER_INSTALLATION:
+      return `${named} is on another GitHub account than the agent's repository. An agent's repositories must share one.`;
+    case undefined:
+      return "These repositories can't be used together. Remove the others to start the agent.";
   }
 }
 
@@ -982,6 +1013,11 @@ export function startFailureNote(
       localAgentRefusalWords(refused.localAgentRefusal, refused.refusedDevice ?? device),
     );
   }
+  if (refused.failure === AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED) {
+    return callFailure(
+      extraRepositoryRefusalWords(refused.extraRepositoryRefusal, refused.refusedRepository),
+    );
+  }
   return (
     settingsFailure(refused, ACTION.START) ??
     callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure))
@@ -1142,6 +1178,8 @@ function startFailureWords(failure: AgentCallFailure): string {
       return keyUnreadableWords(ACTION.START);
     case AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED:
       return localAgentRefusalWords(undefined, undefined);
+    case AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED:
+      return extraRepositoryRefusalWords(undefined, undefined);
   }
 }
 
@@ -1232,6 +1270,7 @@ export function messageFailureWords(failure: AgentCallFailure): string {
       return "This agent no longer exists.";
     // A message names no repository, no model, and no clip, so none of these refusals is its own.
     case AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED:
     case AGENT_CALL_FAILURE.INVALID_CHOICE:
     case AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return `${MESSAGE_NOT_SENT} Try again.`;

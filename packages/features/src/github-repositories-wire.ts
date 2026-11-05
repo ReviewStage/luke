@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { PULL_REQUEST_STATE } from "./agent-wire.js";
-import { GITHUB_REPOSITORY_BOUNDS, GITHUB_REPOSITORY_PATTERN } from "./link-grammar.js";
+import { githubRepositoryFullNameSchema } from "./link-grammar.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -21,13 +21,7 @@ import { countedNumber } from "./service-wire.js";
  * done, or closed as not planned.
  */
 
-/** A repository's full name as the wire takes it: trimmed, and held to GitHub's own shape and bounds. */
-export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
-  EffectSchema.isMaxLength(
-    GITHUB_REPOSITORY_BOUNDS.MAX_OWNER_CHARS + 1 + GITHUB_REPOSITORY_BOUNDS.MAX_NAME_CHARS,
-  ),
-  EffectSchema.isPattern(GITHUB_REPOSITORY_PATTERN),
-);
+export { githubRepositoryFullNameSchema };
 
 /**
  * How a repository is reached: through the workspace's GitHub App

@@ -66,10 +66,13 @@ import {
   agentRunsOnRequestSchema,
   contextWindowSchema,
   disabledServersSchema,
+  EXTRA_REPOSITORY_REFUSAL,
+  type ExtraRepositoryRefusal,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
   MAC_PRESENCE,
   type RefusedDevice,
+  startBranchSchema,
 } from "@repo/features/agent-wire";
 import { deviceAgentRegisterRequestSchema } from "@repo/features/device-agent-wire";
 import {
@@ -391,7 +394,9 @@ export const START_AGENT_REFUSAL = {
     "Not started: give a prompt as text of at most " +
     `${AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     `bounded the same or none, a title of at most ${AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
-    "characters or none, a branch as one git branch name or none, a model with its effort, " +
+    "characters or none, a branch as one git branch name or none, alsoRepositories as at most " +
+    `${AGENT_BOUNDS.MAX_ALSO_REPOSITORIES} repositories as owner/name, each with a branch or ` +
+    "none, or none, a model with its effort, " +
     "both or neither, a taskId or none, a repository as owner/name, null, or none, runsOn as " +
     `${IN_THE_CLOUD_WORDS}, a device of the member's by its name or its id, or none, and images as ` +
     `at most ${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids or none.`,
@@ -434,6 +439,9 @@ export const START_AGENT_REFUSAL = {
   CREDENTIAL_MISSING: `Not started: no subscription or API key of its starter's pays for that model, and ${PRODUCT_NAME}'s key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.`,
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
+  ALSO_NO_REPOSITORY:
+    "Not started: the agent works in no repository of its own for alsoRepositories to stand " +
+    "beside; name its repository, or leave alsoRepositories out.",
   DEVICE_REMOVED: `Not started: the host it would run on was removed. Start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}, or ask the member to add the host again.`,
   NO_DEVICES: `Not started: the member has no device registered to run agents on. Start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}, or ask the member to add a Mac or a host in Settings › Hosts.`,
   NO_SOURCE:
@@ -507,6 +515,26 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
 >;
+
+/** Why a start naming repositories beside its agent's own refused it, in words the calling model can act on, naming the repository where one is why. */
+function extraRepositoryWords(
+  refusal: ExtraRepositoryRefusal,
+  repository: string | undefined,
+): string {
+  const named = repository ?? "One of the repositories";
+  switch (refusal) {
+    case EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF:
+      return "Not started: an agent in several repositories needs the Several repositories experiment, which is off for the member you start for. Ask them to turn it on in Settings › Experimental, or leave alsoRepositories out.";
+    case EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY:
+      return START_AGENT_REFUSAL.ALSO_NO_REPOSITORY;
+    case EXTRA_REPOSITORY_REFUSAL.DEVICE:
+      return `Not started: an agent in several repositories runs only in the cloud. Start it with runsOn ${IN_THE_CLOUD_WORDS}, or leave alsoRepositories out.`;
+    case EXTRA_REPOSITORY_REFUSAL.TOKEN:
+      return `Not started: ${named} is reached only on the member's own GitHub token, and an agent's repositories are all reached through the GitHub App. Leave it out, or ask the member to give the workspace's GitHub App access to it.`;
+    case EXTRA_REPOSITORY_REFUSAL.OTHER_INSTALLATION:
+      return `Not started: ${named} is on another GitHub account's installation of the App than the agent's own repository, and one agent's repositories share one. Leave it out, or start a separate agent for it.`;
+  }
+}
 
 /** Why a start on another member's device refused it, naming the device and its owner where the refusal did. */
 function notOwnerWords(device: RefusedDevice | undefined): string {
@@ -638,11 +666,7 @@ const START_TITLE = Schema.Trim.check(
 );
 
 /** A branch a start may name: one git ref's name as GitHub holds it, with no whitespace, which GitHub then confirms. */
-const START_BRANCH = Schema.String.check(
-  Schema.isNonEmpty(),
-  Schema.isMaxLength(255),
-  Schema.isPattern(/^[^\s~^:?*[\\]+$/u),
-);
+const START_BRANCH = startBranchSchema;
 
 /**
  * A start names a prompt at most, a note at most, a branch at most, and a
@@ -724,6 +748,29 @@ const START_AGENT_INPUT = Schema.Struct({
       "The branch of the task's repository to clone the agent's checkout at and cut its own " +
         "branch from, such as the head branch of a pull request it builds on; it must already be " +
         "on GitHub. Leave it out for the repository's default branch.",
+    ),
+  ),
+  alsoRepositories: Schema.optionalKey(
+    describeWire(
+      Schema.Array(
+        Schema.Struct({
+          repository: describeWire(
+            githubRepositoryFullNameSchema,
+            "The repository, as owner/name.",
+          ),
+          branch: Schema.optionalKey(
+            describeWire(
+              START_BRANCH,
+              "The branch to clone its checkout at, which must already be on GitHub; leave it " +
+                "out for its default branch.",
+            ),
+          ),
+        }),
+      ).check(Schema.isMinLength(1), Schema.isMaxLength(AGENT_BOUNDS.MAX_ALSO_REPOSITORIES)),
+      "Other repositories the agent works in beside its own, each checked out in a folder of " +
+        "its own beside its checkout, which its instructions name: each reached through the " +
+        "GitHub App installation its own repository is on, the agent in the cloud, and the " +
+        "member with the Several repositories experiment on. Leave it out for one repository.",
     ),
   ),
   model: Schema.optionalKey(
@@ -1432,6 +1479,9 @@ function startRefusalWords(refusal: HostedRefusal): string {
   if (refusal.localAgentRefusal !== undefined) {
     return LOCAL_AGENT_REFUSAL_WORDS[refusal.localAgentRefusal];
   }
+  if (refusal.extraRepositoryRefusal !== undefined) {
+    return extraRepositoryWords(refusal.extraRepositoryRefusal, refusal.refusedRepository);
+  }
   return withReset(
     START_REFUSAL_WORDS.get(refusal.error) ?? START_AGENT_REFUSAL.UNAVAILABLE,
     refusal,
@@ -2010,6 +2060,7 @@ export function runStartAgent(
         attachments: images.success,
         title: asked.success.title,
         branch: asked.success.branch,
+        alsoRepositories: asked.success.alsoRepositories,
         from,
         runsOn: runsOn.success,
         summaryModel: call.summaryModel,

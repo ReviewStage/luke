@@ -15,7 +15,11 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
-import { localAgentRefusalSchema, refusedDeviceSchema } from "../agent-wire.js";
+import {
+  extraRepositoryRefusalSchema,
+  localAgentRefusalSchema,
+  refusedDeviceSchema,
+} from "../agent-wire.js";
 import {
   hostPairingHeldDataSchema,
   hostRemovedDataSchema,
@@ -84,6 +88,16 @@ const localAgentRefusedData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(localAgentRefusedDataSchema),
 );
 
+/** What a refused Start naming repositories beside its agent's own carries beside its slug: why, and the repository where one is why. */
+export const extraRepositoryRefusedDataSchema = EffectSchema.Struct({
+  extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
+  refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+const extraRepositoryRefusedData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(extraRepositoryRefusedDataSchema),
+);
+
 const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
@@ -146,6 +160,7 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: {},
   [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: {},
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: { data: extraRepositoryRefusedData },
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: { data: hostUpgradeNeededData },
   [HOSTED_API_ERROR.DEVICE_REMOVED]: {},
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: {},

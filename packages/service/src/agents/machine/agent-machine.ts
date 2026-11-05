@@ -231,6 +231,8 @@ export interface RunnerLaunch<A, E, R, EL, RL> {
   readonly env: Readonly<Record<string, string>>;
   /** The agent the runner is launched for, whose place's record names it. */
   readonly agentId: string;
+  /** Where the repositories the agent works in beside its own are checked out (`extraCheckoutPaths`), which a sandbox's launch marks as it marks the agent's own checkout; none for an agent in one repository or none. */
+  readonly extraCheckouts?: readonly string[] | undefined;
   /** The place's lifecycle name, which the runner is recorded under. */
   readonly name: MachineName;
   /** The caller's steps the runner waits on, run beside the machine's own; their result is handed back. */

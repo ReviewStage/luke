@@ -504,6 +504,36 @@ export interface GitHubRepositoryToken {
   readonly access: GitHubTokenAccess;
 }
 
+/** Why one token of the App's does not reach a set of repositories, as `REPOSITORY_SET_UNREACHED` says. */
+export const REPOSITORY_SET_UNREACHED = {
+  /** Neither the workspace's installation nor the member's token reaches the repository; why travels beside it. */
+  UNREACHED: "unreached",
+  /** Only the member's own token reaches the repository, and the App mints no token for it. */
+  TOKEN: "token",
+  /** The repository is reached through another installation of the App than the first repository's. */
+  OTHER_INSTALLATION: "other-installation",
+} as const;
+
+/** The set's first repository the App's one token does not reach, and why. */
+export type RepositorySetUnreached =
+  | {
+      readonly why: typeof REPOSITORY_SET_UNREACHED.UNREACHED;
+      readonly unreached: GitHubRepositoryUnreached;
+    }
+  | {
+      readonly why:
+        | typeof REPOSITORY_SET_UNREACHED.TOKEN
+        | typeof REPOSITORY_SET_UNREACHED.OTHER_INSTALLATION;
+      readonly repository: string;
+    };
+
+/** One installation token for several repositories: each as GitHub spells it, in the order named, and the token, good for an hour from its mint. */
+export interface GitHubRepositoriesToken {
+  readonly repositories: readonly GitHubRepository[];
+  readonly token: Redacted.Redacted;
+  readonly access: { readonly kind: typeof GITHUB_ACCESS.APP };
+}
+
 /** A token held apart from any one repository, and whose it is. */
 type HeldToken = Omit<GitHubRepositoryToken, "repository">;
 
@@ -693,6 +723,36 @@ export interface GitHubAppService {
     member: string | undefined,
   ) => Effect.Effect<
     Option.Option<GitHubRepositoryToken>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * The repositories named, read afresh as `repositoryReach` reads one,
+   * where the workspace's one installation of the App reaches them all, in
+   * the order named; else the first that is not reached, is reached only on
+   * the member's own token, or is on another installation than the first.
+   */
+  readonly repositorySetReach: (
+    organizationId: string,
+    fullNames: readonly string[],
+    member: string | undefined,
+  ) => Effect.Effect<
+    Result.Result<readonly GitHubRepository[], RepositorySetUnreached>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
+   * One write token for every repository named, minted afresh as the App on
+   * the one installation that reaches them all, with the permissions
+   * `repositoryWriteToken` cuts one repository's to; else why not, on the
+   * terms of `repositorySetReach`, read on the kept reach as a mint reads it.
+   */
+  readonly repositoriesWriteToken: (
+    organizationId: string,
+    fullNames: readonly string[],
+    member: string | undefined,
+  ) => Effect.Effect<
+    Result.Result<GitHubRepositoriesToken, RepositorySetUnreached>,
     GitHubWorkspaceReadFailure,
     HttpClient.HttpClient | DatabaseServices
   >;
@@ -1994,6 +2054,49 @@ function githubAppService(
         });
       });
 
+    /**
+     * The repositories named reached through the one installation that
+     * reaches the first, each on the reach given (`reach` afresh, or
+     * `standingReach` for a mint), or the first that is not, and why.
+     */
+    const setReach = <R>(
+      fullNames: readonly string[],
+      reachOf: (fullName: string) => Effect.Effect<ReachResult, GitHubWorkspaceReadFailure, R>,
+    ) =>
+      Effect.gen(function* () {
+        type SetReach = Result.Result<readonly ReachedThroughApp[], RepositorySetUnreached>;
+        const reached: ReachedThroughApp[] = [];
+        for (const fullName of fullNames) {
+          const one = yield* reachOf(fullName);
+          if (Result.isFailure(one)) {
+            const unreached: SetReach = Result.fail({
+              why: REPOSITORY_SET_UNREACHED.UNREACHED,
+              unreached: one.failure,
+            });
+            return unreached;
+          }
+          const onApp = one.success;
+          const [first] = reached;
+          if (onApp.access === GITHUB_ACCESS.TOKEN) {
+            const onToken: SetReach = Result.fail({
+              why: REPOSITORY_SET_UNREACHED.TOKEN,
+              repository: fullName,
+            });
+            return onToken;
+          }
+          if (first !== undefined && first.installation.id !== onApp.installation.id) {
+            const elsewhere: SetReach = Result.fail({
+              why: REPOSITORY_SET_UNREACHED.OTHER_INSTALLATION,
+              repository: fullName,
+            });
+            return elsewhere;
+          }
+          reached.push(onApp);
+        }
+        const together: SetReach = Result.succeed(reached);
+        return together;
+      });
+
     const service: GitHubAppService = {
       installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
       botLogin: Effect.map(ready, (app) => `${app.slug}${BOT_LOGIN_SUFFIX}`),
@@ -2107,6 +2210,34 @@ function githubAppService(
               : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
           TOKEN_KEEPING.FRESH,
         ),
+      repositorySetReach: (organizationId, fullNames, member) =>
+        Effect.map(
+          setReach(fullNames, (fullName) => reach(organizationId, fullName, member)),
+          Result.map((reached) => reached.map((one) => one.repository)),
+        ),
+      repositoriesWriteToken: (organizationId, fullNames, member) =>
+        Effect.gen(function* () {
+          const reached = yield* setReach(fullNames, (fullName) =>
+            standingReach(new ReachKey({ organizationId, fullName, member })),
+          );
+          if (Result.isFailure(reached)) return Result.fail(reached.failure);
+          const [first] = reached.success;
+          // Note that a set names its first repository, so an empty one is a caller's bug.
+          if (first === undefined) return yield* Effect.die("a set of repositories names none");
+          const on = first.installation;
+          const minted = yield* mint(on.id, {
+            repositories: reached.success.map((one) => one.repository.name),
+            permissions: on.ciReadable
+              ? INSTALLATION_TOKEN_PERMISSIONS.WRITE_READING_CI
+              : INSTALLATION_TOKEN_PERMISSIONS.WRITE,
+          });
+          const token: GitHubRepositoriesToken = {
+            repositories: reached.success.map((one) => one.repository),
+            token: minted.token,
+            access: { kind: GITHUB_ACCESS.APP },
+          };
+          return Result.succeed(token);
+        }),
       userPusher: (userId, fullName) =>
         Effect.gen(function* () {
           const token = yield* userToken(userId);

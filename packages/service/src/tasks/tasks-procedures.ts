@@ -366,6 +366,12 @@ const startedAgentOn = (
           refusal.localAgentRefusal === LOCAL_AGENT_REFUSAL.NOT_OWNER
             ? undefined
             : { localAgentRefusal: refusal.localAgentRefusal }),
+          ...(refusal.extraRepositoryRefusal === undefined
+            ? undefined
+            : { extraRepositoryRefusal: refusal.extraRepositoryRefusal }),
+          ...(refusal.refusedRepository === undefined
+            ? undefined
+            : { refusedRepository: refusal.refusedRepository }),
         };
         return { plan: task, agentRefusal } satisfies TaskStartAnswer;
       }),

@@ -77,6 +77,7 @@ import {
   agentRenameRequestSchema,
   agentServersRequestSchema,
   agentStartRequestOnWire,
+  type ExtraRepositoryRefusal,
   type LocalAgentRefusal,
   type RefusedDevice,
   TRANSCRIPT_PARTS_QUERY,
@@ -85,6 +86,7 @@ import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choi
 import type { AgentChangeRequest } from "./contract/agents.js";
 import {
   credentialMissingDataSchema,
+  extraRepositoryRefusedDataSchema,
   localAgentRefusedDataSchema,
   planLimitReachedDataSchema,
 } from "./contract/errors.js";
@@ -204,6 +206,8 @@ type Failed = {
   readonly provider?: ModelProvider;
   readonly localAgentRefusal?: LocalAgentRefusal;
   readonly refusedDevice?: RefusedDevice;
+  readonly extraRepositoryRefusal?: ExtraRepositoryRefusal;
+  readonly refusedRepository?: string;
 };
 
 /** The refusals a call may answer with, by the service's own word for each. */
@@ -227,6 +231,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: AGENT_CALL_FAILURE.DEVICE_REMOVED,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED,
 } satisfies NamedRefusals;
 
 /** The refusals a memories read or forget can answer with: a workspace the account is not in, or a memory it may not forget. */
@@ -370,6 +375,19 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
       ...(refused.refusedDevice === undefined
         ? undefined
         : { refusedDevice: refused.refusedDevice }),
+    };
+  }
+  if (failure === AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED) {
+    const refused = Result.getOrUndefined(
+      readServiceAnswer(extraRepositoryRefusedDataSchema)(payload),
+    );
+    if (refused?.extraRepositoryRefusal === undefined) return { failure };
+    return {
+      failure,
+      extraRepositoryRefusal: refused.extraRepositoryRefusal,
+      ...(refused.refusedRepository === undefined
+        ? undefined
+        : { refusedRepository: refused.refusedRepository }),
     };
   }
   if (failure !== AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };

@@ -673,6 +673,46 @@ function buildWords(
   };
 }
 
+/** A repository an agent works in beside its own, as its instructions name it: `owner/name`, where it is checked out, and the branch its checkout is cloned at, null for its default branch. */
+export interface ExtraCheckout {
+  readonly repository: string;
+  readonly path: string;
+  readonly branch: string | null;
+}
+
+/**
+ * What an agent that works in other repositories beside its own is told of
+ * them, after its own checkout: each by name, where it stands, and its
+ * branch, read as its own repository is, and for an agent that builds, how
+ * its work there is published while its pull request opens in its own
+ * repository alone; nothing for an agent in one repository, whose words are
+ * then the text they always were, which the prompt cache depends on.
+ */
+function extraCheckoutsWords(
+  extras: readonly ExtraCheckout[],
+  repository: string,
+  builds: boolean,
+): string {
+  if (extras.length === 0) return "";
+  const listed = extras
+    .map(
+      (extra) =>
+        `- \`${extra.repository}\` at \`${extra.path}\`, ${extra.branch === null ? "on its default branch" : `on \`${extra.branch}\``}`,
+    )
+    .join("\n");
+  const reading =
+    "Read each one's `AGENTS.md` and `CLAUDE.md` before you change it, and run its own checks.";
+  const publishing = builds
+    ? ` Commit in each on a branch of your own cut from the branch it is checked out on, and push it; your pull request opens in \`${repository}\` alone, so name what you pushed in the others in its description and in your final message.`
+    : "";
+  return `
+
+You work in other repositories beside it too, each checked out whole in a folder of its own and reached by the same credential:
+${listed}
+
+${reading}${publishing}`;
+}
+
 /** Where an agent with a repository works: its checkout, its branch, its commits, its pull request, and its checks. */
 function repositoryWords(
   tools: ToolWords,
@@ -681,6 +721,7 @@ function repositoryWords(
   build: BuildWords,
   startBranch: string | null,
   machine: CoderMachine,
+  extras: readonly ExtraCheckout[],
 ): WorkWords {
   const branch = branchWords(startBranch);
   return {
@@ -688,7 +729,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(machine)}
+The repository is checked out at \`${machine.checkoutPath}\`, ${branch.checkout}. Work there. ${tools.checkout} ${checkoutReachWords(machine)}${extraCheckoutsWords(extras, repository, true)}
 
 ## How to work
 
@@ -868,6 +909,7 @@ function pilotWords(
   startBranch: string | null,
   memberToken: boolean,
   machine: CoderMachine,
+  extras: readonly ExtraCheckout[],
 ): WorkWords {
   const where = repository === null ? "" : `, in the GitHub repository \`${repository}\``;
   const trunk =
@@ -879,7 +921,7 @@ function pilotWords(
       ? sandboxSection(tools, machine)
       : `## The checkout
 
-The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(machine)} You commit, push, and open a pull request only on a task you do yourself.`;
+The repository is checked out at \`${machine.checkoutPath}\`, ${branchWords(startBranch).checkout}, for you to read. ${tools.checkout} ${checkoutReachWords(machine)} You commit, push, and open a pull request only on a task you do yourself.${extraCheckoutsWords(extras, repository, false)}`;
   const rules =
     repository === null
       ? ""
@@ -998,6 +1040,7 @@ export function coderInstructions(
   kind: AgentKind = AGENT_KIND.CODER,
   memoryOn = false,
   machine: CoderMachine = SANDBOX_MACHINE,
+  extras: readonly ExtraCheckout[] = [],
 ): string {
   const words = BRIEF_WORDS[brief];
   const tools = toolsOn(TOOL_WORDS[harness], machine);
@@ -1025,9 +1068,20 @@ export function coderInstructions(
   const agent =
     repository === null || build === null
       ? sandboxWords(tools, words, brief, ownTask, machine)
-      : repositoryWords(tools, repository, words, build, startBranch, machine);
+      : repositoryWords(tools, repository, words, build, startBranch, machine, extras);
   const work = pilot
-    ? pilotWords(tools, agent, repository, words, brief, build, startBranch, memberToken, machine)
+    ? pilotWords(
+        tools,
+        agent,
+        repository,
+        words,
+        brief,
+        build,
+        startBranch,
+        memberToken,
+        machine,
+        extras,
+      )
     : agent;
   const place = { ...task, ...work };
   const editing = editPlanTold(
@@ -1095,6 +1149,8 @@ export interface AgentInstructionsContext {
   readonly taskNumber?: number | undefined;
   readonly memoryOn: boolean;
   readonly harness: CoderHarness;
+  /** The repositories it works in beside its own, where each is checked out; none for an agent in one repository or none. */
+  readonly extraRepositories?: readonly ExtraCheckout[] | undefined;
   /** Where the agent's machine keeps its checkout, its installed skills, and the files the service reads back; where every sandbox keeps them, where unsaid. */
   readonly place?:
     | {
@@ -1142,5 +1198,6 @@ export function agentCoderInstructions(agent: Agent, context: AgentInstructionsC
       installedSkills: context.place?.installedSkills ?? SANDBOX_MACHINE.installedSkills,
       sharedFiles: context.place?.sharedFiles ?? SANDBOX_MACHINE.sharedFiles,
     },
+    context.extraRepositories,
   );
 }

@@ -38,8 +38,46 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     DEEPEN: "APP_DEEPEN",
     /** Set on the run that brings a checkout a repository snapshot holds up to its branch; its presence is what makes a run the refresh. */
     REFRESH: "APP_REFRESH",
+    /** The folder under the workspace an extra repository's checkout is cloned into; its presence is what makes a run an extra's clone. */
+    FOLDER: "APP_CHECKOUT_FOLDER",
   },
 } as const;
+
+/** The folders under the workspace an extra checkout never takes: the agent's own checkout's and the state folder. */
+const TAKEN_FOLDERS = new Set(
+  [REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT.split("/").pop(), SANDBOX_STATE_FOLDER].map((folder) =>
+    folder?.toLowerCase(),
+  ),
+);
+
+/**
+ * Where each repository an agent works in beside its own is checked out, in
+ * the order given: `/workspace/<name>`, by the repository's name, or
+ * `/workspace/<owner>-<name>` where another of them shares its name in any
+ * case, or the name is a folder the workspace already holds, and that with
+ * its place in the list after it where even that is taken. Note that the
+ * folder is spliced into the launch's shell text (`vercel-machine.ts`),
+ * which is safe because an `owner/name` is held to GitHub's own letters,
+ * digits, dots, underscores, and hyphens (`GITHUB_REPOSITORY_PATTERN`).
+ */
+export function extraCheckoutPaths(repositories: readonly string[]): readonly string[] {
+  const nameOf = (repository: string) => repository.split("/").pop() ?? repository;
+  const named = repositories.map((repository) => nameOf(repository).toLowerCase());
+  const taken = new Set(TAKEN_FOLDERS);
+  return repositories.map((repository, index) => {
+    const name = nameOf(repository);
+    const shared = named.filter((each) => each === name.toLowerCase()).length > 1;
+    const candidates = [
+      ...(shared ? [] : [name]),
+      repository.replace("/", "-"),
+      `${repository.replace("/", "-")}-${index + 1}`,
+    ];
+    const folder =
+      candidates.find((candidate) => !taken.has(candidate.toLowerCase())) ?? candidates.at(-1);
+    taken.add(folder?.toLowerCase());
+    return `${REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE}/${folder}`;
+  });
+}
 
 /** The step a coding agent's shallow checkout is deepened by: the fetch of the rest of its history. */
 export const DEEPEN_STEP = {

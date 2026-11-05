@@ -10,12 +10,16 @@
  * `hostedRefusalResponse` answered.
  */
 
-import { localAgentRefusalSchema, refusedDeviceSchema } from "@repo/features/agent-wire";
+import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
+import { ORPCError } from "@orpc/server";
+import {
+  extraRepositoryRefusalSchema,
+  localAgentRefusalSchema,
+  refusedDeviceSchema,
+} from "@repo/features/agent-wire";
 import { installedSkillRefusedDataSchema } from "@repo/features/installed-skill-route-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { repositoryUnreachedSchema } from "@repo/features/repository-reach-wire";
-import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
-import { ORPCError } from "@orpc/server";
 import { Effect, Schema } from "effect";
 import { ADMIN_REFUSAL_STATUS } from "../admin/http-effect.js";
 import { HOSTED_REFUSAL, HOSTED_REFUSAL_STATUS } from "../http/http-effect.js";
@@ -55,6 +59,8 @@ const isHostedRefusal = Schema.is(
     ...installedSkillRefusedDataSchema.fields,
     localAgentRefusal: Schema.optionalKey(localAgentRefusalSchema),
     refusedDevice: Schema.optionalKey(refusedDeviceSchema),
+    extraRepositoryRefusal: Schema.optionalKey(extraRepositoryRefusalSchema),
+    refusedRepository: Schema.optionalKey(Schema.String),
     minimumVersion: Schema.optionalKey(Schema.String),
     hostRemoved: Schema.optionalKey(Schema.Literal(true)),
   }),

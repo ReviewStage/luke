@@ -53,6 +53,32 @@
       "maxLength": 255,
       "description": "The branch of the task's repository to clone the agent's checkout at and cut its own branch from, such as the head branch of a pull request it builds on; it must already be on GitHub. Leave it out for the repository's default branch."
     },
+    "alsoRepositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string",
+            "maxLength": 140,
+            "description": "The repository, as owner/name."
+          },
+          "branch": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "The branch to clone its checkout at, which must already be on GitHub; leave it out for its default branch."
+          }
+        },
+        "required": [
+          "repository"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 9,
+      "description": "Other repositories the agent works in beside its own, each checked out in a folder of its own beside its checkout, which its instructions name: each reached through the GitHub App installation its own repository is on, the agent in the cloud, and the member with the Several repositories experiment on. Leave it out for one repository."
+    },
     "model": {
       "type": "string",
       "minLength": 1,

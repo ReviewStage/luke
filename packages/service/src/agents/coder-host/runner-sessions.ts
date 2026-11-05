@@ -96,6 +96,7 @@ import {
 } from "@repo/agent-runner/protocol";
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { settleRunnerLostTurns } from "@repo/database/models/abandoned-turns";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   type AgentLatestTurn,
@@ -181,6 +182,7 @@ import {
 } from "../machine/agent-machine.js";
 import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { IMAGE_READY } from "../machine/vercel-machine.js";
+import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import {
   FIREWALL_SLOT,
@@ -731,6 +733,14 @@ export const runnerSessions = <
         ? Effect.succeed(false)
         : Effect.map(readAgent(userId, found.agentId), Option.isSome);
 
+    /** Where the repositories the agent works in beside its own are checked out, which its launch marks as it marks its own checkout; none for an agent in one repository or none. */
+    const extraCheckoutsOf = (agent: Agent) =>
+      hasRepository(agent)
+        ? Effect.map(readAgentRepositories(userId, agent.id), ([, ...extras]) =>
+            extraCheckoutPaths(extras.map((extra) => extra.repository)),
+          )
+        : Effect.succeed([]);
+
     /** The repository's credential set at the running place's firewall again, minted afresh; an agent with no repository has none. */
     const renewCredential = (target: ConversationTarget, agent: Agent, place: MachinePlace) =>
       Effect.gen(function* () {
@@ -884,6 +894,7 @@ export const runnerSessions = <
             [RUNNER_ENV.BEARER]: runnerBearer.handed,
           },
           agentId: agent.id,
+          extraCheckouts: yield* extraCheckoutsOf(agent),
           name: place.name,
           ready,
           firstLines: (made) =>

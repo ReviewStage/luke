@@ -3,15 +3,17 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import { listAgents, readAgent, readAgentByKey } from "@repo/database/models/agent-store";
+import { registerDevice } from "@repo/database/models/device-store";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { createTask, readTask } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { messages } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
-import { AGENT_KIND } from "@repo/features/agent-wire";
+import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
+import { AGENT_KIND, AGENT_MACHINE, EXTRA_REPOSITORY_REFUSAL } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING, type AutomationFiring } from "@repo/features/automation-wire";
 import { AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@repo/features/models-wire";
 import { TASK_MODE, TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
@@ -20,14 +22,19 @@ import { EXPERIMENT } from "@repo/settings";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { Deferred, Effect, ErrorReporter, Fiber, Layer, Option, Result } from "effect";
 import { MESSAGE_ROLE, RUN_EVENT, RUN_TURN_ORIGIN, TURN_ORIGIN, TURN_TRIGGER } from "../../core.js";
-import { HOSTED_REFUSAL } from "../../http/http-effect.js";
+import { extraRepositoryRefused, HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
+  GITHUB_APP_WITH_TOKENS,
+  GITHUB_FIXTURE_MEMBER,
   githubReaching,
   type InstallationFixture,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
+  type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import {
   type AgentSessions,
@@ -86,18 +93,18 @@ function fakeEve() {
   return { opened, sessions, eve: Effect.succeed(sessions) };
 }
 
+/** The catalog every Start is checked against. */
+const catalog = modelCatalogOf([
+  {
+    id: AGENT_DEFAULT_CHOICE.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+]);
+
 /** What a Start reaches beside the store: GitHub reaching the repository, and the catalog. */
-const services = Layer.mergeAll(
-  githubReaching(INSTALLATIONS).layer,
-  modelCatalogOf([
-    {
-      id: AGENT_DEFAULT_CHOICE.model,
-      name: "Claude Opus 5.5",
-      provider: MODEL_PROVIDER.ANTHROPIC,
-      efforts: ["low", "medium", "high", "max"],
-    },
-  ]),
-);
+const services = Layer.mergeAll(githubReaching(INSTALLATIONS).layer, catalog);
 
 /** A workspace connected to an installation reaching the repository, and its owner. */
 const openConnectedWorkspace = Effect.gen(function* () {
@@ -476,6 +483,157 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
       assert.ok(Result.isFailure(refused));
       assert.deepEqual(refused.failure, HOSTED_REFUSAL.NOT_PERMITTED);
       assert.deepEqual(yield* listAgents(owner, piloted.id), []);
+    }),
+  );
+});
+
+const WEB = { owner: RELAY.owner, name: "Web" } as const;
+const DOCS = { owner: "Globex", name: "Docs" } as const;
+const SECRET = { owner: RELAY.owner, name: "Secret" } as const;
+
+/** Installations on the repository's account reaching it and its neighbor, one per test, and one on another account. */
+const SEVERAL: readonly InstallationFixture[] = Array.from({ length: 6 }, (_, index) => ({
+  id: 8_100 + index,
+  login: RELAY.owner,
+  accountId: 81_000 + index,
+  repositories: [RELAY, WEB],
+}));
+const ELSEWHERE: InstallationFixture = {
+  id: 8_200,
+  login: DOCS.owner,
+  accountId: 82_000,
+  repositories: [DOCS],
+};
+let severalConnected = 0;
+
+/** GitHub as a member's own token reads a repository no installation reaches, which it may push to. */
+function memberReachesSecret(sent: SentToGitHub): Response | undefined {
+  if (sent.headers.get("authorization") !== `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`) {
+    return undefined;
+  }
+  return new URL(sent.url).pathname === `/repos/${SECRET.owner}/${SECRET.name}`
+    ? Response.json(memberRepositoryJson(SECRET, true))
+    : undefined;
+}
+
+/** What a Start in several repositories reaches: GitHub with every installation above and the member's token, and the catalog. */
+const severalServices = Layer.mergeAll(
+  githubReaching([...SEVERAL, ELSEWHERE], GITHUB_APP_WITH_TOKENS, {}, memberReachesSecret).layer,
+  catalog,
+);
+
+/** A workspace connected to an installation reaching the repository and its neighbor, its owner, who saved their own token, with Several repositories on unless asked off. */
+const openSeveralWorkspace = (experimentOn = true) =>
+  Effect.gen(function* () {
+    const owner = yield* openTokenMember();
+    yield* connectAgentApiKeys(owner);
+    if (experimentOn) {
+      yield* writeAccountPreferences(owner, {
+        experiments: { [EXPERIMENT.SEVERAL_REPOSITORIES]: true },
+      });
+    }
+    const workspaceId = yield* openWorkspace(owner);
+    const installation = SEVERAL[severalConnected++];
+    assert.ok(installation);
+    yield* connectWorkspaceGitHub(workspaceId, installation);
+    return { owner, workspaceId };
+  });
+
+/** A Start that was refused as given, having made no agent under its key. */
+const refusedStart = (owner: string, ask: StartAsk) =>
+  Effect.gen(function* () {
+    const { eve, opened } = fakeEve();
+    const refused = yield* startAgent(eve, owner, ask).pipe(
+      Effect.provide(severalServices),
+      Effect.flip,
+    );
+    assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
+    assert.deepEqual(opened, []);
+    return refused;
+  });
+
+it.layer(getTestDB())("an agent started in several repositories", (it) => {
+  it.effect(
+    "a Start naming repositories beside its own keeps them after it, as GitHub spells them",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openSeveralWorkspace();
+        const { eve } = fakeEve();
+
+        const started = yield* startAgent(eve, owner, {
+          ...workspaceAsk(workspaceId),
+          alsoRepositories: [{ repository: "acme/web" }],
+        }).pipe(Effect.provide(severalServices));
+
+        assert.deepEqual(
+          (yield* readAgentRepositories(owner, started.agent.id)).map((each) => each.repository),
+          [RELAY_REPOSITORY, `${WEB.owner}/${WEB.name}`],
+        );
+      }),
+  );
+
+  it.effect("refuses them to a member with Several repositories off", () =>
+    Effect.gen(function* () {
+      const { owner, workspaceId } = yield* openSeveralWorkspace(false);
+
+      const refused = yield* refusedStart(owner, {
+        ...workspaceAsk(workspaceId),
+        alsoRepositories: [{ repository: `${WEB.owner}/${WEB.name}` }],
+      });
+
+      assert.deepEqual(refused, extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
+    }),
+  );
+
+  it.effect("refuses them to an agent that would run on a device", () =>
+    Effect.gen(function* () {
+      const { owner, workspaceId } = yield* openSeveralWorkspace();
+      const deviceId = randomUUID();
+      yield* registerDevice(owner, { id: deviceId, name: "Studio", ...DEVICE_LAYOUT });
+
+      const refused = yield* refusedStart(owner, {
+        ...workspaceAsk(workspaceId),
+        alsoRepositories: [{ repository: `${WEB.owner}/${WEB.name}` }],
+        runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
+      });
+
+      assert.deepEqual(refused, extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.DEVICE));
+    }),
+  );
+
+  it.effect("refuses one reached only on the member's own token, naming it", () =>
+    Effect.gen(function* () {
+      const { owner, workspaceId } = yield* openSeveralWorkspace();
+
+      const refused = yield* refusedStart(owner, {
+        ...workspaceAsk(workspaceId),
+        alsoRepositories: [{ repository: `${SECRET.owner}/${SECRET.name}` }],
+      });
+
+      assert.deepEqual(
+        refused,
+        extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.TOKEN, `${SECRET.owner}/${SECRET.name}`),
+      );
+    }),
+  );
+
+  it.effect("refuses one on another installation of the App, naming it", () =>
+    Effect.gen(function* () {
+      const { owner, workspaceId } = yield* openSeveralWorkspace();
+      yield* connectWorkspaceGitHub(workspaceId, ELSEWHERE);
+
+      const refused = yield* refusedStart(owner, {
+        ...workspaceAsk(workspaceId),
+        alsoRepositories: [{ repository: `${DOCS.owner}/${DOCS.name}` }],
+      });
+
+      assert.deepEqual(
+        refused,
+        extraRepositoryRefused(
+          EXTRA_REPOSITORY_REFUSAL.OTHER_INSTALLATION,
+          `${DOCS.owner}/${DOCS.name}`,
+        ),
+      );
     }),
   );
 });
