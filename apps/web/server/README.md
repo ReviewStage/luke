@@ -923,12 +923,10 @@ minutes, and an email to the issue's owners on a high-priority issue.
 ### Deploying
 
 The terminal relay, the Browser tab's live view, and the live reads' socket
-(`/api/live/socket`) are WebSocket functions, each exporting the
-`http.Server` Vercel upgrades into, so enable the WebSockets feature on the
-Vercel team and make sure Fluid compute is on for the project. The live
-reads' socket stands no service for now and refuses every upgrade with 503,
-so a host sends its live polls over HTTP under `/api/live/`
-(`terminal/function.ts`). `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
+(`/api/live/socket`, which answers a host's live polls) are WebSocket
+functions, each exporting the `http.Server` Vercel upgrades into, so enable the
+WebSockets feature on the Vercel team and make sure Fluid compute is on for
+the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys. A native agent's runner reports to the deployment's own origin, its
 production domain in production and its own host otherwise, unless
 `APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).
