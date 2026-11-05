@@ -211,7 +211,7 @@ import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
-import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
+import { REPLY_SCOPE, ReplyDoorProvider, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { ShownPage } from "./shown-page.js";
@@ -2792,6 +2792,14 @@ function AgentTabView({
   const { members, former } = useMemberDirectory();
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
+  const replyThroughBox = useCallback((words: string) => replyDoor.current?.(words), []);
+  // Note that Reply stands only while the box takes a change, as a file's + does.
+  const replies =
+    pilotNote === undefined &&
+    onUnarchive === undefined &&
+    continuedNote === undefined &&
+    composer.closed === undefined &&
+    !composer.sending;
   const macOwner = useKept(macOwnerOf(agent.startedBy, members, readerId, former), sameFields);
   const disabledServers = servers.disabled;
   const mentioned = useMemo(
@@ -2831,82 +2839,84 @@ function AgentTabView({
             <MentionedServers value={mentioned}>
               <UndeliveredLines value={marks}>
                 <RewindProvider value={rewind}>
-                  <AgentTranscriptView
-                    messages={lines}
-                    brief={agent.brief}
-                    briefSender={starter === undefined ? undefined : starterActor}
-                    origin={origin}
-                    readerId={readerId}
-                    agentId={agent.id}
-                    taskId={agent.planId ?? undefined}
-                    replay={replay}
-                    delegation={{
-                      models,
-                      own: { model: agent.model, effort: agent.effort },
-                      starts:
-                        delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                      onOpen: openSubagent,
-                      onOpenTarget: openTarget,
-                      cards,
-                      standings: transcript.subagents,
-                    }}
-                    reading={transcript.reading || holding}
-                    holding={holding}
-                    failed={transcript.failed}
-                    failedWith={transcript.failedWith}
-                    // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
-                    working={working || composer.rewinding}
-                    pageRuns={pageRuns}
-                    rewindOut={composer.rewindOut}
-                    sessionStarting={agent.status === AGENT_STATUS.STARTING}
-                    starting={
-                      transcript.launch === undefined
-                        ? undefined
-                        : {
-                            launch: transcript.launch,
-                            host: agent.mac?.name,
-                            runtime: agent.runtime,
-                          }
-                    }
-                    // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
-                    startedAt={
-                      !counts
-                        ? undefined
-                        : composer.rewinding
-                          ? composer.rewoundAt
-                          : (agentWorkingSince(lines) ?? startedAt)
-                    }
-                    ended={
-                      // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
-                      transcript.pages === 0 ||
-                      transcript.pageStatus === undefined ||
-                      agentStillWriting(transcript.pageStatus) ||
-                      lineGoing
-                        ? undefined
-                        : endLineParts(
-                            agent.status,
-                            transcript.failure,
-                            starter,
-                            continuable,
-                            transcript.hostLost,
-                            transcript.launchStopped === undefined
-                              ? undefined
-                              : { step: transcript.launchStopped, runtime: agent.runtime },
-                          )
-                    }
-                    endReason={endLineReason(transcript.failure, starter)}
-                    keyProvider={keyProvider}
-                    onOpenApiKeys={
-                      onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
-                    }
-                    endPress={endPress}
-                    endTrail={endTrail}
-                    onRetry={transcript.onRetry}
-                    onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
-                    olderFailed={transcript.olderFailed}
-                    overComposer
-                    bringIn={bringIn}
-                  />
+                  <ReplyDoorProvider value={replies ? replyThroughBox : undefined}>
+                    <AgentTranscriptView
+                      messages={lines}
+                      brief={agent.brief}
+                      briefSender={starter === undefined ? undefined : starterActor}
+                      origin={origin}
+                      readerId={readerId}
+                      agentId={agent.id}
+                      taskId={agent.planId ?? undefined}
+                      replay={replay}
+                      delegation={{
+                        models,
+                        own: { model: agent.model, effort: agent.effort },
+                        starts:
+                          delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                        onOpen: openSubagent,
+                        onOpenTarget: openTarget,
+                        cards,
+                        standings: transcript.subagents,
+                      }}
+                      reading={transcript.reading || holding}
+                      holding={holding}
+                      failed={transcript.failed}
+                      failedWith={transcript.failedWith}
+                      // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
+                      working={working || composer.rewinding}
+                      pageRuns={pageRuns}
+                      rewindOut={composer.rewindOut}
+                      sessionStarting={agent.status === AGENT_STATUS.STARTING}
+                      starting={
+                        transcript.launch === undefined
+                          ? undefined
+                          : {
+                              launch: transcript.launch,
+                              host: agent.mac?.name,
+                              runtime: agent.runtime,
+                            }
+                      }
+                      // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
+                      startedAt={
+                        !counts
+                          ? undefined
+                          : composer.rewinding
+                            ? composer.rewoundAt
+                            : (agentWorkingSince(lines) ?? startedAt)
+                      }
+                      ended={
+                        // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
+                        transcript.pages === 0 ||
+                        transcript.pageStatus === undefined ||
+                        agentStillWriting(transcript.pageStatus) ||
+                        lineGoing
+                          ? undefined
+                          : endLineParts(
+                              agent.status,
+                              transcript.failure,
+                              starter,
+                              continuable,
+                              transcript.hostLost,
+                              transcript.launchStopped === undefined
+                                ? undefined
+                                : { step: transcript.launchStopped, runtime: agent.runtime },
+                            )
+                      }
+                      endReason={endLineReason(transcript.failure, starter)}
+                      keyProvider={keyProvider}
+                      onOpenApiKeys={
+                        onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
+                      }
+                      endPress={endPress}
+                      endTrail={endTrail}
+                      onRetry={transcript.onRetry}
+                      onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                      olderFailed={transcript.olderFailed}
+                      overComposer
+                      bringIn={bringIn}
+                    />
+                  </ReplyDoorProvider>
                 </RewindProvider>
               </UndeliveredLines>
             </MentionedServers>
@@ -2989,14 +2999,7 @@ function AgentTabView({
           />
         )}
       </AgentTabFoot>
-      {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
-      {pilotNote !== undefined ||
-      onUnarchive !== undefined ||
-      continuedNote !== undefined ||
-      composer.closed !== undefined ||
-      composer.sending ? null : (
-        <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
-      )}
+      {replies ? <ReplyToSelection scope={tab} onReply={replyThroughBox} /> : null}
     </AgentTabFrame>
   );
 }

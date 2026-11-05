@@ -5,7 +5,14 @@ import { replyOf } from "@repo/ui/reply-quote";
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { Duration, Effect } from "effect";
 import { ReplyIcon, XIcon } from "lucide-react";
-import { type ReactNode, type RefObject, useEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
@@ -41,7 +48,11 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * members', what an ask offers, an option's words, a step, a field's name,
  * how an answer left it, and what became of it, and lays the quote into
  * the item's box (`inbox-pane.tsx`, `inbox-answer-box.tsx`), so the press
- * hands on the words it was over beside the reply. Note that
+ * hands on the words it was over beside the reply. A page an agent showed,
+ * drawn live in its transcript (`shown-page.tsx`), offers the same Reply
+ * over words selected in its frame, which the frame says where they stand
+ * (`@repo/features/page-pick`), and lays them into the same box through
+ * `ReplyDoorProvider`, so it is offered only where a box takes them. Note that
  * a selection reaching into a field, an input or an editor, is never
  * offered, because what it holds is the reader's own typing, not words to
  * answer.
@@ -51,6 +62,16 @@ import { rendererRuntime } from "../renderer-runtime.js";
 export const REPLY_SCOPE = "data-reply-scope";
 
 const SCOPE_SELECTOR = `[${REPLY_SCOPE}]`;
+
+const ReplyDoorContext = createContext<((reply: string) => void) | undefined>(undefined);
+
+/** Hands what is drawn under it the door a reply's words are laid into the message box through; none while the box takes no change. */
+export const ReplyDoorProvider = ReplyDoorContext.Provider;
+
+/** The door a reply's words are laid into the message box through, where one stands. */
+export function useReplyDoor(): ((reply: string) => void) | undefined {
+  return useContext(ReplyDoorContext);
+}
 
 /** What the reader types into, whose words a selection reaching into is not offered. */
 const EDITABLE_SELECTOR =
@@ -258,12 +279,16 @@ export function ReplyToSelection({
 export function ReplyPress({
   place,
   onReply,
+  layer,
 }: {
   place: PressPlace;
   onReply: () => void;
+  /** The box it stands in, for an owner that hears a press away from it. */
+  layer?: RefObject<HTMLDivElement | null> | undefined;
 }): React.JSX.Element {
   return createPortal(
     <MenuSurface
+      ref={layer}
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="reply-to-selection fixed z-menu -translate-x-1/2 -translate-y-full data-below:translate-y-0"
       data-below={place.below ? "" : undefined}
