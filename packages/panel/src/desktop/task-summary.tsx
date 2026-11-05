@@ -42,6 +42,7 @@ import {
   useState,
 } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
+import { rowDrafted, useInboxRowDrafts } from "../composer-drafts.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
@@ -407,17 +408,23 @@ function withCards(
 
 /**
  * The rows the summary lists, before their cards: the plan's Inbox leads,
- * counting what waits on the developer, while it holds an item, waiting or
- * settled, and opens the window's Inbox narrowed to the plan; then the
- * panel's kinds and what they hold, then the agents.
+ * counting what waits on the developer and wearing the Draft pencil where
+ * one of its items' boxes holds a draft (`inboxDrafted`), while it holds an
+ * item, waiting or settled, and opens the window's Inbox narrowed to the
+ * plan; then the panel's kinds and what they hold, then the agents.
  */
-function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: number) {
+function summaryRows(
+  tasks: TasksControl,
+  inbox: InboxBoardView,
+  openComments?: number,
+  inboxDrafted = false,
+) {
   const { sidePanel, mainTabs, agents } = tasks;
   const changes = changesOffers(agents, sidePanel.changes);
   const taskId = tasks.activeTaskId;
   const inboxRow =
     taskId !== undefined && inbox.open.length + inbox.settled.length > 0
-      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length)]
+      ? [inboxEntry(() => tasks.onShowInbox({ taskId }), inbox.waiting.length, inboxDrafted)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
@@ -479,8 +486,9 @@ function summarySections(
   held: HeldTranscripts,
   onOpenAgent: (agentId: string) => void,
   openComments: number | undefined,
+  inboxDrafted: boolean,
 ): SummarySection[] {
-  const { rows, changes } = summaryRows(tasks, inbox, openComments);
+  const { rows, changes } = summaryRows(tasks, inbox, openComments, inboxDrafted);
   const entries = withCards(rows, { tasks, inbox, held, changes, onOpenAgent });
   return sectionsOf(entries, tasks.agents);
 }
@@ -915,12 +923,18 @@ export function TaskSummary({
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const comments = usePlanCommentsControl();
+  const rowDrafts = useInboxRowDrafts();
+  // Note that a draft is read as its item's row reads it, so picks made on an ask since changed mark nothing.
+  const inboxDrafted = [...inbox.open, ...inbox.settled].some((item) =>
+    rowDrafted(rowDrafts.get(item.id), item),
+  );
   const sections = summarySections(
     tasks,
     inbox,
     held,
     onOpenAgent,
     comments?.threads.filter(openThread).length,
+    inboxDrafted,
   );
   // The rail draws the panel's kinds alone, so the Inbox leading Tabs is left off it.
   const kinds = (sections.find(({ heading }) => heading === TABS_SECTION)?.entries ?? []).filter(
