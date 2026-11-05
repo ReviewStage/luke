@@ -4,6 +4,10 @@ import React from "react";
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
+// Note that the disc spans 18 of a line glyph's 24 units, because a filled
+// disc reads larger than the outlined circle it stands beside at the same size.
+const GLYPH_VIEW_BOX = "-16.667 -16.667 133.333 133.333";
+
 interface ProductMarkProps {
   /** Draws the mark in the muted text color, where it stands behind what is said over it. */
   muted?: boolean;
@@ -13,6 +17,8 @@ interface ProductMarkProps {
   inherit?: boolean;
   /** Draws the small cut, its V opened wider, for a mark 32 pixels across or smaller. */
   small?: boolean;
+  /** Draws the mark inset to a line glyph's weight, for a seat it shares with line glyphs, such as a nav row's. */
+  glyph?: boolean;
 }
 
 /**
@@ -30,11 +36,12 @@ export function ProductMark({
   fill = false,
   inherit = false,
   small = false,
+  glyph = false,
 }: ProductMarkProps): React.JSX.Element {
   return (
     <svg
       className="ui-product-mark"
-      viewBox={MARK_ART.VIEW_BOX}
+      viewBox={glyph ? GLYPH_VIEW_BOX : MARK_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"
       data-muted={muted || undefined}
