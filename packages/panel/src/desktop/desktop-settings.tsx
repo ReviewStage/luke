@@ -2,6 +2,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@repo/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@repo/features/integration-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@repo/settings";
 import {
@@ -40,6 +41,7 @@ import { appPlatform } from "../app-platform.js";
 import { useListEdge, useScreenRef, useScreenSplit } from "../column-split.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import type { NavigationHistory } from "../navigation-history.js";
+import { SettingsPageLink } from "../open-settings.js";
 import {
   settingsGroupHeadingOf,
   settingsPageOf,
@@ -82,6 +84,35 @@ export interface SettingsStep {
   readonly listed: boolean;
   /** Goes back from the page to the list. */
   readonly onList: () => void;
+}
+
+/**
+ * The line under the title of the two pages that connect agents, each
+ * naming the other: Integrations holds what the account's own agents use,
+ * and the product's MCP lets outside agents use the account, so a reader
+ * who landed on one looking for the other is sent across. No other page
+ * has one.
+ */
+function pageDescription(view: SettingsView): ReactNode {
+  switch (view) {
+    case SETTINGS_VIEW.INTEGRATIONS:
+      return (
+        <ReplayUnmask>
+          Services your {PRODUCT_NAME} agents can use. To use {PRODUCT_NAME} from Claude Code,
+          Cursor, or another agent, go to <SettingsPageLink page={SETTINGS_VIEW.MCP} />.
+        </ReplayUnmask>
+      );
+    case SETTINGS_VIEW.MCP:
+      return (
+        <ReplayUnmask>
+          Use {PRODUCT_NAME} from Claude Code, Codex, Cursor, ChatGPT, and other agents. To give
+          your {PRODUCT_NAME} agents tools like Linear or Sentry, go to{" "}
+          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} />.
+        </ReplayUnmask>
+      );
+    default:
+      return undefined;
+  }
 }
 
 /** What a page's row's right-click menu is called. */
@@ -432,6 +463,7 @@ export function DesktopSettings({
             )
           }
           titleReplayUnmasked={!named}
+          description={pageDescription(settings.view)}
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

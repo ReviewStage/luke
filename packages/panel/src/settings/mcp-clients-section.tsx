@@ -9,15 +9,19 @@ import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
-  Button,
+  ButtonLink,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
   CONFIRM_LOSS,
   COPY_FIELD_WIDTH,
   ConfirmDialog,
   CopyField,
   ErrorState,
+  SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  SettingsRowStateLine,
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
@@ -25,44 +29,51 @@ import {
   Time,
   useConfirmDialog,
 } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
+import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
-import { replayMaskedError } from "./marks.js";
+import { MenuRow } from "./menu-row.js";
 
 /**
- * mcp-clients-section.tsx -- Settings › MCP's outside MCP clients: the agents the account allowed in, each revoked from its row, and how to connect one.
+ * mcp-clients-section.tsx -- Settings › our MCP: the outside agents the account let in, each revoked from its row, and how to connect one.
  *
  * An agent that signs a member in to the MCP server (Claude Code, Codex,
- * Claude.ai, ChatGPT) holds the member's Allow from the consent page until
- * it is revoked. The page lists every one the account allowed, read by the
- * host while the page shows (`LIVE_READ.MCP_CLIENTS`): its name, where its
- * sign-in returns to as the consent page said it, when it was allowed, and
- * when it last refreshed its access. Revoke asks first in the confirm
- * dialog, then cuts the agent off: its next refresh is refused and its next
- * sign-in asks again, but an access token it already holds keeps working
- * until it expires, so a row revoked stays on the page saying so. A revoke
- * that did not finish says so under its row, which keeps its Revoke, since
- * an agent half revoked could sign in again without being asked.
+ * Cursor, Claude, ChatGPT) holds the member's Allow from the consent page
+ * until it is revoked. Connected lists every one the account allowed, read
+ * by the host while the page shows and again whenever the window is focused
+ * (`LIVE_READ.MCP_CLIENTS`): its name, where its sign-in returns to as the
+ * consent page said it, when it was allowed, and when it last refreshed its
+ * access. Its ⋯ holds Revoke, as an integration's holds Disconnect, which
+ * asks first in the confirm dialog, then cuts the agent off: its next
+ * refresh is refused and its next sign-in asks again, but an access token it
+ * already holds keeps working until it expires, so a row revoked stays on
+ * the page saying so. A revoke that did not finish says so under its row,
+ * which keeps its Revoke, since an agent half revoked could sign in again
+ * without being asked.
  *
- * Under them, Connect an agent gives the server's address with its Copy,
- * drawn under its row at full width as each command is, and how each agent
- * this page knows adds it, as each agent's own docs say it: Claude Code and
- * Codex by a command, each with its Copy, and Claude.ai and ChatGPT through
- * their own settings.
+ * Connect an agent asks which agent first, and then shows only that agent's
+ * one step, as its own docs say it adds a remote MCP server signed in with
+ * OAuth: Claude Code, Codex, and VS Code by a command with its Copy, Cursor
+ * by its install link, Claude and ChatGPT by the server's address pasted in
+ * their own settings, and any other agent by the address alone. An agent
+ * that arrives while the page shows, which is how a member comes back from
+ * the browser, lights its row and is said to be connected under the step.
+ * While the account has none, Connect an agent stands first.
  *
- * Each section is `@repo/ui`'s `SettingsSection` and each row its
- * `SettingsRow`, an address or a command its `CopyField`, and Revoke the
- * outline `Button`.
+ * Each section is `@repo/ui`'s `SettingsSection`, the agent asked for its
+ * segmented `ChoiceBar`, each allowed agent `MenuRow`'s row, and an address
+ * or a command its `CopyField`.
  */
 
 const SECTION_TITLE = {
-  CLIENTS: "Agents with access",
+  CLIENTS: "Connected",
   CONNECT: "Connect an agent",
 } as const;
 
@@ -70,67 +81,119 @@ const SECTION_TITLE = {
 const SERVER_NAME = PRODUCT_NAME.toLowerCase();
 
 const PAGE_LINE = {
-  READ_FAILED: "The agents with access could not be read.",
-  NONE: "No agents yet.",
+  READ_FAILED: "The connected agents could not be read.",
+  NONE: "No agents connected yet.",
   UNNAMED: "Unnamed agent",
+  AGENT: "Agent",
   SERVER: "Server URL",
-  SERVER_WORDS: "Add this URL to any agent that supports remote MCP servers.",
+  REVOKE: "Revoke",
   REVOKED: `Revoked. Its access ends within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
 } as const;
 
-/** How one agent adds the server: the words a member follows, and the command where it takes one. */
+/** The agents Connect an agent knows, in the order it offers them, any other last. */
+const CONNECT_AGENT = {
+  CLAUDE_CODE: "claudeCode",
+  CODEX: "codex",
+  CURSOR: "cursor",
+  VS_CODE: "vsCode",
+  CLAUDE: "claude",
+  CHATGPT: "chatgpt",
+  OTHER: "other",
+} as const;
+
+type ConnectAgent = (typeof CONNECT_AGENT)[keyof typeof CONNECT_AGENT];
+
+/**
+ * How one agent adds the server, as its own docs say it: its step's words,
+ * and the one thing the step hands over, a command to copy, the server's
+ * address to copy, or a link that installs it.
+ */
 interface ConnectStep {
   readonly name: string;
+  readonly label: string;
   readonly words: string;
   readonly command?: (serverUrl: string) => string;
+  readonly address?: true;
+  readonly install?: { readonly label: string; readonly url: (serverUrl: string) => string };
 }
 
-/** Each agent this page knows, as its own docs say it adds a remote MCP server signed in with OAuth. */
-const CONNECT_STEPS: readonly ConnectStep[] = [
-  {
+/** Cursor's install link for a remote server: its name and its config, `{ url }`, in base64 (cursor.com/docs/mcp/install-links). */
+function cursorInstallUrl(serverUrl: string): string {
+  const config = btoa(JSON.stringify({ url: serverUrl }));
+  return `https://cursor.com/en/install-mcp?name=${SERVER_NAME}&config=${encodeURIComponent(config)}`;
+}
+
+/** Each agent's one step. */
+const CONNECT_STEPS = {
+  [CONNECT_AGENT.CLAUDE_CODE]: {
     name: "Claude Code",
-    words: "Run this in a terminal, then type /mcp in Claude Code to sign in.",
+    label: "Run this in a terminal",
+    words: `Then type /mcp in Claude Code, choose ${SERVER_NAME}, and sign in.`,
     command: (serverUrl) => `claude mcp add --transport http ${SERVER_NAME} ${serverUrl}`,
   },
-  {
+  [CONNECT_AGENT.CODEX]: {
     name: "Codex",
-    words: `Run this in a terminal. It opens your browser to sign in, or run codex mcp login ${SERVER_NAME}.`,
+    label: "Run this in a terminal",
+    words: `It opens your browser to sign in. If it doesn't, run codex mcp login ${SERVER_NAME}.`,
     command: (serverUrl) => `codex mcp add ${SERVER_NAME} --url ${serverUrl}`,
   },
-  {
-    name: "Claude.ai",
-    words:
-      "In Customize › Connectors, choose Add custom connector, paste the server URL, then connect it. On a Team or Enterprise plan, an owner adds it in Organization settings › Connectors.",
+  [CONNECT_AGENT.CURSOR]: {
+    name: "Cursor",
+    label: `Add ${PRODUCT_NAME} to Cursor`,
+    words: `Then sign in to ${SERVER_NAME} from Cursor's MCP settings.`,
+    install: { label: "Add to Cursor", url: cursorInstallUrl },
   },
-  {
+  [CONNECT_AGENT.VS_CODE]: {
+    name: "VS Code",
+    label: "Run this in a terminal",
+    words: `Then start ${SERVER_NAME} from VS Code's MCP servers and sign in.`,
+    command: (serverUrl) =>
+      `code --add-mcp '${JSON.stringify({ name: SERVER_NAME, type: "http", url: serverUrl })}'`,
+  },
+  [CONNECT_AGENT.CLAUDE]: {
+    name: "Claude",
+    label: "Copy the server URL",
+    words:
+      "In Claude, open Customize › Connectors, choose Add custom connector, paste it, then connect. On a Team or Enterprise plan, an owner adds it in Organization settings › Connectors.",
+    address: true,
+  },
+  [CONNECT_AGENT.CHATGPT]: {
     name: "ChatGPT",
+    label: "Copy the server URL",
     words:
-      "In Plugins, choose + › Add custom MCP server, paste the server URL under Connection, then choose Create as a plugin.",
+      "In ChatGPT, open Plugins, choose + › Add custom MCP server, paste it under Connection, then choose Create as a plugin.",
+    address: true,
   },
-];
+  [CONNECT_AGENT.OTHER]: {
+    name: "Other",
+    label: PAGE_LINE.SERVER,
+    words: "Add it to any agent that supports remote MCP servers. It signs in with OAuth.",
+    address: true,
+  },
+} as const satisfies Record<ConnectAgent, ConnectStep>;
 
 /** How many agents stand as rows while the read is out. */
 const CLIENT_SKELETON_ROWS = 1;
 
 /**
  * The sections that stand while the agents are read: a row to each agent
- * likely, ending in its Revoke, and Connect an agent's rows, the address
- * first and then each step its declaration lists, each field under its row.
+ * likely, ending in its ⋯, and Connect an agent's two rows, the agent asked
+ * for and its step.
  */
 const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
   {
     headed: true,
     rows: Array.from({ length: CLIENT_SKELETON_ROWS }, () => ({
       described: true,
-      controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      controls: [SETTINGS_SKELETON_CONTROL.MORE],
     })),
   },
   {
     headed: true,
-    rows: Array.from({ length: 1 + CONNECT_STEPS.length }, () => ({
-      described: true,
-      controls: [],
-    })),
+    rows: [
+      { described: false, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
+      { described: true, controls: [] },
+    ],
   },
 ];
 
@@ -144,7 +207,7 @@ function destinations(client: McpClient): string {
   return [...new Set(client.redirectUris.map(oauthRedirectDestination))].join(", ");
 }
 
-/** An agent's line: where it returns to, when it was allowed, and when it last refreshed, where it has. */
+/** An agent's line: where it returns to, when it was allowed, and when it last refreshed its access, where it has. */
 function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   return (
     <>
@@ -157,7 +220,7 @@ function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
       )}
       {client.lastRefreshedAt === null ? null : (
         <>
-          {" · Refreshed "}
+          {" · Active "}
           <Time at={client.lastRefreshedAt} look={TIME_LOOK.AGO} />
         </>
       )}
@@ -165,14 +228,17 @@ function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   );
 }
 
-/** One agent the account allowed: its line and its Revoke, or, once revoked, how long what it holds lasts. */
+/** One agent the account allowed: its line and its ⋯ holding Revoke, or, once revoked, how long what it holds lasts. */
 function ClientRow({
   client,
   revoked,
+  arrived,
   onRevoked,
 }: {
   client: McpClient;
   revoked: boolean;
+  /** Whether it was allowed while the page showed, which lights its row once. */
+  arrived: boolean;
   onRevoked: (client: McpClient) => void;
 }): React.JSX.Element {
   const { act } = useAct();
@@ -210,19 +276,27 @@ function ClientRow({
   const named = client.name !== null && client.name !== undefined;
   return (
     <>
-      <SettingsRow
-        label={<ReplayWords masked={named}>{name}</ReplayWords>}
-        description={revoked ? PAGE_LINE.REVOKED : <ClientLine client={client} />}
-        error={replayMaskedError(refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE))}
-      >
-        {() =>
-          revoked ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={confirm.ask}>
-              Revoke
-            </Button>
-          )
+      <MenuRow
+        thing={name}
+        actions={
+          revoked
+            ? []
+            : [
+                {
+                  label: PAGE_LINE.REVOKE,
+                  icon: <GLYPH.DISCONNECT />,
+                  danger: true,
+                  onSelect: confirm.ask,
+                },
+              ]
         }
-      </SettingsRow>
+        row={{
+          label: <ReplayWords masked={named}>{name}</ReplayWords>,
+          description: revoked ? PAGE_LINE.REVOKED : <ClientLine client={client} />,
+          error: refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE),
+          landed: arrived,
+        }}
+      />
       <ConfirmDialog
         open
         confirm={confirm}
@@ -252,56 +326,104 @@ function shownClients(
   );
 }
 
-/** Connect an agent: the server's address with its Copy, and how each agent adds it. */
-function ConnectSection({ serverUrl }: { serverUrl: string }): React.JSX.Element {
+/** One agent's step: its words, and the command or address to copy, or the link that installs it. */
+function ConnectStepRow({
+  step,
+  serverUrl,
+}: {
+  step: ConnectStep;
+  serverUrl: string;
+}): React.JSX.Element {
+  const openLink = useOpenLink();
+  const install = step.install;
+  const installUrl = install?.url(serverUrl);
+  const copied = step.command?.(serverUrl) ?? (step.address === true ? serverUrl : undefined);
+  return (
+    <SettingsRow
+      label={step.label}
+      description={step.words}
+      {...(install === undefined || installUrl === undefined
+        ? undefined
+        : {
+            children: () => (
+              <ButtonLink
+                variant={BUTTON_VARIANT.OUTLINE}
+                href={installUrl}
+                onClick={linkPressOf(openLink, installUrl)}
+              >
+                {install.label}
+              </ButtonLink>
+            ),
+          })}
+      {...(copied === undefined
+        ? undefined
+        : {
+            below: () => (
+              <CopyField
+                label={step.command === undefined ? PAGE_LINE.SERVER : `${step.name} command`}
+                value={copied}
+                what={step.command === undefined ? "URL" : "command"}
+                copy={copyThroughShell}
+                width={COPY_FIELD_WIDTH.FULL}
+              />
+            ),
+          })}
+    />
+  );
+}
+
+/** Connect an agent: which agent, that agent's one step, and the agent that just connected, once one has. */
+function ConnectSection({
+  serverUrl,
+  arrived,
+}: {
+  serverUrl: string;
+  arrived: McpClient | undefined;
+}): React.JSX.Element {
+  const [agent, setAgent] = useState<ConnectAgent>(CONNECT_AGENT.CLAUDE_CODE);
   return (
     <SettingsSection title={SECTION_TITLE.CONNECT} anchor={SETTINGS_SEARCH_ROW.MCP_CONNECT}>
       <SettingsRow
-        label={PAGE_LINE.SERVER}
-        description={PAGE_LINE.SERVER_WORDS}
+        label={PAGE_LINE.AGENT}
         below={() => (
-          <CopyField
-            label={PAGE_LINE.SERVER}
-            value={serverUrl}
-            what="URL"
-            copy={copyThroughShell}
-            width={COPY_FIELD_WIDTH.FULL}
+          <ChoiceBar
+            label={PAGE_LINE.AGENT}
+            items={Object.values(CONNECT_AGENT).map((each) => ({
+              value: each,
+              label: CONNECT_STEPS[each].name,
+            }))}
+            value={agent}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            onChange={setAgent}
           />
         )}
       />
-      {CONNECT_STEPS.map((step) => {
-        const command = step.command?.(serverUrl);
-        return (
-          <SettingsRow
-            key={step.name}
-            label={step.name}
-            description={step.words}
-            {...(command === undefined
-              ? undefined
-              : {
-                  below: () => (
-                    <CopyField
-                      label={`${step.name} command`}
-                      value={command}
-                      what="command"
-                      copy={copyThroughShell}
-                      width={COPY_FIELD_WIDTH.FULL}
-                    />
-                  ),
-                })}
-          />
-        );
-      })}
+      <ConnectStepRow step={CONNECT_STEPS[agent]} serverUrl={serverUrl} />
+      {arrived === undefined ? null : (
+        <SettingsLine>
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+            <ReplayWords masked={arrived.name !== null && arrived.name !== undefined}>
+              {clientName(arrived)}
+            </ReplayWords>{" "}
+            is connected.
+          </SettingsRowStateLine>
+        </SettingsLine>
+      )}
     </SettingsSection>
   );
 }
 
-/** The agents with access and Connect an agent, for the account signed in. */
+/** The agents allowed and Connect an agent, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
   const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
   // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
   const [revoked, setRevoked] = useState<ReadonlyMap<string, McpClient>>(new Map());
+  // The agents the first read listed, so one allowed while the page shows is told apart as just connected.
+  const [known, setKnown] = useState<ReadonlySet<string> | undefined>(undefined);
+  if (rows !== undefined && known === undefined) {
+    setKnown(new Set(rows.clients.map((client) => client.clientId)));
+  }
   if (rows === undefined) {
     return status === HOST_READ_STATUS.FAILED ? (
       <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
@@ -313,29 +435,42 @@ export function McpClientsSections(): React.JSX.Element {
       </SettingsSection>
     ) : (
       <SettingsSectionsSkeleton
-        label={readingWords("the agents with access")}
+        label={readingWords("the connected agents")}
         sections={SECTIONS_SKELETON}
       />
     );
   }
   const shown = shownClients(rows.clients, revoked);
-  return (
+  const isNew = (client: McpClient) =>
+    known !== undefined && !known.has(client.clientId) && !revoked.has(client.clientId);
+  const clients = (
+    <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
+      {shown.length === 0 ? (
+        <SettingsLine>{PAGE_LINE.NONE}</SettingsLine>
+      ) : (
+        shown.map((client) => (
+          <ClientRow
+            key={client.clientId}
+            client={client}
+            revoked={revoked.has(client.clientId)}
+            arrived={isNew(client)}
+            onRevoked={(gone) => setRevoked((before) => new Map(before).set(gone.clientId, gone))}
+          />
+        ))
+      )}
+    </SettingsSection>
+  );
+  const connect = <ConnectSection serverUrl={rows.serverUrl} arrived={shown.find(isNew)} />;
+  // Note that an account with no agent yet is led to connect one, rather than to an empty list.
+  return shown.length === 0 ? (
     <>
-      <SettingsSection title={SECTION_TITLE.CLIENTS} anchor={SETTINGS_SEARCH_ROW.MCP_CLIENTS}>
-        {shown.length === 0 ? (
-          <SettingsLine>{PAGE_LINE.NONE}</SettingsLine>
-        ) : (
-          shown.map((client) => (
-            <ClientRow
-              key={client.clientId}
-              client={client}
-              revoked={revoked.has(client.clientId)}
-              onRevoked={(gone) => setRevoked((before) => new Map(before).set(gone.clientId, gone))}
-            />
-          ))
-        )}
-      </SettingsSection>
-      <ConnectSection serverUrl={rows.serverUrl} />
+      {connect}
+      {clients}
+    </>
+  ) : (
+    <>
+      {clients}
+      {connect}
     </>
   );
 }
