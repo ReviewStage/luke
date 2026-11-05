@@ -137,7 +137,7 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * one, since the agent's own column opens no tab. Its title names the agent as
  * its tab would, and its ⋯ offers the agent's one menu, the very one its
  * tab's ⋯ offers on a task (`agent-actions.tsx`'s `agentMenuGroups`): Copy
- * link and the transcript's two copies, Rename, which turns the title into
+ * link and Copy transcript, Rename, which turns the title into
  * its name's field, Show terminal, Archive, and Permanently delete, so an
  * agent with no task is acted on as a task's is; and, since such an agent
  * has a row of its own among the sidebar's tasks, what that row offers too:
@@ -287,7 +287,15 @@ function AgentPageBar({
   const section = own
     ? moveToSectionEntry(tasks, { agent: true, id: agent.id }, listed.workspaceId, sectionDialogs)
     : undefined;
-  const groups = agentMenuGroups({ chosen: true, ...actions.doors, read, agentPin, section });
+  // Note that the page's own head already leads with the Slack crumb an agent started from Slack opens, so its ⋯ offers no Open in Slack beside it.
+  const groups = agentMenuGroups({
+    chosen: true,
+    ...actions.doors,
+    onOpenInSlack: undefined,
+    read,
+    agentPin,
+    section,
+  });
   const { rename } = actions;
   const title =
     rename?.editing === true ? (

@@ -166,7 +166,6 @@ import { type CountNoun, foldedCount, sidebarFold, TASK_NOUN } from "./sidebar-f
 import { SidebarFoot } from "./sidebar-foot.js";
 import { SidebarInboxRow } from "./sidebar-inbox-row.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
-import { useSidebarReadAll } from "./sidebar-read-all.js";
 import {
   type DrawnSection,
   moveToSectionEntry,
@@ -186,7 +185,6 @@ import {
   tasksHeadWords,
   useTaskViewCommands,
 } from "./sidebar-task-view.js";
-import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { ChosenTasksContext, useTasksSelection } from "./tasks-selection.js";
@@ -1047,28 +1045,17 @@ function PinnedSection({
 
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
- * right-click on the header: Pin holds the group above the rest on the
- * account, Status sets every task under the header at one, its toast's Undo
- * putting each back, and Open on GitHub opens the repository's page, under
+ * right-click on the header, in one group: Pin holds the group above the
+ * rest on the account, and Open on GitHub opens the repository's page, under
  * GitHub's mark rather than the owner's picture, since it is about GitHub.
- * Status asks nothing first, since no status stops an agent. The tasks with
- * no repository have no pin, since they always stand last, and no page to
- * open, so they offer Status alone.
+ * Note that a status for every task under the header at once is the
+ * selection bar's, not the header's. The tasks with no repository have no
+ * pin, since they always stand last, and no page to open, so they offer no
+ * menu.
  */
 function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): MenuEntry[][] {
   const { repository } = group;
-  const listed = groupTasks(group);
-  const status: MenuEntry[] =
-    listed.length === 0
-      ? []
-      : [
-          statusSubmenu(
-            tasks,
-            listed.map(({ id }) => id),
-            sharedStatus(listed),
-          ),
-        ];
-  if (repository === null) return status.length === 0 ? [] : [status];
+  if (repository === null) return [];
   const pin: MenuAction = tasks.pinnedRepositories.includes(repository)
     ? {
         label: "Unpin",
@@ -1081,7 +1068,7 @@ function repositoryActionGroups(group: RepositoryGroup, tasks: TasksControl): Me
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
     onSelect: () => tasks.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [status, [pin], [github]].filter((each) => each.length > 0);
+  return [[pin, github]];
 }
 
 /** Pinned holds tabs as well as tasks, so its count is read as pins. */
@@ -1093,11 +1080,6 @@ const PINNED_KEY = "pinned";
 /** Pinned listed, or not, for `LeavingGroups`: constants, so a render that changes neither lists nothing new. */
 const PINNED_LISTED: readonly string[] = [PINNED_KEY];
 const NOTHING_LISTED: readonly string[] = [];
-
-/** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
-function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
-  return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
-}
 
 /**
  * One repository's tasks under a header in the headings' voice, which folds
@@ -1826,7 +1808,6 @@ function SidebarColumn({
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
   // The Inbox's row marks its threads read from its right-click.
-  const readAll = useSidebarReadAll(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
   const openTask = (taskId: string) => {
@@ -2199,8 +2180,6 @@ function SidebarColumn({
           waiting={waiting}
           current={inInbox}
           disabled={!tasks.signedIn}
-          shown={tasks.shown && overlay.inSight}
-          readAll={readAll}
           onOpen={chosen(openInbox)}
         />
         <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />

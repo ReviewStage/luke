@@ -81,14 +81,34 @@ function rowMoveActions(place: RowPlace | undefined, run: RowRun = ROW_RUN.DOWN)
   return [...(at > 0 ? [back] : []), ...(at < count - 1 ? [on] : [])];
 }
 
-/** `groups` with the row's moves as a group of their own before them, where it has any. */
+/** Whether a group holds only what destroys, which every menu keeps last and alone. */
+function destroys(group: readonly MenuEntry[] | undefined): boolean {
+  return (
+    group !== undefined &&
+    group.length > 0 &&
+    group.every((entry) => "danger" in entry && entry.danger === true)
+  );
+}
+
+/**
+ * `groups` with the row's moves as a group of their own: at their end for a
+ * row, before a last group that destroys, and first for a tab, beside the
+ * tab's own Close and Pin. Note that a row's moves follow what acts on the
+ * row, because a mouse drags the row and the keyboard has ⇧⌘↑ and ⇧⌘↓, so
+ * the menu's moves are a finger's way and lead nothing.
+ */
 export function withRowMoves(
   groups: readonly (readonly MenuEntry[])[],
   place: RowPlace | undefined,
   run: RowRun = ROW_RUN.DOWN,
 ): readonly (readonly MenuEntry[])[] {
   const moves = rowMoveActions(place, run);
-  return moves.length === 0 ? groups : [moves, ...groups];
+  if (moves.length === 0) return groups;
+  if (run === ROW_RUN.ALONG) return [moves, ...groups];
+  const last = groups.at(-1);
+  return destroys(last) && last !== undefined
+    ? [...groups.slice(0, -1), moves, last]
+    : [...groups, moves];
 }
 
 /** What a list that moves its rows wears, so a row's focus is read by the list it stands directly in and not one of the lists nested in its rows. */

@@ -41,6 +41,7 @@ import {
 } from "@repo/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@repo/ui/actor-model";
 import { confirmAsked } from "@repo/ui/confirm-state";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ChildTaskCount, repositoryLabel } from "@repo/ui/task-list-model";
 import {
@@ -548,6 +549,33 @@ function relationDoor(tasks: TaskRowTab, task: TaskSummary): TaskRelationDoor {
   };
 }
 
+/** What a task's one Move to is called, and what it names the move out of its workspace, at the foot of its sections. */
+const MOVE_TO = "Move to";
+const ANOTHER_WORKSPACE = "Another workspace";
+
+/**
+ * A task's one Move to: its sections, New section, and Remove from section,
+ * then Another workspace where the task may leave its workspace, so the
+ * menu holds one way to move it rather than two. Where the task stands in no
+ * section's menu, Move to workspace stands alone.
+ */
+function moveToEntries(
+  section: MenuEntry | undefined,
+  askMove: (() => void) | undefined,
+  keyed: boolean,
+): MenuEntry[] {
+  if (section === undefined || !("items" in section)) {
+    const lone =
+      askMove === undefined ? [] : [commandAction(PANEL_COMMAND.MOVE_TO_WORKSPACE, askMove, keyed)];
+    return [...(section === undefined ? [] : [section]), ...lone];
+  }
+  const another: MenuAction[] =
+    askMove === undefined
+      ? []
+      : [{ label: ANOTHER_WORKSPACE, icon: <GLYPH.MOVE />, onSelect: askMove }];
+  return [{ ...section, label: MOVE_TO, items: [...section.items, ...another] }];
+}
+
 /** Which surface offers a task's menu, which decides what the menu holds (`taskActionGroups`). */
 export const TASK_MENU_SURFACE = {
   /** A row of the task, whose menu keeps Change repository, and Status, Priority, and Assignee but for the chips the row draws (`StandingChips`). */
@@ -622,7 +650,6 @@ function taskActionGroups(
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
   const versions = versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn);
-  const section: MenuEntry[] = doors.section === undefined ? [] : [doors.section];
   const change = commandAction(
     PANEL_COMMAND.CHANGE_REPOSITORY,
     () => tasks.onChangeRepository(taskId),
@@ -631,10 +658,7 @@ function taskActionGroups(
   // Note that both menus name the pick a task with no repository still needs, as the plan's path does.
   const repository: MenuAction =
     task !== undefined && task.repository === null ? { ...change, label: CHOOSE_LABEL } : change;
-  const move: MenuAction[] =
-    doors.askMove === undefined
-      ? []
-      : [commandAction(PANEL_COMMAND.MOVE_TO_WORKSPACE, doors.askMove, drawn)];
+  const move = moveToEntries(doors.section, doors.askMove, drawn);
   const remove: MenuAction = {
     ...commandAction(PANEL_COMMAND.DELETE_TASK, doors.askDelete, drawn),
     danger: true,
@@ -645,17 +669,16 @@ function taskActionGroups(
           [...copy, ...link],
           [rename, versions, ...read],
           [...relate, ...unparent],
-          [...pinAction(tasks, task, lettered), ...section, ...move],
+          [...pinAction(tasks, task, lettered), ...move],
           [repository],
           [remove],
         ]
       : [
           link,
-          [rename, versions, ...read],
+          [rename, ...read],
           [...doors.standing],
           [...relate, ...unparent],
-          [...pinAction(tasks, task, lettered), ...section, ...move],
-          [repository],
+          [...pinAction(tasks, task, lettered), ...move],
           [remove],
         ];
   return groups.filter((group) => group.length > 0);

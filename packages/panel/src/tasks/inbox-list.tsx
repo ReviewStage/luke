@@ -647,6 +647,20 @@ function ViewOptions({
   );
 }
 
+/** Mark all as read on the window's Inbox's head, pressable while anything is unread. */
+function MarkAllReadButton({ readAll }: { readAll: InboxReadAll }): React.JSX.Element {
+  return (
+    <Tooltip label={MARK_ALL_READ}>
+      <IconButton
+        icon={<CheckCheckIcon />}
+        label={MARK_ALL_READ}
+        disabled={!readAll.unread}
+        onClick={readAll.onMarkAll}
+      />
+    </Tooltip>
+  );
+}
+
 /** Mark all as read, as a phone's ⋯ offers it, a phone having no right-click, pressable while anything is unread. */
 function markAllAction(readAll: InboxReadAll): MenuAction {
   return {
@@ -1019,8 +1033,16 @@ function ListHead({
       </>
     );
   }
+  // Note that the window's Inbox marks everything read from its own head, where its reader looks for it, rather than from the sidebar row's menu.
   const options =
-    view === undefined ? null : <ViewOptions shown={shown} choices={view} readerId={readerId} />;
+    view === undefined && head.readAll === undefined ? null : (
+      <>
+        {head.readAll === undefined ? null : <MarkAllReadButton readAll={head.readAll} />}
+        {view === undefined ? null : (
+          <ViewOptions shown={shown} choices={view} readerId={readerId} />
+        )}
+      </>
+    );
   return (
     <>
       {/* Note that a task's own Inbox is a tab, whose bar is every tab's; the window's Inbox is a page, whose head glides with the sidebar. */}
@@ -1196,6 +1218,8 @@ export interface InboxListHead {
   readonly phone?:
     | { readonly start: React.ReactNode; readonly readAll?: InboxReadAll | undefined }
     | undefined;
+  /** Mark all as read on the window's Inbox's head beside its view's menu; none on a task's own, and on a phone, whose ⋯ holds it. */
+  readonly readAll?: InboxReadAll | undefined;
   /**
    * Whether the list stands in a task's own Inbox tab, which a phone heads
    * with the task's header, so the list draws no head of its own there, only

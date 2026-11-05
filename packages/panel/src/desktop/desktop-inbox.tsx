@@ -632,6 +632,10 @@ export const DesktopInbox = memo(function DesktopInbox({
                             readAll: { unread, onMarkAll: markAll },
                           }
                         : undefined,
+                    readAll:
+                      room === SHELL_ROOM.NARROW || narrowedTask !== undefined
+                        ? undefined
+                        : { unread, onMarkAll: markAll },
                     task:
                       narrowedTask === undefined
                         ? undefined

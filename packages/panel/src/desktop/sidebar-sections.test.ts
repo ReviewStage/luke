@@ -255,8 +255,8 @@ function sectionHeader(sidebar: HTMLElement, title: string): HTMLElement {
   return found ?? assert.fail(`no ${title} section`);
 }
 
-/** Opens the task named `name`'s menu, then its Move to section. */
-function openMoveToSection(sidebar: HTMLElement, name: string): void {
+/** Opens the row named `name`'s menu, then the item listing the sections: a task's Move to, an agent's Move to section. */
+function openMoveToSection(sidebar: HTMLElement, name: string, label = "Move to"): void {
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
     (each) => each.textContent?.includes(name),
   );
@@ -264,7 +264,7 @@ function openMoveToSection(sidebar: HTMLElement, name: string): void {
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
-  act(() => item("Move to section").click());
+  act(() => item(label).click());
 }
 
 /** The dialog's button whose words are `label`, or else whose label is, failing where none is drawn; Lucide's Save glyph is no Save button. */
@@ -410,7 +410,7 @@ test("a section whose only task is done says so in place of Drag tasks here, and
   assert.equal(hiddenIn("My tasks"), "1 more in Done");
 });
 
-test("a task's Move to section puts it on top of the section chosen", async () => {
+test("a task's Move to puts it on top of the section chosen", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes);
   const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
@@ -421,7 +421,7 @@ test("a task's Move to section puts it on top of the section chosen", async () =
   act(() => {
     row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
   });
-  act(() => item("Move to section").click());
+  act(() => item("Move to").click());
   act(() => item("Launch").click());
 
   assert.deepEqual(writes, [
@@ -550,22 +550,15 @@ test("deleting the last section hands focus to the first, rather than letting it
   assert.ok(sectionHeader(sidebar, "Someday").contains(document.activeElement));
 });
 
-test("a section holding tasks offers what acts on all of them between Rename and Delete, after its move", async () => {
+test("a section holding tasks offers Rename, its move, and Delete last, leaving what acts on all its tasks to the selection bar", async () => {
   const sidebar = await mountSidebar([], ICONLESS);
 
   openSectionMenu(sidebar, "Launch");
 
-  assert.deepEqual(menuLabels(), [
-    "Move up",
-    "Rename",
-    "Status",
-    "Move all to section",
-    "Remove all from section",
-    "Delete section",
-  ]);
+  assert.deepEqual(menuLabels(), ["Rename", "Move up", "Delete section"]);
 });
 
-test("a section holding no task offers only Rename and Delete, after its move", async () => {
+test("a section holding no task offers only Rename, its move, and Delete", async () => {
   const sidebar = await mountSidebar([], {
     sections: ICONLESS.sections,
     entries: ICONLESS.entries.filter((entry) => entry.sectionId !== SOMEDAY),
@@ -574,61 +567,7 @@ test("a section holding no task offers only Rename and Delete, after its move", 
 
   openSectionMenu(sidebar, "Someday");
 
-  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Delete section"]);
-});
-
-test("a section's Move all to section puts every task in it on top of the section chosen, in its order", async () => {
-  const writes: TaskSectionWrite[] = [];
-  const sidebar = await mountSidebar(writes, BOTH_IN_LAUNCH);
-
-  openSectionMenu(sidebar, "Launch");
-  act(() => item("Move all to section").click());
-  const offered = menuLabels().slice(menuLabels().indexOf("Delete section") + 1);
-  act(() => item("Someday").click());
-  const moved = writes.reduce((held, write) => applySectionWrite(held, write, 10), BOTH_IN_LAUNCH);
-
-  assert.deepEqual(offered, ["Someday", "New section"]);
-  assert.deepEqual(sectionTaskIds(moved, SOMEDAY), [INVITES.id, RETRIES.id]);
-  assert.deepEqual(sectionTaskIds(moved, LAUNCH), []);
-});
-
-test("a section's Remove all from section takes every task in it out of every section, and Undo puts them back in their order", async () => {
-  const writes: TaskSectionWrite[] = [];
-  const { container: sidebar, draw } = await mountSidebarRedrawn(writes, BOTH_IN_LAUNCH);
-
-  openSectionMenu(sidebar, "Launch");
-  act(() => item("Remove all from section").click());
-
-  assert.deepEqual(writes, [
-    { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES.id, sectionId: null },
-    { kind: TASK_SECTION_WRITE.PLACE, taskId: RETRIES.id, sectionId: null },
-  ]);
-  const removed = applied(BOTH_IN_LAUNCH, writes.splice(0));
-  await draw(removed);
-  assert.match(newestToastSays() ?? "", /2 tasks removed from their sections/u);
-
-  act(() => newestToastAction()?.click());
-
-  assert.deepEqual(sectionTaskIds(applied(removed, writes), LAUNCH), [INVITES.id, RETRIES.id]);
-});
-
-test("a section's Status sets every task in it at the status picked at once, asking nothing even where a task has agents", async () => {
-  const settled: [string[], string][] = [];
-  const working: TaskSummary = {
-    ...RETRIES,
-    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
-  };
-  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
-    tasks: [INVITES, working],
-    onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
-  });
-
-  openSectionMenu(sidebar, "Launch");
-  act(() => item("Status").click());
-  act(() => item("Done").click());
-
-  assert.equal(document.querySelector('[role="alertdialog"]'), null);
-  assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
+  assert.deepEqual(menuLabels(), ["Rename", "Move down", "Delete section"]);
 });
 
 test("⌘-clicking a section's task and one under Tasks chooses both, opening neither, and a right-click on either offers Status for both, which S on the focused one opens", async () => {
@@ -1706,7 +1645,7 @@ test("an agent's Move to section checks the section it stands in and offers Remo
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, SWEEP_IN_LAUNCH, WITH_SWEEP);
 
-  openMoveToSection(sidebar, "Sweep flaky tests");
+  openMoveToSection(sidebar, "Sweep flaky tests", "Move to section");
   assert.equal(item("Launch").getAttribute("aria-checked"), "true");
   act(() => item("Remove from section").click());
 

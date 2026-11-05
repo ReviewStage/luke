@@ -152,13 +152,25 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** Opens Move to workspace from the menu standing. */
-function chooseMove(): HTMLElement {
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (candidate) => candidate.textContent === "Move to workspace",
+/** The menu item standing whose words are `words`, if any. */
+function menuItem(words: string): HTMLButtonElement | undefined {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (candidate) => candidate.textContent === words,
   );
-  act(() => (item ?? assert.fail("the menu offers Move to workspace")).click());
-  return dialog() ?? assert.fail("Move to workspace opens a dialog");
+}
+
+/** Opens the menu's Move to, where the task's sections and Another workspace stand beside it. */
+function openMoveTo(): void {
+  const moveTo = menuItem("Move to");
+  if (moveTo !== undefined) act(() => moveTo.click());
+}
+
+/** Opens the move to another workspace from the menu standing: Move to's Another workspace, or Move to workspace where no section menu stands. */
+function chooseMove(): HTMLElement {
+  openMoveTo();
+  const item = menuItem("Another workspace") ?? menuItem("Move to workspace");
+  act(() => (item ?? assert.fail("the menu offers the move to another workspace")).click());
+  return dialog() ?? assert.fail("the move opens a dialog");
 }
 
 /** The dialog's button with these words. */
@@ -170,20 +182,26 @@ function button(within: HTMLElement, words: string): HTMLButtonElement {
   );
 }
 
-test("the ⋯ offers Move to workspace on the reader's own plan while the account has another workspace, and on no teammate's plan nor with one workspace", () => {
+test("the ⋯'s Move to offers Another workspace on the reader's own plan while the account has another workspace, and on no teammate's plan nor with one workspace", () => {
+  const offered = () => {
+    openMoveTo();
+    return menuLabels();
+  };
   openMenu(openTab(TASK, [STUDIO, ACME]));
-  const own = menuLabels();
+  const own = offered();
   unmountAll();
   openMenu(openTab({ ...TASK, ownerId: SAM }, [STUDIO, ACME]));
-  const teammates = menuLabels();
+  const teammates = offered();
   unmountAll();
   openMenu(openTab(TASK, [STUDIO]));
-  const alone = menuLabels();
+  const alone = offered();
+  const moves = (labels: string[]) =>
+    labels.includes("Another workspace") || labels.includes("Move to workspace");
 
-  assert.ok(own.includes("Move to workspace"), "the owner is offered the move");
+  assert.ok(moves(own), "the owner is offered the move");
   assert.deepEqual(ellipsized(own), [], "no item of the ⋯ ends with an ellipsis");
-  assert.ok(!teammates.includes("Move to workspace"), "a teammate's plan is not theirs to move");
-  assert.ok(!alone.includes("Move to workspace"), "a single workspace has nowhere to move to");
+  assert.ok(!moves(teammates), "a teammate's plan is not theirs to move");
+  assert.ok(!moves(alone), "a single workspace has nowhere to move to");
 });
 
 test("the dialog lists the other workspaces, disables one whose GitHub cannot reach the repository with why, chooses the first that can, says what the move does, and moves the plan there", async () => {

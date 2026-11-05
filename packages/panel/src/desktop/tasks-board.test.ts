@@ -791,7 +791,7 @@ test("a right-click on a card drops the task's own menu, leaving out the Priorit
   assert.deepEqual(opened, []);
 });
 
-test("a section made while the board is drawn is offered under Move to section on a card whose task did not move", async () => {
+test("a section made while the board is drawn is offered under Move to on a card whose task did not move", async () => {
   const board = await mountBoard();
   const launch: TaskSections = {
     sections: [{ id: "section-launch", workspaceId: ACME.id, title: "Launch", createdAt: 1 }],
@@ -805,11 +805,11 @@ test("a section made while the board is drawn is offered under Move to section o
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
   });
-  pick("Move to section");
+  pick("Move to");
   const labels = [...document.querySelectorAll('[role^="menuitem"] .ui-menu-item-label')].map(
     (label) => label.textContent,
   );
-  assert.ok(labels.includes("Launch"), "Move to section offers the section made");
+  assert.ok(labels.includes("Launch"), "Move to offers the section made");
 });
 
 test("under a finger, a card draws no ⋯, and a long press on it drops the task's own menu", async () => {

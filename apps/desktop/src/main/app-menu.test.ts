@@ -49,11 +49,8 @@ describe("the menu bar's gate", () => {
       "Back",
       "Forward",
       "-",
-      "Next Recent Tab",
-      "Previous Recent Tab",
-      "-",
-      "Move Tab Left",
-      "Move Tab Right",
+      "Previous Task",
+      "Next Task",
     ]);
   });
 
@@ -73,11 +70,8 @@ describe("the menu bar's gate", () => {
       "Back",
       "Forward",
       "-",
-      "Next Recent Tab",
-      "Previous Recent Tab",
-      "-",
-      "Move Tab Left",
-      "Move Tab Right",
+      "Previous Task",
+      "Next Task",
     ]);
 
     const withoutPlaces = appMenuTemplate(
@@ -95,11 +89,8 @@ describe("the menu bar's gate", () => {
       "Back",
       "Forward",
       "-",
-      "Next Recent Tab",
-      "Previous Recent Tab",
-      "-",
-      "Move Tab Left",
-      "Move Tab Right",
+      "Previous Task",
+      "Next Task",
     ]);
   });
 });
@@ -162,10 +153,13 @@ describe("the menu bar's names", () => {
   });
 });
 
-describe("the command palette and tab moves", () => {
+describe("the command palette and the task steps", () => {
   test("stand under Go with their chords, as items of their own commands", () => {
-    const items = everyItem(appMenuTemplate("Vespin")).filter((item) =>
-      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.MOVE_TAB_LEFT, APP_COMMAND.MOVE_TAB_RIGHT].some(
+    const go =
+      appMenuTemplate("Vespin").find((menu) => menu.label === "Go")?.submenu ??
+      assert.fail("the menu bar has Go");
+    const items = everyItem(Array.isArray(go) ? go : []).filter((item) =>
+      [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.PREVIOUS_TASK, APP_COMMAND.NEXT_TASK].some(
         (command) => command === item.id,
       ),
     );
@@ -173,8 +167,8 @@ describe("the command palette and tab moves", () => {
       items.map((item) => [item.id, item.label, item.accelerator]),
       [
         [APP_COMMAND.COMMAND_PALETTE, "Command Palette", "Command+K"],
-        [APP_COMMAND.MOVE_TAB_LEFT, "Move Tab Left", "Shift+Command+Left"],
-        [APP_COMMAND.MOVE_TAB_RIGHT, "Move Tab Right", "Shift+Command+Right"],
+        [APP_COMMAND.PREVIOUS_TASK, "Previous Task", "Alt+Command+Up"],
+        [APP_COMMAND.NEXT_TASK, "Next Task", "Alt+Command+Down"],
       ],
     );
   });

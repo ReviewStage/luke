@@ -251,7 +251,7 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
   const { main, side } = bars(container);
   const fromRightClick = rightClickChosen(side);
   const fromMore = pressBarMore(side);
-  assert.deepEqual(fromMore, ["Copy link", "Copy concise transcript", "Copy full transcript"]);
+  assert.deepEqual(fromMore, ["Copy link", "Copy transcript"]);
   // The same items as the right-click's, less the tab's own keeping, which stays there.
   assert.deepEqual(
     fromMore,
@@ -268,8 +268,7 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     "Close others",
     "Pin agent",
     "Copy link",
-    "Copy concise transcript",
-    "Copy full transcript",
+    "Copy transcript",
     "Rename",
     "Show terminal",
     "Archive",
@@ -316,7 +315,7 @@ test("Overview's ⋯ and its right-click offer the task's own document menu, whi
     "Mark as unread",
     "Task relation",
     "Pin",
-    "Move to section",
+    "Move to",
     "Change repository",
     "Permanently delete",
   ]);

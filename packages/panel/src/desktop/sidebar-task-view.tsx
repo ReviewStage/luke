@@ -5,6 +5,7 @@ import {
   GROUP_ACTION_STATE,
   GroupAction,
   IconButton,
+  MENU_ITEM_MARK,
   TextButton,
   Tooltip,
   useMenu,
@@ -17,7 +18,7 @@ import {
   type HiddenStatus,
   TASK_GROUPING,
 } from "@repo/ui/task-list-model";
-import { FolderGitIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
+import { FolderGitIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useAppCommand } from "../app-commands.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -48,6 +49,9 @@ import { FILTERED } from "./tasks-page-options.js";
 
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
+
+/** The switch that groups the list under its repositories' headers, or lists it in one run. */
+const GROUP_BY_REPOSITORY = "Group by repository";
 
 /** What the Tasks head says for Me and Anyone; a member's list is called by their name (`tasksHeadWords`). */
 const TASKS_HEAD_WORDS = {
@@ -112,25 +116,20 @@ function viewEntries(
   reader: ReturnType<typeof useMemberDirectory>,
 ): MenuEntry[][] {
   const { view } = control;
-  const grouping = (
-    label: string,
-    icon: React.JSX.Element,
-    value: TaskListViewControl["view"]["grouping"],
-  ): MenuAction => ({
-    label,
-    icon,
-    checked: view.grouping === value,
-    onSelect: () => control.onGrouping(value),
-  });
+  const byRepository = view.grouping === TASK_GROUPING.REPOSITORY;
+  // Note that the list groups by repository or not at all, so the choice is one switch rather than a submenu of two.
+  const grouping: MenuAction = {
+    label: GROUP_BY_REPOSITORY,
+    icon: <FolderGitIcon />,
+    checked: byRepository,
+    mark: MENU_ITEM_MARK.SWITCH,
+    stays: true,
+    onSelect: () =>
+      control.onGrouping(byRepository ? TASK_GROUPING.NONE : TASK_GROUPING.REPOSITORY),
+  };
   return [
     [
-      {
-        ...commandHead(PANEL_COMMAND.GROUP_BY),
-        items: [
-          grouping("Repository", <FolderGitIcon />, TASK_GROUPING.REPOSITORY),
-          grouping("None", <ListIcon />, TASK_GROUPING.NONE),
-        ],
-      },
+      grouping,
       ...(shared
         ? [
             {

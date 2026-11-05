@@ -403,7 +403,7 @@ test("right-clicking a task outside the selection offers that task's own menu, a
   const menu = openMenu();
   assert.equal(menu.heading, undefined);
   assert.ok(menu.items.includes("Rename"), "the task's own menu offers Rename");
-  choose("Move to section");
+  choose("Move to");
   choose("Launch");
   await settle();
 
