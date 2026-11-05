@@ -33,7 +33,7 @@ import {
  * (`heldOn`), until those move (`liveDigestOn`), and it is asked again once
  * the floor passes, a failed one
  * after a wait drawn at random up to a second and then up to five, the
- * caller told it may be behind meanwhile.
+ * caller told it may be behind once a second fails in a row.
  *
  * Each part of an answer carries the snapshot it was read at, and a held
  * poll Sync woke carries the txids of the writes that woke it too. From the
@@ -240,9 +240,9 @@ export interface LiveFollowDependencies<Part extends string> {
    */
   readonly onTxWait?: (wait: TxWait | undefined) => void;
   /**
-   * Hears that the rows last handed on may be behind: a poll failed and is
-   * asked again. The next rows a poll answers are handed on even where they
-   * did not move, so the caller hears that it caught up.
+   * Hears that the rows last handed on may be behind: a second poll failed
+   * in a row and is asked again. The next rows a poll answers are handed on
+   * even where they did not move, so the caller hears that it caught up.
    */
   readonly behind?: () => void;
   /**
@@ -447,6 +447,8 @@ function liveAnswers<Part extends string>(
       let sync = syncStandingOf(first)?.next;
       /** When the sync id last moved, or a stall was last asked around, by the host's clock. */
       let syncMovedAt = yield* Clock.currentTimeMillis;
+      /** How many polls have failed in a row since the last answer. */
+      let failures = 0;
       yield* answered(first);
       const pollOnce = Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
@@ -458,12 +460,15 @@ function liveAnswers<Part extends string>(
             Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
             return yield* Effect.never;
           }
-          // Note that the next poll asks for the rows whole, past no digest, and hands them on moved or not, since the caller was told they may be behind.
+          // Note that the next poll asks for the rows whole, past no digest, and hands them on moved or not, since the rows may be behind.
           last = undefined;
           seen = undefined;
-          dependencies.behind?.();
+          // Note that one failure is not yet behind, because a poll a sleep or a backgrounded tab cut off fails once and its retry answers.
+          failures += 1;
+          if (failures > 1) dependencies.behind?.();
           return yield* Effect.fail(read);
         }
+        failures = 0;
         seen = standing(read.queries) ?? seen;
         cursor = cursorOf(read) ?? cursor;
         const next = syncStandingOf(read)?.next;

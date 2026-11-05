@@ -31,10 +31,10 @@ import {
  *
  * A read the service did not answer is asked for again, and a follow that
  * stops for good started again, after `LIVE_RESTART`. Each says so as it
- * happens: an unanswered read as `failed`, a broken follow or a failed poll
- * as `behind`, until the next rows are taken. A read refused because the
- * session is no longer the account the follow started for ends the follow,
- * which the next sign-in starts again.
+ * happens: an unanswered read as `failed`, a broken follow or a second
+ * poll failed in a row as `behind`, until the next rows are taken. A read
+ * refused because the session is no longer the account the follow started
+ * for ends the follow, which the next sign-in starts again.
  */
 
 /** A read as the follow asks for it, its rows inline; a failure where the service answered none, `gone` where it never will again. */
@@ -50,9 +50,9 @@ export interface TaskListFollowDependencies {
   /** That the list could not be read, each time a read goes unanswered; the list already drawn stands. */
   readonly failed: () => void;
   /**
-   * That the list drawn may be behind what the service holds: a poll failed
-   * and is asked again, or the follow broke and is read again after
-   * `LIVE_RESTART`. The next rows taken are caught up.
+   * That the list drawn may be behind what the service holds: a second poll
+   * failed in a row and is asked again, or the follow broke and is read
+   * again after `LIVE_RESTART`. The next rows taken are caught up.
    */
   readonly behind: () => void;
   /** Hears the list's wait for a write's transaction where it has one, and none once it is let go. */

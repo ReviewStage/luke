@@ -1,13 +1,10 @@
-import { useAtomSet } from "@effect/atom-react";
 import { HOST_LIVE } from "@repo/features/tasks-view";
 import { ANNOUNCE, BANNER_LOOK, Banner, STATUS_TONE, Tooltip, useAnnounce } from "@repo/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
-import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import { useEffect, useRef, useState } from "react";
-import { rendererRuntime } from "../renderer-runtime.js";
+import { useRef } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**
@@ -20,9 +17,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
  * platform's answer and from whether the service answers its calls,
  * and the host's live state beside the task list (`HOST_LIVE`), which its
  * follow keeps, and draws nothing while both are well, once the pill has
- * faded out. Catching up shows only once it has stood `CATCHING_UP_GRACE`,
- * since a launch or a phone's tab coming back asks its reads again and
- * they land within it. It is a status rather than a press, so
+ * faded out. It is a status rather than a press, so
  * it is announced as one, and a sidebar too narrow for its word draws its
  * glyph alone and still names it. A phone keeps its sidebar in a drawer out
  * of sight, so a phone's header says the same under it, as a strip of the
@@ -53,9 +48,6 @@ const LIVE_MARK_LOOK = {
   },
 } as const satisfies Record<LiveMark, { word: string; hint: string; Icon: unknown }>;
 
-/** How long live updates stand behind before the pill says so, so a read asked again that lands at once, as at a launch or a wake, draws nothing. */
-const CATCHING_UP_GRACE = "3 seconds";
-
 /** What the pill stands for now, or none, which redraws its readers only as it turns. */
 const liveMarkAtom: Atom.Atom<LiveMark | undefined> = Atom.make((get) => {
   const network = get(APP_SLICE.NETWORK);
@@ -66,31 +58,9 @@ const liveMarkAtom: Atom.Atom<LiveMark | undefined> = Atom.make((get) => {
   return undefined;
 });
 
-/** The grace catching up stands before it shows, as an atom whose work is the wait; handed its door inside a record, as a function handed to an atom's setter is called at once. */
-const graceAtom = () =>
-  rendererRuntime.fn(({ show }: { readonly show: () => void }) =>
-    Effect.andThen(Effect.sleep(CATCHING_UP_GRACE), Effect.sync(show)),
-  );
-
-/** What the pill stands for now, catching up only once it has stood `CATCHING_UP_GRACE`. */
-function useLiveMark(): LiveMark | undefined {
-  const mark = useAppSlice(liveMarkAtom);
-  const [grace] = useState(graceAtom);
-  const wait = useAtomSet(grace);
-  const [graced, setGraced] = useState(false);
-  const catchingUp = mark === LIVE_MARK.CATCHING_UP;
-  useEffect(() => {
-    setGraced(false);
-    if (!catchingUp) return undefined;
-    wait({ show: () => setGraced(true) });
-    return () => wait(Atom.Interrupt);
-  }, [catchingUp, wait]);
-  return catchingUp && !graced ? undefined : mark;
-}
-
 /** The pill, or nothing while the Mac is online and live updates are current. */
 export function OfflineMark(): React.JSX.Element | null {
-  const mark = useLiveMark();
+  const mark = useAppSlice(liveMarkAtom);
   useAnnounce(ANNOUNCE.POLITE, mark === undefined ? "" : LIVE_MARK_LOOK[mark].word);
   // Note that the last mark is held drawn through its fade, as anything leaving is.
   const shown = useDisclosure(mark !== undefined);
@@ -125,7 +95,7 @@ export function OfflineMark(): React.JSX.Element | null {
  * the sidebar's foot, mounted in its drawer, already announces it.
  */
 export function OfflineStrip(): React.JSX.Element | null {
-  const mark = useLiveMark();
+  const mark = useAppSlice(liveMarkAtom);
   if (mark === undefined) return null;
   const { hint, Icon } = LIVE_MARK_LOOK[mark];
   return (

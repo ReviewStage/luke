@@ -1306,11 +1306,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   });
 
-  /** A list already followed sealed and followed again now, the time stamped so a wake's further events within `RESYNC_SETTLE` seal it no more. */
+  /**
+   * A list already followed sealed and followed again now, the time stamped
+   * so a wake's further events within `RESYNC_SETTLE` seal it no more. Note
+   * that it says nothing of being behind, because a read asked again is
+   * loading, and its answer or its failure says where the list stands.
+   */
   const resealList = Effect.gen(function* () {
     if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return;
     resyncedAt = yield* Clock.currentTimeMillis;
-    write({ live: HOST_LIVE.CATCHING_UP });
     yield* FiberHandle.run(listFollow, followList);
   });
 
@@ -1904,7 +1908,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const list = entities.stored(KEPT_READ.TASK_LIST);
     if (list !== undefined && view.listStatus !== TASKS_READ.READY) {
       listKeptAt = list.at;
-      view = { ...view, listStatus: TASKS_READ.READY, live: HOST_LIVE.CATCHING_UP };
+      // Note that a list drawn from disk is not said to be behind: the follow's first answer, or its failure, says where it stands.
+      view = { ...view, listStatus: TASKS_READ.READY };
       yield* taskList.collections.answer(list.rows, { past: undefined, next: list.at, gone: [] });
     }
     const sidebarRows = entities.stored(KEPT_READ.SIDEBAR);

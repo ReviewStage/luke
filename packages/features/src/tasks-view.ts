@@ -121,7 +121,8 @@ const tasksReadSchema = EffectSchema.Literals(Object.values(TASKS_READ));
 /**
  * Whether what the host follows live is current, as the task list's follow
  * last found it: live while its rows arrive, catching up while a poll that
- * failed is asked again or a follow that broke is started again, and
+ * failed twice running is asked again or a follow that broke is started
+ * again, never while a read is only loading, and
  * offline while the service answers no seal at all.
  */
 export const HOST_LIVE = {
