@@ -56,6 +56,7 @@ import {
   type StoreFailure,
 } from "../core/query.js";
 import { agentTable, type StoredArchive } from "../schemas/agent.js";
+import { agentRepository } from "../schemas/agent-repository.js";
 import { attachment } from "../schemas/attachment.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
@@ -2195,14 +2196,19 @@ const OPEN_PULL_REQUEST_STATES: readonly string[] = [
   PULL_REQUEST_STATE.DRAFT,
 ];
 
-/** Where the pull requests of the task's standing agents stand, as their rows keep them; an agent whose row keeps none has no line here. */
+/**
+ * Where the pull requests of the task's standing agents stand, as their rows
+ * keep them: each agent's own, then each one in a repository it works in
+ * beside its own (`agent_repository`); a repository whose row keeps none has
+ * no line here, so an agent in one repository reads as it always did.
+ */
 const findStandingPullRequestStates = SqlSchema.findAll({
   Request: Schema.Struct({ taskId: Schema.String }),
   Result: Schema.Struct({ state: Schema.String }),
   execute: ({ taskId }) =>
     Database.use((db) =>
       db
-        .select({ state: sql<string>`${agentTable.published} ->> 'state'` })
+        .select({ state: sql<string>`${agentTable.published} ->> 'state'`.as("state") })
         .from(agentTable)
         .where(
           and(
@@ -2210,6 +2216,19 @@ const findStandingPullRequestStates = SqlSchema.findAll({
             isNull(agentTable.archivedAt),
             isNotNull(agentTable.published),
           ),
+        )
+        .unionAll(
+          db
+            .select({ state: sql<string>`${agentRepository.published} ->> 'state'`.as("state") })
+            .from(agentRepository)
+            .innerJoin(agentTable, eq(agentTable.id, agentRepository.agentId))
+            .where(
+              and(
+                eq(agentTable.taskId, taskId),
+                isNull(agentTable.archivedAt),
+                isNotNull(agentRepository.published),
+              ),
+            ),
         ),
     ),
 });
