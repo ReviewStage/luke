@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
-import {
-  COMBOBOX_ITEM_DETAIL,
-  COMBOBOX_ITEM_GLYPH,
-  COMBOBOX_ITEM_LABEL,
-} from "../../shadcn/combobox.js";
+import { COMBOBOX_ITEM_GLYPH, COMBOBOX_ITEM_LABEL } from "../../shadcn/combobox.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
-import { ONE_LINE_END } from "../one-line/clipped-line.js";
-import { OneLine } from "../one-line/one-line.js";
 
 /**
  * menu-note-row.tsx -- the way out of a menu with nothing to pick, drawn in its note's place as one of its rows: a mark, a name, and at its end the press that mends it or the words saying who can.
@@ -19,8 +13,8 @@ import { OneLine } from "../one-line/one-line.js";
  * option: the arrows pass over it and a pick never lands on it, and its
  * press is its end's own quiet button, reached as the note's controls are.
  * A reader who cannot mend it is told who can in muted words at the row's
- * end, cut short with an ellipsis where the row runs out of room and said
- * whole on hover.
+ * end, which wrap onto more lines where the row runs out of room rather
+ * than being cut short, since a hint over cut words reaches no keyboard.
  */
 
 /** A note row's way out: a quiet press, or words saying who can mend it. */
@@ -28,12 +22,15 @@ export type MenuNoteRowEnd =
   | { readonly action: string; readonly onClick: () => void }
   | { readonly words: string };
 
-/** The row: a menu row's height and inset, stretched across the note's inset to the list's own edges. */
+/** The row: at least a menu row's height, at its inset, stretched across the note's inset to the list's own edges. */
 const ROW =
-  "ui-menu-note-row -mx-list-inset flex h-menu-row min-w-0 items-center gap-icon-gap self-stretch px-row-inset text-start text-body whitespace-nowrap text-foreground";
+  "ui-menu-note-row -mx-list-inset flex min-h-menu-row min-w-0 items-center gap-icon-gap self-stretch px-row-inset text-start text-body whitespace-nowrap text-foreground";
 
 /** The row's end, which gives way before its name does. */
 const END = "ui-menu-note-row-end ml-auto flex min-w-0 flex-[0_1000_auto] items-center";
+
+/** Whom to ask, muted at an item detail's distance, wrapping to the row's end rather than cut short. */
+const WORDS = "py-ui-4 pl-ui-12 text-end text-caption whitespace-normal text-muted-foreground";
 
 /** A menu's way out, in its note's place: `glyph` and `label`, then `end`. */
 export function MenuNoteRow({
@@ -57,9 +54,7 @@ export function MenuNoteRow({
             {end.action}
           </Button>
         ) : (
-          <OneLine className={COMBOBOX_ITEM_DETAIL} end={ONE_LINE_END.ELLIPSIS}>
-            {end.words}
-          </OneLine>
+          <span className={WORDS}>{end.words}</span>
         )}
       </span>
     </div>
