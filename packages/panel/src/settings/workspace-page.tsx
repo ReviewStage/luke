@@ -57,6 +57,7 @@ import {
   SettingsRowMark,
   type SettingsRowSkeletonShape,
   SettingsRowStateLine,
+  SettingsRowsFold,
   SettingsRowsSkeleton,
   SettingsRowValue,
   SettingsSection,
@@ -110,6 +111,7 @@ import { SwitchRow } from "./switch-row.js";
 import { GitHubAccountRows, type ShownConnection } from "./workspace-github-accounts.js";
 import {
   AddTokenRepository,
+  TOKEN_REPOSITORIES_READ,
   TokenOwnerRows,
   useTokenRepositories,
 } from "./workspace-token-repositories.js";
@@ -258,6 +260,10 @@ const GITHUB_UNCONNECTED = {
 
 /** What the GitHub row says to a member once an account is connected, who has no Manage on GitHub to say it: where its access is changed. */
 const GITHUB_CONNECTED_MEMBER = "Accounts and repositories are managed on GitHub.";
+
+/** The chevrons folding an integration's own rows under its row, each closed until pressed. */
+const GITHUB_FOLD = "GitHub accounts";
+const SLACK_BOT_FOLD = "Slack bot settings";
 
 /** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
 const GITHUB_MARK = (
@@ -1054,6 +1060,7 @@ function ManagedGitHub({
   connections,
   add,
   addRefusal,
+  chevron,
 }: {
   workspace: Workspace;
   connections: readonly ShownConnection[];
@@ -1061,6 +1068,8 @@ function ManagedGitHub({
   add: React.ReactNode;
   /** What the last add was refused with, said under the row. */
   addRefusal: string | undefined;
+  /** The chevron folding GitHub's accounts under the row, last at its end. */
+  chevron: React.ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1114,6 +1123,7 @@ function ManagedGitHub({
                 Connect
               </Button>
             )}
+            {chevron}
           </>
         )}
       </SettingsRow>
@@ -1140,30 +1150,50 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
       onRefused={setAddRefusal}
     />
   );
+  // Note that the token rows say their read while it is out or failed, so GitHub folds those lines too.
+  const owns =
+    connections.length > 0 ||
+    repositories.read !== TOKEN_REPOSITORIES_READ.READY ||
+    repositories.listed.length > 0;
   return (
-    <>
-      {managesWorkspace(workspace) ? (
-        <ManagedGitHub
-          workspace={workspace}
-          connections={connections}
-          add={add}
-          addRefusal={addRefusal}
-        />
-      ) : (
-        <SettingsRow
-          leading={GITHUB_MARK}
-          label="GitHub"
-          description={
-            connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_MEMBER
-          }
-          error={replayMaskedError(refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB))}
-        >
-          {() => add}
-        </SettingsRow>
-      )}
-      <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
-      <TokenOwnerRows repositories={repositories} />
-    </>
+    <SettingsRowsFold
+      label={GITHUB_FOLD}
+      head={(chevron) =>
+        managesWorkspace(workspace) ? (
+          <ManagedGitHub
+            workspace={workspace}
+            connections={connections}
+            add={add}
+            addRefusal={addRefusal}
+            chevron={chevron}
+          />
+        ) : (
+          <SettingsRow
+            leading={GITHUB_MARK}
+            label="GitHub"
+            description={
+              connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_MEMBER
+            }
+            error={replayMaskedError(refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB))}
+          >
+            {() => (
+              <>
+                {add}
+                {chevron}
+              </>
+            )}
+          </SettingsRow>
+        )
+      }
+      rows={
+        owns ? (
+          <>
+            <GitHubAccountRows workspaceId={workspace.id} connections={connections} />
+            <TokenOwnerRows repositories={repositories} />
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -1339,10 +1369,13 @@ function ManagedSlackBot({
   workspace,
   slack,
   channels,
+  chevron,
 }: {
   workspace: Workspace;
   slack: WorkspaceSlack;
   channels: readonly SlackListedChannel[] | undefined;
+  /** The chevron folding the bot's rows under its row, last at its end. */
+  chevron: React.ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
   const workspaceId = workspace.id;
@@ -1417,6 +1450,7 @@ function ManagedSlackBot({
                 Connect Slack bot
               </Button>
             ),
+          chevron,
         }}
       />
       <ConfirmDialog
@@ -1466,9 +1500,10 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
 }
 
 /**
- * An owner's or an admin's bot row, and under it, where the bot is
- * connected, its repositories and channels (`slack-bot-channels.tsx`): the
- * channels are Slack's own list, which the host holds while the row shows.
+ * An owner's or an admin's bot row, and folded under it, where the bot is
+ * connected, its repositories and channels (`slack-bot-channels.tsx`) and
+ * the reader's own switch: the channels are Slack's own list, which the host
+ * holds while the row shows.
  */
 function ManagedSlackBotRows({
   workspace,
@@ -1479,16 +1514,29 @@ function ManagedSlackBotRows({
 }): React.JSX.Element {
   const channels = useHostRead(LIVE_READ.SLACK_CHANNELS, workspace.id);
   return (
-    <>
-      <ManagedSlackBot workspace={workspace} slack={slack} channels={channels.rows} />
-      {slack.team === undefined ? null : (
-        <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+    <SettingsRowsFold
+      label={SLACK_BOT_FOLD}
+      head={(chevron) => (
+        <ManagedSlackBot
+          workspace={workspace}
+          slack={slack}
+          channels={channels.rows}
+          chevron={chevron}
+        />
       )}
-    </>
+      rows={
+        slack.team === undefined ? undefined : (
+          <>
+            <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+            <SlackNotificationsRow workspaceId={workspace.id} />
+          </>
+        )
+      }
+    />
   );
 }
 
-/** The bot's row, and under it, where the bot is connected, an owner's or admin's repositories and channels and the reader's own switch. */
+/** The bot's row, and folded under it, where the bot is connected, an owner's or admin's repositories and channels and the reader's own switch. */
 function SlackBotRows({
   workspace,
   slack,
@@ -1496,22 +1544,25 @@ function SlackBotRows({
   workspace: Workspace;
   slack: WorkspaceSlack;
 }): React.JSX.Element {
+  if (managesWorkspace(workspace))
+    return <ManagedSlackBotRows workspace={workspace} slack={slack} />;
   // Note that the rows stand side by side as the card's own, as GitHub's do, so the card rules a line between each.
   return (
-    <>
-      {managesWorkspace(workspace) ? (
-        <ManagedSlackBotRows workspace={workspace} slack={slack} />
-      ) : (
+    <SettingsRowsFold
+      label={SLACK_BOT_FOLD}
+      head={(chevron) => (
         <SettingsRow
           leading={SLACK_MARK}
           label="Slack bot"
           description={slackBotLine(slack, false)}
         >
-          {() => null}
+          {() => chevron}
         </SettingsRow>
       )}
-      {slack.team === undefined ? null : <SlackNotificationsRow workspaceId={workspace.id} />}
-    </>
+      rows={
+        slack.team === undefined ? undefined : <SlackNotificationsRow workspaceId={workspace.id} />
+      }
+    />
   );
 }
 

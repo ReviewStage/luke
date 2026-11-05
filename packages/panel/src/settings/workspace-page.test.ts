@@ -1583,9 +1583,23 @@ const rowWords = (row: HTMLElement) => [
 const integrationRows = (page: HTMLElement) =>
   [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)].map(rowWords);
 
-/** The words of every button a row draws. */
+/** The chevrons folding an integration's own rows under its row. */
+const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack bot settings" } as const;
+
+/** The words of every button a row draws, bar the chevron folding its rows. */
 const rowButtons = (row: HTMLElement) =>
-  [...row.querySelectorAll("button")].map((each) => each.textContent);
+  [...row.querySelectorAll("button")]
+    .filter((each) => !Object.values<string | null>(FOLD).includes(each.getAttribute("aria-label")))
+    .map((each) => each.textContent);
+
+/** Opens the rows an integration's row folds under it, which start closed. */
+function unfold(page: HTMLElement, label: string): void {
+  const chevron =
+    page.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ??
+    assert.fail(`no ${label} fold`);
+  assert.equal(chevron.getAttribute("aria-expanded"), "false", `${label} starts folded`);
+  act(() => chevron.click());
+}
 
 /** The row's ⋯, which opens its menu. */
 const ellipsisOn = (row: HTMLElement) =>
@@ -1624,6 +1638,8 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       `a ${role}'s controls`,
     );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
+    assert.deepEqual(integrationRows(page), [["GitHub", undefined]], "the accounts start folded");
+    unfold(page, FOLD.GITHUB);
     assert.deepEqual(integrationRows(page), [
       ["GitHub", undefined],
       ["acme-org", "0 repositories"],
@@ -1652,18 +1668,21 @@ const foldLines = (row: HTMLElement) =>
 
 /** The chevron that folds an account's repositories open under its row. */
 const foldOn = (row: HTMLElement) =>
-  row.querySelector<HTMLButtonElement>("button[aria-expanded]") ?? assert.fail("no fold");
+  row.querySelector<HTMLButtonElement>('button[aria-label$="repositories"]') ??
+  assert.fail("no fold");
 
-test("an active account counts the App's repositories whose owner is its login in any case and lists them open under it by name, and an inactive account draws no row", async () => {
+test("an active account counts the App's repositories whose owner is its login in any case and folds them under it by name, closed until pressed, and an inactive account draws no row", async () => {
   githubRepositories = ["acme-org/relay", "ACME-ORG/site", "acme-labs/old", "other/thing"];
   tokenReach = ["acme-org/forked"];
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
   const org = rowNamed(group, "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [["acme-org", "2 repositories"]]);
   assert.equal(foldOn(org).getAttribute("aria-label"), "acme-org's repositories");
-  assert.equal(foldOn(org).getAttribute("aria-expanded"), "true");
+  assert.deepEqual(foldLines(org), [], "a few repositories start folded too");
+  act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), ["relay", "site"]);
 });
 
@@ -1686,6 +1705,7 @@ test("an account given every repository says All N and opens on six lines before
       { installationId: 13, login: "acme-tools", active: true },
     ],
   });
+  unfold(page, FOLD.GITHUB);
   const org = rowNamed(githubGroup(page), "acme-org");
 
   assert.deepEqual(integrationRows(page).slice(1), [
@@ -1693,7 +1713,6 @@ test("an account given every repository says All N and opens on six lines before
     ["acme-labs-renamed", "1 repository"],
     ["acme-tools", "2 repositories"],
   ]);
-  assert.deepEqual(foldLines(org), [], "more than five start folded");
   act(() => foldOn(org).click());
   assert.deepEqual(foldLines(org), [
     ...shown.slice(0, 6).map((fullName) => fullName.split("/")[1]),
@@ -1709,12 +1728,14 @@ test("an account given every repository says All N and opens on six lines before
 test("while the repositories are read each account's line says so, and a read that failed says so once with Retry rather than as none, which reads them again", async () => {
   repositoriesReadHeld = true;
   const reading = await mount(SEVERAL);
+  unfold(reading.page, FOLD.GITHUB);
   assert.deepEqual(integrationRows(reading.page).slice(1), [["acme-org", "Reading repositories"]]);
   for (const root of roots.splice(0)) act(() => root.unmount());
 
   repositoriesReadHeld = false;
   repositoriesReadFails = true;
   const { page } = await mount(SEVERAL);
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
   assert.deepEqual(integrationRows(page).slice(1, 2), [["acme-org", undefined]]);
   assert.equal(group.textContent?.includes("Repositories could not be read."), true);
@@ -1742,6 +1763,7 @@ test("Manage on GitHub opens GitHub through the same connect as Connect, and not
 test("a service from before several connections names one GitHub account alone, which is listed as the only one", async () => {
   const { githubInstallations: _dropped, ...legacy } = CONNECTED;
   const { page } = await mount(legacy);
+  unfold(page, FOLD.GITHUB);
 
   assert.deepEqual(integrationRows(page), [
     ["GitHub", undefined],
@@ -1806,6 +1828,7 @@ test("an owner or an admin of a workspace with no GitHub, or none still active, 
 test("a member reads every account connected, or is told to ask an owner or admin, and is offered Add repository alone: no Manage on GitHub, Connect, or right-click menu", async () => {
   const connected = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
   const unconnected = await mount(ACME);
+  unfold(connected.page, FOLD.GITHUB);
 
   assert.deepEqual(integrationRows(connected.page), [
     ["GitHub", MANAGED_ON_GITHUB],
@@ -1833,6 +1856,7 @@ test("the repositories members added on their tokens stand by owner after the Ap
     { fullName: "ACME/notes", addedBy: READER_ID, addedAt: 1, removable: true },
   ];
   const { page } = await mount(SEVERAL);
+  unfold(page, FOLD.GITHUB);
   const group = githubGroup(page);
 
   assert.deepEqual(integrationRows(page), [
@@ -1841,6 +1865,7 @@ test("the repositories members added on their tokens stand by owner after the Ap
     ["acme", "2 repositories"],
     ["octo-member", "1 repository"],
   ]);
+  act(() => foldOn(rowNamed(group, "acme")).click());
   assert.deepEqual(foldLines(rowNamed(group, "acme")), ["relay", "notes"]);
   assert.deepEqual(rowActions(rowNamed(group, "octo-member")), []);
   assert.deepEqual(rowActions(rowNamed(group, "acme")), ["Remove relay", "Remove notes"]);
@@ -1886,6 +1911,8 @@ test("Add repository offers the repositories the reader's own token may push to 
       .map((one) => one.payload),
     [{ workspaceId: SEVERAL.id, repository: "octo-member/side", added: true }],
   );
+  unfold(page, FOLD.GITHUB);
+  act(() => foldOn(rowNamed(githubGroup(page), "octo-member")).click());
   assert.deepEqual(foldLines(rowNamed(githubGroup(page), "octo-member")), ["side", "notes"]);
 });
 
@@ -1970,6 +1997,7 @@ test("the token repositories say Reading while they are read, and a refused read
     release = resolve;
   });
   const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+  unfold(page, FOLD.GITHUB);
   const reading = page.textContent?.includes("Reading token repositories");
   release();
   await settle();

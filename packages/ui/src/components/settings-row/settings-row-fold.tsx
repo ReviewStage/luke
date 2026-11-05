@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { IconButton } from "../button/button.js";
 import {
   DISCLOSURE_BODY,
@@ -28,6 +28,12 @@ import { SettingsRow, type SettingsRowControl, type SettingsRowIndent } from "./
  * the muted caption, each a name alone, starting where the row's words do
  * and held to one line as a row's name is (`OneLine`); a press at the foot,
  * such as Show all, stands on a line of its own (`SettingsFoldFoot`).
+ *
+ * A row that owns whole rows rather than lines, as an integration its
+ * accounts or channels, folds them with `SettingsRowsFold`: the same
+ * chevron last at the head row's end, and the rows drawn after it while the
+ * fold is open, each a row of the card in its own right, ruled as the
+ * card's own.
  */
 
 /**
@@ -96,6 +102,42 @@ export function SettingsFoldRow({
         )}
       </SettingsRow>
     </DisclosureScope>
+  );
+}
+
+/**
+ * A head row and the rows it owns under it, closed until its chevron is
+ * pressed: `head` draws the row, handed the chevron (named `label`) to
+ * stand last at its end, or nothing where there are no `rows` to fold.
+ */
+export function SettingsRowsFold({
+  label,
+  head,
+  rows,
+}: {
+  /** The chevron's name, which a sighted reader has from the head row ("GitHub's accounts"). */
+  label: string;
+  /** The head row, handed the chevron to draw after its other controls. */
+  head: (chevron: ReactNode) => ReactNode;
+  /** The rows the fold owns, or nothing where it owns none now. */
+  rows?: ReactNode;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const folds = rows !== undefined && rows !== null && rows !== false;
+  return (
+    <>
+      {head(
+        folds ? (
+          <IconButton
+            icon={<DisclosureChevron open={open} />}
+            label={label}
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          />
+        ) : undefined,
+      )}
+      {folds && open ? rows : null}
+    </>
   );
 }
 
