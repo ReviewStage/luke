@@ -69,14 +69,28 @@ const AGENT: AgentSummary = {
   brief: AGENT_BRIEF.PROMPT,
 };
 
-let root: Root | undefined;
+/**
+ * Every root a test drew into, latest last. Note that each is unmounted once
+ * the test ends, not only the latest, because a root left standing stays
+ * subscribed to the window's state and commits on a later delivery, after
+ * the file's window is gone.
+ */
+const roots: Root[] = [];
 
 afterEach(() => {
   vi.useRealTimers();
-  act(() => root?.unmount());
-  root = undefined;
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
   document.body.innerHTML = "";
 });
+
+/** A root over `container`, unmounted once the test ends. */
+function mountRoot(container: HTMLElement): Root {
+  const root = createRoot(container);
+  roots.push(root);
+  return root;
+}
 
 async function settle(): Promise<void> {
   await act(async () => {
@@ -103,7 +117,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   if (drawn.account !== undefined) handState({}, { account: signedInAs(drawn.account).account });
   handMembers(() => ({ rows: { members: MEMBERS, former: FORMER } }));
   const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
+  const root = mountRoot(container);
   const { readerId, account: _account, ...rest } = drawn;
   const body = createElement(PlanBody, {
     task,
@@ -111,7 +125,7 @@ async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
     ...rest,
   });
   act(() =>
-    root?.render(
+    root.render(
       onRegistry(
         AtomRegistry.make(),
         createElement(MemberDirectory, { workspace: ACME, readerId, children: body }),
@@ -267,7 +281,7 @@ test("a section's byline shows only the writer's face and a few letters of time,
     " Oct 1",
     "a date, its year left out",
   );
-  act(() => root?.unmount());
+  act(() => roots.at(-1)?.unmount());
 
   const view = await draw(editedAs(byApp), { readerId: DEAN.userId });
   const byline = view.querySelector(".plan-unit-byline");
@@ -420,11 +434,11 @@ test("a save that writes a section above the one the keyboard stands on leaves T
   fakeActPort({});
   handMembers(() => ({ rows: { members: MEMBERS } }));
   const container = document.body.appendChild(document.createElement("div"));
-  root = createRoot(container);
+  const root = mountRoot(container);
   const registry = AtomRegistry.make();
   const drawPlan = (task: Task) =>
     act(() =>
-      root?.render(
+      root.render(
         onRegistry(
           registry,
           createElement(MemberDirectory, {
