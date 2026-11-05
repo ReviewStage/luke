@@ -67,3 +67,17 @@ test("an agent handed a plan is told to implement it, on every harness", () => {
     assert.ok(instructions.includes(PLAN_JOB), harness);
   }
 });
+
+test("an agent in several repositories is told where each of the others is checked out, and on which branch", () => {
+  const planned = agentHanded({ planSnapshot: "# Plan", prompt: null });
+  const instructions = agentCoderInstructions(planned, {
+    ...CONTEXT,
+    harness: CODER_HARNESS.CLAUDE_CODE,
+    extraRepositories: [
+      { repository: "acme/web", path: "/workspace/web", branch: null },
+      { repository: "acme/docs", path: "/workspace/docs", branch: "next" },
+    ],
+  });
+  assert.ok(instructions.includes("- `acme/web` at `/workspace/web`, on its default branch"));
+  assert.ok(instructions.includes("- `acme/docs` at `/workspace/docs`, on `next`"));
+});

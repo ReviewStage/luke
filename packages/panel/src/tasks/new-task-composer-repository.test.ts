@@ -4,14 +4,26 @@ import assert from "node:assert/strict";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { EVERY_WORKSPACE } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handHostReads, holdRepositoryLists, type RepositoriesRead } from "../testing/app-state.js";
-import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
+import {
+  handHostReads,
+  handState,
+  holdRepositoryLists,
+  type RepositoriesRead,
+} from "../testing/app-state.js";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -23,7 +35,9 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * New task's repository chip in a workspace whose GitHub App is on another
  * owner: a repository the picker lists on a member's own GitHub token stays
  * picked once chosen, and a preset the workspace's GitHub does not reach is
- * not started on before the picker's read lands. Synthetic throughout.
+ * not started on before the picker's read lands. With Several repositories
+ * on, a repository added beside the task's travels with the agent the card
+ * starts; with it off, none is offered. Synthetic throughout.
  */
 
 const ACME: Workspace = {
@@ -89,6 +103,7 @@ async function mount(
   const { again } = holdRepositoryLists(handHostReads({}).deliverRepositoryLists, read);
   const control = tasksControl();
   const starts: (string | null)[] = [];
+  const also: (readonly string[] | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -104,8 +119,9 @@ async function mount(
             workspaceId: scope.id,
             ...(preset === undefined ? undefined : { preset: { repository: preset } }),
             repositoriesIn: () => ({ ...control.repositories, recent, scope: scope.id }),
-            start: (_name: string, repository: string | null) => {
+            start: (_name: string, repository: string | null, _workspace, from) => {
               starts.push(repository);
+              also.push(from?.handed?.alsoRepositories);
               return Promise.resolve(undefined);
             },
           },
@@ -127,7 +143,7 @@ async function mount(
     await act(again);
     await settle();
   };
-  return { container, starts, redraw, comeForward };
+  return { container, starts, also, redraw, comeForward };
 }
 
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
@@ -263,4 +279,58 @@ test("a recent default a read does not list is let go, so a later read listing i
 
   assert.equal(reads, 2);
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
+});
+
+/** A read listing two repositories the workspace's App reaches. */
+const APP_LISTING = (): Promise<RepositoriesRead> =>
+  Promise.resolve({
+    repositories: {
+      installed: true,
+      repositories: ["api", "web"].map((name) => ({
+        owner: "acme",
+        name,
+        fullName: `acme/${name}`,
+        defaultBranch: "main",
+        private: true,
+        updatedAt: 1,
+        access: GITHUB_ACCESS.APP,
+      })),
+      installationUrl: "https://github.com/apps/luke/installations/new",
+    },
+  });
+
+/** The card's Add repository chip, where it draws one. */
+function addRepositoryChip(container: ParentNode): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>(".ui-chip")].find((chip) =>
+    chip.textContent?.includes("Add repository"),
+  );
+}
+
+test("with Several repositories on, a repository added beside the task's travels with the agent the card starts", async () => {
+  handState(experimentsOn(EXPERIMENT.SEVERAL_REPOSITORIES));
+  const { container, starts, also } = await mount(APP_LISTING, "acme/api");
+  const add = addRepositoryChip(container) ?? assert.fail("the card offers to add one");
+  act(() => add.click());
+  await settle();
+  const offered = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  assert.deepEqual(
+    offered.map((option) => option.textContent?.includes("acme/api")),
+    [false],
+    "the task's own repository is not offered again",
+  );
+  act(() => offered[0]?.click());
+  await settle();
+  typeInComposer(container, "Bump the client in both");
+  pressInComposer(container, "Enter");
+  await settle();
+
+  assert.deepEqual(starts, ["acme/api"]);
+  assert.deepEqual(also, [["acme/web"]]);
+});
+
+test("with Several repositories off, the card offers no repository beside the task's", async () => {
+  handState(experimentsOn());
+  const { container } = await mount(APP_LISTING, "acme/api");
+
+  assert.equal(addRepositoryChip(container), undefined);
 });

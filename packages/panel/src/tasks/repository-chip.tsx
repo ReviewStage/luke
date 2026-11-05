@@ -252,6 +252,8 @@ interface RepositoryMenuProps {
   onAsked?: ((request: number) => void) | undefined;
   /** The edge of its room the menu hangs from, the trailing one where none is named. */
   align?: PopoverAlign | undefined;
+  /** The repositories the menu leaves out, in any case, as an opener that adds one leaves out those it holds; none where left out. */
+  omit?: readonly string[] | undefined;
 }
 
 /**
@@ -330,7 +332,10 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     opener.current = from;
     setOpen(!open);
   };
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
+  const omitted = new Set((props.omit ?? []).map((each) => each.toLowerCase()));
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).filter(
+    (row) => !omitted.has(row.id.toLowerCase()),
+  );
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
   const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
   const label =
@@ -480,5 +485,64 @@ export function RepositoryChip(
       </Tooltip>
       {menu.menu}
     </div>
+  );
+}
+
+/** The opener's words for a repository added beside the agent's own. */
+const ADD_REPOSITORY_LABEL = "Add repository";
+
+/**
+ * The repositories a Start names beside its agent's own, each a chip its ×
+ * lifts, and after them an Add repository chip opening the repository's
+ * menu (`useRepositoryMenu`), which leaves out the agent's own and those
+ * already added; a pick is added after the others.
+ */
+export function AlsoRepositoryChips(props: {
+  /** The agent's own repository, which the menu leaves out. */
+  readonly own: string;
+  readonly value: readonly string[];
+  readonly chooser: RepositoryChooser;
+  readonly onChange: (repositories: readonly string[]) => void;
+}): React.JSX.Element {
+  const { own, value, chooser, onChange } = props;
+  const menu = useRepositoryMenu({
+    value: null,
+    chooser,
+    onChoose: (repository) => onChange([...value, repository]),
+    align: POPOVER_ALIGN.START,
+    omit: [own, ...value],
+  });
+  return (
+    <>
+      {value.map((repository) => (
+        <Tooltip key={repository} label={repository}>
+          <Chip
+            look={CHIP_LOOK.FIELD}
+            removeLabel={`Remove ${repository}`}
+            onRemove={() => onChange(value.filter((each) => each !== repository))}
+          >
+            <RepositoryPicture
+              repository={repository}
+              pictures={chooser.pictures}
+              size={AVATAR_SIZE.GLYPH}
+            />
+            <ChipName>{repository}</ChipName>
+          </Chip>
+        </Tooltip>
+      ))}
+      <div className="also-repository-chip relative min-w-0" ref={menu.room}>
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          aria-haspopup="dialog"
+          aria-expanded={menu.open}
+          aria-controls={menu.open ? menu.menuId : undefined}
+          onClick={(event) => menu.press(event.currentTarget)}
+        >
+          <GLYPH.ADD />
+          <ChipName>{ADD_REPOSITORY_LABEL}</ChipName>
+        </Chip>
+        {menu.menu}
+      </div>
+    </>
   );
 }
