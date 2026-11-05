@@ -50,7 +50,7 @@ const PAGE_GROUPS = [
   { heading: "Workspace", rows: ["Workspace"] },
   {
     heading: "Account",
-    rows: ["Account", "Agents", "Integrations", "MCP", "Experimental"],
+    rows: ["Account", "Agents", "Integrations", "Vespin MCP", "Experimental"],
   },
   {
     heading: "This Mac",
@@ -397,7 +397,7 @@ test("the sidebar lists Hosts under Account after Agents, and its search finds i
     "Agents",
     "Hosts",
     "Integrations",
-    "MCP",
+    "Vespin MCP",
     "Experimental",
   ]);
   openPage(on, "Hosts");

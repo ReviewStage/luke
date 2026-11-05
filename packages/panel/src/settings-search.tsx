@@ -241,13 +241,16 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
-    // The MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
+    // The product MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.MCP_CLIENTS,
-          label: "Agents with access",
+          label: "Connected agents",
           page: SETTINGS_VIEW.MCP,
-          haystack: ["Agents with access", "mcp server clients oauth allowed revoke access"],
+          haystack: [
+            "Connected agents",
+            "mcp server clients oauth allowed agents with access revoke external outside",
+          ],
         }
       : undefined,
     input.accountDrawn
@@ -257,7 +260,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.MCP,
           haystack: [
             "Connect an agent",
-            "mcp server url address claude code codex chatgpt connector",
+            "mcp server url address claude code codex cursor vs code chatgpt connector external outside",
           ],
         }
       : undefined,

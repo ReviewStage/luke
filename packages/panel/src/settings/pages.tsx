@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import {
   SETTINGS_PAGE_GROUP,
@@ -6,7 +7,7 @@ import {
   type SettingsPageGroup,
   type SettingsView,
 } from "@repo/settings/settings-views";
-import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon } from "@repo/ui";
+import { DisplayIcon, KeyboardIcon, LaptopIcon, PlugIcon, ProductMark } from "@repo/ui";
 import { FlaskConicalIcon, GLYPH, InfoIcon } from "@repo/ui/icons";
 import { settingsPageShown } from "./settings-rows.js";
 
@@ -31,7 +32,8 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.AGENTS]: { title: "Agents", icon: <GLYPH.AGENT /> },
   [SETTINGS_VIEW.HOSTS]: { title: "Hosts", icon: <GLYPH.HOST /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
-  [SETTINGS_VIEW.MCP]: { title: "MCP", icon: <GLYPH.MCP_SERVER /> },
+  // Note that the outside agents' page is named and marked for the product, never the protocol alone, because the MCP glyph and "MCP servers" are what the window calls the servers its own agents use.
+  [SETTINGS_VIEW.MCP]: { title: `${PRODUCT_NAME} MCP`, icon: <ProductMark small /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
