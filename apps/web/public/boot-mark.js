@@ -12,8 +12,9 @@
 // light reads as more dots and shadow as fewer, all in the theme's one
 // copper. The dots appear once the wait has run long enough to notice
 // (`--ui-hint-delay`), each fading in where it stands, in the dither's order,
-// and settling the last few pixels into place, so the mark never draws outside
-// its own box; the light keeps moving while the tab loads. When
+// and settling up the last few pixels into place, so the mark never strays
+// more than those few pixels from its own box; the light keeps moving while
+// the tab loads. When
 // the panel draws, `src/app/web-root.tsx` lifts the frame out of the root and
 // sends it `boot-frame-leave`: the dots stop where they stand and fade out
 // with the frame's ground, as one layer, to the app beneath, and the frame
