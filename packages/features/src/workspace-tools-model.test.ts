@@ -13,7 +13,7 @@ describe("runOnMacReason", () => {
     {
       case: "Settings off before a Mac away",
       settingsOff: true,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY, owner: "user-owner" },
+      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY },
       expected: RUN_ON_MAC_REASON.SETTINGS_OFF,
     },
     {
@@ -31,7 +31,7 @@ describe("runOnMacReason", () => {
     {
       case: "a Mac away",
       settingsOff: false,
-      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY, owner: "user-owner" },
+      standing: { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY },
       expected: RUN_ON_MAC_REASON.MAC_AWAY,
     },
     { case: "on", settingsOff: false, standing: { on: true }, expected: undefined },

@@ -23,10 +23,10 @@ export type ServersWriter = (
 const NONE_OFF: readonly string[] = [];
 
 export function useAgentServers(input: {
-  agent: Pick<AgentSummary, "id" | "disabledServers">;
+  agent: Pick<AgentSummary, "id" | "disabledServers" | "startedBy">;
   write: ServersWriter;
   onOpenSettings: () => void;
-  /** The reader's account, which says whether this Mac's setting meets the agent's commands. */
+  /** The reader's account, which says whether they started the agent and so whether this Mac's setting meets its commands. */
   me: string | undefined;
 }): AgentServersControl {
   const { agent } = input;
@@ -41,7 +41,7 @@ export function useAgentServers(input: {
     onOpenSettings: () => latest.current.onOpenSettings(),
     workspace: {
       agentId: agent.id,
-      reader: input.me,
+      starterReading: input.me !== undefined && agent.startedBy?.userId === input.me,
     },
   };
 }
