@@ -140,10 +140,11 @@ function failedWords(words: string): string {
 }
 
 /**
- * A failed picture's stand-in: its glyph, line, and Retry. Note that it says
- * its failure shown and hidden itself, as `FailureCopy` does where a failure
- * offers its details, because a picture offers none to copy and the app
- * still hears of every failure it shows.
+ * A failed picture's stand-in: its glyph, line, and Retry. Note that it
+ * offers no Copy details, unlike a failure on a line, because a picture's
+ * box is kept as quiet as the pictures around it, as most apps keep one; so
+ * it says its failure shown and hidden itself, as `FailureCopy` would, and
+ * the app still hears of every failure it shows.
  */
 function FailedStandIn({
   words,
