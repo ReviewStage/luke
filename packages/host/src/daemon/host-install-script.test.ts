@@ -644,7 +644,7 @@ describe("the host's install script", () => {
             : [`bootout gui/${uid}/dev.vespin.host.standalone`],
         ),
       );
-      // Note that the host leaves Vespin only once its service stopped, so a refused uninstall leaves it standing on both sides.
+      // Note that the host leaves its account only once its service stopped, so a refused uninstall leaves it standing on both sides.
       expect(commands.includes("vespin-host leave")).toBe(stops);
       expect(
         answer.stdout.includes("Vespin host is removed from this account and from Vespin."),
