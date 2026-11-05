@@ -1,4 +1,9 @@
-import { AGENT_MACHINE, type AgentSummary } from "@repo/features/agent-wire";
+import {
+  ADDED_REPOSITORY_CHECKOUT,
+  type AddedRepositoryCheckout,
+  AGENT_MACHINE,
+  type AgentSummary,
+} from "@repo/features/agent-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { EXPERIMENT } from "@repo/settings";
 import {
@@ -8,6 +13,7 @@ import {
   DialogActions,
   type DialogConfirm,
   ErrorState,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -22,6 +28,7 @@ import { useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { confirmFailure } from "../failure-report.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { addRepositoryFailureWords } from "./agent-model.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip.js";
@@ -35,8 +42,10 @@ import type { AgentsControl } from "./use-agents.js";
  * offering only what the workspace's GitHub App reaches, since one App
  * token reaches all of an agent's repositories; Add sends the pick, and the
  * service appends it, checks it out, and tells the agent
- * (`agent-repository-add.ts`). A refusal keeps the dialog up saying why
- * under the chooser. It stands only while Several repositories is on, on
+ * (`agent-repository-add.ts`). A toast then says whether it was checked out
+ * beside the agent now or will be at its next turn, where no place of the
+ * agent's ran, which tells the agent nothing so an idle one is not woken. A
+ * refusal keeps the dialog up saying why under the chooser. It stands only while Several repositories is on, on
  * an agent the reader started that runs in the cloud and is not archived,
  * under nothing archived, where the control can add one; the service still
  * refuses an agent in no repository and a repository already among its
@@ -58,6 +67,13 @@ const ADD_WORDS = {
   PICK: "Choose a repository.",
   BODY: "It is checked out beside the agent's own, and the agent's GitHub token reaches it.",
 } as const;
+
+/** What a repository added says once the service took it: checked out beside the agent now, or at its next turn, which a service that named neither is read as. */
+function addedWords(repository: string, checkout: AddedRepositoryCheckout | undefined): string {
+  return checkout === ADDED_REPOSITORY_CHECKOUT.NOW
+    ? `${repository} is checked out beside the agent.`
+    : `${repository} is checked out at the agent's next turn.`;
+}
 
 /** Whether the reader may add a repository to the agent, on the terms the header says. */
 function useAddOffered(agent: AddedTo, agents: AddDoors): boolean {
@@ -153,6 +169,7 @@ export function useAddRepository(
   shown: boolean,
 ): AddRepositoryDoor {
   const offered = useAddOffered(agent, agents);
+  const toast = useToast();
   const [picked, setPicked] = useState<string | null>(null);
   const add = async (): Promise<ActionResult> => {
     const { onAddRepository } = agents;
@@ -160,9 +177,16 @@ export function useAddRepository(
       return { status: ACTION_RESULT_STATUS.REJECTED, reason: ADD_WORDS.PICK };
     }
     const answer = await onAddRepository(agent.id, picked);
-    return "failure" in answer
-      ? { status: ACTION_RESULT_STATUS.REJECTED, reason: addRepositoryFailureWords(answer) }
-      : { status: ACTION_RESULT_STATUS.ACCEPTED };
+    if ("failure" in answer) {
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: addRepositoryFailureWords(answer) };
+    }
+    // Note that a repository added to an agent whose place does not run is checked out at its next turn, and the agent hears nothing now.
+    toast({
+      words: addedWords(picked, answer.addedCheckout),
+      tone: STATUS_TONE.COMPLETE,
+      hold: TOAST_HOLD.DONE,
+    });
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const confirm = useConfirmDialog(
     { subject: offered, surfaceOpen: shown },

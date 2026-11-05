@@ -329,6 +329,7 @@ export const agentAgentAnswerSchema = EffectSchema.Union([
     agent: agentSummarySchema,
     txid: agentAnswerSchema.fields.txid,
     notice: agentAnswerSchema.fields.notice,
+    addedCheckout: agentAnswerSchema.fields.addedCheckout,
   }),
   failedReaching,
 ]);

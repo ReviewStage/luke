@@ -54,6 +54,7 @@ import {
   runtimeModels,
 } from "@repo/features/agent-runtime-models";
 import {
+  ADDED_REPOSITORY_CHECKOUT,
   AGENT_ARCHIVER,
   AGENT_BOUNDS,
   AGENT_MACHINE,
@@ -2879,6 +2880,10 @@ export function runUpdateAgent(
   );
 }
 
+/** What an added repository's answer says where no place of the agent's ran to take it now. */
+const ADDED_AT_NEXT_TURN =
+  "It is checked out at that agent's next turn, whose instructions name it; the agent was told nothing now, so an idle one was not woken.";
+
 /** An added repository's refusal in the model's words, naming the agent's starter where only they may add one. */
 const addRefusalWords = (refusal: HostedRefusal, agent: Agent) =>
   Effect.gen(function* () {
@@ -2921,7 +2926,8 @@ function addedRepository(
       if (Result.isFailure(added)) {
         return agentToolRejected(yield* addRefusalWords(added.failure, agent));
       }
-      const { repository, path, checkedOut } = added.success;
+      const { repository, path, checkout } = added.success;
+      const now = checkout === ADDED_REPOSITORY_CHECKOUT.NOW;
       const step = yield* workspaceStepOf(userId, workspaceId);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2932,10 +2938,11 @@ function addedRepository(
           onYourTask: task.onYourTask,
           mention: agentMention(agent, step),
         },
-        added: { repository, path, checkedOut },
-        ...(calling?.id === agent.id && checkedOut
+        added: { repository, path, checkout },
+        ...(now && calling?.id === agent.id
           ? { told: addedRepositoryLine({ repository, path }) }
           : undefined),
+        ...(now ? undefined : { note: ADDED_AT_NEXT_TURN }),
       };
     }),
   );

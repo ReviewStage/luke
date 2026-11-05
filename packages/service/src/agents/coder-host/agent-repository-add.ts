@@ -28,15 +28,19 @@
  * credential renewed for the whole set (`renewCredential`, which mints
  * through `agentRepositoryToken`) and the repository cloned on the path a
  * launch clones extras on (`agentExtraReads`, `cloneAgentExtras`); where no
- * place runs, the next launch clones it. The agent is then told in one line
- * of its conversation, a new message rather than a change to its
- * instructions, so the prompt cache they open stands; an agent that added it
- * to itself reads the line as the call's own answer instead.
+ * place runs, the next launch clones it. Where the running place took it,
+ * the agent is then told in one line of its conversation, a new message
+ * rather than a change to its instructions, so the prompt cache they open
+ * stands; an agent that added it to itself reads the line as the call's own
+ * answer instead. Where none ran, it is told nothing, so an idle agent is
+ * not woken: its next launch clones it and its instructions name it then.
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import {
+  APPEND_REFUSAL,
+  type AppendRefusal,
   appendAgentRepository,
   readAgentRepositories,
 } from "@repo/database/models/agent-repositories";
@@ -44,13 +48,15 @@ import { type Agent, hasRepository } from "@repo/database/models/agent-store";
 import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { APP_LINE_METADATA, type StoreWriter } from "@repo/database/models/writer";
 import {
+  ADDED_REPOSITORY_CHECKOUT,
+  type AddedRepositoryCheckout,
   AGENT_BOUNDS,
   AGENT_MACHINE,
   type AgentAlsoRepository,
   EXTRA_REPOSITORY_REFUSAL,
 } from "@repo/features/agent-wire";
 import { EXPERIMENT } from "@repo/settings";
-import { Effect, Option, Result } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { GitHubApp, REPOSITORY_SET_UNREACHED } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
@@ -80,13 +86,21 @@ export interface RepositoryTelling {
   readonly clientKey: string;
 }
 
-/** A repository added: as GitHub spells it, where it is checked out, and whether the running place holds it now rather than at its next launch. */
+/** A repository added: as GitHub spells it, where it is checked out, and whether the running place holds it now or only its next launch will. */
 export interface AddedRepository {
   readonly repository: string;
   readonly path: string;
-  /** False where the running place's checkout failed, so the agent was not told; its next launch clones it. */
-  readonly checkedOut: boolean;
+  /** Now, in the place the agent runs, where it is told; at its next turn where no place ran or the checkout there failed, as its next launch clones it and its instructions name it, and it is told nothing. */
+  readonly checkout: AddedRepositoryCheckout;
 }
+
+/** A refusal the append answered under the agent's lock, as two adds at once can meet one: the repository already among the agent's, the bound reached, or the agent out of reach since the checks. */
+const APPEND_REFUSED = {
+  [APPEND_REFUSAL.ALREADY]: (repository: string) =>
+    extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.ALREADY, repository),
+  [APPEND_REFUSAL.FULL]: () => extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.FULL),
+  [APPEND_REFUSAL.UNREACHED]: () => HOSTED_REFUSAL.NOT_FOUND,
+} as const satisfies Record<AppendRefusal, (repository: string) => HostedRefusal>;
 
 /** The line the agent is told, or reads as its own call's answer: where the repository stands and that its credential reaches it. */
 export function addedRepositoryLine(added: Pick<AddedRepository, "repository" | "path">): string {
@@ -177,19 +191,20 @@ export const addAgentRepository = /* @__PURE__ */ Effect.fn("web/addAgentReposit
       baseBranch: asked.branch ?? null,
     }),
   );
-  if (Option.isNone(written)) {
-    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.ALREADY, repository));
-  }
+  if (Result.isFailure(written))
+    return yield* Effect.fail(APPEND_REFUSED[written.failure](repository));
   const [, ...extras] = yield* hostedStoreOrUnavailable(
     readAgentRepositories(agent.userId, agent.id),
   );
   const paths = extraCheckoutPaths(extras.map((extra) => extra.repository));
   const index = extras.findIndex((extra) => extra.repository === repository);
   const path = paths[index] ?? paths.at(-1) ?? repository;
-  const checkedOut = (yield* runnerCheckedOut(agent)) !== RUNNER_CHECKOUT.FAILED;
-  const added: AddedRepository = { repository, path, checkedOut };
-  // Note that an agent adding to itself reads the line as its call's answer, and a failed checkout tells nothing untrue.
-  if (checkedOut && adder.agent?.id !== agent.id) {
+  const live = (yield* runnerCheckedOut(agent)) === RUNNER_CHECKOUT.CHECKED_OUT;
+  const checkout = live ? ADDED_REPOSITORY_CHECKOUT.NOW : ADDED_REPOSITORY_CHECKOUT.NEXT_TURN;
+  const added: AddedRepository = { repository, path, checkout };
+  // Note that only a checkout that landed in a running place is told, so an idle agent is never woken by a
+  // line saying something not yet true, and an agent adding to itself reads the line as its call's answer.
+  if (live && adder.agent?.id !== agent.id) {
     yield* steerAgent(telling.eve, telling.writer, agent.userId, agent, {
       text: addedRepositoryLine(added),
       clientKey: telling.clientKey,

@@ -943,6 +943,19 @@ export const agentServersRequestSchema = EffectSchema.Struct({
 
 export type AgentServersRequest = typeof agentServersRequestSchema.Type;
 
+/** When a repository added to a running agent is checked out: now, in the place it runs, or at its next turn, where no place ran or the checkout there failed, as its next launch clones it. */
+export const ADDED_REPOSITORY_CHECKOUT = {
+  NOW: "now",
+  NEXT_TURN: "next_turn",
+} as const;
+
+export type AddedRepositoryCheckout =
+  (typeof ADDED_REPOSITORY_CHECKOUT)[keyof typeof ADDED_REPOSITORY_CHECKOUT];
+
+export const addedRepositoryCheckoutSchema = EffectSchema.Literals(
+  Object.values(ADDED_REPOSITORY_CHECKOUT),
+);
+
 /**
  * Adding a repository to a running agent (PATCH): `owner/name`, and the
  * branch its checkout is cloned at, none for its default branch, appended
@@ -1246,6 +1259,8 @@ const agentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]
 export const agentAnswerSchema = EffectSchema.Struct({
   agent: agentSummarySchema,
   txid: EffectSchema.optionalKey(agentTxidSchema),
+  /** Where a repository a change added was checked out: in the place the agent runs now, or at its next turn; none for any other change. */
+  addedCheckout: EffectSchema.optionalKey(addedRepositoryCheckoutSchema),
   /**
    * Retired: a service no longer sends it, since a Start on a teammate's
    * device is refused (`LOCAL_AGENT_REFUSAL.NOT_OWNER`) and never runs in the

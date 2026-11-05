@@ -577,12 +577,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       }
       if ("addRepository" in body) {
         // The member adds it as `update_agent` does, and the agent hears it in its conversation.
-        yield* addAgentRepository({ userId }, agent, body.addRepository, {
+        const added = yield* addAgentRepository({ userId }, agent, body.addRepository, {
           eve: yield* routedSessions<EveTypedTurn>(userId),
           writer,
           clientKey: randomUUID(),
         });
-        return { agent: yield* summaryOf(userId, agent) };
+        return { agent: yield* summaryOf(userId, agent), addedCheckout: added.checkout };
       }
       const route = Option.getOrUndefined(
         yield* hostedStoreOrUnavailable(nativeRouteOfReached(agent.conversationId)),

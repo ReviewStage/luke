@@ -14,8 +14,9 @@
  * extras, at the next position, under the agent row's lock.
  */
 
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { agentTable, type StoredPullRequest } from "../schemas/agent.js";
@@ -143,33 +144,54 @@ const insertAgentRepository = SqlSchema.void({
   execute: (row) => Database.use((db) => db.insert(agentRepository).values(row)),
 });
 
+/** Why a repository was not added beside an agent's own: the account does not reach the agent or it works in no repository of its own, it already works in this one, or in as many beside its own as a Start may name. */
+export const APPEND_REFUSAL = {
+  UNREACHED: "unreached",
+  ALREADY: "already",
+  FULL: "full",
+} as const;
+
+export type AppendRefusal = (typeof APPEND_REFUSAL)[keyof typeof APPEND_REFUSAL];
+
 /**
  * A repository added to the agent beside the ones it works in, as the
  * account the agent works for reaches it: written after its extras, at the
  * position after the last, with the branch its checkout is cloned at, none
- * for its default branch. Answers the position written; none where the
- * account does not reach the agent, the agent works in no repository of its
- * own, or already works in this one, in any case. The agent row is locked
- * for the read and the write, so two adds at once take two positions and
- * never add one repository twice.
+ * for its default branch. Answers the position written, or why not
+ * (`APPEND_REFUSAL`): the account does not reach the agent or it works in no
+ * repository of its own, it already works in this one, in any case, or in
+ * as many beside its own as a Start may name
+ * (`AGENT_BOUNDS.MAX_ALSO_REPOSITORIES`). The agent row is locked for the
+ * read and the write, so two adds at once take two positions, never add one
+ * repository twice, and never pass the bound.
  */
 export function appendAgentRepository(
   userId: string,
   agentId: string,
   added: { readonly repository: string; readonly baseBranch: string | null },
-): AgentStoreEffect<Option.Option<number>> {
+): AgentStoreEffect<Result.Result<number, AppendRefusal>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        type Appended = Result.Result<number, AppendRefusal>;
+        const refused = (why: AppendRefusal): Appended => Result.fail(why);
         const locked = yield* lockAgentRepository({ userId, agentId });
-        if (Option.isNone(locked) || locked.value.repository === null) return Option.none();
+        if (Option.isNone(locked) || locked.value.repository === null) {
+          return refused(APPEND_REFUSAL.UNREACHED);
+        }
         const extras = yield* findExtraPositions({ agentId });
         const named = added.repository.toLowerCase();
         const every = [locked.value.repository, ...extras.map((extra) => extra.repository)];
-        if (every.some((each) => each.toLowerCase() === named)) return Option.none();
+        if (every.some((each) => each.toLowerCase() === named)) {
+          return refused(APPEND_REFUSAL.ALREADY);
+        }
+        if (extras.length >= AGENT_BOUNDS.MAX_ALSO_REPOSITORIES) {
+          return refused(APPEND_REFUSAL.FULL);
+        }
         const position = Math.max(0, ...extras.map((extra) => extra.position)) + 1;
         yield* insertAgentRepository({ agentId, position, ...added });
-        return Option.some(position);
+        const appended: Appended = Result.succeed(position);
+        return appended;
       }),
     ),
   );
