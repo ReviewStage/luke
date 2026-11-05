@@ -9,6 +9,7 @@ import {
   ADMIN_USER_ID_PARAM,
   ADMIN_USERS_SEARCH_MAX_LENGTH,
   ADMIN_USERS_SEARCH_PARAM,
+  ADMIN_WORKSPACE_ID_PARAM,
   ADMIN_WORKSPACES_KIND,
   ADMIN_WORKSPACES_KIND_PARAM,
   type AdminDayQuery,
@@ -16,6 +17,7 @@ import {
   type AdminUserQuery,
   type AdminUsersQuery,
   type AdminWindowedQuery,
+  type AdminWorkspaceQuery,
   type AdminWorkspacesQuery,
   isUtcDayKey,
 } from "@repo/features/admin-wire";
@@ -29,6 +31,8 @@ import { ADMIN_LINK_SECTION, type AdminLinkSection } from "@repo/features/link-g
  * endpoint's gate, never into anything rendered.
  */
 const ACCOUNT_VIEW_PARAM = "user";
+
+const WORKSPACE_VIEW_PARAM = "workspace";
 
 const DAY_VIEW_PARAM = "day";
 
@@ -47,7 +51,7 @@ export const SEARCH_DEBOUNCE_MS = 250;
 /**
  * The sidebar's destinations, in the order it lists them, each the view it
  * opens and the address's `view` value naming it (the Overview names none);
- * an open account highlights Users.
+ * an open account highlights Users, and an open workspace Workspaces.
  */
 export const ADMIN_TAB = {
   DASHBOARD: "dashboard",
@@ -62,6 +66,7 @@ export type AdminTab = (typeof ADMIN_TAB)[keyof typeof ADMIN_TAB];
 /** The pages under a section, each opened from one of its rows rather than the sidebar. */
 export const ADMIN_PAGE = {
   ACCOUNT: "account",
+  WORKSPACE: "workspace",
   DAY: "day",
 } as const;
 
@@ -69,11 +74,12 @@ export const ADMIN_PAGE = {
 export type AdminView =
   | { kind: AdminTab }
   | { kind: typeof ADMIN_PAGE.ACCOUNT; id: string }
+  | { kind: typeof ADMIN_PAGE.WORKSPACE; id: string }
   | { kind: typeof ADMIN_PAGE.DAY; day: string };
 
-/** Whether a view is one of the place's sections, rather than an account's or a day's page under one. */
+/** Whether a view is one of the place's sections, rather than an account's, a workspace's, or a day's page under one. */
 export function adminSection(view: AdminView): boolean {
-  return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
+  return Object.values(ADMIN_TAB).some((tab) => tab === view.kind);
 }
 
 /** The view a section opens on. */
@@ -81,9 +87,10 @@ export function adminSectionView(tab: AdminTab): AdminView {
   return { kind: tab };
 }
 
-/** The section a view stands under: an account's page under Users, a day's under the Overview. */
+/** The section a view stands under: an account's page under Users, a workspace's under Workspaces, a day's under the Overview. */
 export function adminSectionOf(view: AdminView): AdminTab {
   if (view.kind === ADMIN_PAGE.ACCOUNT) return ADMIN_TAB.USERS;
+  if (view.kind === ADMIN_PAGE.WORKSPACE) return ADMIN_TAB.WORKSPACES;
   if (view.kind === ADMIN_PAGE.DAY) return ADMIN_TAB.DASHBOARD;
   return view.kind;
 }
@@ -92,6 +99,8 @@ export function viewFromLocation(): AdminView {
   const params = new URLSearchParams(window.location.search);
   const id = params.get(ACCOUNT_VIEW_PARAM);
   if (id) return { kind: ADMIN_PAGE.ACCOUNT, id };
+  const workspaceId = params.get(WORKSPACE_VIEW_PARAM);
+  if (workspaceId) return { kind: ADMIN_PAGE.WORKSPACE, id: workspaceId };
   // An address naming no real UTC day is the plain dashboard rather than a
   // broken page, the same reading an out-of-set window gets.
   const day = params.get(DAY_VIEW_PARAM);
@@ -175,6 +184,12 @@ export function accountHref(id: string): string {
   return hrefWithWindow(params);
 }
 
+export function workspaceHref(id: string): string {
+  const params = new URLSearchParams();
+  params.set(WORKSPACE_VIEW_PARAM, id);
+  return hrefWithWindow(params);
+}
+
 export function dayHref(day: string): string {
   const params = new URLSearchParams();
   params.set(DAY_VIEW_PARAM, day);
@@ -239,6 +254,11 @@ export function accountReadQuery(id: string, windowDays: AdminMetricsWindow): Ad
   };
 }
 
+/** One workspace's read query. */
+export function workspaceReadQuery(id: string): AdminWorkspaceQuery {
+  return { [ADMIN_WORKSPACE_ID_PARAM]: id };
+}
+
 /** The day read's query: one day, with the default scope riding as no param. */
 export function dayReadQuery(day: string, hideAdmins: boolean): AdminDayQuery {
   return {
@@ -264,15 +284,18 @@ export function workspacesReadQuery(
   };
 }
 
-/** The Admin place's link fields for a view: the Overview none, a section its name, an account's or a day's page its own. */
+/** The Admin place's link fields for a view: the Overview none, a section its name, an account's, a workspace's, or a day's page its own. */
 export function adminLinkFields(view: AdminView): {
   readonly section?: AdminLinkSection;
   readonly userId?: string;
+  readonly workspaceId?: string;
   readonly day?: string;
 } {
   switch (view.kind) {
     case "account":
       return { userId: view.id };
+    case "workspace":
+      return { workspaceId: view.id };
     case "day":
       return { day: view.day };
     case "cost":
@@ -292,9 +315,12 @@ export function adminLinkFields(view: AdminView): {
 export function adminViewOfLink(fields: {
   readonly section?: AdminLinkSection | undefined;
   readonly userId?: string | undefined;
+  readonly workspaceId?: string | undefined;
   readonly day?: string | undefined;
 }): AdminView | undefined {
   if (fields.userId !== undefined) return { kind: ADMIN_PAGE.ACCOUNT, id: fields.userId };
+  if (fields.workspaceId !== undefined)
+    return { kind: ADMIN_PAGE.WORKSPACE, id: fields.workspaceId };
   if (fields.day !== undefined) return { kind: ADMIN_PAGE.DAY, day: fields.day };
   return fields.section === undefined ? undefined : { kind: fields.section };
 }

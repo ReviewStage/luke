@@ -22,6 +22,7 @@ import { DashboardScreen, useMetricsRead } from "./screens/dashboard.js";
 import { DayScreen } from "./screens/day.js";
 import { ReliabilityScreen } from "./screens/reliability.js";
 import { UsersScreen } from "./screens/users.js";
+import { WorkspaceScreen } from "./screens/workspace.js";
 import { WorkspacesScreen } from "./screens/workspaces.js";
 
 /** No shell of their own: the app's work column is the screens' frame. */
@@ -32,7 +33,7 @@ const noSignOut = async () => undefined;
 
 export interface AdminPlaceProps {
   readonly view: AdminView;
-  /** Opens another view of the place: a section in place, an account's or a day's page as a step of the window's history. */
+  /** Opens another view of the place: a section in place, an account's, a workspace's, or a day's page as a step of the window's history. */
   readonly onOpen: (view: AdminView) => void;
 }
 
@@ -61,6 +62,7 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
   };
   const [windowDays, setWindowDays] = useState<AdminMetricsWindow>(ADMIN_METRICS_WINDOW_DEFAULT);
   const openAccount = (id: string) => onOpen({ kind: ADMIN_PAGE.ACCOUNT, id });
+  const openWorkspace = (id: string) => onOpen({ kind: ADMIN_PAGE.WORKSPACE, id });
   const openDay = (day: string) => onOpen({ kind: ADMIN_PAGE.DAY, day });
   // The overview's read waits while another view stands, as the web page's does.
   const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === ADMIN_TAB.DASHBOARD);
@@ -75,6 +77,16 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
           windowDays={windowDays}
           onWindowDaysChange={setWindowDays}
           onBack={() => onOpen({ kind: ADMIN_TAB.USERS })}
+          onOpenWorkspace={openWorkspace}
+        />
+      );
+    case ADMIN_PAGE.WORKSPACE:
+      return (
+        <WorkspaceScreen
+          {...shared}
+          id={view.id}
+          onBack={() => onOpen({ kind: ADMIN_TAB.WORKSPACES })}
+          onOpenAccount={openAccount}
         />
       );
     case ADMIN_PAGE.DAY:
@@ -117,6 +129,7 @@ function AdminViews({ view, onOpen }: AdminPlaceProps): React.JSX.Element {
           hideAdmins={hideAdmins}
           onHideAdminsChange={changeHideAdmins}
           onOpenAccount={openAccount}
+          onOpenWorkspace={openWorkspace}
         />
       );
     case ADMIN_TAB.USERS:

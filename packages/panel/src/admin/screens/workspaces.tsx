@@ -22,6 +22,7 @@ import {
   type DataTableColumn,
   GAP,
   Inline,
+  MARK_PROVIDER,
   SearchField,
   STATUS_TONE,
   Stack,
@@ -31,12 +32,14 @@ import {
   Text,
 } from "@repo/ui";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { githubAccountPageUrl } from "@repo/ui/tasks-model";
 import { useEffect, useState } from "react";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { adminReadView } from "../admin-read-view.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminViewOptions, PageSections } from "../chrome/controls.js";
+import { ExternalLink } from "../chrome/external-links.js";
 import {
   AdminCollectionPage,
   CollectionCountSkeleton,
@@ -47,6 +50,7 @@ import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
 import { INSTALLATION_LABEL, INSTALLATION_TONE } from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
+import { WorkspaceCell } from "../workspace-cell.js";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
@@ -54,8 +58,8 @@ import { useAdminRead } from "../use-admin-read.js";
  * over a table of the workspaces themselves, busiest week first.
  *
  * A row names its workspace, its owner, counts, and the GitHub account it
- * connected; opening one opens its owner's account page,
- * since a workspace has no page of its own.
+ * connected; opening one opens the workspace's own page, and its owner's
+ * name opens the owner's account.
  */
 
 const WORKSPACES_ERROR = readFailedWords("workspaces");
@@ -97,7 +101,13 @@ function InstallationsCell({
     <Stack gap={GAP.CONTROL}>
       {installations.map((installation) => (
         <Stack key={installation.login} gap={GAP.TIGHT}>
-          <Text as={TEXT_ELEMENT.SPAN}>{installation.login}</Text>
+          <ExternalLink
+            place={{
+              provider: MARK_PROVIDER.GITHUB,
+              label: installation.login,
+              href: githubAccountPageUrl(installation.login),
+            }}
+          />
           <span className="flex">
             <Badge tone={INSTALLATION_TONE[installation.status]}>
               {INSTALLATION_LABEL[installation.status]}
@@ -111,6 +121,7 @@ function InstallationsCell({
 
 function workspaceColumns(
   onOpenAccount: (id: string) => void,
+  onOpenWorkspace: (id: string) => void,
 ): DataTableColumn<AdminWorkspaceRow, WorkspaceColumnKey>[] {
   const count = (
     key: WorkspaceColumnKey,
@@ -128,9 +139,7 @@ function workspaceColumns(
       label: "Workspace",
       cell: (row) => (
         <Inline gap={GAP.ICON}>
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-            {row.name}
-          </Text>
+          <WorkspaceCell workspace={row} onOpen={onOpenWorkspace} />
           {row.personal ? <Badge tone={STATUS_TONE.NEUTRAL}>Personal</Badge> : null}
         </Inline>
       ),
@@ -222,12 +231,14 @@ function WorkspacesSections({
   rows,
   searched,
   onOpenAccount,
+  onOpenWorkspace,
 }: {
   list: AdminWorkspaceList | undefined;
   rows: readonly AdminWorkspaceRow[];
   /** Whether the box holds a search, which is what an empty table is worded by. */
   searched: boolean;
   onOpenAccount: (id: string) => void;
+  onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -236,7 +247,7 @@ function WorkspacesSections({
         {list === undefined ? (
           <DataTableSkeleton
             label="Workspaces"
-            columns={workspaceColumns(onOpenAccount)}
+            columns={workspaceColumns(onOpenAccount, onOpenWorkspace)}
             rows={WORKSPACES_SKELETON_ROWS}
             minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
             cells={{ [WORKSPACE_COLUMN.OWNER]: <AccountCellSkeleton /> }}
@@ -245,15 +256,12 @@ function WorkspacesSections({
           <>
             <DataTable
               label="Workspaces"
-              columns={workspaceColumns(onOpenAccount)}
+              columns={workspaceColumns(onOpenAccount, onOpenWorkspace)}
               rows={rows}
               rowKey={(row) => row.id}
               empty={workspacesEmpty(searched)}
               minWidth={DATA_TABLE_MIN_WIDTH.WIDE}
-              rowPressable={(row) => row.owner !== null}
-              onRowPress={(row) => {
-                if (row.owner !== null) onOpenAccount(row.owner.id);
-              }}
+              onRowPress={(row) => onOpenWorkspace(row.id)}
             />
             <WorkspacesNote list={list} />
           </>
@@ -269,6 +277,7 @@ export function WorkspacesScreen({
   account,
   onSignOut,
   onOpenAccount,
+  onOpenWorkspace,
   frame,
 }: {
   hideAdmins: boolean;
@@ -276,6 +285,7 @@ export function WorkspacesScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onOpenAccount: (id: string) => void;
+  onOpenWorkspace: (id: string) => void;
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
@@ -358,6 +368,7 @@ export function WorkspacesScreen({
               rows={[]}
               searched={false}
               onOpenAccount={onOpenAccount}
+              onOpenWorkspace={onOpenWorkspace}
             />
           </PageSections>
         ),
@@ -388,6 +399,7 @@ export function WorkspacesScreen({
             rows={rows}
             searched={tokens.length > 0 || list.search !== undefined}
             onOpenAccount={onOpenAccount}
+            onOpenWorkspace={onOpenWorkspace}
           />,
         ),
       });

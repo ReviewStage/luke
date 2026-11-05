@@ -240,6 +240,7 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
           account: undefined,
           onSignOut: async () => undefined,
           onBack: () => backs.push(backs.length),
+          onOpenWorkspace: () => undefined,
           frame: (content) => content,
         }),
       ),

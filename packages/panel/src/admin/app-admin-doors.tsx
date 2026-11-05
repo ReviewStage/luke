@@ -63,6 +63,7 @@ const APP_ADMIN_READS: AdminReads = {
   user: (query) => readThroughHost("user", query),
   day: (query) => readThroughHost("day", query),
   workspaces: (query) => readThroughHost("workspaces", query),
+  workspace: (query) => readThroughHost("workspace", query),
   favorite: (id, favorite) => askAct(ACT_KIND.ADMIN_FAVORITE, { id, favorite }).catch(() => false),
 };
 
@@ -100,6 +101,7 @@ const APP_ADMIN_DOORS: AdminDoors = {
   },
   address: {
     accountHref: () => undefined,
+    workspaceHref: () => undefined,
     search: () => "",
     keepSearch: () => undefined,
     onSearchMoved: () => () => undefined,

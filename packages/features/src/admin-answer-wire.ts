@@ -31,6 +31,7 @@ import type { GitHubInstallationStatus } from "./github-installation-wire.js";
 import type { IntegrationRowStatus } from "./integration-row-wire.js";
 import type { IntegrationProvider } from "./integration-wire.js";
 import type { FastAccess, ProviderKeyProvider, ProviderKeyStatus } from "./provider-key-wire.js";
+import type { WorkspaceRole } from "./workspace-wire.js";
 
 /* ----- The Overview's metrics (`@repo/service/admin/admin-metrics`) ----- */
 
@@ -277,6 +278,11 @@ export interface AdminUserDetail {
   generatedAt: number;
   windowDays: number;
   account: AdminUserAccount;
+  /**
+   * The account's person in the product analytics console, which files it
+   * under its account id; absent where the deployment names no project.
+   */
+  analyticsPersonUrl?: string | undefined;
   /** What the account did, by its meaningful actions: the page's live activity. */
   actions: AdminUserActions;
   /** The retired hosted tier's figures, which only dictation still writes. */
@@ -581,6 +587,26 @@ export interface AdminWorkspaceList {
   limit: number;
   summary: AdminWorkspaceSummary;
   rows: AdminWorkspaceRow[];
+}
+
+/* ----- One workspace's page (`@repo/service/admin/admin-workspace`) ----- */
+
+/** One member of a workspace: their account, their role in it, and when they joined it. */
+export interface AdminWorkspaceMember {
+  account: AdminWorkspaceOwner;
+  /** The highest role the member holds (`roleOf`). */
+  role: WorkspaceRole;
+  /** When they joined, in epoch milliseconds. */
+  joinedAt: number;
+}
+
+export interface AdminWorkspaceDetail {
+  generatedAt: number;
+  activityDays: number;
+  /** The workspace as the Workspaces table's row names it. */
+  workspace: AdminWorkspaceRow;
+  /** Every member, owners first, then the earliest to join. */
+  members: AdminWorkspaceMember[];
 }
 
 /* ----- One account's support sections (`@repo/service/admin/admin-account`) ----- */

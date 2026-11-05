@@ -9,6 +9,7 @@ import {
   Badge,
   GAP,
   Inline,
+  MARK_PROVIDER,
   PICTURE_TILE_FACE,
   PictureTile,
   SKELETON_SHAPE,
@@ -36,6 +37,7 @@ import {
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { UsageChart, UsageChartSkeleton } from "../charts/usage-chart.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
+import { ExternalLinks } from "../chrome/external-links.js";
 import { AccountActionsNote, AccountActivityNote, retiredTitle } from "../chrome/notes.js";
 import {
   AccountAvatar,
@@ -183,15 +185,17 @@ const VOLUME_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The masthead's frame: `avatar` beside the email line over the joined line. */
+/** The masthead's frame: `avatar` beside the email line over the joined line and the account's pages elsewhere. */
 function MastheadFrame({
   avatar,
   email,
   joined,
+  links,
 }: {
   avatar: React.ReactNode;
   email: React.ReactNode;
   joined: React.ReactNode;
+  links: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Inline gap={GAP.FIELD}>
@@ -199,6 +203,7 @@ function MastheadFrame({
       <Stack gap={GAP.TIGHT}>
         {email}
         {joined}
+        {links}
       </Stack>
     </Inline>
   );
@@ -270,6 +275,21 @@ function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
             : ""}
         </Text>
       }
+      links={
+        <ExternalLinks
+          places={
+            detail.analyticsPersonUrl === undefined
+              ? []
+              : [
+                  {
+                    provider: MARK_PROVIDER.POSTHOG,
+                    label: "Person in PostHog",
+                    href: detail.analyticsPersonUrl,
+                  },
+                ]
+          }
+        />
+      }
     />
   );
 }
@@ -289,6 +309,7 @@ function MastheadSkeleton(): React.JSX.Element {
           <Skeleton width={SKELETON_JOINED_WIDTH} />
         </Text>
       }
+      links={null}
     />
   );
 }
@@ -301,9 +322,11 @@ function MastheadSkeleton(): React.JSX.Element {
 function AccountSections({
   detail,
   windowDays,
+  onOpenWorkspace,
 }: {
   detail: AdminUserDetail | undefined;
   windowDays: number;
+  onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -331,6 +354,7 @@ function AccountSections({
       <AccountSupportSections
         support={detail?.support}
         windowDays={detail?.windowDays ?? windowDays}
+        onOpenWorkspace={onOpenWorkspace}
       />
 
       {/* Note that the hosted tier stands last, under everything the account
@@ -374,6 +398,7 @@ export function AccountScreen({
   account,
   onSignOut,
   onBack,
+  onOpenWorkspace,
   frame,
 }: {
   id: string;
@@ -382,6 +407,7 @@ export function AccountScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onBack: () => void;
+  onOpenWorkspace: (id: string) => void;
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
@@ -409,7 +435,11 @@ export function AccountScreen({
     loading: () =>
       frame(
         <PageSkeleton title={ACCOUNT_TITLE} note={note} back={back} controls={controls}>
-          <AccountSections detail={undefined} windowDays={windowDays} />
+          <AccountSections
+            detail={undefined}
+            windowDays={windowDays}
+            onOpenWorkspace={onOpenWorkspace}
+          />
         </PageSkeleton>,
       ),
     missing: () =>
@@ -427,7 +457,13 @@ export function AccountScreen({
     ready: (detail, refreshed) =>
       frame(
         <AdminPage title={accountLabel(detail.account)} back={back} note={note} controls={controls}>
-          {refreshed(<AccountSections detail={detail} windowDays={windowDays} />)}
+          {refreshed(
+            <AccountSections
+              detail={detail}
+              windowDays={windowDays}
+              onOpenWorkspace={onOpenWorkspace}
+            />,
+          )}
         </AdminPage>,
       ),
   });
