@@ -76,6 +76,9 @@ rsvg-convert -w 660 -h 400 dmg/dmg-background.svg -o dmg/dmg-background.png
 rsvg-convert -w 1320 -h 800 dmg/dmg-background.svg -o dmg/dmg-background@2x.png
 rsvg-convert -w 1200 -h 630 social/og-card.svg -o ../../../apps/web/public/og-card.png
 cp icon/favicon.svg ../../../apps/web/public/favicon.svg
+cp icon/favicon.svg ../../../apps/docs/favicon.svg
+cp logo/logo-color-light.svg ../../../apps/docs/logo/light.svg
+cp logo/logo-color-dark.svg ../../../apps/docs/logo/dark.svg
 rsvg-convert -w 180 -h 180 icon/web-icon.svg -o ../../../apps/web/public/apple-touch-icon.png
 for s in 192 512; do
   rsvg-convert -w $s -h $s icon/web-icon.svg -o ../../../apps/web/public/app-icon-$s.png
