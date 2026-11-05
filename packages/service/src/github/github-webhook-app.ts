@@ -41,9 +41,10 @@ import { setInstallationStatus } from "./github-installations.js";
 /**
  * github-webhook-app.ts -- our GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
  *
- * The events read are a pull request's, a check suite's, a check run's once
- * it ends, and a commit status's, since the checks' one word counts the
- * statuses beside the runs. GitHub signs every delivery with the App's webhook secret, and nothing is
+ * The events read are a pull request's, a check suite's, and a commit
+ * status's, since the checks' one word counts the statuses beside the runs.
+ * Note that a check run's are not, because GitHub sends one per job, many
+ * to a push, and its suite completing says the same of the head once. GitHub signs every delivery with the App's webhook secret, and nothing is
  * read before the signature over the body's own bytes is confirmed in
  * constant time; a deployment holding no secret refuses every delivery as
  * unavailable, so an unconfigured webhook trusts nothing. Of a delivery only
@@ -119,7 +120,6 @@ const WEBHOOK_EVENT = {
   PING: "ping",
   PULL_REQUEST: "pull_request",
   CHECK_SUITE: "check_suite",
-  CHECK_RUN: "check_run",
   /** A commit status, which the checks' one word counts beside the check runs. */
   STATUS: "status",
   /** The App installed, removed, suspended, or brought back on an account. */
@@ -159,9 +159,6 @@ const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "dequeued",
 ]);
 
-/** A check run is read once it has ended, since its start moves nothing a suite's own start does not. */
-const CHECK_RUN_COMPLETED = "completed";
-
 /** GitHub caps a delivery at 25 MB; a pull request's is a few kilobytes, so this is generous and still bounded. */
 const MAXIMUM_DELIVERY_BYTES = 5 * 1024 * 1024;
 
@@ -185,17 +182,6 @@ const CheckSuiteDeliverySchema = Schema.Struct({
   repository: RepositorySchema,
   check_suite: Schema.Struct({
     head_branch: Schema.NullOr(Schema.String),
-    pull_requests: Schema.Array(HeadSchema),
-  }),
-});
-
-const CheckRunDeliverySchema = Schema.Struct({
-  action: Schema.String,
-  repository: RepositorySchema,
-  check_run: Schema.Struct({
-    check_suite: Schema.optionalKey(
-      Schema.Struct({ head_branch: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
-    ),
     pull_requests: Schema.Array(HeadSchema),
   }),
 });
@@ -299,18 +285,6 @@ function deliveryTarget(event: string, payload: UnparsedWireValue): DeliveryTarg
       return {
         repository: read.success.repository.full_name,
         branches: branchesOf([suite.head_branch, ...suite.pull_requests.map((pr) => pr.head.ref)]),
-      };
-    }
-    case WEBHOOK_EVENT.CHECK_RUN: {
-      const read = readDelivery(CheckRunDeliverySchema, payload);
-      if (Result.isFailure(read) || read.success.action !== CHECK_RUN_COMPLETED) return undefined;
-      const run = read.success.check_run;
-      return {
-        repository: read.success.repository.full_name,
-        branches: branchesOf([
-          run.check_suite?.head_branch ?? null,
-          ...run.pull_requests.map((pr) => pr.head.ref),
-        ]),
       };
     }
     case WEBHOOK_EVENT.STATUS: {

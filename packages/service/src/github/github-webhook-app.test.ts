@@ -949,6 +949,30 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
       }),
   );
   it.effect(
+    "a check run completing on an agent's branch reads nothing of its pull request again, since its suite completing will",
+    () =>
+      Effect.gen(function* () {
+        const pull = { state: "open", merged: false, conclusion: "success" } as const;
+        const { github, ref } = yield* openAgent({ ...pull });
+        const run = {
+          action: "completed",
+          repository: { ...repository, html_url: `https://github.com/${RELAY_FULL_NAME}` },
+          check_run: {
+            head_sha: HEAD_SHA,
+            conclusion: "success",
+            completed_at: "2026-10-16T12:00:00Z",
+            app: { slug: "github-actions" },
+            check_suite: { head_branch: ref },
+            pull_requests: [{ number: 41, head: { ref } }],
+          },
+        };
+
+        const answered = yield* answer(github, SECRET, delivery("check_run", run), {});
+
+        assert.deepEqual(answered, { status: 200, body: { read: 0, queued: 0, told: 0 } });
+      }),
+  );
+  it.effect(
     "a repository renamed on GitHub still wakes its agent and still names its task: the first delivery under the new name relabels what the store kept under the old",
     () =>
       Effect.gen(function* () {
