@@ -1540,22 +1540,13 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
 
-  // Mark done pressed in the box ticks every step on the row and its card, as the box shows them.
+  // Mark done pressed in the box ticks every step on the row, as the box shows them.
   act(() => rowNamed(page, STEPS.title).click());
   await settle();
   act(() => askPress(itemPane(page), "Mark done").click());
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
-  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-item-card]");
-  assert.deepEqual(
-    [
-      ...document.querySelectorAll(
-        '.ui-tooltip-card [data-inbox-item-card] ul[aria-label="Steps"] > li',
-      ),
-    ].map((step) => step.getAttribute("data-done")),
-    ["true", "true", "true"],
-  );
 });
 
 /** Types `words` into the list's search, as a reader's keys put them in its field. */

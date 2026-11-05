@@ -11,12 +11,10 @@
  */
 
 import {
-  INBOX_ASK,
   INBOX_STATUS,
   type InboxItem,
   type InboxPerson,
   inboxWaitsOn,
-  recommendedLabels,
 } from "@repo/features/inbox-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import type { CatalogModel } from "@repo/features/models-wire";
@@ -26,7 +24,6 @@ import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
-  HoverCardList,
   HoverCardNote,
   HoverCardRow,
   HoverCardRule,
@@ -41,19 +38,12 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName, personActor } from "@repo/ui/actor-model";
-import {
-  CheckIcon,
-  CircleIcon,
-  GLYPH,
-  PenLineIcon,
-  SquareCheckIcon,
-  SquareIcon,
-} from "@repo/ui/icons";
+import { CheckIcon, GLYPH, PenLineIcon, SquareCheckIcon } from "@repo/ui/icons";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
-import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
+import { useInboxItemDrafted } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -62,31 +52,27 @@ import { agentStillWriting, providerOf } from "./agent-model.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
 import { HOME_ROW_META } from "./home-row.js";
-import { fillInWords, WRITE_AN_ANSWER } from "./inbox-ask-words.js";
 import {
   holderAutomationId,
   holderName,
   INBOX_HOLDER,
   INBOX_LINE,
   type InboxHolder,
-  type InboxKnownAsk,
   type InboxLineKind,
   type InboxListed,
-  inboxCardThread,
+  inboxCardWords,
   inboxLineKind,
   inboxSettledStanding,
   inboxSettledWords,
-  inboxShownTicks,
   itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
-  RECOMMENDED,
   readersItem,
 } from "./inbox-model.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { PlanGlyph } from "./tab-look.js";
 import { TASK_CARD_STANDING, TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
-import { cardTitle, plainWords } from "./tool-call-model.js";
+import { cardTitle } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -234,9 +220,9 @@ function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | unde
  * it, its title, where it stands, waiting on the reader, on a teammate, or
  * settled, and when it last moved; then what holds it, a task as its key
  * and its chip, which wears its status, or an automation by its name;
- * the ask in full while one waits, every option with the recommended one
- * marked or every step as the reader's draft ticks it, or how it ended; and
- * the agent's latest words, three lines at most. The agent that asked
+ * how it ended, once it has; and the agent's latest words, three lines at
+ * most. Note that it draws no open ask's options or steps, because a card
+ * takes no press and they would read as controls; the item's box answers. The agent that asked
  * stands at its foot, the loading spinner beside it while it works.
  */
 export function InboxItemCard({
@@ -256,8 +242,7 @@ export function InboxItemCard({
   const { needsYou, starter, nameOf } = useInboxStanding(listed, readerId);
   const settled = inboxSettledWords(item, nameOf);
   const subject = itemSubject(holder, item.agentId, models, readerId);
-  const thread = inboxCardThread(item);
-  const ticked = inboxShownTicks(item, useInboxItemDraft(item));
+  const words = inboxCardWords(item);
   // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
   const line =
     holder.kind === INBOX_HOLDER.TASK
@@ -273,18 +258,14 @@ export function InboxItemCard({
         corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
       <HolderDetail holder={holder} workspaceId={itemWorkspaceId(holder)} />
-      {thread.ask === undefined ? (
-        settled === undefined ? null : (
-          <HoverCardRow
-            look={HOVER_CARD_ROW_LOOK.DETAIL}
-            glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
-            label={settled}
-          />
-        )
-      ) : (
-        <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />
+      {settled === undefined ? null : (
+        <HoverCardRow
+          look={HOVER_CARD_ROW_LOOK.DETAIL}
+          glyph={item.status === INBOX_STATUS.CLOSED ? <GLYPH.DISMISSED /> : <CheckIcon />}
+          label={settled}
+        />
       )}
-      {thread.words === "" ? null : <HoverCardNote>{thread.words}</HoverCardNote>}
+      {words === "" ? null : <HoverCardNote>{words}</HoverCardNote>}
       <HoverCardRule />
       <HoverCardRow
         look={HOVER_CARD_ROW_LOOK.DETAIL}
@@ -417,66 +398,6 @@ function HolderRef({
       data-kind={holder.kind}
     />
   );
-}
-
-/** An open ask as an item's card shows it in full: a choice's options, each recommended one marked; a to-do's steps, ticked as the reader's draft ticks them; or what a form or an answer asks. */
-function CardAsk({
-  ask,
-  ticked,
-  title,
-}: {
-  ask: InboxKnownAsk;
-  ticked: readonly number[];
-  /** The item's title, which a to-do naming no steps of its own asks as its one step, as its box shows it. */
-  title: string;
-}): React.JSX.Element {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      return (
-        <HoverCardList label="Options">
-          {ask.options.map((option) => (
-            <li key={option.label}>
-              <HoverCardRow
-                glyph={<CircleIcon aria-hidden="true" />}
-                label={option.label}
-                end={recommendedLabels(ask).includes(option.label) ? RECOMMENDED : undefined}
-              />
-            </li>
-          ))}
-        </HoverCardList>
-      );
-    case INBOX_ASK.DO:
-      return (
-        <HoverCardList label="Steps">
-          {(ask.steps.length === 0 ? [title] : ask.steps).map((step, at) => (
-            <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
-              <HoverCardRow
-                glyph={
-                  ticked.includes(at) ? (
-                    <SquareCheckIcon aria-hidden="true" />
-                  ) : (
-                    <SquareIcon aria-hidden="true" />
-                  )
-                }
-                label={plainWords(step)}
-              />
-            </li>
-          ))}
-        </HoverCardList>
-      );
-    case INBOX_ASK.ANSWER:
-      return (
-        <HoverCardRow
-          look={HOVER_CARD_ROW_LOOK.DETAIL}
-          glyph={<PenLineIcon />}
-          label={
-            ask.fields === undefined
-              ? WRITE_AN_ANSWER
-              : fillInWords(ask.fields.map((field) => field.label))
-          }
-        />
-      );
-  }
 }
 
 /**

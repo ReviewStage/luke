@@ -946,22 +946,6 @@ export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "s
 }
 
 /**
- * The draft an inbox item's box holds, its steps ticked and the answer
- * pressed, which its row and its card read to show the steps as the box
- * does; none where no draft stands, or where its picks were made on the item
- * before it changed, since none of them stands then. Note that it answers
- * the kept draft itself, the same until it changes.
- */
-export function useInboxItemDraft(
-  item: Pick<InboxItem, "id" | "revision" | "status">,
-): KeptDraft | undefined {
-  return useAtomValue(draftsAtom, (drafts) => {
-    const kept = drafts.find((each) => isInbox(each) && each.place.itemId === item.id);
-    return kept === undefined || draftOfItem(kept, item) !== kept ? undefined : kept;
-  });
-}
-
-/**
  * What a list of inbox rows reads of an item's draft: the item, its picks
  * and the revision they were made on, and whether it holds words or files,
  * never the words themselves, so a list reading every row's draft draws
@@ -1069,7 +1053,7 @@ export function rowDrafted(
   return draft !== undefined && (draft.words || (picksStand(draft, item) && holdsPicks(draft)));
 }
 
-/** A row's draft whose picks its row shows, as `useInboxItemDraft` answers it of its draft as a list read it; none where its picks were made on the item before it changed. */
+/** A row's draft whose picks its row shows, read of its draft as a list read it; none where its picks were made on the item before it changed. */
 export function rowPicks(
   draft: InboxRowDraft | undefined,
   item: Pick<InboxItem, "revision" | "status">,
