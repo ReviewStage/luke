@@ -486,7 +486,7 @@ export function Tab({
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
-  /** Whether its label is the app's own words (Overview, Inbox), which a screen recording shows as they read; masked otherwise, as a tab named by a task or a file is. */
+  /** Whether its label and its detail are the app's own words (Overview, Inbox and its count), which a screen recording shows as they read; masked otherwise, as a tab named by a task or a file is. */
   labelReplayUnmasked?: boolean | undefined;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
   detail?: string | undefined;
@@ -573,7 +573,7 @@ export function Tab({
               className="ui-tab-detail text-muted-foreground data-tone:text-tone-ink"
               data-tone={detailTone}
             >
-              {detail}
+              <ReplayWords unmasked={labelReplayUnmasked}>{detail}</ReplayWords>
             </span>
           </>
         )}

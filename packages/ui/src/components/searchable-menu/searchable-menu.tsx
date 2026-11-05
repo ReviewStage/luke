@@ -1082,6 +1082,7 @@ export function SearchableMenu(
         hold={ownerRef}
         name={open?.label ?? props.label}
         detail={open === undefined ? undefined : props.label}
+        replayUnmasked={unmasked}
         back={open === undefined ? undefined : { label: props.label, onBack: closeSubmenu }}
         field={open === undefined ? searchField : undefined}
         onAway={props.onClose}
