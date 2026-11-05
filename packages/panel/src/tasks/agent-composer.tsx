@@ -30,7 +30,7 @@ import {
   riseAboveEnd,
   useMenu,
 } from "@repo/ui";
-import { lapsedServer, SERVER_HANDED } from "@repo/ui/agent-servers-model";
+import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { GLYPH } from "@repo/ui/icons";
 import { OPENAI_KEY_MISSING_NOTE } from "@repo/ui/microphone-access";
 import { type ReportedFailure, UNREPORTED, type Unreported } from "@repo/ui/reported-failure";
@@ -49,7 +49,6 @@ import { useConnected } from "../connection.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
-import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
 import { useAttachedFiles } from "../use-attached-files.js";
@@ -74,7 +73,7 @@ import type { AgentModelControl } from "./use-agent-model.js";
 import { useModifierHeld } from "./use-modifier-held.js";
 
 /**
- * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go or a server's sign-in expired.
+ * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
  * at its default type, its files over its words and its foot as every message
@@ -113,10 +112,10 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * once it lands; an agent that takes no message any more keeps the box,
  * disabled, with the reason under the bar and Continue in new agent under
  * that (`closedRemedy`); a change of model that did not take
- * says why in the same place, and with nothing else to say there, a server
- * the agent has on whose sign-in expired is offered to reconnect, in place, as
- * the servers popover reconnects it; an editor bundle that could not be loaded
- * says so there too. The box takes
+ * says why in the same place; an editor bundle that could not be loaded
+ * says so there too. A server whose sign-in expired is not said here but in
+ * a toast of its own, wherever the window is (`expired-server-toasts.ts`).
+ * The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan, and a message sent
  * from the box, by Enter or by Send, hands the caret back to the box as it
@@ -597,26 +596,6 @@ export function AgentComposer({
   // Whether the editor stood as the box first drew, which an owner that focuses the field focuses.
   const [mountedFirst] = useState(module !== undefined);
   const statuses = useIntegrationStatuses();
-  const grant = useIntegrationGrant(statuses);
-  // A reconnect that could not begin says so in the note, as Settings' row does.
-  const [reconnectFailed, setReconnectFailed] = useState<string | undefined>(undefined);
-  const reconnect = (server: string) => {
-    setReconnectFailed(undefined);
-    void grant.begin(server).then((outcome) => {
-      if (outcome === GRANT_OUTCOME.NOT_OPENED || outcome === GRANT_OUTCOME.REFUSED) {
-        setReconnectFailed(server);
-      }
-    });
-  };
-  // Note that a box handing no servers offers none to reconnect either.
-  const lapsed =
-    servers === undefined
-      ? undefined
-      : lapsedServer({
-          statusOf: statuses.statusOf,
-          accountsOf: statuses.accountsOf,
-          disabled: servers.disabled,
-        });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
   const sendNote = noteWhileOffline(composer.note, connected);
   const words =
@@ -627,22 +606,7 @@ export function AgentComposer({
     unloaded ??
     (sendNote === undefined ? model?.note : undefined);
   const note: Failure | undefined =
-    words !== undefined
-      ? { reason: FAILURE_REASON.OTHER, text: words }
-      : (sendNote ??
-        (lapsed === undefined
-          ? undefined
-          : {
-              reason: FAILURE_REASON.RECONNECT_INTEGRATION,
-              text:
-                reconnectFailed === lapsed.connection
-                  ? `${lapsed.name}'s sign-in expired, and reconnecting it could not start.`
-                  : `${lapsed.name}'s sign-in expired.`,
-              provider: lapsed.provider,
-              ...(lapsed.connection === lapsed.provider
-                ? undefined
-                : { connection: lapsed.connection, name: lapsed.name }),
-            }));
+    words !== undefined ? { reason: FAILURE_REASON.OTHER, text: words } : sendNote;
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = note !== undefined && note === sendNote;
   // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
@@ -675,13 +639,11 @@ export function AgentComposer({
   const remedy =
     note === undefined
       ? undefined
-      : note.reason === FAILURE_REASON.RECONNECT_INTEGRATION
-        ? () => reconnect(note.connection ?? note.provider)
-        : // Note that a move's retry is the box's as the move lands, and only while the refusal it
-          // was pressed for still stands, so an edit or a later send meanwhile is never sent over.
-          repositoryRemedy(note, () => {
-            if (latest.current.note === note) latest.current.retry();
-          });
+      : // Note that a move's retry is the box's as the move lands, and only while the refusal it
+        // was pressed for still stands, so an edit or a later send meanwhile is never sent over.
+        repositoryRemedy(note, () => {
+          if (latest.current.note === note) latest.current.retry();
+        });
   // Note that a remedy finished where we cannot watch keeps Retry beside it, since the same send goes once it is done.
   const remedyWords = note === undefined ? undefined : remedyLabel(note);
   // Note that a closed box asks for nothing, since it takes nothing.

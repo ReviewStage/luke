@@ -47,6 +47,7 @@ import { DesktopShell } from "./desktop/desktop-shell.js";
 import { ListedAutomations } from "./desktop/listed-automations.js";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse.js";
 import { TabSwitcher } from "./desktop/tab-switcher.js";
+import { useExpiredServerToasts } from "./expired-server-toasts.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
 import { stepTitle } from "./history-titles.js";
@@ -189,6 +190,12 @@ function UpdatedToast(): null {
 /** The toast that says the changes made offline the service refused once it answered again. */
 function OfflineRefusedToast(): null {
   useOfflineRefusedToast();
+  return null;
+}
+
+/** The toasts that say each MCP server whose sign-in expired, until it is reconnected. */
+function ExpiredServerToasts(): null {
+  useExpiredServerToasts();
   return null;
 }
 
@@ -728,6 +735,7 @@ function AppWindow(): React.JSX.Element {
                           <LinkMenu />
                           <UpdatedToast />
                           <OfflineRefusedToast />
+                          <ExpiredServerToasts />
                           {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}

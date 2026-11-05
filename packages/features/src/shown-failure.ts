@@ -122,6 +122,7 @@ export const FAILURE_SURFACE = {
   INBOX_READ: "inbox.read",
   INTEGRATIONS_READ: "integrations.read",
   INTEGRATION_DISCONNECT: "integration.disconnect",
+  INTEGRATION_RECONNECT: "integration.reconnect",
   INTEGRATION_RENAME: "integration.rename",
   MCP_CLIENTS_READ: "mcp_clients.read",
   MCP_CLIENT_REVOKE: "mcp_client.revoke",

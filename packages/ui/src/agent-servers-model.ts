@@ -358,18 +358,6 @@ export function namedServers(input: {
   });
 }
 
-/** The first server this agent has on whose sign-in expired, which its composer offers to reconnect; none while every one stands. */
-export function lapsedServer(input: {
-  statusOf: (server: string) => IntegrationStatus | undefined;
-  accountsOf: (provider: IntegrationProvider) => readonly IntegrationAccount[];
-  disabled: readonly string[];
-}): NamedServer | undefined {
-  return namedServers({
-    ...input,
-    standing: (status) => status === INTEGRATION_STATUS.EXPIRED,
-  }).find((server) => !input.disabled.includes(server.connection));
-}
-
 /**
  * The servers off once one is switched, each once: the connection switched
  * off where it is now off, and every other one already off kept, an account

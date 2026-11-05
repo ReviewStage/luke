@@ -1,5 +1,4 @@
 import { harnessNameOf } from "./agent-runtime-models.js";
-import { INTEGRATION_NAME, type IntegrationProvider } from "./integration-wire.js";
 import type { ModelProvider } from "./models-wire.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
@@ -8,7 +7,6 @@ import { PRODUCT_NAME } from "./product-name.js";
  */
 
 export const FAILURE_REASON = {
-  RECONNECT_INTEGRATION: "reconnect-integration",
   /** The member's own API key was refused or cannot be read: its harness's row on Settings › Agents replaces it. */
   API_KEY: "api-key",
   /** The task's workspace has no GitHub connected: Settings › Workspace connects it. */
@@ -39,15 +37,6 @@ type TaskRemedyReason =
   | typeof FAILURE_REASON.CHOOSE_REPOSITORY;
 
 export type Failure =
-  | {
-      readonly reason: typeof FAILURE_REASON.RECONNECT_INTEGRATION;
-      readonly text: string;
-      readonly provider: IntegrationProvider;
-      /** The account to sign in again, by its connection name, where it is not the provider's first. */
-      readonly connection?: string;
-      /** What the account is called among its provider's others, where it has others. */
-      readonly name?: string;
-    }
   | { readonly reason: TaskRemedyReason; readonly text: string; readonly taskId: string }
   | {
       readonly reason: typeof FAILURE_REASON.ADD_REPOSITORY;
@@ -91,8 +80,6 @@ function connectLabel(provider: ModelProvider | undefined): string {
 /** The remedy's label; none where only Retry answers. */
 export function remedyLabel(failure: Failure): string | undefined {
   switch (failure.reason) {
-    case FAILURE_REASON.RECONNECT_INTEGRATION:
-      return `Reconnect ${failure.name ?? INTEGRATION_NAME[failure.provider]}`;
     case FAILURE_REASON.API_KEY:
       return connectLabel(failure.provider);
     case FAILURE_REASON.CONNECT_GITHUB:
