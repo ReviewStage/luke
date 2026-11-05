@@ -9,6 +9,7 @@ import { Announcer } from "../announcer/announcer.js";
 import { Button } from "../button/button.js";
 import { Switch } from "../switch/switch.js";
 import { SettingsRow } from "./settings-row.js";
+import { SettingsRowsFold } from "./settings-row-fold.js";
 
 /** The failure beneath every refusal a row says here. */
 const { failure: FAILURE } = recordedFailure();
@@ -239,4 +240,36 @@ test("a press on a switch row's words sets its switch, as a press on the switch 
     act(() => words.click());
     expect(control.getAttribute("aria-checked")).toBe("false");
   }
+});
+
+/** A row folded under another that counts its presses, as a row keeps what it waits on, such as a refusal still to be said. */
+function CountingRow(): React.JSX.Element {
+  const [count, setCount] = useState(0);
+  return createElement(SettingsRow, {
+    label: `Pressed ${count}`,
+    children: () => createElement(Button, { onClick: () => setCount(count + 1) }, "Press"),
+  });
+}
+
+test("a row folded under another keeps its own state while the fold is closed", () => {
+  const page = mount(
+    createElement(SettingsRowsFold, {
+      label: "Slack settings",
+      head: (chevron: React.ReactNode) =>
+        createElement(SettingsRow, { label: "Slack", children: () => chevron }),
+      rows: createElement(CountingRow),
+    }),
+  );
+  const chevron = page.querySelector<HTMLButtonElement>('button[aria-label="Slack settings"]');
+  const press = () =>
+    [...page.querySelectorAll("button")].find((each) => each.textContent === "Press");
+
+  act(() => chevron?.click());
+  act(() => press()?.click());
+  act(() => chevron?.click());
+  const closed = chevron?.getAttribute("aria-expanded");
+  act(() => chevron?.click());
+
+  expect(closed).toBe("false");
+  expect(page.textContent).toContain("Pressed 1");
 });

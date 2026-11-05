@@ -36,9 +36,11 @@ import {
  *
  * A row that owns whole rows rather than lines, as an integration its
  * accounts or channels, folds them with `SettingsRowsFold`: the same
- * chevron last at the head row's end, and the rows drawn after it while the
- * fold is open, each a row of the card in its own right, ruled as the
- * card's own.
+ * chevron last at the head row's end, and the rows after it in a box of
+ * their own, each a row of the card in its own right, ruled as the card's
+ * own (settings-section.css). Note that a closed fold hides its rows rather
+ * than letting them go, because a row keeps what it is waiting on, such as
+ * a refusal still to be said under a picker, while the fold is closed.
  */
 
 /**
@@ -145,7 +147,11 @@ export function SettingsRowsFold({
           <SettingsRowActSlot />
         ),
       )}
-      {folds && open ? rows : null}
+      {folds ? (
+        <div className="ui-settings-rows-fold" hidden={!open}>
+          {rows}
+        </div>
+      ) : null}
     </>
   );
 }

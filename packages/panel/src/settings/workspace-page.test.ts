@@ -1581,7 +1581,9 @@ const rowWords = (row: HTMLElement) => [
 
 /** What every row of the Integrations group says, in order. */
 const integrationRows = (page: HTMLElement) =>
-  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)].map(rowWords);
+  [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)]
+    .filter((row) => row.closest("[hidden]") === null)
+    .map(rowWords);
 
 /** The chevrons folding an integration's own rows under its row. */
 const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack settings" } as const;
