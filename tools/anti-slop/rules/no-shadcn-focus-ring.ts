@@ -1,7 +1,7 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-import { repositoryPathOf } from "../shared/effect-edges.ts";
+import { repositoryPathOf } from "../shared/repository-path.ts";
 import { SHADCN_SOURCE } from "../shared/shadcn-focus-guard.ts";
 import { literalText, TEST_SOURCE } from "../shared/test-guard.ts";
 

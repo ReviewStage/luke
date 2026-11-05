@@ -1,7 +1,7 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 function isNodeTestLiteral(node: ESTree.Node | undefined): boolean {
   return node !== undefined && node.type === "Literal" && node.value === "node:test";

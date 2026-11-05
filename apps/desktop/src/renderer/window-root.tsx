@@ -2,8 +2,7 @@
  * window-root.tsx -- what every window's entry runs to draw: the one root, the surface it mounts once the window's document reads, and tracing once it has drawn.
  *
  * The panel's entry (`index.tsx`, loaded by `index.html`) runs it. This
- * module is the window's startup, and a runtime edge
- * (`tools/anti-slop/effect-edges.json`) where it runs the first read: it is
+ * module is the window's startup, and the edge where it runs the first read: it is
  * evaluated once per window, so no two windows share a browser registry.
  */
 

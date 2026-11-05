@@ -1,7 +1,5 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
-
-import { repositoryPathOf } from "../shared/effect-edges.ts";
 import {
   FOLLOW_OPENERS,
   isHoldDoor,
@@ -9,6 +7,7 @@ import {
   isWatchedSource,
   namesHoldDoor,
 } from "../shared/host-read-guard.ts";
+import { repositoryPathOf } from "../shared/repository-path.ts";
 import { literalText } from "../shared/test-guard.ts";
 
 /**

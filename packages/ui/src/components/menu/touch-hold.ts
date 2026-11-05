@@ -1,9 +1,8 @@
 /**
  * touch-hold.ts -- a touch held still on an element with a context menu opens that menu, as a long press does on a phone: `menu.tsx`'s `useMenu` uses it, and so does an app's hover hint over a control a tap presses.
  *
- * The one place in the menu that arms a raw timer, kept apart so the
- * repository's raw-timer allowlist (`tools/anti-slop/effect-edges.json`)
- * names this file rather than the whole menu. Only the first finger down
+ * The one place in the menu that arms a raw timer, kept apart from the rest
+ * of the menu. Only the first finger down
  * (`isPrimary`) counts toward a hold: a second finger, as a pinch's, starts
  * none and lets go of the first one's. A control that a mouse holds too, as
  * a browser's Back opens its list when held, asks for the mouse's main

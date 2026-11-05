@@ -1,6 +1,6 @@
 import { ACT_USE, PORT_ACT_USE } from "../../../packages/host/src/contract/kinds.ts";
-import { TYPESCRIPT_SOURCE } from "./effect-edges.ts";
 import { isTestFile } from "./kept-guard.ts";
+import { TYPESCRIPT_SOURCE } from "./repository-path.ts";
 
 /**
  * host-read-guard.ts -- what the `no-follow-outside-host-read` rule reads:

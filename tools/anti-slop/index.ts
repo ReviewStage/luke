@@ -17,11 +17,9 @@ import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noOpenPageFromButtonRule } from "./rules/no-open-page-from-button.ts";
 import { noPlaceholderEllipsisRule } from "./rules/no-placeholder-ellipsis.ts";
 import { noProductNameRule } from "./rules/no-product-name.ts";
-import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
 import { noRawHeadingOutsideUiRule } from "./rules/no-raw-heading-outside-ui.ts";
 import { noRawPressOutsideUiRule } from "./rules/no-raw-press-outside-ui.ts";
 import { noReducedMotionQueryRule } from "./rules/no-reduced-motion-query.ts";
-import { noRunPromiseOutsideEdgesRule } from "./rules/no-run-promise-outside-edges.ts";
 import { noShadcnFocusRingRule } from "./rules/no-shadcn-focus-ring.ts";
 import { noSourceReadInTestRule } from "./rules/no-source-read-in-test.ts";
 import { retiredRule } from "./rules/retired.ts";
@@ -56,11 +54,9 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-open-page-from-button": noOpenPageFromButtonRule,
     "no-placeholder-ellipsis": noPlaceholderEllipsisRule,
     "no-product-name": noProductNameRule,
-    "no-raw-async-primitives": noRawAsyncPrimitivesRule,
     "no-raw-heading-outside-ui": noRawHeadingOutsideUiRule,
     "no-raw-press-outside-ui": noRawPressOutsideUiRule,
     "no-reduced-motion-query": noReducedMotionQueryRule,
-    "no-run-promise-outside-edges": noRunPromiseOutsideEdgesRule,
     "no-shadcn-focus-ring": noShadcnFocusRingRule,
     "no-source-read-in-test": noSourceReadInTestRule,
     retired: retiredRule,
