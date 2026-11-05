@@ -293,6 +293,16 @@ export const CHAPTERS_ACT_KIND = {
 } as const;
 
 /**
+ * The `vespin` command installed into this Mac's account, as Settings' MCP
+ * page's Install command-line tool asks: the install script the
+ * service serves, run in its `cli` mode. Main answers it itself
+ * (`cli.ts`).
+ */
+export const CLI_ACT_KIND = {
+  CLI_INSTALL: "cli.install",
+} as const;
+
+/**
  * Settings' Skills: the skills the account sees in a workspace held for the
  * window while it holds the stream open, a pasted GitHub source or skill
  * text previewed and installed for the account or its workspace, and one
@@ -717,6 +727,7 @@ export const PORT_ACT_KIND = {
   ...AUTOMATION_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
+  ...CLI_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...MAC_COMMAND_ACT_KIND,
@@ -862,6 +873,8 @@ export const PORT_ACT_USE = {
   CHAPTERS_RETRY: ACT_USE.READ,
   CHAPTERS_GENERATE: ACT_USE.WRITE,
   CHAPTERS_MODEL_WRITE: ACT_USE.WRITE,
+
+  CLI_INSTALL: ACT_USE.WRITE,
 
   INSTALLED_SKILLS_FOLLOW: ACT_USE.READ,
   INSTALLED_SKILLS_RETRY: ACT_USE.READ,
@@ -1009,6 +1022,7 @@ export const PORT_ACT_USE = {
  */
 export const PLATFORM_PORT_ACT_KIND = {
   ...BROWSER_LIVE_ACT_KIND,
+  ...CLI_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,

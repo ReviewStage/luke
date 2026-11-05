@@ -25,8 +25,10 @@ import {
   webContents,
 } from "electron";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
+import { installCli } from "../native/cli-install";
 import type { DesktopServices } from "../services/compose-desktop";
 import { windowPushes } from "../window/window-pushes";
+import { cliProcedures } from "./cli-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
@@ -119,6 +121,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       createId: randomUUID,
       run,
     }),
+    ...cliProcedures({ install: () => installCli(config.hostedServiceBaseUrl) }),
     ...macTerminalProcedures({
       home: os.homedir(),
       openInTerminal: (folder) =>

@@ -1,5 +1,5 @@
 /**
- * cli-release.ts -- the `vespin` command's release the install script's `cli` mode serves: its version and each tarball's SHA-256, and where CI publishes them.
+ * cli-release.ts -- the `vespin` command's release the install script's `cli` mode serves: its version and each tarball's SHA-256, where CI publishes them, and the commands a person installs it with.
  *
  * CI builds the command's bundle once and publishes it to npm as `vespin`,
  * and packs it with the Node it runs on into one tarball per target the host
@@ -19,6 +19,21 @@ import { HOST_TARGET, type HostTarget } from "./host-release.js";
 
 /** The repository whose releases carry the command's tarballs. */
 const RELEASE_REPOSITORY = "ReviewStage/vespin";
+
+/** The npm package the command is published as, unscoped, so `npx vespin` and `npm i -g vespin` reach it. */
+const CLI_PACKAGE = "vespin";
+
+/** The install script's mode that installs the command rather than the host, as the script reads its first argument (`apps/web/install/install.sh`). */
+export const CLI_INSTALL_MODE = "cli";
+
+/** Where the install script's `cli` mode links the command, as a person's shell expands it. */
+export const CLI_LINK_FOLDER = "~/.local/bin";
+
+/** The commands a person is shown to install the command with npm and sign it in, as the command's README spells them. */
+export const CLI_COMMAND = {
+  NPM_INSTALL: `npm i -g ${CLI_PACKAGE}`,
+  LOGIN: `${CLI_PACKAGE} login`,
+} as const;
 
 /** A published release of the command: its version, and each of the host's targets' tarball by its SHA-256 in hex. */
 export interface CliRelease {

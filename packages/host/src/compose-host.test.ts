@@ -183,6 +183,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.CLI_INSTALL,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);

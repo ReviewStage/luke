@@ -42,6 +42,10 @@ export const SETTINGS_SEARCH_ROW = {
   MCP_CLIENTS: "mcp-clients",
   /** Our MCP page's Connect an agent, the agent asked for and its step. */
   MCP_CONNECT: "mcp-connect",
+  /** The CLI page's Install, the `vespin` command's install. */
+  CLI_INSTALL: "cli-install",
+  /** The CLI page's Sign in, the command's sign-in and Sign out everywhere. */
+  CLI_SIGN_IN: "cli-sign-in",
   /** Hosts' Add hosts button, under its list. */
   ADD_HOSTS: "add-hosts",
   /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
