@@ -1305,21 +1305,21 @@ function titleBarOffline(page: HTMLElement): Element | null {
 }
 
 test("with the sidebar folded, the Mac offline says so in the title bar beside New task, and nothing does online", async () => {
-  handState({}, { network: { online: false, reachable: true } });
+  handState({}, { network: { online: false } });
   const offline = mount(false);
   await settle();
   assert.ok(titleBarOffline(offline), "the title bar says the Mac is offline");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  handState({}, { network: { online: true, reachable: true } });
+  handState({}, { network: { online: true } });
   const online = mount(false);
   await settle();
   assert.equal(titleBarOffline(online), null);
 });
 
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
-  handState({}, { network: { online: false, reachable: true } });
+  handState({}, { network: { online: false } });
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);

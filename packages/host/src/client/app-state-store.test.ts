@@ -97,7 +97,7 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
-      app.update({ network: { online: true, reachable: true } });
+      app.update({ network: { online: true } });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
       app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
@@ -117,7 +117,7 @@ it.effect("a subscriber that patches the document as it is announced lands its p
       Stream.runForEach(Stream.take(app.changes, 2), (state) =>
         Effect.sync(() => {
           if (state.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED) {
-            app.update({ network: { online: false, reachable: true } });
+            app.update({ network: { online: false } });
           }
         }),
       ),
@@ -141,7 +141,7 @@ it("two slices in one patch are one version", () => {
   const app = store();
   app.update({
     audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
-    network: { online: false, reachable: true },
+    network: { online: false },
   });
   assert.equal(app.snapshot().version, 1);
   assert.equal(app.snapshot().network.online, false);

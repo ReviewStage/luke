@@ -50,7 +50,6 @@ import {
   linkNetworkWatch,
   linkSessionReload,
   type OperatorClient,
-  serviceReachLayer,
 } from "@repo/host/client";
 import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@repo/host/contract";
 import {
@@ -497,7 +496,6 @@ export function composeWeb(
   const storage = tabStorage();
   // Only a development tab's address can name one, so a production tab's host is always live.
   const fixture = developmentFixtureProfile(location.search);
-  // Every call the host makes to the service tells the service's reach beside it, which the tab's network watch follows.
   const assembly = Layer.provide(
     hostAssemblyLayer([HOST_PLATFORM_CONCERN.TERMINALS]),
     Layer.mergeAll(
@@ -507,7 +505,7 @@ export function composeWeb(
       httpClient,
       Layer.provide(cookieAccountSourceLayer(cookieDoor(tab)), httpClient),
     ),
-  ).pipe(Layer.provideMerge(serviceReachLayer));
+  );
   const launched = Layer.unwrap(
     Effect.map(ComposedWebTag, (web) =>
       Layer.mergeAll(

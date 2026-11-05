@@ -171,7 +171,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
     sessionReplay: { permitted: false, halted: false },
-    network: { online: true, reachable: true },
+    network: { online: true },
     window: { fullScreen: false },
   };
 }
