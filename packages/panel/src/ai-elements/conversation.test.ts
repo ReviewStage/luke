@@ -214,6 +214,20 @@ test.each([
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+test("a reader's wheel over a page drawn in the log, which its frame takes, takes the log off its newest line", () => {
+  const { root, box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  const page = box.appendChild(document.createElement("iframe"));
+  act(() => {
+    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+  });
+  lateScroll(box, 150, 2000);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["one", "two", "three"]);
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
 test.each([
   {
     how: "a press elsewhere, on a rail's row",
