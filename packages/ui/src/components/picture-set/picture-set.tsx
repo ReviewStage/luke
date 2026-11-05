@@ -1,5 +1,12 @@
 import { countWords } from "@repo/features/words";
-import { Children, createContext, isValidElement, type ReactNode, useContext } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  type ReactNode,
+  useContext,
+  useLayoutEffect,
+} from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ImageOffIcon } from "../../icons/icons.js";
 import { RetryIcon } from "../../icons/lucide-glyphs.js";
@@ -7,7 +14,6 @@ import { PICTURE_STATE, type PictureState } from "../../picture-cache.js";
 import type { ReportedFailure } from "../../reported-failure.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card } from "../card/card.js";
-import { FailureCopy } from "../failure-copy/failure-copy.js";
 import { PictureTile } from "../picture-tile/picture-tile.js";
 import { Spinner } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -78,12 +84,10 @@ const FAILED_LINE = "Couldn't load image";
 /**
  * A failed picture's stand-in, filling the box the spinner stood in and the
  * container its narrow look asks about: the gone picture's glyph over a
- * short line, then Retry and Copy details, centered, as a picture that
- * failed reads in most apps. Its sentence, with the picture's own words, is
- * spoken as the alert rather than drawn. Note that a narrow box, a portrait
- * thumbnail's, keeps the glyph and Retry's glyph alone, because the line and
- * the copy would not fit; the copy is still drawn there, unseen, so the
- * failure is still reported as shown.
+ * short line, then Retry, centered, as a picture that failed reads in most
+ * apps. Its sentence, with the picture's own words, is spoken as the alert
+ * rather than drawn. Note that a narrow box, a portrait thumbnail's, keeps
+ * the glyph and Retry's glyph alone, because the line would not fit.
  */
 const FAILED_STAND_IN =
   "ui-picture-failed @container/ui-picture-failed flex w-full flex-col items-center justify-center gap-ui-4 p-ui-8 text-center text-caption text-muted-foreground";
@@ -95,10 +99,9 @@ const FAILED_GLYPH =
 /** The short line, given up in a narrow box. */
 const FAILED_WORDS = "ui-picture-failed-words @max-[160px]/ui-picture-failed:hidden";
 
-/** Retry and Copy details on one line; in a narrow box Retry is its glyph alone and the copy is not drawn. */
-const FAILED_ACTIONS =
-  "ui-picture-failed-actions flex items-center gap-control-gap @max-[160px]/ui-picture-failed:[&_.ui-button-words]:sr-only";
-const FAILED_COPY = "ui-picture-failed-copy contents @max-[160px]/ui-picture-failed:hidden";
+/** Retry, its glyph alone in a narrow box. */
+const FAILED_RETRY =
+  "ui-picture-failed-retry contents @max-[160px]/ui-picture-failed:[&_.ui-button-words]:sr-only";
 
 /**
  * A tile's frame, filling the tile's room at the picture's shape, what stands
@@ -137,6 +140,50 @@ function failedWords(words: string): string {
 }
 
 /**
+ * A failed picture's stand-in: its glyph, line, and Retry. Note that it says
+ * its failure shown and hidden itself, as `FailureCopy` does where a failure
+ * offers its details, because a picture offers none to copy and the app
+ * still hears of every failure it shows.
+ */
+function FailedStandIn({
+  words,
+  onRetry,
+  failure,
+}: {
+  words: string;
+  onRetry: (() => void) | undefined;
+  failure: ReportedFailure;
+}): React.JSX.Element {
+  useLayoutEffect(() => {
+    failure.shown();
+    return () => failure.hidden();
+  }, [failure]);
+  return (
+    <span className={FAILED_STAND_IN} role="alert">
+      <VisuallyHidden>{failedWords(words)}</VisuallyHidden>
+      <span className={FAILED_GLYPH} aria-hidden="true">
+        <ImageOffIcon />
+      </span>
+      <span className={FAILED_WORDS} aria-hidden="true">
+        {FAILED_LINE}
+      </span>
+      {onRetry === undefined ? null : (
+        <span className={FAILED_RETRY}>
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<RetryIcon />}
+            turns
+            onClick={() => onRetry()}
+          >
+            {RETRY}
+          </Button>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
  * What stands in a picture's place while it is not drawn: the window's
  * spinner, said as reading the picture, while its bytes are read; the
  * glyph of a picture gone and its words, with why (`not available` unless
@@ -167,33 +214,7 @@ export function PictureStandIn(
   const { state, words } = props;
   if (state === PICTURE_STATE.READING) return <Spinner delay label={READING_LABEL} />;
   if (props.state === PICTURE_STATE.FAILED) {
-    const { onRetry } = props;
-    return (
-      <span className={FAILED_STAND_IN} role="alert">
-        <VisuallyHidden>{failedWords(words)}</VisuallyHidden>
-        <span className={FAILED_GLYPH} aria-hidden="true">
-          <ImageOffIcon />
-        </span>
-        <span className={FAILED_WORDS} aria-hidden="true">
-          {FAILED_LINE}
-        </span>
-        <span className={FAILED_ACTIONS}>
-          {onRetry === undefined ? null : (
-            <Button
-              variant={BUTTON_VARIANT.QUIET}
-              icon={<RetryIcon />}
-              turns
-              onClick={() => onRetry()}
-            >
-              {RETRY}
-            </Button>
-          )}
-          <span className={FAILED_COPY}>
-            <FailureCopy failure={props.failure} />
-          </span>
-        </span>
-      </span>
-    );
+    return <FailedStandIn words={words} onRetry={props.onRetry} failure={props.failure} />;
   }
   return (
     <span className={STAND_IN}>

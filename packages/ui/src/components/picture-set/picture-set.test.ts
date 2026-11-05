@@ -156,10 +156,7 @@ test("a picture whose read did not land says it could not be read, and its Retry
   expect(container.querySelector('[role="alert"]')?.textContent).toContain(
     "Members could not be read.",
   );
-  expect(presses.map((press) => press.ariaLabel ?? press.textContent)).toEqual([
-    "Retry",
-    "Copy details",
-  ]);
+  expect(presses.map((press) => press.textContent)).toEqual(["Retry"]);
   act(() => (presses[0] as HTMLButtonElement).click());
   expect(pressed).toEqual(["retry"]);
 });
