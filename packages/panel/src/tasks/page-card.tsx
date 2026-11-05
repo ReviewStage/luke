@@ -9,9 +9,11 @@ import { HoverCard, HoverCardHead, HoverCardSkeleton, PageThumb, Time, useMinute
 import { ACTOR_KIND, ACTOR_STATE, type Actor, APP_ACTOR } from "@repo/ui/actor-model";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { AppWindowIcon } from "lucide-react";
+import { useRef } from "react";
 import { PROVENANCE_VERB, ProvenanceRow } from "../actor-ref.js";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
+import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenPlace } from "./use-open-link.js";
 
@@ -26,6 +28,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * Then the page
  * itself, small: its newest version drawn in a frame as its tab draws it
  * (`page-pane.tsx`), under the same sandbox and from the same address,
+ * wearing the window's theme and the room its tab keeps (`page-theme.ts`),
  * laid out four times the card's width, a desktop window's, and
  * scaled down to the card's (tasks.css), so the developer sees what a page is before opening it. The frame
  * is the pointer's preview and nothing more: it takes no pointer, so the
@@ -41,10 +44,13 @@ interface CardPage {
   readonly page: PageLine;
 }
 
-/** The page's newest version, drawn small and inert. */
+/** The page's newest version, drawn small and inert, as its tab draws it. */
 function PagePreview({ place, page }: CardPage): React.JSX.Element {
+  const frame = useRef<HTMLIFrameElement>(null);
+  usePageTheme(frame, PAGE_ROOM.OWN);
   return (
     <PageThumb
+      frameRef={frame}
       frame={{
         title: `${page.title} preview`,
         src: appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version }),

@@ -7,7 +7,7 @@ import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { PageCard } from "./page-card.js";
@@ -17,7 +17,8 @@ import { OpenLinkProvider } from "./use-open-link.js";
  * page-card.test.ts -- a page's card shows its preview once the version it
  * names has loaded, and a version written while the card stands is held
  * hidden until it loads, rather than the last version standing under the
- * new one's number. Synthetic plan and page.
+ * new one's number, and its preview is handed the window's theme as its tab
+ * is. Synthetic plan and page.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -32,6 +33,7 @@ const FUNNEL: PageLine = {
 const roots: Root[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
@@ -121,4 +123,31 @@ test("a press on the agent that showed the version opens its tab, on the page's 
   assert.equal(shower?.tagName, "BUTTON", "the agent's name is a press");
   act(() => shower?.click());
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: TASK, agentId }]);
+});
+
+test("the preview's page is handed the window's theme when it asks, with the room its tab keeps", () => {
+  document.documentElement.style.setProperty("--ui-page-inset", "24px");
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(PageCard, { place: { taskId: TASK }, page: FUNNEL }),
+      ),
+    ),
+  );
+  const framed = container.querySelector("iframe")?.contentWindow;
+  assert.ok(framed);
+  const answer = vi.spyOn(framed, "postMessage").mockImplementation(() => undefined);
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", { data: { type: "app-page-theme-ask" }, source: framed }),
+    );
+  });
+  const answered = answer.mock.calls[0]?.[0];
+  document.documentElement.style.removeProperty("--ui-page-inset");
+  assert.equal(answered?.type, "app-page-theme");
+  assert.equal(answered?.inset, "24px", "the tab's room, not the words' none");
 });
