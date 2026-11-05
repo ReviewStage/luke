@@ -11,9 +11,10 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
  * what went wrong, the one way on it offers, and a closing note. A quiet
  * way out of the flow, such as setup's Sign out, stands off the card in the
- * page's top-right corner, where a toolbar's last button would, so it never
- * competes with the step's own presses and stays clear of the desktop
- * window's traffic lights at the other end of its title bar. The page
+ * page's top-right corner, centered on the title bar's middle where the
+ * window names one (the desktop's traffic lights), else a toolbar row's, so
+ * it never competes with the step's own presses and stays clear of the
+ * traffic lights at the other end of the title bar. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
  * phone's width, and what it holds stretches to the card's inner width, so a
@@ -142,7 +143,7 @@ export function AuthPage({
         ) : null}
       </section>
       {exit === undefined ? null : (
-        <div className="ui-auth-exit absolute top-ui-8 end-column-inset">
+        <div className="ui-auth-exit absolute top-title-bar-control-top end-column-inset">
           <Button variant={BUTTON_VARIANT.QUIET} onClick={exit.onPress}>
             {exit.label}
           </Button>

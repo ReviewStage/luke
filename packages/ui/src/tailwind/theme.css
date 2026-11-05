@@ -350,6 +350,14 @@
   /* Where a card the window's size starts: clear of what the window draws
      over its top (the traffic lights), as the window says, else a margin. */
   --spacing-dialog-window-top: var(--ui-dialog-window-top, var(--ui-space-24));
+  /* Where a title-bar control stands, its middle on the title bar's
+     (`--ui-title-bar-middle`, the traffic lights' as the window says), else
+     on a toolbar row's: an auth page's way out, such as setup's Sign out. */
+  --spacing-title-bar-control-top: calc(
+    var(--ui-title-bar-middle, calc(var(--ui-space-8) + var(--ui-control-height) / 2)) -
+    var(--ui-control-height) /
+    2
+  );
   --spacing-card-inset-snug: var(--ui-card-inset-snug);
   --spacing-dialog-reach: var(--ui-space-12);
   --spacing-menu-inset: var(--ui-menu-inset);

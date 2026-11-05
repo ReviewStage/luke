@@ -51,6 +51,9 @@
      card the window's size starts (`@repo/ui`'s Dialog): a gap under them. */
   --traffic-lights-bottom: calc(var(--traffic-lights-middle) + 7px);
   --ui-dialog-window-top: calc(var(--traffic-lights-bottom) + var(--ui-space-16));
+  /* The title bar's middle, which a control `@repo/ui` stands in it (an auth
+     page's way out) centers on, level with the traffic lights. */
+  --ui-title-bar-middle: var(--title-bar-middle);
 }
 
 /* In full screen macOS hides the traffic lights, so the title bar's buttons
