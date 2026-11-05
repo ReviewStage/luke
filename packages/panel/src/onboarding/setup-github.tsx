@@ -1,5 +1,10 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  type GitHubRepository,
+} from "@repo/features/github-repositories-wire";
+import {
   GITHUB_TOKEN_CREATE_URL,
   type GitHubTokenRejection,
 } from "@repo/features/github-token-wire";
@@ -52,13 +57,11 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 /** What setup says over GitHub's cards, which setup requires: agents work in the account's repositories. */
 export const GITHUB_REQUIRED = "Agents work in your repositories and open pull requests.";
 
-/** How the workspace reaches its repositories. */
-const ROUTE = {
-  APP: "app",
-  TOKEN: "token",
+/** What the done line says each route reaches its repositories through. */
+const ROUTE_WORDS = {
+  [GITHUB_ACCESS.APP]: "through the GitHub App",
+  [GITHUB_ACCESS.TOKEN]: "through your token",
 } as const;
-
-type Route = (typeof ROUTE)[keyof typeof ROUTE];
 
 /** A card's words under its choice, in the caption's muted ink. */
 function CardWords({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -69,9 +72,20 @@ function CardWords({ children }: { children: React.ReactNode }): React.JSX.Eleme
   );
 }
 
-/** How many repositories the workspace reaches, as the done card says it. */
-function reachedWords(count: number): string {
-  return count === 1 ? "1 repository" : `${count} repositories`;
+/** How many repositories the workspace reaches, and through which route, as the done card says it. */
+function reachedWords(count: number, route: GitHubAccess): string {
+  const counted = count === 1 ? "1 repository" : `${count} repositories`;
+  return `${counted} ${ROUTE_WORDS[route]}`;
+}
+
+/**
+ * The route the workspace's repositories are reached through: the App
+ * wherever it reaches one, since the App wins, and a row with no access
+ * named is the App's, from a service older than tokens.
+ */
+function reachedRoute(repositories: readonly GitHubRepository[]): GitHubAccess {
+  const onApp = repositories.some(({ access }) => access !== GITHUB_ACCESS.TOKEN);
+  return onApp ? GITHUB_ACCESS.APP : GITHUB_ACCESS.TOKEN;
 }
 
 /** The App's card: one press sends the browser to GitHub's install page. */
@@ -211,27 +225,30 @@ export function GitHubSetup({
   workspaceId: string;
   onReached: (reached: boolean) => void;
 }): React.JSX.Element {
-  const [route, setRoute] = useState<Route>(ROUTE.APP);
-  const reached =
-    useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId).rows?.repositories.length ?? 0;
+  const [chosen, setChosen] = useState<GitHubAccess>(GITHUB_ACCESS.APP);
+  const repositories = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId).rows?.repositories;
+  const reached = repositories?.length ?? 0;
   useEffect(() => onReached(reached > 0), [reached, onReached]);
+  // Note that once a repository is reached the route is the one that reaches it, never the card last chosen, which a remount forgets.
+  const route = repositories !== undefined && reached > 0 ? reachedRoute(repositories) : chosen;
   const done =
     reached > 0 ? (
       <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-        {reachedWords(reached)}
+        {reachedWords(reached, route)}
       </SettingsRowStateLine>
     ) : null;
-  const options: readonly ChoiceOption<Route>[] = [
+  const options: readonly ChoiceOption<GitHubAccess>[] = [
     {
-      value: ROUTE.APP,
+      value: GITHUB_ACCESS.APP,
       label: "GitHub App",
       badge: "Recommended",
-      below: route !== ROUTE.APP ? null : (done ?? <AppRoute workspaceId={workspaceId} />),
+      below: route !== GITHUB_ACCESS.APP ? null : (done ?? <AppRoute workspaceId={workspaceId} />),
     },
     {
-      value: ROUTE.TOKEN,
+      value: GITHUB_ACCESS.TOKEN,
       label: "Personal access token",
-      below: route !== ROUTE.TOKEN ? null : (done ?? <TokenRoute workspaceId={workspaceId} />),
+      below:
+        route !== GITHUB_ACCESS.TOKEN ? null : (done ?? <TokenRoute workspaceId={workspaceId} />),
     },
   ];
   return (
@@ -241,8 +258,8 @@ export function GitHubSetup({
       options={options}
       value={[route]}
       disabled={reached > 0}
-      onChange={([chosen]) => {
-        if (chosen !== undefined) setRoute(chosen);
+      onChange={([picked]) => {
+        if (picked !== undefined) setChosen(picked);
       }}
     />
   );
