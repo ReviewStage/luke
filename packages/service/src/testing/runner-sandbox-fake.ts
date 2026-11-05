@@ -170,6 +170,8 @@ export function runnerSandboxApi() {
    * sandbox's next session.
    */
   const stopsAt: { call?: ((rest: string) => boolean) | undefined } = {};
+  /** How many resumes the API refuses next with 422 `sandbox_snapshotting`, as Vercel answers one while the last stop's snapshot is still being taken. */
+  const snapshotting = { remaining: 0 };
   /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
@@ -277,6 +279,13 @@ export function runnerSandboxApi() {
       const resuming = parsed.searchParams.get("resume") === "true";
       if (resuming && sandbox.status === "stopped" && sandbox.snapshotExpired === true) {
         return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
+      }
+      if (resuming && snapshotting.remaining > 0) {
+        snapshotting.remaining -= 1;
+        return Response.json(
+          { error: { code: "sandbox_snapshotting", message: "Sandbox is being snapshotted." } },
+          { status: 422 },
+        );
       }
       // A resume of a sandbox still stopping waits the stop out and opens its next session, which
       // `@vercel/sandbox`'s `withResume` relies on.
@@ -457,6 +466,7 @@ export function runnerSandboxApi() {
     holdPolicy,
     waits,
     stopsAt,
+    snapshotting,
     hooks,
   };
 }
