@@ -1,6 +1,6 @@
 import { Children, type MouseEvent, type ReactNode, useId } from "react";
 import { isReported, type ShownError } from "../../reported-failure.js";
-import { BUTTON_SIZE, BUTTON_VARIANT, ButtonLink } from "../button/button.js";
+import { BUTTON_SIZE, BUTTON_VARIANT, Button, ButtonLink } from "../button/button.js";
 import { FailureCopy } from "../failure-copy/failure-copy.js";
 
 /**
@@ -9,7 +9,8 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
  * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
- * what went wrong, the one way on it offers, and a closing note. The page
+ * what went wrong, the one way on it offers, a closing note, and a quiet
+ * way out of the flow, such as setup's Sign out. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
  * phone's width, and what it holds stretches to the card's inner width, so a
@@ -40,6 +41,12 @@ export interface AuthAction {
   readonly onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
 }
 
+/** A quiet way out of the flow the page is a step of, such as Sign out: its words and its press. */
+export interface AuthExit {
+  readonly label: string;
+  readonly onPress: () => void;
+}
+
 /** Whether words say anything: nothing, `null`, `false`, and an empty string say nothing. */
 function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
@@ -54,6 +61,7 @@ export function AuthPage({
   action,
   footnote,
   foot,
+  exit,
   children,
 }: {
   /** The artwork the page opens with: an `AuthMark`, or the product's mark. */
@@ -69,6 +77,8 @@ export function AuthPage({
   footnote?: ReactNode;
   /** The foot under what the page holds: a step's `AuthStepFoot`, or a consent's answers. */
   foot?: ReactNode;
+  /** A quiet way out under everything else, such as Sign out, or nothing where there is none. */
+  exit?: AuthExit | undefined;
   /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
 }): React.JSX.Element {
@@ -127,6 +137,17 @@ export function AuthPage({
             {footnote}
           </p>
         ) : null}
+        {exit === undefined ? null : (
+          <div className="ui-auth-exit flex justify-center mt-ui-16">
+            <Button
+              variant={BUTTON_VARIANT.QUIET}
+              size={BUTTON_SIZE.COMPACT}
+              onClick={exit.onPress}
+            >
+              {exit.label}
+            </Button>
+          </div>
+        )}
       </section>
     </main>
   );

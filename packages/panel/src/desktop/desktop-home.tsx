@@ -18,7 +18,6 @@ import { useRef, useState } from "react";
 import { useInboxRowDrafts } from "../composer-drafts.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
-import { SetupSections } from "../onboarding/setup-sections.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
 import { type InboxListed, NEEDS_YOU, needsYou } from "../tasks/inbox-model.js";
@@ -45,8 +44,7 @@ import { RecentTasks } from "./recent-tasks.js";
  * each the Tasks page's row as a person's page lists it (`recent-tasks.tsx`),
  * a press opening it. Its sections are a person's page's (`person-frame.tsx`),
  * whose voice was Home's to begin with. Nothing waiting says so in the
- * Inbox's own words. An account with nothing yet is greeted as new, and
- * asked over the composer for what setup left undone (`setup-sections.tsx`).
+ * Inbox's own words. An account with nothing yet is greeted as new.
  * Nothing here names the sidebar, which may be folded away.
  *
  * The composer starts the task in the listed workspace, as the dialog
@@ -262,7 +260,7 @@ function HomeComposer({
   );
 }
 
-/** Home, in the task's place while no task is open, with a new account's Finish setting up over its composer. */
+/** Home, in the task's place while no task is open. */
 export function DesktopHome({
   tasks,
   room = SHELL_ROOM.WIDE,
@@ -287,8 +285,6 @@ export function DesktopHome({
   return (
     // Note that the greeting welcomes the reader back while the list is read, because an account is new but once.
     <DetailPage frame={PAGE_FRAME.PAGE} title={greeting(accountName, welcomed(tasks))}>
-      {/* A new account is asked here for what setup left undone, above the box that starts its first task. */}
-      {welcomed(tasks) ? <SetupSections tasks={tasks} /> : null}
       <HomeComposer tasks={tasks} takesFocus={takesFocus} />
       {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
       <div className="home-rows contents" {...roving}>
