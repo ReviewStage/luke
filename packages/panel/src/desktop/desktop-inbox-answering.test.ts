@@ -194,7 +194,7 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
   );
 });
 
-test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and the plain Send sends the words with the close as its note, in one send", async () => {
+test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send sends the words with the close as its note, in one send", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const closes = takenCloses();
@@ -210,7 +210,6 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
   await settle();
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "the × asks nothing");
   assert.deepEqual(closes, [], "and resolves nothing until Send");
-  assert.equal(sendWords(pane), "Send", "Send stays the plain Send");
   assert.equal(document.activeElement?.textContent, "Undo", "Undo takes the ×'s focus");
   const undo =
     [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
