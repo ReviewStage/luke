@@ -5,8 +5,7 @@
  * repository's, then the workspace's installed skills, then the member's
  * personal ones. A coding agent's checkout already holds each repository
  * skill's sibling files, so its body is led by the folder it stands in
- * within the checkout; an installed skill's files are written by eve into
- * the sandbox, or, for an agent on a native harness, by the launch
+ * within the checkout; an installed skill's files are written by the launch
  * (`nativeSkills`, `runner-sessions.ts`), which hands the harness the
  * installed skills alone, since it finds the repository's in the checkout
  * itself. An agent with no repository is offered its installed skills
@@ -58,23 +57,14 @@ function sourcedSkills(
   });
 }
 
-/** The skills the agent's session is offered: its repository's on its default branch, where it has one, then its member's installed ones (`mergedSkills`). */
-export function agentSkills(
-  target: ConversationTarget,
-  agent: Agent,
-): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
-  return Effect.flatMap(sourcedSkills(target, agent), (sources) => mergedSkills(target, sources));
-}
-
 /**
  * The installed skills a native harness is handed (`runner-sessions.ts`):
- * the merge eve's session is offered, of the repository's skills the
- * harness finds itself and the installed ones, less those repository
- * skills, which the harness reads from the checkout. Merged whole first, so
+ * the merge of the repository's skills the harness finds itself and the
+ * installed ones, less those repository skills, which the harness reads from the checkout. Merged whole first, so
  * an installed skill a repository skill of its name shadows stays out too;
  * a repository skill in a root the harness never reads (`roots`, such as
  * `.claude/skills` for Codex) shadows nothing, since the harness would
- * offer neither. Read from the default branch, as eve's are.
+ * offer neither. Read from the default branch.
  */
 export function nativeSkills(
   target: ConversationTarget,
@@ -88,7 +78,7 @@ export function nativeSkills(
       return loadedMarkdown(skill);
     });
     const theirs = repository.filter((skill) => seen.has(skill.name));
-    const merged = yield* mergedSkills(target, [theirs, installed]);
+    const merged = mergedSkills([theirs, installed]);
     return merged.filter((skill) => !seen.has(skill.name));
   });
 }
