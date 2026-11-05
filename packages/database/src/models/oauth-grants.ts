@@ -1,4 +1,4 @@
-import { and, desc, eq, exists, max, min, not, notInArray, sql } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, max, min, not, notInArray, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -25,7 +25,8 @@ import { InstantColumnSchema } from "./columns.js";
  * ones are, leaves no consent row: the provider mints its tokens straight
  * away. Such a client is listed by the refresh tokens it holds for the
  * member instead, for as long as one of them is live, allowed when it was
- * first minted one.
+ * first minted one, but only where the caller names it, so a first-party
+ * client nobody meant to show, a retired one among them, never lists.
  */
 
 /** One client the member allowed: its registered name and redirects, when they allowed it, and when it last traded a refresh token for a new one. */
@@ -72,14 +73,13 @@ const findConsentedClients = SqlSchema.findAll({
 });
 
 /**
- * The clients that hold a live refresh token for the member with no consent
- * of theirs behind it, each allowed when its first token was minted,
- * leaving out the clients named. Note that a refresh marks the token it
- * spends revoked as it mints the next, so a live token is one never spent,
- * revoked, or rotated.
+ * The clients named that hold a live refresh token for the member with no
+ * consent of theirs behind it, each allowed when its first token was
+ * minted. Note that a refresh marks the token it spends revoked as it mints
+ * the next, so a live token is one never spent, revoked, or rotated.
  */
 const findTokenOnlyClients = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, except: Schema.Array(Schema.String) }),
+  Request: Schema.Struct({ userId: Schema.String, clients: Schema.Array(Schema.String) }),
   Result: ConsentedClientSchema,
   execute: (key) =>
     Database.use((db) =>
@@ -95,9 +95,7 @@ const findTokenOnlyClients = SqlSchema.findAll({
         .where(
           and(
             eq(oauthRefreshToken.userId, key.userId),
-            key.except.length === 0
-              ? undefined
-              : notInArray(oauthRefreshToken.clientId, [...key.except]),
+            inArray(oauthRefreshToken.clientId, [...key.clients]),
             not(
               exists(
                 db
@@ -172,17 +170,17 @@ const deleteRefreshTokens = SqlSchema.void({
 });
 
 /**
- * The clients the member allowed but those named, whether by consent or,
- * for a client that skips it, by a live token, newest allowed first, each
- * with when it last refreshed.
+ * The clients the member allowed, by consent but for those left out, and by
+ * a live token for the skip-consent clients named, newest allowed first,
+ * each with when it last refreshed.
  */
 export function listOAuthGrants(
   userId: string,
-  except: readonly string[],
+  clients: { readonly except: readonly string[]; readonly tokenOnly: readonly string[] },
 ): Effect.Effect<readonly OAuthGrant[], StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
-    const consented = yield* findConsentedClients({ userId, except });
-    const tokenOnly = yield* findTokenOnlyClients({ userId, except });
+    const consented = yield* findConsentedClients({ userId, except: clients.except });
+    const tokenOnly = yield* findTokenOnlyClients({ userId, clients: clients.tokenOnly });
     const refreshes = yield* findLastRefreshes(userId);
     const refreshedAt = new Map(refreshes.map((each) => [each.clientId, each.lastRefreshedAt]));
     return [...consented, ...tokenOnly]
