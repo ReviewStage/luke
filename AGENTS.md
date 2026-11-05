@@ -291,15 +291,6 @@ minted in one package the same service in another. `@effect/platform`,
 catalog. The pin is an exact release rather than a range, and is moved
 deliberately.
 
-### Where an Effect may run
-
-As Effect's own guidance says (`node_modules/effect/AGENTS.md`, which the
-Effect-TS skill points at): an Effect describes work, and everything between
-the program's edges returns one and lets its caller decide. A process runs
-its program at its entry point, and where a framework awaits a promise of
-ours — a web handler, a library's hook, a callback API — the Effect runs
-there, on the runtime or the services that entry point built.
-
 ### Vocabulary
 
 `SchemaRead` (`@repo/wire`) is the boundary result vocabulary a Schema
@@ -328,7 +319,6 @@ reads it: `packages/host/src/acts.ts`,
   layer that provides the `SqlClient` provides beside it; it is yielded, and
   `anti-slop/no-await-drizzle-statement` refuses one awaited.
   `apps/web/server/README.md`'s "The data layer" is the rest.
-- Run an Effect only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
 - `Schedule`, not a hand-rolled interval or backoff loop.
 - `TestClock`, not a fake clock: a test that waits on time advances the clock
