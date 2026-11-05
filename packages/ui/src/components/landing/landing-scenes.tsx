@@ -2,10 +2,16 @@ import { AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { TASK_STATUS, type TaskStatus } from "@repo/features/task-wire";
 import type { ReactNode } from "react";
-import { ComposeIcon, MicrophoneIcon, PlayIcon, PlusIcon, SidebarIcon } from "../../face/glyphs.js";
+import {
+  ComposeIcon,
+  MicrophoneIcon,
+  PlayIcon,
+  PlusIcon,
+  SearchIcon,
+  SidebarIcon,
+} from "../../face/glyphs.js";
 import {
   CheckIcon,
-  EllipsisIcon,
   GLYPH,
   ICON_SIZE,
   InboxIcon,
@@ -20,11 +26,11 @@ import { HarnessMark } from "../../marks/harness-mark.js";
 import { MARK_PROVIDER, ProviderMark } from "../../marks/provider-mark.js";
 import { TaskStatusMark } from "../../marks/task-marks.js";
 import { STATUS_TONE } from "../../status-tone.js";
-import { PROFILE, THEME, surfaceAttributes } from "../../tokens/surface.js";
+import { PROFILE, surfaceAttributes, THEME } from "../../tokens/surface.js";
 import { AttentionMark } from "../attention-mark/attention-mark.js";
 import { AVATAR_SHAPE, AVATAR_SIZE, Avatar } from "../avatar/avatar.js";
 import { Badge } from "../badge/badge.js";
-import { BarItem } from "../bar-item/bar-item.js";
+import { BarAction, BarItem, BarItems } from "../bar-item/bar-item.js";
 import { Breadcrumbs } from "../breadcrumbs/breadcrumbs.js";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button, IconButton } from "../button/button.js";
 import { Checkbox } from "../checkbox/checkbox.js";
@@ -1033,20 +1039,23 @@ function PhoneInbox(): React.JSX.Element {
         </List>
       </div>
       <nav className="ui-landing-phone-places" aria-label="Places">
-        <BarItem
-          icon={<InboxIcon />}
-          current
-          count={{ value: 2, noun: "need you" }}
-          onPress={still}
-        >
-          Inbox
-        </BarItem>
-        <BarItem icon={<ListTodoIcon />} onPress={still}>
-          Tasks
-        </BarItem>
-        <BarItem icon={<EllipsisIcon />} onPress={still}>
-          More
-        </BarItem>
+        <BarItems>
+          <BarItem
+            icon={<InboxIcon />}
+            current
+            count={{ value: 2, noun: "need you" }}
+            onPress={still}
+          >
+            Inbox
+          </BarItem>
+          <BarItem icon={<ListTodoIcon />} onPress={still}>
+            Tasks
+          </BarItem>
+          <BarItem icon={<SearchIcon />} onPress={still}>
+            Search
+          </BarItem>
+        </BarItems>
+        <BarAction icon={<PlusIcon />} label="New task" onPress={still} />
       </nav>
     </div>
   );
