@@ -295,7 +295,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way through its harness acting for the cookie's account",
+    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way through its harness acting for the cookie's account, the Archive keeping the reason it gives",
     () =>
       Effect.gen(function* () {
         const stopped = yield* messagedAgent(fakeEve(), { running: true });
@@ -314,7 +314,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
             method: "PATCH",
             id: archived.agent.id,
             cookie: sessionCookieOf(archived.owner),
-            body: { archived: true },
+            body: { archived: true, reason: "Superseded by the stacked change." },
           }),
         );
         const taskArchive = yield* withTask.ask(
@@ -333,10 +333,9 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           assert.deepEqual(eve.canceled, [[sessionId, "turn_0"]]);
           assert.deepEqual(eve.canceledAs, [harnessFor(owner)]);
         }
-        assert.notEqual(
-          Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id)).archivedAt,
-          null,
-        );
+        const archivedRow = Option.getOrThrow(yield* readAgent(archived.owner, archived.agent.id));
+        assert.notEqual(archivedRow.archivedAt, null);
+        assert.equal(archivedRow.archivedBy?.reason, "Superseded by the stacked change.");
         assert.deepEqual(countedWith(stopped.owner, SERVER_EVENT.AGENT_STOP), [
           { agent_kind: AGENT_KIND.CODER },
         ]);
@@ -1059,7 +1058,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent reads as its own page by its id, its plan named, and with no plan once an automation's run left it so, for a member of its workspace and no one else",
+    "an agent reads as its own page by its id, its plan named, and with no plan once an automation's run left it so, with the branch its last turn ended on, for a member of its workspace and no one else",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1073,7 +1072,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         yield* Database.use((db) =>
           db
             .update(agentTable)
-            .set({ taskId: null, organizationId: task.workspaceId })
+            .set({ taskId: null, organizationId: task.workspaceId, branch: "luke/invite-links" })
             .where(eq(agentTable.id, agent.id)),
         );
         const taskless = yield* page();
@@ -1086,6 +1085,10 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(
           [taskless.agent.planId, taskless.agent.automationId, taskless.agent.workspaceId],
           [null, null, task.workspaceId],
+        );
+        assert.deepEqual(
+          [onTask.agent.branch, taskless.agent.branch],
+          [undefined, "luke/invite-links"],
         );
         assert.equal(taskless.agent.status, AGENT_STATUS.COMPLETED);
         assert.deepEqual(

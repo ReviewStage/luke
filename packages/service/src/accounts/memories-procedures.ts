@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { memoryOnFor } from "../agents/memory-tools.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
   HOSTED_REFUSAL,
@@ -9,8 +10,12 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   forgetWorkspaceMemory,
   readWorkspaceMemories,
+  saveWorkspaceMemory,
+  searchWorkspaceMemories,
   WORKSPACE_MEMORY,
+  WORKSPACE_MEMORY_SAVE,
   type WorkspaceMemoryAnswer,
+  type WorkspaceMemorySaveAnswer,
 } from "./workspace-memories.js";
 
 /**
@@ -27,6 +32,13 @@ import {
  * landed answers the same; one that deleted the memory answers the
  * transaction it was deleted in beside them, which a desktop holding the
  * workspace's memories live waits for (`workspaceMemoriesLive`).
+ *
+ * A member's own client keeps a memory in their words and searches them
+ * (`saveMemory`, `searchMemories`), the member MCP server's `save_memory`
+ * and `search_memory`, and as those tools are, only while the member has
+ * Memory on (`memoryOnFor`), refused as off otherwise. A keep that looks
+ * like it holds a credential is refused, as is one past the workspace's
+ * bound, and a correction of a memory gone is answered not found.
  */
 
 /** What the memories' procedures reach beyond the store: who the bearer is. */
@@ -48,6 +60,27 @@ function memoriesAnswer(answer: WorkspaceMemoryAnswer) {
       });
   }
 }
+
+/** A member's keep as the procedure answers it: what it came to and the memory, or the refusal. */
+function saveAnswer(answer: WorkspaceMemorySaveAnswer) {
+  switch (answer.kind) {
+    case WORKSPACE_MEMORY_SAVE.NOT_MEMBER:
+    case WORKSPACE_MEMORY_SAVE.NOT_FOUND:
+      return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    case WORKSPACE_MEMORY_SAVE.CREDENTIAL:
+      return Effect.fail(HOSTED_REFUSAL.MEMORY_CREDENTIAL);
+    case WORKSPACE_MEMORY_SAVE.FULL:
+      return Effect.fail(HOSTED_REFUSAL.MEMORY_FULL);
+    case WORKSPACE_MEMORY_SAVE.SAVED:
+      return Effect.succeed({ outcome: answer.outcome, memory: answer.memory });
+  }
+}
+
+/** Refused as off unless the member has Memory on, as the member MCP server's memory tools are. */
+const memoryOn = (userId: string) =>
+  Effect.flatMap(memoryOnFor(userId), (on) =>
+    on ? Effect.void : Effect.fail(HOSTED_REFUSAL.MEMORY_OFF),
+  );
 
 /** The memories' procedures, each to a signed-in caller. */
 export function memoriesProcedures(seams: MemoriesProcedureSeams) {
@@ -72,6 +105,27 @@ export function memoriesProcedures(seams: MemoriesProcedureSeams) {
         {},
       );
       return answered;
+    }),
+
+    saveMemory: signedIn.saveMemory.effect(function* ({ context, input }) {
+      yield* memoryOn(context.userId);
+      const { workspaceId, text, replaces } = input;
+      return yield* saveAnswer(
+        yield* hostedStoreOrUnavailable(
+          saveWorkspaceMemory(context.userId, workspaceId, text, replaces),
+        ),
+      );
+    }),
+
+    searchMemories: signedIn.searchMemories.effect(function* ({ context, input }) {
+      yield* memoryOn(context.userId);
+      const answer = yield* hostedStoreOrUnavailable(
+        searchWorkspaceMemories(context.userId, input.workspaceId, input.query),
+      );
+      if (answer.kind === WORKSPACE_MEMORY.NOT_MEMBER) {
+        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      }
+      return { memories: answer.memories, total: answer.total };
     }),
   };
 }

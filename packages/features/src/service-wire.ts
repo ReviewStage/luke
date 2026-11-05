@@ -179,6 +179,12 @@ export const HOSTED_API_ERROR = {
   HOST_PAIRING_HELD: "host-pairing-held",
   /** A write sent again under the idempotency key (`IDEMPOTENCY_KEY`) it was taken under before; it was not run again, so what it wrote stands as the service holds it now. */
   ALREADY_WRITTEN: "already-written",
+  /** The member has Memory off, so their workspace's memories are neither kept nor searched for them; nothing was read or written. */
+  MEMORY_OFF: "memory-off",
+  /** A memory's words look like they hold a credential, which is never kept; nothing was written. */
+  MEMORY_CREDENTIAL: "memory-credential",
+  /** The workspace holds as many memories as it may (`MEMORY_BOUNDS.MAX_MEMORIES`), so a new one is refused until one is corrected or forgotten; nothing was written. */
+  MEMORY_FULL: "memory-full",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

@@ -560,5 +560,6 @@ export function agentPage(
       : { origin: originOf(agent.automationOrigin, names) }),
     workspaceId: agent.organizationId,
     repository: agent.repository,
+    ...(agent.branch === null ? undefined : { branch: agent.branch }),
   };
 }

@@ -1389,7 +1389,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a note without a source, files beside a source with no note, and a prompt beside a source and a note are refused as invalid",
+    "a note without a source, files beside a source with no note, a prompt beside a source and a note, and a branch beside a source are refused as invalid",
     () =>
       Effect.gen(function* () {
         const { owner, task, ask, eve, source } = yield* sourceAgent;
@@ -1404,6 +1404,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           { from: { agentId: source.id }, attachments: [png] },
           { from: { agentId: source.id }, note: "Carry on.", task: "Do it again." },
           { from: { agentId: source.id }, note: " " },
+          { from: { agentId: source.id }, branch: "luke/stacked" },
         ]) {
           assert.deepEqual(
             yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), ...body })),
@@ -1411,6 +1412,45 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             JSON.stringify(Object.keys(body)),
           );
         }
+        assert.equal(eve.opened.length, opened);
+      }),
+  );
+
+  it.effect(
+    "a Start cloned at a branch GitHub holds keeps it and the title it names, and one at a branch GitHub does not hold starts nothing",
+    () =>
+      Effect.gen(function* () {
+        const held: RepositoryScript = (sent) =>
+          sent.url.endsWith(`/repos/${RELAY_FULL_NAME}/git/ref/heads/luke/stacked`)
+            ? Response.json({ object: { type: "commit", sha: "a".repeat(40) } })
+            : undefined;
+        const { owner, task, ask, eve } = yield* openTask({ github: held });
+
+        const started = readAnswer(
+          agentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              branch: "luke/stacked",
+              title: "Stack the invite links",
+            }),
+          ),
+        ).agent;
+        const opened = eve.opened.length;
+        const missing = yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), branch: "luke/gone" }),
+        );
+
+        const stored = Option.getOrThrow(yield* readAgent(owner, started.id));
+        assert.deepEqual(
+          [stored.startBranch, stored.title],
+          ["luke/stacked", "Stack the invite links"],
+        );
+        assert.deepEqual(
+          missing,
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.BRANCH_NOT_FOUND),
+        );
         assert.equal(eve.opened.length, opened);
       }),
   );

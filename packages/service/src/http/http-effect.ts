@@ -79,6 +79,9 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
   [HOSTED_API_ERROR.ALREADY_WRITTEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.MEMORY_OFF]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.MEMORY_CREDENTIAL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.MEMORY_FULL]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -203,6 +206,12 @@ export const HOSTED_REFUSAL = {
   HOST_PAIRING_HELD: { error: HOSTED_API_ERROR.HOST_PAIRING_HELD },
   /** A write sent again under an idempotency key it was taken under before; nothing ran again. */
   ALREADY_WRITTEN: { error: HOSTED_API_ERROR.ALREADY_WRITTEN },
+  /** The member has Memory off; nothing was read or written. */
+  MEMORY_OFF: { error: HOSTED_API_ERROR.MEMORY_OFF },
+  /** A memory's words look like a credential; nothing was written. */
+  MEMORY_CREDENTIAL: { error: HOSTED_API_ERROR.MEMORY_CREDENTIAL },
+  /** The workspace holds as many memories as it may; nothing was written. */
+  MEMORY_FULL: { error: HOSTED_API_ERROR.MEMORY_FULL },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */

@@ -169,4 +169,7 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: {},
   [HOSTED_API_ERROR.HOST_PAIRING_HELD]: { data: hostPairingHeldData },
   [HOSTED_API_ERROR.ALREADY_WRITTEN]: {},
+  [HOSTED_API_ERROR.MEMORY_OFF]: {},
+  [HOSTED_API_ERROR.MEMORY_CREDENTIAL]: {},
+  [HOSTED_API_ERROR.MEMORY_FULL]: {},
 } as const satisfies Record<HostedApiError, ErrorMapItem>;

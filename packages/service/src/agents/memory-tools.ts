@@ -52,8 +52,6 @@ export interface MemoryCall {
 const MEMORY_TOOL_BOUNDS = {
   /** The most memories one recall hands back. */
   RECALL_RESULTS: 8,
-  /** The longest query read; a query is a few words, never a passage. */
-  QUERY_CHARS: 300,
   /** The most distinct words of a query matched. */
   QUERY_WORDS: 16,
 } as const;
@@ -128,7 +126,7 @@ const REMEMBER_INPUT = Schema.Struct({
 const RECALL_INPUT = Schema.Struct({
   query: Schema.optionalKey(
     describeWire(
-      Schema.Trim.check(Schema.isMaxLength(MEMORY_TOOL_BOUNDS.QUERY_CHARS)),
+      Schema.Trim.check(Schema.isMaxLength(MEMORY_BOUNDS.MAX_QUERY_CHARS)),
       "A few words naming what to look for, such as the area, tool, or convention at hand; " +
         "leave it out for the memories kept most recently.",
     ),
@@ -141,7 +139,7 @@ const readRecall = Schema.decodeUnknownResult(RECALL_INPUT);
 /** Why a memory call did nothing, in words the model can act on. */
 const MEMORY_REFUSAL = {
   UNREADABLE_REMEMBER: `Not remembered: give the memory as text of at most ${MEMORY_BOUNDS.MAX_CHARS} characters.`,
-  UNREADABLE_RECALL: `Not recalled: give the query as text of at most ${MEMORY_TOOL_BOUNDS.QUERY_CHARS} characters.`,
+  UNREADABLE_RECALL: `Not recalled: give the query as text of at most ${MEMORY_BOUNDS.MAX_QUERY_CHARS} characters.`,
   CREDENTIAL:
     "Not remembered: it looks like it holds a credential. Never keep a key, token, or " +
     "password; keep the fact without it.",
@@ -211,8 +209,8 @@ function memoryRecord(memory: StoredMemory): WireRecord {
   };
 }
 
-/** Whether words look like they hold a credential, so they are never kept. */
-function looksLikeCredential(text: string): boolean {
+/** Whether words look like they hold a credential, so they are never kept: by an agent, or by a member's own client (`../accounts/workspace-memories.ts`). */
+export function looksLikeCredential(text: string): boolean {
   if (CREDENTIAL_SHAPES.some((shape) => shape.test(text))) return true;
   return (text.match(OPAQUE_RUN) ?? []).some(
     (run) => /[a-z]/u.test(run) && /[A-Z]/u.test(run) && /[0-9]/u.test(run),
@@ -229,8 +227,10 @@ function wordsOf(text: string): readonly string[] {
  * query's distinct words begin one of its own, so "deploy" finds
  * "deployment", ties going to the one kept most recently. A query with no
  * telling word answers the most recent; one that finds nothing answers none.
+ * A member's own client's search ranks them the same way
+ * (`../accounts/workspace-memories.ts`).
  */
-function rankMemories(
+export function rankMemories(
   memories: readonly StoredMemory[],
   query: string | undefined,
 ): readonly StoredMemory[] {
