@@ -31,7 +31,7 @@ const LINK_NAME = "vespin";
 /** The shell a Mac's account logs in with where `SHELL` names none. */
 const DEFAULT_SHELL = "/bin/zsh";
 
-/** How long the script, which downloads a release, may take; the command and the shell, less. */
+/** How long the script, which downloads a release, may take; its own download, the command, and the shell, less. */
 const ANSWER_WITHIN = {
   INSTALL: Duration.minutes(10),
   COMMAND: Duration.seconds(30),
@@ -80,9 +80,11 @@ export function installCli(serviceBaseUrl: string): Effect.Effect<CliInstallAnsw
   const shell = process.env.SHELL ?? DEFAULT_SHELL;
   const scriptUrl = new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, serviceBaseUrl).href;
   return Effect.gen(function* () {
+    // Note that a download that stalls is bounded too, so Install never waits on it for good.
     const script = yield* HttpClient.get(scriptUrl).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((response) => response.text),
+      Effect.timeout(ANSWER_WITHIN.COMMAND),
       Effect.option,
     );
     if (Option.isNone(script)) return failed(`Could not download ${scriptUrl}.`);
