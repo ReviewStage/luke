@@ -931,25 +931,14 @@ export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
 }
 
-/** What an item's hover card reads of its thread: the ask that waits, where one does, and the agent's latest words, plain. */
-export interface InboxCardThread {
-  readonly ask: InboxKnownAsk | undefined;
-  readonly words: string;
-}
-
-/** An item's thread as its hover card reads it (`InboxCardThread`). */
-export function inboxCardThread(item: InboxItem): InboxCardThread {
-  const thread = item.thread ?? [];
-  const asking = openAskOf(thread);
-  const said = thread.findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
-  return {
-    ask: asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined,
-    words: said === undefined ? "" : plainWords(said.text),
-  };
+/** What an item's hover card reads of its thread: the agent's latest words, plain. */
+export function inboxCardWords(item: InboxItem): string {
+  const said = (item.thread ?? []).findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
+  return said === undefined ? "" : plainWords(said.text);
 }
 
 /**
- * The steps of an item's open to-do its row and card show ticked, as its box
+ * The steps of an item's open to-do its row shows ticked, as its box
  * shows them (`shownTicks`): every one while Mark done is pressed in its
  * draft, else those ticked by hand; none where no draft stands.
  */
