@@ -435,22 +435,6 @@ function RowsFoldRows(): React.JSX.Element {
         }
       />
       <SettingsRowsFold
-        label="Sentry settings"
-        head={(chevron) => (
-          <SettingsRow
-            label="Sentry"
-            description={
-              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
-                Connected
-              </SettingsRowStateLine>
-            }
-            leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
-          >
-            {() => chevron}
-          </SettingsRow>
-        )}
-      />
-      <SettingsRowsFold
         label="Slack bot settings"
         head={(chevron) => (
           <SettingsRow
@@ -486,6 +470,22 @@ function RowsFoldRows(): React.JSX.Element {
             </SettingsRow>
           </>
         }
+      />
+      <SettingsRowsFold
+        label="Sentry settings"
+        head={(chevron) => (
+          <SettingsRow
+            label="Sentry"
+            description={
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                Connected
+              </SettingsRowStateLine>
+            }
+            leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
+          >
+            {() => chevron}
+          </SettingsRow>
+        )}
       />
     </SettingsSection>
   );

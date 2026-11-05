@@ -341,8 +341,8 @@ const INVITATION_ROW_SKELETON: SettingsRowSkeletonShape = {
 /** The services the Workspace connections group draws a row for, in order, each by its own row. */
 const WORKSPACE_INTEGRATIONS = [
   { service: INTEGRATION_PROVIDER.GITHUB, Row: WorkspaceGitHub },
-  { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
   { service: INTEGRATION_PROVIDER.SLACK, Row: WorkspaceSlackBotRow },
+  { service: INTEGRATION_PROVIDER.SENTRY, Row: WorkspaceSentryRow },
 ] as const;
 
 /**
