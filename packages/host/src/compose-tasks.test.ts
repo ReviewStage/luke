@@ -5569,8 +5569,10 @@ it.effect(
       });
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 
-      // A deploy changed the row's shape, so it no longer decodes and the follow breaks.
+      // A deploy changed the row's shape, so it no longer decodes, and the poll asked again within a second fails the same way.
       yield* listAnswers(service, { plans: [{ id: INVITES, title: "Teammate invitations" }] });
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
       assert.equal(last()?.live, HOST_LIVE.CATCHING_UP);
       assert.equal(last()?.listStatus, TASKS_READ.READY, "the list drawn stands");
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
@@ -5585,7 +5587,7 @@ it.effect(
 );
 
 it.effect(
-  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed; a regain right after a wake reads it again",
+  "a resync reads a followed list again at once, once for a wake's several events, without saying it is behind, and asks nothing of a list not followed; a regain right after a wake reads it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
@@ -5611,8 +5613,8 @@ it.effect(
       yield* settled;
       assert.equal(service.liveListReads, before + 1, "one wake reads the list once");
       assert.ok(
-        told.slice(toldBefore).some((view) => view.live === HOST_LIVE.CATCHING_UP),
-        "behind until the fresh rows land",
+        told.slice(toldBefore).every((view) => view.live !== HOST_LIVE.CATCHING_UP),
+        "a read asked again is loading, not behind",
       );
       assert.equal(last()?.live, HOST_LIVE.LIVE);
 

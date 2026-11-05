@@ -273,10 +273,11 @@ it.effect(
 );
 
 it.effect(
-  "a poll that fails says the rows may be behind, and the next poll that answers hands its rows on again, moved or not",
+  "a poll that fails once and whose retry answers says nothing; one that fails again says the rows may be behind, and the next poll that answers hands its rows on again, moved or not",
   () =>
     Effect.gen(function* () {
-      let failing = false;
+      /** How many polls are still to fail, each in turn. */
+      let failing = 0;
       let behind = 0;
       const rows: unknown[] = [];
       const following = yield* Effect.forkChild(
@@ -285,11 +286,11 @@ it.effect(
             {
               // A poll past a digest answers it unchanged with no rows, as the held poll does; one past none answers the rows whole.
               poll: (after) =>
-                Effect.succeed(
-                  failing
-                    ? { failure: "unavailable" }
-                    : polledRead(after === undefined ? [] : undefined, "1"),
-                ),
+                Effect.sync(() => {
+                  if (failing === 0) return polledRead(after === undefined ? [] : undefined, "1");
+                  failing -= 1;
+                  return { failure: "unavailable" };
+                }),
               behind: () => {
                 behind += 1;
               },
@@ -305,17 +306,19 @@ it.effect(
       assert.equal(rows.length, 1, "rows that did not move are handed on once");
       assert.equal(behind, 0);
 
-      failing = true;
-      yield* TestClock.adjust(Duration.seconds(1));
-      yield* settled;
-      assert.ok(behind > 0, "the failed poll says the rows may be behind");
-      assert.equal(rows.length, 1);
-
-      failing = false;
+      // A poll a sleep cut off fails once, and its retry answers.
+      failing = 1;
       yield* TestClock.adjust(Duration.seconds(5));
       yield* settled;
-      assert.equal(rows.length, 2, "the poll that answers hands the same rows on again");
+      assert.equal(behind, 0, "one failed poll its retry answers is not behind");
+      assert.equal(rows.length, 2, "the retry hands the same rows on again");
       assert.deepEqual(rows[1], rows[0]);
+
+      failing = 2;
+      yield* TestClock.adjust(Duration.seconds(10));
+      yield* settled;
+      assert.ok(behind > 0, "a second failed poll in a row says the rows may be behind");
+      assert.equal(rows.length, 3);
       yield* Fiber.interrupt(following);
     }),
 );
