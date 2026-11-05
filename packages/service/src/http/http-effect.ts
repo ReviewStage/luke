@@ -62,7 +62,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
-  [HOSTED_API_ERROR.SESSION_NOT_FRESH]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -171,8 +170,6 @@ export const HOSTED_REFUSAL = {
   AGENT_API_KEY_UNREADABLE: { error: HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE },
   /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
-  /** The session is older than Better Auth deletes an account for; nothing was deleted, and the delete under a session signed in again is taken. */
-  SESSION_NOT_FRESH: { error: HOSTED_API_ERROR.SESSION_NOT_FRESH },
   /** The address is already a member of the workspace, or already invited to it; nothing was sent. */
   ALREADY_INVITED: { error: HOSTED_API_ERROR.ALREADY_INVITED },
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */

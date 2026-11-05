@@ -29,7 +29,6 @@ import {
   type AccountIdentity,
   accessTokenNeedsRefresh,
   accountFailureAction,
-  deleteHostedAccount,
   deletionNeedsNewSession,
   type StoredAccount,
   withIssuedAccountTokens,
@@ -747,10 +746,7 @@ export class AccountSessionManager {
   }
 
   #deleteHosted(sessionToken: string): Effect.Effect<void, AccountClientFailure> {
-    return deleteHostedAccount({
-      serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-      sessionToken,
-    });
+    return this.#options.client.deleteUser(sessionToken);
   }
 
   /** A new session of the Mac's own, asked for through the browser and read back from the store; refused where none landed. */

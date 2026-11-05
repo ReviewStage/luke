@@ -31,7 +31,6 @@ import { modelCatalogOf } from "../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
-import { NO_ACCOUNT_DELETION } from "../testing/no-account-deletion.js";
 import { accountProcedures } from "./account-procedures.js";
 
 /**
@@ -105,8 +104,6 @@ const openAccounts = Effect.gen(function* () {
       Effect.succeed(
         Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
       ),
-    // This suite deletes nothing, so it retires no session and reaches no Better Auth.
-    ...NO_ACCOUNT_DELETION,
     readPreferences: readAccountPreferences,
     readAccess: readAccountAccess,
     accountFastOffer,

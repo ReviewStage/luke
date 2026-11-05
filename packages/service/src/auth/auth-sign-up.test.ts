@@ -16,6 +16,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { accountDeletionTestServices } from "../testing/account-deletion-services.js";
 import { authApp } from "./auth-app.js";
 import { authDatabaseHooks } from "./auth-counts.js";
 import { authDatabaseAdapter } from "./auth-database.js";
@@ -76,6 +77,7 @@ it.effect(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
           welcomeMail,
+          accountDeletionTestServices,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(
           authApp((request) => auth.handler(request), workspaceSeams(auth.api)).pipe(

@@ -7,6 +7,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { admin, bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
+import { accountDeletionSteps } from "../accounts/account-deletion-hooks.js";
 import { authDatabaseHooks, authOrganizationHooks } from "./auth-counts.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import {
@@ -98,7 +99,9 @@ export const auth = betterAuth({
   database: authDatabaseAdapter(authDatabase),
   databaseHooks: authDatabaseHooks,
   account: ACCOUNT_TOKEN_STORAGE,
-  user: { deleteUser: accountDeletion((): OrganizationDeletionApi => auth.api) },
+  user: {
+    deleteUser: accountDeletion((): OrganizationDeletionApi => auth.api, accountDeletionSteps),
+  },
   session: SESSION_COOKIE_CACHE,
   rateLimit: AUTH_RATE_LIMIT,
   advanced: { ipAddress: { ipAddressHeaders: [...CLIENT_ADDRESS_HEADERS] } },

@@ -60,8 +60,8 @@ const grantingConsent: OpenConsent = (options) => ({
 /** The account service, answered: the deletion, then the second sign-in's exchange and identity. */
 const accountService: typeof globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
-  if (request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`)
-    return jsonResponse({ deleted: true });
+  if (request.url === `${ACCOUNT_BASE_URL}/delete-user`)
+    return jsonResponse({ success: true, message: "User deleted" });
   if (request.url === `${ACCOUNT_BASE_URL}/oauth2/token`)
     return jsonResponse({ access_token: "access-2", refresh_token: "refresh-2" });
   if (request.url === `${ACCOUNT_BASE_URL}/oauth2/userinfo`)
@@ -411,7 +411,7 @@ const ACCOUNT_STEPS: readonly string[] = [
   "/api/auth/sign-in/social",
   "/api/auth/link-social",
   "/api/auth/sign-out",
-  HOSTED_SERVICE_PATH.ACCOUNT_DELETE,
+  "/api/auth/delete-user",
 ];
 
 /** The scripted service behind the platform fetch, which the cookie source and the settings ride. */

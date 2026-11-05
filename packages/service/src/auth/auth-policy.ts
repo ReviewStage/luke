@@ -226,7 +226,6 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/create",
   "/organization/update",
   "/organization/delete",
-  "/delete-user",
   "/delete-user/callback",
   "/organization/check-slug",
   "/organization/set-active",
@@ -361,25 +360,38 @@ export interface OrganizationDeletionApi {
   }): Promise<unknown>;
 }
 
+/** What the account's deletion does of its own around Better Auth's, as its hooks await it (`accounts/account-deletion-hooks.ts`). */
+export interface AccountDeletionSteps<Pending> {
+  readonly before: (userId: string) => Promise<Pending>;
+  readonly after: (userId: string, pending: Pending) => Promise<void>;
+}
+
 /**
  * Better Auth's account deletion
  * (https://www.better-auth.com/docs/concepts/users-accounts#delete-user),
- * reached only through `auth.api.deleteUser`, since `/delete-user` and its
- * callback are shut (`DISABLED_AUTH_PATHS`). Better Auth checks the session
- * is fresh, then deletes the account's sessions, sign-in accounts, and user
- * row. Before it does, every workspace the account is the only member of and
- * may delete is deleted through the organization plugin, under the same
- * session, so nothing stays behind that nobody can open; a workspace others
- * belong to keeps them, and loses only the account's member row. The
- * organization calls need the session's headers, so the caller hands
- * `deleteUser` the request they ride on.
+ * which the Mac and the browser ask for at its own `/delete-user` under the
+ * account's session, as `authClient.deleteUser()` does. Better Auth checks
+ * the session is fresh, signed in within its `freshAge`, and refuses an older
+ * one (`SESSION_EXPIRED`) before anything below runs. Its `beforeDelete` runs
+ * the deletion's own steps first, then deletes every workspace the account is
+ * the only member of and may delete through the organization plugin, under
+ * the request's own session, so nothing stays behind that nobody can open;
+ * a workspace others belong to keeps them, and loses only the account's
+ * member row. Better Auth then deletes the account's sessions, sign-in
+ * accounts, and user row, and its `afterDelete` settles what the steps read.
+ * The email-verification callback is shut (`DISABLED_AUTH_PATHS`), since no
+ * verification is configured.
  */
-export function accountDeletion(api: () => OrganizationDeletionApi) {
+export function accountDeletion<Pending>(
+  api: () => OrganizationDeletionApi,
+  steps: AccountDeletionSteps<Pending>,
+) {
+  const pending = new WeakMap<Request, Pending>();
   return {
     enabled: true,
-    beforeDelete: async (_user: unknown, request?: Request) => {
-      if (request === undefined)
-        throw new Error("An account is deleted only with its session's request.");
+    beforeDelete: async (user: { id: string }, request?: Request) => {
+      if (request === undefined) throw new Error("An account is deleted only at /delete-user.");
+      pending.set(request, await steps.before(user.id));
       const { headers } = request;
       for (const { id: organizationId } of await api().listOrganizations({ headers })) {
         const { total } = await api().listMembers({ headers, query: { organizationId } });
@@ -391,6 +403,10 @@ export function accountDeletion(api: () => OrganizationDeletionApi) {
         });
         if (success) await api().deleteOrganization({ headers, body: { organizationId } });
       }
+    },
+    afterDelete: async (user: { id: string }, request?: Request) => {
+      const read = request === undefined ? undefined : pending.get(request);
+      if (read !== undefined) await steps.after(user.id, read);
     },
   };
 }

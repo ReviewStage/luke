@@ -145,12 +145,6 @@ export const HOSTED_API_ERROR = {
    * removing someone, an owner removed or leaving. Nothing was written.
    */
   NOT_PERMITTED: "not-permitted",
-  /**
-   * The session was signed in longer ago than Better Auth deletes an
-   * account for (its `freshAge`); nothing was deleted, and the same delete
-   * under a session signed in again is taken.
-   */
-  SESSION_NOT_FRESH: "session-not-fresh",
   /** The address is already a member of the workspace, or already holds a pending invitation to it; nothing was sent. */
   ALREADY_INVITED: "already-invited",
   /** The coding agent's sandbox is stopped, so no shell starts in it until the developer resumes it; nothing was started. */

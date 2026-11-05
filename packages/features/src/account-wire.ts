@@ -58,11 +58,6 @@ export const supportAccessAnswerSchema = EffectSchema.Struct({
 
 export type SupportAccessAnswerWire = typeof supportAccessAnswerSchema.Type;
 
-/** The account erased (POST). */
-export const accountDeleteAnswerSchema = EffectSchema.Struct({
-  deleted: EffectSchema.Literal(true),
-});
-
 /**
  * What the signed-in account may open in the app's clients (GET): whether it
  * is an admin, and who may open it as them, and nothing of any other
