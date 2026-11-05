@@ -142,6 +142,7 @@ import { retiredBeforeDelete, retiringReach } from "./retire-sessions.js";
 import { type SandboxStopReach, stoppedInBackground } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import type { SandboxUnavailable } from "./vercel-sandbox-api.js";
+import { listedPage } from "./workspace-agents.js";
 import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
@@ -382,8 +383,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * the archived ones left out unless `archived=include` asks, narrowed to
      * one repository where the query names one and to agents whose title or
      * task's name holds the query's words where it names some, as the plan
-     * list answers them; a workspace the account is not in is not found, as
-     * a plan is.
+     * list answers them, a page at a time from the query's `offset` with the
+     * next page's offset where more stand, as the agent tools' list pages
+     * (`workspace-agents.ts`); a workspace the account is not in is not
+     * found, as a plan is.
      */
     listOfWorkspace: signedIn.listOfWorkspace.effect(function* ({ input, context }) {
       const workspaceId = input.workspaceId ?? "";
@@ -401,15 +404,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         isWorkspaceMember(context.userId, workspaceId),
       );
       if (!member) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const agents = yield* hostedStoreOrUnavailable(
+      const offset = input.offset ?? 0;
+      const listed = yield* hostedStoreOrUnavailable(
         listWorkspaceAgentLines(context.userId, workspaceId, {
           ...(repository === undefined ? undefined : { repository }),
           ...(words === undefined ? undefined : { words }),
           includeArchived: listsArchived(input.archived),
-          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS,
+          offset,
+          // One past the bound tells whether a next page stands.
+          limit: AGENT_BOUNDS.MAX_WORKSPACE_AGENTS + 1,
         }),
       );
-      return yield* listedSummaries(context.userId, agents);
+      const { page, nextOffset } = listedPage(listed, offset, AGENT_BOUNDS.MAX_WORKSPACE_AGENTS);
+      const summaries = yield* listedSummaries(context.userId, page);
+      return nextOffset === null ? summaries : { ...summaries, nextOffset };
     }),
     /** The task's agents with their status. */
     listOfTask: signedIn.listOfTask.effect(function* ({ input, context }) {

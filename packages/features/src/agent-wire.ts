@@ -95,7 +95,7 @@ export const AGENT_BOUNDS = {
   MAX_ARCHIVE_REASON_CHARS: 500,
   /** The most characters the words a workspace's agents are found by may spell. */
   MAX_SEARCH_CHARS: 200,
-  /** The most agents a workspace's list offers, newest first: enough to choose one an automation's runs go to. */
+  /** The most agents one page of a workspace's list offers, newest first: enough to choose one an automation's runs go to; `nextOffset` names the next page. */
   MAX_WORKSPACE_AGENTS: 50,
   /** The most MCP servers one agent's list may name, and the most characters one name may spell: room for every provider and then some, never a document. */
   MAX_SERVERS: 32,
@@ -1008,6 +1008,7 @@ export const AGENT_WORKSPACE_QUERY = {
   REPOSITORY: "repository",
   WORDS: "words",
   ARCHIVED: AGENT_LIST_QUERY.ARCHIVED,
+  OFFSET: "offset",
 } as const;
 
 /** What the list's `archived` query may say. */
@@ -1361,6 +1362,12 @@ export const agentPageAnswerSchema = EffectSchema.Struct({ agent: agentPageSchem
 /** The task's agents (GET), in the order they were started. */
 export const agentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(agentSummarySchema),
+});
+
+/** A page of a workspace's agents (GET), newest started first, and the `offset` of the next page where more stand; absent where the list ended, and from a service before paging. */
+export const agentWorkspaceListAnswerSchema = EffectSchema.Struct({
+  ...agentListAnswerSchema.fields,
+  nextOffset: EffectSchema.optionalKey(EffectSchema.Int),
 });
 
 /** Where a pull request stands on GitHub, as its pill is colored. */
