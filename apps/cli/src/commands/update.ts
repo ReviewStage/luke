@@ -33,11 +33,25 @@ import { VERSION } from "./version.js";
 /** The install script's mode that installs the command, as it reads its first argument. */
 const CLI_MODE = "cli";
 
+/** The only scheme the install script is fetched over, since what it answers is run as a shell script. */
+const SCRIPT_PROTOCOL = "https:";
+
 const encoder = new TextEncoder();
 
-/** The install script, as the service answers it at its own origin. */
+/**
+ * The install script, as the service answers it at its own origin. Note that
+ * an origin not on https is refused before anything is fetched, because
+ * whoever sits on a plain connection could answer any script, which this
+ * would run; the install script refuses an `--origin` of that kind alike.
+ */
 const installScript = Effect.fnUntraced(function* (origin: string) {
   const url = `${origin}${HOST_WIRE.INSTALL_SCRIPT_PATH}`;
+  if (new URL(origin).protocol !== SCRIPT_PROTOCOL) {
+    return yield* new CommandFailed({
+      exit: CLI_EXIT.USAGE,
+      message: `${PRODUCT_NAME} CLI updates only from an https:// service, not ${origin}.`,
+    });
+  }
   const unreachable = new CommandFailed({
     exit: CLI_EXIT.UNAVAILABLE,
     message: `Could not fetch ${url}.`,
@@ -97,8 +111,9 @@ export const updateCommand = Command.make("update", {}, () =>
     const kind = installKind();
     if (kind !== INSTALL_KIND.CURL) return yield* told(kind);
     const origin = yield* serviceOrigin;
+    const script = yield* installScript(origin);
     yield* note(`Updating ${PRODUCT_NAME} CLI ${VERSION} from ${origin}…`);
-    yield* runInstallScript(yield* installScript(origin));
+    yield* runInstallScript(script);
     const version = yield* linkedVersion;
     yield* answer({
       json: { install: kind, version, previous: VERSION, updated: version !== VERSION },
