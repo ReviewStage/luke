@@ -39,7 +39,14 @@ function trip(pasted: (authorization: LoopbackAuthorization) => string) {
 
 // Note that the regression these catch is a pasted address taken without this trip's own state,
 // so a code from another trip, or one a page planted, is exchanged as the person's own.
-it.effect.each([
+/** One pasted address a trip must refuse: what the person pasted, and the reason it ends on. */
+type Refused = readonly [
+  label: string,
+  pasted: (authorization: LoopbackAuthorization) => string,
+  reason: string,
+];
+
+it.effect.each<Refused>([
   [
     "another trip's state",
     (at: LoopbackAuthorization) => `${at.redirectUri}?code=c&state=other`,
