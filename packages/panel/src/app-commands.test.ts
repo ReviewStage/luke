@@ -6,7 +6,7 @@ import { Dialog } from "@repo/ui";
 import { act, createElement, Fragment, type ReactElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
+import { useAppCommand, useAppKeymap, useMenuCommands, useMenuOffers } from "./app-commands.js";
 import { useFocusedRowKeys } from "./desktop/task-actions.js";
 import { fakeAppPlatform } from "./testing/app-platform.js";
 
@@ -18,10 +18,14 @@ import { fakeAppPlatform } from "./testing/app-platform.js";
  */
 
 let menuListener: ((command: AppCommand) => void) | undefined;
+/** Each set of commands the window told the menu bar it offers, in order. */
+let toldOffers: (readonly AppCommand[])[] = [];
 const roots: Root[] = [];
 
 beforeEach(() => {
+  toldOffers = [];
   fakeAppPlatform({
+    menuOffers: (commands: readonly AppCommand[]) => toldOffers.push(commands),
     onMenuCommand: (listener: (command: AppCommand) => void) => {
       menuListener = listener;
       return () => {
@@ -202,4 +206,34 @@ test("U, P, and S act on the focused sidebar row over the open thing, even once 
   pressLetter("p");
   pressLetter("s");
   assert.deepEqual(presses.splice(0), ["open pin", "open status"]);
+});
+
+/** A window telling the menu bar its offers, offering Back always and Copy link while `linked`. */
+function OfferingWindow({ linked }: { linked: boolean }): ReactElement | null {
+  useMenuOffers();
+  useAppCommand(APP_COMMAND.BACK, () => undefined);
+  useAppCommand(APP_COMMAND.COPY_LINK, linked ? () => undefined : undefined);
+  return null;
+}
+
+test("the window tells the menu bar the commands it offers as one set each time the set changes, and nothing when a redraw changes none", async () => {
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const draw = async (linked: boolean) => {
+    await act(async () => {
+      root.render(createElement(OfferingWindow, { linked }));
+      await Promise.resolve();
+    });
+  };
+
+  await draw(false);
+  await draw(false);
+  await draw(true);
+  await draw(false);
+
+  assert.deepEqual(toldOffers, [
+    [APP_COMMAND.BACK],
+    [APP_COMMAND.BACK, APP_COMMAND.COPY_LINK].toSorted(),
+    [APP_COMMAND.BACK],
+  ]);
 });

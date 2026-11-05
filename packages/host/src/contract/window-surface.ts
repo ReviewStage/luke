@@ -14,6 +14,7 @@ import {
   MICROPHONE_TRANSPORT,
   type MicrophoneRoute,
 } from "@repo/settings/microphone";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { UnparsedWireValue } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
@@ -171,6 +172,17 @@ export const windowSurfaceActsContract = {
     "Could not show or hide this build's label.",
   )
     .input(exactInput(EffectSchema.Struct({ shown: EffectSchema.Boolean })))
+    .output(EffectSchema.Void),
+  [WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS]: actProcedure(
+    "Could not tell the menu bar what this window offers.",
+  )
+    .input(
+      exactInput(
+        EffectSchema.Struct({
+          commands: EffectSchema.Array(EffectSchema.Literals(Object.values(APP_COMMAND))),
+        }),
+      ),
+    )
     .output(EffectSchema.Void),
   [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: actProcedure("Could not send that on this system.")
     .input(exactInput(EffectSchema.Struct({ submission: feedbackSubmissionSchema })))
