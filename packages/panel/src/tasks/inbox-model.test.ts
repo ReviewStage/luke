@@ -501,7 +501,7 @@ test("an item is done with once it is settled, answered or closed, and read; one
   assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
 });
 
-test("Open lists only what is open, and the item chosen where one is given, as the steps through the list keep it", () => {
+test("Open lists only what the reader is not done with, and the item chosen where one is given, as the steps through the list keep it", () => {
   const open = { show: INBOX_SHOW.OPEN, readerId: undefined } as const;
   assert.deepEqual(drawn(inboxList(TASKS, { ...open, chosen: undefined })), [
     "expiry",
@@ -627,7 +627,7 @@ test("Needs you lists and counts only the questions whose ask waits on the reade
   assert.equal(inboxCounts(groups, ME.userId, dana)[INBOX_SHOW.NEEDS_ME], 1);
 });
 
-test("a task done or canceled hides none of its items: its open ones need you, Open listing and counting them as any task's, while its unread settled ones are All's", () => {
+test("a task done or canceled hides none of its items: Open lists and counts its open ones and its unread settled ones as any task's", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
@@ -645,14 +645,14 @@ test("a task done or canceled hides none of its items: its open ones need you, O
     },
   ];
   const counts = inboxCounts(finished, undefined);
-  assert.equal(counts[INBOX_SHOW.OPEN], 2);
+  assert.equal(counts[INBOX_SHOW.OPEN], 4);
   assert.equal(counts[INBOX_SHOW.ALL], 4);
   const open = inboxList(finished, {
     readerId: undefined,
     chosen: undefined,
     show: INBOX_SHOW.OPEN,
   });
-  assert.deepEqual(drawn(open), ["done-open", "canceled-open"]);
+  assert.deepEqual(drawn(open), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
 });
 
 /**
@@ -680,10 +680,15 @@ const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   ],
 }));
 
-test("Open addressed to the reader lists their own open items, read or not, never a settled one however unread, and All lists every item; each counts its own", () => {
+test("Open addressed to the reader lists their own open items, read or not, and their settled ones unread, as one marked unread is, and All lists every item; each counts its own", () => {
   const rows = (show: InboxShow, whose: InboxWhose) =>
     drawn(inboxList(UNREAD_SHARED, { show, whose, readerId: ME.userId, chosen: undefined }));
-  assert.deepEqual(rows(INBOX_SHOW.OPEN, MINE), ["mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.OPEN, MINE), [
+    "mine-followed",
+    "mine-invites",
+    "mine",
+    "unnamed",
+  ]);
   assert.deepEqual(rows(INBOX_SHOW.ALL, EVERYONES), [
     "danas-answered",
     "danas",
@@ -695,7 +700,7 @@ test("Open addressed to the reader lists their own open items, read or not, neve
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId, MINE), {
     [INBOX_SHOW.NEEDS_ME]: 0,
-    [INBOX_SHOW.OPEN]: 3,
+    [INBOX_SHOW.OPEN]: 4,
     [INBOX_SHOW.ALL]: 4,
     [INBOX_SHOW.SNOOZED]: 0,
   });

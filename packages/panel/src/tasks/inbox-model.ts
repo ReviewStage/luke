@@ -64,7 +64,8 @@ import { plainWords } from "./tool-call-model.js";
  * The list holds every item of every plan it is handed, the latest changed
  * first, under its plan, under the person it waits on, or in one
  * run with no groups, the items its tab takes: what needs the reader, what
- * is unread, every open item, or everything, each tab counting its own.
+ * they are not done with, everything, or what they snoozed, each tab
+ * counting its own.
  * An item is the reader's where it waits on them: they are its task's
  * assignee, or, on a task nobody is assigned or an agent's with no task,
  * they started the agent that asks it; or where the service does not say, as main counts what waits on
@@ -1404,8 +1405,9 @@ export function agentGroups(
  * Which items an Inbox lists, as its view's menu chooses: Needs you, the
  * questions whose ask waits on the reader's answer (`threadNeedsReader`),
  * which Addressed to never narrows; Open, every
- * thread still open, a question not yet answered or a notice nobody has
- * opened yet, which Addressed to then narrows; All, every item, open and
+ * thread the reader is not done with, a question not yet answered, a notice
+ * not yet opened, or a thread they have not read since it changed or marked
+ * unread, which Addressed to then narrows; All, every item, open and
  * settled; or Snoozed, the items the reader snoozed, which the other three
  * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
  * kept before it reads as Open. Note too that no scope asks where the
@@ -1730,22 +1732,24 @@ export function isDone(item: InboxItem): boolean {
 }
 
 /**
-/**
  * Whether a scope lists the item: Needs you every question whose ask waits
  * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those snoozed, a notice never; Open every open thread, a question or an
- * update not yet opened, which narrowed to the reader's own (`needsYou`)
- * are what the sidebar's Inbox row counts (`places-waiting.ts`), and All
- * all of them, each leaving out what the reader snoozed (`isSnoozed`),
- * which Snoozed alone lists. Note that a thread of theirs settled and unread is left to
- * All, because main counts no settled item.
+ * Dock's badge count but for those snoozed, a notice never; Open every
+ * thread the reader is not done with (`isDone`), one still open or one
+ * settled since they last read it or marked unread, as a mail app's inbox
+ * keeps what is unread; and All all of them, each leaving out what the
+ * reader snoozed (`isSnoozed`), which Snoozed alone lists. Note that Open
+ * reads the reader's own read state rather than the thread's status alone,
+ * because a notice settles as it is opened (`acknowledgedOnOpen`), so a
+ * thread marked unread comes back to Open whatever settled it, and a row
+ * drawn gray is one Open has let go.
  */
 function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.NEEDS_ME:
       return threadNeedsReader(item, readerId) && !isSnoozed(item);
     case INBOX_SHOW.OPEN:
-      return item.status === INBOX_STATUS.OPEN && !isSnoozed(item);
+      return !isDone(item) && !isSnoozed(item);
     case INBOX_SHOW.ALL:
       return !isSnoozed(item);
     case INBOX_SHOW.SNOOZED:
