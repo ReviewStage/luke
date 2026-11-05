@@ -1747,8 +1747,8 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
 
 /**
  * Every inbox item the account reaches written for Neon Realtime: where
- * each stands (`stamps`), every open item and every settled one changed at
- * or after `settledSince`, and the items among those changed at or after
+ * each stands (`stamps`), every open item and every settled one changed or
+ * settled at or after `settledSince`, and the items among those changed at or after
  * `since` whole, with their threads and files, as a scope's inbox carries
  * them (`itemsLiveStatements`). A stamp carries what moves an item without
  * moving its last change: whether it is unread for the reader, who it waits
@@ -1778,7 +1778,11 @@ function accountItemsOf(
   const carried = and(
     // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
-    or(eq(inboxItem.status, INBOX_STATUS.OPEN), gte(inboxItem.updatedAt, settledSince)),
+    // Note that a settled item stands by the later of its last change and its settling, since a nod on an old notice settles it without moving its last change.
+    or(
+      eq(inboxItem.status, INBOX_STATUS.OPEN),
+      sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}) >= ${settledSince}`,
+    ),
     narrowed,
   );
   const stamps = liveStatementOf(

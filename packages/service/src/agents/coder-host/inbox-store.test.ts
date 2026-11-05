@@ -330,14 +330,20 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "the account's items stamp every open item and the settled ones of the last week, and carry whole only those changed since the reader's instant",
+    "the account's items stamp every open item and the settled ones of the last week, an old notice nodded to this week among them, and carry whole only those changed since the reader's instant",
     () =>
       Effect.gen(function* () {
         const { agent } = yield* openAgentIn;
         yield* post(agent, { ...SETTINGS, key: "stale" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "stale", "Not needed after all")));
         const waiting = yield* post(agent, { ...SETTINGS, key: "waiting" });
+        const notice = yield* post(agent, { key: "merged", title: "Merged", body: "On main." });
         yield* TestClock.adjust(Duration.days(8));
+        assert.ok(
+          Option.isSome(
+            yield* acknowledgeInboxItem(agent.userId, notice.id, notice.revision, randomUUID()),
+          ),
+        );
         const lately = yield* post(agent, { ...SETTINGS, key: "lately" });
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "lately", "Done another way")));
         const fresh = yield* post(agent, { ...SETTINGS, key: "fresh" });
@@ -346,7 +352,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           yield* accountItemIdsOf(agent.userId, now, now - Duration.toMillis(Duration.days(7))),
           {
-            stamps: [waiting.id, lately.id, fresh.id].toSorted(),
+            stamps: [waiting.id, notice.id, lately.id, fresh.id].toSorted(),
             items: [lately.id, fresh.id].toSorted(),
           },
         );
