@@ -464,8 +464,7 @@ export function inboxEntries(
 }
 
 /**
- * The "+" menu's rows: New agent, unavailable with Start's own reason while
- * Start could not run, left out on an archived task and on a pilot task
+ * The "+" menu's rows: New agent, unavailable while a Start is out, left out on an archived task and on a pilot task
  * (`startsOwnAgents`), by itself under no heading; then each of its agents under Agents (`agentEntries`).
  */
 function addEntries(

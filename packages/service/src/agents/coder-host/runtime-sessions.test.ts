@@ -1290,7 +1290,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start handed words or the plan on a task with no repository runs in the cloud with no checkout, as one on no task does",
+      "a Start handed words or the plan on a task with no repository runs in the cloud with no checkout, as one on no task does, and one naming a branch there is refused rather than dropping it",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1319,6 +1319,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               [task.id, null, AGENT_MACHINE.VERCEL],
             );
           }
+          const branched = yield* startAgent(routedSessions(owner), owner, {
+            ...startOn(task.id, "anthropic/claude-opus-5.5"),
+            branch: "luke/stacked",
+          }).pipe(Effect.provide(Layer.mergeAll(CATALOG, environment(), native)), Effect.result);
+          assert.deepEqual(branched, Result.fail(HOSTED_REFUSAL.NO_REPOSITORY));
         }),
     );
 

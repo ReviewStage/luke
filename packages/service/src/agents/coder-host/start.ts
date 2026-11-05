@@ -444,7 +444,8 @@ const confirmedBranch = Effect.fnUntraced(function* (
 
 /**
  * The branch the agent's checkout is cloned at: the one the ask names,
- * which GitHub must hold; else the one the agent it is started from was
+ * which GitHub must hold, and which a Start in no repository is refused for
+ * naming; else the one the agent it is started from was
  * started on, where GitHub still holds it; else none, the default branch.
  * Note that a retry whose agent already stands is not asked of GitHub
  * again, because the branch may be gone since and the agent its Start made
@@ -461,6 +462,10 @@ const startBranchOf = Effect.fnUntraced(function* (
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
+  // A branch named where there is no repository to clone it from is refused, rather than dropped.
+  if (ask.branch !== undefined && landing.repository === null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const branch = ask.branch ?? inherited ?? undefined;
   if (branch === undefined || landing.repository === null) return undefined;
   const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));

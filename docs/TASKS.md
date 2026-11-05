@@ -682,7 +682,7 @@ repository's checks, and decides whether to open a pull request. Started
 instead on a prompt the developer wrote, it is handed that prompt as its first
 message and never the plan, and works in the task's repository the same way.
 On a task with no repository it works in an empty folder, with no checkout
-and no GitHub credential, and opens no pull request. How it runs,
+and no repository credential installed in its sandbox, and opens no pull request. How it runs,
 its routes, and what it is told are described in
 `packages/service/README.md` under "The agent service" and "The
 agent routes"; New task ("The Tasks tab" above), the column's New agent,

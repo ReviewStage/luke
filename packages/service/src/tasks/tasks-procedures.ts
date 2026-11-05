@@ -566,8 +566,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /**
      * A plan started with an empty document, its repository confirmed where
      * it names one, and, where it names an agent, that agent started on it,
-     * in no repository where the plan names none, and the agent's session is opened for the account
-     * the request resolved to (`coder-host/runtime-sessions.ts`); one whose
+     * in no repository where the plan names none. The agent's session is
+     * opened for the account the request resolved to (`coder-host/runtime-sessions.ts`); one whose
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`). A pilot task is refused,
      * also before anything is written, to an account without the Pilot
