@@ -228,6 +228,19 @@ test("a reader's wheel over a page drawn in the log, which its frame takes, take
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+test("a layout's scroll up after the page under the pointer is taken away keeps the log on its newest line", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  const page = box.appendChild(document.createElement("iframe"));
+  act(() => {
+    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+  });
+  page.remove();
+  layout.writes.splice(0);
+  lateScroll(box, 0, 2000);
+  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
+});
+
 test.each([
   {
     how: "a press elsewhere, on a rail's row",

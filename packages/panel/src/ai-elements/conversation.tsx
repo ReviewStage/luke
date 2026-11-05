@@ -142,8 +142,9 @@ export function Conversation({
   const readerAt = useRef(Number.NEGATIVE_INFINITY);
   // Whether the reader holds a press now, a scroll bar's thumb among them.
   const pressing = useRef(false);
-  // Whether the pointer stands over a frame in the log, a page drawn in its words, whose wheel the window never hears.
-  const overFrame = useRef(false);
+  // The frame in the log the pointer stands over, a page drawn in its words, whose wheel the window never hears.
+  // Note that a frame taken away under a pointer at rest, its row scrolled out, is left by no event, so it counts only while it is still drawn.
+  const overFrame = useRef<HTMLIFrameElement | undefined>(undefined);
   const toEnd = useCallback((element: HTMLDivElement) => {
     element.scrollTop = element.scrollHeight;
     lastTop.current = element.scrollTop;
@@ -159,10 +160,13 @@ export function Conversation({
     };
     // Note that the window hears the pointer enter a frame and leave it, and nothing between.
     const entered = (event: Event) => {
-      overFrame.current = event.target instanceof HTMLIFrameElement && inputOn(list.current, event);
+      overFrame.current =
+        event.target instanceof HTMLIFrameElement && inputOn(list.current, event)
+          ? event.target
+          : undefined;
     };
     const exited = (event: Event) => {
-      if (event.target instanceof HTMLIFrameElement) overFrame.current = false;
+      if (event.target === overFrame.current) overFrame.current = undefined;
     };
     // Note that a press released over another window never reaches this one, so the window losing focus, or the page being hidden, ends it too.
     const left = (event: Event) => {
@@ -324,7 +328,7 @@ export function Conversation({
       const down = element.scrollTop >= lastTop.current;
       const asked =
         pressing.current ||
-        overFrame.current ||
+        overFrame.current?.isConnected === true ||
         event.timeStamp - readerAt.current < READER_SCROLL_MS ||
         scrollAsked(element);
       if (following.current && !down && !asked && !followsNewest(element)) {
