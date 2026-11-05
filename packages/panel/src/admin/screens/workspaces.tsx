@@ -23,6 +23,7 @@ import {
   GAP,
   Inline,
   MARK_PROVIDER,
+  QuietWords,
   SearchField,
   STATUS_TONE,
   Stack,
@@ -48,7 +49,7 @@ import {
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { WORKSPACES_SHARED_ONLY } from "../prefs.js";
 import { SEARCH_DEBOUNCE_MS, searchTerm, workspacesReadQuery } from "../routing.js";
-import { INSTALLATION_LABEL, INSTALLATION_TONE } from "../status-words.js";
+import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 import { WorkspaceCell } from "../workspace-cell.js";
 
@@ -109,9 +110,9 @@ function InstallationsCell({
             }}
           />
           <span className="flex">
-            <Badge tone={INSTALLATION_TONE[installation.status]}>
+            <QuietWords mark={installationMark(installation.status)}>
               {INSTALLATION_LABEL[installation.status]}
-            </Badge>
+            </QuietWords>
           </span>
         </Stack>
       ))}

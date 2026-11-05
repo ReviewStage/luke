@@ -13,12 +13,11 @@ import { formatCompact, formatCount, formatUsd } from "@repo/features/number-for
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { readFailedWords } from "@repo/features/words";
 import {
-  Badge,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
-  STATUS_TONE,
+  QuietWords,
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
@@ -128,11 +127,7 @@ const MODEL_COLUMNS: readonly DataTableColumn<AdminCostModel>[] = [
     label: LIST_PRICE,
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
     cell: (row) =>
-      row.spendUsd === null ? (
-        <Badge tone={STATUS_TONE.ATTENTION}>Unpriced</Badge>
-      ) : (
-        formatUsd(row.spendUsd)
-      ),
+      row.spendUsd === null ? <QuietWords>Unpriced</QuietWords> : formatUsd(row.spendUsd),
   },
   {
     key: MODEL_COLUMN.TOKENS,

@@ -21,7 +21,7 @@ import type {
   AdminAccountSupport,
   AdminAccountWorkspace,
 } from "@repo/features/admin-answer-wire";
-import { CONTEXT_WINDOW } from "@repo/features/agent-wire";
+import { AGENT_STATUS, CONTEXT_WINDOW } from "@repo/features/agent-wire";
 import { AGENT_STATUS_WORDS } from "@repo/features/automation-list-model";
 import { formatCount, formatPercent } from "@repo/features/number-format";
 import { FAST_ACCESS, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
@@ -36,25 +36,22 @@ import {
   GAP,
   Inline,
   MARK_PROVIDER,
+  QUIET_MARK,
+  QuietWords,
   Skeleton,
-  STATUS_TONE,
   Stack,
-  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
 } from "@repo/ui";
 import { repositoryPageUrl } from "@repo/ui/tasks-model";
-import { AGENT_STATUS_TONE } from "../../tasks/agent-model.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { ExternalLink } from "../chrome/external-links.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import {
-  connectionTone,
   connectionWord,
   INSTALLATION_LABEL,
-  INSTALLATION_TONE,
-  pullRequestTone,
+  installationMark,
   pullRequestWord,
 } from "../status-words.js";
 import { WorkspaceCell } from "../workspace-cell.js";
@@ -158,7 +155,9 @@ const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
     label: "Status",
     cell: (agent) => (
       <Inline gap={GAP.TIGHT}>
-        <Badge tone={AGENT_STATUS_TONE[agent.status]}>{AGENT_STATUS_WORDS[agent.status]}</Badge>
+        <QuietWords mark={agent.status === AGENT_STATUS.FAILED ? QUIET_MARK.FAILED : undefined}>
+          {AGENT_STATUS_WORDS[agent.status]}
+        </QuietWords>
         {agent.failure === null ? null : <Text tone={TEXT_TONE.MUTED}>{agent.failure}</Text>}
       </Inline>
     ),
@@ -170,9 +169,7 @@ const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
       agent.pullRequest === ADMIN_PULL_REQUEST.NONE ? (
         NONE
       ) : (
-        <Badge tone={pullRequestTone(agent.pullRequest)}>
-          {pullRequestWord(agent.pullRequest)}
-        </Badge>
+        <QuietWords>{pullRequestWord(agent.pullRequest)}</QuietWords>
       ),
   },
 ];
@@ -209,9 +206,9 @@ function workspaceColumns(
         ) : (
           <Inline gap={GAP.TIGHT}>
             {[...new Set(workspace.github)].map((status) => (
-              <Badge key={status} tone={INSTALLATION_TONE[status]}>
+              <QuietWords key={status} mark={installationMark(status)}>
                 {INSTALLATION_LABEL[status]}
-              </Badge>
+              </QuietWords>
             ))}
           </Inline>
         ),
@@ -226,7 +223,8 @@ interface CredentialRow {
   kind: string;
   provider: string;
   status: string;
-  tone: StatusTone;
+  /** Whether the status is a failure, a key that is not verified, which wears the failure glyph. */
+  failed: boolean;
   detail: string | undefined;
   at: number;
 }
@@ -238,7 +236,7 @@ function credentialRows(support: AdminAccountSupport): CredentialRow[] {
       kind: "Provider key",
       provider: key.provider,
       status: key.status,
-      tone: key.status === PROVIDER_KEY_STATUS.VERIFIED ? STATUS_TONE.COMPLETE : STATUS_TONE.DANGER,
+      failed: key.status !== PROVIDER_KEY_STATUS.VERIFIED,
       detail: key.fastAccess === null ? undefined : FAST_ACCESS_WORDS[key.fastAccess],
       at: key.statusAt,
     }),
@@ -248,7 +246,7 @@ function credentialRows(support: AdminAccountSupport): CredentialRow[] {
       kind: "Connection",
       provider: connection.provider,
       status: connectionWord(connection.status),
-      tone: connectionTone(connection.status),
+      failed: false,
       detail: undefined,
       at: connection.at,
     }),
@@ -264,7 +262,7 @@ const CREDENTIAL_COLUMNS: readonly DataTableColumn<CredentialRow>[] = [
     label: "Status",
     cell: (row) => (
       <Inline gap={GAP.TIGHT}>
-        <Badge tone={row.tone}>{row.status}</Badge>
+        <QuietWords mark={row.failed ? QUIET_MARK.FAILED : undefined}>{row.status}</QuietWords>
         {row.detail === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{row.detail}</Text>}
       </Inline>
     ),
@@ -294,7 +292,7 @@ const FAILURE_COLUMNS: readonly DataTableColumn<FailureRow>[] = [
       failure.reason === null ? (
         <Text tone={TEXT_TONE.MUTED}>no reason recorded</Text>
       ) : (
-        <Badge tone={STATUS_TONE.DANGER}>{failure.reason}</Badge>
+        <QuietWords mark={QUIET_MARK.FAILED}>{failure.reason}</QuietWords>
       ),
   },
 ];

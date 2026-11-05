@@ -87,7 +87,6 @@ import {
 } from "@repo/features/turn-rows";
 import { andList, readFailedWords } from "@repo/features/words";
 import type { FormerMember, WorkspaceMember } from "@repo/features/workspace-wire";
-import { STATUS_TONE, type StatusTone } from "@repo/ui";
 import {
   ACTOR_KIND,
   ACTOR_STATE,
@@ -2789,15 +2788,6 @@ export function agentLines(
 ): readonly AgentTranscriptMessage[] {
   return [...messages, ...sent.map(sentLineMessage)];
 }
-
-/** The tone a coding agent's status is named in on a badge: at work, done, failed, or stopped. */
-export const AGENT_STATUS_TONE = {
-  [AGENT_STATUS.STARTING]: STATUS_TONE.WORKING,
-  [AGENT_STATUS.RUNNING]: STATUS_TONE.WORKING,
-  [AGENT_STATUS.COMPLETED]: STATUS_TONE.COMPLETE,
-  [AGENT_STATUS.FAILED]: STATUS_TONE.DANGER,
-  [AGENT_STATUS.CANCELED]: STATUS_TONE.NEUTRAL,
-} as const satisfies Record<AgentStatus, StatusTone>;
 
 /** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row; the one map every place that says a state reads. */
 export const PULL_REQUEST_STATE_LABEL = {
