@@ -8,17 +8,24 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@repo/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber, SubscriptionRef } from "effect";
+import { TestClock } from "effect/testing";
 import {
   accountBearer,
   accountCall,
+  CALL_FAULT,
   type CallCredential,
   callAnswered,
   lateCredential,
   NO_CREDENTIAL,
+  ServiceReach,
+  type ServiceReachState,
 } from "./account-call.js";
 
 const BASE_URL = "https://app.test";
+
+/** The service's reach as it is first kept, at the test clock's start, before any call was made. */
+const REACHABLE: ServiceReachState = { reachable: true, answeredAt: 0 };
 const PATH = "/api/account/preferences";
 
 function refusal(): Response {
@@ -143,4 +150,62 @@ it.effect("a late credential renews and retries on the bearer it resolves", () =
       ["Bearer stale", "Bearer fresh"],
     );
   }),
+);
+
+it.effect(
+  "silence past 45 seconds, then a call that ends with no answer, sets the service unreachable, and the next answer, a refusal among them, sets it back",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make<ServiceReachState>(REACHABLE);
+      let asked = 0;
+      const { call, client } = callOn(NO_CREDENTIAL, () => {
+        asked += 1;
+        if (asked === 1) throw new TypeError("Load failed");
+        return refusal();
+      });
+      const send = Effect.provideService(
+        Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client),
+        ServiceReach,
+        reach,
+      );
+
+      yield* TestClock.adjust("46 seconds");
+      const unanswered = yield* send;
+      assert.deepEqual(unanswered, { fault: CALL_FAULT.NETWORK, errorName: "TypeError" });
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, false);
+
+      const refused = yield* send;
+      assert.ok(callAnswered(refused) && refused.response.status === HTTP_STATUS.UNAUTHORIZED);
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, true);
+    }),
+);
+
+it.effect(
+  "a call that runs out its deadline within 45 seconds of the last answer leaves the service reachable",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make<ServiceReachState>(REACHABLE);
+      let asked = 0;
+      const { call, client } = callOn(NO_CREDENTIAL, () => {
+        asked += 1;
+        return asked === 1 ? jsonResponse({ ok: true }) : new Promise<Response>(() => undefined);
+      });
+      const send = Effect.provideService(
+        Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client),
+        ServiceReach,
+        reach,
+      );
+
+      yield* TestClock.adjust("30 seconds");
+      assert.ok(callAnswered(yield* send));
+      // A quiet gap no call was answered in, longer than the deadline and shorter than the silence it takes.
+      yield* TestClock.adjust("25 seconds");
+      const silent = yield* Effect.forkChild(send);
+      while (asked < 2) yield* Effect.yieldNow;
+      yield* TestClock.adjust("10 seconds");
+      const unanswered = yield* Fiber.join(silent);
+
+      assert.deepEqual(unanswered, { fault: CALL_FAULT.NETWORK, errorName: "TimeoutError" });
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, true);
+    }),
 );
