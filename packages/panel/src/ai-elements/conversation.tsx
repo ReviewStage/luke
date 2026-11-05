@@ -227,12 +227,17 @@ export function Conversation({
   // is as tall as its lines, so any line resizing resizes it, and a line
   // replaced or removed is then never held by the observer; and that it
   // watches the block's border box, so its end growing keeps a following log
-  // at its newest line too.
+  // at its newest line too. Note that a box with no room is one a page
+  // hidden around it took out of the layout (`display: none`), as the kept
+  // Inbox is while another page stands: it reads as empty and scrolled to
+  // its top, which says nothing of where the reader stands, so it is left
+  // as it was, or a reader scrolled up would be taken to the end once it
+  // is shown again.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
         const element = list.current;
-        if (element === null) return;
+        if (element === null || element.clientHeight === 0) return;
         if (following.current) {
           toEnd(element);
           return;
@@ -245,7 +250,17 @@ export function Conversation({
         setAtBottom(true);
       }),
   );
-  useEffect(() => () => resized.disconnect(), [resized]);
+  // Note that what was observed is forgotten with the observer, because a
+  // page kept hidden (`Activity`) takes its effects down and puts them back
+  // as it is shown again, its lines as they were, and the render after
+  // would otherwise find nothing changed and watch nothing.
+  useEffect(
+    () => () => {
+      resized.disconnect();
+      observed.current = undefined;
+    },
+    [resized],
+  );
   // Note that a new subject reuses the box, scrolled wherever the reader
   // left the last, so it is taken to its newest line here, before the paint,
   // even where its lines happen to number and end as the last subject's did.
