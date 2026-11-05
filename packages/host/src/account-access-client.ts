@@ -2,13 +2,10 @@
  * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
  *
  * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard, and whether a Start on a task with no
- * repository runs, as it does in the local demo alone, which a window reads
- * to let that Start be pressed. It draws by it and authorizes nothing: the
- * dashboard's own gate decides every admin read on the service, and the
- * Start route every Start. A read that fails, or an answer that is not the
- * shape the wire declares, is read as nothing opened, so a doubt never
- * offers either.
+ * offer the admin dashboard. It draws by it and authorizes nothing: the
+ * dashboard's own gate decides every admin read on the service. A read that
+ * fails, or an answer that is not the shape the wire declares, is read as
+ * nothing opened, so a doubt never offers it.
  */
 import type { CallCredential } from "@repo/features";
 import { askHosted, type HostedClient, hostedClient } from "@repo/features/hosted-link";
@@ -42,14 +39,7 @@ export class AccountAccessClient {
   /** What the signed-in account may open; nothing for any failure. */
   readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
-      Effect.map(
-        (answer): AppAccessSlice => ({
-          admin: answer.admin,
-          ...(answer.startsWithoutRepository === true
-            ? { startsWithoutRepository: true }
-            : undefined),
-        }),
-      ),
+      Effect.map((answer): AppAccessSlice => ({ admin: answer.admin })),
       // A read that failed is settled as no admin, not left pending, so nothing waits on it.
       Effect.orElseSucceed((): AppAccessSlice => ({ admin: false })),
       Effect.provide(this.#client),

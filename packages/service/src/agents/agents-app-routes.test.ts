@@ -526,46 +526,45 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start naming an agent is refused with nothing made where it names no repository, as an agent's Start on such a task is, or asks for planning beside it",
+    "a task's start naming an agent and no repository makes the task and starts the agent on it in none, asking GitHub nothing; one asking for planning beside it is refused with nothing made",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, github, ask } = yield* openTask();
         const agent = { idempotencyKey: randomUUID(), prompt: "Expire invitations." };
+        const asked = github.sent.length;
         const startWith = (body: WireBoundaryInput) =>
           ask(request(TASKS, owner, { method: "POST", body }));
 
-        const answered = [
+        const started = readAnswer(
+          taskStartAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
           yield* startWith({ name: "No repository", workspaceId: task.workspaceId, agent }),
-          yield* startWith({
-            name: "Null repository",
-            workspaceId: task.workspaceId,
-            repository: null,
-            agent,
-          }),
-          yield* startWith({
-            name: "Planned",
-            workspaceId: task.workspaceId,
-            repository: RELAY_FULL_NAME,
-            planning: true,
-            agent,
-          }),
-        ];
+        );
+        const planned = yield* startWith({
+          name: "Planned",
+          workspaceId: task.workspaceId,
+          repository: RELAY_FULL_NAME,
+          planning: true,
+          agent: { ...agent, idempotencyKey: randomUUID() },
+        });
         const listed = readAnswer(
           taskListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(TASKS, owner)),
         );
 
-        assert.deepEqual(answered, [
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        ]);
+        assert.equal(started.agentRefusal, undefined);
+        assert.equal(started.plan.repository, null);
+        assert.equal(started.agent?.planId, started.plan.id);
+        assert.equal(github.sent.length, asked, "a start in no repository asks GitHub nothing");
         assert.deepEqual(
-          listed.plans.map((each) => each.id),
-          [task.id],
+          planned,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
-        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(
+          listed.plans.map((each) => each.id).sort(),
+          [task.id, started.plan.id].sort(),
+        );
       }),
   );
 

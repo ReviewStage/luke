@@ -48,6 +48,10 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * so a trip finished in the browser lands on its own.
  */
 
+/** What setup and Home say over GitHub's cards: that it is optional, since an agent works in no repository where none is chosen. */
+export const GITHUB_OPTIONAL =
+  "Optional. Agents can work without a repository; connect GitHub to have them work in your code and open pull requests.";
+
 /** How the workspace reaches its repositories. */
 const ROUTE = {
   APP: "app",

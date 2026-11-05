@@ -76,18 +76,6 @@ it.effect("asks the service for the signed-in account's access under its bearer"
   }),
 );
 
-it.effect(
-  "a read that says a Start runs on a task with no repository holds that beside the admin flag",
-  () =>
-    Effect.gen(function* () {
-      const { client } = service([json({ admin: false, startsWithoutRepository: true })]);
-      assert.deepEqual(yield* client.readAccess(), {
-        admin: false,
-        startsWithoutRepository: true,
-      });
-    }),
-);
-
 it.effect("an admin's read is an admin, and a sign-out leaves no admin standing", () =>
   Effect.gen(function* () {
     const { client } = service([json({ admin: true })]);

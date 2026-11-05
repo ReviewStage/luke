@@ -61,7 +61,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * a repository its workspace cannot work in; a pick the read finds out of
  * reach is handed back, and with nothing to offer the chip reads No
  * repository, which a task can start with. An opener that may stand on
- * no repository, as an automation's editor may, is offered No repository
+ * no repository, as New task and an automation's editor may, is offered No repository
  * pinned under the list, which lets the pick go. With no
  * GitHub connected to the workspace, or one GitHub removed or suspended,
  * the menu says which in the list's place: an owner or an admin is offered
@@ -235,7 +235,7 @@ interface RepositoryMenuProps {
   value: string | null;
   chooser: RepositoryChooser;
   onChoose: (repository: string) => void;
-  /** Lets the pick go, offered as No repository pinned under the list, where the opener may stand on none, as an automation's runs may; a null value then reads No repository. */
+  /** Lets the pick go, offered as No repository pinned under the list, where the opener may stand on none, as a new task or an automation's runs may; a null value then reads No repository. */
   onClear?: (() => void) | undefined;
   /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;

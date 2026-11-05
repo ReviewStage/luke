@@ -478,8 +478,7 @@ function addEntries(
     row: {
       id: NEW_AGENT_ROW,
       ...tabLook({ kind: TAB_KIND.DRAFT }),
-      // Start's reason stands exactly while Start could not run on the open task.
-      disabled: start.busy ? NEW_AGENT_STARTING : start.reason,
+      disabled: start.busy ? NEW_AGENT_STARTING : undefined,
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
@@ -492,11 +491,11 @@ function addEntries(
 /**
  * What a phone's Overview offers after the task's agents in place of the
  * column's hidden "+" (`plan-agents.tsx`): New agent on the "+"'s own
- * terms, unavailable with Start's reason under it; and the agents' read
+ * terms, unavailable while a Start is out; and the agents' read
  * again where it never landed, as the strip's Retry offers it.
  */
 export function phoneAgentStarts(main: MainTabsControl, agents: AgentsControl): MenuAction[] {
-  const reason = agents.start.busy ? NEW_AGENT_STARTING : agents.start.reason;
+  const reason = agents.start.busy ? NEW_AGENT_STARTING : undefined;
   const starts: MenuAction[] =
     agents.onUnarchive === undefined && startsOwnAgents(agents.mode)
       ? [

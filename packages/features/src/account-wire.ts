@@ -58,10 +58,4 @@ export const accountDeleteAnswerSchema = EffectSchema.Struct({
  */
 export const accountAccessAnswerSchema = EffectSchema.Struct({
   admin: EffectSchema.Boolean,
-  /**
-   * True where a Start on a task that names no repository runs, as it does
-   * in the local demo alone, where the task's agents run on a host; absent
-   * everywhere else, and from a service older than it.
-   */
-  startsWithoutRepository: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });

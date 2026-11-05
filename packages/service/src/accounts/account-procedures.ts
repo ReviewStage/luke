@@ -75,7 +75,6 @@ import {
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
-import { LocalDemo } from "../local/local-demo.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   type AccountFastOffer,
@@ -257,18 +256,10 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       return snapshotAnswer(row, yield* snapshotAgent(context.userId, row));
     }),
 
-    /**
-     * Whether the caller's own account is an admin, any role but the admin
-     * role not, and, in the local demo alone, that a Start on a task with no
-     * repository runs where its agents run on a host (`local/local-demo.ts`).
-     */
+    /** Whether the caller's own account is an admin, any role but the admin role not. */
     access: signedIn.access.effect(function* ({ context }) {
       const role = yield* hostedStoreOrUnavailable(seams.readRole(context.userId));
-      const demo = yield* LocalDemo;
-      return {
-        admin: isAdminRole(role),
-        ...(demo.on ? { startsWithoutRepository: true as const } : undefined),
-      };
+      return { admin: isAdminRole(role) };
     }),
 
     /**

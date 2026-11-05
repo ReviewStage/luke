@@ -1025,7 +1025,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, a task's Start naming it, and a source in no repository start nothing; and one keyed by an agent on a task starts on that task",
+    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, and a task's Start naming it start nothing; a source in no repository is continued in none; and one keyed by an agent on a task starts on that task",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, eve } = yield* openTask();
@@ -1128,6 +1128,9 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
           "a task's Start refuses a source on no task rather than starting afresh",
         );
+        assert.equal(eve.opened.length, before);
+
+        // A source on no task and in no repository is continued in its workspace, in none.
         const bare = yield* createAgent(owner, {
           taskId: null,
           organizationId: task.workspaceId,
@@ -1140,15 +1143,19 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
         });
         const bareId = Option.getOrThrow(bare).agent.id;
-        assert.deepEqual(
+        const fromBare = readAnswer(
+          agentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
           yield* startFromAs(owner, bareId, {
             idempotencyKey: randomUUID(),
             from: { agentId: bareId },
           }),
-          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
-          "a source on no task and in no repository has no checkout to go on from",
+        ).agent;
+        const bareStored = Option.getOrThrow(yield* readAgent(owner, fromBare.id));
+        assert.deepEqual(
+          [bareStored.taskId, bareStored.organizationId, bareStored.repository],
+          [null, task.workspaceId, null],
         );
-        assert.equal(eve.opened.length, before);
 
         // The same path from an agent on a task starts on that task, as the task's own Start would.
         const onTask = readAnswer(

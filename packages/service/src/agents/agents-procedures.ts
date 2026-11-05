@@ -466,12 +466,10 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
         return startAnswer({ agent: yield* summaryOf(context.userId, made.value), created: false });
       }
       const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
-      const place = placeOfAgent(source);
-      if (place === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       const started = yield* startRequestedAgent(
         routedSessions<EveTypedTurn>(context.userId),
         context.userId,
-        place,
+        placeOfAgent(source),
         input.body,
         yield* summaryModelOf,
       );

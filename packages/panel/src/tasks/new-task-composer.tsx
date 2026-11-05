@@ -23,7 +23,6 @@ import {
   type ChoiceItem,
   POPOVER_ALIGN,
   TEXT_ELEMENT,
-  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   VisuallyHidden,
@@ -107,8 +106,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * any agent is started on it. An automation's card offers none.
  *
  * The words are a coding agent's prompt. Start stands once there are
- * words or files, and a repository, without which it is held and
- * the card says so under it. It starts the task with an empty plan and no
+ * words or files, with a repository or with none, which the chip offers
+ * as No repository and the agent then works in. It starts the task with an empty plan and no
  * call, Untitled until the
  * agent names it, and the agent on the words, the files, and the model
  * picked on the chip, in the one start (`use-tasks-tab.ts`), then opens the
@@ -238,12 +237,8 @@ const MODE_CHOICES: readonly ChoiceItem<TaskMode>[] = [
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository, which a tree's card cannot choose, since its tasks share the other's; and why the chip is held. */
-const COMPOSER_WORDS = {
-  NEEDS_REPOSITORY: "Choose a repository",
-  RELATED_HAS_NO_REPOSITORY: "That task has no repository",
-  REPOSITORY_HELD: "A sub-task and its parent share one repository",
-} as const;
+/** Why the chip is held on a tree's card, whose tasks share the other's repository. */
+const REPOSITORY_HELD = "A sub-task and its parent share one repository";
 
 /** What the card says where the member's devices could not be read, with Retry, rather than starting the task in the cloud. */
 const DEVICES_UNREAD: Failure = {
@@ -498,9 +493,8 @@ export function NewTaskComposer({
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
-  // An agent needs a repository to work in, and something to work on: words or files.
-  const blocked = repository === null;
-  const canStart = !blocked && !devicesUnread && filled;
+  // An agent needs something to work on, words or files, and works in no repository where none is chosen.
+  const canStart = !devicesUnread && filled;
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
   const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
@@ -623,8 +617,9 @@ export function NewTaskComposer({
       chooser={repositories}
       onChoose={setChosen}
       onUnreached={judged ? () => setChosen(null) : undefined}
+      onClear={tree ? undefined : () => setChosen(null)}
       onListed={setListed}
-      held={tree ? COMPOSER_WORDS.REPOSITORY_HELD : undefined}
+      held={tree ? REPOSITORY_HELD : undefined}
     />
   );
   const composer: AgentComposerControl = {
@@ -702,7 +697,7 @@ export function NewTaskComposer({
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
-        sendable={!blocked && !devicesUnread && (!forAutomation || said !== "")}
+        sendable={!devicesUnread && (!forAutomation || said !== "")}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         modelsFailed={newTask.modelsFailed}
@@ -734,11 +729,6 @@ export function NewTaskComposer({
             : undefined
         }
       />
-      {blocked ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {tree ? COMPOSER_WORDS.RELATED_HAS_NO_REPOSITORY : COMPOSER_WORDS.NEEDS_REPOSITORY}
-        </Text>
-      ) : null}
     </div>
   );
   // Note that the card stands under the providers with or without a repository, so one chosen or let go keeps the card mounted.

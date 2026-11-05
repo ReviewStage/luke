@@ -58,7 +58,7 @@ import {
   SERVERS_FAILED,
   type SentLine,
   START_FAILED_AWAY,
-  START_NEEDS_REPOSITORY,
+  START_NEEDS_TASK,
   STOP_FAILED,
   startFailureNote,
 } from "./agent-model.js";
@@ -340,10 +340,8 @@ export interface AgentsControl {
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
-    /** Whether a Start could run now: the task names a repository, or runs where a Start runs without one. */
+    /** Whether a Start could run now: a task is open. */
     available: boolean;
-    /** Why it cannot, said on the "+" menu's New agent and the terminal picker's start row, while it cannot. */
-    reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;
     /** Starts an agent on the choice given, or on the account's default with none; answers why it did not start, with the answer that said so as its cause, or nothing once it did or while it could not be pressed. */
@@ -557,12 +555,6 @@ function sameFiles(a: readonly AgentAttachment[], b: readonly AgentAttachment[])
   return a.length === b.length && a.every((file, index) => file === b[index]);
 }
 
-/** Why a Start cannot run on the open task, while it cannot: it names no repository, and runs nowhere a Start runs without one. */
-function startReason(taskId: string | undefined, starts: boolean): string | undefined {
-  if (taskId === undefined) return undefined;
-  return starts ? undefined : START_NEEDS_REPOSITORY;
-}
-
 /**
  * One agent read by its id as its own page reads it, wherever it stands,
  * on a task or on none; nothing where it could not be read. A surface that
@@ -655,13 +647,6 @@ export function useAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
-  /**
-   * Whether a Start runs on the open task though it names no repository:
-   * where the service says such a Start runs, as it does in the local demo
-   * alone (the account's access), and the task's agents run on a host. None
-   * everywhere else, where a task naming no repository starts nothing.
-   */
-  startsWithoutRepository?: boolean | undefined;
   /** How a task is worked, by its id, as the task list names it; none before the list names the task. */
   modeOf?: ((taskId: string) => TaskMode | undefined) | undefined;
   /**
@@ -716,12 +701,6 @@ export function useAgents(input: {
   // Where a Start from an agent and a draft stand: the open task, or the page's agent where no task
   // is open, whose Start the service puts where that agent is (its task, or its workspace).
   const startsOn = taskId ?? agentId;
-  // Whether a Start could run on the open task: one naming a repository, or one the service runs without.
-  const taskStarts =
-    taskId !== undefined && (repository !== null || input.startsWithoutRepository === true);
-  // Whether a Start from one of the agents could run: on a task a Start runs on, or on an agent's
-  // page, where the service reads the repository off the agent started from.
-  const startsFrom = startsOn !== undefined && (taskId === undefined || taskStarts);
   // Each place's draft's key and chip, by the plan's id or the page's agent's; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
   const heldDraft = startsOn === undefined ? undefined : drafts.get(startsOn);
@@ -897,7 +876,7 @@ export function useAgents(input: {
   };
 
   const pressStart = async (choice?: ModelChoice): Promise<StartFailure | undefined> => {
-    if (taskId === undefined || !taskStarts || starting) return undefined;
+    if (taskId === undefined || starting) return undefined;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -929,7 +908,7 @@ export function useAgents(input: {
   // service has not answered it and the words and files are the same, so a
   // press asked again opens the agent the first may already have started.
   const continueAgent: AgentContinuer = async (sourceId, note, attachments = []) => {
-    if (startsOn === undefined || !startsFrom) return undefined;
+    if (startsOn === undefined) return undefined;
     const held = continues.current.get(sourceId);
     const carried = note !== undefined || attachments.length > 0 ? (note ?? "") : undefined;
     const key =
@@ -1198,8 +1177,7 @@ export function useAgents(input: {
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<StartFailure | undefined> => {
-    if (taskId === undefined || !taskStarts)
-      return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
+    if (taskId === undefined) return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_TASK };
     const answer = await askStart(taskId, {
       idempotencyKey: draftId,
       prompt,
@@ -1224,8 +1202,7 @@ export function useAgents(input: {
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<StartFailure | undefined> => {
-    if (startsOn === undefined || !startsFrom)
-      return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
+    if (startsOn === undefined) return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_TASK };
     const asked = forkStart({
       draftId,
       fork,
@@ -1543,10 +1520,9 @@ export function useAgents(input: {
     macs: offered.rows === undefined ? undefined : (offered.rows.macs ?? []),
     readModels,
     onUnarchive: undefined,
-    continueAgent: startsFrom ? steadyContinueAgent : undefined,
+    continueAgent: startsOn === undefined ? undefined : steadyContinueAgent,
     start: {
-      available: taskStarts,
-      reason: startReason(taskId, taskStarts),
+      available: taskId !== undefined,
       busy: starting,
       onPress: pressStart,
       pending: pressedHere,

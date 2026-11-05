@@ -496,8 +496,11 @@ export function agentStateWords(status: AgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === AGENT_STATUS.CANCELED);
 }
 
-/** Why a Start cannot run, said on the "+" menu's New agent: the task names no repository yet. */
-export const START_NEEDS_REPOSITORY = "Choose a repository";
+/** What a Start refused for want of a repository says. */
+const START_NEEDS_REPOSITORY = "Choose a repository";
+
+/** Why a Start cannot run where neither a task nor an agent is open, which no draft is drawn without. */
+export const START_NEEDS_TASK = "Open a task to start an agent";
 
 /** What a call refused for a repository out of the workspace's reach says, wherever it is refused. */
 export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task's repository on GitHub.`;

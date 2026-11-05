@@ -564,10 +564,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /**
-     * A plan started with an empty document, its repository confirmed, and,
-     * where it names an agent, that agent started on it: a start naming an agent and no
-     * repository is refused as an agent's Start on such a plan is, before
-     * anything is written, and the agent's session is opened for the account
+     * A plan started with an empty document, its repository confirmed where
+     * it names one, and, where it names an agent, that agent started on it,
+     * in no repository where the plan names none, and the agent's session is opened for the account
      * the request resolved to (`coder-host/runtime-sessions.ts`); one whose
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`). A pilot task is refused,
@@ -625,9 +624,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
             ? childOf.repository
             : input.repository;
-      if (agent !== undefined && (repository === undefined || repository === null)) {
-        return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-      }
       // Where its agents run is checked before anything is written, so a device refused starts no task;
       // a child runs where its parent runs, which was confirmed as the parent was made.
       const runsOn =

@@ -645,15 +645,6 @@ const continueFromSlack = Effect.fnUntraced(function* (
   attachments: readonly AgentAttachment[],
 ) {
   const thread = threadOf(addressed);
-  const place = placeOfAgent(source);
-  if (place === undefined) {
-    yield* bot.reply(
-      addressed.channel,
-      thread,
-      refusalReply("continue the agent", { error: HOSTED_API_ERROR.NO_REPOSITORY }),
-    );
-    return;
-  }
   const outside = yield* heardFromAnotherAccount({
     userId: source.userId,
     conversationId: source.conversationId,
@@ -665,7 +656,7 @@ const continueFromSlack = Effect.fnUntraced(function* (
     );
   const started = yield* Effect.result(
     startAgent(routedSessions(userId), userId, {
-      ...place,
+      ...placeOfAgent(source),
       idempotencyKey: addressed.eventId,
       choice: undefined,
       prompt: undefined,

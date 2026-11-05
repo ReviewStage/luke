@@ -52,7 +52,6 @@ interface Standing {
   taskId: string | undefined;
   agentId?: string;
   repository: string | null;
-  startsWithoutRepository?: boolean;
   listedAgents?: readonly AgentSummary[];
   listedPage?: Pick<TasklessAgent, "id" | "workspaceId" | "repository">;
   list?: { readonly read: boolean; readonly failed: boolean; readonly onRetry: () => void };
@@ -118,7 +117,6 @@ function mount(
       taskId: held.taskId,
       agentId: held.agentId,
       repository: held.repository,
-      startsWithoutRepository: held.startsWithoutRepository,
       listedAgents: held.listedAgents,
       listedPage: held.listedPage,
       list: held.list,
@@ -1028,33 +1026,17 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("a task naming no repository offers no Start, which asks nothing when pressed, and no continue, unless the service runs a Start without one there, when its Start asks the service on the task", async () => {
-  const bare = mount({ taskId: TASK, repository: null });
+test("a task naming no repository offers its Start and a continue, and its Start asks the service on the task", async () => {
+  const bare = mount({ taskId: TASK, repository: null, listedAgents: [] });
+  bare.answer(ACT_KIND.AGENTS_START, { agent: STARTED });
   await bare.mount();
-  const { start } = bare.control();
-  assert.deepEqual([start.available, start.reason], [false, "Choose a repository"]);
-  assert.equal(bare.control().continueAgent, undefined);
+  assert.equal(bare.control().start.available, true);
+  assert.notEqual(bare.control().continueAgent, undefined);
   await act(async () => {
     await bare.control().start.onPress();
   });
-  assert.deepEqual(startPayloads(bare.asked), [], "a press asks nothing");
-
-  const allowed = mount({
-    taskId: TASK,
-    repository: null,
-    startsWithoutRepository: true,
-    listedAgents: [],
-  });
-  allowed.answer(ACT_KIND.AGENTS_START, { agent: STARTED });
-  await allowed.mount();
-  const offered = allowed.control().start;
-  assert.deepEqual([offered.available, offered.reason], [true, undefined]);
-  assert.notEqual(allowed.control().continueAgent, undefined);
-  await act(async () => {
-    await allowed.control().start.onPress();
-  });
   assert.deepEqual(
-    startPayloads(allowed.asked).map((each) => [each.taskId, each.idempotencyKey]),
+    startPayloads(bare.asked).map((each) => [each.taskId, each.idempotencyKey]),
     [[TASK, "key-1"]],
   );
 });

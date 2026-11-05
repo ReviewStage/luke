@@ -619,15 +619,24 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   ]);
 });
 
-test("a box with no repository holds Start and says why under the card", async () => {
-  const card = await mount(undefined, undefined, { recent: [] });
+test("No repository picked on the chip starts the task and its agent in none", async () => {
+  const card = await mount();
+  const chip =
+    document.querySelector<HTMLButtonElement>(".repository-chip button") ??
+    assert.fail("the repository chip stands");
+  act(() => chip.click());
+  await settle();
+  const none =
+    [...document.querySelectorAll<HTMLElement>("[role='option'], button")].find(
+      (each) => each.textContent === "No repository",
+    ) ?? assert.fail("the menu offers No repository");
+  act(() => none.click());
+  await settle();
   card.type("Write the migration");
   await card.key("Enter");
 
-  assert.equal(card.startButton().disabled, true);
-  // The chip asks for a repository too, so the note under the card is the second saying.
-  assert.equal(card.dialog()?.textContent?.split("Choose a repository").length, 3);
-  assert.deepEqual(card.starts, []);
+  assert.deepEqual(card.starts, [["", null]]);
+  assert.equal(card.agents[0]?.prompt, "Write the migration");
 });
 
 test("Command-Return on an empty box starts a bare task: no planning and no agent", async () => {

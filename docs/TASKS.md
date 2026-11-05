@@ -170,14 +170,16 @@ Dictate, and Start.
    `owner/name` of the repository the task is about, which the service keeps
    on the task (`task.repository`). It starts on the repository of the newest
    started task that has one, and its menu is the app's searchable picker,
-   listing the repositories the workspace's GitHub reaches. An agent needs a
-   repository, so Start is held without one, and the card says so.
+   listing the repositories the workspace's GitHub reaches, with No
+   repository pinned under them. A task with no repository starts its agent
+   in none: it has no checkout and opens no pull request, and works with what
+   it was handed and the MCP servers connected.
 2. **Start**, the round button; Return presses it. It starts the task with
    an empty plan, Untitled until the agent names it, and the
    agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
-   agent's tab. ⌘Return on an empty box starts a bare task with no agent,
-   which needs no repository. There is no Plan mode.
+   agent's tab. ⌘Return on an empty box starts a bare task with no agent.
+   There is no Plan mode.
 
 ### Header
 
@@ -673,12 +675,14 @@ your Mac").
 
 ### From a plan to a pull request
 
-A task with a repository can be handed to an agent: a cloud session of
-Claude Code or Codex, which checks the repository out in a Vercel
+A task can be handed to an agent: a cloud session of
+Claude Code or Codex, which checks the task's repository out in a Vercel
 Sandbox of its own, implements the plan given as its first message, runs the
 repository's checks, and decides whether to open a pull request. Started
 instead on a prompt the developer wrote, it is handed that prompt as its first
-message and never the plan, and works in the task's repository the same way. How it runs,
+message and never the plan, and works in the task's repository the same way.
+On a task with no repository it works in an empty folder, with no checkout
+and no GitHub credential, and opens no pull request. How it runs,
 its routes, and what it is told are described in
 `packages/service/README.md` under "The agent service" and "The
 agent routes"; New task ("The Tasks tab" above), the column's New agent,
@@ -727,8 +731,8 @@ Copy copies the new document.
   reads fail the same way. Starting a new task shows the reason under New
   task's composer, which stays open.
 - **Loading a task.** The document region shows the failure and `Try again`.
-- **Start.** The service refuses to start an agent on a task with no
-  repository (`no-repository`, 409), on one the Vespin GitHub App no longer
+- **Start.** The service refuses to start an agent on a task whose
+  repository the Vespin GitHub App no longer
   reaches for the workspace (`repository-not-reachable`, 403), and answers
   `unavailable` where the agent's session could not be started; the reason is said
   under the composer that sent it, or on the window's toast for a start from

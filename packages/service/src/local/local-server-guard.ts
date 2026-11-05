@@ -8,13 +8,10 @@
  * host but this machine's loopback may be production's, so either refuses the
  * start before any route is imported. The rule is a function of the variables
  * alone, so the local-only routes that mount on the server can hold their own
- * path to it too, and the service reads it again over its own environment
- * (`localServerRefusalRead`) before it honors anything only the local server
- * may turn on (`local-demo.ts`).
+ * path to it too.
  */
 
 import { isIPv4 } from "node:net";
-import { Config, ConfigProvider, Effect, Option } from "effect";
 
 /** The prefix every variable Vercel sets on a deployment, a build, or a pulled environment carries. */
 const VERCEL_PREFIX = "VERCEL";
@@ -104,30 +101,3 @@ export function localServerRefusal(
     unpooled: variables[DATABASE_VARIABLE.UNPOOLED_URL],
   });
 }
-
-/**
- * The same refusal over the environment the active `ConfigProvider` holds,
- * as an effect running on the service reads it. Note that a `VERCEL*`
- * variable is found by the first segment of its name, because `fromEnv`
- * lists an environment's names split on `_` and every name that starts
- * `VERCEL` has a first segment that does; a provider that cannot be read is
- * read as a refusal, so a doubt never passes.
- */
-export const localServerRefusalRead: Effect.Effect<string | undefined> = Effect.gen(function* () {
-  const provider = yield* ConfigProvider.ConfigProvider;
-  const root = yield* provider.load([]);
-  const { url, unpooled } = yield* Config.all({
-    url: Config.option(Config.String(DATABASE_VARIABLE.URL)),
-    unpooled: Config.option(Config.String(DATABASE_VARIABLE.UNPOOLED_URL)),
-  });
-  return refusalOf({
-    vercel:
-      root?._tag === "Record"
-        ? [...root.keys].filter((name) => name.startsWith(VERCEL_PREFIX))
-        : [],
-    url: Option.getOrUndefined(url),
-    unpooled: Option.getOrUndefined(unpooled),
-  });
-}).pipe(
-  Effect.catch((unread) => Effect.succeed(`the environment could not be read: ${unread._tag}`)),
-);

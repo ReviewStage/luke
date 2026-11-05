@@ -400,11 +400,7 @@ sweep is called in process on the cron's cadence under `CRON_SECRET`.
 
 It refuses to start beside any `VERCEL*` variable or over a database host off
 the loopback (`@repo/service/local/local-server-guard`), and imports no route
-until it has, because the auth service reads the environment as it loads. It
-sets `APP_LOCAL_DEMO` for the routes it mounts, which the service honors only
-where the same guard passes over its own environment
-(`@repo/service/local/local-demo`): there a Start on a task with no repository
-runs where its agents run on a host. Where
+until it has, because the auth service reads the environment as it loads. Where
 `BETTER_AUTH_URL` is unset it names the server's own address there first. A
 route that only the local server answers mounts in the entry's `localRoutes`
 and never under `server/routes/`, so no deployed function reaches it.

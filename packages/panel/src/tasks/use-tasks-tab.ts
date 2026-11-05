@@ -1,11 +1,6 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
-import {
-  AGENT_MACHINE,
-  type AgentAttachment,
-  type ListedAgent,
-  type TasklessAgent,
-} from "@repo/features/agent-wire";
+import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -139,7 +134,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SETTINGS_VIEW, useAppSlice, useStartsWithoutRepository } from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -1506,18 +1501,12 @@ export function useTasksTab(input: {
           }),
     [openDocument, viewed.activeTaskId],
   );
-  // A task with no repository starts its agents where the service runs such a Start, on a host alone.
-  const startsWithoutRepository = useStartsWithoutRepository();
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useAgents({
     acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
-    startsWithoutRepository:
-      startsWithoutRepository &&
-      openDocument?.id === viewed.activeTaskId &&
-      openDocument?.runsOn?.machine === AGENT_MACHINE.DEVICE,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,

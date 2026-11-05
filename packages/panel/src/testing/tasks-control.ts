@@ -293,7 +293,6 @@ export function agentsControl(overrides: Partial<AgentsControl> = {}): AgentsCon
     continueAgent: undefined,
     start: {
       available: false,
-      reason: undefined,
       busy: false,
       onPress: () => Promise.resolve(undefined),
     },
