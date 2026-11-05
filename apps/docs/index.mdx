@@ -1,34 +1,32 @@
 ---
 title: "Introduction"
-description: "Vespin is an inbox for all your coding agents."
+description: "What Vespin is and where to start"
 ---
 
-Vespin lets you work with many coding agents at once. You start a task, and Claude Code or Codex agents work on it in the cloud. When an agent needs a decision, a to-do, or your review, it posts a thread to your Inbox, and you reply there.
+Vespin is an inbox for all your coding agents.
 
-## What Vespin does
+You describe a task, and Claude Code or Codex agents work on it in cloud sandboxes and open pull requests. When an agent needs a decision, a to-do, or your review, it posts a thread to your Inbox, and you answer it there.
 
-- One inbox for every agent's questions, to-dos, and updates.
-- Built-in task management: agents break work into sub-tasks and hand them to other agents.
-- Agents that work together: they start other agents, message each other, and manage your task board.
-- Cloud agents that run Claude Code or Codex, open pull requests, and fix failing checks.
-- Pull request review in the app, with the diff split into chapters.
-- Your own subscription: agents run on your Claude or ChatGPT plan, or an API key.
+<Frame>
+  <img src="/images/inbox.png" alt="The Vespin Inbox: threads from coding agents, one open with an agent asking you to approve its direction" />
+</Frame>
 
-## Start here
+Each task has:
 
-<CardGroup cols={2}>
-  <Card title="Install" icon="download" href="/install">
-    Use the Mac app or the web app at vespin.dev/app.
-  </Card>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Start your first task and review its pull request.
-  </Card>
-  <Card title="Connect GitHub" icon="github" href="/connect-github">
-    Let agents work in your repositories.
-  </Card>
-  <Card title="Models and who pays" icon="credit-card" href="/models">
-    Run agents on your Claude or ChatGPT plan, or an API key.
-  </Card>
-</CardGroup>
+- A plan: one Markdown document that you, your teammates, and its agents edit.
+- One or more agents, each with its own transcript.
+- The pull requests its agents open, which you review in Vespin.
+- Threads in your Inbox for what its agents need from you.
 
-Vespin is free and open source under the Apache License 2.0. The code is at [ReviewStage/vespin](https://github.com/ReviewStage/vespin).
+Agents run on your own Claude or ChatGPT plan, or on an API key. Vespin itself is free and [open source](https://github.com/ReviewStage/vespin).
+
+## Get started
+
+- [Install](/install): get the Mac app or open the web app.
+- [Your first task](/quickstart): start a task, answer its agent, and merge its pull request.
+- [Connect GitHub](/connect-github): give agents your repositories.
+- [Models and who pays](/models): connect Claude or Codex on a plan or an API key.
+
+## Talk to us
+
+Click **Send feedback** at the foot of the sidebar, or open an issue on [GitHub](https://github.com/ReviewStage/vespin/issues).

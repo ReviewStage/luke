@@ -1,28 +1,45 @@
 ---
-title: "Quickstart"
-description: "Start a task, answer your agent, and merge its pull request."
+title: "Your first task"
+description: "Start a task, answer its agent, and merge its pull request"
 ---
 
-Before you start, connect an agent and GitHub. Setup asks for both. You can also connect them in **Settings › Agents** and **Settings › Workspace**.
+A task is one piece of work, from the sentence that starts it to its merged pull request. It holds a plan, the agents working on it, and their pull requests.
 
-<Steps>
-  <Step title="Start a task">
-    Press <kbd>⌘N</kbd> or click **New task**. Choose a repository, describe the change, and send it.
-  </Step>
-  <Step title="Watch the agent work">
-    The task opens on its agent's tab, which shows each step the agent takes. The task's plan is on its **Overview** tab.
-  </Step>
-  <Step title="Answer in the Inbox">
-    When the agent needs something from you, it posts a thread to your Inbox (<kbd>⇧⌘I</kbd>). A thread can end in a decision to make, a to-do, or a short form. Press <kbd>1</kbd>–<kbd>9</kbd> to choose an option, or <kbd>R</kbd> to reply.
-  </Step>
-  <Step title="Review the pull request">
-    The agent opens a pull request as you. Open the task's **Pull request** tab to read its conversation, checks, and changed files, or open **Chapters** for an outline of the diff.
-  </Step>
-  <Step title="Merge">
-    Merge from the **Pull request** tab. If a check fails, the agent reads why, pushes a fix, and waits for the checks again.
-  </Step>
-</Steps>
+This guide takes one task from start to merge. Before you start, finish [setup](/install#sign-in-and-set-up) so an agent and GitHub are connected. To check, open **Settings › Agents** and **Settings › Workspace**.
 
-<Tip>
-  To steer an agent while it works, send it another message from its tab.
-</Tip>
+## Start the task
+
+Press <kbd>⌘N</kbd> or click **New task**. Pick the repository, describe the change, and send it.
+
+Write it as you would a GitHub issue: the outcome you want, and anything the agent can't learn from the code.
+
+<Frame>
+  <img src="/images/home.png" alt="Vespin's Home: New task's message box on acme/relay, the Inbox items waiting on you, and recent tasks" />
+</Frame>
+
+## Follow the agent
+
+The task opens on its agent's tab, which shows each step as the agent takes it. The agent writes the task's plan on the **Overview** tab as it goes.
+
+By default, an agent works in a cloud sandbox with its own checkout of the repository, not in your local checkout. To correct it while it works, send it a message on its tab.
+
+## Answer in the Inbox
+
+When the agent needs you, it posts a thread to your Inbox (<kbd>⇧⌘I</kbd>). A thread can end in a choice between options, a list of steps for you to do, or a short form.
+
+Press <kbd>1</kbd>–<kbd>9</kbd> to choose an option, or <kbd>R</kbd> to reply.
+
+## Review the pull request
+
+The agent opens a pull request as you. Open it on the task's **Pull request** tab:
+
+- **Files changed** shows the diff.
+- **Chapters** splits the diff into sections, each with a summary.
+
+Review and comment there as you would on GitHub. The agent reads new reviews and comments and answers them.
+
+## Merge
+
+Merge from the **Pull request** tab. If a check fails, the agent reads why, pushes a fix, and waits for the checks again.
+
+Next, [choose your default model](/models).

@@ -1,40 +1,33 @@
 ---
 title: "Install"
-description: "Use the Mac app or the web app. Both open the same workspace."
+description: "Get the Mac app or open the web app"
 ---
 
-## Mac app
+Vespin runs as a Mac app and as a web app. Both sign in to the same account and show the same workspace.
 
-The Mac app needs Apple silicon and macOS 14 or newer.
+## Requirements
+
+- **Mac app**: Apple silicon and macOS 14 or newer.
+- **Web app**: a current browser. On a phone, add [vespin.dev/app](https://vespin.dev/app) to your home screen.
+- **Sign-in**: a Google or GitHub account.
+- **Agents**: a Claude or ChatGPT plan, or an Anthropic or OpenAI API key. See [Models and who pays](/models).
+
+## Install the Mac app
 
 1. Download the DMG from the [latest release](https://github.com/ReviewStage/vespin/releases/latest).
 2. Open it and drag Vespin to Applications.
-3. Open Vespin from Applications.
+3. Open Vespin from Applications. It downloads new versions in the background, and **Settings › About** says when one is ready to install.
 
-## Web app
+## Sign in and set up
 
-Open [vespin.dev/app](https://vespin.dev/app). On a phone, add it to your home screen.
+Sign in with Google or GitHub. A new account then goes through setup, one card per step:
 
-## Sign in
+1. **Welcome**: choose **Just me** or **With my team**.
+2. **Create a team workspace**: team accounts only. Name the workspace and invite teammates by email.
+3. **Connect an agent**: connect Claude or Codex. See [Models and who pays](/models).
+4. **Connect GitHub**: choose how agents reach your repositories, or skip it for now. See [Connect GitHub](/connect-github).
+5. **Connect your tools**: connect services agents can use, such as Linear, Notion, or Sentry. You can add more later in **Settings › Integrations**.
 
-Sign in with Google or GitHub. A new account then goes through setup:
+If a teammate invited you to their workspace, setup asks only for an agent.
 
-<Steps>
-  <Step title="Welcome">
-    Choose **Just me** or **With my team**.
-  </Step>
-  <Step title="Create a team workspace">
-    Only if you chose **With my team**. Name the workspace and invite your teammates.
-  </Step>
-  <Step title="Connect an agent">
-    Connect Claude or Codex, on a plan or an API key. See [Models and who pays](/models).
-  </Step>
-  <Step title="Connect GitHub">
-    Choose how agents reach your repositories. You can skip this step and connect GitHub later. See [Connect GitHub](/connect-github).
-  </Step>
-  <Step title="Connect your tools">
-    Connect the services agents can use, such as Linear, Notion, or Sentry. You can connect more later in **Settings › Integrations**.
-  </Step>
-</Steps>
-
-If a teammate invited you to their workspace, setup asks you only to connect an agent.
+Next, [start your first task](/quickstart).
