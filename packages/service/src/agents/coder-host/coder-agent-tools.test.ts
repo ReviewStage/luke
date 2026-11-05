@@ -45,6 +45,7 @@ import { type ConversationTarget, storeWriter } from "@repo/database/models/writ
 import { agentPin } from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
 import { attachment } from "@repo/database/schemas/attachment";
+import { device } from "@repo/database/schemas/device";
 import { messages } from "@repo/database/schemas/storage";
 import { task } from "@repo/database/schemas/task";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
@@ -1014,6 +1015,78 @@ test("start_agent naming another member's device is refused in words that name t
   );
   assert.deepEqual([stored.machine, stored.deviceId ?? null], [AGENT_MACHINE.VERCEL, null]);
   assert.equal(eve.sent.length, 1);
+});
+
+test("start_agent naming a device by its name runs on the caller's member's own device of that name, any case, and refuses a name that matches more than one of theirs, or only a teammate's, listing only their own devices", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(), agents.caller, eve.services);
+  const studio = randomUUID();
+  const [laptop, oldLaptop] = [randomUUID(), randomUUID()];
+  const billing = await database.run(
+    Effect.gen(function* () {
+      yield* registerDevice(agents.teammates.userId, {
+        id: randomUUID(),
+        name: "Garage",
+        ...DEVICE_LAYOUT,
+      });
+      for (const [id, name] of [
+        [studio, "Studio"],
+        [laptop, "Laptop"],
+        [oldLaptop, "laptop"],
+      ] as const) {
+        yield* registerDevice(agents.caller.userId, { id, name, ...DEVICE_LAYOUT });
+      }
+      // The laptops last beat an hour and a day ago, so they read away, the latest first.
+      const db = yield* Database;
+      for (const [id, ago] of [
+        [laptop, 3_600_000],
+        [oldLaptop, 86_400_000],
+      ] as const) {
+        yield* db
+          .update(device)
+          .set({ lastSeenAt: new Date(Date.now() - ago) })
+          .where(eq(device.id, id));
+      }
+      return yield* createTask(agents.caller.userId, {
+        organizationId: workspaceId,
+        name: "Metered billing",
+        repository: RELAY_FULL_NAME,
+      });
+    }),
+  );
+  const start = (name: string, callId: string) =>
+    call(
+      CODER_TOOL.START_AGENT,
+      {
+        taskId: billing.id,
+        prompt: "Bill by seat.",
+        runsOn: { machine: AGENT_MACHINE.DEVICE, device: name },
+      },
+      callId,
+    );
+  const listed =
+    `Their devices: "Studio" (deviceId ${studio}, online); "Laptop" (deviceId ${laptop}, away); ` +
+    `"laptop" (deviceId ${oldLaptop}, away). Name one by its name or its deviceId, or start it in ` +
+    'the cloud with runsOn {"machine":"vercel"}.';
+
+  assert.deepEqual(await start("Laptop", "call-ambiguous"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `Not started: 2 devices of the member's are named "Laptop", so name the one you mean by its deviceId. ${listed}`,
+  });
+  assert.deepEqual(await start("Garage", "call-teammates"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `Not started: no device of the member's is named "Garage". ${listed}`,
+  });
+  assert.equal(eve.sent.length, 0, "nothing was started");
+
+  const started = await start(" studio ", "call-studio");
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  assert.ok(isRecord(started.agent) && isWireString(started.agent.id), JSON.stringify(started));
+  const stored = Option.getOrThrow(
+    await database.run(readAgent(agents.caller.userId, started.agent.id)),
+  );
+  assert.deepEqual([stored.machine, stored.deviceId], [AGENT_MACHINE.DEVICE, studio]);
 });
 
 test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {

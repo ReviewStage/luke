@@ -21,6 +21,7 @@ import {
   updateAgentServers,
 } from "@repo/database/models/agent-store";
 import { currentAutomationRun } from "@repo/database/models/automation-store";
+import { type Device, devicesSeenSince } from "@repo/database/models/device-store";
 import {
   listJournals,
   messageSeqOf,
@@ -59,6 +60,7 @@ import {
   AGENT_STATUS,
   type AgentFailure,
   type AgentPullRequestAnswer,
+  type AgentRunsOnRequest,
   type AgentStartFrom,
   type AgentStatus,
   agentRunsOnRequestSchema,
@@ -66,8 +68,10 @@ import {
   disabledServersSchema,
   LOCAL_AGENT_REFUSAL,
   type LocalAgentRefusal,
+  MAC_PRESENCE,
   type RefusedDevice,
 } from "@repo/features/agent-wire";
+import { deviceAgentRegisterRequestSchema } from "@repo/features/device-agent-wire";
 import {
   GITHUB_ACCESS,
   type GitHubAccess,
@@ -389,7 +393,7 @@ export const START_AGENT_REFUSAL = {
     `bounded the same or none, a title of at most ${AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, a model with its effort, " +
     "both or neither, a taskId or none, a repository as owner/name, null, or none, runsOn as " +
-    `${IN_THE_CLOUD_WORDS}, a device of the member's by its id, or none, and images as ` +
+    `${IN_THE_CLOUD_WORDS}, a device of the member's by its name or its id, or none, and images as ` +
     `at most ${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids or none.`,
   NO_PROMPT:
     "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
@@ -435,6 +439,7 @@ export const START_AGENT_REFUSAL = {
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
   DEVICE_REMOVED: `Not started: the host it would run on was removed. Start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}, or ask the member to add the host again.`,
+  NO_DEVICES: `Not started: the member has no device registered to run agents on. Start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}, or ask the member to add a Mac or a host in Settings › Hosts.`,
   NO_SOURCE:
     "Not started: no agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -512,6 +517,34 @@ function notOwnerWords(device: RefusedDevice | undefined): string {
   const where = device === undefined ? "another member's device" : device.name;
   const who = device?.owner ?? "its owner";
   return `Not started: it would run on ${where}. Only ${who} can start agents on it, so ask them to, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`;
+}
+
+/** A device of the member's as a refusal of a device's name lists it: its name, its id, and whether it is online now, as a start would take it (`freshOffer`). */
+function listedDevice(device: Device, now: number): string {
+  const online = device.lastSeenAt.getTime() >= now - MAC_PRESENCE.FRESH_MS;
+  return `${JSON.stringify(device.name)} (deviceId ${device.id}, ${online ? "online" : "away"})`;
+}
+
+/**
+ * Why a start naming a device by its name started nothing: the name matches
+ * none of the member's devices, or more than one, said with every device of
+ * theirs by name, id, and whether it is online, so the call can be made again
+ * naming one; or the member has none to list.
+ */
+function deviceNameRefusal(
+  name: string,
+  matched: number,
+  devices: readonly Device[],
+  now: number,
+): string {
+  if (devices.length === 0) return START_AGENT_REFUSAL.NO_DEVICES;
+  const named = JSON.stringify(name);
+  const why =
+    matched === 0
+      ? `no device of the member's is named ${named}`
+      : `${matched} devices of the member's are named ${named}, so name the one you mean by its deviceId`;
+  const listed = devices.map((device) => listedDevice(device, now)).join("; ");
+  return `Not started: ${why}. Their devices: ${listed}. Name one by its name or its deviceId, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`;
 }
 
 /** Who calls an agent tool: a coding agent from its own session, or a member through the member MCP server. */
@@ -626,6 +659,20 @@ const START_BRANCH = Schema.String.check(
  * start on the plan had no room for what was said beyond the plan, so the
  * caller started the agent and then messaged it the rest.
  */
+/**
+ * Where a started agent runs, as `start_agent` names it: as a start request
+ * does (`agentRunsOnRequestSchema`), or one of the member's own devices by
+ * its name, which the call matches to its id (`runsOnOfStart`) before the
+ * start is asked.
+ */
+const START_RUNS_ON = Schema.Union([
+  ...agentRunsOnRequestSchema.members,
+  Schema.Struct({
+    machine: Schema.Literal(AGENT_MACHINE.DEVICE),
+    device: deviceAgentRegisterRequestSchema.fields.name,
+  }),
+]);
+
 const START_AGENT_INPUT = Schema.Struct({
   taskId: Schema.optionalKey(
     describeWire(
@@ -698,10 +745,14 @@ const START_AGENT_INPUT = Schema.Struct({
   ),
   runsOn: Schema.optionalKey(
     describeWire(
-      agentRunsOnRequestSchema,
+      START_RUNS_ON,
       `Where the agent runs: ${IN_THE_CLOUD_WORDS} for the cloud, or ` +
-        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} for one of the ` +
-        "member's own devices (a Mac or a host) by its id, which must be registered and online. " +
+        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, device: "<name>" })} for one of the ` +
+        "member's own devices (a Mac or a host) by its name, in any case, or " +
+        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} by its id, which ` +
+        "must be registered and online; a name that matches none of the member's devices, or " +
+        "more than one, is refused with their devices listed by name, id, and whether each is " +
+        "online. " +
         "With from, another place than that agent's moves it there. " +
         "Leave it out for where the agent it starts from runs, with from; else where the " +
         "member's newest agent on the task runs; else where the member last chose to run one; " +
@@ -1838,6 +1889,34 @@ function startInputRefusal(
 }
 
 /**
+ * The place a start's runsOn names, as a start request names it: a device
+ * named by its name is the starting member's own registered device of that
+ * name, any case, by its id; a name that matches none of theirs, or more than
+ * one, is refused with their devices listed (`deviceNameRefusal`). Note that
+ * only the member's own devices are read, so a teammate's device of that name
+ * never matches and is never listed.
+ */
+const runsOnOfStart = Effect.fnUntraced(function* (
+  userId: string,
+  runsOn: typeof START_RUNS_ON.Type | undefined,
+): Effect.fn.Return<
+  Result.Result<AgentRunsOnRequest | undefined, string>,
+  StoreFailure,
+  DatabaseServices
+> {
+  if (runsOn === undefined || !("device" in runsOn)) return Result.succeed(runsOn);
+  const devices = yield* devicesSeenSince(userId, new Date(0));
+  const wanted = runsOn.device.trim().toLowerCase();
+  const matched = devices.filter((device) => device.name.trim().toLowerCase() === wanted);
+  const [only] = matched;
+  if (matched.length === 1 && only !== undefined) {
+    return Result.succeed({ machine: AGENT_MACHINE.DEVICE, deviceId: only.id });
+  }
+  const now = yield* Clock.currentTimeMillis;
+  return Result.fail(deviceNameRefusal(runsOn.device, matched.length, devices, now));
+});
+
+/**
  * One call of `start_agent`: an agent started under the call's own key on
  * the caller's own task, another of its workspace, the task of the agent
  * it starts from, or, for a caller on no task naming none, a task made for
@@ -1915,6 +1994,8 @@ export function runStartAgent(
       if (Result.isFailure(images)) {
         return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
+      const runsOn = yield* runsOnOfStart(userId, asked.success.runsOn);
+      if (Result.isFailure(runsOn)) return agentToolRejected(runsOn.failure);
       // Note that the task is made only once the call's input is read whole, so a call refused for it makes none.
       const made = fresh ? yield* startTaskOf(call, repository) : undefined;
       const onTask = taskId ?? made;
@@ -1935,7 +2016,7 @@ export function runStartAgent(
         title: asked.success.title,
         branch: asked.success.branch,
         from,
-        runsOn: asked.success.runsOn,
+        runsOn: runsOn.success,
         summaryModel: call.summaryModel,
         ...(calling === undefined
           ? undefined
