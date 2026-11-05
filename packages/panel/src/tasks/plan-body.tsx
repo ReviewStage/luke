@@ -445,9 +445,16 @@ function pictureNoteOf(marks: SectionMarks, heading: string): React.JSX.Element 
 /** The class every unit of the text wears, one per section in the order the sections stand. */
 const UNIT_CLASS = "plan-unit";
 
-/** The class of a section changed since the developer last looked, tinted until they dismiss it. */
+/**
+ * The class of a section changed since the developer last looked, tinted
+ * until they dismiss it. Note that the wash is a gradient of one color
+ * rather than a fill, because Chromium takes a plain fill covering half a
+ * layer for the whole layer's color (`kMinBackgroundColorCoverageRatio`),
+ * and floods the scrolling document with it, side to side, while it
+ * catches up with a scroll; it never takes a shader's.
+ */
 const CHANGED_CLASS =
-  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-ui-6 after:-inset-y-ui-2 after:-z-1 after:rounded-ui-6 after:bg-plan-changed";
+  "plan-changed relative isolate after:pointer-events-none after:absolute after:-inset-x-ui-6 after:-inset-y-ui-2 after:-z-1 after:rounded-ui-6 after:bg-[linear-gradient(theme(--color-plan-changed),theme(--color-plan-changed))]";
 
 /** The class of the column the title and the text stand in. */
 const BODY_CLASS = "plan-body";
