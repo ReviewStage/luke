@@ -229,6 +229,12 @@ export interface AdminUserAccount {
   createdAt: number;
   /** Linked sign-in providers, as their account rows name them (e.g. "github"). */
   signInMethods: string[];
+  /**
+   * When the member's grant of support access runs out, in epoch
+   * milliseconds, while one stands, so a maintainer may sign in as the
+   * account until then; null where none does.
+   */
+  supportAccessUntil: number | null;
 }
 
 /** One UTC day of an account's meaningful actions: its key, and each kind's count that day. */

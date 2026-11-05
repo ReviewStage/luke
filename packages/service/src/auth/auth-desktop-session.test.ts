@@ -4,12 +4,13 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
-import { bearer, jwt } from "better-auth/plugins";
+import { admin, bearer, jwt } from "better-auth/plugins";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { WireValue } from "../core.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
+  ADMIN_OPTIONS,
   DESKTOP_SESSION,
   DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
@@ -17,6 +18,7 @@ import {
   SESSION_BEARER,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
+import { supportAccess } from "./support-access.js";
 
 /**
  * The Mac's session beside its OAuth token, end to end on one Better Auth
@@ -92,6 +94,8 @@ function desktopAuth() {
       }),
       electron(DESKTOP_SESSION),
       bearer(SESSION_BEARER),
+      admin(ADMIN_OPTIONS),
+      supportAccess(),
     ],
   });
 }

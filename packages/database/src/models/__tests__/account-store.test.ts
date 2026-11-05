@@ -12,8 +12,8 @@ import { accountPreference } from "../../schemas/preferences.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   accountExperimentOn,
+  readAccountAccess,
   readAccountPreferences,
-  readAccountRole,
   writeAccountPreferences,
 } from "../account-store.js";
 
@@ -191,18 +191,30 @@ it.layer(getTestDB())("the account store's chapters model", (it) => {
   );
 });
 
-it.layer(getTestDB())("the account store's role", (it) => {
-  it.effect("reads the role on the account's own row, and no other account's", () =>
-    Effect.gen(function* () {
-      const admin = yield* openAccount;
-      const member = yield* openAccount;
-      const db = yield* Database;
-      yield* db.update(user).set({ role: "admin" }).where(eq(user.id, admin));
+it.layer(getTestDB())("the account store's access", (it) => {
+  it.effect(
+    "reads the role and the grant of support access on the account's own row, and no other account's",
+    () =>
+      Effect.gen(function* () {
+        const admin = yield* openAccount;
+        const member = yield* openAccount;
+        const db = yield* Database;
+        const until = new Date("2026-11-12T09:00:00.000Z");
+        yield* db
+          .update(user)
+          .set({ role: "admin", supportAccessUntil: until })
+          .where(eq(user.id, admin));
 
-      assert.equal(yield* readAccountRole(admin), "admin");
-      // A new account holds the column's default, whatever another account was granted.
-      assert.equal(yield* readAccountRole(member), "user");
-    }),
+        assert.deepEqual(yield* readAccountAccess(admin), {
+          role: "admin",
+          supportAccessUntil: until,
+        });
+        // A new account holds the column's default and no grant, whatever another account was given.
+        assert.deepEqual(yield* readAccountAccess(member), {
+          role: "user",
+          supportAccessUntil: undefined,
+        });
+      }),
   );
 
   it.effect("reads nothing where the row holds no role, or there is no such account", () =>
@@ -211,8 +223,9 @@ it.layer(getTestDB())("the account store's role", (it) => {
       const db = yield* Database;
       yield* db.update(user).set({ role: null }).where(eq(user.id, userId));
 
-      assert.equal(yield* readAccountRole(userId), undefined);
-      assert.equal(yield* readAccountRole(`user-${randomUUID()}`), undefined);
+      const nothing = { role: undefined, supportAccessUntil: undefined };
+      assert.deepEqual(yield* readAccountAccess(userId), nothing);
+      assert.deepEqual(yield* readAccountAccess(`user-${randomUUID()}`), nothing);
     }),
   );
 });

@@ -16,6 +16,7 @@ import {
   type AdminMetricsScope,
 } from "@repo/features/admin-wire";
 import { PLAN_ACTOR, type PlanActor } from "@repo/features/task-wire";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { USER_ROLE } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
@@ -227,5 +228,30 @@ it.layer(getTestDB())("the Users read", (it) => {
       assert.deepEqual(actions.calendarDaily.at(-1), { day: "2026-10-21", count: 2 });
       assert.equal(activity.activeDaysWindow, 0);
     }),
+  );
+
+  it.effect(
+    "answers a member's grant of support access while it stands, and none once it has run out",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const granting = yield* openAccount("page-granting", []);
+        const lapsed = yield* openAccount("page-lapsed", []);
+        const day = 24 * 60 * 60 * 1000;
+        const until = NOW + 3 * day;
+        yield* db
+          .update(user)
+          .set({ supportAccessUntil: new Date(until) })
+          .where(eq(user.id, granting));
+        yield* db
+          .update(user)
+          .set({ supportAccessUntil: new Date(NOW - day) })
+          .where(eq(user.id, lapsed));
+
+        const read = (userId: string) =>
+          readAdminUserSource({ userId, now: NOW, windowDays: ADMIN_METRICS_WINDOW.MONTH });
+        assert.equal((yield* read(granting))?.account.supportAccessUntil, until);
+        assert.equal((yield* read(lapsed))?.account.supportAccessUntil, null);
+      }),
   );
 });
