@@ -15,6 +15,7 @@ import { noInternalViMockRule } from "./rules/no-internal-vi-mock.ts";
 import { noLucideOutsideDoorRule } from "./rules/no-lucide-outside-door.ts";
 import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noOpenPageFromButtonRule } from "./rules/no-open-page-from-button.ts";
+import { noPlaceholderEllipsisRule } from "./rules/no-placeholder-ellipsis.ts";
 import { noProductNameRule } from "./rules/no-product-name.ts";
 import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
 import { noRawHeadingOutsideUiRule } from "./rules/no-raw-heading-outside-ui.ts";
@@ -29,7 +30,7 @@ import { skeletonThroughComponentsRule } from "./rules/skeleton-through-componen
 /**
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
  * and the design system's guards against controls and headings built outside `@repo/ui`,
- * forms the browser checks with its own bubble, loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page,
+ * forms the browser checks with its own bubble, loading skeletons that copy the surface they stand for, buttons that wait on a press without saying so, buttons that open a page, placeholders that end in an ellipsis,
  * popovers that close on a press through a listener of their own, view choices stored by hand rather than through `useKept`, a follow
  * opened beside `useHostRead`, a vendored
  * shadcn component hiding the keyboard's ring, a script asking the OS whether to move rather than the motion tokens, and the classes, glyphs and patterns phase 2 retired coming back; and the testing policy's
@@ -53,6 +54,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-lucide-outside-door": noLucideOutsideDoorRule,
     "no-node-test": noNodeTestRule,
     "no-open-page-from-button": noOpenPageFromButtonRule,
+    "no-placeholder-ellipsis": noPlaceholderEllipsisRule,
     "no-product-name": noProductNameRule,
     "no-raw-async-primitives": noRawAsyncPrimitivesRule,
     "no-raw-heading-outside-ui": noRawHeadingOutsideUiRule,

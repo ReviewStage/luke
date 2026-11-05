@@ -329,7 +329,7 @@ export function WorkspacesScreen({
   const search = (
     <SearchField
       label="Search workspaces by name"
-      placeholder="Search workspaces…"
+      placeholder="Search workspaces"
       value={query}
       onChange={changeQuery}
       onClear={() => changeQuery("")}
