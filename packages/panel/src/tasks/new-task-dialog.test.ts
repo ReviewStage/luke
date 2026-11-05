@@ -1033,7 +1033,7 @@ test("in a workspace with no GitHub connected, a repository its plans still name
   assert.deepEqual(dialog.starts, [["", null]]);
 });
 
-test("a pick the workspace's GitHub turns out not to list is let go, while one it lists stays chosen", async () => {
+test("a recent default the workspace's GitHub turns out not to list gives way to the next recent one it lists, and a pick it lists stays chosen", async () => {
   const listing = () =>
     Promise.resolve({
       repositories: {
@@ -1060,7 +1060,7 @@ test("a pick the workspace's GitHub turns out not to list is let go, while one i
   listed.type("Rate limits");
   await listed.key("Enter");
 
-  assert.deepEqual(unlisted.starts, [["", null]]);
+  assert.deepEqual(unlisted.starts, [["", "acme/api"]]);
   assert.deepEqual(listed.starts, [["", "acme/api"]]);
 });
 

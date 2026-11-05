@@ -120,7 +120,7 @@ const PLACE_LOOK = {
 /** The chip's words while it waits on a pick. */
 export const CHOOSE_LABEL = "Choose a repository";
 
-/** The chip's words while the tasks its default is read from are still being read, which ask nothing yet. */
+/** The chip's words while what its default is read from, the tasks or the repositories, is still being read, which ask nothing yet. */
 const READING_LABEL = "Repository";
 
 /** The id of the row pinned under the list that chooses no repository. */
@@ -244,6 +244,8 @@ interface RepositoryMenuProps {
   onClear?: (() => void) | undefined;
   /** Lets go of a pick the read finds the workspace's GitHub does not reach, where the pick is the opener's own to drop. */
   onUnreached?: (() => void) | undefined;
+  /** Whether a null value is a default still waiting on the read rather than No repository picked, so it reads as waiting while the read could still name one. */
+  pending?: boolean | undefined;
   /** Hears the repositories each successful read lists, `owner/name`. */
   onListed?: ((repositories: readonly string[]) => void) | undefined;
   /** Counts the asks from elsewhere to open the menu, each opening it. */
@@ -345,9 +347,15 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     (row) => !omitted.has(row.id.toLowerCase()),
   );
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
-  const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
+  const nothingReached = rows.length === 0 && listed !== undefined;
+  const none = nothingReached || (onClear !== undefined && props.pending !== true);
   const label =
-    value ?? (none ? NO_REPOSITORY : chooser.reading === true ? READING_LABEL : CHOOSE_LABEL);
+    value ??
+    (none
+      ? NO_REPOSITORY
+      : chooser.reading === true || props.pending === true
+        ? READING_LABEL
+        : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
