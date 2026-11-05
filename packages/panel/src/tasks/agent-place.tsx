@@ -24,13 +24,13 @@ import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
 /**
  * agent-place.tsx -- the chip an agent's message box wears saying where the agent runs: its device by name, or the cloud.
  *
- * It is New task's Runs on chip as the task keeps it (`runs-on.tsx`): the
+ * It is a start's Runs on chip as the agent keeps it (`runs-on.tsx`): the
  * same toolbar chip, the same glyph by the device's platform, and the same
  * name every list of machines gives it (`machine-name.ts`), This Mac among
- * them, so a task reads alike before and after it starts. Since where a
- * task runs is set when it is created, the chip ends in no chevron and
+ * them, so an agent reads alike before and after it starts. Since where an
+ * agent runs is set as it starts, the chip ends in no chevron and
  * takes no press (`StaticChip`); a rest on it, or a tap under a finger,
- * hangs a card saying where every agent on the task runs and whether the
+ * hangs a card saying where the agent runs and whether the
  * device is online, and a reader hears "Runs on:" before its words. An
  * agent in a sandbox says "Cloud" beside the cloud glyph.
  *
@@ -62,10 +62,10 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
-/** What the card says under its head of every agent on the task, in the cloud or on a device. */
+/** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
-  CLOUD: "Every agent on this task runs in a cloud sandbox. Set when the task was created.",
-  DEVICE: "Every agent on this task runs on this device. Set when the task was created.",
+  CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
+  DEVICE: "This agent runs on this device. Set when it was started.",
 } as const;
 
 export function AgentPlace({
