@@ -177,7 +177,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * ChatGPT's narrow panes do (planning.css's `composer` container). As the
  * card narrows, the branch's chip draws its mark alone, and so does New
  * task's Runs on chip, which stands in its place; then a ⋯ takes in, in this order, the
- * context ring and the microphone; then the model chip draws
+ * context ring and the microphone, where the ring stands, since a ⋯ holding
+ * the microphone alone would be one press behind two; then the model chip draws
  * its harness's mark alone; and last the + goes into the ⋯ too, the ⋯
  * offering the + menu's rows in its place. The field
  * and the round Send or Stop always stand whole. The chips drawing their
