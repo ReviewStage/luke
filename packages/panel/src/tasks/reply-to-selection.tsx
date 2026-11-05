@@ -49,10 +49,11 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * how an answer left it, and what became of it, and lays the quote into
  * the item's box (`inbox-pane.tsx`, `inbox-answer-box.tsx`), so the press
  * hands on the words it was over beside the reply. A page an agent showed,
- * drawn live in its transcript (`shown-page.tsx`), offers the same Reply
- * over words selected in its frame, which the frame says where they stand
- * (`@repo/features/page-pick`), and lays them into the same box through
- * `ReplyDoorProvider`, so it is offered only where a box takes them. Note that
+ * drawn live in its transcript or an Inbox thread (`shown-page.tsx`),
+ * offers the same Reply over words selected in its frame, which the frame
+ * says where they stand (`@repo/features/page-pick`), and lays them into
+ * that place's box through `ReplyDoorProvider`, so it is offered only where
+ * a box takes them. Note that
  * a selection reaching into a field, an input or an editor, is never
  * offered, because what it holds is the reader's own typing, not words to
  * answer.

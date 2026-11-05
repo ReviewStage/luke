@@ -40,8 +40,8 @@ import { pressPlace, ReplyPress, useReplyDoor } from "./reply-to-selection.js";
  *
  * Words selected in the page offer Reply over them, as words selected in
  * the transcript around it do (`reply-to-selection.tsx`), and a press lays
- * them into the message box as a quote, wherever a box stands to take them
- * (`useReplyDoor`). No selection in the frame reaches this window, so the
+ * them into the message box as a quote, the agent's or the Inbox item's,
+ * wherever a box stands to take them (`useReplyDoor`). No selection in the frame reaches this window, so the
  * frame says the words and where they stand (`@repo/features/page-pick`),
  * heard from that frame alone; Reply goes as they go, as a press lands
  * anywhere else in the window, in another frame included, or as another
