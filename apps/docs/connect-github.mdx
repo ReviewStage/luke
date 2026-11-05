@@ -1,0 +1,21 @@
+---
+title: "Connect GitHub"
+description: "Agents work in your repositories and open pull requests."
+---
+
+A workspace connects to GitHub once, and every agent in it reaches the same repositories. Open **Settings › Workspace › Workspace connections** and choose one way to connect.
+
+<CardGroup cols={2}>
+  <Card title="GitHub App" icon="github">
+    Recommended. Install Vespin's GitHub App on your account or organization and choose the repositories it can reach. Agents hear about reviews, comments, and failed checks as they happen.
+  </Card>
+  <Card title="Personal access token" icon="key">
+    Paste a classic token with the `repo` scope. Vespin reads your pull requests' reviews, comments, and checks with it about once a minute.
+  </Card>
+</CardGroup>
+
+Either way, agents commit and open pull requests as you.
+
+## GitHub tools for your agents
+
+The workspace connection gives agents your repositories. To also give agents GitHub's own tools as you, such as reading issues and searching code, connect GitHub under **Settings › Integrations**.

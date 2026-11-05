@@ -1,0 +1,28 @@
+---
+title: "Models and who pays"
+description: "Vespin is free. Agents run on your own plan or API key."
+---
+
+Vespin runs Claude Code and Codex agents. Each one runs on a plan or an API key you connect in **Settings › Agents**, and its usage counts against that plan or is billed to that key.
+
+| Agent | Plan | API key |
+| --- | --- | --- |
+| Claude | Claude plan | Anthropic API key |
+| Codex | ChatGPT plan | OpenAI API key |
+
+## Connect a Claude plan
+
+1. In a terminal, run `claude setup-token`.
+2. In **Settings › Agents**, open the Claude row and paste the token it prints.
+
+## Connect a ChatGPT plan
+
+In **Settings › Agents**, open the Codex row and click **Continue with ChatGPT**, then finish signing in in your browser. This works in the Mac app only.
+
+## Use an API key
+
+Open the Claude or Codex row, choose **API key**, and paste a key from Anthropic or OpenAI.
+
+## Choose the default model
+
+**Settings › Agents** also sets the **Default model**, its **Effort**, and its **Context** for new agents. You can change the model for one agent in its message box. The model menu's last line says which plan or key pays for that agent.
