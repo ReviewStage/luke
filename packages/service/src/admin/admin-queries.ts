@@ -304,7 +304,14 @@ export function readAdminMetricsSource(input: {
 const AccountRowSchema = Schema.Struct({
   ...ACCOUNT_FACE_FIELDS,
   createdAt: InstantColumnSchema,
+  supportAccessUntil: Schema.NullOr(InstantColumnSchema),
 });
+
+/** A grant of support access's end in epoch milliseconds while it stands at `now`; null where none does. */
+function standingGrant(until: Date | null, now: number): number | null {
+  const end = until?.getTime();
+  return end !== undefined && end > now ? end : null;
+}
 
 const findAccount = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -315,6 +322,7 @@ const findAccount = SqlSchema.findOneOption({
         .select({
           ...ACCOUNT_FACE_COLUMNS,
           createdAt: user.createdAt,
+          supportAccessUntil: user.supportAccessUntil,
         })
         .from(user)
         .where(eq(user.id, userId))
@@ -649,6 +657,7 @@ export function readAdminUserSource(input: {
         admin: isAdminRole(row.role),
         createdAt: row.createdAt.getTime(),
         signInMethods: signInMethods.map((linked) => linked.providerId),
+        supportAccessUntil: standingGrant(row.supportAccessUntil, input.now),
       },
       actionsByDay,
       usage: {

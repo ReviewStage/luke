@@ -5,7 +5,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
-import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
+import { admin, bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { authDatabaseHooks, authOrganizationHooks } from "./auth-counts.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
@@ -17,6 +17,7 @@ import {
 } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
+  ADMIN_OPTIONS,
   AUTH_BASE_PATH,
   AUTH_RATE_LIMIT,
   CLIENT_ADDRESS_HEADERS,
@@ -33,9 +34,9 @@ import {
   oauthClientRegistration,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
-  USER_FIELDS,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
+import { supportAccess } from "./support-access.js";
 
 const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 
@@ -95,7 +96,6 @@ export const auth = betterAuth({
   database: authDatabaseAdapter(authDatabase),
   databaseHooks: authDatabaseHooks,
   account: ACCOUNT_TOKEN_STORAGE,
-  user: USER_FIELDS,
   session: SESSION_COOKIE_CACHE,
   rateLimit: AUTH_RATE_LIMIT,
   advanced: { ipAddress: { ipAddressHeaders: [...CLIENT_ADDRESS_HEADERS] } },
@@ -139,5 +139,10 @@ export const auth = betterAuth({
     // browser by the Electron plugin, carried as a signed bearer token.
     electron(DESKTOP_SESSION),
     bearer(SESSION_BEARER),
+    // A maintainer signs in as an account for an hour on the web, only
+    // while its member has granted support access, and that sign-in passes
+    // none of the doors above that would make it outlast its hour.
+    admin(ADMIN_OPTIONS),
+    supportAccess(),
   ],
 });

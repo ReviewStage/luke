@@ -39,6 +39,7 @@
 
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
+  AccountAccessRow,
   AccountPreferencesRow,
   AccountPreferencesWrite,
   AccountPreferencesWritten,
@@ -60,7 +61,7 @@ import {
 } from "@repo/settings";
 import type { UnparsedWireValue } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
-import { Effect, Redacted, Result, Schema } from "effect";
+import { Clock, Effect, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { isAdminRole } from "../admin/admin-access.js";
 import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
@@ -94,8 +95,8 @@ export interface AccountProcedureSeams {
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
-  /** The role on the account's own row, as Better Auth stores it; nothing where it holds none. */
-  readRole: (userId: string) => AccountSeamEffect<string | undefined>;
+  /** The role and the grant of support access on the account's own row, as Better Auth stores them. */
+  readAccess: (userId: string) => AccountSeamEffect<AccountAccessRow>;
   /** Which fast versions the account is offered, by which its coding-agent choice may name one (`offeredToAccount`). */
   accountFastOffer: (
     userId: string,
@@ -259,14 +260,19 @@ export function accountProcedures(seams: AccountProcedureSeams) {
 
     /**
      * Whether the caller's own account is an admin, any role but the admin
-     * role not, and, in the local demo alone, that a Start on a task with no
-     * repository runs where its agents run on a host (`local/local-demo.ts`).
+     * role not; when its member's grant of support access runs out, null
+     * where none stands or it has run out; and, in the local demo alone, that
+     * a Start on a task with no repository runs where its agents run on a
+     * host (`local/local-demo.ts`).
      */
     access: signedIn.access.effect(function* ({ context }) {
-      const role = yield* hostedStoreOrUnavailable(seams.readRole(context.userId));
+      const access = yield* hostedStoreOrUnavailable(seams.readAccess(context.userId));
       const demo = yield* LocalDemo;
+      const now = yield* Clock.currentTimeMillis;
+      const until = access.supportAccessUntil?.getTime();
       return {
-        admin: isAdminRole(role),
+        admin: isAdminRole(access.role),
+        supportAccessUntil: until !== undefined && until > now ? until : null,
         ...(demo.on ? { startsWithoutRepository: true as const } : undefined),
       };
     }),

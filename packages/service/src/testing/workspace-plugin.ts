@@ -6,20 +6,21 @@ import {
 } from "@repo/database/testing";
 import { betterAuth } from "better-auth";
 import { makeSignature } from "better-auth/crypto";
-import { bearer, organization as organizationPlugin } from "better-auth/plugins";
+import { admin, bearer, organization as organizationPlugin } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, Option } from "effect";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
 import {
+  ADMIN_OPTIONS,
   DISABLED_AUTH_PATHS,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
   SESSION_COOKIE_CACHE,
-  USER_FIELDS,
 } from "../auth/auth-policy.js";
+import { supportAccess } from "../auth/support-access.js";
 
 /**
- * workspace-plugin.ts -- Better Auth with the organization and bearer plugins, and the user's fields and session cookie cache `auth.ts` declares, over a migrated PGlite of its own.
+ * workspace-plugin.ts -- Better Auth with the organization, bearer, admin, and support-access plugins, and the session cookie cache `auth.ts` declares, over a migrated PGlite of its own.
  *
  * The plugin writes through its own adapter and the store reads through
  * `database`, the same PGlite, so a test sees the plugin's real rows: the
@@ -45,10 +46,14 @@ export const openWorkspacePlugin = Effect.gen(function* () {
     database: authDatabaseAdapter(drizzle({ client })),
     baseURL: "http://127.0.0.1",
     secret: SECRET,
-    user: USER_FIELDS,
     session: SESSION_COOKIE_CACHE,
     disabledPaths: [...DISABLED_AUTH_PATHS],
-    plugins: [organizationPlugin(ORGANIZATION_OPTIONS), bearer(SESSION_BEARER)],
+    plugins: [
+      organizationPlugin(ORGANIZATION_OPTIONS),
+      bearer(SESSION_BEARER),
+      admin(ADMIN_OPTIONS),
+      supportAccess(),
+    ],
   });
   /** A fresh session for the account, its token signed under the plugin's secret. */
   const signedSessionOf = async (userId: string) => {

@@ -9,6 +9,7 @@
 import type { CimdOptions } from "@better-auth/cimd";
 import type { ClientMetadataResourceFetch, OAuthOptions, Scope } from "@better-auth/oauth-provider";
 import { DESKTOP_SESSION_CLIENT_ID } from "@repo/features/desktop-session-wire";
+import type { AdminOptions } from "better-auth/plugins";
 import { USER_ROLE } from "../admin/admin-access.js";
 import { MEMBER_MCP_SCOPE } from "../member-mcp/resource.js";
 
@@ -159,6 +160,15 @@ export const ACCOUNT_TOKEN_STORAGE = {
   accountLinking: { enabled: true, allowDifferentEmails: true },
 } as const;
 
+/** The support-access plugin's own endpoints (`support-access.ts`), under the auth base path. */
+export const SUPPORT_ACCESS_PATH = {
+  GRANT: "/support-access/grant",
+  REVOKE: "/support-access/revoke",
+} as const;
+
+/** How long a member's grant of support access stands, in seconds: seven days from the moment they grant it. */
+export const SUPPORT_ACCESS_GRANT_SECONDS = 7 * 24 * 60 * 60;
+
 /**
  * The Better Auth endpoints this deployment does not serve. `/token` is the
  * JWT plugin's, which the OAuth provider's own token endpoint stands in for.
@@ -190,6 +200,18 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * The Electron plugin's `/electron/init-oauth-proxy` starts a sign-in of
  * its own; the Mac signs in through its OAuth authorization and only then
  * asks the plugin to transfer the signed-in browser, so that door is shut.
+ *
+ * The admin plugin is installed for its impersonation alone, so every other
+ * endpoint it adds is shut: an account's role is set only by a
+ * maintainer's own write to the database (`admin/admin-access.ts`), and no
+ * page of ours lists, edits, bans, signs out, or deletes an account through
+ * Better Auth. A maintainer starts and stops a support sign-in from the
+ * browser (`/admin/impersonate-user`, `/admin/stop-impersonating`), which
+ * `support-access.ts` holds to the member's grant.
+ *
+ * The member grants and revokes support access as they make every other
+ * workspace write, through our routes and the server-only calls, so the
+ * support-access plugin's own two paths are shut as well.
  */
 export const DISABLED_AUTH_PATHS = [
   "/token",
@@ -219,6 +241,21 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/update-role",
   "/organization/delete-role",
   "/electron/init-oauth-proxy",
+  "/admin/set-role",
+  "/admin/get-user",
+  "/admin/create-user",
+  "/admin/update-user",
+  "/admin/list-users",
+  "/admin/list-user-sessions",
+  "/admin/unban-user",
+  "/admin/ban-user",
+  "/admin/revoke-user-session",
+  "/admin/revoke-user-sessions",
+  "/admin/remove-user",
+  "/admin/set-user-password",
+  "/admin/has-permission",
+  SUPPORT_ACCESS_PATH.GRANT,
+  SUPPORT_ACCESS_PATH.REVOKE,
 ] as const;
 
 /**
@@ -248,18 +285,27 @@ export const SESSION_COOKIE_CACHE = {
 } as const;
 
 /**
- * The user's fields beyond Better Auth's own. Admin access is a plain-text
- * `role` on the user, managed by Better Auth: the migrations declared it on
- * the `user` table, and it is returned on the session so the dashboard reads
- * it without a query of its own. `input: false` keeps a sign-up from
- * asserting its own role — the role is set only by a maintainer's own write
- * to the database, never by anything we run.
+ * Better Auth's admin plugin
+ * (https://www.better-auth.com/docs/plugins/admin), installed so a
+ * maintainer can sign in as an account whose member granted support access
+ * (`support-access.ts`). The plugin owns the user's plain-text `role`: it
+ * writes `defaultRole` on every new account, answers the role on the
+ * session so the dashboard reads it without a query of its own, and lets no
+ * endpoint set it (`input: false`). Admin access is that role
+ * (`admin/admin-access.ts`), set only by a maintainer's own write to the
+ * database, never by anything we run, since every endpoint that would write
+ * it is shut (`DISABLED_AUTH_PATHS`).
+ *
+ * The admin role alone may impersonate, and an account holding it cannot
+ * be impersonated: no `adminUserIds` is named, which would let an account
+ * past that refusal. A support sign-in is a session of its own, marked with
+ * the maintainer it was started by (`impersonatedBy`), and lasts an hour.
  */
-export const USER_FIELDS = {
-  additionalFields: {
-    role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
-  },
-} as const;
+export const ADMIN_OPTIONS = {
+  adminRoles: [USER_ROLE.ADMIN],
+  defaultRole: USER_ROLE.USER,
+  impersonationSessionDuration: 60 * 60,
+} satisfies AdminOptions;
 
 /**
  * Better Auth's Electron plugin
