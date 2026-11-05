@@ -235,6 +235,7 @@ function environment(): Layer.Layer<HostedEnvironment> {
     cronSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
+    titleAnthropicApiKey: undefined,
   };
   return Layer.succeed(HostedEnvironment, values);
 }

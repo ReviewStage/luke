@@ -135,6 +135,7 @@ export const LOCAL_AGENT_ENVIRONMENT = Layer.succeed(HostedEnvironment, {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 });
 
 /** The developer's message as the store hands it to the agent's sessions. */

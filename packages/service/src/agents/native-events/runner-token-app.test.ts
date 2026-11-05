@@ -79,6 +79,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(KEK),
+  titleAnthropicApiKey: undefined,
 };
 
 /** OpenAI's token endpoint: each renewal rotates the refresh token and answers the next access token, good for an hour. */

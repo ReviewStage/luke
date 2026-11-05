@@ -74,6 +74,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+  titleAnthropicApiKey: undefined,
 };
 
 /** What the routes counted, across the file; a case reads its own account's. */

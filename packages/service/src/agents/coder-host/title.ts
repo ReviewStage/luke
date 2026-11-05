@@ -59,9 +59,10 @@ import { CURSOR_START } from "./transcript.js";
  * is filled on its child conversation (`child-titles.ts`). Nothing of the
  * conversation leaves here but to the model.
  *
- * The model runs on the account's own API key (`account-keys.ts`'s
- * `ownKeyOf`), never ours. An account that saved none, as one paying
- * only through a subscription, is named with no model call at all: the
+ * The model runs on our own key (`model.ts`'s `deploymentTitleModel`),
+ * never the account's, so an account that saved no API key, as one paying
+ * only through a subscription, is named by the model all the same. A
+ * deployment holding no such key names it with no model call at all: the
  * first words of the first line of its opening, or of the automation's
  * prompt, or of the task a subagent was handed, tidied as a model's answer
  * is (`firstWordsTitle`).
@@ -77,10 +78,8 @@ const AGENT_TITLE = {
   MAX_OUTPUT_TOKENS: 64,
   /** How long the call may take before the agent goes untitled. */
   TIMEOUT: CODER.TITLE_TIMEOUT,
-  /** The least an Anthropic model is asked to think, since a title is no reasoning task. */
+  /** The least the model is asked to think, since a title is no reasoning task. */
   EFFORT: "low",
-  /** OpenAI's word for no reasoning at all, so the few output tokens a title has go to its words. */
-  OPENAI_EFFORT: "none",
   /** The most words of its first line a title falls back to where no model names it. */
   FALLBACK_WORDS: 6,
   /** The most of each message the call reads, which is enough to tell the task from. */
@@ -332,10 +331,7 @@ function generateAgentTitle(
       system: INSTRUCTIONS,
       prompt: named,
       maxOutputTokens: AGENT_TITLE.MAX_OUTPUT_TOKENS,
-      providerOptions: {
-        anthropic: { effort: AGENT_TITLE.EFFORT },
-        openai: { reasoningEffort: AGENT_TITLE.OPENAI_EFFORT },
-      },
+      providerOptions: { anthropic: { effort: AGENT_TITLE.EFFORT } },
     }),
   ).pipe(
     Effect.map((answer) => tidyAgentTitle(answer.text)),

@@ -1686,6 +1686,7 @@ const CHAPTERS_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: AGENT_KEY_RING,
+  titleAnthropicApiKey: undefined,
 };
 
 /** The procedures answering an agent's pull request's chapters as `bearer`, over the store and GitHub. */

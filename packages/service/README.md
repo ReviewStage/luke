@@ -586,7 +586,7 @@ through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
 model that offers two, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
-Anthropic and OpenAI directly on the account's own keys, never through the gateway — so
+Anthropic and OpenAI directly on the account's own keys, or Vespin's for a title, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
 catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
 through a scripted gateway and the test clock; `src/accounts/models-procedures.test.ts`
@@ -1386,16 +1386,19 @@ firewall is what keeps a credential from the agent's commands: they can read
 the placeholders, each good only through that sandbox's firewall, and never
 the value it swaps in; on a host a Claude Code agent's commands can read its
 credential. Codex's commands inherit neither the bearer nor its credential's
-variable (`shell_environment_policy`). The deployment holds no model key of
-its own. The calls beside an account's agents run on its own
-key too, through `ownKeyOf` (`src/agents/coder-host/account-keys.ts`), the
-provider they prefer first and the other where it saved only that, and never
-on Vespin's: an agent's title on the provider's small model (Haiku, or
-OpenAI's `gpt-6-luna`), and a Continue's or Fork's replay summary on the new
-agent's own model, or the other provider's balanced model. An account that
-saved no API key, as one on a plan alone, has its agents titled from the
-first words of their opening's first line, with no model call, and its
-replays carried without a summary.
+variable (`shell_environment_policy`). The deployment holds one model key of
+its own, Vespin's Anthropic key for titles (`TITLE_ANTHROPIC_API_KEY`), and
+every title, an agent's, its task's, or an inbox thread's, runs on it, on
+Anthropic's small model (Haiku), whether or not the account saved a key
+(`src/agents/coder-host/model.ts`'s `deploymentTitleModel`); a deployment
+holding none titles each from the first words of its opening's first line,
+with no model call, and never falls back to the account's key. The other
+calls beside an account's agents run on its own key, through `ownKeyOf`
+(`src/agents/coder-host/account-keys.ts`), the provider they prefer first and
+the other where it saved only that, and never on Vespin's: a pull request's
+chapters, and a Continue's or Fork's replay summary on the new agent's own
+model, or the other provider's balanced model. An account that saved no API
+key, as one on a plan alone, has its replays carried without a summary.
 
 The sandbox is one Vercel Sandbox per agent
 (`src/agents/machine/vercel-machine.ts`), opened from Vespin's own template
@@ -1456,7 +1459,8 @@ on a developer's prompt, the prompt is, the agent is never handed the plan,
 and the instructions are worded for a prompt in the plan's place. The service
 needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each account's own keys are
 sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
-credentials.
+credentials, and names agents by a model only where it holds
+`TITLE_ANTHROPIC_API_KEY`.
 
 ## The account group
 

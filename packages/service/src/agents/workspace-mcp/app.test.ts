@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { listAgentBrowserTabs } from "@repo/database/models/agent-browser-tabs";
@@ -25,9 +28,6 @@ import {
   type WireBoundaryInput,
 } from "@repo/wire";
 import { webmBytes } from "@repo/wire/testing";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { Base64 } from "effect/encoding";
@@ -123,6 +123,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  titleAnthropicApiKey: undefined,
 };
 
 /** The integrations this deployment set up: none, so a turn is handed GitHub alone, as the App offers it. */
