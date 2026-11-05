@@ -127,10 +127,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * or failure draws here within a moment, never on a clock. The view is a
  * chunk of its own, loaded the first time it is shown, as Settings is. Nothing makes them but a press of
  * Generate chapters, which answers once the generation lands, minutes later
- * at most; until then the view stands as a ring timed from the press. Its
- * chevron, and Regenerate's, drop Claude's models, the account's choice
- * checked, which a pick keeps for every Generate after it
- * (`chapters-model-pick.ts`).
+ * at most; until then the view stands as a ring timed from the press, or,
+ * where a model was picked just before, from that pick's write landing,
+ * which the Generate waits on. Its chevron, and Regenerate's, drop Claude's
+ * models, the account's choice checked, which a pick keeps for every
+ * Generate after it (`chapters-model-pick.ts`).
  * Chapters someone else is making stand the same way, until their
  * generation lands. A generation that failed says why with a
  * Retry; a member who saved no API key, which chapters run on, is told to

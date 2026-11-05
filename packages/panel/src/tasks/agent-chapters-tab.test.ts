@@ -25,7 +25,10 @@ import {
   type Chapter,
   LINE_REF_SIDE,
 } from "@repo/features/pull-request-chapters";
-import type { PullRequestChaptersAnswerView } from "@repo/features/pull-request-chapters-view";
+import {
+  PULL_REQUEST_CHAPTERS_CALL_FAILURE,
+  type PullRequestChaptersAnswerView,
+} from "@repo/features/pull-request-chapters-view";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
   PULL_REQUEST_CHAPTERS_STATE,
@@ -50,6 +53,7 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
+import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
@@ -58,6 +62,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { agentsControl } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentPullRequestTab } from "./agent-pull-request-tab.js";
 import type { AgentsControl } from "./use-agents.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
@@ -629,6 +635,44 @@ test("a model picked on Generate's chevron is kept before the Generate after it 
   kept.resolve({ model: CHAPTERS_MODEL.SONNET });
   await settle();
   assert.equal(asked, 1);
+});
+
+test("a pick the service refuses says so in a toast, and the Generate after it still runs on the model the service keeps", async () => {
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CHAPTERS_MODEL_WRITE]: () =>
+      Promise.resolve({ failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED }),
+  });
+  const toasts = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => toasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
+  let asked = 0;
+  const tab = await draw(
+    controlAnswering({
+      generateChapters: () => {
+        asked += 1;
+        return Promise.resolve(answering(ready()));
+      },
+    }),
+  );
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>(
+        'button[aria-label="Choose the model chapters are generated on"]',
+      ) ?? assert.fail("Generate chapters has a chevron")
+    ).click(),
+  );
+  const opus =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
+      (item) => item.textContent === "Opus 5.5",
+    ) ?? assert.fail("the chevron offers Opus 5.5");
+  act(() => opus.click());
+  act(() => button(tab, "Generate chapters").click());
+  await settle();
+
+  assert.match(newestToastSays() ?? "", /The chapters model could not be saved\. Try again\./u);
+  assert.equal(asked, 1);
+  act(() => toasts.unmount());
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
