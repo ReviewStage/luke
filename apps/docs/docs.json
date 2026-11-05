@@ -29,7 +29,7 @@
     "groups": [
       {
         "group": "Get started",
-        "pages": ["index", "install", "quickstart", "connect-github", "models"]
+        "pages": ["index", "install", "quickstart"]
       }
     ]
   },

@@ -3,43 +3,22 @@ title: "Your first task"
 description: "Start a task, answer its agent, and merge its pull request"
 ---
 
-A task is one piece of work, from the sentence that starts it to its merged pull request. It holds a plan, the agents working on it, and their pull requests.
+A task is one piece of work, from the sentence that starts it to its merged pull request.
 
-This guide takes one task from start to merge. Before you start, finish [setup](/install#sign-in-and-set-up) so an agent and GitHub are connected. To check, open **Settings › Agents** and **Settings › Workspace**.
+## Start a task
 
-## Start the task
-
-Press <kbd>⌘N</kbd> or click **New task**. Pick the repository, describe the change, and send it.
-
-Write it as you would a GitHub issue: the outcome you want, and anything the agent can't learn from the code.
+Press <kbd>⌘N</kbd>, pick a repository, and describe the change as you would in a GitHub issue.
 
 <Frame>
   <img src="/images/home.png" alt="Vespin's Home: New task's message box on acme/relay, the Inbox items waiting on you, and recent tasks" />
 </Frame>
 
-## Follow the agent
-
-The task opens on its agent's tab, which shows each step as the agent takes it. The agent writes the task's plan on the **Overview** tab as it goes.
-
-By default, an agent works in a cloud sandbox with its own checkout of the repository, not in your local checkout. To correct it while it works, send it a message on its tab.
+The agent works in a cloud sandbox with its own checkout of the repository, not in your local checkout. It writes the task's plan on the **Overview** tab as it goes.
 
 ## Answer in the Inbox
 
-When the agent needs you, it posts a thread to your Inbox (<kbd>⇧⌘I</kbd>). A thread can end in a choice between options, a list of steps for you to do, or a short form.
+When the agent needs a decision, a to-do, or your review, it posts a thread to your Inbox (<kbd>⇧⌘I</kbd>). Press <kbd>1</kbd>–<kbd>9</kbd> to choose an option, or <kbd>R</kbd> to reply.
 
-Press <kbd>1</kbd>–<kbd>9</kbd> to choose an option, or <kbd>R</kbd> to reply.
+## Review and merge
 
-## Review the pull request
-
-The agent opens a pull request as you. Open it on the task's **Pull request** tab:
-
-- **Files changed** shows the diff.
-- **Chapters** splits the diff into sections, each with a summary.
-
-Review and comment there as you would on GitHub. The agent reads new reviews and comments and answers them.
-
-## Merge
-
-Merge from the **Pull request** tab. If a check fails, the agent reads why, pushes a fix, and waits for the checks again.
-
-Next, [choose your default model](/models).
+The agent opens a pull request as you. On the task's **Pull request** tab, **Chapters** splits the diff into sections, each with a summary. The agent answers review comments and fixes failing checks until you merge.

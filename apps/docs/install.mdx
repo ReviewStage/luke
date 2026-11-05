@@ -1,33 +1,37 @@
 ---
 title: "Install"
-description: "Get the Mac app or open the web app"
+description: "Get Vespin running and connect an agent and GitHub"
 ---
 
-Vespin runs as a Mac app and as a web app. Both sign in to the same account and show the same workspace.
+Vespin is a Mac app for Apple silicon on macOS 14 or newer, and a web app at [vespin.dev/app](https://vespin.dev/app). Both open the same workspace.
 
-## Requirements
-
-- **Mac app**: Apple silicon and macOS 14 or newer.
-- **Web app**: a current browser. On a phone, add [vespin.dev/app](https://vespin.dev/app) to your home screen.
-- **Sign-in**: a Google or GitHub account.
-- **Agents**: a Claude or ChatGPT plan, or an Anthropic or OpenAI API key. See [Models and who pays](/models).
-
-## Install the Mac app
+## Download for Mac
 
 1. Download the DMG from the [latest release](https://github.com/ReviewStage/vespin/releases/latest).
-2. Open it and drag Vespin to Applications.
-3. Open Vespin from Applications. It downloads new versions in the background, and **Settings › About** says when one is ready to install.
+2. Drag Vespin to your Applications folder.
+3. Open Vespin and sign in with Google or GitHub.
 
-## Sign in and set up
+## Setup
 
-Sign in with Google or GitHub. A new account then goes through setup, one card per step:
+A new account walks through setup. You need an agent and GitHub to start a task.
 
-1. **Welcome**: choose **Just me** or **With my team**.
-2. **Create a team workspace**: team accounts only. Name the workspace and invite teammates by email.
-3. **Connect an agent**: connect Claude or Codex. See [Models and who pays](/models).
-4. **Connect GitHub**: choose how agents reach your repositories, or skip it for now. See [Connect GitHub](/connect-github).
-5. **Connect your tools**: connect services agents can use, such as Linear, Notion, or Sentry. You can add more later in **Settings › Integrations**.
+### Connect an agent
 
-If a teammate invited you to their workspace, setup asks only for an agent.
+Agents run on your own plan or API key. Vespin doesn't bill for model usage.
 
-Next, [start your first task](/quickstart).
+- **Claude plan**: run `claude setup-token` in a terminal and paste what it prints.
+- **ChatGPT plan**: click **Continue with ChatGPT**. This works only in the Mac app.
+- **API key**: paste an Anthropic or OpenAI key.
+
+With both a plan and a key saved, **New Claude agents use** and **New Codex agents use** in **Settings › Agents** choose which one pays for new agents.
+
+### Connect GitHub
+
+- **GitHub App** (recommended): choose which repositories it can reach. Agents hear about reviews, comments, and failed checks as they happen.
+- **Personal access token**: a classic token with the `repo` scope. Vespin checks your pull requests about once a minute, and the token can reach every repository your GitHub account can.
+
+You can skip GitHub during setup and connect it later in **Settings › Workspace**.
+
+## Next step
+
+Start [your first task](/quickstart).
