@@ -252,10 +252,12 @@ function cardLook(
       };
     }
     case STOP_KIND.PERSON: {
-      const name = memberName(members, stop.userId) ?? stop.name ?? PERSON_WORDS;
+      const known = memberName(members, stop.userId) ?? stop.name;
+      const name = known ?? PERSON_WORDS;
       return {
         icon: <PersonStopFace userId={stop.userId} name={name} />,
         label: name,
+        labelReplayUnmasked: known === undefined,
         detail: undefined,
       };
     }

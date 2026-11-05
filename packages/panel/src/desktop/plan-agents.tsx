@@ -124,25 +124,27 @@ function PlanAgentRow({
         }
         actions={
           pullRequest === undefined ? undefined : (
-            <PullRequestChip
-              pullRequest={pullRequest}
-              card={
-                <PullRequestCard
-                  pullRequest={pullRequest}
-                  place={{ taskId: entry.agent?.planId ?? null }}
-                  lines={pullRequest}
-                  files={pullRequest.changedFiles}
-                  opener={people?.author ?? openerOf(pullRequest)}
-                  agent={{
-                    subject: agentSubject(agents, agentId, held, chosen),
-                    models: agents.models,
-                    onOpen: entry.onPick,
-                  }}
-                  reviewers={people?.reviewers}
-                />
-              }
-              onOpen={onOpenPullRequest}
-            />
+            <ReplayMask>
+              <PullRequestChip
+                pullRequest={pullRequest}
+                card={
+                  <PullRequestCard
+                    pullRequest={pullRequest}
+                    place={{ taskId: entry.agent?.planId ?? null }}
+                    lines={pullRequest}
+                    files={pullRequest.changedFiles}
+                    opener={people?.author ?? openerOf(pullRequest)}
+                    agent={{
+                      subject: agentSubject(agents, agentId, held, chosen),
+                      models: agents.models,
+                      onOpen: entry.onPick,
+                    }}
+                    reviewers={people?.reviewers}
+                  />
+                }
+                onOpen={onOpenPullRequest}
+              />
+            </ReplayMask>
           )
         }
         onPress={entry.onPick}

@@ -111,20 +111,23 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
   if (open.length === 0) return null;
   return (
     <>
+      {/* Note that a pull request's number names the person's work, so it is masked in a screen recording. */}
       {open.map((pullRequest) => (
-        <PullRequestChip
-          key={pullRequest.url}
-          pullRequest={pullRequest}
-          card={
-            <PullRequestCard
-              pullRequest={pullRequest}
-              place={{ taskId: task.id }}
-              lines={pullRequest}
-              opener={openerOf(pullRequest)}
-            />
-          }
-          onOpen={() => openLink(pullRequest.url)}
-        />
+        <ReplayMask key={pullRequest.url}>
+          <PullRequestChip
+            key={pullRequest.url}
+            pullRequest={pullRequest}
+            card={
+              <PullRequestCard
+                pullRequest={pullRequest}
+                place={{ taskId: task.id }}
+                lines={pullRequest}
+                opener={openerOf(pullRequest)}
+              />
+            }
+            onOpen={() => openLink(pullRequest.url)}
+          />
+        </ReplayMask>
       ))}
     </>
   );

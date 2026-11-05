@@ -1625,7 +1625,7 @@
    stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
-  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
     border-radius: 0;
     background: var(--ui-color-fill-hover);
   }
