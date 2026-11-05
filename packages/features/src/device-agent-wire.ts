@@ -40,9 +40,10 @@ export const DEVICE_AGENT_BOUNDS = {
    */
   MAX_ANSWER_BYTES: 8 * 1024 * 1024,
   /**
-   * The most bytes of files, raw, one files line carries: about 4 MB in its
-   * base64, so its claim answers under the 4.5 MB a Vercel function may
-   * answer. A file is never split, so one larger goes in a line alone.
+   * The most bytes of files and their paths, raw, one files line carries:
+   * about 4 MB in base64, so its claim answers under the 4.5 MB a Vercel
+   * function may answer. A file is never split, so one larger goes in a line
+   * alone.
    */
   MAX_FILES_LINE_BYTES: 3_000_000,
   /**

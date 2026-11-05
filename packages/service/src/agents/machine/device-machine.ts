@@ -196,7 +196,7 @@ function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFi
   const lines: SandboxFile[][] = [];
   let bytes = 0;
   for (const file of files) {
-    const size = file.path.length + file.contents.byteLength;
+    const size = Buffer.byteLength(file.path) + file.contents.byteLength;
     const line = lines.at(-1);
     if (line === undefined || bytes + size > DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES) {
       lines.push([file]);
