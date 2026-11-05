@@ -407,13 +407,19 @@ export function FootQuestion({
     >
       <div className={FOOT_WORDS}>
         <Text id={titleId} variant={TEXT_VARIANT.LABEL}>
-          <ReplayWords unmasked={question.replayUnmasked} masked={question.titleReplayMasked}>
+          <ReplayWords
+            unmasked={question.replayUnmasked === true}
+            masked={question.titleReplayMasked}
+          >
             {question.title}
           </ReplayWords>
         </Text>
         {question.body ? (
           <p id={bodyId} className={BODY}>
-            <ReplayWords unmasked={question.replayUnmasked} masked={question.bodyReplayMasked}>
+            <ReplayWords
+              unmasked={question.replayUnmasked === true}
+              masked={question.bodyReplayMasked}
+            >
               {question.body}
             </ReplayWords>
           </p>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { Empty, EmptyHeader, EmptyMedia } from "../../shadcn/empty.js";
 import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -74,7 +75,14 @@ export interface EmptyStateAction {
 }
 
 /** One way on from an empty place, as a button in its look; nothing where none is given. */
-function WayOn({ way }: { way: EmptyStateAction | undefined }): React.JSX.Element | null {
+function WayOn({
+  way,
+  unmasked,
+}: {
+  way: EmptyStateAction | undefined;
+  /** Whether its words show in a screen recording (`EmptyState`'s `replayUnmasked`). */
+  unmasked: boolean;
+}): React.JSX.Element | null {
   if (way === undefined) return null;
   return (
     <Button
@@ -85,7 +93,7 @@ function WayOn({ way }: { way: EmptyStateAction | undefined }): React.JSX.Elemen
       {...(way.busy === undefined ? {} : { busy: true, busyLabel: way.busy })}
       onClick={way.onClick}
     >
-      {way.label}
+      <ReplayWords unmasked={unmasked}>{way.label}</ReplayWords>
     </Button>
   );
 }
@@ -100,6 +108,7 @@ function WayOn({ way }: { way: EmptyStateAction | undefined }): React.JSX.Elemen
 export function EmptyState({
   icon,
   title,
+  replayUnmasked = false,
   action,
   secondary,
   beside,
@@ -108,6 +117,8 @@ export function EmptyState({
 }: {
   icon?: ReactNode;
   title?: string | undefined;
+  /** Whether its title and its ways on are the app's own words, which a screen recording shows as they read; masked otherwise. What it says under the title is its caller's to mark. */
+  replayUnmasked?: boolean | undefined;
   action?: EmptyStateAction | undefined;
   /** A second way on, under the first, where the place offers two (Retry, then Close). */
   secondary?: EmptyStateAction | undefined;
@@ -123,20 +134,20 @@ export function EmptyState({
         <EmptyHeader>
           {title === undefined ? null : (
             <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
-              {title}
+              <ReplayWords unmasked={replayUnmasked}>{title}</ReplayWords>
             </Text>
           )}
           {children === undefined ? null : <Text tone={TEXT_TONE.MUTED}>{children}</Text>}
         </EmptyHeader>
         {beside === undefined || beside === null ? (
-          <WayOn way={action} />
+          <WayOn way={action} unmasked={replayUnmasked} />
         ) : (
           <div className="ui-empty-state-beside flex items-center gap-control-gap">
-            <WayOn way={action} />
+            <WayOn way={action} unmasked={replayUnmasked} />
             {beside}
           </div>
         )}
-        <WayOn way={secondary} />
+        <WayOn way={secondary} unmasked={replayUnmasked} />
       </Empty>
     </div>
   );

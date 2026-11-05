@@ -12,7 +12,7 @@ import {
 import { isComposingKey } from "../../composing-key.js";
 import { CloseIcon } from "../../face/glyphs.js";
 import { motionHeld } from "../../motion-timing.js";
-import { ReplayWords } from "../../session-replay-marks.js";
+import { REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { IconButton } from "../button/button.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -135,7 +135,7 @@ export function PopoverPanel({
   id?: string | undefined;
   /** What it is called, drawn at a card's head and read as its name. */
   title: string;
-  /** Whether its title is the app's own words, which a screen recording shows as they read; what it holds is its owner's to mark (`@repo/ui/session-replay-marks`), since it stands in a portal no mark round its owner reaches. */
+  /** Whether its title is the app's own words, which a screen recording shows as they read; what it holds is its owner's to mark (`@repo/ui/session-replay-marks`), masked unless its owner marks words inside it, since the panel wears the mask mark on its root. */
   replayUnmasked?: boolean | undefined;
   look?: PopoverPanelLook | undefined;
   /** What the × is named, which draws it at a card's head; none where it is left out. */
@@ -201,6 +201,7 @@ export function PopoverPanel({
       ref={drawn}
       id={id}
       className={PANEL}
+      {...REPLAY_MASKED}
       data-look={look}
       data-ending-style={leaving ? "" : undefined}
       inert={leaving}

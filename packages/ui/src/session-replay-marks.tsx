@@ -29,8 +29,13 @@
  * words it draws itself, and where its items or its title may name a
  * person's thing, a `replayMasked` flag on the item (`titleReplayMasked`
  * on a dialog), which masks them again; each draws them through
- * `ReplayWords`. Words a caller hands as nodes are the caller's to mark,
- * inside the portal. A tooltip and a hover card take none, since the
+ * `ReplayWords`. With the opt-in off its words are masked wherever it is
+ * drawn, so a menu or a panel drawn in place inside an unmasked page never
+ * shows its rows, and one drawn in place wears the mask mark on its root
+ * (`REPLAY_MASKED`), so what its caller hands it is masked too. Words a
+ * caller hands as nodes are the caller's to mark, inside the component. A
+ * page's title in the bar across its top (`Toolbar`) takes the same opt-in
+ * (`titleReplayUnmasked`). A tooltip and a hover card take none, since the
  * recording leaves them out whole (`ph-no-capture`).
  *
  * Two things reach the recording past its masking, and each is answered
@@ -71,6 +76,9 @@ const MASK = "data-replay-mask";
 
 /** The nearest mark, either one, above words. */
 const EITHER_MARK = `[${UNMASK}], [${MASK}]`;
+
+/** What a component drawn in place spreads on its root, so nothing it draws takes an unmask mark above its caller: its own words are unmasked only by its opt-in, and what its caller hands it only by a mark inside. */
+export const REPLAY_MASKED = { [MASK]: "" } as const;
 
 /** Where words are being typed, which never leave whatever mark stands above them. */
 const TYPED = 'textarea, [contenteditable]:not([contenteditable="false"])';
@@ -117,24 +125,26 @@ export function ReplayMask({ children }: { children: ReactNode }): React.JSX.Ele
 /**
  * Words a component draws from a string its caller handed it, marked as its
  * caller asked: under the mask mark where the caller masked them (a menu
- * item or a choice that names a person's thing), under the unmask mark where
- * the caller unmasked what the component draws (`replayUnmasked`), and
- * unmarked otherwise, so they take whatever mark stands above them. This is
+ * item or a choice that names a person's thing); for a component with a
+ * `replayUnmasked` opt-in, which hands it as `unmasked`, under the unmask
+ * mark where it is on and the mask mark where it is off; and for one with
+ * none, unmarked, so they take whatever mark stands above them. This is
  * how a component whose words stand in a portal, which no mark around its
  * caller reaches, or arrive as strings, which its caller cannot wrap, takes
  * its caller's marks.
  */
 export function ReplayWords({
-  unmasked = false,
+  unmasked,
   masked = false,
   children,
 }: {
+  /** The component's opt-in, where it has one; none leaves the words to the marks above them. */
   unmasked?: boolean | undefined;
   masked?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  if (masked) return <ReplayMask>{children}</ReplayMask>;
-  return unmasked ? <ReplayUnmask>{children}</ReplayUnmask> : <>{children}</>;
+  if (unmasked === true && !masked) return <ReplayUnmask>{children}</ReplayUnmask>;
+  return masked || unmasked === false ? <ReplayMask>{children}</ReplayMask> : <>{children}</>;
 }
 
 /**

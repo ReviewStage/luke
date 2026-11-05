@@ -17,8 +17,8 @@
  * positions, the app's own labels, headings, buttons, and menu words, and
  * asterisks of the right length for every other word. The surfaces that hold the
  * most of a person's words also block their whole subtree with the library's
- * fixed `ph-no-capture` class as a second line, each named where it is drawn
- * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
+ * fixed `ph-no-capture` class as a second line, each named where it is
+ * drawn: the feedback dialog, whose screenshots are
  * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its transcript, Work, Code, File, and page tabs,
@@ -30,8 +30,10 @@
  * block is their only line, and canvas recording is held off by name rather
  * than by the library's default.
  *
- * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
- * masking and those blocks are the whole of what decides it. Every shell that
+ * `PRIVACY.md` says, in a policy's plain terms, that a recording shows how
+ * the window is used and masks what a person types and anything sensitive
+ * before it leaves, and that has to stay true: the masking and those blocks
+ * are the whole of what decides it. Every shell that
  * records (the desktop's panel window, `apps/desktop/src/renderer/session-replay.ts`,
  * and the web app's tab, `apps/web/src/app/web-session-replay.ts`) records
  * through `sessionReplay` here, so the masking is stated once and no shell can

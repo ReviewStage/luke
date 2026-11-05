@@ -3,7 +3,7 @@ import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
-import { ReplayWords } from "../../session-replay-marks.js";
+import { REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import {
   COMBOBOX_EMPTY,
   COMBOBOX_HEADING,
@@ -104,6 +104,8 @@ export interface ComboboxOption {
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
+  /** Whether the option names a person's thing, kept masked in a screen recording whole, its glyph and lead with its words, whatever mark stands round its list. */
+  readonly replayMasked?: boolean | undefined;
   /** The detail in plain words, where `detail` draws them as a tree (marked for a screen recording), so its hint still says it whole. */
   readonly detailWords?: string | undefined;
   /** At the option's end: the chord that chooses it, or any short mark. */
@@ -163,6 +165,7 @@ export function ComboboxOptionItem({
       onClick={
         option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
       }
+      {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
       className={cn("ui-combobox-option", COMBOBOX_ITEM)}
       style={undefined}
     >

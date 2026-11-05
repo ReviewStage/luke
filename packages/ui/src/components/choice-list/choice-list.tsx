@@ -5,7 +5,7 @@ import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
-import { ignoredByReplay, ReplayWords } from "../../session-replay-marks.js";
+import { ignoredByReplay, REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import {
   ROVING_ORIENTATION,
@@ -426,7 +426,12 @@ function RowInside({
         />
       ) : null}
       {option.mark === undefined ? null : (
-        <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
+        <span
+          className="ui-choice-mark inline-flex flex-none"
+          {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
+        >
+          {option.mark}
+        </span>
       )}
       <ChoiceWords option={option} look={look} number={number} />
     </>
@@ -674,7 +679,12 @@ function SettledChoices<Value extends string>({
         return (
           <li key={option.value} className={ROW} data-picked={picked}>
             {option.mark === undefined ? null : (
-              <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
+              <span
+                className="ui-choice-mark inline-flex flex-none"
+                {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
+              >
+                {option.mark}
+              </span>
             )}
             <ChoiceWords
               option={option}

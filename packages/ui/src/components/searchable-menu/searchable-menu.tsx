@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import { cssCustomProperties } from "../../css.js";
 import { type SearchSubject, searchHit } from "../../search-score.js";
 import { searchTokens } from "../../search-tokens.js";
-import { ReplayWords } from "../../session-replay-marks.js";
+import { REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import {
   AnchoredPopover,
   POPOVER_BOUNDS,
@@ -443,6 +443,7 @@ function optionGroups(
       detail: rowWords(row, unmasked, row.detail),
       detailWords: typeof row.detail === "string" ? row.detail : undefined,
       hint: rowWords(row, unmasked, rowHint(row)),
+      replayMasked: row.replayMasked,
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
@@ -473,6 +474,7 @@ function submenuOptions(open: Submenu, unmasked: boolean): ComboboxOption[] {
     detail: rowWords(row, unmasked, row.detail),
     detailWords: typeof row.detail === "string" ? row.detail : undefined,
     hint: rowWords(row, unmasked, rowHint(row)),
+    replayMasked: row.replayMasked,
     card: row.card,
     current: row.id === open.value,
   }));
@@ -1105,6 +1107,7 @@ export function SearchableMenu(
       inset={MENU_SURFACE_INSET.NONE}
       role="dialog"
       aria-label={props.label}
+      {...REPLAY_MASKED}
       leaving={leaving}
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}

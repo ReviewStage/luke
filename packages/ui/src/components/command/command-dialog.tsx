@@ -164,7 +164,13 @@ const CommandRow = memo(function CommandRow({
     );
   const option =
     unmasked || item.replayMasked === true
-      ? { ...item, label: marked(item.label), detail: marked(item.detail), hint: marked(item.hint) }
+      ? {
+          ...item,
+          label: marked(item.label),
+          detail: marked(item.detail),
+          detailWords: typeof item.detail === "string" ? item.detail : undefined,
+          hint: marked(item.hint),
+        }
       : item;
   const row = (
     <Command.Item

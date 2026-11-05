@@ -755,7 +755,10 @@ function ItemBody({
   column?: boolean;
 }): React.JSX.Element {
   const beside = action.detailPlace === MENU_DETAIL.BESIDE;
-  const glyph = column || action.icon !== undefined ? <MenuGlyph>{action.icon}</MenuGlyph> : null;
+  const glyph =
+    column || action.icon !== undefined ? (
+      <MenuGlyph masked={action.replayMasked}>{action.icon}</MenuGlyph>
+    ) : null;
   if (action.detail === undefined) {
     return (
       <>
