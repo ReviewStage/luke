@@ -24,6 +24,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
@@ -170,6 +171,9 @@ function AskDialog({
     <Dialog
       open
       title={boxQuestion(box)}
+      // Note that the question names the box by the name and address it reported, so its title stays masked in a screen recording.
+      replayUnmasked
+      titleReplayMasked
       busy={settled}
       // Note that an answer under way, or the host just made, holds the card until it lands.
       onDismiss={settled ? () => undefined : onClose}
@@ -182,7 +186,7 @@ function AskDialog({
             busyLabel={WORDS.DENYING}
             onClick={() => onAnswer(ANSWER.DENY)}
           >
-            {WORDS.DENY}
+            <ReplayUnmask>{WORDS.DENY}</ReplayUnmask>
           </Button>
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
@@ -193,7 +197,7 @@ function AskDialog({
             onDone={onClose}
             onClick={() => onAnswer(ANSWER.CONNECT)}
           >
-            {WORDS.CONNECT}
+            <ReplayUnmask>{WORDS.CONNECT}</ReplayUnmask>
           </Button>
         </>
       }
@@ -201,7 +205,7 @@ function AskDialog({
       <Stack gap={GAP.CONTROL}>
         <Text>{WORDS.MATCH}</Text>
         <Text variant={TEXT_VARIANT.SECTION} font={TEXT_FONT.MONO}>
-          {shownHostUserCode(code)}
+          <ReplayMask>{shownHostUserCode(code)}</ReplayMask>
         </Text>
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {`It works until ${momentText(box.expiresAt)}.`}
@@ -225,15 +229,25 @@ function AskDialog({
 /** A dialog that only says how the pairing ended, closed from its Done. */
 function EndedDialog({
   title,
+  titleReplayMasked = false,
   body,
   onClose,
 }: {
   title: string;
+  /** Whether the title names the box, kept masked in a screen recording. */
+  titleReplayMasked?: boolean;
   body: string;
   onClose: () => void;
 }): React.JSX.Element {
   return (
-    <Dialog open title={title} onDismiss={onClose} actions={<DialogActions onDone={onClose} />}>
+    <Dialog
+      open
+      title={title}
+      replayUnmasked
+      titleReplayMasked={titleReplayMasked}
+      onDismiss={onClose}
+      actions={<DialogActions onDone={onClose} />}
+    >
       <Text>{body}</Text>
     </Dialog>
   );
@@ -338,7 +352,12 @@ export function HostConnectDialog({
       );
     case STANDING.DENIED:
       return (
-        <EndedDialog title={`Denied ${standing.box.name}`} body={WORDS.DENIED} onClose={onClose} />
+        <EndedDialog
+          title={`Denied ${standing.box.name}`}
+          titleReplayMasked
+          body={WORDS.DENIED}
+          onClose={onClose}
+        />
       );
     case STANDING.REFUSED:
       return <EndedDialog {...refusalWords(standing.refusal)} onClose={onClose} />;

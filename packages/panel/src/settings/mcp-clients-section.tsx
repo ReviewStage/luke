@@ -25,7 +25,7 @@ import {
   Time,
   useConfirmDialog,
 } from "@repo/ui";
-import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
@@ -206,10 +206,12 @@ function ClientRow({
     confirmFailure(FAILURE_SURFACE.MCP_CLIENT_REVOKE),
   );
 
+  // Note that an agent that gave no name is called by the app's own words, which show in a screen recording.
+  const named = client.name !== null && client.name !== undefined;
   return (
     <>
       <SettingsRow
-        label={<ReplayMask>{name}</ReplayMask>}
+        label={<ReplayWords masked={named}>{name}</ReplayWords>}
         description={revoked ? PAGE_LINE.REVOKED : <ClientLine client={client} />}
         error={replayMaskedError(refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE))}
       >
@@ -231,8 +233,8 @@ function ClientRow({
           running: "Revoking",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           replayUnmasked: true,
-          titleReplayMasked: true,
-          bodyReplayMasked: true,
+          titleReplayMasked: named,
+          bodyReplayMasked: named,
         }}
       />
     </>

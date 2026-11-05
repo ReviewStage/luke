@@ -217,22 +217,28 @@ function SkillFileDialog({
       open={open}
       title={skill.name}
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
+      titleReplayMasked
       onDismiss={onClose}
       onExited={onExited}
       actions={<DialogActions onDone={onClose} />}
     >
       {read.kind === LIST.READING ? (
-        <SpinnerRegion label={`Reading ${skill.name}`} delay />
+        <ReplayMask>
+          <SpinnerRegion label={`Reading ${skill.name}`} delay />
+        </ReplayMask>
       ) : read.kind === LIST.FAILED ? (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.SKILL_READ)}
           onRetry={() => setAttempt((count) => count + 1)}
         >
-          {read.line}
+          <ReplayMask>{read.line}</ReplayMask>
         </ErrorState>
       ) : (
         <Stack gap={GAP.FIELD}>
-          <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
+          <ReplayMask>
+            <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
+          </ReplayMask>
           <Stack gap={GAP.ITEM}>
             <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.H3}>
               {SKILLS_LINE.FILES}
@@ -247,7 +253,7 @@ function SkillFileDialog({
                       variant={TEXT_VARIANT.INHERIT}
                       font={TEXT_FONT.MONO}
                     >
-                      {file.path}
+                      <ReplayMask>{file.path}</ReplayMask>
                     </Text>
                   }
                 >
