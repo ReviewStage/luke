@@ -1605,6 +1605,7 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
     <Dialog
       open={form.open}
       title={SLUG_WORDS.CHANGE}
+      replayUnmasked
       busy={form.settling}
       initialFocus={field}
       onDismiss={form.dismiss}
@@ -1620,7 +1621,15 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
         />
       }
     >
-      <FormField label="Slug" description={`${LINK_HOME.HOST}/${slug}`} error={inputProblem(shown)}>
+      <FormField
+        label="Slug"
+        description={
+          <>
+            {LINK_HOME.HOST}/<ReplayMask>{slug}</ReplayMask>
+          </>
+        }
+        error={inputProblem(shown)}
+      >
         {(control) => (
           <TextField
             ref={field}
