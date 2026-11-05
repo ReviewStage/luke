@@ -75,6 +75,9 @@ import { slackClipped, slackMarkdownBlock } from "./slack-markdown.js";
 /** Slack's own limits a DM's parts are clipped to: a header's text, a button's, and a checkbox's. */
 const SLACK_TEXT_BOUND = { HEADER: 150, BUTTON: 75, OPTION: 75 } as const;
 
+/** What a thread's title DM says before its title, so the DM reads as the inbox's. */
+const TITLE_PREFIX = "📥 ";
+
 /** What a checkbox says after its label, in parentheses, where the agent recommends it. */
 const RECOMMENDED_NOTE = " (Recommended)";
 
@@ -283,10 +286,11 @@ function askControls(itemId: string, message: InboxMessage): AskControls {
   };
 }
 
-/** The DM a thread's Slack thread stands under: its title alone, as the header. */
+/** The DM a thread's Slack thread stands under: its title alone, after the inbox's emoji, as the header. */
 function titleDmContent(title: string): SlackMessageContent {
-  const header = slackClipped(title, SLACK_TEXT_BOUND.HEADER);
-  return { text: title, blocks: [{ type: "header", text: { type: "plain_text", text: header } }] };
+  const text = `${TITLE_PREFIX}${title}`;
+  const header = slackClipped(text, SLACK_TEXT_BOUND.HEADER);
+  return { text, blocks: [{ type: "header", text: { type: "plain_text", text: header } }] };
 }
 
 /**

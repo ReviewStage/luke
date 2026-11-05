@@ -39,11 +39,15 @@ export const SETTINGS_SEARCH_ROW = {
   API_KEY_OPENAI: "api-key-openai",
   /** Skills' Add a skill row. */
   ADD_SKILL: "add-skill",
+  /** MCP's Agents with access, the outside agents the account let in. */
+  MCP_CLIENTS: "mcp-clients",
+  /** MCP's Connect an agent, the server's address and each agent's steps. */
+  MCP_CONNECT: "mcp-connect",
   /** Hosts' Add hosts button, under its list. */
   ADD_HOSTS: "add-hosts",
   /** The Workspace page's identity row, where an owner or an admin renames the workspace. */
   WORKSPACE_RENAME: "workspace-rename",
-  /** The Workspace page's link row, where the owner changes the workspace's slug. */
+  /** The Workspace page's identity row, whose ⋯ holds the owner's Change slug. */
   WORKSPACE_SLUG: "workspace-slug",
 } as const;
 

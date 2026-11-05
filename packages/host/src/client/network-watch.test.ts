@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Exit, Scope } from "effect";
+import { ServiceReach, type ServiceReachState } from "@repo/features";
+import { Effect, Exit, Scope, SubscriptionRef } from "effect";
 import { TestClock } from "effect/testing";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, initialAppState } from "./app-state-store.js";
@@ -8,9 +9,10 @@ import { linkNetworkWatch } from "./network-watch.js";
 
 /**
  * What a window reads of the network: the document's `network` slice follows
- * the platform's probe within one interval, either way, moves the version
- * only when the answer moved, runs what catches up once each time the
- * network comes back, and stops following once the client's scope closes.
+ * the platform's probe within one interval, either way, and the service's
+ * reach as its calls set it, moves the version only when the answer moved,
+ * runs what catches up once each time the app can reach the service again,
+ * and stops following once the client's scope closes.
  */
 
 const RUN = {
@@ -21,11 +23,12 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-/** A store and a probe whose answer the test sets, first `online`, the watch linked into `scope`, and how many times it ran `regained`. */
+/** A store, a probe whose answer the test sets, first `online`, and the service's reach its calls would set, the watch linked into `scope`, and how many times it ran `regained`. */
 function watched(scope: Scope.Closeable, online = true) {
   return Effect.gen(function* () {
     const machine = { online };
     const regained = { times: 0 };
+    const reach = yield* SubscriptionRef.make<ServiceReachState>({ reachable: true, answered: 0 });
     const state = new AppStateStore(initialAppState(RUN, false, []), yield* Effect.context());
     yield* linkNetworkWatch({
       state,
@@ -33,8 +36,8 @@ function watched(scope: Scope.Closeable, online = true) {
       regained: Effect.sync(() => {
         regained.times += 1;
       }),
-    }).pipe(Scope.provide(scope));
-    return { machine, state, regained };
+    }).pipe(Scope.provide(scope), Effect.provideService(ServiceReach, reach));
+    return { machine, reach, state, regained };
   });
 }
 
@@ -71,6 +74,30 @@ it.effect("a network found again catches up once, and a loss or a steady network
     assert.equal(regained.times, 1);
     yield* Scope.close(scope, Exit.void);
   }),
+);
+
+it.effect(
+  "the service unanswered is said at once, and catches up only once it answers again with the network back",
+  () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const { machine, reach, state, regained } = yield* watched(scope);
+
+      yield* SubscriptionRef.set(reach, { reachable: false, answered: 0 });
+      machine.online = false;
+      yield* TestClock.adjust("2 seconds");
+      assert.deepEqual(state.snapshot().network, { online: false, reachable: false });
+
+      machine.online = true;
+      yield* TestClock.adjust("10 seconds");
+      assert.equal(regained.times, 0, "the network back while the service still does not answer");
+
+      yield* SubscriptionRef.set(reach, { reachable: true, answered: 1 });
+      yield* Effect.yieldNow;
+      assert.deepEqual(state.snapshot().network, { online: true, reachable: true });
+      assert.equal(regained.times, 1);
+      yield* Scope.close(scope, Exit.void);
+    }),
 );
 
 it.effect("a machine offline at launch is said at once, not an interval later", () =>

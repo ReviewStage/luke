@@ -685,9 +685,10 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
  * state, and an item of a workspace the account is not in is not found.
  * Marking every item read marks every item their Inbox lists, in the
  * workspace the body names or in all of theirs, and answers how many were
- * unread. Each of the member's writes but a message is taken once under
- * the idempotency key its request carries (`writeReceiptMiddleware`), so
- * one sent again after an answer lost lands once.
+ * unread. Each of the member's writes but a message or a new thread is
+ * taken once under the idempotency key its request carries
+ * (`writeReceiptMiddleware`), so one sent again after an answer lost lands
+ * once.
  */
 export function inboxProcedures(seams: InboxProcedureSeams) {
   const writer = storeWriter({ tools: CODER_TOOL_SET });

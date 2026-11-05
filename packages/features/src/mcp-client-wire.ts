@@ -2,7 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { countedNumber } from "./service-wire.js";
 
 /**
- * mcp-client-wire.ts -- the outside MCP clients a member allowed into their account, as Settings › Integrations lists and revokes them.
+ * mcp-client-wire.ts -- the outside MCP clients a member allowed into their account, as Settings › MCP lists and revokes them.
  *
  * An outside MCP client (Claude Code, Codex, Claude.ai, ChatGPT) signs a
  * member in to the member MCP server through the auth service, and the

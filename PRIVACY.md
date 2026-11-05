@@ -1,1932 +1,361 @@
 # Privacy
 
-Last updated: 4 November 2026
-
-Vespin is an inbox for all your coding agents. This policy explains
-what we collect, who we send it to, and how to turn it off.
-
-## In short
-
-- **What Vespin stores.** On your Mac, only its window layout, the messages
-  you have not sent yet, and, sealed, a copy of your workspaces' lists with the changes you made offline. On our service: your account, your tasks and their
-  plans, your agents' transcripts, and your conversation. Agents work
-  in sandboxes on our service, not on your Mac. An agent you run on This Mac
-  or on a host instead runs straight on that machine, as you or the user Vespin's
-  host runs as there, with full access to whatever that account can reach,
-  in a folder of its own it keeps for its life; no copy of its work comes to
-  us. See [What we collect](#what-we-collect) and [Storage](#storage).
-- **Models run on your keys.** Dictation goes to OpenAI, and
-  agents go to Anthropic or OpenAI, on the API key or subscription you
-  saved, never ours.
-- **Who else gets data.** GitHub for your repositories. Vercel runs our
-  service and the sandboxes, and Neon hosts our database. PostHog gets usage
-  data and screen recordings with every word masked. Sentry gets crash,
-  error, and performance reports, and a log of the errors Vespin shows you,
-  which leave out what a model was sent or answered. Any integration you connect gets what your agents ask it. See
-  [Who we send it to](#who-we-send-it-to).
-- **Commands on your Mac.** Agents can run commands on your Mac, and
-  what those commands print leaves it. See "Commands agents run on your Mac"
-  under [What we collect](#what-we-collect).
-- **Off switches.** Turn off "Share usage data" in Settings › Account, set
-  "Let agents run commands on this Mac" to Never, disconnect any integration,
-  or delete your account, which erases what our service keeps under it. See
-  [Your choices](#your-choices).
-
-## What we collect
-
-**On your Mac.** Agents can run any shell command on your
-Mac once you allow it, and what it prints leaves your Mac (see "Commands
-agents run on your Mac"). Apart from that, nothing in Vespin reads an agent session, message history, file contents, or command output from your
-Mac's disk or from any other app, except a file you hand it to attach to a
-agent's message (see "Files you attach to an agent"). The only
-agents it lists are the ones started on a task from Vespin — from New task,
-New agent, or the terminal picker, or by another agent — which
-our service runs in sandboxes of their own (see "Who we send it to"), and
-the transcripts it shows, each an agent's or one of its workers', are
-read from our service. Each agent reads a task's repository in its
-sandbox on our service. No part of an agent runs on this Mac, so no
-transcript, working memory, or inbox of one is held here on disk, and in
-memory only the tabs described next and the content they showed that never
-changes once read. On disk, under its application data, Vespin keeps
-the layout of its window: which tasks' tabs are open and which are pinned,
-each pin with its label (an agent's title or a file's path), which
-inbox items you have seen, and which groups you folded and how you sorted
-the Inbox; and the words of a message you typed to an agent and have
-not sent, mentions and skills among them, kept per agent until you send it
-or empty its box, and an inbox answer you have not sent, kept per item until
-you send it or the agent changes the item, each shown only while the account
-that wrote it is signed in. The files attached to such a message or answer
-stay in memory only.
-None of it is sent anywhere.
-
-While you are signed in, Vespin on your Mac also keeps a copy of your
-workspaces' lists as our service last sent them, so the app opens on them
-before it reaches us: your tasks and their agents as the task list shows
-them, your sidebar's sections and the tasks and agents you keep in them,
-your pinned repositories, and your workspaces with their GitHub
-installations. For each workspace whose people, invitations, or
-automations you opened, it also keeps its members' account ids, names,
-emails, roles, and profile pictures' addresses, and its former members'
-account ids, names, and profile pictures' addresses; its invitations as
-our service last listed them, each with its id, address, role, and expiry,
-and the address their accept links are built on; and its automations as
-their list shows them, each with its name, trigger, the prompt it hands its
-agent, and its latest run, never a webhook's body or secret. The members,
-invitations, and automations it keeps for a workspace are deleted once you
-leave that workspace. Its tasks and agents remain until our service sends
-the next task list. Beside these it
-keeps the changes you made while our service could
-not be reached (a task's name, standing, or pin, a pinned repository, a
-section, an agent's name or pin, or an inbox item marked read or unread,
-snoozed, acknowledged, or closed, by its id), each with a random key it is sent
-again under, until our service takes it. Our service keeps that key for 30
-days, so a change sent twice lands once. The copy is one file,
-`entities.sealed`, beside the settings, sealed under a key held in the
-macOS Keychain, and deleted when you sign out. It holds no transcript, inbox item, plan, page, comment,
-browser tab, command or its output, picture, or credential, and it is sent
-nowhere. Vespin in a browser keeps none of it on disk: it holds the
-changes you made while our service could not be reached in the tab's
-memory alone, sent under their keys in the same way, and loses them when
-the tab is closed or reloaded.
-
-**Commands agents run on your Mac.** Every agent can run any shell
-command on your Mac, as many at a time as you allow; the workers a Claude Code
-agent hands work to cannot, and run their own commands where the agent's own
-commands run: in its sandbox, with the same network, or, for a local agent, on
-your Mac or the host. This holds whenever Vespin is open on the Mac and
-signed in to your account, and Settings › This Mac is not on Never. It has
-three modes: Ask every time, the default, where you see a prompt and can deny
-the command; Always allow, which runs it at once; and Never. The mode is kept
-on each Mac, not with your account, and opening Vespin at login is on by default
-on every Mac. A
-command runs in your login shell, from your home folder, as your macOS user,
-with Vespin's own environment, so it reaches everything you can: your files and
-checkouts, your installed tools, and the network. Nothing is read into it, and
-it is killed after 60 seconds, or after up to eight minutes when the agent
-asks for longer; quitting Vespin kills the commands still running, though a
-process a command started apart from itself can outlive both. While the mode
-is not Never, Vespin on your Mac keeps a read open to our service for the commands your
-agents queue, and our service records, once for your account, when a Mac of
-yours last read, with nothing about which Mac. A command waits in our database
-until a Mac takes it, and its answer until the agent has read it; both are
-deleted as soon as the agent has the answer or stops waiting, though if our
-service fails during that wait they stay until you delete your account. A
-command no Mac takes within 30 seconds is not run, and the agent is told it
-had no answer. The command, the few words the agent gave to describe it, its
-exit code, and up to 20,000 characters each of what it printed to its output
-and its error are returned to the agent; stored with the agent's
-transcript, or its worker's, under its terms, and in the session history
-described under "Who we send it to"; shown, marked "On your Mac", on a
-worker's tab or the agent's tab on every Mac signed in as
-you; and sent to the model provider that agent runs on. Nothing is redacted:
-if a command prints a password, a token, a key, or a file's contents, all of
-that goes too, and our operators can read it there like the rest of the
-conversation. None of it is logged, counted in usage data, or written to a
-trace. When two of your Macs are open, whichever takes a command first runs
-it, and only that one. Turning the switch off, or signing out, stops that Mac
-taking new commands at once: a command it already took is answered as switched
-off, and one still running is stopped within about 20 seconds. For up to 45
-seconds after the Mac's last read our service may still count it as listening,
-and an agent is told its command was not run or had no answer; after that, it
-is told that no Mac is listening.
-
-**Your conversations with agents.** Nothing on your Mac writes what you said
-to disk, and no record of what an agent did is kept
-there. Opening an agent, yours or another member's, reads its
-transcript (its words, reasoning summaries, and tool calls with their input
-and output, and the lines said on calls an earlier version took) for its tab, as it runs, and
-opening one of its workers reads that worker's whole session for its own
-tab. All of this is held in Vespin's memory, never on disk, goes when you leave
-the task or quit Vespin, and is left out of the screen recording (see "Screen
-recordings"). The content that never changes once read is the exception: up
-to 32 MB in all of the pictures and attachments you opened, an agent's, an
-inbox item's, a plan's, or a pull request's, with the pages' HTML and the
-files read at a commit, stays in Vespin's memory, never on disk, until you
-sign out or quit Vespin, or in a browser until its tab closes or reloads, so
-that showing one again asks our service nothing. Your default model, effort, and
-context size for an agent are kept with your account preferences on our
-service, set in Settings › Agents or by the model you last started
-with. The Claude model your Generate chapters runs on is kept with them too,
-set in Settings › Agents. Where a Vespin link you open in a browser goes, staying there or handed
-to Vespin for Mac, is kept with them too, set in Settings › Account; Vespin in a
-browser on a Mac reads it each time it loads a link that names something in
-Vespin.
-
-A fixture or evidence run keeps no conversation at all.
-
-**Tasks.** When you start a named task, our service stores it in a
-workspace: the first workspace made for your account unless you start it in
-another workspace you are a member of, and the task records which, and who
-started it, named by their account's name to every member of the workspace. Every member of that
-workspace can read, change, and delete the task, its pages, and its
-history, read what was said on calls an earlier version took, yours included, and read,
-message, rename, and stop the agents any member started on it. Each
-message a member sends an agent keeps which member sent it, as their
-account, and the agent's tab names them over it to every other member; a
-message of a member whose account is deleted keeps no account and reads as a
-former member's. A message that mentions another agent of the
-workspace tells the agent it reaches that agent's task, branch, and pull
-request, and how to message it, never its conversation. An agent can
-also list the other agents of its workspace, on any task and whichever
-member started them, send one a
-message, list the workspace's open tasks, and start a new one on its own
-task or another task of the workspace, handing it pictures of its own
-conversation as images on its first message, without asking you first; a
-message is kept in the receiving agent's transcript under the sending
-agent's title, opening with the sending agent's title and id, and goes to
-the receiving agent's model provider as the rest of its conversation does,
-and an agent it starts runs as the member who started it, on that member's
-keys, and is told which agent started it. It stores
-under your account its name and its plan, one Markdown document, which begins empty
-and is written by agents started on it and by
-you, when you edit a section or restore an
-earlier version. Your edits are sent as you pause typing and when you finish;
-unsaved words stay in Vespin's memory on your Mac, never on disk. Our service
-keeps the plan's history without limit: the document after each revision
-(saves one writer makes close together count as one), who wrote it (you or
-another member, editing or restoring which version, kept as that member's
-account; or which agent; a revision a task's own Vespin wrote, before
-tasks lost him, keeps which member's call it was on) and
-when, and who last changed each section and when, so Vespin can say so beside
-it, naming each member by their account's name to every member of the
-workspace. A revision of a member whose account is deleted keeps no account
-and names nobody. An agent's last fifty saves are also kept as its
-notes, so the task's agents are told what it changed. All of it is stored as written,
-bound to your account and readable by our own operators, like the
-conversation described below. Vespin on your Mac remembers, for each task, only
-the time of its newest save when you last had it open, to show which sections
-changed since.
-
-Deleting a task removes it at once with its history, its inbox, and the
-record of each agent started on it with the plan copy or prompt that
-agent was handed, and marks each agent's transcript deleted, removed seven
-days later. The conversation a task held with its own Vespin, before tasks
-lost him, is already marked deleted, whether or not the task is, and is
-removed seven days after it was marked. Before it deletes anything, it
-stops every agent of the task still at work, as Stop does; if one
-cannot be stopped just then, or is still starting, the task is not deleted
-and you can try again in a moment. Deleting your account removes every task. Pinning or archiving a task
-stores only when you did it and deletes nothing.
-
-**A plan's pictures.** When you paste, drop, or choose a picture into a
-task's plan, Vespin re-encodes it on your Mac to at most 1.5 MB and sends it
-to our service, which keeps it in our database beside the task, under the
-task rather than your account, with which member added it. An agent on
-the task may add a picture too: a PNG, JPEG, or WebP file of at most 1.5 MB in
-its sandbox, such as a screenshot it took of what it built, or a short video it
-recorded there of what it did, a WebM of up to 4 MB, which our service
-reads from the sandbox and keeps the same way, as added by the member the
-agent's turn runs for, with the plan's history naming the agent. The plan's text
-names the picture by an address on vespin.dev; our service serves its bytes
-only to Vespin signed in as a member of the task's workspace, and opening the
-address in a browser shows a page that opens the task in Vespin and nothing of
-the picture. Every member of the workspace sees it, as they see the plan.
-A video an agent showed you can also be added to the plan from the file
-viewer's Add to plan, which sends it as it is, never re-encoded, up to 3.3 MB.
-A plan holds at most ten videos, which play where they stand in its text and
-are left out of the screen recording as its pictures are.
-Pictures are stored as sent and readable by our own operators, like the plan.
-The agents read the plan with each picture's line, its address, its
-alt text, and its caption, but not the picture. An agent on the task
-may look at one of the plan's pictures when those
-words are not enough, read as the member the turn runs
-for, which sends the picture to the model that looked; our service keeps
-only that it looked in the agent's transcript, not
-the picture, though the model's session history may keep it (see "Who we send
-it to"). An agent never looks at one of the plan's videos: our service
-refuses the look, so no model is handed a video, and the agent reads only its
-alt text and caption. A picture stays as long as the task does, even once the plan no
-longer shows it, so every earlier version still shows its pictures; one no save of the
-plan ever showed, pasted and undone, is deleted a day after it was sent.
-Deleting the task deletes its pictures; deleting your account leaves the
-pictures you added to a task that stays, as it leaves the words you wrote.
-
-**A plan's comments.** When you comment on a task's plan, our service keeps
-the comment in our database beside the task, under the task rather than your
-account: your words, which member wrote them and when, the words of the plan
-the thread is on as they stood when it was started, where those words stand
-in the plan now, and the section they stand in. It keeps the same of each
-reply, edit, resolve, and reopen, and of every comment an agent on the
-task writes, or a task's own Vespin wrote before tasks lost it, naming the
-member whose turn it ran on. Every member of
-the workspace sees every comment, as they see the plan. Comments are stored
-as written and readable by our own operators, like the plan. Deleting a
-comment or a thread deletes it at once; deleting the task deletes all of its
-comments; deleting your account leaves the comments you wrote on a task that
-stays, naming nobody, as it leaves the words you wrote. The task's agents read the
-open threads beside the plan, and a thread in which a member mentions one of
-them with @ is handed to that agent whole as a request; either way the comments' words
-and their writers' names go to that agent's model provider, as the plan does
-(see "Who we send it to").
-
-**What Vespin remembers.** Where its developer turned on the Memory
-experiment, as an agent works it may keep a fact or
-convention its developer settled or it confirmed in the code, such as how
-your team tests or ships, so later agents can recall it. Our service stores
-each one under the workspace the agent works in, as a short statement in the
-agent's words, with who it stands for (the member who started the agent that
-kept it, or the one whose agent last corrected it) and when, readable by our
-own operators like the transcript it came from; nothing asks you first. A
-memory is the workspace's shared knowledge: any member's agent there
-may read it, and Settings › Memory shows it to every member with your name on
-it. No agent of another workspace reads it. Vespin refuses to keep words that
-look like a key, token, or password, and agents are told never to keep a
-remark about one member. An agent keeps nothing on a turn an automation
-started, or once that turn has read the web, since neither's words are a
-member's. In Settings › Memory you can forget a memory
-holding your words, and the workspace's owners and admins can forget any;
-forgetting deletes it at once, so no later agent recalls it. Like a
-project's history, a memory outlives the person who said it: leaving a
-workspace, or deleting your account, leaves the memories you kept with the
-workspace, and once your account is gone they no longer carry your name.
-Deleting a task does not remove a memory kept while working on it, and a
-workspace's memories go when the workspace does.
-
-**Pinned repositories.** When you pin a repository in the sidebar, our
-service stores its name and when you pinned it under your account, so the pin
-follows you to every Mac you sign in on. Unpinning deletes that record, and
-deleting your account removes them all.
-
-**Renamed repositories.** So that a task, an agent, an automation, or a pin
-keeps its repository when you rename or transfer it on GitHub, our service
-keeps each repository's GitHub id with the name GitHub last gave it, as
-GitHub's deliveries to the Vespin GitHub App and its answers name them, and
-moves every stored name of a repository to its new one when GitHub reports
-it. That record names no account and holds nothing else; it is not removed
-with an account.
-
-**Sidebar sections.** When you make a section in the sidebar, our service
-stores its title, its icon (an emoji, or an icon's name and the color you
-chose for it), its place among your sections, and the workspace
-it is in under your account, and, for each task you put in it, which task and
-when, so your sections follow you to every Mac you sign in on. They are yours
-alone: no teammate sees them. Deleting a section deletes those records and none
-of its tasks; they are not read while you are not a member of the workspace,
-and deleting your account or the workspace removes them all.
-
-**A task's inbox.** When an agent on a task needs a decision from you,
-or something only you can do such as changing a GitHub setting, it posts an
-item to the task's inbox on our service: a title, context in Markdown, links,
-references to lines of its repository (a path, the lines, and the commit,
-never the lines themselves), and how it asks to be answered, with any options
-or form fields. An item may carry a picture the agent took in its sandbox,
-such as a screenshot of a page it rendered, with the agent's description of
-up to 300 characters, or a short video it recorded there of what it did, such
-as clicking through a form it built: our service reads the file from the
-sandbox, keeps the image, up to 1.5 MB, or the video, a WebM of up to 4 MB,
-which plays where the item draws it, in our database beside the item, and
-serves it only to Vespin signed in as you. A video is what the agent's own
-screen showed while it recorded, so it can hold whatever that screen did; it
-is left out of the screen recording as the pictures are. Items and their pictures are stored under your account
-and readable by our own operators, like the agent's transcript. The agent can
-change or withdraw an item, and our service keeps each as it last stood; a
-picture goes when the item stops naming it. Your answer, and any note, is
-stored with the item under the account of whichever member gave it, which
-every member of the task's workspace sees by name beside the answer, and,
-where the agent asked to hear back, handed to it as one of your messages,
-kept in its transcript. You can attach files to an answer as you can to a
-message, on the same terms and bounds (see "Files you attach to an agent"): an answer carrying one is always handed to the agent, and our
-service also keeps each file, with its name, in our database beside the item,
-where every member of the task's workspace can open it, until the answer is
-taken back or the agent posts the item again. Any member of the task's
-workspace can also add a message to an item's thread at any point, answered
-or not, with files on the same terms: our service keeps the message's words
-and files with the item under the account of the member who wrote it, which
-every member of the workspace sees by name beside it, and hands it to the
-agent as one of your messages, kept in its transcript. A thread stays until
-the item is deleted with its task. While you are signed in, Vespin
-on your Mac keeps a read open to our service for every item waiting in your
-workspaces, each in brief (its task, agent, title, and the account that started
-the agent), and for every task holding an item; it counts in its sidebar and on
-its Dock icon only the open questions waiting on you: those an agent addressed
-to you, else those on a task assigned to you, else those of agents you started
-on a task nobody is assigned. Opening the Inbox reads
-each of those tasks' items whole, the ones you settled included, with what
-each offered and the answer you picked; Vespin holds them in memory only, never
-on disk. Deleting the task, or your account, deletes
-its items.
-
-**Files you attach to an agent.** You can attach files to an agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
-dropping, or pasting: images, PDFs up to 3 MB, and text files up to 100 KB, up
-to ten files and 3 MB a message. A PNG, JPEG, or WebP up to 1.5 MB is sent as
-it is; any other image, or a larger one, is first made into a smaller WebP on
-your Mac. Vespin reads only the files you hand it and sends our service each
-one's name and contents, including whatever the file carries inside it, such
-as where and on what a photo was taken, but never where it was on your Mac.
-Our service sends them to the agent's model with your message and with every
-later call, and keeps them with the agent's transcript, readable by our own
-operators. Each PNG, JPEG, or WebP is kept once, beside the transcript, as a
-tool's pictures are (see "Pictures in a tool's answer"), and the transcript
-names it by an id rather than carrying it; the agent is told that id, by which
-it may hand the image to another agent, as a file of another agent's Start,
-on the same bounds as a file you attach. Any
-other file, and an image not kept that way, such as one past the transcript's
-200 MB of pictures, is stored in the transcript as sent, except that the
-prompt an agent is started on keeps a PDF, or an image not kept, by name
-alone. An agent is handed a PNG, JPEG, GIF, or WebP image in its message; any
-other file, a PDF among it, is written into its sandbox (for a local agent,
-into its folder on your Mac or the host), and the message tells it where.
-They go when the transcript does; the sandbox's snapshot and the agent's session history keep them on the
-terms under "Who we send it to".
-
-**Pictures in a tool's answer.** When a tool answers an agent
-with a picture, as a connected service can answer a screenshot or an image
-attached to an issue, the model that made the call sees it, and our service
-keeps the picture once, a PNG, JPEG, or WebP of up to 4 MB, in our database
-beside the agent's transcript the call is written to, which names the
-picture by an id rather than carrying it; a transcript keeps up to 200 MB of
-pictures. A larger picture, one past
-that, or one of another kind is not kept, and the record says only its kind
-and size. An agent can also show you pictures
-from its sandbox, such as screenshots of a page it changed, up to twenty at a
-time with a line of its own words each, and among them a short video it
-recorded in its sandbox of what it did there, such as clicking through a form
-it built, as a WebM of up to 4 MB, which the transcript plays where it would
-draw a picture: our service reads each file from the sandbox and keeps it the
-same way, beside the agent's transcript, and the model is told
-only that they were shown, never handed the pictures or the videos back. A
-video is what the agent's own screen showed while it recorded, so it can hold
-whatever that screen did; it is left out of the screen recording as the
-pictures are, and may be added to the task's plan (see "A plan's pictures").
-An agent's kept pictures are served only
-to Vespin signed in as a member of the workspace who can read the agent. Kept
-pictures are readable by our own operators, like the transcript, and go
-when it does.
-
-**Your own API keys.** If you add an Anthropic or OpenAI API key in Settings,
-your Mac sends it once, over HTTPS, to our service, which keeps it only if the
-provider accepts it when asked for its list of models, a request that costs
-nothing. It is stored under your account encrypted with AES-256-GCM, under a
-key drawn for it alone that is itself encrypted under a server-only secret
-held outside the database, so a copy of our database alone cannot read it; our
-operators who hold both could. Beside it we keep the provider, a hint (the
-`sk-` prefix and the word after it where it has them, and the last four
-characters, such as `sk-ant-…abcd`), when you last saved it, and whether, and
-when, the provider last accepted it, refused it, or said it was out of credit,
-or our service could no longer read it, updated when an agent call on it
-finds that changed. Every model call Vespin makes for you runs on your own keys
-and never on ours: an agent's and its workers' calls, Fast, and web
-search on the key of the provider the model is on; dictation on your OpenAI
-key; and titles, pull request chapters, and the summary a
-Continue or Fork writes on whichever of your keys there is. Without an OpenAI
-key, dictation is off; without any API key, an agent is titled from
-the first words of its first message, and no chapters or summaries are
-written. After you save it, neither your Mac nor any answer from our
-service holds the key again, and we never log it or send it to our analytics,
-crash reports, or screen recordings. Removing it in Settings, or deleting your
-account, deletes it.
-
-**Your ChatGPT plan.** Where Settings offers it, Sign in with ChatGPT signs
-Vespin in to your ChatGPT account through OpenAI's own page in your browser,
-which hands a one-time code back to Vespin on your Mac over a connection that
-never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
-access token, a renewable refresh token, and an ID token, checks the ID
-token's signature and that it was issued to Vespin for this sign-in, and sends
-them, with the client id OpenAI issued Vespin and your ChatGPT account's id
-(the ID token's subject), once, over HTTPS, to our service. It keeps nothing
-of them itself. The service stores them under your account encrypted exactly
-as your own API keys are, with the scopes OpenAI granted and when the access
-token expires, beside a host id it made for your account, which names Vespin's
-hosted runtime to OpenAI and is kept after you disconnect. It renews the
-access token with OpenAI as it nears its expiry. You are shown that you are
-connected and when, never a token, and we never log one or send it to our
-analytics, crash reports, or screen recordings. Disconnecting in Settings
-asks OpenAI to end the sign-in and deletes it whether or not OpenAI confirms;
-where OpenAI did not confirm, Settings says so, and you can remove Vespin in
-your ChatGPT settings to end it there. Deleting your account deletes it too.
-
-**Your own GitHub token.** If you save a GitHub personal access token (classic)
-in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
-which asks GitHub whose it is with one request and keeps it only if GitHub
-accepts it, it carries the `repo` scope, and it belongs to the GitHub account
-linked to yours; a fine-grained token is refused without being sent to GitHub.
-It is stored under your account encrypted with AES-256-GCM, under the same
-keys as your own API keys, so a copy of our database alone cannot read it.
-Beside it we keep your GitHub login and account number, a hint (the `ghp_`
-prefix and the last four characters), its expiry where GitHub gives one, when
-you saved it, and whether GitHub has since refused it. You are shown the hint,
-the login, and the expiry, never the token. Our service uses it only to call
-GitHub for you: to list the repositories it can push to, and to read, check
-out, commit to, and open pull requests on the repository of a task or
-agent you start on it, where no GitHub App installation connected to the
-workspace reaches that repository. Once a minute it reads the reviews, comments, and
-checks on the open pull requests of your agents that run on it, to wake
-those agents. It also asks GitHub whether your token can read the repository
-of a teammate's task or agent that runs on their own token, to decide
-whether you see it, and keeps that answer for up to an hour. In an agent's sandbox it is set at
-the network firewall on that one repository's paths alone, and never enters
-the sandbox, a command, or its output. After you save it, neither your Mac nor
-any answer from our service holds the token again, and we never log it or send
-it to our analytics, crash reports, or screen recordings. Removing it in
-Settings, or deleting your account, deletes it.
-
-**How agents read your repository.** A task names a GitHub
-repository of the Vespin GitHub App installation connected to the task's
-workspace. Each agent on the task reads and changes its code in a
-Vercel Sandbox of its own: an isolated machine our service opens for the
-agent's session, on Vercel's infrastructure, never on your Mac (see "Who we
-send it to"). The tokens its checkout is made and pushed with are set at the
-sandbox's network firewall and never enter the sandbox, a command, its
-output, or the agent's transcript. So that a change to that firewall keeps
-what else stands there, our service keeps what the sandbox's firewall
-carries in our database, encrypted with AES-256-GCM under the same keys as
-your own API keys and bound to that sandbox's session, for as long as it
-stands: an entry is deleted the moment it is taken off, and all of them as
-our service stops the sandbox. A sandbox that stops otherwise, on its own
-timeout, leaves its record behind, which is deleted a day and an hour after
-it was last written. Each command the agent runs, the few
-words it gives to describe it, and what it printed are stored with the
-agent's transcript, under its terms. The checkout stays in the sandbox
-between turns and, once the sandbox is stopped, in a snapshot Vercel keeps
-until thirty days after its last use. When an agent's transcript, or the
-conversation a task's own Vespin kept before tasks lost it, is removed,
-seven days after you delete its task, our service deletes the sandbox of
-each of its sessions, with the snapshots no other sandbox uses, shortly
-after; deleting your account does the same for every session of yours,
-shortly after the deletion. A session an agent's conversation was moved off
-earlier in its life is not tracked, and its snapshot stays until Vercel lets
-it expire. The sandbox of each session a task's own Vespin ran, before tasks
-lost him, is deleted the same way, shortly after his conversation is removed.
-
-**A local agent on your Mac.** Once you turn on Bring your own host in
-Settings › Experimental, an agent you start on This Mac runs Claude Code, or
-Codex for a GPT model, straight on your Mac, as you, in a folder of its own
-under `~/.vespin/agents` that holds its repository, its home, and its caches.
-It has full access to whatever your account on the Mac can reach, as a program
-you run yourself does: your files, the folders of your other agents, your
-running programs, and the network; neither Claude Code nor Codex runs a
-sandbox of its own there or asks before a command. Its transcript, its events,
-and the files its tools read still reach our service as any agent's do. It
-runs on the plan or key you saved in Vespin, never on the sign-in of Claude
-Code or Codex on your Mac; a Codex agent asks our service for your ChatGPT
-plan's access token over HTTPS as it needs one, so no token waits in our
-database for your Mac. A Claude Code agent's plan token or key is in the
-agent's environment, where any command it runs can read it, unlike in a Vercel
-Sandbox. It reaches GitHub with a short-lived token our service hands your
-Mac, as for a host below, which your Mac writes into `gh`'s sign-in in the
-agent's own folder, where the agent's `git` and `gh` read it and any command
-it runs can too, rewrites as it renews, and deletes as each turn ends. No copy
-of an agent's work goes to Vespin: its folder stays on your Mac for the
-agent's life, and each turn goes on from it. An agent you archive or delete
-loses its folder from your Mac as soon as the archive reaches it, or within
-minutes of your Mac's next being online once our service no longer lists the
-agent; one where your Mac's check finds work that no remote has, or cannot
-tell, is kept for seven days, and then deleted. Only the folders of the agents
-your Mac's host made are ever touched. Nothing of this happens until you turn
-Bring your own host on. Turning it on enrolls your Mac on your sign-in and
-installs Vespin's host program, `vespin-host`, into your account on the Mac, as
-the install command in Settings › Hosts does: the app runs the install script
-our service serves, which puts the host under `~/.local` with a LaunchAgent
-that runs it at each login, whether the app is open or not, and the host keeps
-the secret it acts on in `~/.local/state/vespin-host`, readable by you alone.
-Every copy of Vespin on your Mac drives that one host. Turning Bring your own
-host off stops it and keeps it from starting at the next login, with its files
-left in place; `vespin-host uninstall` removes it, with the folders of the
-agents it ran. To run them, `vespin-host` downloads Claude Code, Codex, and
-GitHub's CLI from their publishers once, and keeps each in its own folder on
-your Mac only once it matches the checksum Vespin pins.
-
-**A local agent on a host.** A host is a Linux machine or Mac of your own
-that you add to Vespin to run your agents, as This Mac does. Each agent on
-it runs straight on the box, as the user Vespin's host program runs as there, in
-a folder of its own, with full access to whatever that user can reach: the
-box's files, the host program's own folder and the secret it holds among them,
-every other agent's folder, its running programs, and its network; where the
-host runs as root, that is the whole box. It has no git login of yours, so for
-each agent on it that works in a repository, our service hands the host a
-short-lived GitHub token over HTTPS. It is a Vespin GitHub App installation token
-cut to that one repository, good for an hour and renewed every 50 minutes. Your
-own saved GitHub token is never sent. The host writes the token into `gh`'s
-sign-in in the agent's own folder, where the agent's `git` and `gh` read it and
-any command it runs can too, rewrites it as it renews, and deletes it as each
-turn ends. The token is never logged and never written to the conversation's
-record. As on This Mac, a Claude Code agent's plan token or key is in the
-agent's environment, where a command it runs can read it, and no copy of an
-agent's work goes to Vespin: its folder stays on the box for the agent's life.
-The host deletes an archived or deleted agent's folder once the archive reaches
-it or our service no longer lists the agent; one where the host's check finds
-work that no remote has, or cannot tell, is kept for seven days, then deleted.
-
-**Connecting a host with a code.** A host joins your account with a code.
-The box asks our service for a code with no
-credential, and our service keeps, beside the code, the name, operating
-system, and processor the box gives, its version of Vespin's host program, and
-the IP address it asked from, for the code's ten minutes. Anyone signed in to
-Vespin who opens the code's link is shown them, so you can tell whether the box
-is yours before you approve it. Approving it adds the box to your hosts under
-that name; denying it, or letting the code lapse, adds nothing. What was kept
-with the code, its IP address included, is deleted once the box collects its
-secret, or within a few minutes of the code lapsing. To stop codes being
-guessed, our service also counts, for 15 minutes at a time, how many codes
-your account named that matched none.
-
-**Which machine a host is.** This Mac and every host tell our service which
-machine they run on, so that two of your machines with one name can be told
-apart, and two installs on one machine known as one. A Mac reads its hardware
-UUID (`IOPlatformUUID`) and a Linux box its machine id (`/etc/machine-id`),
-asking nothing of you; that id never leaves the machine and is never logged.
-What is sent in its place is a keyed SHA-256 hash (HMAC) of it under a fixed
-key of Vespin's own, which the id cannot be worked back from and no other
-app's hash of it matches, but which stays the same for as long as the
-machine's id does: for a Mac's life, and on a Linux box until its machine id
-is made anew. A Mac also sends its model as macOS names it, such as "MacBook
-Air (M2, 2022)"; a Linux box sends none. Nothing else the system reports beside
-them, its serial number among it, is kept or sent. They go with This Mac's
-enroll as you turn on Bring your own host, with a box's ask for its code, and
-each time the host program starts; our service keeps them with the host from
-its enroll or its first call after you approve it, keeping none from the ask
-for a code, lists them only to your own account's apps, and keeps them for as
-long as it keeps the host, which goes with your account.
-
-**An agent that runs on Claude Code.** Every Claude agent runs on
-Anthropic's Claude Code, whether your Claude plan or your own Anthropic API
-key pays for it, in that agent's own Vercel Sandbox unless it is a local
-agent, as above. Its sandbox's disk holds the agent's checkout of the
-repository and Claude Code's own session files: its record of the session,
-which it picks up again from there when the agent is next messaged. Both stay
-on that disk between turns and in the snapshot Vercel keeps when the sandbox
-stops, and are deleted with the sandbox when the task is deleted, as above.
-Your plan's token, or your API key, never enters the agent's sandbox: Claude
-Code there is handed a random stand-in made for each launch, which every
-command it runs inherits, and the sandbox's network firewall puts the real
-one in its place on requests from that sandbox to Anthropic's API that carry
-the stand-in, and nowhere else, kept in our database with what else that
-firewall carries, as above, until the agent's runner ends. A local agent's
-Claude Code is handed the token or key itself, in its process's environment,
-where every command it runs can read it, since your Mac has no firewall of
-ours. Either way it is never written to that disk or the conversation's
-record. What you send such an agent in its sandbox, a
-message with the files it carries as Claude Code takes them, a Stop, or a change
-of model, waits in our database as a line for the agent's runner, which reads it
-from there; a message the runner never took is handed to the agent's next launch
-within five minutes of your sending it, or not at all. A line is deleted once
-it is a day old and a later one is sent to that agent, and with the agent.
-
-**An agent that runs on Codex.** On the same terms, every GPT agent runs
-on OpenAI's Codex, whether your ChatGPT plan or your own OpenAI API key pays
-for it. Its sandbox's
-disk holds the agent's checkout and Codex's own thread files (under its
-`CODEX_HOME`): its record of the thread, which it resumes from there when the
-agent is next messaged. Both stay on that disk between turns and in the
-snapshot Vercel keeps when the sandbox stops, and are deleted with the
-sandbox when the task is deleted, as above. Neither the plan's short-lived
-access token nor, for an agent your API key pays for, that key ever enters the
-sandbox: our service sets it at the sandbox's network firewall, which adds it
-to the agent's requests to OpenAI's API on their way out, and hands Codex in
-its place only a random stand-in made for that launch, which is good for
-nothing but those requests from that sandbox. While the agent runs, our
-service renews the plan's access token there before it expires, checking
-each running agent's within a quarter of an hour, and the token or the key
-comes off the firewall as the agent's run ends. The firewall's copy is kept in our database as the
-sandbox's other firewall entries are (see "How agents read your
-repository"), and your sign-in's refresh token never leaves our service.
-Neither is ever written to that disk, a command Codex runs, or the
-conversation's record.
-
-On either, the firewall is what keeps the token or key from the commands the
-agent runs: neither Claude Code nor Codex runs a sandbox of its own around
-them. A command Claude Code runs inherits its stand-in; one Codex runs
-inherits neither Codex's stand-in nor the one the agent's runner reaches our
-service with, but, running as the same user, any command can read each of
-them from the environment of the process that holds it. Each is good for
-nothing but requests from that sandbox, and the real values are never in the
-sandbox at all. What keeps even a stand-in from anyone with a Terminal
-in that sandbox is not a missing `sudo`: Claude Code or Codex runs as a user
-of its own, whose home no other user reads, and every Terminal shell, every
-command the agent runs, and Claude Code or Codex itself start with every
-Linux capability dropped, so none of them can read another user's process
-environment or a file kept from it, or become root.
-
-**Code an agent showed in an earlier version.** Earlier versions let a
-agent show you code: it named a file and lines, and our service read
-them from its sandbox checkout, never a file named `.env` or starting with
-`.env`. The path, the commit the checkout read it at, the line numbers, the
-lines (at most 200, each cut to 400 characters), and the model's note on why
-it showed them (at most 280 characters) stay stored with that agent's
-transcript, and are deleted with it. No agent shows code now, and none of
-it is part of the task's plan.
-
-**A whole file in a File tab.** A file named in a mention or an inbox item
-opens whole in a File tab. Our service reads the file from GitHub at the
-commit named, or, for a file you open from the tree or a skill, at the head
-of the default branch: it confirms the workspace's installation still reaches the
-repository and mints a token for that one repository that reads its contents, used for that
-read and never sent to your Mac, logged, or kept. It never reads a file named
-`.env` or starting with `.env`, and a link, a folder, a file over a megabyte,
-or one that is not text is refused. The file is read 500 lines at a time as you scroll, is
-not stored by our service, and is held by Vespin only while its tab is open,
-or, read at a commit, among the 32 MB it keeps until you sign out or quit (see
-"Your conversations with agents"), never on disk, except that copying or downloading it reads it whole (up to
-that megabyte, lines uncut) and a download is written where you save it. The
-File tab's tree lists the repository's folders and file names the same way,
-through our service, which does not store them, and Vespin holds them in memory
-only; a `.env` file's name may be listed, though the file is never read.
-An inbox item's line reference is read the same way, at the
-commit the agent named, for the lines on the item and the File tab it opens;
-nothing of the file is stored.
-
-**An agent's pull request.** An agent's Pull request tab shows its
-pull request as GitHub holds it, in two views. Each time a view first opens, or
-you refresh it, our service reads it from GitHub with a token the Vespin GitHub
-App mints for that one repository on the workspace's installation. The overview
-reads its title, branches, and whether it would merge, with how it may be
-merged: the merge methods and auto-merge its repository allows, whether a merge
-queue merges its base and its place in that queue, whether auto-merge is on,
-its head commit, what its required reviews say, and its checks as one word; its description and up
-to its 100 newest comments and reviews, each whole with its author, as GitHub
-renders them; the name, App, state, and times of up to 100 checks on its head;
-its reviewers; and up to its 100 newest review threads on lines, each with the
-file and lines it is on, the part of the diff it was made on, whether it was
-resolved or outdated, and up to its first 50 comments, each whole with its
-author, as GitHub renders them; and the reactions on the description, those
-comments and reviews, and those review comments, with up to 10 of who gave
-each, except on a review comment, where only how many. Beside it, where you
-hold a GitHub sign-in, our service reads with your own GitHub token which of
-those reactions are yours, so the tab can light them; it keeps none of it, and
-the answer is never kept for anyone else. An image in the description or a comment is read by our
-service too, never by your Mac: an upload with the same one-repository token,
-through a fresh signed address GitHub gives for it, and any other image through
-GitHub's own image proxy, each up to 8 MB; other images are shown as links.
-Files changed reads each changed file's name and patch, for up to 300 files,
-leaving out a patch over 100,000 characters. It stores none of it, and Vespin
-holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. Chapters splits the pull
-request into chapters only when a member presses Generate chapters, or
-Regenerate once its head has moved on; nothing makes them on its own. Our
-service then reads the pull request's title, description, the messages of up
-to its first 100 commits, and each changed file's patch as Files changed
-reads them, and sends all of it, except the patches of files a reader reads
-past (lockfiles, minified files, source maps, snapshots, images, fonts,
-videos, and documents) and of files with no patch to read, to the Claude model
-the member who pressed it chose in Settings › Agents (Haiku 5.5 unless
-they changed it), on that member's own Anthropic API key (or, with only an
-OpenAI key saved, to an OpenAI model on that key), never ours and never
-counted in your daily usage, as described under "Who we send it to".
-It stores the chapters that come back with the workspace, for that repository,
-pull request, and head commit, beside which member asked, when, the model
-that answered, and why a generation failed where one did: each chapter's
-title, summary, risk and reasons, the questions it puts to a reviewer, and the
-file paths and line numbers it covers, never a patch, the description, or a
-commit message. Every member of the workspace who can reach the repository
-sees them, and a Generate for the same head replaces them. They are deleted
-when the workspace is; nothing else deletes them, so they stay after the pull
-request closes, after a newer head's chapters are made, and after the member
-who asked deletes their account, which only clears who asked. A button in the tab that
-changes the pull request, such as Ready for review, Convert to draft, Merge,
-Enable auto-merge, or giving or taking back a reaction, is
-sent to GitHub by our service as you, on the token of your own GitHub sign-in,
-whoever started the agent, so it can do only what your GitHub account may; it
-is never sent as the Vespin GitHub App, and where you hold no GitHub sign-in
-GitHub takes, nothing is sent and the tab asks you to sign in with GitHub
-again. Files changed's Viewed boxes are GitHub's own, which GitHub keeps for
-each account: our service reads which files you marked viewed, and marks or
-unmarks one when you press its box, on the same token of your own GitHub
-sign-in and never as the Vespin GitHub App, and stores none of it. Wherever Vespin names someone on
-GitHub, as the tab does who opened, reviewed, and commented on the pull
-request, it draws them by their GitHub avatar, which your Mac loads straight
-from GitHub's avatar host, as github.com does, so GitHub sees your Mac's IP
-address.
-
-**Your repository's skills.** A repository can hold agent skills, Markdown
-instructions in `.agents/skills/` or `.claude/skills/`, each in a `SKILL.md`.
-When an agent's session starts, our service
-reads them from GitHub at the head of the default branch, with a token for
-that one repository: up to 64 skills, leaving out a file over 64 KB. The
-agent is told each skill's name and
-description, and reads a skill's whole file when it loads one, which you can
-ask for by typing `/` and its name in an agent's message box; a load is
-stored with the agent's transcript like any tool
-call. Vespin on your Mac reads each skill's name, description, and path through
-our service, read from GitHub the same way, never its file, to list after `/`,
-and holds them in memory only; a skill named in a message opens its file in a
-File tab, by the rules above. Our service keeps no copy of the skills
-themselves.
-
-**Security ratings of skills you add.** When you paste a `skills add`
-command into Add skill, our service reads the repository it names from
-GitHub to show you its skills. Where GitHub says that repository is public,
-it also asks skills.sh, Vercel's skills directory, for its partners'
-security ratings of the skills shown in detail, as the `skills` command
-does: it sends the repository's owner and name and those skills' names, and
-nothing about you. It never asks for a private repository, and keeps
-nothing of the answer past showing it.
-
-**Pages an agent makes.** Agents can make a
-page for a task: an interactive HTML document, such as a chart or a mockup,
-that opens in the task's side panel. Our service stores each page with the
-task, as written and readable by our own operators: its title and HTML, at
-most 262,144 characters a version, and every version it has had, each kept as
-written and never changed, with which agent showed it, or Vespin, for
-a page a task's own Vespin showed before tasks lost it.
-Deleting the task deletes its pages. Agents can also read a page of
-any task of the workspace by its
-id, as a mention of the page points them to it: its HTML, at most 40,000
-characters of it, is then sent to that agent's model as part of its
-conversation. Vespin
-on your Mac reads a page's HTML from our service only to draw it, in its tab
-or in the card over its tab, its row, or a chip naming it, holds it in
-memory only, each version it drew among the 32 MB it keeps until you sign out
-or quit (see "Your conversations with agents"), and never passes it to the
-rest of the panel. Vespin in a
-browser draws a page in the same places, loading it from vespin.page, a
-domain of ours kept apart from the app's own so that a page never shares a
-site with your account. As the page loads, our service makes a link to it for
-your account: the link names your account's id, the page, and its version,
-works for one minute, and is signed so that nothing but our service can make
-one. Our service keeps no record of the link; Vercel's request log records its
-address, as it records every request's. Nothing on vespin.page sets or
-reads a cookie. A page runs sealed
-off from Vespin: it cannot read the panel, your account, or another page, and
-cannot store anything, open a window, or send anything anywhere but the
-requests it makes to the one place it may load from, cdnjs.cloudflare.com, for
-code libraries such as charts and diagrams, which Cloudflare's CDN then sees
-requested from your Mac's or your browser's address. A link inside a page does
-not open. A page is never published: it opens only in Vespin, to whoever can
-open the task or agent it stands on, and in a browser only inside Vespin's
-own frame, through a link that works for about a minute and loads nowhere
-else.
-
-**Agents' working memory.** Each agent works
-from a session history of its own turns — the model's record of what it read,
-said, and did, folded into a written summary when it grows long — kept by
-Claude Code or Codex as files on the agent's sandbox's disk, on the terms
-under "An agent that runs on Claude Code" and "An agent that runs on Codex",
-or, for a local agent, in its folder on your Mac or the host. Our database
-keeps the record of each turn described under "Your account"; a session that
-has ended does not pick up again from it, and the agent's next message starts
-a fresh one. Apart from a local agent's folder, none of it is held on your
-Mac, in memory or on disk.
-
-Earlier versions kept the conversation, Vespin's working memory, the things
-it remembered about you, and a search index over its workspace files in a
-database under Vespin's application data (`agents/main/agent.sqlite`, with
-recovery archives under `archives/`), and versions before those in three
-files beside your settings. This version reads and writes none of them, so
-all of that starts over on our service. Each launch removes the database and
-its archives if it finds them; the three older files stay until you remove
-them.
-
-Vespin's runtime runs inside the app. It holds your settings, the encrypted
-credentials (decrypted where it runs, under the same Keychain entry), and your
-account's session, while the part that draws listens, speaks, holds the keys,
-and asks the runtime for everything else. Nothing about you crosses that
-boundary that the panel did not already draw; no stored key, token, or account
-secret travels in any answer or event. Quitting Vespin cancels
-what was running, commands agents run on your Mac included, and writes down
-what did not finish rather than finishing it. Beside those commands and the
-files you attach, the one thing the app does on this machine at the runtime's
-ask is open an address you asked to open.
-
-**Your account.** Signing in with Google or GitHub gives us your name, email
-address, the address of your profile picture, and which of the two you used.
-An account made with Google can also link a GitHub account to itself, even
-one under a different email address, in Settings › Integrations, which lets
-agents use GitHub tools as you, lets our service open the pull request
-of an agent you start as you, and lets it change an agent's pull
-request as you when you press a button in its Pull request tab; signing in with GitHub, or linking it,
-authorizes the Vespin GitHub App: its token reaches only
-repositories where you installed the App and can already see, with the App's
-permissions (reading a repository's details; reading and writing its contents,
-pull requests, issues, and discussions; reading its checks, commit statuses,
-and Actions runs with their logs where the installation has accepted them;
-and reading your email addresses), and none until you install it. We keep that token and its refresh
-token sealed under a server-only secret, read them only on our service, and
-never hand them to your Mac, a browser, or anyone else; they go when you
-delete your account, and you can revoke the App in GitHub's settings under
-Applications, where an account that signed in before the App may also hold
-an unused `repo` permission to revoke. When you revoke it, GitHub tells us,
-and we delete that GitHub link's tokens. We keep the link itself, which
-holds only your GitHub account's number, so signing in with GitHub again
-finds your account even if your GitHub email changed; your account keeps
-any other way you sign in. Signing in with Google leaves us
-Google's sign-in tokens, kept on our service and used for nothing after the
-sign-in. Your own GitHub is not how Vespin reaches a workspace's
-repositories: they are those of the GitHub installation connected to the
-workspace, read from GitHub with tokens the App mints for that installation
-when you choose one, and nobody's own GitHub account decides what a
-workspace reaches. We also keep the records
-that keep you signed in, each with the network address and the browser or app
-it was signed in from, and a daily count of your use of our service, one
-number a day: one for each clip you dictated, and on days an earlier version
-opened voice sessions, one for each of those;
-beside it, how many seconds you dictated.
-
-Vespin's own maintainers can see your name, email address, profile picture,
-sign-in method, whether you are an administrator, when you joined and were
-last active, and your daily counts, and the names of your workspaces and
-their members, roles, invitations, connected integrations, GitHub
-installation, and activity counts, on an admin page that only an account we
-have marked as an administrator can open: on our site, and in the Mac app and
-the web app, where it reads the same answers through the app's own
-connection to our service. Beside them it shows
-how many tasks you created over a window; your
-agents, each with when it started, the repository it works in, its
-model and effort, whether it is running, finished, or failed with the fixed
-word for why, and whether its pull request is open, merged, or closed; which
-providers you saved a key for or connected, and whether each key or
-connection works; your agent model and effort, and the experiments
-you turned on; and when an automation of yours failed to start, with the
-fixed word for why. For the most active accounts it
-also shows how many agents you started and pull requests of theirs
-merged, on how many days you created a task, wrote a plan revision, or
-started an agent, and when you last signed in. Counted across all
-accounts, never named to one, it shows how many plan revisions, inbox
-answers, and automation runs there were, and how many accounts have GitHub
-connected on a workspace, have an integration
-connected, or opened or merged a pull request.
-Across every account, the same page counts how many of Vespin's turns,
-agents' runs, and automation runs ended and how many failed, were
-dropped, or were skipped, each by the fixed word the service records for why.
-Where one of your own API keys stands refused, out of quota, or unreadable,
-one of your integrations stands expired, or a workspace you belong to has its
-GitHub installation suspended or removed, the page lists your account with
-which provider or integration it is and that status, when it last changed,
-and how many of your agents failed in the past week; that list names
-no workspace and no repository. The same page shows the service's use at
-public list prices, a figure for comparison and not what we are billed,
-from the model tokens each turn recorded and the seconds of dictation it
-metered: mostly as totals across every
-account, and, for the accounts whose use comes to the most at those prices
-over the days chosen, what each one's use comes to, how many tokens of it
-no price was known for, and how many of its agents' pull requests
-merged. Past those names, nothing you
-type, say, or run appears on it: no task's title, plan, prompt, or message,
-no pull request's title, no key, and no error's own words.
-
-Every account also gets a first workspace on our service when it signs in, a
-record named with your name and holding you as its owner, which is otherwise
-like any workspace you create: you can invite people to it, and it stays when
-you delete your account, as every workspace you own does, with only your
-membership removed. A workspace you create is a record
-named as you name it, holding you as its owner; every member of a workspace
-sees every other member's name, email address, and
-role in it, and an owner or admin of it can remove a member. An owner or
-admin invites someone by email address: the service keeps the address, the
-role offered, who invited them, and whether the invitation is still pending,
-and emails the invitation's link to that address through Resend, named
-under "Who we send it to" below. A workspace may
-show a photo an owner or admin of it uploads: the service keeps it with the
-workspace, a PNG, JPEG, or WebP image, and serves its bytes only to Vespin
-signed in as one of the workspace's members, never caching it on the way;
-the list of your workspaces names only a short digest of it, so your Mac
-reads the photo again only when it changes. The photo is the one picture
-you choose, which your Mac first redraws as a small square, 256 pixels a
-side, and sends nothing else of the file; an owner or admin who removes it
-deletes it from the service, and a new upload replaces it. Your own first workspace, while
-it has no photo, shows your profile picture, from the address your sign-in
-gave us where it is Google's or GitHub's, and only to you. When an owner
-or admin connects GitHub to a workspace, the
-service keeps beside the workspace GitHub's ids for that installation and the
-account it is on, its login, whether it is a user or an organization, and
-whether the installation is active, suspended, or removed. To confirm the
-installation is one the person connecting it can see, GitHub asks them to
-authorize the Vespin GitHub App once; our service uses the one-time token that
-gives it to read their installations once, then revokes it, and keeps nothing
-of it or of that read. While a connect is under way it keeps, for at most an
-hour, a one-way digest of the connect link's random code beside your account
-and the workspace, the installation GitHub named, and the random code that
-proves the authorization is the one it asked for.
-
-The service also keeps your conversations with your agents. Each
-turn an agent runs for you writes to our database your message as given; its reply, the summaries of its reasoning, and each tool call with
-its input and result; and the turn's model and effort, token counts, and
-when it was queued, started, and ended, and how (rows from earlier versions
-may also hold the ids of OpenAI's responses, and the turns a task's own Vespin
-ran before tasks lost him). A transcript from an earlier version, which took
-voice calls, may also hold the lines said on a call into the agent, yours and
-the voice's, each kept as it was written. These rows are not sealed: they are stored
-as written, and our own operators can read them. They stand until you delete
-your account, which removes them at once. A deleted task's agents'
-transcripts are marked deleted and removed seven days later, as is every
-conversation a task held with its own Vespin before tasks lost it (see
-"Tasks").
-
-**Apps you connect as MCP clients.** An app that speaks MCP, such as Claude
-Code, Codex, Claude.ai, ChatGPT, or Cursor, can connect to our service's
-MCP server and act as you. It first names itself to our service, either by
-the address of a document it publishes about itself, which our service
-fetches and keeps a copy of (the app's name and redirect addresses) for up
-to an hour before fetching it again, or by registering its name and redirect
-addresses with our service, which anyone may do, five times a minute per
-network address. We keep that as a client record, with no secret in it. The
-app then sends you to our sign-in page in your browser, where you sign in if
-you are not, and to a consent page that names the app, says what it will be
-able to do, and says where its answer goes; nothing is granted until you
-allow it. If you do, we keep your consent and mint the app an access token
-for our MCP server alone, good for fifteen minutes, and a refresh token that
-lapses after thirty days unused, both kept hashed under your account. That
-token opens only our MCP server, never the account routes the Mac app uses.
-What the app then receives is whatever the server's tools answer it, as the
-Mac app would read the same: your workspaces, and, as tools are added, your
-tasks and their plans, your agents' transcripts, and your inbox threads. The
-app keeps what it receives under its maker's own policy. Settings ›
-Integrations lists each app you allowed, with its name, where its sign-in
-returns to, when you allowed it, and when it last refreshed its access. Revoke
-deletes the app's tokens and your consent, so it can no longer refresh and
-must ask you again before it connects; an access token it already holds keeps
-working until it expires, fifteen minutes at most. The client record, your
-consent, and the tokens go when you delete your account. To hold the
-registration and sign-in limits, our
-service keeps the network address and the path of each request to the
-sign-in service for the length of its limit's window, a minute at most.
-
-**Linear, if you connect it.** Connecting Linear in Settings › Integrations
-signs you in to Linear in your browser through Vercel Connect, which stores
-Linear's token for your account, encrypted, and renews it. Our service never
-writes the token down: it gets it from Vercel Connect when an agent uses
-Linear, or when an agent's MCP menu lists Linear's tools, holds it in
-memory for a short while, and sends it only to Linear's MCP server, never to
-your Mac, a model, or a sandbox. We keep only your connection's state
-(waiting for sign-in, connected, or expired), when it last changed and last
-finished signing in, and, while a sign-in is under way, when it began and a
-one-time value that matches its return. We also keep a name for each
-account, which Settings › Integrations shows beside the service's: the name
-the service gives that account's workspace when Vercel Connect hands us its
-token; where that names none, the name the service itself answers for the
-account, read with the same token, from Google's API for Google's products
-(below), and otherwise through one tool of the service's own MCP server that
-only reads: your organization's or workspace's name for Mercury, Neon, Notion,
-PostHog, Sentry, and Supabase (Neon, Sentry, and Supabase only where you belong
-to one organization there), and your email there for Granola, Vercel, and
-Y Combinator; or one you give it in Settings › Integrations. Of what the
-service answers we keep only that name, and a read that fails is not tried
-again for five minutes. An agent handed more than one account
-at a service is told each one's name, so it can ask which you mean and say
-which it used. The list of Linear's tools that menu
-shows is held in our service's memory for five minutes. While you are
-connected, every agent and its workers can read and change whatever
-your Linear account can, through Linear's own MCP server, without asking you
-first, unless you switch Linear off for that agent in its message box's MCP menu,
-which takes effect from its next turn and is stored with the agent. A
-message to the agent from a member of the workspace or Vespin, or an
-automation's own prompt (never a webhook body or a GitHub event's words),
-that mentions Linear, one of its tools, or one of its pages hands it Linear
-for the turn that message opens, or, sent while a turn is under way, for its
-next one, even while Linear is switched off for that agent, and leaves the
-switch as it is; a message from another agent or a reviewer hands it
-none. The workers are told to use it only to read. What Linear answers goes
-to the model that made the call, and each call, with its input and everything Linear answered, is written to the agent's
-transcript like any other tool call. Disconnecting stops Vespin
-using it from each agent's next step, removes the connection's record, and
-asks Vercel Connect to revoke the grant; what agents already changed in
-Linear, and the record of it, stays. Deleting your account removes the record
-and asks Vercel Connect to revoke the grant in the same way; if Vercel Connect
-cannot be reached then, your account is deleted all the same and the grant
-stays until you revoke Vespin in Linear's own settings.
-
-**Notion, if you connect it.** Connecting Notion in Settings › Integrations
-signs you in to Notion in your browser through Vercel Connect, which stores
-Notion's token for your account, encrypted, and renews it. Our service
-handles the token as it does Linear's, and keeps the same record of your
-connection. While you are connected, every agent and its workers,
-as for Linear, can read, create, and
-change whatever your Notion account can, through Notion's own MCP server,
-without asking you first. What
-Notion answers goes to the model that made the call, and each call, with its
-input and everything Notion answered, is written to the agent's transcript
-like any other tool call. Disconnecting and deleting
-your account work as they do for Linear: Vespin stops using it from each agent's
-next step, removes the connection's record, and asks Vercel Connect to revoke
-the grant; what agents already changed in Notion, and the record of it, stays,
-and a grant Vercel Connect could not revoke stays until you remove Vespin in
-Notion's own settings.
-
-**Sentry, if you connect it.** Connecting Sentry in Settings › Integrations
-signs you in to Sentry in your browser through Vercel Connect, which stores
-Sentry's token for your account, encrypted, and renews it. Sentry's sign-in
-lists what Vespin may do, reading issues and events among it, and you can untick
-its write access there to keep Vespin to reading. Our service handles the token
-as it does Linear's, and keeps the same record of your connection. While you
-are connected, every agent and its workers, as for Linear, can do whatever your Sentry grant allows, through
-Sentry's own MCP server, without asking you first. What Sentry answers, which
-can include the error messages, stack traces, and event data your applications
-sent it, goes to the model that made the call, and each call, with its input
-and everything Sentry answered, is written to the agent's transcript like
-any other tool call. Disconnecting and deleting your
-account work as they do for Linear: Vespin stops using it from each agent's next
-step, removes the connection's record, and asks Vercel Connect to revoke the
-grant; what agents already changed in Sentry, and the record of it, stays, and
-a grant Vercel Connect could not revoke stays until you revoke Vespin in
-Sentry's own settings.
-
-**Slack, where it is offered.** Slack is an integration like Linear, which a
-deployment of our service may offer to only some accounts, as ours does,
-because Vespin's Slack app works in its own Slack workspace alone. For any
-other account, Settings › Integrations shows no Slack to connect, and no
-agent of that account is handed Slack, so nothing reaches Slack. Where it is
-offered to you, connecting Slack in Settings › Integrations signs you in to Slack in your browser through Vercel
-Connect, which stores Slack's token for your account, encrypted, and renews
-it. While you are connected, the agents, as for Linear, can do whatever your
-Slack grant allows, without asking you first: search messages, files,
-channels, and people, read channels, private channels, direct messages,
-threads, canvases, and profiles, with people's email addresses, that your
-Slack account can see, and send and schedule messages, react, and write
-canvases as you. Our service handles the token as it does Linear's, and keeps
-the same record of your connection; which agents can use Slack is as for
-Linear. What Slack answers, which can include other people's messages in
-conversations you can see, goes to the model that made the call, and each
-call, with its input and everything Slack answered, is written to the
-agent's transcript like any other tool call.
-Disconnecting and deleting your account work as they do for Linear: Vespin
-stops using it from each agent's next step, removes the connection's record,
-and asks Vercel Connect to revoke the grant; what agents already sent or
-changed in Slack, and the record of it, stays, and a grant Vercel Connect
-could not revoke stays until you remove Vespin in Slack's own settings.
-
-**Vespin's Slack bot, where an owner or admin connects it.** Apart from the
-Slack each member connects for their agents, a workspace's owner or admin can
-connect Vespin's own Slack bot under Settings › Workspace, so Vespin can
-message the workspace's members in Slack. The bot's token stays in Vercel
-Connect, which holds it for the bot rather than for any account; our service
-asks for it each time it calls Slack and never stores it. Connecting asks
-Slack which Slack workspace the bot belongs to, and our service keeps that
-Slack workspace's id and name, and who connected it. The first time the bot
-is to message you, our service finds you in that Slack workspace. Where you
-connected your own Slack account under Settings › Integrations, it asks
-Slack who that account is, on that account's token from Vercel Connect,
-which it does not store, and takes your Slack user id where the account is
-in the bot's Slack workspace. Otherwise it sends your Vespin account's email
-address to Slack to find you there. It keeps the Slack user id it found, or
-that the email found no one, which it asks again after a day; a member it
-finds neither way is sent nothing. What the bot sends
-you, such as a thread's title and a link to it or an automation's result,
-goes to Slack, which keeps it under Slack's own policy. Disconnecting the bot
-deletes the Slack workspace's record and every member's Slack user id with
-it; deleting the workspace does the same, and deleting your account deletes
-your Slack user id. Messages the bot already sent stay in Slack.
-
-When an agent posts a thread that waits on you, the bot messages you its
-title, the agent's words, and a link to the thread, and uploads the
-pictures and recordings the post carried to Slack as files in that
-conversation, which Slack keeps under its own policy, and our service keeps
-that Slack message's conversation and timestamp, and which member it went
-to, beside the agent's message, so it can rewrite it once the ask is
-answered, withdrawn, or replaced, and post each later message of the agent's
-on that thread that waits on you as a reply in that Slack message's thread,
-kept the same way. Once rewritten, the record is marked settled rather than
-deleted, and it goes when the agent's message does. Slack notifications, under the bot's row in
-Settings › Workspace, turns these messages off for you in every workspace.
-Where the thread asks you to pick one option, the message carries a button
-for each, and pressing one answers the ask as you, as picking it in Vespin
-would: Slack sends the press through Vercel Connect to our service, which
-reads only the Slack user and Slack workspace who pressed it and the
-thread, message, and option the button names, finds you by the Slack user
-id it kept, and keeps nothing else of the press. A reply you write in the
-Slack thread under such a message reaches our service the same way and is
-posted on the Vespin thread as your reply, as one typed in Vespin would be,
-with the PNG, JPEG, and WebP images it shares as its files, read from Slack
-on the bot's token, and handed to its agent, so it reaches the agent's prompt, the model, its
-transcript, and its traces; one from anyone but the member the message went
-to is not posted.
-
-When you mention @Vespin in a Slack channel the bot is in, or write to the
-bot directly, Slack sends that message through Vercel Connect to our
-service, which finds you as a member of a Vespin workspace connected to that
-Slack workspace: by the Slack user id it kept; or else by asking Slack who
-each Slack account that workspace's members connected themselves is, for the
-members whose Slack user id it does not keep yet, as above; or else by asking
-Slack for the email address on your Slack profile and matching it to your
-Vespin account's. It keeps each Slack user id it finds from then on. A Slack
-user it finds no member for is told to connect Slack in Vespin's Settings ›
-Integrations, and nothing is started or kept. For
-a member, it starts a coding agent as you, or, in a thread an agent was
-already started from, sends the message to that agent as yours. The agent is
-handed your message, the earlier messages of the Slack thread it stands in,
-which our service reads from Slack and which other people may have written,
-with their Slack user ids, and the message's Slack link, so all of these
-reach the agent's prompt, the model, its transcript, and its traces, as
-anything you type to an agent does. The PNG, JPEG, and WebP images your
-message shares are read from Slack on the bot's token and handed to the
-agent as your message's files, kept beside its transcript as any picture
-you attach to an agent is; any other file you share is not read. Our
-service keeps which Slack conversation and thread each such agent was
-started from, so it can post the final message of each of the agent's
-turns, or that it failed or was stopped, back in that thread, with the
-pictures and recordings the agent showed in its transcript during that
-turn uploaded as files, where everyone in the conversation can read them;
-that record is deleted with the agent, with the workspace's bot connection, or with your
-account. Messages the bot posted stay in Slack. An owner or admin sees the
-Slack workspace's public channels, and the private ones the bot is in, under
-Settings › Workspace, read from Slack each time the page opens and not kept;
-they can add the bot to a public channel or remove it from one, and choose a
-repository for the workspace's Slack starts and for each channel, which our
-service keeps with that channel's Slack id until the bot leaves the channel
-or is disconnected.
-
-**Gmail, Google Calendar, and Google Drive, where they are offered.** Our
-service offers them only to the accounts of the organization it names, while
-Google's sign-in for them is limited to that organization's Google
-Workspace. Each is connected on its own in Settings › Integrations, which
-signs you in to Google in your browser through Vercel Connect for that one
-product, so connecting Calendar never grants mail. Vercel Connect stores
-Google's token for your account, encrypted, and renews it. Our service
-handles the token as it does Linear's, keeps the same record of your
-connection, and sends it only to Google's MCP server for that product, and
-to that product's own API to read your Google account's email, which names
-the connection: Gmail's profile, your primary calendar's entry, or Drive's
-account details. A read that fails is not tried again for five minutes. While
-you are connected, the agents, as for Linear, can do whatever that grant
-allows, through Google's own MCP servers, without asking you first: for
-Gmail, search and read your mail and apply labels, and write drafts, but
-never send one, which you do yourself from Gmail; for Google Calendar, read
-your calendars and read, create, change, and delete your events and respond
-to invitations; for Google Drive, search and read your files and create and
-copy files. What Google answers, which can include other people's messages
-to you, their names and email addresses, and whatever a message or file
-holds, such as a one-time code or a link to reset a password, goes to the
-model that made the call, and each call, with its input and everything
-Google answered, is written to the agent's transcript like any other tool
-call. Disconnecting and deleting your account work as they do for Linear:
-Vespin stops using it from each agent's next step, removes the connection's
-record, and asks Vercel Connect to revoke the grant; what agents already
-drafted or changed, and the record of it, stays, and a grant Vercel Connect
-could not revoke stays until you remove Vespin in your Google Account's
-security settings. "Google user data" below says what we never do with it.
-
-**Granola, Mercury, Neon, PostHog, Stripe, Supabase, Vercel, and Y Combinator,
-if you connect them.** Connecting one signs you in to it in your browser through
-Vercel Connect, which stores its token for your account, encrypted, and renews
-it. Our service handles each token as it does Linear's, and keeps the same
-record of your connection. While you are connected, the agents, as for
-Linear, can do whatever your grant at that service allows, through its own
-MCP server, without asking you first: read and change your Granola meeting
-notes and transcripts; read your Mercury accounts, balances, transactions,
-cards, recipients, and statements, with account and routing numbers,
-categorize and annotate transactions, and request payments and transfers,
-which an approver still confirms in Mercury; manage your Neon and Supabase
-projects and databases and run SQL on them; query and change your PostHog
-analytics, feature flags, and experiments; read and change your Stripe
-customers, payments, subscriptions, invoices, products, prices, and payment
-links in the accounts and sandboxes you grant on Stripe's consent page, and
-request refunds and movements of money, which Stripe holds until you approve
-them in its Dashboard; manage your Vercel projects,
-deployments, domains, and environment variables; and use Y Combinator's
-Bookface as your YC account can. What a service answers can include a
-credential it hands out, such as a database connection string or password, a
-decrypted environment variable, or an API key; like everything else it
-answers, it goes to the model that made the call, and each call, with its
-input and everything the service answered, is written to the agent's
-transcript like any other tool call.
-Disconnecting and deleting your account work as they do for Linear: Vespin stops
-using it from each agent's next step, removes the connection's record, and
-asks Vercel Connect to revoke the grant; what agents already changed there,
-and the record of it, stays, and a grant Vercel Connect could not revoke
-stays until you remove Vespin in that service's own settings.
-
-**Executor, if you connect it.** Executor (executor.sh) is a gateway to the
-apps you set up in it: other services' MCP servers and APIs, skills, and
-automations. Connecting it signs you in to Executor in your browser through
-Vercel Connect, for the one Executor organization you pick there, and Vercel
-Connect stores its token for your account, encrypted, and renews it. Our
-service handles the token as it does Linear's, and keeps the same record of
-your connection. The credentials of the apps you set up in Executor stay in
-Executor, which attaches them to each call itself; Vespin never receives them.
-While you are connected, the agents, as for Linear, can do whatever your
-Executor grant allows, without asking you first: read the apps' skills, search
-their tools, and call them or run a script over them, writes included. A call
-that Executor's own policy holds for your approval, or that needs your input,
-comes back to the agent as a question, which it puts to you, and the call goes
-on only with your answer. What an app answers, which can include a credential
-that app hands out, goes to the model that made the call, and each call, with
-its input and everything Executor answered, is written to the agent's
-transcript like any other tool call. Disconnecting
-and deleting your account work as they do for Linear: Vespin stops using it from
-each agent's next step, removes the connection's record, and asks Vercel
-Connect to revoke the grant; what agents already changed through Executor, and
-the record of it, stays, and a grant Vercel Connect could not revoke stays
-until you revoke it in Executor's own settings.
-
-**GitHub, if you signed in with GitHub.** GitHub needs no connecting of its
-own: while your GitHub sign-in stands, every agent and its workers,
-as for Linear, can do whatever the Vespin
-GitHub App's token allows, through GitHub's own MCP server
-(`api.githubcopilot.com`), without asking you first: read and change
-repositories, files, branches, issues, pull requests and their reviews,
-discussions, and Actions runs where the App is installed and you have access.
-Our service reads that token from where your sign-in left it, as it does for
-everything else it reads from GitHub, sends it only to GitHub's MCP server,
-never to your Mac, a model, or a sandbox, and keeps no other record of the
-connection. What GitHub answers goes to the model that made the call, and each
-call, with its input and everything GitHub answered, is written to the
-agent's transcript like any other tool call. An account
-that signed in with Google alone is offered Connect on GitHub's row in
-Settings › Integrations instead, which connects it, and Disconnect there
-ends it. Vespin
-stops using it when your GitHub connection ends: when you disconnect it,
-revoke the App in GitHub's settings, or delete your account; what agents
-already changed on GitHub, and the record of it, stays.
-
-**Usage data.** We count how Vespin's features are used on the Mac, and attach
-your name and email to that record. The counts are event names and values from
-a fixed list. Among them is which kind of page or pane you opened (a task's
-plan, an agent, the Inbox, a pull request, a file, a terminal, a
-browser, Settings, and the like, never which one) and whether Vespin's window
-was wide or narrow as you opened it. A count
-made before you sign in waits in Vespin's memory and is sent under your account
-if you sign in before Vespin quits, and is dropped otherwise. The mark that you
-used Vespin on a day is counted once a day for each account signed in, so Vespin
-keeps in its settings file on your Mac, for each account it was sent for, the
-email address and the UTC day it was last sent, and only the newest day; it is
-never sent anywhere. Nothing you type
-or say and nothing from a session can appear in one: no titles, branches, file
-paths, prompts, or error text. Each count also carries Vespin's version, whether
-it is a released build or a development one, whether it came from Vespin for Mac
-or Vespin in a browser tab (`platform`), and which deployment of our
-service recorded it. Our service also files them under a workspace, by its id
-alone, from its own record of the workspaces you are a member of, never from
-anything Vespin sends: the one workspace you share with others, or your own
-first workspace if you share none; if you are a member of two or more shared
-workspaces, they carry none. So if you are a member of a team's workspace,
-what you count while working in your own first workspace is filed under the
-team's. Settings › Account › "Share usage data" turns these counts off (see
-"Your choices").
-
-Our service also counts, under the same account, the work done through it:
-a task or a workspace made (with where it was started from), a task finished or
-canceled (by you, or on the merge of its work), an agent started (with the model and effort
-it runs on, who started it (you, another agent, or an automation), and what kind of agent it is),
-an agent whose start failed (with how it failed), a message you sent an agent
-(with what runs it, where, what kind of agent it is, whether it was at
-work, and whether it waited in the agent's queue), each of an agent's turns ended (with how it ended: answered, failed,
-stopped, or given up on by our service, why a failed one failed, roughly how long it ran, and what
-kind of agent it is), an agent stopped or archived (with what kind of agent
-it is), an agent's model or effort changed, a pull
-request an agent opened (as you or as Vespin's GitHub App, and whether as a
-draft), one it opened merged, and one you merged, reviewed, set to merge
-automatically, or closed from Vespin (which of those), an Inbox item
-answered, an automation made (with what triggers it), edited, or deleted (with
-whether you or an agent made the change), a message handed to an agent's runner (with which harness it
-runs, how the message reached it, whether a turn was under way, and how long the
-agent had been idle), an integration connected or disconnected (with which
-provider), and a pull request's chapters generated (with how it came out, how
-many chapters and parts of the diff they hold, and how long it took). It
-counts how a team comes together and sets up the same way, each under the
-account that did it: an account's first sign-in (with whether it was through
-Google or GitHub), a GitHub account linked or a GitHub token saved, a model
-provider's key or sign-in added (with which provider), a repository pinned or
-unpinned (never which), an invitation to a workspace sent (with the role it offers)
-and accepted or canceled, a member removed, given another role, or handed the
-workspace, a member who left, a workspace renamed, a post a member made on a thread (with whether it answered an ask
-and whether it carried a picture or a file), a plan a member edited, a comment
-a member wrote on one (with whether it replied on a thread or started one), an
-automation run started (with what fired it: its schedule, GitHub, a webhook, an
-integration, or Run now), counted under the automation's owner, the GitHub App
-connected to a workspace, a Linux host or this Mac enrolled (with which), a
-box's pairing approved or denied and a host removed, a skill installed, turned on or off,
-updated, shared with a workspace, or removed (never which), a workspace memory
-forgotten (never what it held), a clip you dictated (with a rough length, never
-its words), and a terminal or a browser tab you opened in an agent's sandbox, a
-browser tab you took over or handed back, or a file you added to a plan.
-What an agent writes on a thread or in a plan is not counted among these. These counts are event names and values from a fixed list too, are labeled
-`platform: server`, and
-carry no titles, names, repositories, branches, prompts, messages, or the
-words of any of them. They go from our service to PostHog, so PostHog never
-sees your network address for them, with your name and email attached as the
-Mac's are, and deleting your account erases them with the rest of your usage
-data.
-
-Our service's counts are also grouped by workspace, so PostHog can count
-workspaces as well as people: a count of something done in a workspace (a
-task, an agent and its messages and turns, a pull request, a thread, a plan, an
-automation, an invitation, a member or workspace change, a memory, a
-tool you opened for an agent, the GitHub App, or the workspace made) carries the
-workspace's id, and a count of your account's own setup and belongings (your
-first sign-in, a GitHub account or token, an integration, an API key, a pinned
-repository, an enrolled host or a pairing, a skill, or a dictated clip) carries
-none. For each workspace it counts, PostHog holds that
-workspace's name, as its members see it, and when it was made, and nothing
-else of it; our service sends them beside the workspace's first count on each
-of its servers, again once a day, and when the workspace is renamed. Your own
-first workspace is named with your name, so PostHog holds your name for it
-too. A workspace is never deleted, and PostHog cannot delete a single
-workspace's record, so PostHog keeps a workspace's name and creation date;
-deleting your account leaves them, your first workspace's name among them, as
-the workspace itself stays on our service.
-
-**Screen recordings.** Vespin records what its own panel draws, never your
-screen, your editor, your terminal, or any other app, and records its shape,
-not its words: before it leaves your Mac, every piece of text, and every
-label, description, picture address, and link address a page carries for
-itself, is replaced with blocks of the same length, so a task's plan, a
-line of what you or Vespin said, your name and email address, and anything
-you type all appear as blocks. An agent's message box is an editor, and
-the words in it and a skill chosen there are text it draws, which appear as
-blocks too; no chip carries what it names anywhere else. As a second line, some parts are left out
-whole: the feedback form, since a screenshot you attach could carry another
-app's words; a task's title while you edit it, its plan while you edit it,
-the contents of its File tabs with
-their tree, its pages, and its version history with the earlier version you
-are viewing; an Inbox item's body and pictures; each agent's and
-worker's tab, with its Changes tab, its Terminal tab, message box, menus of
-skills and MCP servers, and the files you attach there; a Browser tab, with
-the live view of its page; code drawn in a
-transcript; the API keys page of Settings; an automation's
-webhook secret, the one time it is shown; the admin page in the app, which
-only our maintainers can open and which names other people's accounts; and the cards
-that open over a row or a chip on hover, a page's preview among them. A
-Terminal tab's shell draws its words as pixels, which the
-masking cannot reach, so leaving it out is
-its only line, and recording what a canvas draws is switched off. A mention drawn as a chip carries what it names, such as a
-plan section's heading, only in its words, never in an attribute the masking
-leaves, so the recording keeps its shape alone. Vespin does not report what you
-clicked. Vespin records only while you are signed in: nothing is recorded
-before you sign in, a visit to the web app that never signs in records
-nothing, and signing out stops it. Each recording is filed under your
-account, which carries your name and email address as you are shown in
-Vespin, so that we can find the recordings of a person who reports a problem;
-deleting your account erases them. Each recording carries Vespin's version,
-whether it is a released build or a development one, and whether it came
-from the Mac app or the web app; only a released build records at all. It is
-also filed under the workspace Vespin's sidebar was showing as it was made, by
-the workspace's id alone, and under the next one when you switch; signing out
-lets it go with your account.
-Each also carries what PostHog's library reports of your device by default:
-its operating system and that system's version, the browser, your language
-and time zone, and the size of your screen. The Mac app sends its recordings
-to PostHog directly; Vespin in a browser sends them through vespin.dev, which
-passes them on to PostHog (see "Our website").
-
-**Tab switcher previews.** When you hold ⌃Tab in the Mac app, each card shows a
-small, downscaled still of a screen you visited, taken by the app as you
-settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
-while it is open, a few at a time: they are never written to disk and never
-reach our service, a trace, or a counted event, and the screen recording
-leaves them out.
-
-**Browser tabs.** A Browser tab shows an agent's cloud browser, which the
-agent drives and you can watch and take over.
-The cloud browser is a Chromium that runs in the agent's own Vercel Sandbox,
-never on your Mac, so it reaches that sandbox's own `localhost` and holds none
-of your Mac's cookies or signed-in sites. What the agent does with it reaches the model:
-each page's address and title, a screenshot, and a text snapshot of the page;
-the transcript keeps these, under its terms. A screenshot is taken twice: the
-model is handed a small copy, which the stored transcript leaves out, and our
-service keeps a full-size copy, the page at its own size as a JPEG or a PNG of
-at most 1.5 MB, in our database beside the transcript the call is written to,
-the agent's or its worker's, as it keeps the pictures an agent shows you (see
-"Pictures in a tool's answer"), under the same 200 MB a transcript keeps. The
-transcript names it by an id and shows it as a thumbnail that opens full size,
-to Vespin signed in as a member of the workspace who can read the agent, which
-is each member who can open the task. Kept screenshots are readable by our
-own operators, like the transcript, and are deleted with it: deleting the
-agent or its task marks the transcript deleted and removes it, with its
-screenshots, seven days later, and deleting your account removes them at
-once. Our service keeps each agent's list of cloud
-tabs, each one's address and title, until that agent's conversation is
-removed; a task's panel lists every one of its agents' tabs together, and an
-agent's own page lists its agent's, whether or not it is on a task. The agent can also record the
-browser as a video, for up to two minutes at a time, to show you a flow it
-built or tested: a recorder in its sandbox writes what the browser draws to the
-sandbox's disk, where it stays until the next recording replaces it or the
-sandbox's snapshot is deleted, and once the agent stops it our service keeps the
-video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
-shown to the same members, readable by our operators, and deleted with the
-transcript on the same terms; the model is told it was kept, never handed the
-video, and the screen recording leaves out its player. The agent may also post
-such a recording to the task's inbox, or add it to the
-task's plan, where it is kept and shown as any video an agent posts or adds
-there is (see "A task's inbox" and "A plan's pictures"). Apart from such a
-recording, the page and its live-view frames
-are not kept by us: the frames pass through our service
-to the panel of each member who can read the agent and opens its task or its
-page, and every such member can watch the tab and take it over by clicking and typing in it, and the agent's
-actions on it wait while you do. Nothing of it reaches a trace, a counted event,
-or a fixture, and the screen recording masks the live view
-and the transcript's screenshots.
-The browser's profile, with the cookies and logins you type into it, lives on
-the sandbox's disk, so it stays in that sandbox while it runs and in the
-snapshot Vercel keeps when the sandbox stops, until thirty days after the
-snapshot's last use, as the checkout does under "How Vespin reads your
-repository"; the pages open at a stop are not kept, and the browser reopens
-each tab at its last address on resume. No other agent reaches that profile;
-an agent's workers share its sandbox, so they share it. Deleting the task, or
-your account, deletes the sandbox and its snapshot as described there.
-
-**Crash and performance reports from the Mac app.** In ordinary runs, Vespin
-sends Sentry reports of unhandled exceptions in its Electron main, preload,
-and renderer code, and of the errors it caught but could not recover from: a
-launch that could not start, a window whose state could not be read, and an
-internal error in an action, a background task, or a part of Vespin shutting
-down. It also sends process-session status, and native minidumps when an
-Electron main, renderer, or GPU process crashes. It also sends performance
-traces for about one launch or page load in ten: how long Vespin took to start,
-how each window's page loaded, and the requests each made. Vespin uses Sentry's
-default data collection, so reports and traces carry the exception message
-and code path, breadcrumbs (among them messages Vespin wrote to its console and
-the addresses of requests it made),
-the headers, bodies, and query parameters of requests Vespin made, Electron,
-operating-system, runtime, and device context, and your Mac's IP address.
-Sentry replaces a value whose name looks like a credential, such as an
-authorization header or a token parameter, before it is sent. Vespin drops any
-error report or breadcrumb that names an access token in an address's
-`access_token` parameter, and any traced step whose name or request address
-names one as it starts; in the rest of a trace, a name or a value that names
-one is replaced. In
-the address of a request or of the page that a trace carries, the value of
-each query parameter and the fragment are replaced, and so is any part of its
-path shaped like a credential, such as a long token; the scheme, the host, the
-rest of the path, and the parameters' names are sent as they were. Each
-report and log line names the Vespin account signed in at the time by its id
-alone, never your email, your name, or your GitHub or Google login, so that we
-can find every error one person met; one sent while nobody is signed in names
-no account. Vespin does not enable Sentry Replay, screenshots, or profiling.
-Fixture and evidence runs send nothing to Sentry.
-
-**Errors Vespin shows you.** Each time the Mac app or Vespin in a browser shows
-you an error, such as a notice that something you asked for could not be
-done, it also sends Sentry a log line saying so; where the error is not one
-our service or the app named, as a limit you reached is, it sends an error
-report besides. Each carries where in Vespin the error was shown, its code, the
-name, code, HTTP status, and message of the error behind it, with every run
-shaped like a credential replaced and the message cut short, the ids of what
-it was about (such as the workspace, task, agent, conversation, inbox item,
-automation, or pull request number), whether your Mac or browser was
-online, whether you were signed in, and, while you were, your Vespin
-account's id, as every report described above does. It never carries what
-you typed, a
-transcript, a plan, or a file's contents. The message is the error's own, or
-our service's sentence for a refusal, so it can name what that error named,
-such as an address. Both go under the data collection described above. An
-error notice's Copy details button puts the same facts on your clipboard, with
-the time, the app's version, and the ids Sentry gave the report, and sends
-nothing anywhere: they go only where you paste them.
-
-**Error and performance reports from our service.** Our service sends Sentry
-reports so that we can find and fix failures. Our service's web functions send every error they did not handle or that ended
-work they run apart from a request (such as standing the terminal service),
-with its message, stack trace, and
-the lines of code around it; performance traces of a share of the requests
-they answer, each database query, and each request they make, with the
-method, the address and the names of its query parameters, the status, the
-browser's or app's user agent, and the query's text; every line they log,
-with the values it was logged under, such as the ids of the agent, the
-conversation, and the turn it is about; counts and timings; and, each minute, whether the scheduled sweep ran. They do
-not send a request's headers or body, the values of local variables, or the IP
-address a request came from, except the trace id a request names in its
-`traceparent` header, which its trace, its errors, and its log lines carry, in
-Sentry and in our service's own logs alike, so the app's report of a request
-that failed and the service's record of the same request share one id.
-An agent itself, and what it runs, sends our Sentry nothing, whether in its
-sandbox or as a local agent on your Mac or a host. The web functions do not send Sentry the
-instructions or messages sent to a model (the plan, the conversation, or what
-the agents read, such as code, a command's output from
-your Mac, or an integration's answer), a model's replies, or a tool call's
-arguments or result. The words of an error or a log line can still quote what
-an agent was working on, such as the path of a file a tool could not find. In
-the address of a request that the web functions give on a trace, an error, a breadcrumb,
-or a log line, the value of each query parameter and the fragment are replaced,
-and so is any part of its path shaped like a credential, such as a long token;
-the scheme, the host, the rest of the path, and the parameters' names are sent
-as the request carried them. An address written elsewhere, such as in a header
-or the words of an error or a log line, is sent as it was written. Terminal
-tabs' bytes are not sent. A report or a log line made while
-answering a request you signed in for, or while running one of your agents,
-names your Vespin account by its id alone, never your email, your name, or a
-login, wherever our service knows whose it was, so that we can find every
-error one person met. What reaches Sentry is kept under Sentry's retention
-and is not erased when you delete your account: Sentry gives us no way to
-erase one account's reports, so they stay, naming an account that no longer
-exists, until that retention ends.
-
-**What earlier versions left on our service.** Earlier versions of Vespin
-followed your agent sessions, kept a notebook, and pushed briefings to
-a phone; this version does none of that. On 13 October 2026 we deleted what
-they stored on our service: the Conductor key an earlier version synced, the
-roster of your Conductor sessions it observed, Vespin's workspace files (among
-them the things he remembered about you in `USER.md`) with their embeddings,
-and the device rows and push tokens an earlier Mac, iOS, or Apple Watch app
-registered. What stays in our database, unread, is the conversations Vespin kept
-for the sessions he followed and for the helpers he delegated to, deleted
-with your account. A calendar grant an earlier version kept encrypted on
-this Mac stays in its settings file as that version left it, still encrypted:
-this version neither reads nor sends it. Every provider key an earlier version
-stored on this Mac, a key of your own for voice among them, is removed from
-your Mac the next time Vespin opens, without being read.
-
-**Feedback.** If you use the feedback form, we receive what you typed, any
-screenshots you attached, and — unless you untick "Include my name and email"
-— the name and email of the account you are signed in with; they reach us
-only when you press Send. We read them by email. Your words and that name and
-email are also recorded in PostHog as a response to our feedback survey, apart
-from your usage data and under no person, and PostHog posts them to our own
-team's Slack; the screenshots stay in the email.
-
-## Who we send it to
-
-- Anthropic or OpenAI, for web search. An agent and its workers search
-  the web with the search tool of the provider its model is on (Anthropic's
-  for a Claude model, OpenAI's for a GPT one), inside that model call and on
-  the plan or key that pays for the agent. A page an agent reads is fetched
-  by Claude Code or Codex where the agent runs, in its sandbox or, for a local
-  agent, on your Mac or the host, so the site sees that machine's address. The
-  query, what the search found, and what the agent read of the page are
-  stored with the agent's transcript like any other tool call.
-- Any app you connect as an MCP client, such as Claude Code or Cursor: once
-  you allow it on the consent page, our service answers its tool calls, made
-  as you, with what the Mac app would read, and the app keeps that under its
-  maker's own policy. See "Apps you connect as MCP clients" under [What we
-  collect](#what-we-collect).
-- OpenAI, for dictation. Pressing the microphone in a message box records it,
-  in memory and never on disk, until you press ✓ or Enter (or for two minutes
-  at most); ✕ or Escape discards the recording. It goes through our service,
-  on your account, to OpenAI's transcription model on the OpenAI API key you
-  saved in Settings › Agents (never a key of ours; without one, dictation is
-  off), with words the
-  task is likely to contain — its repository's name, its title, and the file
-  paths it names — so they are spelled right. Only the text comes back, into
-  the box at the caret, and it goes nowhere until you send it. Our service
-  stores and logs neither the recording nor the text, apart from the reports to Sentry described under "Error and
-  performance reports from our service", and counts
-  only the clip and its length in your daily usage; OpenAI keeps the request and its reply
-  under its own retention policy.
-- PostHog, for usage data and screen recordings from the Mac app, screen
-  recordings from Vespin in a browser, and the counts our service makes of the
-  work done through it, all grouped by workspace, with each workspace's name
-  and creation date. The counts go through our own service; the
-  recordings go from the Mac app to PostHog directly, and from your browser
-  through vespin.dev, which passes them on to PostHog.
-- Sentry, for the Mac app's and Vespin in a browser's crash and performance
-  reports, and our service's error, performance, and log reports, described
-  above.
-- Resend, for email. When an owner or admin of a workspace invites someone,
-  our service sends Resend the invited address, the workspace's name, the
-  inviter's name (or their email address where their account has none), and
-  the invitation's link, and Resend delivers that one email to the invited
-  address and keeps it under its own policy. Nothing is emailed when an
-  invitation is canceled. A feedback note you send also reaches us by email
-  through Resend, with what it carries as described above.
-- PostHog and Slack, for the feedback form. A feedback note's words, and the
-  name and email it carries unless you untick them, go from our service to
-  PostHog as a feedback survey response, with no network address, and PostHog
-  posts them to a channel in our own team's Slack workspace, which Slack keeps
-  under its own policy.
-- Anthropic, for a pull request's chapters. Pressing Generate chapters in a
-  agent's Pull request tab sends the pull request's title, description,
-  commit messages, and patches, except those of files a reader reads past, to
-  the Claude model the member chose in Settings (Haiku 5.5 unless they changed
-  it) from our service, on that member's own Anthropic API key (or, with only
-  an OpenAI key saved, on an OpenAI model and that key), never ours, in at most two
-  calls (the second places the parts of the diff the first left out), as
-  described under "An agent's pull request". Our service logs only how a
-  generation failed, by its kind, and counts its outcome as described under
-  "Usage data"; Anthropic keeps the request and its reply under its own
-  retention policy.
-- Anthropic and OpenAI, for an agent. When you, or another
-  agent, start one on a task, our service runs it in a Vercel Sandbox of its own with the
-  task's repository checked out, and calls the model chosen (or your default)
-  and whatever model of the same provider it picks for each worker it hands
-  work to: Anthropic for a Claude model, OpenAI for a GPT model,
-  on the subscription or API key you added for that provider, never ours; with
-  neither, the agent does not start. A call on your own key is billed to you
-  by the provider, and if our service can no longer read your key the agent
-  stops and asks you to replace it. Fast, for Claude models, runs the same
-  calls on Anthropic's fast mode on your own Anthropic key, where Anthropic
-  grants that key fast mode. Each call carries the plan's text, the agent's
-  conversation so far, any files you attached, and what it read of the
-  repository, the web, your integrations, its skills, and your Mac; the
-  provider keeps it under its own retention policy. The agent's workers are
-  told to only read the checkout, the web, and your integrations and to leave
-  every change to the agent, though nothing but those words holds them to it,
-  and a Claude Code agent's workers cannot run commands on your Mac as the
-  agent can. The agent's transcript — its
-  words, reasoning summaries, and tool calls with their input (such as the few
-  words it gives to describe a command) and output — is written to your
-  account's conversation as described under "Your account". Archiving an agent
-  stops a running turn and sets the agent aside; its transcript, with your
-  files, and its pull request are kept, and you can bring it back. Agents can
-  archive an idle agent of the workspace too, a teammate's included, for the
-  member they act for, and bring one back; none archives one that is still
-  working. The agent records who archived it (you, the archiving agent's title
-  on your behalf, or, for one an earlier version archived, Vespin) and any
-  reason given, which
-  every member of the workspace sees on the archived agent until it is
-  brought back, when the record is cleared. The sandbox
-  has ordinary Internet access and runs the repository's own checks; the agent
-  searches the web as described above. The sandbox stops when a turn ends or
-  you stop it, and its checkout, with the agent's changes, stays in a snapshot
-  on the terms under "How agents read your repository". Nothing
-  of the sandbox reaches the screen recording. A Terminal tab opens a shell in
-  the agent's sandbox, beside its checkout, and reaches it through our
-  service: what you type and what the shell prints pass through the service
-  on their way and are not stored, logged, or counted there or on your Mac.
-  Your shells, and what they printed, stay in the sandbox until it stops, and
-  no shell history is written to a file; anything you write into the
-  sandbox's files the agent can read on its next turn. While you are typing in
-  a terminal the sandbox does not stop at a turn's end; it stops about seven
-  minutes after you last typed, unless a turn is running, and a stopped
-  sandbox comes back only when you resume it. While a terminal is connected,
-  the agent's GitHub access at the sandbox's firewall is kept fresh, so what
-  you run there reaches GitHub as the agent does, never holding the token
-  itself.
-- Anthropic, for titles. As an agent's turn completes, until it has a
-  title and for its first three turns at most, our service asks a small Claude
-  model on your own Anthropic API key (or a small OpenAI model on your OpenAI
-  key where you saved only that), never ours, for a short title, sending
-  your first message (for an agent started on the plan, the plan's text), your
-  latest one, and the agent's latest answer, as text alone cut to 2,000
-  characters each. Each title is stored with the agent; Anthropic keeps the
-  request and its reply under its own retention policy.
-- GitHub, through the Vespin GitHub App, for an agent's work. The agent
-  checks the repository out and pushes its branch with an installation token
-  the App mints for that one repository, set at the sandbox's network
-  boundary and never inside it. Where you started the agent, you signed in
-  with GitHub (or linked it), and your GitHub
-  account may push to the repository, the agent writes as you: its commits
-  name your GitHub account at the private noreply address GitHub gives it,
-  each with Vespin's App as co-author, and our service opens its pull request
-  as you, with your own GitHub App token, in one request to GitHub for that
-  one repository. Your token is used on our service alone and never reaches
-  the agent's sandbox, so neither the agent nor anyone with a terminal in it
-  holds it; everything else the agent asks of GitHub, such as a comment or
-  marking a draft ready, goes out as the App. Where GitHub refuses your
-  token, the App opens the pull request in your place and the agent keeps
-  why. Otherwise, and always for an agent an automation started, its commits
-  and pull request are the App's own, under its bot, and name no one's
-  GitHub account. Which of the two an agent writes as is kept with it.
-  Where the installation has
-  accepted it, the agent also reads its pull request's checks and the logs of
-  failed runs with that token, which land in its transcript like any other
-  command's output. GitHub also tells our service, signed with a secret it
-  shares with us, when a pull request or its checks change on a repository the
-  App is installed on; our service reads only the kind of change and the
-  repository's and branch's names from that message and keeps none of it,
-  then, for up to ten of the newest agents on that branch, reads with a token
-  the App mints on the workspace's installation the pull request's number,
-  title, link, state, checks,
-  and size of change, and the branch's latest commit, and keeps them with the
-  agent until the task is deleted. When someone reviews or comments on an
-  agent's pull request, or a check fails on an agent's branch, GitHub tells
-  our service the same way; our service reads who did it by their GitHub
-  login, the pull request's number and branch, the link to the review,
-  comment, or failed commit, a review's verdict, when, and what the review
-  or comment says; for a review it also reads that review's inline comments
-  from GitHub, each with its file and line, with a token the App mints for
-  the repository on the workspace's installation. It sends that to the
-  agents on that pull request as a message, which their transcript keeps
-  under that login until the task is deleted, and which reaches the model
-  that runs the agent like any other message. Whatever the message cut
-  short, or a failed check, the agent reads itself with the App's token,
-  and what it reads lands in its transcript like any other command's
-  output. Our service also reads from GitHub, through
-  the workspace's installation and storing none of it, a file or folder you
-  open, a pull request's changed files for the Changes tab, a repository's
-  skills, and the number, title, link, state, and author's GitHub login of a
-  pull request or an issue a plan, a reply, or an Inbox item links to, which
-  the app shows on the link; an issue is read on a token cut to reading
-  issues alone, and an Inbox item's link is read through its own workspace's
-  installation, its
-  plan's or its agent's, and through none where that is not known.
-- Vercel Connect and Linear, if you connect Linear: Vercel Connect keeps
-  Linear's token, and our service sends each Linear call, with its input, to
-  Linear's MCP server, which keeps it under Linear's own policy.
-- Vercel Connect and Notion, if you connect Notion: Vercel Connect keeps
-  Notion's token, and our service sends each Notion call, with its input, to
-  Notion's MCP server, which keeps it under Notion's own policy.
-- Vercel Connect and Sentry, if you connect Sentry: Vercel Connect keeps
-  Sentry's token, and our service sends each Sentry call, with its input, to
-  Sentry's MCP server, which keeps it under Sentry's own policy.
-- Vercel Connect and Slack, if you connect Slack where it is offered: Vercel
-  Connect keeps Slack's token, and our service sends each Slack call, with its
-  input, to Slack's MCP server, which keeps it under Slack's own policy.
-- Vercel Connect and Slack, if your workspace connects Vespin's Slack bot:
-  Vercel Connect keeps the bot's token and passes our service every request
-  Slack sends the bot, of which our service reads only the messages addressed
-  to the bot and the buttons pressed on its messages, leaving every other
-  event unread. Our service sends Slack your email address to find you there,
-  each message the bot sends you, the final message of each turn of an agent
-  started from a Slack thread, posted in that thread, and a 👀 on each message
-  it acts on, and reads from Slack the earlier messages of that thread; Slack
-  keeps all of it under its own policy.
-- GitHub's MCP server, if you signed in with GitHub: our service sends each
-  GitHub call, with its input and your Vespin GitHub App token, to GitHub's MCP
-  server, which keeps it under GitHub's own policy.
-- Vercel Connect and Executor, if you connect Executor: Vercel Connect keeps
-  Executor's token, and our service sends each Executor call, with its input,
-  to Executor's MCP server, which keeps it under Executor's own policy and
-  passes it on to the app it names.
-- Vercel Connect and Google, for each of Gmail, Google Calendar, and Google
-  Drive you connect where they are offered: Vercel Connect keeps Google's
-  token, and our service sends each call, with its input, to Google's MCP
-  server for that product, which keeps it under Google's own policy.
-- Vercel Connect and Granola, Mercury, Neon, PostHog, Stripe, Supabase,
-  Vercel, or Y Combinator, for each you connect: Vercel Connect keeps its token, and our
-  service sends each call, with its input, to that service's MCP server,
-  which keeps it under that service's own policy.
-- Vercel, which runs our service and the sandboxes, and Neon, which hosts our
-  database: everything our service keeps is stored with Neon and passes
-  through Vercel. Each agent's session history (the messages, files, tool
-  calls, and answers its model works from) is kept by Claude Code or Codex on
-  its sandbox's disk, as described under "Agents' working memory". Deleting a
-  task or your account ends each of its agents' sessions for good through
-  Claude Code or Codex, a turn still running included, and deletes each one's
-  sandbox; a session that could not be reached or did not confirm in time is
-  noted in our service's logs, and the delete goes on without it. Earlier
-  versions ran each agent and its workers as sessions on Vercel Workflow;
-  what Vercel still keeps of such a session stays under Vercel's own
-  retention.
-- GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
-  network address: to check for updates, carrying nothing about you, when Vespin
-  opens, every four hours, and when you ask from Vespin's menu or Settings,
-  signed in or not, with a newer version downloaded from GitHub and installed
-  when you quit; and for the picture of each repository owner the app names,
-  an organization's logo or a person's avatar, carrying only the owner's name.
-- Google or GitHub, asked by your Mac itself for your own profile picture,
-  from the address your sign-in gave us, carrying no referrer, beside your
-  name and on your own first workspace while it has no photo.
-
-We do not sell your information or use it for advertising.
-
-## Our website
-
-vespin.dev counts page views, presses, and sign-in steps using PostHog, and
-records the pages themselves, except the sign-in pages, which it does not
-record. A press is counted by what was clicked and where, never the words on
-it, and a recording masks what you type into a field. Before a count or a
-recording leaves your browser, the site takes out of every address in it, on
-every page, any sign-in code, state, error, challenge, signature, or token a
-sign-in or a link put there, and cuts a sign-in page's address to the page
-itself. It collects nothing else, whatever our PostHog project's settings
-say: no errors, nothing from your browser's console, no network requests,
-no page or network timings, no heatmaps, no chat widget, surveys, or product
-tours, and no feature flags. When you finish signing in, on the page that
-hands the sign-in back to Vespin on your Mac, or on the consent page where one
-is shown, the site names you to PostHog by your account's id, name, and
-email address, which links your earlier visits to your account, and counts
-the sign-in once, remembering in your browser which sign-in it last counted.
-The hand-off page is one of the sign-in pages above: not recorded, its
-address cut to the page itself. Your browser sends all of this to a path on
-vespin.dev rather than to PostHog, and our hosting passes each request on to
-PostHog as your browser sent it, without the site's cookies. So PostHog still
-sees what the request carries, your browser's user agent among it, and is
-handed your network address beside it; our PostHog project is set to discard
-client IP addresses, so PostHog does not keep it.
-
-Vespin in a browser, the app at vespin.dev/app and at every link to something
-in Vespin, is not one of the site's pages above: it records and reports what the
-Mac app does. It makes screen recordings as described under "Screen
-recordings", with every word masked and the same parts left out, and with
-the tab's address, which names the workspace and what it opens, and the
-address of the page that sent you there, replaced by the app's own; only the
-site's production deployment records, never a preview of it. A recording
-follows your account in that browser: a visit that never signs in records
-nothing, signing out stops it, and deleting your account in one tab stops
-the recording in every tab of that browser until you sign in again. It sends Sentry reports of the
-errors it did not handle and of a tab that could not draw, the errors it
-shows you, as described under "Errors Vespin shows you", and performance
-traces for about one page load in ten, and a warning for each kind of request
-the page's security policy refused, once in each tab, naming only the
-policy's directive and the refused address's origin, or the browser's own
-word for it, such as inline, all using Sentry's default data
-collection and each naming the account signed in in that tab, as described
-under "Crash and performance reports from the Mac app", where the page's
-address, your browser's details, and the addresses of the requests it made
-take the place of the Mac's. Your browser contacts Sentry (see "Who we send
-it to") directly, so Sentry sees your network address. It sends the app's
-recordings through vespin.dev as the site's pages do, so PostHog is handed
-your network address too, and does not keep it.
-
-A link to something in Vespin, pasted into Slack, iMessage, or anywhere else
-that previews links, shows only Vespin's own card: the Vespin name and logo, the
-same for every link, and nothing of the task, the agent, the person, or the
-workspace it opens.
-
-## Storage
-
-Your settings and your account's sign-in tokens stay on your Mac, the tokens
-encrypted under a key held in the macOS Keychain, beside whatever settings,
-keys, or calendar grants an earlier version kept there, which stay as they
-were but for a voice key, removed as described above. Nothing of your
-conversations with agents or their working memory is kept on your Mac
-beyond the layout of its window described under "On your Mac". While you
-are signed in, the copy of your workspaces' lists described there is kept
-in `entities.sealed` beside the settings, encrypted under a key held in
-the macOS Keychain, and deleted when you sign out. The
-switch for commands on your Mac is kept with that Mac's settings. Vespin in a browser keeps your settings in
-that browser's own storage for the site, and no sign-in token at all: it is
-signed in by the site's session cookie, which only the browser holds. Its
-screen recording keeps, in that browser's storage for the site, the
-account id it files under while you are signed in, an id of its own it
-keeps beside it, and whether it may send, under `app_replay` and
-`app_replay_consent`, apart from the site's own counting. A connect
-started there, such as connecting GitHub, keeps in its tab's session storage a
-random id naming the connect, or the address it left from, until the page it
-lands on, or the app opened again in that tab, lets go of it. A sign-in
-started there keeps in its tab's session storage a mark that it left for the
-provider, until the page it comes back to lets go of it, so that page counts
-the sign-in once. Our service
-keeps your account and, unsealed, your conversation in our database, which
-Neon hosts, beside what earlier versions left there; a
-task's checkout and an agent's changes are held in a Vercel Sandbox and
-its snapshot; usage counts and recordings are held by PostHog, and crash
-and error and performance reports by Sentry.
-
-## Your choices
-
-- Turn off Settings › Account › "Share usage data" to stop Vespin sending the
-  usage counts it makes (see "Usage data"); what is waiting to be sent is
-  dropped, and nothing more is sent until you turn it on again. It is set on
-  each Mac, and in each browser, apart. It is on by default in the Vespin you
-  download, and off in a Vespin you build and run from its source, which sends
-  no usage counts unless you turn it on. It does not stop the counts our
-  service makes of the work done through it.
-- Set Settings › This Mac › "Let agents run commands on this Mac" to Never to
-  stop agents running commands on that Mac; it is set on each Mac apart, and
-  signing out stops it too.
-- Switch an integration off for one agent in its message box's MCP
-  menu, or disconnect it for every agent in Settings › Integrations.
-- Delete any workspace file an earlier version of Vespin left on your Mac;
-  nothing reads it now. What earlier versions left on our service goes with
-  your account.
-- Vespin listens through your microphone only while a dictation into a message
-  box is recording, which the box shows as a moving waveform with its time.
-  macOS's microphone indicator is lit whenever the device is open.
-- Delete your account from the Account section in Settings. This erases at
-  once your account and everything our service keeps under it — among them
-  your sign-in records and the GitHub and Google tokens we kept, your usage
-  counts and preferences, your pinned
-  repositories, your tasks with their history, pages, agents,
-  inbox items and pictures, the conversation with
-  its attached files, every call's record, the commands waiting for your Mac with the
-  record of when it last read, your own API keys, your name on the memories
-  Vespin's agents kept in your words (the memories themselves stay with their
-  workspace), Vespin's record of every integration you connected, and everything earlier
-  versions left there — and asks PostHog to erase the person it holds for your
-  account with its usage data and recordings, which PostHog queues and carries
-  out shortly after rather than at once, and which does not reach a recording
-  never attached to your account. If PostHog cannot be reached, refuses, or
-  reports that it could not erase them, the account is deleted anyway and
-  PostHog keeps what it holds.
-  Vespin stops recording for the rest of the session, and starts again the next
-  time you open it or sign in. Sentry reporting continues, and what Sentry
-  already received, which names your account by its id, is not erased with
-  it but kept until Sentry's retention ends. Deleting does not affect your Google or GitHub account
-  or the account at any service you connected, and does not revoke the Vespin
-  GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
-  revoke every integration's grant it holds; if Vercel Connect cannot
-  be reached, the account is deleted anyway and a grant stays until you revoke
-  Vespin in that service's own settings. It ends every agent's session of
-  yours through Claude Code or Codex, noting in our logs any it could not, and
-  deletes their sandboxes, with the session history on their disks and the
-  snapshots no other sandbox uses, at once or shortly after; what Vercel
-  Workflow still keeps of an earlier version's session goes as described
-  under "Who we send it to", and anything stored only on your Mac stays there
-  until you remove it.
-
-## Google user data
+Effective date: November 4, 2026
+
+## 1\. Introduction
+
+Stage Inc., a Delaware corporation ("we," "us," or "our"), operates the
+vespin.dev website, the Vespin Mac app, the Vespin web app, and the hosted
+service behind them (collectively, the "Service"). Vespin is an inbox for all
+your coding agents. This Privacy Policy explains how we collect, use,
+disclose, and safeguard your information when you use the Service.
+
+By using the Service, you agree to the collection and use of information in
+accordance with this policy.
+
+## 2\. Information we collect
+
+### Account information
+
+When you sign in with Google or GitHub, we collect your name, email address,
+profile picture address, and which provider you used. We also store the
+records that keep you signed in, each with the IP address and browser or app
+it came from, and a daily count of your dictation use. Signing in with GitHub,
+or linking GitHub later, authorizes the Vespin GitHub App; we store its
+OAuth tokens encrypted on the Service and never send them to your Mac or
+browser.
+
+### Workspaces, tasks, and plans
+
+Every account gets a first workspace, and you can create or join others.
+Members of a workspace see each other's names, email addresses, and roles.
+Owners and admins can invite people by email, upload a workspace photo, and
+connect a GitHub App installation. Within a workspace we store each task's
+name, its plan (a Markdown document written by members and agents) with its
+full revision history, comments on the plan, inbox items and their answers,
+pages that agents make, pictures and short videos added to any of these, and,
+if the Memory experiment is on, short facts agents save about how your team
+works. Every member of the workspace can see all of this.
+
+### Agent conversations
+
+For each turn an agent runs, we store your message, any files you attach, the
+agent's reply and reasoning summaries, each tool call with its input and
+output, and the model, token counts, and timing. Tool output can include files
+from your repository, command output, web pages, screenshots of the agent's
+browser, and answers from your integrations. Transcripts and plans are stored
+as written, not end-to-end encrypted, and our operators can read them.
+
+### Repository and GitHub data
+
+Through your workspace's GitHub App installation, we access repository
+contents, pull requests, code diffs, review comments, checks, and issues for
+repositories where the App is installed. Each agent works on a checkout of the
+repository in its own Vercel Sandbox. We generally do not keep copies of
+repository content apart from what lands in an agent's transcript, except a
+pull request's number, title, state, and checks, and any chapters you
+generate for it.
+
+### Credentials you save
+
+If you save an Anthropic or OpenAI API key, a GitHub personal access token, or
+sign in with your ChatGPT plan, we store it encrypted with AES-256-GCM under a
+per-credential key that is itself encrypted with a server-only secret held
+outside the database. We keep a short hint (such as `sk-ant-…abcd`) and
+whether the provider accepts it. We never send a saved credential back to your
+device, log it, or include it in analytics, error reports, or screen
+recordings.
+
+### Integrations and connected apps
+
+If you connect an integration (such as Linear, Notion, Sentry, Slack, Gmail,
+Google Calendar, Google Drive, Granola, Mercury, Neon, PostHog, Stripe,
+Supabase, Vercel, Y Combinator, or Executor), Vercel Connect stores its token
+for your account, encrypted, and we keep the connection's state and a display
+name. While connected, your agents can read and change whatever your grant at
+that service allows, without asking you first, and everything the service
+answers, which can include other people's messages or credentials it hands
+out, goes to the agent's model and into its transcript. If your workspace
+connects Vespin's Slack bot, we store your Slack user id, and messages you send
+the bot, with the earlier messages of that Slack thread, are handed to an
+agent. If you allow an app such as Claude Code or Cursor to connect to our MCP
+server, we store a record of the app, your consent, and hashed tokens.
+
+### Commands on your Mac
+
+If you allow it in Settings › This Mac, agents can run shell commands on your
+Mac as your macOS user, with access to everything you can reach. The command,
+its exit code, and up to 20,000 characters each of its output and errors are
+returned to the agent, stored in its transcript, and sent to the agent's model
+provider. **This output is not redacted**: if a command prints a password,
+token, key, or file contents, that goes too.
+
+### Agents on your own machines
+
+If you turn on Bring your own host, agents can run directly on This Mac or on
+another machine you add, with full access to everything that machine's account
+can reach. Their work stays on that machine, though their transcripts are
+stored like any other. To tell your machines apart, each sends us a keyed hash
+of its hardware or machine id, never the id itself, and a Mac sends its model
+name.
+
+### Usage data and screen recordings
+
+The Mac app and the web app send counts of which features you use, from a
+fixed list of event names and values, under your account's name and email.
+They never include anything you type or say, titles, branches, file paths,
+prompts, or error text. The Service counts work done through it (such as
+tasks created and agents started) the same way. Counts are grouped by
+workspace, with each workspace's name and creation date.
+
+While you are signed in, released builds of the Mac app and the web app also
+record the layout of Vespin's own window, never your screen or other apps.
+Before a recording leaves your device, every word, label, and link address is
+replaced with blocks of the same length, and the parts that hold the most of
+your words are left out entirely, including the feedback form, plan editing,
+File tabs, pages, version history, Inbox items, agent and Terminal tabs,
+Browser tabs, the API keys page, and hover previews. Canvas recording is off,
+and clicks are not reported. Each recording is filed under your account's
+name and email and carries the app version, operating system, browser,
+language, time zone, and screen size. There is no switch for recordings;
+nothing is recorded before you sign in.
+
+### Error and performance data
+
+The Mac app, the web app, and the Service send Sentry error reports, crash
+reports, reports of the errors Vespin shows you, and performance traces for a
+sample of launches and page loads. They use Sentry's default data collection,
+so reports may include error messages, stack traces, request addresses and
+headers, device details, and your IP address. Sentry replaces values whose
+names look like credentials, and Vespin removes query parameter values and
+token-shaped parts of addresses. Reports name your account by its id only. The
+Service does not send Sentry what was sent to or returned by a model, though an
+error's own words can quote what an agent was working on.
+
+### Feedback
+
+If you send feedback, we receive your words, any screenshots you attach, and,
+unless you untick it, your name and email.
+
+### Information stored on your Mac
+
+The Mac app keeps its window layout and the drafts of messages you have not
+sent. While you are signed in, it also keeps a copy of your workspaces' lists
+and changes you made offline in one file, `entities.sealed`, encrypted under a
+key in the macOS Keychain and deleted when you sign out. Your sign-in
+tokens are kept encrypted the same way. Transcripts and pictures you
+open are held in memory only.
+
+## 3\. Legal basis for processing
+
+We process your personal information on the following legal bases, as
+applicable under the EU General Data Protection Regulation (GDPR) and similar
+laws:
+
+- **Contractual necessity:** processing required to provide the Service,
+  manage your account, and run your agents.
+- **Legitimate interest:** processing for security, error monitoring, abuse
+  prevention, and improving the Service, where these interests are not
+  overridden by your rights.
+- **Consent:** processing based on your consent, such as connecting an
+  integration, letting agents run commands on your Mac, or sharing usage data.
+  You may withdraw consent at any time.
+- **Legal obligation:** processing necessary to comply with applicable laws
+  and regulations.
+
+## 4\. How we use your information
+
+- Provide, operate, and maintain the Service
+- Run your agents and the models they use, on your own keys
+- Authenticate your identity and manage your account and workspaces
+- Send workspace invitations and the Slack messages your workspace asked for
+- Monitor and analyze usage to improve the Service
+- Detect, prevent, and address technical issues and security threats
+- Comply with legal obligations
+
+Our operators can read what the Service stores. Vespin's maintainers also have
+an admin page showing each account's name, email, activity counts, workspaces
+and members, agents' status and models, and which providers and integrations
+are connected. It never shows a task's title, plan, prompt, message, pull
+request title, key, or an error's own words.
+
+We do not use your code or conversations to train AI models.
+
+## 5\. Data sharing and disclosure
+
+We do not sell your personal information or use it for advertising. We share
+data with:
+
+- **AI providers:** your agents, web search, dictation, titles, and pull
+  request chapters run on Anthropic or OpenAI, always on the API key or
+  subscription you saved, never ours. Each call carries what the model needs,
+  such as the plan, the conversation, attached files, and what the agent read.
+  These providers process it under their own policies.
+- **GitHub:** to check out repositories, push branches, and open pull requests
+  through the Vespin GitHub App. Your devices also contact GitHub directly to
+  check for updates and load avatars.
+- **Infrastructure providers:** Vercel (hosting, agent sandboxes, and Vercel
+  Connect, which holds integration tokens), Neon (database), PostHog (usage
+  data, screen recordings, and feedback), Sentry (error and performance
+  monitoring), Resend (email), and Slack (feedback and Vespin's Slack bot).
+- **Integrations and connected apps:** the services and MCP clients you connect
+  receive what your agents send them, or what our tools answer, and keep it
+  under their own policies.
+- **Workspace members:** data within a workspace is visible to its other
+  members.
+- **Legal requirements:** we may disclose information if required by law,
+  regulation, or legal process.
+
+## 6\. Data storage and security
+
+Your data is stored on servers provided by our infrastructure partners: our
+database is hosted by Neon, and agents' checkouts and session files live in
+Vercel Sandboxes and in snapshots kept for up to thirty days after last use.
+We use encryption in transit (TLS), encrypt saved credentials as described
+above, and keep the tokens agents use outside their sandboxes, adding them at
+the sandbox's network firewall. Transcripts, plans, and other content are not
+end-to-end encrypted.
+
+While we strive to protect your information, no method of electronic storage
+or transmission is 100% secure, and we cannot guarantee absolute security. In
+the event of a data breach affecting your personal information, we will notify
+affected users and relevant authorities as required by applicable law.
+
+## 7\. Data retention
+
+We retain your data for as long as your account is active and as needed to
+provide the Service. Deleting a task deletes it at once with its history,
+pages, inbox items, and pictures; its agents' transcripts and sandboxes are
+removed seven days later. When you delete your account:
+
+- **Account data** (profile, sessions, OAuth tokens, saved credentials,
+  preferences, and integration records) is deleted at once.
+- **Your tasks, plans, transcripts, and inbox items** are deleted at once, and
+  your agents' sandboxes shortly after.
+- **Workspaces you own**, and the memories, comments, and plan text you left in
+  them, stay with the workspace without your name.
+- **Usage data and screen recordings:** we ask PostHog to erase them; if it
+  cannot be reached, your account is deleted anyway and PostHog keeps them.
+- **Error reports** already sent to Sentry are kept until Sentry's retention
+  ends, since Sentry offers no way to erase one account's reports.
+- **Integrations:** we ask Vercel Connect to revoke your grants; anything your
+  agents already did at those services stays there.
+
+## 8\. Your rights and choices
+
+Depending on your jurisdiction, you may have the right to:
+
+- Access the personal data we hold about you
+- Request correction of inaccurate data
+- Request deletion of your data
+- Object to or restrict processing of your data
+- Request a copy of your data in a portable format
+- Withdraw consent at any time
+
+To exercise any of these rights, contact us at founders@stagereview.app. You
+can also act directly in the app:
+
+- **Usage data:** turn off Settings › Account › "Share usage data". It is set
+  per Mac and per browser, is on by default in the Vespin you download, and
+  does not stop the counts the Service makes of work done through it.
+- **Commands on your Mac:** set Settings › This Mac › "Let agents run commands
+  on this Mac" to Never.
+- **Integrations:** switch one off for a single agent in its message box's MCP
+  menu, or disconnect it in Settings › Integrations. Revoke connected apps in
+  Settings › MCP › Agents with access.
+- **GitHub:** revoke the Vespin GitHub App in GitHub's settings under
+  Applications.
+- **Delete your account** in Settings › Account.
+
+## 9\. Cookies and tracking
+
+The web app uses a session cookie to keep you signed in. vespin.dev uses
+PostHog to count page views, clicks (by what was clicked and where, never the
+words on it), and sign-in steps, and to record its pages, except the sign-in
+pages; recordings mask what you type into fields. Before anything leaves your
+browser, the site removes sign-in codes, tokens, and similar values from every
+address. It collects nothing else, regardless of our PostHog project's
+settings: no errors, console output, network requests, timings, heatmaps,
+surveys, chat widgets, or feature flags. When you finish signing in, the site
+links your visits to your account's id, name, and email.
+
+Your browser sends this data to a path on vespin.dev, which passes it on to
+PostHog without the site's cookies. PostHog receives your IP address and user
+agent; our project is set to discard IP addresses. Vespin in a browser
+(vespin.dev/app) records and reports as the Mac app does, and sends Sentry
+reports directly from your browser.
+
+## 10\. Third-party services
+
+The Service connects to third-party services you choose, including GitHub,
+your model providers, and any integrations you connect. We are not responsible
+for the privacy practices of these third parties, and we encourage you to
+review their privacy policies.
+
+## 11\. Children's privacy
+
+The Service is not intended for individuals under the age of 18. We do not
+knowingly collect personal information from children. If we learn we have
+collected data from a child under 18, we will delete it promptly.
+
+## 12\. California privacy rights (CCPA/CPRA)
+
+If you are a California resident, you have additional rights under the
+California Consumer Privacy Act (CCPA) and the California Privacy Rights Act
+(CPRA):
+
+- **Right to know:** you may request details about the categories and specific
+  pieces of personal information we have collected about you.
+- **Right to delete:** you may request deletion of your personal information,
+  subject to certain exceptions.
+- **Right to correct:** you may request correction of inaccurate personal
+  information.
+- **Right to opt out of sale or sharing:** we do not sell or share your
+  personal information as defined under the CCPA/CPRA.
+- **Right to non-discrimination:** we will not discriminate against you for
+  exercising any of these rights.
+
+To exercise these rights, contact us at founders@stagereview.app. We will
+verify your identity before processing your request.
+
+## 13\. International data transfers
+
+Your information may be transferred to and processed in countries other than
+your own, including the United States. We rely on Standard Contractual Clauses
+(SCCs) and other legally recognized transfer mechanisms to ensure your data is
+protected when transferred internationally. Our service providers are
+contractually obligated to protect your information in accordance with this
+policy.
+
+## 14\. Google user data
 
 Vespin's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
 including the Limited Use requirements. We use what Google returns when you
 sign in with it, your name, email address, and profile picture, only to
-identify your account. What Gmail, Google Calendar, and Google Drive answer
-an agent, where you connect them, is used only for the work you or your
-automations ask that agent to do, as "Gmail, Google Calendar, and Google
-Drive" above says: it goes to the model that agent runs on and into the
-agent's transcript, which is kept as every transcript is. None of it is
-transferred or sold, used for advertising, or used to train or improve
-any AI or machine-learning model, ours or anyone's, and no person at Vespin reads it
+identify your account. What Gmail, Google Calendar, and Google Drive answer an
+agent, where you connect them, is used only for the work you or your
+automations ask that agent to do: it goes to the model that agent runs on and
+into the agent's transcript, which is kept as every transcript is. Agents can
+read and label mail and write drafts but never send mail. None of it is
+transferred or sold, used for advertising, or used to train or improve any AI
+or machine-learning model, ours or anyone's, and no person at Vespin reads it
 unless you ask us to, for security, or where the law requires it.
 
-## Contact
+## 15\. Changes to this policy
 
-Email founders@stagereview.app with any questions about this policy.
+We may update this Privacy Policy from time to time. We will notify you of
+material changes by posting the new policy on this page and updating the
+effective date. Your continued use of the Service after changes constitutes
+acceptance of the updated policy.
+
+## 16\. Governing law
+
+This Privacy Policy is governed by and construed in accordance with the laws
+of the State of Delaware, United States, without regard to its conflict of law
+provisions.
+
+## 17\. Contact us
+
+If you have questions about this Privacy Policy, please contact us at
+founders@stagereview.app.

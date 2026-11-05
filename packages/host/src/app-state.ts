@@ -124,6 +124,8 @@ export const RUN_PROFILE = {
   SETTINGS_HOSTS: "settings-hosts",
   /** The same account, Settings on Integrations: some connected, some with their sign-in expired. */
   SETTINGS_INTEGRATIONS: "settings-integrations",
+  /** The same account, Settings on MCP: the agents it let in and how to connect another. */
+  SETTINGS_MCP: "settings-mcp",
   /** The same account, Settings on Skills: its team's and its own. */
   SETTINGS_SKILLS: "settings-skills",
   /** The same account, Settings on its team's memory. */
@@ -782,15 +784,29 @@ interface AppNotificationsSlice {
 }
 
 /**
- * Whether this machine has a network, as its platform last answered
- * (`client/network-watch.ts`): online until a probe says otherwise. An
- * answer of offline is a reliable one; online says nothing of whether the
- * service itself answers.
+ * Whether this machine can reach the service (`client/network-watch.ts`):
+ * whether it has a network, as its platform last answered, and whether the
+ * service answered the last call made to it. Each is true until something
+ * says otherwise. An answer of offline is a reliable one; online says
+ * nothing of whether the service itself answers, which is what `reachable`
+ * says, so `networkConnected` reads the two together.
  */
 interface AppNetworkSlice {
   online: boolean;
+  /** Whether the last call to the service was answered, with any status, rather than ending with no answer: a transport fault or its deadline. */
+  reachable: boolean;
   /** How many changes made offline the service refused as they were sent again, until a window clears the count; none where none was. */
   offlineRefused?: number;
+}
+
+/**
+ * Whether the app can reach the service now: the platform says this machine
+ * has a network, and the service answered the last call made to it. The one
+ * reading of the `network` slice every surface that asks "are we connected?"
+ * goes by.
+ */
+export function networkConnected(network: Pick<AppNetworkSlice, "online" | "reachable">): boolean {
+  return network.online && network.reachable;
 }
 
 /**
@@ -913,7 +929,7 @@ export interface AppState {
   [LIVE_READ.WORKSPACE_PHOTOS]: AppWorkspacePhotos;
   /** Each agent's own tools the windows chose, held while its servers popover shows and a while after. */
   [LIVE_READ.WORKSPACE_TOOLS]: AppWorkspaceTools;
-  /** The outside MCP clients the account allowed, held while Settings › Integrations shows them and a while after. */
+  /** The outside MCP clients the account allowed, held while Settings › MCP shows them and a while after. */
   [LIVE_READ.MCP_CLIENTS]: AppMcpClients;
   /** Each workspace's automations the windows chose, by the workspace, newest made first, held while a window holds them and a while after: what the Automations pages, a person's page, ⌘K, and an agent's card read. */
   [LIVE_READ.AUTOMATIONS]: AppHeldById<readonly AutomationSummary[]>;

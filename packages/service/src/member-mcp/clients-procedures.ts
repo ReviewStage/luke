@@ -1,5 +1,5 @@
 /**
- * clients-procedures.ts -- the outside MCP clients a member allowed, as Settings › Integrations reads them and revokes one.
+ * clients-procedures.ts -- the outside MCP clients a member allowed, as Settings › MCP reads them and revokes one.
  *
  * A client a member allowed holds their consent and the tokens minted on
  * it, in the OAuth provider's own tables. The read lists the member's

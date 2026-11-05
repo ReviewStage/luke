@@ -8,17 +8,23 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@repo/wire/testing";
-import { Effect } from "effect";
+import { Effect, Fiber, SubscriptionRef } from "effect";
 import {
   accountBearer,
   accountCall,
+  CALL_FAULT,
   type CallCredential,
   callAnswered,
   lateCredential,
   NO_CREDENTIAL,
+  ServiceReach,
+  type ServiceReachState,
 } from "./account-call.js";
 
 const BASE_URL = "https://app.test";
+
+/** The service's reach before any call was made. */
+const REACHABLE: ServiceReachState = { reachable: true, answered: 0 };
 const PATH = "/api/account/preferences";
 
 function refusal(): Response {
@@ -143,4 +149,60 @@ it.effect("a late credential renews and retries on the bearer it resolves", () =
       ["Bearer stale", "Bearer fresh"],
     );
   }),
+);
+
+it.effect(
+  "a call that ends with no answer sets the service unreachable, and the next answer, a refusal among them, sets it back",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make<ServiceReachState>(REACHABLE);
+      let asked = 0;
+      const { call, client } = callOn(NO_CREDENTIAL, () => {
+        asked += 1;
+        if (asked === 1) throw new TypeError("Load failed");
+        return refusal();
+      });
+      const send = Effect.provideService(
+        Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client),
+        ServiceReach,
+        reach,
+      );
+
+      const unanswered = yield* send;
+      assert.deepEqual(unanswered, { fault: CALL_FAULT.NETWORK, errorName: "TypeError" });
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, false);
+
+      const refused = yield* send;
+      assert.ok(callAnswered(refused) && refused.response.status === HTTP_STATUS.UNAUTHORIZED);
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, true);
+    }),
+);
+
+it.effect(
+  "a call that ends with no answer after another was answered since it was sent leaves the service reachable",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make<ServiceReachState>(REACHABLE);
+      const held = Promise.withResolvers<Response>();
+      let asked = 0;
+      const { call, client } = callOn(NO_CREDENTIAL, () => {
+        asked += 1;
+        return asked === 1 ? held.promise : jsonResponse({ ok: true });
+      });
+      const send = Effect.provideService(
+        Effect.provide(call.send({ method: HTTP_METHOD.GET, path: PATH }), client),
+        ServiceReach,
+        reach,
+      );
+
+      const older = yield* Effect.forkChild(send);
+      yield* Effect.yieldNow;
+      assert.equal(asked, 1);
+      yield* send;
+      held.reject(new TypeError("Load failed"));
+      const unanswered = yield* Fiber.join(older);
+
+      assert.ok(!callAnswered(unanswered));
+      assert.equal((yield* SubscriptionRef.get(reach)).reachable, true);
+    }),
 );

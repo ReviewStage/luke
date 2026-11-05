@@ -1516,9 +1516,10 @@ export class HostedAgentClient {
   /**
    * Acknowledges one notice of the inbox, Got it, against the revision the
    * window drew, under the key the window made for the nod, which a retry
-   * carries again, and the idempotency key given where one is, and answers
-   * the item as it then stands with whether the nod was taken; a nod the service would refuse by shape is refused here
-   * without traveling.
+   * carries again; sent under the idempotency key given where one is. It
+   * answers the item as it then stands with whether the nod was taken; a
+   * nod the service would refuse by shape is refused here without
+   * traveling.
    */
   answerInbox(
     itemId: string,
@@ -1541,9 +1542,9 @@ export class HostedAgentClient {
   /**
    * Closes one open item of the inbox without an answer, against the
    * revision the window drew, under the key the window made for the close,
-   * which a retry carries again, and the idempotency key given where one
-   * is, and answers the item as it then stands with whether the close was
-   * taken, as an answer does.
+   * which a retry carries again; sent under the idempotency key given where
+   * one is. It answers the item as it then stands with whether the close
+   * was taken, as an answer does.
    */
   closeInbox(
     itemId: string,
