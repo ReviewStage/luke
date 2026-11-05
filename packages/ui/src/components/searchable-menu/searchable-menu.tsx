@@ -15,6 +15,7 @@ import {
 } from "../anchored-popover/anchored-popover.js";
 import { clipsAround } from "../anchored-popover/clip-room.js";
 import {
+  COMBOBOX_LEAD,
   type ComboboxGroup,
   ComboboxList,
   type ComboboxOption,
@@ -150,6 +151,8 @@ export interface MenuRow {
   label: string;
   /** A mark drawn ahead of the label: a provider's logo, the GitHub mark, a lock. */
   icon?: React.ReactNode;
+  /** Faces drawn ahead of the label in place of a mark, in a column a pair of faces wide so the rows' names line up: a commit's author and co-author. */
+  faces?: React.ReactNode;
   /** Words a search matches beside the label, such as a model's provider. */
   terms?: readonly string[];
   /** Muted words after the label: the effort a model runs at, an owner, "(Fast)", where an agent stands. */
@@ -439,7 +442,9 @@ function optionGroups(
       id: row.id,
       label: rowWords(row, unmasked, markedLabel(row, query)),
       words: row.label,
-      icon: row.icon,
+      ...(row.faces === undefined
+        ? { icon: row.icon }
+        : { lead: row.faces, leadWidth: COMBOBOX_LEAD.FACES }),
       detail: rowWords(row, unmasked, row.detail),
       detailWords: typeof row.detail === "string" ? row.detail : undefined,
       hint: rowWords(row, unmasked, rowHint(row)),
@@ -531,7 +536,7 @@ function PlacedRow({
   return (
     <RowHintOptions card={row.card}>
       <ListRow
-        leading={row.icon}
+        leading={row.faces ?? row.icon}
         title={titleMasked === true ? <ReplayWords masked>{title}</ReplayWords> : title}
         description={rowWords(row, false, description)}
         meta={rowHint(row)}

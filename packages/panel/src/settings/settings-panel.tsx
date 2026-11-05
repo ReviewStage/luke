@@ -102,7 +102,9 @@ export function SettingsPanel({
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
             {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
-            {panelView ? <CommitsSection view={panelView} writes={writes} /> : null}
+            {panelView ? (
+              <CommitsSection view={panelView} writes={writes} account={account} />
+            ) : null}
             {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
