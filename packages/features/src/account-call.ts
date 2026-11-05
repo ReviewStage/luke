@@ -32,9 +32,10 @@ const ACCOUNT_CALL_DEFAULTS = {
  * The name a deadline ends a request under. The deadline is the runtime's own
  * timeout rather than an `AbortSignal.timeout`, and this is the name that
  * signal's reason carried, kept so a caller reporting an end reports the same
- * word it always did.
+ * word it always did, and a reader of a failure can tell a call that got no
+ * answer by it.
  */
-const DEADLINE_ERROR_NAME = "TimeoutError";
+export const DEADLINE_ERROR_NAME = "TimeoutError";
 
 /** The content type a serialized body names, the one type this call sends. */
 const JSON_CONTENT_TYPE = "application/json";

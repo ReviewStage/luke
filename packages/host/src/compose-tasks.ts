@@ -2452,7 +2452,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   client.create(start.request, start.request.agent === undefined ? key : undefined),
                 );
                 if (!created.ok) {
-                  const { failure, localAgentRefusal } = created;
+                  const { failure, localAgentRefusal, cause } = created;
                   const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
                   const waits =
                     went === WRITE_UNTAKEN.UNANSWERED && key !== undefined && startMayWait(start);
@@ -2464,11 +2464,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   } else if (opened !== undefined && !waits) yield* startedBack(opened, id);
                   return untaken<FieldChange<PlanRow>, WireValue>(went, {
                     kept: carried<TasksStartAnswer>({ planId: id }),
-                    refused: carried<TasksStartAnswer>(
-                      localAgentRefusal === undefined
-                        ? { failure }
-                        : { failure, localAgentRefusal },
-                    ),
+                    refused: carried<TasksStartAnswer>({
+                      failure,
+                      ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
+                      ...(cause === undefined ? undefined : { cause }),
+                    }),
                   });
                 }
                 const { task, agent, txid } = created.answer;
