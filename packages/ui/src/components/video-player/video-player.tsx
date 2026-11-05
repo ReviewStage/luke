@@ -57,7 +57,8 @@ import { Tooltip } from "../tooltip/hint.js";
  * video is paused and, with a pointer, fades while it plays until the
  * pointer or the keyboard is in it; on a touch screen it always stands. Full
  * screen fills the screen with the frame, the bar with it, and Escape or its
- * button brings it back. There is no volume, since an agent's recording of
+ * button brings it back; where the browser fills it with nothing but a
+ * video, as Safari on an iPhone, it opens the video in the browser's player. There is no volume, since an agent's recording of
  * its screen has no sound, and no Download, which the viewer's header has.
  *
  * Where a picture would be drawn, the video plays in place (`INLINE`), in a
@@ -272,11 +273,21 @@ function frameSecondsOf(dataUrl: string): number {
   return FALLBACK_FRAME_S;
 }
 
+/** A video as Safari draws one, which on a phone fills the screen only in Safari's own player. */
+type WebKitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+
 /**
  * Whether `frame` fills the screen, and the press that toggles it. Note that
- * the frame is what fills it, not the video, so the bar comes with it.
+ * the frame is what fills it, not the video, so the bar comes with it. Note
+ * that a browser that fills the screen with no element, as Safari on an
+ * iPhone, hands the video alone to its own player instead, because that is
+ * the one full screen it offers; our bar stays behind, and the player's own
+ * Done brings it back.
  */
-function useFullScreen(frame: RefObject<HTMLElement | null>): [boolean, () => void] {
+function useFullScreen(
+  frame: RefObject<HTMLElement | null>,
+  video: RefObject<WebKitVideo | null>,
+): [boolean, () => void] {
   const [full, setFull] = useState(false);
   useEffect(() => {
     const follow = () => setFull(document.fullscreenElement === frame.current);
@@ -286,6 +297,10 @@ function useFullScreen(frame: RefObject<HTMLElement | null>): [boolean, () => vo
   const toggle = () => {
     if (document.fullscreenElement === frame.current) {
       document.exitFullscreen().catch(() => undefined);
+      return;
+    }
+    if (!document.fullscreenEnabled) {
+      video.current?.webkitEnterFullscreen?.();
       return;
     }
     frame.current?.requestFullscreen().catch(() => undefined);
@@ -643,7 +658,7 @@ export function VideoPlayer({
   const url = useBlobUrl(dataUrl);
   const video = useRef<HTMLVideoElement>(null);
   const frame = useRef<HTMLSpanElement>(null);
-  const [full, toggleFullScreen] = useFullScreen(frame);
+  const [full, toggleFullScreen] = useFullScreen(frame, video);
   const [playback, setPlayback] = useState<Playback>({
     playing: false,
     at: 0,
