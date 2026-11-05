@@ -137,7 +137,7 @@ import { sectionGlyph } from "./section-icon-picker.js";
 import { groupCount, sidebarFold } from "./sidebar-fold.js";
 import { type OpenedTask, openedTaskOf, type TaskRowTab, useTaskRowTab } from "./task-actions.js";
 import { TaskListRow } from "./task-list-row.js";
-import { CreatorFace, useStandingDoor, WaitingBadge } from "./task-row-parts.js";
+import { CreatorFace, useStandingDoor, WaitingCount } from "./task-row-parts.js";
 import {
   assigneeFor,
   assigneeWords,
@@ -692,7 +692,7 @@ const TasksPageRow = memo(function TasksPageRow({
       onOpen={onOpen}
       onStanding={(standing) => onStanding(task, standing)}
       content={{
-        [TASK_PROPERTY.WAITING]: <WaitingBadge count={waiting} />,
+        [TASK_PROPERTY.WAITING]: <WaitingCount count={waiting} />,
         // Note that a task the app or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does.
         [TASK_PROPERTY.CREATOR]: (
           <>

@@ -140,7 +140,6 @@ export function Badge({
   icon,
   swatch,
   fill,
-  dot = false,
   lit = false,
   hideWordsUnder,
   replayMasked = false,
@@ -153,11 +152,9 @@ export function Badge({
   swatch?: string | undefined;
   /** A provider's color the badge is filled with, its words on one line; any color but six hex digits draws it neutral. */
   fill?: string | undefined;
-  /** Whether a muted dot leads the words, as a marker of something standing open. */
-  dot?: boolean;
   /** Whether it stands in the ink, as a pressed filter chip does: the reader's own. */
   lit?: boolean;
-  /** Give the words up, to a reader alone, once the room around the badge (a `ui-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or dot says the state in their place. */
+  /** Give the words up, to a reader alone, once the room around the badge (a `ui-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or tone's dot says the state in their place. */
   hideWordsUnder?: VisuallyHiddenUnder | undefined;
   /** Whether its words name a person's thing, a GitHub label or a branch, kept masked in a screen recording even under `ReplayUnmask`; a filled badge's words stay one string. */
   replayMasked?: boolean | undefined;
@@ -166,9 +163,9 @@ export function Badge({
 }): React.JSX.Element {
   const color = swatch === undefined ? undefined : SWATCH_COLOR.exec(swatch)?.[1];
   const filled = fill === undefined ? undefined : fillColors(fill);
-  const marked = icon != null || swatch !== undefined || dot || tone !== STATUS_TONE.NEUTRAL;
-  // Note that the tone's dot stands only where the words stand alone, because a glyph, a swatch, or a marker dot already says the state.
-  const toneDot = tone !== STATUS_TONE.NEUTRAL && icon == null && swatch === undefined && !dot;
+  const marked = icon != null || swatch !== undefined || tone !== STATUS_TONE.NEUTRAL;
+  // Note that the tone's dot stands only where the words stand alone, because a glyph or a swatch already says the state.
+  const toneDot = tone !== STATUS_TONE.NEUTRAL && icon == null && swatch === undefined;
   const face = lit ? BADGE_FACE.LIT : filled === undefined ? BADGE_FACE.PLAIN : BADGE_FACE.FILLED;
   return (
     <ShadcnBadge
@@ -188,7 +185,6 @@ export function Badge({
           style={color === undefined ? undefined : { background: `#${color}` }}
         />
       )}
-      {dot ? <span className={SWATCH} aria-hidden="true" /> : null}
       {icon}
       <span
         className="ui-badge-words min-w-0 wrap-break-word"

@@ -12,7 +12,6 @@ import {
 } from "@repo/features/inbox-wire";
 import { FIELD_WORDS } from "@repo/features/words";
 import {
-  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -28,6 +27,7 @@ import {
   FormField,
   GAP,
   LAYOUT_ELEMENT,
+  QuietWords,
   ReadableControls,
   Stack,
   TEXT_ELEMENT,
@@ -994,11 +994,11 @@ export function WithdrawnWhy({ reason }: { reason: string | undefined }): React.
   );
 }
 
-/** The small pill an ask waiting on someone else ends its message with: "Waiting on" them, after a dot in the muted ink. */
+/** The quiet words an ask waiting on someone else ends its message with: "Waiting on" them. */
 export function WaitingMarker({ on }: { on: string }): React.JSX.Element {
   return (
     <span data-inbox-marker="">
-      <Badge dot>Waiting on {on}</Badge>
+      <QuietWords>Waiting on {on}</QuietWords>
     </span>
   );
 }

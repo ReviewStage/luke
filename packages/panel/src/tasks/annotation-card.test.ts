@@ -5,20 +5,14 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
-import {
-  ANNOTATION_TONE,
-  AnnotationCard,
-  AnnotationComment,
-  AnnotationComments,
-} from "./annotation-card.js";
+import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 
 /**
  * annotation-card.test.ts -- the card every annotation on code stands on: its
  * faces and its words each keep one column, the head's and every comment's
  * alike; folded, it is its head alone, counting its comments rather than
- * previewing any; and a narrow card says the age to a reader alone, draws
- * each state as its badge's dot that still says its word, and counts
- * without the word; its ⋯ stands beside its head, never in it.
+ * previewing any; and a narrow card says the age to a reader alone and
+ * counts without the word; its ⋯ stands beside its head, never in it.
  *
  * jsdom lays nothing out, so the window's stylesheets are laid for a card
  * of each width (`testing/container-width.ts`) and the columns are read
@@ -63,7 +57,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
       "More actions",
     ),
     time: createElement("span", { className: "annotation-card-time" }, "2h"),
-    states: [{ word: "Outdated", tone: ANNOTATION_TONE.NEUTRAL }],
+    states: ["Outdated"],
     count: 2,
     children: createElement(AnnotationComments, {
       children: [

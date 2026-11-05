@@ -29,7 +29,6 @@ import {
   AnchoredPopover,
   BANNER_LOOK,
   BackButton,
-  Badge,
   Banner,
   BUTTON_VARIANT,
   Button,
@@ -58,6 +57,7 @@ import {
   PROVIDER_MARK_SIZE,
   ProductMark,
   ProviderMark,
+  QuietWords,
   RowHint,
   RowHintOptions,
   SCROLL_SIZE,
@@ -524,12 +524,11 @@ function WorkspaceRowWords({ workspace }: { workspace: WorkspaceToolsRead }): Re
   );
 }
 
-/** Whether `run_on_mac` is on for the agent, once that is known: On in the complete tone, Off in the attention tone. */
-function RunOnMacBadge({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element | null {
-  if (workspace.reason !== undefined)
-    return <Badge tone={STATUS_TONE.ATTENTION}>{WORKSPACE_WORDS.OFF}</Badge>;
+/** Whether `run_on_mac` is on for the agent, once that is known, as quiet words: On or Off. */
+function RunOnMacWords({ workspace }: { workspace: WorkspaceToolsRead }): React.JSX.Element | null {
+  if (workspace.reason !== undefined) return <QuietWords>{WORKSPACE_WORDS.OFF}</QuietWords>;
   if (workspace.answer === undefined) return null;
-  return <Badge tone={STATUS_TONE.COMPLETE}>{WORKSPACE_WORDS.ON}</Badge>;
+  return <QuietWords>{WORKSPACE_WORDS.ON}</QuietWords>;
 }
 
 /** Whether a row of the app's page opens a page of its own: `run_on_mac` alone, whose page says why it is off. */
@@ -1187,7 +1186,7 @@ function ServersPopover({
               <Highlighted text={description} tokens={workspaceTokens} />
             )
           }
-          actions={runOnMac ? <RunOnMacBadge workspace={workspace} /> : undefined}
+          actions={runOnMac ? <RunOnMacWords workspace={workspace} /> : undefined}
           current={index === workspaceAt ? LIST_ROW_CURRENT.ITEM : undefined}
           chevron={opensWorkspaceTool(shown)}
           keepFocus
@@ -1274,7 +1273,7 @@ function ServersPopover({
             {AGENT_TOOL.RUN_ON_MAC}
           </OneLine>
           <span className={SERVER_END_CLASS}>
-            <RunOnMacBadge workspace={workspace} />
+            <RunOnMacWords workspace={workspace} />
           </span>
         </div>
         {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}

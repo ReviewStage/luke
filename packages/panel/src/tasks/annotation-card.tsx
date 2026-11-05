@@ -1,5 +1,4 @@
 import {
-  Badge,
   CARD_CORNER,
   CARD_ELEMENT,
   CARD_PADDING,
@@ -12,10 +11,8 @@ import {
   DisclosureSummary,
   GAP,
   LAYOUT_ELEMENT,
-  STATUS_TONE,
+  QuietWords,
   Stack,
-  type StatusTone,
-  Tooltip,
   useDisclosureState,
   VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
@@ -47,32 +44,17 @@ import { Fold, FoldBody } from "../ai-elements/fold.js";
  * `.annotation-card`), which the head and the comments both read, so no
  * part is nudged into line with another.
  *
- * In a narrow place (`@container annotation`, under 440 pixels) the age
- * is said to a reader alone, a state is its badge's dot whose word is its
- * hint and its name, the
- * count drops its word, the card moves to the pane's inset, and the presses
- * at its foot draw closer.
+ * Each state is its word, quiet in the caption's type and the muted ink,
+ * whole at every width. In a narrow place (`@container annotation`, under
+ * 440 pixels) the age is said to a reader alone, the count drops its word,
+ * the card moves to the pane's inset, and the presses at its foot draw
+ * closer.
  */
 
 /** What a card says of how many comments it holds while folded, the word dropped where it is narrow. */
 const COUNT_WORDS = {
   word: (count: number) => (count === 1 ? "comment" : "comments"),
 } as const;
-
-/** A state a card is in, by its word and the tone it is drawn in. */
-export const ANNOTATION_TONE = {
-  NEUTRAL: STATUS_TONE.NEUTRAL,
-  ATTENTION: STATUS_TONE.ATTENTION,
-  COMPLETE: STATUS_TONE.COMPLETE,
-} as const satisfies Record<string, StatusTone>;
-
-type AnnotationTone = (typeof ANNOTATION_TONE)[keyof typeof ANNOTATION_TONE];
-
-/** One state a card is in: its word, which a narrow card says as its dot's hint and name. */
-export interface AnnotationState {
-  readonly word: string;
-  readonly tone: AnnotationTone;
-}
 
 /**
  * The card's frame, as wide as its words up to a reading measure, in the
@@ -85,20 +67,12 @@ const CARD_CLASS = "annotation-card min-w-0 max-w-annotation font-sans text-body
 const COMMENT_CLASS =
   "annotation-comment grid min-w-0 grid-cols-annotation-comment gap-x-annotation-gap gap-y-tight-gap";
 
-/** A state's badge: its word after its tone's dot, or, narrow, the dot alone, whose word is its hint and stays its name. */
-function StateChip({ state }: { state: AnnotationState }): React.JSX.Element {
+/** A state's word, as quiet words that stay whole however narrow the card, since the name gives way first. */
+function StateWords({ word }: { word: string }): React.JSX.Element {
   return (
-    <Tooltip label={state.word}>
-      <span className="annotation-card-state flex flex-none">
-        <Badge
-          tone={state.tone}
-          dot={state.tone === ANNOTATION_TONE.NEUTRAL}
-          hideWordsUnder={VISUALLY_HIDDEN_UNDER.TIGHT}
-        >
-          {state.word}
-        </Badge>
-      </span>
-    </Tooltip>
+    <span className="annotation-card-state flex flex-none">
+      <QuietWords>{word}</QuietWords>
+    </span>
   );
 }
 
@@ -156,7 +130,8 @@ export function AnnotationCard({
   /** Who wrote it, in words alone, since the head that says it is the card's summary, which holds no control. */
   name: ReactNode;
   time?: ReactNode;
-  states?: readonly AnnotationState[];
+  /** The states it is in, each by its word: Outdated, Resolved, Pending. */
+  states?: readonly string[];
   /** How many comments it holds, said while it is folded; none says nothing. */
   count?: number | undefined;
   /** Its ⋯, beside the head's end rather than in it; nothing where it offers nothing. */
@@ -209,8 +184,8 @@ export function AnnotationCard({
                 <span className="annotation-card-time flex-none text-muted-foreground">{time}</span>
               </VisuallyHidden>
             )}
-            {states.map((state) => (
-              <StateChip key={state.word} state={state} />
+            {states.map((word) => (
+              <StateWords key={word} word={word} />
             ))}
             {count === undefined ? null : <FoldedCount count={count} />}
           </DisclosureSummary>

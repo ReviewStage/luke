@@ -167,12 +167,10 @@ import {
 } from "./agent-changes-tab.js";
 import { pullRequestNumberLabel } from "./agent-model.js";
 import {
-  ANNOTATION_TONE,
   AnnotationCard,
   AnnotationComment,
   AnnotationComments,
   type AnnotationReply,
-  type AnnotationState,
 } from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { CHAPTERS_SHOWN, chapterPaths, chaptersShown, chapterViewed } from "./chapters-model.js";
@@ -191,11 +189,11 @@ import type { TreeShown } from "./file-view.js";
 import { MergeControl } from "./merge-box.js";
 import {
   PENDING_WORDS,
-  PendingBadge,
   PendingComment,
   type PendingComments,
   PendingCommentsProvider,
   PendingSurfaceProvider,
+  PendingWords,
   pendingThreadsOf,
   usePendingComment,
   usePendingThread,
@@ -1180,15 +1178,11 @@ function lineSpan(
 }
 
 /** The states a review thread's head wears: resolved, outdated by a later push, and pending, the member's own not yet submitted. */
-function threadStates(thread: ReviewThread, pending: boolean): readonly AnnotationState[] {
+function threadStates(thread: ReviewThread, pending: boolean): readonly string[] {
   return [
-    ...(thread.resolved
-      ? [{ word: PULL_REQUEST_WORDS.RESOLVED, tone: ANNOTATION_TONE.COMPLETE }]
-      : []),
-    ...(thread.outdated
-      ? [{ word: PULL_REQUEST_WORDS.OUTDATED, tone: ANNOTATION_TONE.NEUTRAL }]
-      : []),
-    ...(pending ? [{ word: PENDING_WORDS.PENDING, tone: ANNOTATION_TONE.ATTENTION }] : []),
+    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
+    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
+    ...(pending ? [PENDING_WORDS.PENDING] : []),
   ];
 }
 
@@ -1369,7 +1363,7 @@ function ThreadComment({
         nameRef: <ActorRef actor={writer} nameOnly />,
         at: comment.at,
         now,
-        trailing: draft === undefined ? undefined : <PendingBadge />,
+        trailing: draft === undefined ? undefined : <PendingWords />,
       };
   return (
     <AnnotationComment reply={reply} className="pull-request-thread-comment">
