@@ -64,6 +64,15 @@
  * every model, which leaves the service's catalog, which offers an
  * Ultrafast version only where OpenAI prices one, the one gate on it.
  *
+ * Subagents. A plan's launch hands app-server a catalog of its own too: the
+ * pinned release's with no model naming a `multi_agent_version`, which is
+ * what has Codex offer its subagent tools whatever its features say. OpenAI
+ * refuses a plan's request that carries an `agent_message` item
+ * (`subscription_sharing_unsupported_capability`), and a spawned subagent's
+ * first request carries its task as one, as the parent's history carries
+ * the subagent's answer, so one spawn would fail every later turn of the
+ * thread.
+ *
  * Sandbox. Codex runs no sandbox of its own, `danger-full-access` with
  * approval `never` (https://learn.chatgpt.com/docs/sandboxing), set as the
  * thread starts and again as the `sandboxPolicy` of each `turn/start`, as
@@ -297,7 +306,7 @@ const ULTRAFAST_CATALOG_TIER = {
   description: "Fastest speed, highest usage",
 } as const;
 
-/** The file an API-key launch writes its catalog to, in a folder of its own it removes as it ends. */
+/** The file a launch writes its catalog to, in a folder of its own it removes as it ends. */
 const CATALOG_FILE = { PREFIX: "vespin-codex-", NAME: "models.json" } as const;
 
 /** The tier a turn names for the speed keys given; null, the standard tier, for neither. */
@@ -319,12 +328,17 @@ const CatalogSchema = Schema.Struct({
   ),
 });
 
+/** The pinned release's bundled catalog, as this file reads it. */
+function bundledCatalog() {
+  return Schema.decodeUnknownSync(CatalogSchema)(JSON.parse(CODEX_BUNDLED_MODELS_JSON));
+}
+
 /**
  * The pinned release's bundled catalog with the Ultrafast tier listed on
  * every model that lists none, as Codex's `model_catalog_json` reads it.
  */
 function ultrafastCatalog(): string {
-  const catalog = Schema.decodeUnknownSync(CatalogSchema)(JSON.parse(CODEX_BUNDLED_MODELS_JSON));
+  const catalog = bundledCatalog();
   const isUltrafast = (tier: unknown) =>
     typeof tier === "object" && tier !== null && "id" in tier && tier.id === SERVICE_TIER.ULTRAFAST;
   const models = catalog.models.map((model) => {
@@ -336,16 +350,30 @@ function ultrafastCatalog(): string {
   return JSON.stringify({ ...catalog, models });
 }
 
-/** The Ultrafast catalog written to a folder of the launch's own, which the launch's scope removes; its absolute path, as `model_catalog_json` takes it. */
-const ultrafastCatalogFile = Effect.acquireRelease(
-  Effect.sync(() => {
-    const folder = mkdtempSync(join(tmpdir(), CATALOG_FILE.PREFIX));
-    const file = join(folder, CATALOG_FILE.NAME);
-    writeFileSync(file, ultrafastCatalog());
-    return { folder, file };
-  }),
-  ({ folder }) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-).pipe(Effect.map(({ file }) => file));
+/**
+ * The pinned release's bundled catalog with no model naming a
+ * `multi_agent_version`, so Codex offers no subagent tools on the plan
+ * (the file header's Subagents), as Codex's `model_catalog_json` reads it.
+ */
+function planCatalog(): string {
+  const catalog = bundledCatalog();
+  const models = catalog.models.map((model) =>
+    Object.fromEntries(Object.entries(model).filter(([key]) => key !== "multi_agent_version")),
+  );
+  return JSON.stringify({ ...catalog, models });
+}
+
+/** The catalog given written to a folder of the launch's own, which the launch's scope removes; its absolute path, as `model_catalog_json` takes it. */
+const catalogFile = (catalog: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const folder = mkdtempSync(join(tmpdir(), CATALOG_FILE.PREFIX));
+      const file = join(folder, CATALOG_FILE.NAME);
+      writeFileSync(file, catalog);
+      return { folder, file };
+    }),
+    ({ folder }) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  ).pipe(Effect.map(({ file }) => file));
 
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
@@ -365,18 +393,18 @@ const CODEX_AUTH = {
   API_KEY: "api_key",
 } as const;
 
-type CodexAuth =
+type CodexAuth = (
   | { readonly kind: typeof CODEX_AUTH.TOKEN_COMMAND; readonly command: TokenCommand }
-  | {
-      readonly kind: typeof CODEX_AUTH.API_KEY;
-      /** The catalog app-server reads in place of its bundled one (`ultrafastCatalogFile`). */
-      readonly catalog: string;
-    };
+  | { readonly kind: typeof CODEX_AUTH.API_KEY }
+) & {
+  /** The catalog app-server reads in place of its bundled one (`catalogFile`): `planCatalog` on the plan, `ultrafastCatalog` on an API key. */
+  readonly catalog: string;
+};
 
 /**
  * How our provider is handed its token: from the runner's token command
  * on the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API
- * key; and its own name.
+ * key; its own name; and the catalog the launch wrote for it.
  */
 function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
   const named = auth.kind === CODEX_AUTH.API_KEY ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
@@ -405,12 +433,8 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
     // (https://learn.chatgpt.com/docs/agent-configuration/speed). On an API key alone an Ultrafast one runs on the
     // `ultrafast` tier, which its own feature turns on and our catalog lists.
     ["features.fast_mode", "true"],
-    ...(auth.kind === CODEX_AUTH.API_KEY
-      ? ([
-          ["features.ultrafast_mode", "true"],
-          ["model_catalog_json", toml(auth.catalog)],
-        ] as const)
-      : []),
+    ...(auth.kind === CODEX_AUTH.API_KEY ? ([["features.ultrafast_mode", "true"]] as const) : []),
+    ["model_catalog_json", toml(auth.catalog)],
   ];
 }
 
@@ -901,22 +925,24 @@ function onApiKey(context: LaunchContext<CodexConfig>): boolean {
 }
 
 /**
- * The credential a launch's app-server runs on: the account's API key, with
- * the catalog written for it, where the environment holds it, and the
- * plan's token command otherwise, where the runner knows its own bundle;
- * none where it does not.
+ * The credential a launch's app-server runs on, with the catalog written for
+ * it: the account's API key where the environment holds it, and the plan's
+ * token command otherwise, where the runner knows its own bundle; none where
+ * it does not.
  */
-function authOf(
+const authOf = Effect.fn("agent-runner/codexAuthOf")(function* (
   context: LaunchContext<CodexConfig>,
-  catalog: string | undefined,
-): CodexAuth | undefined {
-  if (catalog !== undefined) return { kind: CODEX_AUTH.API_KEY, catalog };
+) {
+  if (onApiKey(context)) {
+    return { kind: CODEX_AUTH.API_KEY, catalog: yield* catalogFile(ultrafastCatalog()) } as const;
+  }
   if (context.self === undefined) return undefined;
   return {
     kind: CODEX_AUTH.TOKEN_COMMAND,
     command: { self: context.self, tokenUrl: context.config.tokenUrl },
-  };
-}
+    catalog: yield* catalogFile(planCatalog()),
+  } as const;
+});
 
 /**
  * The PATH app-server runs with: the one given, behind the folder of tools
@@ -937,8 +963,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   context: LaunchContext<CodexConfig>,
 ) {
   const { config, sink } = context;
-  const catalog = onApiKey(context) ? yield* ultrafastCatalogFile : undefined;
-  const auth = authOf(context, catalog);
+  const auth: CodexAuth | undefined = yield* authOf(context);
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }

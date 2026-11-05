@@ -337,6 +337,14 @@ it.effect(
         ],
       });
       yield* service.seen;
+      // The catalog app-server reads on the plan, while it runs: every bundled model, none offering Codex's subagents, whose messages OpenAI refuses on a plan.
+      const catalogOverride = override(spawned[0], "model_catalog_json");
+      const catalog = JSON.parse(readFileSync(JSON.parse(catalogOverride ?? '""'), "utf8"));
+      assert.deepEqual(
+        catalog.models.map((model: { slug: string }) => model.slug),
+        JSON.parse(CODEX_BUNDLED_MODELS_JSON).models.map((model: { slug: string }) => model.slug),
+      );
+      assert.ok(catalog.models.every((model: object) => !("multi_agent_version" in model)));
       yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
@@ -377,6 +385,7 @@ it.effect(
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
         "features.fast_mode=true",
+        `model_catalog_json=${catalogOverride}`,
         'mcp_servers.workspace.url="https://app.test/runner/mcp"',
         'mcp_servers.workspace.bearer_token_env_var="APP_RUNNER_TOKEN"',
         'mcp_servers.workspace.default_tools_approval_mode="approve"',
