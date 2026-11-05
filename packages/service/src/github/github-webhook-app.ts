@@ -43,8 +43,8 @@ import { setInstallationStatus } from "./github-installations.js";
  *
  * The events read are a pull request's, a check suite's, and a commit
  * status's, since the checks' one word counts the statuses beside the runs.
- * Note that a check run's are not, because GitHub sends one per job, many
- * to a push, and its suite completing says the same of the head once. GitHub signs every delivery with the App's webhook secret, and nothing is
+ * Note that a check run's delivery is not read, because GitHub sends one per
+ * job, often many to a push, and the check suite completing covers the head once. GitHub signs every delivery with the App's webhook secret, and nothing is
  * read before the signature over the body's own bytes is confirmed in
  * constant time; a deployment holding no secret refuses every delivery as
  * unavailable, so an unconfigured webhook trusts nothing. Of a delivery only
