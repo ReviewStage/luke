@@ -31,8 +31,9 @@ const SUPPORT_ACCESS_MEANING = `A ${PRODUCT_NAME} maintainer may sign in as you,
  * and the one press that turns it, granting it for seven days or revoking
  * it. Either acts on the press, since the row's other press turns it back.
  * A grant is not offered while a maintainer is already signed in as the
- * member, since the service refuses one then; a revoke still is, and ends
- * that sign-in.
+ * member, since the service refuses one then, nor before the access is read,
+ * since a grant standing unread would be extended; a revoke still is, and
+ * ends that sign-in.
  */
 function SupportAccessRow(): React.JSX.Element {
   const access = useAppSlice(APP_SLICE.ACCESS);
@@ -60,7 +61,7 @@ function SupportAccessRow(): React.JSX.Element {
           >
             Revoke
           </Button>
-        ) : impersonated ? null : (
+        ) : impersonated || access === undefined || access.pending === true ? null : (
           <Button
             variant={BUTTON_VARIANT.OUTLINE}
             busy={press.busy}

@@ -348,6 +348,14 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
       Effect.gen(function* () {
         const grant = params.grant;
         if (typeof grant !== "boolean") return yield* invalid("grant is true or false");
+        // Note that the session is read again first, because a browser's cookie
+        // may name someone else since another tab signed in, and a grant for
+        // anyone but the person the window shows is refused.
+        const pressedFor = signedInAccountId(session.snapshot());
+        yield* session.confirmAccount?.() ?? Effect.void;
+        if (pressedFor === undefined || signedInAccountId(session.snapshot()) !== pressedFor) {
+          return yield* new RefusedRefusal({ message: SUPPORT_ACCESS_REFUSED });
+        }
         const written = yield* Effect.result(accessClient.writeSupportAccess(grant));
         if (Result.isFailure(written)) {
           report(`${SUPPORT_ACCESS_REFUSED}: ${written.failure._tag}`);

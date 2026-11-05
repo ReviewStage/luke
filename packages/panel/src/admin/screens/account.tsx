@@ -265,6 +265,9 @@ function supportAccessWords(detail: AdminUserDetail): string {
     : "no support access";
 }
 
+/** What the page says where Impersonate failed with no words of the service's. */
+const IMPERSONATE_FAILED = "Couldn't sign in as this account. Try again.";
+
 /**
  * Impersonate: signs the maintainer in as the member through the mount's
  * door, which leaves the page where it lands, so only a refusal comes back,
@@ -282,10 +285,12 @@ function ImpersonateControl({
   const press = () => {
     setBusy(true);
     setRefusal(undefined);
-    void impersonate(userId).then((refused) => {
-      setBusy(false);
-      setRefusal(refused);
-    });
+    void impersonate(userId)
+      .catch(() => IMPERSONATE_FAILED)
+      .then((refused) => {
+        setBusy(false);
+        setRefusal(refused);
+      });
   };
   return (
     <Inline>
