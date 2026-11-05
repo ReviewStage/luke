@@ -1319,11 +1319,16 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               [task.id, null, AGENT_MACHINE.VERCEL],
             );
           }
-          const branched = yield* startAgent(routedSessions(owner), owner, {
+          const onBranch = {
             ...startOn(task.id, "anthropic/claude-opus-5.5"),
             branch: "luke/stacked",
-          }).pipe(Effect.provide(Layer.mergeAll(CATALOG, environment(), native)), Effect.result);
+          };
+          const branched = yield* startAgent(routedSessions(owner), owner, onBranch).pipe(
+            Effect.provide(Layer.mergeAll(CATALOG, environment(), native)),
+            Effect.result,
+          );
           assert.deepEqual(branched, Result.fail(HOSTED_REFUSAL.NO_REPOSITORY));
+          assert.ok(Option.isNone(yield* readAgentByKey(owner, onBranch.idempotencyKey)));
         }),
     );
 
