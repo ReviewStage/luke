@@ -173,9 +173,9 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child")].map(
-        (name) => name.textContent,
-      ),
+      [
+        ...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child"),
+      ].map((name) => name.textContent),
     ]),
   );
 }

@@ -11,8 +11,8 @@ import { describe, it } from "vitest";
 import {
   type RunsHeld,
   type RunTasksHeld,
-  withoutFinishedRuns,
   withoutFinishedRunTasks,
+  withoutFinishedRuns,
 } from "./finished-runs.js";
 
 /**
