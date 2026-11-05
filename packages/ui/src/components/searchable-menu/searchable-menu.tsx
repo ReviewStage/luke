@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import { cssCustomProperties } from "../../css.js";
 import { type SearchSubject, searchHit } from "../../search-score.js";
 import { searchTokens } from "../../search-tokens.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import {
   AnchoredPopover,
   POPOVER_BOUNDS,
@@ -22,6 +23,7 @@ import {
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
+import { MenuReplayUnmasked } from "../menu/menu-replay.js";
 import { inNarrowRoom, MenuSheetFrame } from "../menu/menu-sheet.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { useSubmenuAim } from "../menu/submenu-aim.js";
@@ -168,6 +170,8 @@ export interface MenuRow {
   card?: React.ReactNode;
   /** Marks at the row's end, after its shortcut, as ⌘K's rows end: a teammate's face, a failed agent's mark. */
   end?: React.ReactNode;
+  /** Whether its words name a person's thing, a repository's or a workspace's name, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`) or a list under `ReplayUnmask`. */
+  replayMasked?: boolean | undefined;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -426,16 +430,18 @@ function optionGroups(
   rows: readonly MenuRow[],
   value: string | undefined,
   query: string,
+  unmasked: boolean,
 ): ComboboxGroup[] {
   return sectionsOf(rows).map((section) => ({
     label: section.heading,
+    replayUnmasked: unmasked,
     options: section.rows.map(({ row }) => ({
       id: row.id,
-      label: markedLabel(row, query),
+      label: rowWords(row, unmasked, markedLabel(row, query)),
       words: row.label,
       icon: row.icon,
-      detail: row.detail,
-      hint: rowHint(row),
+      detail: rowWords(row, unmasked, row.detail),
+      hint: rowWords(row, unmasked, rowHint(row)),
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
@@ -444,14 +450,27 @@ function optionGroups(
   }));
 }
 
+/** A row's words, marked for a screen recording as its menu and the row ask. */
+function rowWords(row: MenuRow, unmasked: boolean, words: React.ReactNode): React.ReactNode {
+  // Note that words neither mark touches stay as handed, so a plain title is still measured as plain words.
+  if (words === undefined || words === null || (!unmasked && row.replayMasked !== true)) {
+    return words;
+  }
+  return (
+    <ReplayWords unmasked={unmasked} masked={row.replayMasked}>
+      {words}
+    </ReplayWords>
+  );
+}
+
 /** A submenu's rows as its list's options, the chosen one checked. */
-function submenuOptions(open: Submenu): ComboboxOption[] {
+function submenuOptions(open: Submenu, unmasked: boolean): ComboboxOption[] {
   return open.rows.map((row) => ({
     id: row.id,
-    label: row.label,
+    label: rowWords(row, unmasked, row.label),
     icon: row.icon,
-    detail: row.detail,
-    hint: rowHint(row),
+    detail: rowWords(row, unmasked, row.detail),
+    hint: rowWords(row, unmasked, rowHint(row)),
     card: row.card,
     current: row.id === open.value,
   }));
@@ -506,8 +525,8 @@ function PlacedRow({
     <RowHintOptions card={row.card}>
       <ListRow
         leading={row.icon}
-        title={title}
-        description={description}
+        title={rowWords(row, false, title)}
+        description={rowWords(row, false, description)}
         meta={rowHint(row)}
         hint={row.card === undefined ? undefined : { Hint: RowHint, label: title }}
         disabled={disabled}
@@ -615,9 +634,17 @@ export function SearchableMenu(
     leaving?: boolean | undefined;
     /** Hands the menu's element to the hold its owner draws it through its exit with. */
     ref?: ((element: HTMLElement | null) => void) | undefined;
+    /**
+     * Whether its own words are the app's, which a screen recording shows as
+     * they read: its rows, their sections' headings, its submenus and their
+     * notes, and its pinned rows, but for a row that is `replayMasked`; its
+     * note and last line are its owner's to mark (`@repo/ui/session-replay-marks`).
+     */
+    replayUnmasked?: boolean | undefined;
   } & SearchableMenuPlace,
 ): React.JSX.Element {
   const { rows, value, onPick } = props;
+  const unmasked = props.replayUnmasked === true;
   const leaving = props.leaving === true;
   // Note that the room is read as the menu opens, so one standing open never turns into the other as the window is resized.
   const sheeted = () => props.layer !== SEARCHABLE_MENU_LAYER.EMBEDDED && inNarrowRoom();
@@ -913,13 +940,15 @@ export function SearchableMenu(
         ref={sheet ? list : undefined}
         id={submenuId}
         label={shown.label}
-        groups={[{ options: submenuOptions(shown) }]}
+        groups={[{ options: submenuOptions(shown, unmasked) }]}
         active={subAt}
         onActiveChange={(moved) => setSubmenu({ moved })}
         onChoose={(_index, option) => pickIn(shown, option.id)}
         steer={sheet ? keys : undefined}
       />
-      {shown.note === undefined ? null : <FootNote words={shown.note} />}
+      {shown.note === undefined ? null : (
+        <FootNote words={<ReplayWords unmasked={unmasked}>{shown.note}</ReplayWords>} />
+      )}
     </>
   );
 
@@ -964,7 +993,7 @@ export function SearchableMenu(
       ref={list}
       id={listId}
       label={props.label}
-      groups={optionGroups(matches, value, answered ? "" : query)}
+      groups={optionGroups(matches, value, answered ? "" : query, unmasked)}
       active={at}
       onActiveChange={(index) => aim(() => hoverRow(index))}
       onChoose={(index) => {
@@ -1024,7 +1053,7 @@ export function SearchableMenu(
   ) : null;
   const footRows = (
     <>
-      {pinnedRows}
+      <MenuReplayUnmasked.Provider value={unmasked}>{pinnedRows}</MenuReplayUnmasked.Provider>
       {props.lastLine === undefined ? null : <LastLine line={props.lastLine} />}
     </>
   );

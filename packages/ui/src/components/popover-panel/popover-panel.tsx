@@ -227,7 +227,7 @@ export function PopoverPanel({
         </div>
       ) : (
         <h2 id={titleId} className="ui-visually-hidden">
-          {title}
+          <ReplayWords unmasked={replayUnmasked}>{title}</ReplayWords>
         </h2>
       )}
       {children}

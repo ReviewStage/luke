@@ -1,6 +1,5 @@
 import type { BaseUIEvent } from "@base-ui/react/types";
 import {
-  createContext,
   Fragment,
   useCallback,
   useContext,
@@ -44,6 +43,7 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
 import { MENU_LINE, type MenuLine, menuCut } from "./menu-cut.js";
+import { MenuReplayUnmasked } from "./menu-replay.js";
 import { inNarrowRoom, MenuSheetFrame } from "./menu-sheet.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useSubmenuAim } from "./submenu-aim.js";
@@ -234,6 +234,8 @@ export interface SteeredMenuItem {
 /** An item that opens a menu of its own beside it rather than acting. */
 export interface MenuSubmenu {
   label: string;
+  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];
   /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
@@ -259,6 +261,8 @@ export interface MenuPanelDoors {
  */
 export interface MenuPanel {
   label: string;
+  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
   /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
   hint?: React.ReactNode;
@@ -724,14 +728,6 @@ function secondLine(action: MenuAction): boolean {
   return action.detail !== undefined && action.detailPlace !== MENU_DETAIL.BESIDE;
 }
 
-/**
- * Whether the menu standing round an item unmasks its words in a screen
- * recording (`MenuProps`'s `replayUnmasked`), read by each item rather than
- * handed down, since a menu's rows stand in portals of their own, as its
- * submenus and its phone's sheet do, which no mark round the menu reaches.
- */
-const MenuReplayUnmasked = createContext(false);
-
 /** An item's words, marked for a screen recording as its menu and the item ask. */
 function ItemWords({
   masked,
@@ -765,12 +761,12 @@ function ItemBody({
       <>
         {glyph}
         {action.tag === undefined ? (
-          <OneLine className="ui-menu-item-label min-w-0 flex-1">
+          <OneLine className="ui-menu-item-label min-w-0 flex-1" words={action.label}>
             <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
           </OneLine>
         ) : (
           <span className="ui-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
-            <OneLine className="ui-menu-item-label min-w-0">
+            <OneLine className="ui-menu-item-label min-w-0" words={action.label}>
               <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
             </OneLine>
             {action.tag}
@@ -792,10 +788,14 @@ function ItemBody({
       >
         <OneLine
           className={cn("ui-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
+          words={action.label}
         >
           <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
         </OneLine>
-        <OneLine className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
+        <OneLine
+          className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}
+          words={action.detail}
+        >
           <ItemWords masked={action.replayMasked}>{action.detail}</ItemWords>
         </OneLine>
       </span>
@@ -1173,8 +1173,8 @@ function Submenu({
         }}
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>
-        <OneLine className="ui-menu-item-label min-w-0 flex-1">
-          <ItemWords>{entry.label}</ItemWords>
+        <OneLine className="ui-menu-item-label min-w-0 flex-1" words={entry.label}>
+          <ItemWords masked={entry.replayMasked}>{entry.label}</ItemWords>
         </OneLine>
         {entry.hint === undefined ? null : <span className="ui-menu-item-hint">{entry.hint}</span>}
       </DropdownMenuSubTrigger>

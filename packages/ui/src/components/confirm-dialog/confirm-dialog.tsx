@@ -76,7 +76,9 @@ export interface DialogQuestion {
    * Whether its words are the app's, which a screen recording shows as they
    * read: its title, its body, and its act's word, but for a title or a
    * body that names a person's thing (`titleReplayMasked`,
-   * `bodyReplayMasked`). The name a gate asks for and a refusal stay masked.
+   * `bodyReplayMasked`). The name a gate asks for, a refusal, and what the
+   * card holds under its body stay masked, the last unless its owner marks
+   * its own words in it (`ReplayUnmask`).
    */
   replayUnmasked?: boolean | undefined;
   titleReplayMasked?: boolean | undefined;
@@ -215,7 +217,8 @@ function ConfirmCard({
           <ReplayWords masked={question.bodyReplayMasked}>{question.body}</ReplayWords>
         </p>
       ) : null}
-      {children}
+      {/* What the owner hands under the body is its own to mark, masked here even where the question unmasks its words. */}
+      <ReplayMask>{children}</ReplayMask>
       {gate === undefined ? null : (
         <FormField
           label={
