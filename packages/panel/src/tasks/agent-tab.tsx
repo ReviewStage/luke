@@ -101,7 +101,12 @@ import {
   FLOATING_OVER_LOG_CLASS,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
-import { Message, MessageContent, RECEIVED_MESSAGE_CLASS } from "../ai-elements/message.js";
+import {
+  Message,
+  MessageBeside,
+  MessageContent,
+  RECEIVED_MESSAGE_CLASS,
+} from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
@@ -269,6 +274,7 @@ import {
   UndeliveredMark,
   useLineMarked,
   useLineSending,
+  useLineStatus,
   useUndeliveredLines,
   useUnsentLines,
 } from "./undelivered-mark.js";
@@ -1517,6 +1523,7 @@ export function AgentMessage({
   const forkOffered = useForkOffered();
   const sending = useLineSending(message.id);
   const marked = useLineMarked(message.id);
+  const status = useLineStatus(message.id);
   const editor = useMessageEdit(message.id);
   // Note that a box let go stays drawn, on the doors it was last handed, until its exit has played.
   const editing = useDisclosure(editor !== undefined);
@@ -1593,6 +1600,13 @@ export function AgentMessage({
       );
     // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
     const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
+    const content = (
+      <MessageContent>
+        <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
+          <SentWords text={shown} />
+        </SentToAgent>
+      </MessageContent>
+    );
     return (
       <Message
         from={received ? MESSAGE_ROLE.ASSISTANT : message.role}
@@ -1602,16 +1616,18 @@ export function AgentMessage({
       >
         {received ? <MessageHead sender={named}>{subject}</MessageHead> : subject}
         <MessageFileChips message={message} sending={sending} />
-        {shown === "" ? null : (
-          <MessageContent>
-            <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
-              <SentWords text={shown} />
-            </SentToAgent>
-          </MessageContent>
+        {shown === "" ? null : marked ? (
+          <MessageBeside mark={<UndeliveredMark messageId={message.id} />}>{content}</MessageBeside>
+        ) : (
+          content
         )}
-        <UndeliveredMark messageId={message.id} />
+        {/* A line of files alone stands its mark on a row of its own, kept clear of the files' fade. */}
+        {shown === "" && marked ? (
+          <MessageBeside mark={<UndeliveredMark messageId={message.id} />}>{null}</MessageBeside>
+        ) : null}
         <MessageLine
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
+          status={status}
           at={sentAt}
           // Note that a line of no words, files alone, still offers its Copy link, though it has nothing to copy or edit.
           actions={
@@ -1856,6 +1872,11 @@ function useKept<T>(value: T, same: (a: T, b: T) => boolean): T {
 /** Whether two lists hold the same ids in the same order. */
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
+}
+
+/** Whether two maps of why lines did not go hold the same notes for the same lines. */
+function sameNotes<T>(a: ReadonlyMap<string, T>, b: ReadonlyMap<string, T>): boolean {
+  return a.size === b.size && [...a].every(([id, note]) => b.get(id) === note);
 }
 
 /** Whether two sets hold the same members. */
@@ -2825,9 +2846,21 @@ function AgentTabView({
     sameSet,
   );
   const retryLine = useSteady(composer.retryLine);
+  const takeBackLine = useSteady(composer.takeBackLine);
+  const dropLine = useSteady(composer.dropLine);
+  const failedNotes = useKept(composer.failedNotes, sameNotes);
   const marks = useMemo(
-    () => ({ undelivered, unsent, sending, retry: (id: string) => retryLine?.(id) }),
-    [undelivered, unsent, sending, retryLine],
+    () => ({
+      undelivered,
+      closed: composer.closed,
+      unsent,
+      notes: failedNotes,
+      sending,
+      retry: (id: string) => retryLine?.(id),
+      takeBack: (id: string) => takeBackLine?.(id),
+      drop: (id: string) => dropLine?.(id),
+    }),
+    [undelivered, composer.closed, unsent, failedNotes, sending, retryLine, takeBackLine, dropLine],
   );
   const starterActor = usePerson(agent.startedBy);
   const wholeParts = useWholePartDoor(agent.id);
@@ -3184,6 +3217,11 @@ function AgentTabBody({
     rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
     starter,
+    shown,
+    onOpen:
+      onOpenTarget === undefined
+        ? undefined
+        : () => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent: agent.id }),
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
   const servers = useAgentServers({
