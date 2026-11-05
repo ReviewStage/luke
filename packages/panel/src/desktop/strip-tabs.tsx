@@ -10,8 +10,6 @@ import {
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
   SearchableMenu,
-  SKELETON_SHAPE,
-  Skeleton,
   STATUS_TONE,
   type StatusTone,
   Tooltip,
@@ -523,19 +521,6 @@ export interface AddEntry {
 /** An entry as a menu draws its row: its end mark and its card drawn where `MenuRow` draws them, so a "+" menu, ⌘K and the summary say the same of a row. */
 export function entryRow({ row, endMark, card }: AddEntry): MenuRow {
   return { ...row, end: endMark ?? row.end, card: card ?? row.card };
-}
-
-/** How wide the block standing in a tab is while its strip is read: a typical tab's width. */
-const TAB_SKELETON_WIDTH = "120px";
-
-/** The block standing in a tab while its strip is read, at a typical tab's width. */
-export function TabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />;
-}
-
-/** The block standing in the "+" while its strip is read: an icon press's square, as tall as it is wide. */
-export function AddTabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--ui-control-height)" />;
 }
 
 /**

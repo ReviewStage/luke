@@ -74,6 +74,21 @@ export function ComposerFieldRoom({
   );
 }
 
+/** What the empty field asks for, over the field at the editor's own insets, said to nobody since the field names it. */
+export function ComposerPlaceholder({ children }: { children: string }): React.JSX.Element {
+  return (
+    <Text
+      as={TEXT_ELEMENT.SPAN}
+      variant={TEXT_VARIANT.INHERIT}
+      truncate
+      className="agent-composer-placeholder"
+      aria-hidden="true"
+    >
+      {children}
+    </Text>
+  );
+}
+
 /** The field before its editor mounts: drawn at the editor's own size and insets, inert. */
 export function UnloadedComposerField(): React.JSX.Element {
   return <div className={FIELD_CLASS} aria-busy="true" />;
@@ -282,17 +297,7 @@ export function ComposerField({
 
   return (
     <ComposerFieldRoom ref={roomHost}>
-      {draft === "" ? (
-        <Text
-          as={TEXT_ELEMENT.SPAN}
-          variant={TEXT_VARIANT.INHERIT}
-          truncate
-          className="agent-composer-placeholder"
-          aria-hidden="true"
-        >
-          {placeholder}
-        </Text>
-      ) : null}
+      {draft === "" ? <ComposerPlaceholder>{placeholder}</ComposerPlaceholder> : null}
       {module === undefined ? <UnloadedComposerField /> : <div ref={host} />}
       {chips.map((each) =>
         createPortal(

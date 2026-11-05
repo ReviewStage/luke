@@ -198,19 +198,15 @@ test("a task opened on an agent whose list is still read follows the agent's tra
   );
 });
 
-test("opening a task on its agent passes through one placeholder, from the task's read to the transcript, the toolbar's tab, the column, and its composer standing where they land", async () => {
+test("opening a task on its agent passes through one placeholder, from the task's read to the transcript, the column and its composer standing where they land", async () => {
   const held = heldTranscript();
   const page = mount(opened({ read: false, listed: false }));
   await settle();
   const seen = [columnLog(page.container)];
-  const tabBlock = () =>
-    page.container.querySelector(".ui-toolbar-heading .ui-skeleton")?.getAttribute("style");
-  const tabWhileRead = tabBlock();
 
   page.draw(opened({ read: true, listed: false }));
   await settle();
   seen.push(columnLog(page.container));
-  assert.equal(tabBlock(), tabWhileRead, "the toolbar's tab stands as it stood");
 
   page.draw(opened({ read: true, listed: true }));
   await settle();

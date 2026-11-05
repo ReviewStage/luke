@@ -20,7 +20,6 @@ import {
   Fill,
   NOT_FOUND_THING,
   NotFound,
-  SKELETON_SHAPE,
   Skeleton,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
@@ -53,7 +52,7 @@ import { useSteadyDoor } from "../steady-door.js";
 import { type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
-import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
@@ -79,18 +78,12 @@ import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopHome } from "./desktop-home.js";
-import {
-  AgentPane,
-  MainTabStrip,
-  MainTabStripSkeleton,
-  mainTabLabel,
-  phoneAgentStarts,
-} from "./main-tabs.js";
+import { AgentPane, MainTabStrip, mainTabLabel, phoneAgentStarts } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
@@ -181,12 +174,6 @@ import {
 /** What the task's page says to a reader while the task is read. */
 const TASK_LOADING_LABEL = readingWords("the task");
 
-/** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
-const ACTION_SKELETON_WIDTHS = { START: "104px" } as const;
-
-/** An icon press's width, the task's ⋯'s and the summary's toggle's, as tall as it is wide. */
-const ICON_PRESS_WIDTH = "var(--ui-control-height)";
-
 /**
  * The task's page as it and its placeholder stand it: the column, its
  * toolbar over its body, and what stands beside it, the side panel; the
@@ -226,22 +213,10 @@ function TaskBody({ children }: { children: React.ReactNode }): React.JSX.Elemen
   return <div className="desktop-plan-body relative flex min-h-0 flex-1">{children}</div>;
 }
 
-/** The task's actions at the toolbar's right while the task is read, as the toolbar lands them: Start, the chosen agent's ⋯, and the summary's toggle where the summary holds something. */
-function TaskActionsSkeleton({ summary }: { summary: boolean }): React.JSX.Element {
-  return (
-    <>
-      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ACTION_SKELETON_WIDTHS.START} />
-      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} />
-      {summary ? <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} /> : null}
-    </>
-  );
-}
-
 /**
  * The task's page while the task is read, in the shape it lands in and
- * through the frames it lands in: the toolbar with a tab where the
- * column's first will stand, its "+" after it and its actions at its right,
- * the column standing as an agent's tab does before its transcript lands
+ * through the frames it lands in: the toolbar empty where it stands, the
+ * column standing as an agent's tab does before its transcript lands
  * (`AgentTabSkeleton`), the summary's room where it will stand, and the
  * side panel at its width where it is open. The column's tab draws the very
  * same placeholder until it lands, so a task opens through one placeholder
@@ -255,12 +230,12 @@ function TaskPageSkeleton({
   starting,
   head,
 }: {
-  /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
-  starting?: SentLine | undefined;
+  /** New task's agent start under way, the line its agent opens on and the model it names, which the column draws as the agent's tab will; none while a task is read. */
+  starting?: { readonly line: SentLine; readonly model: ComposerModel | undefined } | undefined;
   /** The side panel as it will be drawn, its panel none where it is shut. */
   drawing: SidePanelDrawing;
-  /** How the summary will stand, whose room is kept, and whether it holds anything, which its toggle stands for. */
-  summary: Pick<SummaryLayout, "mode" | "holds">;
+  /** How the summary will stand, whose room is kept. */
+  summary: Pick<SummaryLayout, "mode">;
   /** Hands over the column, which the summary's room is measured on, as the page's own does. */
   onColumn: (column: HTMLElement | null) => void;
   /** A phone's head over the page, as the page will be headed once it lands (`TaskWaitHead`); none elsewhere. */
@@ -276,20 +251,17 @@ function TaskPageSkeleton({
         fullScreen={panel?.fullScreen === true}
         column={
           <>
-            <Toolbar
-              start={TOOLBAR_INSET.COLUMN}
-              look={TOOLBAR_LOOK.TABS}
-              measure
-              title={<MainTabStripSkeleton />}
-              actions={<TaskActionsSkeleton summary={summary.holds} />}
-            />
+            {/* Note that the bar stands empty, never in blocks for the tabs and actions it lands with, and a phone, whose page hides the bar, draws none. */}
+            {head === undefined ? (
+              <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
+            ) : null}
             <TaskBody>
               <Fill className="desktop-task-column">
                 <AgentColumn>
                   {starting === undefined ? (
                     <AgentTabSkeleton label={TASK_LOADING_LABEL} />
                   ) : (
-                    <StartingAgentTab line={starting} />
+                    <StartingAgentTab line={starting.line} model={starting.model} />
                   )}
                 </AgentColumn>
               </Fill>
@@ -1394,16 +1366,18 @@ function PlanDocument({
  * column standing as the agent's tab with the developer's words as its first
  * line and no side panel beside it, since the task lands on its agent alone
  * (`useTasksTab`'s `openAgent`), so Start opens the page at once and the
- * start's answer only fills it in.
+ * start's answer only fills it in. The model the start named stands as
+ * itself in the composer's chip rather than a block; the task's title stays
+ * a block, since the task is Untitled until its agent names it.
  */
 function StartingTaskPage({
   tasks,
-  line,
+  starting,
   summary,
   phoneAway,
 }: {
   tasks: TasksControl;
-  line: SentLine;
+  starting: StartingTask;
   summary: SummaryPin;
   /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
   phoneAway: TaskHeadBack | undefined;
@@ -1417,7 +1391,13 @@ function StartingTaskPage({
       drawing={drawing}
       summary={summaryLayout}
       onColumn={setColumn}
-      starting={line}
+      starting={{
+        line: starting.line,
+        model:
+          starting.choice === undefined
+            ? undefined
+            : { choice: starting.choice, models: tasks.agents.models ?? [] },
+      }}
       head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
     />
   );
@@ -1458,7 +1438,7 @@ export const DesktopTasks = memo(function DesktopTasks({
     return (
       <StartingTaskPage
         tasks={tasks}
-        line={tasks.starting}
+        starting={tasks.starting}
         summary={summary}
         phoneAway={
           room === SHELL_ROOM.NARROW

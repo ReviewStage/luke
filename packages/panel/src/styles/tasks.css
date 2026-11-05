@@ -1816,8 +1816,9 @@ summary button[data-tool-agent-ref]:focus-visible {
    follows is its own: the app's mark beside a note of its, drawn at the row's
    16px in his voice's color; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
-   (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
-   the newest lines draw, on the log's own inset, over the composer's card. */
+   (`agent-tab-skeleton.tsx`): the log's last exchange stands at its foot,
+   where the newest lines draw, on the log's own inset, its turns a turn's
+   room apart, over the composer's card. */
 .agent-log-skeleton-wait {
   display: flex;
   min-height: 0;
@@ -1829,7 +1830,7 @@ summary button[data-tool-agent-ref]:focus-visible {
 .agent-log-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--ui-control-gap);
+  gap: var(--ui-space-20);
   padding: var(--ui-section-gap) var(--ui-space-16) var(--ui-space-20);
 }
 
