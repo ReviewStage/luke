@@ -776,7 +776,13 @@ export function useAgents(input: {
   const toast = useToast();
   const failed = useCallback(
     (words: string, failure: ShownFailure) =>
-      toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED, failure }),
+      toast({
+        replayUnmasked: true,
+        words,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure,
+      }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -1196,6 +1202,7 @@ export function useAgents(input: {
     undoable.current = closed.choices.id;
     toast({
       ...undoToast(DRAFT_CLOSED, () => restoreNow.current(closed)),
+      replayUnmasked: true,
       subject: closed.choices.id,
     });
   };
@@ -1419,7 +1426,7 @@ export function useAgents(input: {
       (asked ? undefined : pressed.keep(words.done)) ??
       (() =>
         void archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)));
-    toast(undoToast(words.done, undo));
+    toast({ ...undoToast(words.done, undo), replayUnmasked: true });
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);

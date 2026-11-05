@@ -366,6 +366,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
   running: "Closing",
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+  replayUnmasked: true,
 };
 
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */
@@ -473,11 +474,13 @@ export function PullRequestStateMenu({
       action === PULL_REQUEST_ACTION.CLOSE
         ? () =>
             toast({
+              replayUnmasked: true,
               words: CLOSED_TOAST.WORDS,
               tone: STATUS_TONE.COMPLETE,
               subject: toastSubject,
               action: {
                 label: CLOSED_TOAST.REOPEN,
+                replayUnmasked: true,
                 onPress: () =>
                   void newestWrites.current.write({ action: PULL_REQUEST_ACTION.REOPEN }),
               },
@@ -508,7 +511,13 @@ export function PullRequestStateMenu({
         <ChipName>{shownWords}</ChipName>
       </Chip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[items]} onClose={menu.close} />
+        <ActionMenu
+          replayUnmasked
+          label={label}
+          menu={menu.drawn}
+          groups={[items]}
+          onClose={menu.close}
+        />
       )}
       <ConfirmDialog
         open

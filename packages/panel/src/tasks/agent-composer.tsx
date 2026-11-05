@@ -407,6 +407,7 @@ function ComposerMore({
       </span>
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={moreLabel(BUTTON.MORE_THING)}
           menu={menu.drawn}
           groups={[actions]}

@@ -17,9 +17,10 @@ import {
   Tooltip,
 } from "@repo/ui";
 import type { ShownError } from "@repo/ui/reported-failure";
+import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
-import { SettingMarks } from "./marks.js";
+import { replayMaskedError, SettingMarks } from "./marks.js";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
@@ -54,6 +55,8 @@ interface PickerProps {
   value: string | undefined;
   /** What the chip says: the chosen value's own words. */
   valueLabel: string;
+  /** Whether those words are a person's, a repository's or a host's name, kept masked in a screen recording though the page around the chip shows its own. */
+  valueReplayMasked?: boolean | undefined;
   /** The chosen value's mark, where values carry one. */
   valueIcon?: React.ReactNode;
   /** Whether the chip draws that mark alone, its words read as its name and its hover, where its place is too narrow for them. */
@@ -101,6 +104,7 @@ export function Picker({
   invalid,
   value,
   valueLabel,
+  valueReplayMasked = false,
   valueIcon,
   iconOnly = false,
   replayUnmasked,
@@ -167,7 +171,9 @@ export function Picker({
           }}
         >
           {valueIcon}
-          <ChipName>{valueLabel}</ChipName>
+          <ChipName>
+            <ReplayWords masked={valueReplayMasked}>{valueLabel}</ReplayWords>
+          </ChipName>
         </Chip>
       </Tooltip>
       {drawn.mounted ? (
@@ -212,8 +218,11 @@ export function PickerRow({
   error,
   density,
   indent,
+  labelReplayUnmasked = false,
   ...picker
 }: Omit<PickerProps, "describedBy" | "invalid"> & {
+  /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
+  labelReplayUnmasked?: boolean | undefined;
   /** The why under the row's name: words, and where a row needs one, a link among them. */
   detail?: React.ReactNode;
   /** Whether the stored value differs from the default, which earns the mark. */
@@ -231,10 +240,10 @@ export function PickerRow({
     <SettingsRow
       density={density}
       indent={indent}
-      label={picker.label}
+      label={<ReplayWords unmasked={labelReplayUnmasked}>{picker.label}</ReplayWords>}
       adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
-      error={error}
+      error={replayMaskedError(error)}
     >
       {(control) => (
         <Picker

@@ -10,6 +10,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useState } from "react";
 import { firstRefusal, type Kept } from "../act.js";
@@ -91,6 +92,7 @@ export function InboxSelectionBar({
             const refused = taken.filter((each) => !each.kept).length;
             if (refused === 0) return;
             toast({
+              replayUnmasked: true,
               words: closedNote(taken.length - refused, refused),
               tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
@@ -114,11 +116,15 @@ export function InboxSelectionBar({
         const refused = marking.length - landed.length;
         if (undoable && landed.length > 0) {
           const note = markedNote(unread, landed.length, refused);
-          toast(undoToast(note, () => markAll(landed, !unread, false)));
+          toast({
+            ...undoToast(note, () => markAll(landed, !unread, false)),
+            replayUnmasked: true,
+          });
           return;
         }
         if (refused === 0) return;
         toast({
+          replayUnmasked: true,
           words: markedNote(unread, landed.length, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -172,7 +178,9 @@ export function InboxSelectionBar({
     <>
       {listed.length === 0 ? null : (
         <Stack inset={INSET.COLUMN}>
-          <SelectionBar count={listed.length} acts={acts} onClear={onClear} controls={controls} />
+          <ReplayUnmask>
+            <SelectionBar count={listed.length} acts={acts} onClear={onClear} controls={controls} />
+          </ReplayUnmask>
         </Stack>
       )}
       <ConfirmDialog

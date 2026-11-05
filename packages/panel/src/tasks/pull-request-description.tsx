@@ -70,6 +70,7 @@ const RELOAD_QUESTION: DialogQuestion = {
   verb: "Reload description",
   running: "Reloading",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** Where the description stands: drawn, open in its editor, or waiting on its read to open again on GitHub's words. */

@@ -57,6 +57,9 @@ function revertQuestion(takes: string | undefined): DialogQuestion {
     verb: "Revert to message",
     running: "Reverting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    // Note that `takes` names the members whose messages go.
+    bodyReplayMasked: takes !== undefined,
   };
 }
 

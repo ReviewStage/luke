@@ -86,6 +86,7 @@ import {
   XIcon,
 } from "@repo/ui/icons";
 import { inputProblem } from "@repo/ui/reported-failure";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
@@ -104,6 +105,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { useInviteDialog } from "./invite-dialog.js";
+import { replayMaskedError } from "./marks.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -243,6 +245,8 @@ function transferAsk(
       verb: TRANSFER_WORDS.VERB,
       running: TRANSFER_WORDS.RUNNING,
       loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+      replayUnmasked: true,
+      titleReplayMasked: true,
     },
   };
 }
@@ -544,16 +548,24 @@ function MemberRow({
         thing={member.name}
         actions={[profileActs, roleActs, removeActs]}
         row={{
-          leading: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />,
+          leading: (
+            <ReplayMask>
+              <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.CARD} />
+            </ReplayMask>
+          ),
           label: (
             // The person card's own wrapper, so You stands off the name as it does on the card.
             <span className="actor-card-name inline-flex items-center gap-item-gap">
-              {member.name}
+              <ReplayMask>{member.name}</ReplayMask>
               {userId === readerId ? <YouBadge /> : null}
             </span>
           ),
-          description: <OneLine hint={wholeWordsHint(member.email)}>{member.email}</OneLine>,
-          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_MEMBER),
+          description: (
+            <OneLine hint={wholeWordsHint(member.email)}>
+              <ReplayMask>{member.email}</ReplayMask>
+            </OneLine>
+          ),
+          error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_MEMBER)),
           control: (
             <>
               <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>
@@ -571,6 +583,8 @@ function MemberRow({
           verb: "Remove member",
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          titleReplayMasked: true,
         }}
       />
       <ConfirmDialog open confirm={makeOwner} {...transferAsk(workspace, member.name)} />
@@ -628,7 +642,14 @@ function MemberLeave({
         : LEAVE_WORDS.AUTOMATIONS_NAMED(ownAutomations);
   return (
     <>
-      <SettingsRow label={`Leave ${workspace.name}`} description={LEAVE_WORDS.LINE}>
+      <SettingsRow
+        label={
+          <>
+            Leave <ReplayMask>{workspace.name}</ReplayMask>
+          </>
+        }
+        description={LEAVE_WORDS.LINE}
+      >
         {() => (
           <Button
             variant={BUTTON_VARIANT.DANGER_OUTLINE}
@@ -695,8 +716,12 @@ function HeirChip({
           aria-label={`New owner: ${chosen.name}`}
           {...menu.trigger()}
         >
-          <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
-          <ChipName>{chosen.name}</ChipName>
+          <ReplayMask>
+            <ActorMark actor={memberActor(chosen, undefined)} size={ACTOR_SIZE.INLINE} />
+          </ReplayMask>
+          <ChipName>
+            <ReplayMask>{chosen.name}</ReplayMask>
+          </ChipName>
         </Chip>
       </div>
       {menu.drawn === undefined ? null : (
@@ -763,7 +788,11 @@ function OwnerLeave({
   return (
     <>
       <SettingsRow
-        label={`Leave ${workspace.name}`}
+        label={
+          <>
+            Leave <ReplayMask>{workspace.name}</ReplayMask>
+          </>
+        }
         description={heir === undefined ? LEAVE_WORDS.OWNER_NO_ADMIN : LEAVE_WORDS.OWNER}
       >
         {() =>
@@ -967,8 +996,17 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
           ]}
           row={{
             leading: <ActorMark actor={INVITED_ACTOR} size={ACTOR_SIZE.CARD} />,
-            label: <OneLine hint={wholeWordsHint(one.email)}>{one.email}</OneLine>,
-            description: `Invited as ${ROLE_WORDS[one.role]} · Expires ${dayAndTimeText(Date.parse(one.expiresAt))}`,
+            label: (
+              <OneLine hint={wholeWordsHint(one.email)}>
+                <ReplayMask>{one.email}</ReplayMask>
+              </OneLine>
+            ),
+            description: (
+              <>
+                Invited as {ROLE_WORDS[one.role]} · Expires{" "}
+                <ReplayMask>{dayAndTimeText(Date.parse(one.expiresAt))}</ReplayMask>
+              </>
+            ),
             // We send no mail: the accept link is copied and sent by hand.
             control: (
               <Button
@@ -990,6 +1028,8 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
           verb: "Cancel invitation",
           running: "Canceling",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          bodyReplayMasked: true,
         }}
       />
     </>
@@ -1058,7 +1098,9 @@ function ManagedGitHub({
         leading={GITHUB_MARK}
         label="GitHub"
         description={connected ? undefined : GITHUB_UNCONNECTED.MANAGES}
-        error={refusedShown(refusal ?? addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
+        error={replayMaskedError(
+          refusedShown(refusal ?? addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB),
+        )}
       >
         {() => (
           <>
@@ -1125,7 +1167,7 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
           description={
             connections.length === 0 ? GITHUB_UNCONNECTED.MEMBER : GITHUB_CONNECTED_MEMBER
           }
-          error={refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB)}
+          error={replayMaskedError(refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_GITHUB))}
         >
           {() => add}
         </SettingsRow>
@@ -1202,6 +1244,7 @@ function ManagedSentry({
         installation.account === undefined || sentry.installations.length === 1
           ? "Disconnect"
           : `Disconnect ${installation.account}`,
+      replayMasked: installation.account !== undefined && sentry.installations.length > 1,
       icon: <GLYPH.DISCONNECT />,
       danger: true,
       onSelect: () => {
@@ -1219,7 +1262,7 @@ function ManagedSentry({
           leading: SENTRY_MARK,
           label: "Sentry",
           description: sentryLine(sentry, true),
-          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SENTRY),
+          error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SENTRY)),
           control:
             sentry.installations.length > 0 ? null : (
               <Button
@@ -1238,6 +1281,8 @@ function ManagedSentry({
         confirm={disconnect}
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
+          replayUnmasked: true,
+          titleReplayMasked: true,
           body: `Its alerts and new issues stop triggering this workspace's automations. Uninstall ${PRODUCT_NAME} in Sentry's settings to remove it there too.`,
           verb: "Disconnect Sentry",
           running: "Disconnecting",
@@ -1357,9 +1402,10 @@ function ManagedSlackBot({
           leading: SLACK_MARK,
           label: "Slack bot",
           description: slackBotLine(slack, true),
-          error:
+          error: replayMaskedError(
             refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT) ??
-            refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
+              refusedShown(addRefusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
+          ),
           control:
             slack.team !== undefined ? (
               channels === undefined ? null : (
@@ -1386,6 +1432,8 @@ function ManagedSlackBot({
         confirm={disconnect}
         question={{
           title: `Disconnect the Slack bot from ${workspace.name}?`,
+          replayUnmasked: true,
+          titleReplayMasked: true,
           body: `${PRODUCT_NAME} stops messaging this workspace's members in Slack. The bot stays installed in Slack until a Slack admin removes it.`,
           verb: "Disconnect Slack bot",
           running: "Disconnecting",
@@ -1412,6 +1460,7 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
   return (
     <SwitchRow
       label="Slack notifications"
+      labelReplayUnmasked
       checked={on}
       changed={!on}
       onChange={(notifications) =>
@@ -1557,6 +1606,7 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
     <Dialog
       open={form.open}
       title={SLUG_WORDS.CHANGE}
+      replayUnmasked
       busy={form.settling}
       initialFocus={field}
       onDismiss={form.dismiss}
@@ -1572,7 +1622,15 @@ function useSlugDialog(workspace: Workspace): SlugAsk {
         />
       }
     >
-      <FormField label="Slug" description={`${LINK_HOME.HOST}/${slug}`} error={inputProblem(shown)}>
+      <FormField
+        label="Slug"
+        description={
+          <>
+            {LINK_HOME.HOST}/<ReplayMask>{slug}</ReplayMask>
+          </>
+        }
+        error={inputProblem(shown)}
+      >
         {(control) => (
           <TextField
             ref={field}
@@ -1722,19 +1780,25 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         anchor={SETTINGS_SEARCH_ROW.WORKSPACE_SLUG}
         actions={actions}
         row={{
-          leading: <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />,
+          leading: (
+            <ReplayMask>
+              <WorkspaceTile workspace={workspace} size={TILE_SIZE.HEAD} />
+            </ReplayMask>
+          ),
           label: (
-            <InlineEdit
-              value={workspace.name}
-              label="Workspace name"
-              editing={editing}
-              maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
-              look={INLINE_EDIT_LOOK.INPUT}
-              onEnd={end}
-            />
+            <ReplayMask>
+              <InlineEdit
+                value={workspace.name}
+                label="Workspace name"
+                editing={editing}
+                maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
+                look={INLINE_EDIT_LOOK.INPUT}
+                onEnd={end}
+              />
+            </ReplayMask>
           ),
           description: sharedWords(workspace.memberCount, workspace.personal === true),
-          error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_WRITE),
+          error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_WRITE)),
           control: (
             <>
               {rename}
@@ -1748,6 +1812,8 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
         confirm={remove}
         question={{
           title: `Remove ${workspace.name}'s photo?`,
+          replayUnmasked: true,
+          titleReplayMasked: true,
           body: PHOTO_WORDS.REMOVE_BODY,
           verb: PHOTO_WORDS.REMOVE,
           running: "Removing",

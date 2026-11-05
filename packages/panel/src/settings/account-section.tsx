@@ -26,6 +26,7 @@ import {
   wholeWordsHint,
 } from "@repo/ui";
 import { accountActor } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
@@ -60,6 +61,7 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
   } catch (cause) {
     showToast({
       words: SIGN_OUT_FAILED,
+      replayUnmasked: true,
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: { surface: FAILURE_SURFACE.ACCOUNT_SIGN_OUT, cause },
@@ -167,8 +169,16 @@ export function AccountSection({
         <SettingsRow
           lead={SETTINGS_ROW_LEAD.FACE}
           // The account's face as the sidebar's foot and every list draw it: its picture, else its letter on its hue.
-          leading={<ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />}
-          label={<OneLine hint={wholeWordsHint(account.email)}>{account.email}</OneLine>}
+          leading={
+            <ReplayMask>
+              <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.CARD} />
+            </ReplayMask>
+          }
+          label={
+            <OneLine hint={wholeWordsHint(account.email)}>
+              <ReplayMask>{account.email}</ReplayMask>
+            </OneLine>
+          }
           description={
             <span className="inline-flex flex-wrap items-center gap-ui-4 whitespace-nowrap">
               Signed in with
@@ -216,6 +226,8 @@ export function AccountSection({
           verb: "Delete account",
           running: "Deleting account",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
+          replayUnmasked: true,
+          titleReplayMasked: true,
         }}
       />
     </SettingsSection>

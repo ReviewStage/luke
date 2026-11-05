@@ -273,17 +273,22 @@ function ShellRow({
         menu={
           renaming
             ? undefined
-            : rowMenu(SHELL_THING, [
-                [commandAction(PANEL_COMMAND.RENAME, rename.begin, false)],
+            : rowMenu(
+                SHELL_THING,
                 [
-                  {
-                    label: END_SHELL,
-                    icon: <GLYPH.DELETE />,
-                    danger: true,
-                    onSelect: ending.ask,
-                  },
+                  [commandAction(PANEL_COMMAND.RENAME, rename.begin, false)],
+                  [
+                    {
+                      label: END_SHELL,
+                      icon: <GLYPH.DELETE />,
+                      danger: true,
+                      onSelect: ending.ask,
+                    },
+                  ],
                 ],
-              ])
+                undefined,
+                true,
+              )
         }
       />
       <ConfirmDialog
@@ -295,6 +300,9 @@ function ShellRow({
           verb: END_SHELL,
           running: "Ending the shell",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
+          replayUnmasked: true,
+          // Note that the title names the shell.
+          titleReplayMasked: true,
         }}
       />
     </>

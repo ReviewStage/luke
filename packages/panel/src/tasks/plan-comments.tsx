@@ -110,7 +110,7 @@ import {
 } from "@repo/ui/plan-comments";
 import { MESSAGE_BLOCK, messageBlocks, messageText, replyOf } from "@repo/ui/reply-quote";
 import { UNREPORTED } from "@repo/ui/reported-failure";
-import { writeWithheldSheet } from "@repo/ui/session-replay-marks";
+import { ReplayUnmask, writeWithheldSheet } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { visibleViewport } from "@repo/ui/visible-viewport";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
@@ -601,6 +601,7 @@ const DELETE_QUESTION: DialogQuestion = {
   verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
@@ -609,6 +610,7 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   verb: "Delete thread",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** What discarding a send not sent asks first, since its words and files are kept nowhere else. */
@@ -618,6 +620,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   verb: "Discard comment",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** What discarding several sends not sent asks first, a reply refused and those queued behind it. */
@@ -627,6 +630,7 @@ const DISCARD_MANY_QUESTION: DialogQuestion = {
   verb: "Discard comments",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** One comment of a thread: who wrote it and when, its words, or the field editing them, and its tools under the pointer. */
@@ -780,7 +784,7 @@ function CommentEntry({
           <>
             {entry.editedAt === undefined ? null : (
               <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-                {COMMENT_WORDS.EDITED}
+                <ReplayUnmask>{COMMENT_WORDS.EDITED}</ReplayUnmask>
               </Text>
             )}
             <div className="comment-tools">
@@ -802,6 +806,7 @@ function CommentEntry({
               )}
               {groups.length === 0 || menu.drawn === undefined ? null : (
                 <ActionMenu
+                  replayUnmasked
                   label={moreLabel(COMMENT_WORDS.THING)}
                   menu={menu.drawn}
                   groups={groups}
@@ -839,10 +844,12 @@ function CommentEntry({
               autoFocus
             />
             <div className="comment-field-foot">
-              <Button onClick={() => setEditing(undefined)}>{COMMENT_WORDS.CANCEL}</Button>
+              <Button onClick={() => setEditing(undefined)}>
+                <ReplayUnmask>{COMMENT_WORDS.CANCEL}</ReplayUnmask>
+              </Button>
               {/* Note that the host draws the edit on the press, which closes the field, so Save is never busy. */}
               <Button variant={BUTTON_VARIANT.PRIMARY} busy={false} onClick={save}>
-                {COMMENT_WORDS.SAVE}
+                <ReplayUnmask>{COMMENT_WORDS.SAVE}</ReplayUnmask>
               </Button>
             </div>
           </ComposerFrame>
@@ -1175,12 +1182,16 @@ function ReplyField({
             })}
             also={
               <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
-                {COMMENT_WORDS.DISCARD}
+                <ReplayUnmask>{COMMENT_WORDS.DISCARD}</ReplayUnmask>
               </TextButton>
             }
           >
-            {failure ??
-              (unsent.length === 1 ? COMMENT_WORDS.NOT_SENT : COMMENT_WORDS.NOT_SENT_MANY)}
+            {/* Note that a refusal's words are the service's, so only the app's own note shows. */}
+            {failure ?? (
+              <ReplayUnmask>
+                {unsent.length === 1 ? COMMENT_WORDS.NOT_SENT : COMMENT_WORDS.NOT_SENT_MANY}
+              </ReplayUnmask>
+            )}
           </FailureNote>
           <ConfirmDialog
             open
@@ -1309,7 +1320,7 @@ function GoneQuote({
     <>
       <div className="comment-gone">
         <TrashIcon />
-        {COMMENT_WORDS.GONE}
+        <ReplayUnmask>{COMMENT_WORDS.GONE}</ReplayUnmask>
       </div>
       <ThreadQuote thread={thread} gone onShowWords={onShowWords} />
     </>
@@ -1492,7 +1503,9 @@ function ThreadCard({
           }}
         >
           {replies.length === 0 ? (
-            <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
+            <VisuallyHidden>
+              <ReplayUnmask>{COMMENT_WORDS.OPEN_THREAD}</ReplayUnmask>
+            </VisuallyHidden>
           ) : (
             <span className="mt-list-gap mr-0 mb-0 ml-comment-indent flex items-center gap-item-gap text-caption-inline text-muted-foreground">
               <span className="inline-flex">
@@ -1500,7 +1513,9 @@ function ThreadCard({
                   <WriterMark key={JSON.stringify(writer)} writer={writer} agents={doors.agents} />
                 ))}
               </span>
-              {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
+              <ReplayUnmask>
+                {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
+              </ReplayUnmask>
               <span className="comment-time">
                 {" · "}
                 <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} />
@@ -2328,7 +2343,7 @@ export function PlanCommentLayer({
       >
         <Tooltip label={COMMENT_WORDS.COMMENT} command={APP_COMMAND.COMMENT_ON_SELECTION}>
           <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
-            {COMMENT_WORDS.COMMENT}
+            <ReplayUnmask>{COMMENT_WORDS.COMMENT}</ReplayUnmask>
           </Button>
         </Tooltip>
       </MenuSurface>
@@ -2647,17 +2662,21 @@ function ThreadList({
       data-empty={none ? "" : undefined}
     >
       {control.failed ? (
-        <ErrorState
-          failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
-          placement={ERROR_STATE_PLACEMENT.CENTERED}
-          onRetry={control.onRetry}
-        >
-          The comments could not be read.
-        </ErrorState>
+        <ReplayUnmask>
+          <ErrorState
+            failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
+            placement={ERROR_STATE_PLACEMENT.CENTERED}
+            onRetry={control.onRetry}
+          >
+            The comments could not be read.
+          </ErrorState>
+        </ReplayUnmask>
       ) : none ? (
-        <EmptyState icon={<CommentsIcon />} title={empty.title}>
-          {empty.line}
-        </EmptyState>
+        <ReplayUnmask>
+          <EmptyState replayUnmasked icon={<CommentsIcon />} title={empty.title}>
+            {empty.line}
+          </EmptyState>
+        </ReplayUnmask>
       ) : !control.read ? (
         <CommentsSkeleton />
       ) : (
@@ -2726,6 +2745,7 @@ function ThreadsPane({
       <WordsDatePickerRoom>
         <PaneBar
           title={COMMENTS_FILTER_WORDS[filter]}
+          titleReplayUnmasked
           detail={listed.length}
           actions={
             <ResolvedOnly

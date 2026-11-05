@@ -1,5 +1,6 @@
 import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@repo/ui";
 import type { Actor } from "@repo/ui/actor-model";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
 
@@ -77,33 +78,43 @@ export function DocumentByline({
 }): React.JSX.Element {
   return (
     <p className="plan-byline mx-0 mt-0 mb-block-gap flex flex-wrap gap-x-field-gap gap-y-tight-gap text-caption text-muted-foreground pointer-coarse:gap-y-block-gap">
-      <span className="actor-line">
-        {creator === undefined && maker === undefined ? "Created" : "Created by "}
-        {maker === undefined ? null : (
+      <ReplayUnmask>
+        <span className="actor-line">
+          {creator === undefined && maker === undefined ? "Created" : "Created by "}
+          {maker === undefined ? null : (
+            <>
+              <ReplayMask>
+                <ActorRef actor={maker.actor} />
+              </ReplayMask>
+              {creator === undefined ? null : " for "}
+            </>
+          )}
+          {creator === undefined ? null : (
+            <ReplayMask>
+              <ActorRef actor={creator} sentence />
+            </ReplayMask>
+          )}
+          {" · "}
+          <Time at={createdAt} now={now} look={TIME_LOOK.AGO} />
+        </span>
+        {/* Note that where it came from is a phrase of its own, so a long line wraps between phrases rather than cutting a name short. */}
+        {maker?.fromTask === undefined ? null : (
           <>
-            <ActorRef actor={maker.actor} />
-            {creator === undefined ? null : " for "}
+            {" "}
+            <span className="actor-line plan-byline-from">
+              From <ReplayMask>{maker.fromTask}</ReplayMask>
+            </span>
           </>
         )}
-        {creator === undefined ? null : <ActorRef actor={creator} sentence />}
-        {" · "}
-        <Time at={createdAt} now={now} look={TIME_LOOK.AGO} />
-      </span>
-      {/* Note that where it came from is a phrase of its own, so a long line wraps between phrases rather than cutting a name short. */}
-      {maker?.fromTask === undefined ? null : (
-        <>
-          {" "}
-          <span className="actor-line plan-byline-from">{`From ${maker.fromTask}`}</span>
-        </>
-      )}
-      {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
-      {edited === undefined ? null : (
-        <>
-          {" "}
-          <span className="actor-line plan-byline-edited">{edited}</span>
-        </>
-      )}
-      {saved}
+        {/* Note that the space between the phrases is read, not drawn: the line's gap draws it. */}
+        {edited === undefined ? null : (
+          <>
+            {" "}
+            <span className="actor-line plan-byline-edited">{edited}</span>
+          </>
+        )}
+        {saved}
+      </ReplayUnmask>
     </p>
   );
 }

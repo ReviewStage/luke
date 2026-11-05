@@ -118,6 +118,7 @@ export function usePlanComments(
   const takenBack = useCallback(
     (words: string, surface: FailureSurface, answer: TasksCommentAnswer) =>
       toast({
+        replayUnmasked: true,
         words,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,

@@ -713,6 +713,27 @@ function PostHogMark({ className }: MarkProps): React.JSX.Element {
 }
 
 /**
+ * Resend's logomark, verbatim from `resend-icon-black.svg` and
+ * `resend-icon-white.svg` on Resend's brand page (https://resend.com/brand),
+ * framed to the glyph's own square rather than the file's padded one. Resend
+ * publishes it in pure black and pure white, so it is drawn in `currentColor`
+ * with `.integration-mark-resend` (`styles/desktop.css`) setting which.
+ */
+function ResendMark({ className }: MarkProps): React.JSX.Element {
+  return (
+    <svg
+      className={`${className} integration-mark-resend`}
+      viewBox="450 450 900 900"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M1000.46 450C1174.77 450 1278.43 553.669 1278.43 691.282C1278.43 828.896 1174.77 932.563 1000.46 932.563H912.382L1350 1350H1040.82L707.794 1033.48C683.944 1011.47 672.936 985.781 672.935 963.765C672.935 932.572 694.959 905.049 737.161 893.122L908.712 847.244C973.85 829.812 1018.81 779.353 1018.81 713.298C1018.8 632.567 952.745 585.78 871.095 585.78H450V450H1000.46Z" />
+    </svg>
+  );
+}
+
+/**
  * Sentry's glyph, verbatim from the logo generator on Sentry's branding page
  * (https://sentry.io/branding/, Glyph with no clear space), whose brand guide
  * (https://live.standards.site/sentry) uses the glyph alone where space is
@@ -964,6 +985,8 @@ export function ProviderMark({
       return <NotionMark className={className} />;
     case MARK_PROVIDER.POSTHOG:
       return <PostHogMark className={className} />;
+    case MARK_PROVIDER.RESEND:
+      return <ResendMark className={className} />;
     case MARK_PROVIDER.SENTRY:
       return <SentryMark className={className} />;
     case MARK_PROVIDER.SLACK:

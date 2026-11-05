@@ -282,6 +282,7 @@ export function useVersionRestore(
       if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
       else {
         toast({
+          replayUnmasked: true,
           words: result.reason,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -303,14 +304,21 @@ export function sayRestored(
   undo: (() => Promise<Kept>) | undefined,
 ): void {
   if (undo === undefined) {
-    toast({ words: VERSION_RESTORED_NOTE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
+    toast({
+      replayUnmasked: true,
+      words: VERSION_RESTORED_NOTE,
+      tone: STATUS_TONE.COMPLETE,
+      hold: TOAST_HOLD.DONE,
+    });
     return;
   }
-  toast(
-    undoToast(VERSION_RESTORED_NOTE, () => {
+  toast({
+    replayUnmasked: true,
+    ...undoToast(VERSION_RESTORED_NOTE, () => {
       undo().then((undone) => {
         if (undone.kept) return;
         toast({
+          replayUnmasked: true,
           words: RESTORE_UNDO_REFUSED_NOTE,
           failure: { surface: FAILURE_SURFACE.PLAN_RESTORE, cause: undone.cause },
           tone: STATUS_TONE.DANGER,
@@ -318,7 +326,7 @@ export function sayRestored(
         });
       });
     }),
-  );
+  });
 }
 
 /**

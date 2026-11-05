@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ReplayWords } from "../../session-replay-marks.js";
 
 /**
  * sidebar.tsx -- the parts of the app's sidebar every surface that draws it shares: the head naming whose it is, the places under it, the rule that parts them from a list, and the foot with the account's row.
@@ -28,11 +29,14 @@ export function SidebarIdentity({
   name,
   qualifier,
   mark,
+  replayUnmasked = false,
 }: {
   name: string;
   qualifier?: string | undefined;
   /** The mark, drawn to fill its seat (a `ProductMark` with `fill`). */
   mark: ReactNode;
+  /** Whether its name and qualifier are the app's own, which a screen recording shows as they read; masked unless set (`@repo/ui/session-replay-marks`). */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   return (
     <div className="sidebar-identity flex items-center gap-ui-12 px-row-inset pt-ui-2 pb-section-gap">
@@ -40,9 +44,13 @@ export function SidebarIdentity({
         <span className="grid size-ui-24">{mark}</span>
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className="text-dialog-size font-dialog tracking-identity">{name}</span>
+        <span className="text-dialog-size font-dialog tracking-identity">
+          <ReplayWords unmasked={replayUnmasked}>{name}</ReplayWords>
+        </span>
         {qualifier === undefined ? null : (
-          <span className="text-caption-inline text-muted-foreground">{qualifier}</span>
+          <span className="text-caption-inline text-muted-foreground">
+            <ReplayWords unmasked={replayUnmasked}>{qualifier}</ReplayWords>
+          </span>
         )}
       </span>
     </div>

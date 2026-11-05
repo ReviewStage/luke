@@ -283,8 +283,7 @@ const MachineSchema = Schema.Literals(Object.values(AGENT_MACHINE));
  * The column `column` names of the task's newest agent, any member's,
  * archived ones among them; null for a task with none. Note that a task
  * holds no place of its own, so this is what a released desktop is told the
- * task runs on (`runsOnOf`), and the task's own `machine` and `device_id`
- * are read by nothing.
+ * task runs on (`runsOnOf`).
  */
 function newestAgentColumn<T>(column: typeof agentTable.machine | typeof agentTable.deviceId) {
   const newest = queryBuilder

@@ -1959,6 +1959,7 @@ function MenuSheet({
   openOnChecked = false,
   openOn,
   onClose,
+  replayUnmasked = false,
 }: MenuProps): React.JSX.Element {
   const { id, opener, leaving, ref: hold } = menu;
   // Note that the submenu standing is held by its name and read from `groups` each render, so a value that stays reads and toggles as its owner now draws it.
@@ -2039,6 +2040,8 @@ function MenuSheet({
   const title = subject?.name ?? label;
   const name = page?.label ?? title;
   const detail = page === undefined ? subject?.detail : title;
+  // Note that the head shows only where it names the menu itself or a submenu of its own words, because a subject is the caller's thing, as the floating menu keeps it.
+  const headUnmasked = replayUnmasked && subject === undefined && page?.replayMasked !== true;
   return (
     <MenuSheetFrame
       open={!leaving}
@@ -2047,6 +2050,7 @@ function MenuSheet({
       hold={hold}
       name={name}
       detail={detail}
+      replayUnmasked={headUnmasked}
       mark={subject?.mark}
       back={page === undefined ? undefined : { label: title, onBack: back }}
       onAway={away}

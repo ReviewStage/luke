@@ -17,6 +17,7 @@ const NO_MATCH = "No options match";
  */
 export function SelectRow<Value extends string | number>({
   label,
+  labelReplayUnmasked,
   detail,
   value,
   options,
@@ -31,6 +32,8 @@ export function SelectRow<Value extends string | number>({
   onChange,
 }: {
   label: string;
+  /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
+  labelReplayUnmasked?: boolean | undefined;
   detail?: string | undefined;
   value: Value;
   /** Each option's token and words, and why it cannot be picked now where it cannot. A set with faces is a `PictureChoiceRow` instead. */
@@ -61,6 +64,7 @@ export function SelectRow<Value extends string | number>({
   return (
     <PickerRow
       label={label}
+      labelReplayUnmasked={labelReplayUnmasked}
       detail={detail}
       changed={changed}
       saves={saves}
@@ -76,6 +80,8 @@ export function SelectRow<Value extends string | number>({
       }))}
       placeholder={placeholder}
       noMatch={NO_MATCH}
+      // Note that a select's options are a fixed set, the app's own words.
+      replayUnmasked
       anchor={anchor}
       disabled={busy || Boolean(restBusy)}
       onPick={(id) => {

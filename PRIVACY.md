@@ -69,7 +69,7 @@ recordings.
 ### Integrations and connected apps
 
 If you connect an integration (such as Linear, Notion, Sentry, Slack, Gmail,
-Google Calendar, Google Drive, Granola, Mercury, Neon, PostHog, Stripe,
+Google Calendar, Google Drive, Granola, Mercury, Neon, PostHog, Resend, Stripe,
 Supabase, Vercel, Y Combinator, or Executor), Vercel Connect stores its token
 for your account, encrypted, and we keep the connection's state and a display
 name. While connected, your agents can read and change whatever your grant at

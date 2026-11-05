@@ -18,6 +18,7 @@ import {
   Tooltip,
 } from "@repo/ui";
 import { GLYPH, NetworkIcon, PlusIcon } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { subTaskCount, subTasksOf, taskFinished } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
@@ -329,15 +330,17 @@ export function PlanRelations({
       return {
         task: other,
         relation: (
-          <RelationKindPill
-            kind={kind}
-            kinds={TASK_RELATION_ORDER}
-            words={TASK_RELATION_WORDS}
-            icon={(each) => <TaskRelationIcon kind={each} />}
-            attention={blocker && !settled}
-            onChange={doors.onChange}
-            onRemove={doors.onRemove}
-          />
+          <ReplayUnmask>
+            <RelationKindPill
+              kind={kind}
+              kinds={TASK_RELATION_ORDER}
+              words={TASK_RELATION_WORDS}
+              icon={(each) => <TaskRelationIcon kind={each} />}
+              attention={blocker && !settled}
+              onChange={doors.onChange}
+              onRemove={doors.onRemove}
+            />
+          </ReplayUnmask>
         ),
         settled: blocker && settled,
         menu: relationMenu(kind, doors),
@@ -350,64 +353,68 @@ export function PlanRelations({
     // Note that the groups are pulled out by a row's inset on each side, so their marks stand on the title's edge, as the Agents group's do.
     <div className="plan-relations -mx-row-inset mb-block-gap flex flex-col gap-block-gap">
       {subTasks.length === 0 ? null : (
-        <GroupHeader
-          heading={GROUP_HEADING.NONE}
-          label={GROUP_WORDS.SUB_TASKS}
-          glyph={<GLYPH.SUB_TASK />}
-          mark={
-            <ProgressCount
-              done={count.finished}
-              total={count.total}
-              label={`${count.finished} of ${count.total} sub-tasks finished`}
-              look={PROGRESS_COUNT_LOOK.BADGE}
-            />
-          }
-          fold={{ defaultOpen: true }}
-          actions={
-            <RelationAdd
-              task={task}
-              door={door}
-              kind={TASK_RELATION_KIND.SUB_TASK}
-              label={ADD_WORDS.SUB_TASK}
-            />
-          }
-          actionsShown={GROUP_ACTIONS.AT_REST}
-        >
-          <RelatedTasks
-            tasks={tasks}
+        <ReplayUnmask>
+          <GroupHeader
+            heading={GROUP_HEADING.NONE}
             label={GROUP_WORDS.SUB_TASKS}
-            rows={subTasks}
-            onOpenTask={onOpenTask}
-          />
-        </GroupHeader>
+            glyph={<GLYPH.SUB_TASK />}
+            mark={
+              <ProgressCount
+                done={count.finished}
+                total={count.total}
+                label={`${count.finished} of ${count.total} sub-tasks finished`}
+                look={PROGRESS_COUNT_LOOK.BADGE}
+              />
+            }
+            fold={{ defaultOpen: true }}
+            actions={
+              <RelationAdd
+                task={task}
+                door={door}
+                kind={TASK_RELATION_KIND.SUB_TASK}
+                label={ADD_WORDS.SUB_TASK}
+              />
+            }
+            actionsShown={GROUP_ACTIONS.AT_REST}
+          >
+            <RelatedTasks
+              tasks={tasks}
+              label={GROUP_WORDS.SUB_TASKS}
+              rows={subTasks}
+              onOpenTask={onOpenTask}
+            />
+          </GroupHeader>
+        </ReplayUnmask>
       )}
       {relations.length === 0 ? null : (
-        <GroupHeader
-          heading={GROUP_HEADING.NONE}
-          label={GROUP_WORDS.RELATIONS}
-          glyph={<NetworkIcon />}
-          count={{
-            value: relations.length,
-            noun: relations.length === 1 ? RELATIONS_NOUN.one : RELATIONS_NOUN.many,
-          }}
-          fold={{ defaultOpen: true }}
-          actions={
-            <RelationAdd
-              task={task}
-              door={door}
-              kind={TASK_RELATION_KIND.BLOCKED_BY}
-              label={ADD_WORDS.RELATION}
-            />
-          }
-          actionsShown={GROUP_ACTIONS.AT_REST}
-        >
-          <RelatedTasks
-            tasks={tasks}
+        <ReplayUnmask>
+          <GroupHeader
+            heading={GROUP_HEADING.NONE}
             label={GROUP_WORDS.RELATIONS}
-            rows={relations}
-            onOpenTask={onOpenTask}
-          />
-        </GroupHeader>
+            glyph={<NetworkIcon />}
+            count={{
+              value: relations.length,
+              noun: relations.length === 1 ? RELATIONS_NOUN.one : RELATIONS_NOUN.many,
+            }}
+            fold={{ defaultOpen: true }}
+            actions={
+              <RelationAdd
+                task={task}
+                door={door}
+                kind={TASK_RELATION_KIND.BLOCKED_BY}
+                label={ADD_WORDS.RELATION}
+              />
+            }
+            actionsShown={GROUP_ACTIONS.AT_REST}
+          >
+            <RelatedTasks
+              tasks={tasks}
+              label={GROUP_WORDS.RELATIONS}
+              rows={relations}
+              onOpenTask={onOpenTask}
+            />
+          </GroupHeader>
+        </ReplayUnmask>
       )}
     </div>
   );

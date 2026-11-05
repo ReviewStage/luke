@@ -180,6 +180,7 @@ export function useAddToPlan(): ViewerAction | undefined {
         toast(
           typeof undone !== "string"
             ? {
+                replayUnmasked: true,
                 words: ADD_WORDS.NOT_UNDONE,
                 tone: STATUS_TONE.DANGER,
                 hold: TOAST_HOLD.FAILED,
@@ -189,10 +190,15 @@ export function useAddToPlan(): ViewerAction | undefined {
                   about: { taskId },
                 },
               }
-            : { words: ADD_WORDS.UNDONE, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE },
+            : {
+                replayUnmasked: true,
+                words: ADD_WORDS.UNDONE,
+                tone: STATUS_TONE.COMPLETE,
+                hold: TOAST_HOLD.DONE,
+              },
         );
       };
-      settle(undoToast(ADD_WORDS.ADDED, () => void undo()));
+      settle({ ...undoToast(ADD_WORDS.ADDED, () => void undo()), replayUnmasked: true });
     };
     return {
       label: ADD_LABEL,

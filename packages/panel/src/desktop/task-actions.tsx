@@ -41,6 +41,7 @@ import {
 } from "@repo/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@repo/ui/actor-model";
 import { confirmAsked } from "@repo/ui/confirm-state";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ChildTaskCount, repositoryLabel } from "@repo/ui/task-list-model";
 import {
   DOCUMENT_REGION,
@@ -491,15 +492,26 @@ function standingSubmenus(
   };
   const pickAssignee = (id: string) =>
     setStanding(task, { assigneeId: id === NO_ASSIGNEE ? null : id });
+  const assigned = chipSubmenu(
+    STANDING_WORDS.ASSIGNEE,
+    assignees,
+    task.assignee?.userId ?? NO_ASSIGNEE,
+    pickAssignee,
+  );
   return [
     keyedStatusSubmenu(tasks, task.id, status, keyed),
     chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority),
-    chipSubmenu(
-      STANDING_WORDS.ASSIGNEE,
-      assignees,
-      task.assignee?.userId ?? NO_ASSIGNEE,
-      pickAssignee,
-    ),
+    // Note that the members a task may be assigned are named by their own names, kept masked in a screen recording.
+    {
+      ...assigned,
+      // Note that a member's face draws their initial as words, so the glyph is masked with the name.
+      ...(assigned.icon === undefined ? {} : { icon: <ReplayMask>{assigned.icon}</ReplayMask> }),
+      items: assigned.items.map((item, at) =>
+        assignees[at]?.id === NO_ASSIGNEE
+          ? item
+          : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
+      ),
+    },
   ];
 }
 
@@ -666,23 +678,35 @@ function TaskMenuFooter({
   return (
     <>
       <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
-        {"Created by "}
-        {origin === undefined ? null : (
-          <>
-            <ActorRef actor={origin} />
-            {" for "}
-          </>
-        )}
-        <ActorRef actor={creatorActor(task, reader, you)} sentence />
-        {" · "}
-        <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
+        <ReplayUnmask>
+          {"Created by "}
+          {origin === undefined ? null : (
+            <>
+              <ReplayMask>
+                <ActorRef actor={origin} />
+              </ReplayMask>
+              {" for "}
+            </>
+          )}
+          <ReplayMask>
+            <ActorRef actor={creatorActor(task, reader, you)} sentence />
+          </ReplayMask>
+          {" · "}
+          <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
+        </ReplayUnmask>
       </p>
       {edit === undefined && task.updatedAt <= task.createdAt ? null : (
         <p className="task-menu-note actor-line m-0 flex-wrap overflow-clip [overflow-clip-margin:var(--ui-focus-ring-room)]">
-          {named ? "Last edited by " : "Last edited"}
-          {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
-          {" · "}
-          <Time at={edit?.at ?? task.updatedAt} now={now} look={TIME_LOOK.AGO} />
+          <ReplayUnmask>
+            {named ? "Last edited by " : "Last edited"}
+            {edit === undefined ? null : (
+              <ReplayMask>
+                <EditedBy edit={edit} place={place} sentence />
+              </ReplayMask>
+            )}
+            {" · "}
+            <Time at={edit?.at ?? task.updatedAt} now={now} look={TIME_LOOK.AGO} />
+          </ReplayUnmask>
         </p>
       )}
     </>
@@ -704,6 +728,8 @@ function deleteQuestion(name: string, settled: boolean): DialogQuestion {
     verb: "Permanently delete task",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    bodyReplayMasked: true,
   };
 }
 
@@ -1056,13 +1082,19 @@ export function SidebarTask({
               />
             ) : (
               <>
-                <OneLine words={task.name}>{task.name}</OneLine>
+                <OneLine words={task.name}>
+                  <ReplayMask>{task.name}</ReplayMask>
+                </OneLine>
                 {task.status === undefined ? null : (
                   <VisuallyHidden>, {TASK_STATUS_WORDS[task.status]}</VisuallyHidden>
                 )}
                 {task.blocked === true ? <VisuallyHidden>, {BLOCKED_WORDS}</VisuallyHidden> : null}
                 {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
-                {worn === undefined ? null : <AssigneeFaceHeard face={worn} />}
+                {worn === undefined ? null : (
+                  <ReplayMask>
+                    <AssigneeFaceHeard face={worn} />
+                  </ReplayMask>
+                )}
               </>
             )
           }
@@ -1071,7 +1103,9 @@ export function SidebarTask({
             rename.editing ? null : (
               <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
+                  <span className={SIDEBAR_ROW_REPOSITORY}>
+                    <ReplayMask>{repository}</ReplayMask>
+                  </span>
                 )}
                 {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
                 {drafted ? <DraftMark /> : null}
@@ -1099,7 +1133,7 @@ export function SidebarTask({
               ? undefined
               : chosen === undefined
                 ? {
-                    ...rowMenu("Task", actions.groups(), tasks.shown),
+                    ...rowMenu("Task", actions.groups(), tasks.shown, true),
                     footer: actions.footer,
                     openRequest: statusAsked,
                   }
