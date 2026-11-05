@@ -6,16 +6,15 @@
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall —
- * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
- * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
- * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`,
- * `updateNetworkPolicy`, `getSession`, `extendTimeout`, and `updateSandbox`
- * when it moves; a sandbox's snapshot retention is set by Vercel's documented
- * "Update a sandbox" and checked against its documented "List snapshots"),
- * directly rather than through the SDK,
- * because
- * the SDK bundled into a function fails it as it loads and carries a dozen
- * Node modules these calls never use.
+ * it asks here. A sandbox's delete goes through `@vercel/sandbox` itself, at
+ * the version the catalog pins, which loads in a function's bundle; the rest
+ * are still the calls that SDK's `APIClient` makes (`@vercel/sandbox` 3.3.0,
+ * the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
+ * `stopSession`, `runCommand`, `openInteractive`, `updateNetworkPolicy`,
+ * `getSession`, `extendTimeout`, and `updateSandbox` when it moves; a
+ * sandbox's snapshot retention is set by Vercel's documented "Update a
+ * sandbox" and checked against its documented "List snapshots"), made
+ * directly, until each moves onto the SDK.
  *
  * A native harness's sandbox is the one sandbox we open ourselves rather
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
@@ -38,6 +37,7 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@repo/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
+import { APIError, Sandbox } from "@vercel/sandbox";
 import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
@@ -739,6 +739,18 @@ function refused(
   });
 }
 
+/**
+ * What `@vercel/sandbox` threw as the failure it is: an `APIError` read as
+ * Vercel's answer is, by its status and its body's text, and anything else
+ * as the cause. Note that the SDK has already tried a 429, a 5xx, and a
+ * failure to connect again twice by then.
+ */
+function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
+  if (!(cause instanceof APIError))
+    return new SandboxUnavailable({ call, detail: causeDetail(cause) });
+  return refused(call, { status: cause.response.status, text: cause.text ?? "" });
+}
+
 /** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
@@ -919,7 +931,7 @@ export function vercelSandboxApi(
         if (claims === undefined) {
           return yield* new SandboxUnavailable({ call, detail: "a token naming no project" });
         }
-        return { headers: { authorization: `Bearer ${token}` }, ...claims };
+        return { token, headers: { authorization: `Bearer ${token}` }, ...claims };
       });
 
     /** A URL on the API, under the team the token names and the extra query given. */
@@ -1025,18 +1037,26 @@ export function vercelSandboxApi(
       deleteSandbox: (name) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.DELETE);
-          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
-            projectId: asked.projectId,
-            deleteOrphanSnapshots: "true",
-          });
-          const deleted = yield* callApi(
-            client,
-            SANDBOX_CALL.DELETE,
-            HttpClientRequest.delete(url, { headers: asked.headers }),
+          yield* Effect.tryPromise({
+            try: async (signal) => {
+              // Note that the lookup asks no resume, because a sandbox on its way out is never woken to be deleted.
+              const sandbox = await Sandbox.get({
+                name,
+                resume: false,
+                token: asked.token,
+                teamId: asked.teamId,
+                projectId: asked.projectId,
+                signal,
+              });
+              await sandbox.delete({ deleteOrphanSnapshots: true, signal });
+            },
+            catch: (cause) => sdkFailure(SANDBOX_CALL.DELETE, cause),
+          }).pipe(
+            Effect.catchIf(
+              (failure) => failure.status === NOT_FOUND_STATUS,
+              () => Effect.void,
+            ),
           );
-          if (!succeeded(deleted.status) && deleted.status !== NOT_FOUND_STATUS) {
-            return yield* refused(SANDBOX_CALL.DELETE, deleted);
-          }
         }),
       run: (sandboxSessionId, ask) =>
         Effect.gen(function* () {

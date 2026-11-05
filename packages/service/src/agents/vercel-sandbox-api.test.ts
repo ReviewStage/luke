@@ -8,6 +8,7 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { afterEach, vi } from "vitest";
 import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
 import {
   COMMAND_GONE,
@@ -64,7 +65,6 @@ const CALLS: readonly {
   { call: SANDBOX_CALL.GET, ask: (api) => api.getNamed(NAME) },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listNamed("luke-native-") },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listTagged("session_fixture") },
-  { call: SANDBOX_CALL.DELETE, ask: (api) => api.deleteSandbox(NAME) },
 ];
 
 /** The API under the fixture's token, over the responder given. */
@@ -85,6 +85,11 @@ function answering(...answers: readonly (() => Response)[]) {
     return answer();
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 const refusedWith = (status: number) => () => Response.json({ error: REFUSAL }, { status });
 const started = () => Response.json({ command: { id: COMMAND, exitCode: null } });
@@ -362,5 +367,71 @@ it.effect(
       const text = record.toString("utf8");
       assert.equal(text, `${Buffer.byteLength(text)} path=${path.slice(1)}\n`);
       assert.equal(String.fromCharCode(tar[1024 + 156] ?? 0), "0");
+    }),
+);
+
+const FOUND_AT = Date.UTC(2026, 10, 5);
+
+/** A stopped sandbox as Vercel names it. */
+const STOPPED_SANDBOX = {
+  name: NAME,
+  persistent: true,
+  createdAt: FOUND_AT,
+  updatedAt: FOUND_AT,
+  currentSessionId: SESSION,
+  status: "stopped",
+} as const;
+
+/** Vercel's answer to a lookup, with the session the sandbox last ran, and to a delete, as `@vercel/sandbox` reads them. */
+const sandboxAnswer = (method: string) =>
+  method === "DELETE"
+    ? Response.json({ sandbox: STOPPED_SANDBOX })
+    : Response.json({
+        sandbox: STOPPED_SANDBOX,
+        session: {
+          id: SESSION,
+          memory: 4096,
+          vcpus: 2,
+          region: "iad1",
+          timeout: 60_000,
+          status: "stopped",
+          requestedAt: FOUND_AT,
+          createdAt: FOUND_AT,
+          cwd: "/vercel/sandbox",
+          updatedAt: FOUND_AT,
+        },
+        routes: [],
+      });
+
+it.effect(
+  "a delete wakes no stopped sandbox, takes its orphan snapshots, counts one gone as deleted, and names Vercel's refusal",
+  () =>
+    Effect.gen(function* () {
+      // The SDK reads its own copy of the deployment's token before each call, and asks `fetch` rather than our client.
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const asked: { readonly method: string; readonly url: URL }[] = [];
+      let answer: (method: string) => Response = sandboxAnswer;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const method = init?.method ?? "GET";
+        asked.push({ method, url: new URL(String(input)) });
+        return answer(method);
+      });
+      const api = yield* apiOver(refusedWith(400));
+
+      yield* api.deleteSandbox(NAME);
+      const [lookup, deletion] = asked;
+      assert.equal(lookup?.url.searchParams.get("resume"), "false");
+      assert.equal(deletion?.method, "DELETE");
+      assert.equal(deletion?.url.searchParams.get("deleteOrphanSnapshots"), "true");
+
+      answer = () => refusedWith(404)();
+      yield* api.deleteSandbox(NAME);
+
+      answer = () => refusedWith(400)();
+      const failure = yield* Effect.flip(api.deleteSandbox(NAME));
+      assert.equal(failure.call, SANDBOX_CALL.DELETE);
+      assert.equal(failure.status, 400);
+      assert.equal(failure.detail, `${REFUSAL.code}: ${REFUSAL.message}`);
+      assert.equal(failure.message.includes(fixtureToken()), false);
     }),
 );
