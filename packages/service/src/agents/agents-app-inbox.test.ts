@@ -817,11 +817,17 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { post, read, close } = yield* openInbox(eve);
+        const { owner, post, read, close, transcript } = yield* openInbox(eve);
         const asked = yield* post(QUESTION);
         assert.ok(Result.isSuccess(asked));
         const before = eve.sent.length;
         yield* TestClock.adjust(Duration.seconds(1));
+        const words = "We dropped invitations from this release.";
+        const plan = {
+          name: "release-plan.txt",
+          mediaType: AGENT_ATTACHMENT_TYPE.TEXT,
+          data: Buffer.from("invitations move to next quarter\n").toString("base64"),
+        };
 
         const closed = readAnswer(
           inboxAnsweredSchema,
@@ -829,7 +835,8 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* close(asked.success.id, {
             revision: asked.success.revision,
             clientKey: randomUUID(),
-            text: "We dropped invitations from this release.",
+            text: words,
+            attachments: [plan],
           }),
         );
 
@@ -837,16 +844,26 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(closed.item.status, INBOX_STATUS.CLOSED);
         assert.equal(eve.sent.length, before + 1, "the agent is told once");
         const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
-        assert.ok(handed.includes(`${INBOX_CLOSE_LEAD} on`), "it reads as an Inbox close");
-        assert.ok(handed.includes("We dropped invitations from this release."), "with the note");
+        const lead = handed.indexOf(`${INBOX_CLOSE_LEAD} on`);
+        assert.ok(lead !== -1, "it reads as an Inbox close");
+        assert.ok(handed.indexOf(words) > lead, "the note follows the close's line");
+        assert.ok(handed.includes("invitations move to next quarter"), "it carries the file");
+        assert.ok((yield* transcript()).lines.some((line) => line?.includes(words)));
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.deepEqual(
-          kept?.thread?.map((each) => [each.author, each.text]),
+          kept?.thread?.map((each) => [
+            each.author,
+            each.text,
+            each.files?.map((file) => file.name),
+          ]),
           [
-            [INBOX_MESSAGE_AUTHOR.AGENT, QUESTION.body],
-            [INBOX_MESSAGE_AUTHOR.MEMBER, "We dropped invitations from this release."],
+            [INBOX_MESSAGE_AUTHOR.AGENT, QUESTION.body, undefined],
+            [INBOX_MESSAGE_AUTHOR.MEMBER, words, [plan.name]],
           ],
         );
+        assert.deepEqual(countedProperties(owner, SERVER_EVENT.THREAD_POST), [
+          { answered_ask: false, has_media: true },
+        ]);
       }),
   );
 

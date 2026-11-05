@@ -490,6 +490,7 @@ function AnswerCard({
   // Note that the checkbox unticks once its thread is started, and while ticked a question's controls step aside, the question left waiting.
   const [asNew, setAsNew] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [closing, setClosing] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const starts = newThread !== undefined && asNew;
   // Note that a staged resolve goes with Send, the box's words and files beside it as its note, or alone where it holds none.
@@ -498,8 +499,8 @@ function AnswerCard({
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
   standing.current = draft;
-  // Note that only a nod and a thread start hold the box; a reply leaves it at once and the next may follow.
-  const sending = control.sending.has(item.id) || starting;
+  // Note that only a nod, a thread start, and a resolve hold the box; a reply leaves it at once and the next may follow.
+  const sending = control.sending.has(item.id) || starting || closing;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
     holder: {
@@ -601,8 +602,10 @@ function AnswerCard({
       void closer(item);
       return;
     }
+    setClosing(true);
     control.onDraft(item, { ...draft, note: "", attachments: [] });
     void closer(item, undefined, note).then((closed) => {
+      setClosing(false);
       if (closed.kept) return;
       const now = standing.current;
       control.onDraft(item, {

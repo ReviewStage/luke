@@ -2928,7 +2928,7 @@ export function withdrawInboxAnswer(
  * under the key their client sent the close with, where it is open there,
  * and the ask it held open withdrawn with no reason, which is how a
  * member's close reads on the thread; nothing where it is not open there,
- * or where it carries a note and a message of the thread holds the key.
+ * or where a message of the thread holds the key.
  * The revision stays, as an answer's does. The close is the member's own,
  * so it leaves the item read for them, as an answer does; a message is
  * written for it only where it carries a note, words or files, which is
@@ -2950,8 +2950,8 @@ export function closeInboxItemAsMember(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
-        // A key a message of the thread holds names that message, never this close's note.
-        if (noted && (yield* keyTaken(itemId, closeKey))) return Option.none();
+        // A key a message of the thread holds names that message, never this close, so taking the close back deletes only its own note.
+        if (yield* keyTaken(itemId, closeKey)) return Option.none();
         const closed = yield* memberCloseItem({ userId, itemId, revision, closeKey, now });
         if (Option.isNone(closed)) return Option.none();
         if (noted) {
