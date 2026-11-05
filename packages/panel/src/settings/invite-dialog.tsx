@@ -24,6 +24,7 @@ import { useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { confirmFailure } from "../failure-report.js";
+import { replayMaskedError } from "./marks.js";
 
 /**
  * invite-dialog.tsx -- Members' Invite: the card that invites one address or several, as a member or, for the owner, an admin.
@@ -133,6 +134,9 @@ export function useInviteDialog({
     <Dialog
       open={form.open}
       title={`Invite to ${workspaceName}`}
+      // Note that its own words show in a screen recording, but its title, which names the workspace, and a refusal, which can quote an address, stay masked.
+      replayUnmasked
+      titleReplayMasked
       busy={form.settling}
       refused={form.refusal !== undefined}
       initialFocus={field}
@@ -155,7 +159,7 @@ export function useInviteDialog({
       }
     >
       <Stack>
-        <FormField label="Email addresses" error={form.refusal}>
+        <FormField label="Email addresses" error={replayMaskedError(form.refusal)}>
           {(control) => (
             <TextField
               ref={field}
