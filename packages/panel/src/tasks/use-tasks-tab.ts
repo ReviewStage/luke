@@ -3441,7 +3441,8 @@ export function useTasksTab(input: {
     if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
       return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
     }
-    if (tab === SIDE_PANEL_TAB.INBOX) return false;
+    // Note that a fixed kind the panel no longer draws, the Inbox's of old or Comments with Plans off, is passed over.
+    if (typeof tab === "string") return drawnKinds(experiments).some((kind) => kind === tab);
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });

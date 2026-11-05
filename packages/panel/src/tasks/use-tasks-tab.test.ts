@@ -39,6 +39,7 @@ import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppPlanDocuments,
+  type AppStateDelivery,
   RUN_PROFILE,
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
@@ -80,6 +81,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
+  deliveryOf,
   handHostReads,
   handState,
   holdPages,
@@ -1042,6 +1044,33 @@ test('Show panel on a plan whose strip holds no tab opens the tab last closed th
   act(() => fresh.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(fresh), { open: false, tab: undefined }, "never shown empty");
   assert.equal(fresh.control().sidePanel.toggleAsked, true, 'the "+" is asked at the toggle');
+});
+
+test('Show panel after Plans was turned off since Comments closed passes Comments over and asks for the "+" at the toggle', async () => {
+  // The account's document is delivered again with Plans off once Comments is closed.
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.PLANS), {})),
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const tab = mount({ shown: true, tasks: OPEN });
+  await settle();
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
+
+  const plansOff = deliveryOf(stateWith({}, { version: 2 }));
+  act(() => {
+    for (const listener of listeners) listener(plansOff);
+  });
+  await settle();
+  act(() => panel().onToggle());
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined }, "Comments stands nowhere");
+  assert.equal(panel().toggleAsked, true, 'the "+" is asked at the toggle');
 });
 
 test("Show panel beside the Inbox, its item's plan's strip holding no tab, asks for the \"+\" at the toggle rather than showing the panel empty, though another plan stands open behind it", () => {
