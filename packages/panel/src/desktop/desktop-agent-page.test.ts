@@ -34,6 +34,7 @@ import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import type { Task } from "@repo/features/task-wire";
 import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -1604,6 +1605,14 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "Archive",
     "Permanently delete⌘⌫",
   ]);
+
+  act(() => pageMenuItem(page, "Mark as unreadU").click());
+  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  await settle();
+  assert.deepEqual(
+    told.filter((asked) => asked.kind === ACT_KIND.AGENTS_MARK_READ).map((asked) => asked.payload),
+    [{ agentId: AGENT_ID, readMark: READ_MARK.UNREAD }],
+  );
 });
 
 /** What a side panel is asked to show. */
