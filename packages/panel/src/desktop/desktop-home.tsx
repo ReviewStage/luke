@@ -169,7 +169,7 @@ function HomeInbox({
       tone={STATUS_TONE.ATTENTION}
     >
       {waiting.length === 0 ? (
-        <NoteLine look={NOTE_LINE_LOOK.INSET}>{NEEDS_YOU.NONE}</NoteLine>
+        <NoteLine look={NOTE_LINE_LOOK.ROWS}>{NEEDS_YOU.NONE}</NoteLine>
       ) : (
         <ReplayMask>
           <List label={TAB_WORDS.INBOX} joinsWalk>
