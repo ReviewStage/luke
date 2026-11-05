@@ -247,7 +247,8 @@ function CountingRow(): React.JSX.Element {
   const [count, setCount] = useState(0);
   return createElement(SettingsRow, {
     label: `Pressed ${count}`,
-    children: () => createElement(Button, { onClick: () => setCount(count + 1) }, "Press"),
+    children: () =>
+      createElement(Button, { onClick: () => setCount(count + 1), children: "Press" }),
   });
 }
 
