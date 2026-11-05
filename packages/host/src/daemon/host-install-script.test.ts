@@ -599,11 +599,11 @@ describe("the host's install script", () => {
       writeFileSync(join(release, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), {
         mode: 0o755,
       });
-      // Note that the release's daemon says what it was asked, and its leave answers that the service took it.
+      // Note that the release's daemon says what it was asked, and its leave answers that the service took it only while the box's record still stands.
       mkdirSync(join(release, "node/bin"), { recursive: true });
       writeFileSync(
         join(release, "node/bin/node"),
-        `#!/bin/sh\nshift\nprintf 'vespin-host %s\\n' "$*" >>"${asked}"\n`,
+        `#!/bin/sh\nshift\nprintf 'vespin-host %s\\n' "$*" >>"${asked}"\n[ -e "$APP_HOST_STATE_ROOT/device.json" ]\n`,
         {
           mode: 0o755,
         },

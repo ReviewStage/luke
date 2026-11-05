@@ -331,15 +331,22 @@ const uninstallApart = (service: HostService | undefined) => {
       Effect.orElseSucceed(() => false),
     );
   }
-  return Effect.try(() =>
-    spawn(command, ["uninstall"], {
-      detached: true,
-      stdio: ["ignore", "inherit", "inherit"],
-    }).unref(),
-  ).pipe(
-    Effect.as(true),
-    Effect.orElseSucceed(() => false),
-  );
+  // Note that a command that cannot start fails as an `error` event after the spawn returns, so the answer waits on `spawn` or `error`, whichever comes first.
+  return Effect.callback<boolean>((resume) => {
+    try {
+      const child = spawn(command, ["uninstall"], {
+        detached: true,
+        stdio: ["ignore", "inherit", "inherit"],
+      });
+      child.once("spawn", () => {
+        child.unref();
+        resume(Effect.succeed(true));
+      });
+      child.once("error", () => resume(Effect.succeed(false)));
+    } catch {
+      resume(Effect.succeed(false));
+    }
+  });
 };
 
 /**
