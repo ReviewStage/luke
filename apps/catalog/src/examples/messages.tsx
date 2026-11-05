@@ -3,6 +3,8 @@
  */
 
 import {
+  AVATAR_SIZE,
+  Avatar,
   BUTTON_SIZE,
   CopyIcon,
   IconButton,
@@ -23,6 +25,16 @@ import { CatalogSection } from "../section";
 
 /** Oct 14, 2026, 3:42 PM, on the viewer's own clock. */
 const SENT_AT = new Date(2026, 9, 14, 15, 42).getTime();
+
+/** A sender as the transcript names one: their face and name, one wash target. */
+const ADA = (
+  <InlineRef
+    look={INLINE_REF_LOOK.WASH}
+    glyph={<Avatar name="Ada Lovelace" size={AVATAR_SIZE.INLINE} decorative />}
+    label="Ada Lovelace"
+    onPress={() => {}}
+  />
+);
 
 const COPY = (
   <MessageActions>
@@ -72,8 +84,8 @@ function Messages(): React.JSX.Element {
       >
         <div className="catalog-frame">
           <MessageFrame revealActionsOnTap>
-            <MessageHead sender="Ada">
-              <SubjectLine lead="Thread answer" fit={SUBJECT_FIT.OWN}>
+            <MessageHead sender={ADA}>
+              <SubjectLine lead="answered" fit={SUBJECT_FIT.OWN}>
                 <InlineRef
                   look={INLINE_REF_LOOK.PILL}
                   label="Expire an invitation after a week?"

@@ -4,7 +4,7 @@ import {
   REVIEW_STATE,
   type ReviewState,
 } from "@repo/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineTitle } from "@repo/features/inbox-wire";
+import { threadLineTitle } from "@repo/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import {
   DISCLOSURE_FILL,
@@ -24,6 +24,7 @@ import {
   type GitHubLineMetadata,
   isFailingConclusion,
   type SlackLineMetadata,
+  THREAD_LINE_EVENT,
   type ThreadLineMetadata,
 } from "@repo/wire";
 import { createContext, type ReactNode, useContext } from "react";
@@ -48,7 +49,10 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * A member's reply, answer, or close on a thread reaches the agent as their
  * words under a header naming the item by its title and key, which is the
  * agent's; the transcript heads the words instead with what they did and
- * the thread's chip, which opens it. What GitHub said on the agent's pull
+ * the thread's chip, which opens it. Each head says what was done as a verb
+ * that reads on from the sender's name ("Grace Hopper wrote in" the thread's
+ * chip), and opens with it, capitalized, where the line is the reader's own
+ * and no name stands before it (`LineLead`). What GitHub said on the agent's pull
  * request reaches the agent as a prompt fenced and closed with what to do
  * about it; the transcript draws it as its own folding card, the one a
  * plan, a continue, and a fork are drawn in (`ai-elements/plan.tsx`), closed
@@ -60,6 +64,24 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * card with nothing under its head is its head alone, with no chevron. The
  * instructions and the fence are left to the agent.
  */
+
+/** What a line's head says was done: in lowercase after its sender's name, or opening the line where it is the reader's own. */
+interface LineLead {
+  readonly AFTER_NAME: string;
+  readonly OWN: string;
+}
+
+/** The lead for a line another sent, or the reader's own. */
+function leadOf(lead: LineLead, received: boolean): string {
+  return received ? lead.AFTER_NAME : lead.OWN;
+}
+
+/** What a thread's line says the member did on it, by the event its metadata names, so the head reads as a sentence from their name. */
+export const THREAD_LINE_DID = {
+  [THREAD_LINE_EVENT.MESSAGE]: { AFTER_NAME: "wrote in", OWN: "Wrote in" },
+  [THREAD_LINE_EVENT.ANSWER]: { AFTER_NAME: "answered", OWN: "Answered" },
+  [THREAD_LINE_EVENT.CLOSE]: { AFTER_NAME: "closed", OWN: "Closed" },
+} as const satisfies Record<ThreadLineMetadata["event"], LineLead>;
 
 /** The agent whose transcript is drawn, whose threads its thread lines are on; none where no transcript says. */
 export const TranscriptAgent = createContext<string | undefined>(undefined);
@@ -82,11 +104,14 @@ function threadLink(
 export function ThreadLineHead({
   line,
   words,
+  received,
   fit,
 }: {
   line: ThreadLineMetadata;
   /** The line's words as the agent read them, whose first line names the item by its title. */
   words: string;
+  /** Whether the line is another's, its head following their name (`MessageHead`); the reader's own opens with its lead. */
+  received: boolean;
   /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
   fit?: SubjectFit | undefined;
 }): React.JSX.Element {
@@ -97,14 +122,17 @@ export function ThreadLineHead({
       ? undefined
       : linkChip(href, threadLineTitle(words, line.event) ?? href, doors);
   return (
-    <SubjectLine lead={THREAD_LINE_LEAD[line.event]} fit={fit} data-thread-line="">
+    <SubjectLine lead={leadOf(THREAD_LINE_DID[line.event], received)} fit={fit} data-thread-line="">
       {chip}
     </SubjectLine>
   );
 }
 
 /** What a comment line leads with, as a thread's leads with what its member did. */
-export const COMMENT_LINE_LEAD = "Comment on";
+export const COMMENT_LINE_LEAD = {
+  AFTER_NAME: "commented on",
+  OWN: "Commented on",
+} as const satisfies LineLead;
 
 /** What a comment line's chip names where no page does: the plan of the task it is on. */
 const PLAN_WORDS = "the plan";
@@ -132,9 +160,12 @@ export function commentLineSubject(line: CommentLineMetadata): string {
  */
 export function CommentLineHead({
   line,
+  received,
   fit,
 }: {
   line: CommentLineMetadata;
+  /** Whether the line is another's, its head following their name (`MessageHead`); the reader's own opens with its lead. */
+  received: boolean;
   /** How much of the line the chip takes: the rest of it alone, or its own width beside its sender (`MessageHead`). */
   fit?: SubjectFit | undefined;
 }): React.JSX.Element {
@@ -143,14 +174,17 @@ export function CommentLineHead({
   const chip =
     href === undefined ? commentLineSubject(line) : linkChip(href, commentLineSubject(line), doors);
   return (
-    <SubjectLine lead={COMMENT_LINE_LEAD} fit={fit} data-comment-line="">
+    <SubjectLine lead={leadOf(COMMENT_LINE_LEAD, received)} fit={fit} data-comment-line="">
       {chip}
     </SubjectLine>
   );
 }
 
 /** What a Slack line leads with: after its sender's name, as GitHub's card says what its author did, or opening the line where it is the reader's own. */
-export const SLACK_LINE_LEAD = { AFTER_NAME: "wrote in", OWN: "Wrote in" } as const;
+export const SLACK_LINE_LEAD = {
+  AFTER_NAME: "wrote in",
+  OWN: "Wrote in",
+} as const satisfies LineLead;
 
 /** What a Slack line's chip names: Slack, whose mark the chip wears for a link to it. */
 export const SLACK_LINE_SUBJECT = "Slack";
@@ -173,11 +207,7 @@ export function SlackLineHead({
   const doors = useMentionDoors();
   const chip = line.url === undefined ? undefined : linkChip(line.url, SLACK_LINE_SUBJECT, doors);
   return (
-    <SubjectLine
-      lead={received ? SLACK_LINE_LEAD.AFTER_NAME : SLACK_LINE_LEAD.OWN}
-      fit={SUBJECT_FIT.OWN}
-      data-slack-line=""
-    >
+    <SubjectLine lead={leadOf(SLACK_LINE_LEAD, received)} fit={SUBJECT_FIT.OWN} data-slack-line="">
       {chip ?? SLACK_LINE_SUBJECT}
     </SubjectLine>
   );
@@ -363,7 +393,13 @@ export function GitHubLineCard({
   const rows = checks.length > 0 && !githubChecksPassed(line, words);
   const folds = said !== "" || comments.length > 0 || rows;
   const count = comments.length === 0 ? "" : commentsWords(comments.length);
-  const named = `${line.by} ${head.does} ${head.target}`;
+  // Note that a check event's head is its words alone, capitalized, as its copy reads, because what failed or passed is no act of whoever posted the checks: "github-actions a check failed on" reads as no sentence.
+  const checked =
+    line.event === GITHUB_LINE_EVENT.CHECK_FAILED ||
+    line.event === GITHUB_LINE_EVENT.CHECKS_COMPLETED;
+  const by = checked ? null : sender;
+  const does = checked ? head.event : head.does;
+  const named = checked ? `${head.event} ${head.target}` : `${line.by} ${head.does} ${head.target}`;
   return (
     <Plan
       data-github-line={line.event}
@@ -373,12 +409,12 @@ export function GitHubLineCard({
       actions={
         // Note that the head clips with room for the sender's wash, whose ring stands at its edge, so its corners are not cut square.
         // Note that a head too narrow for one line puts what was done on a line of its own under who did it, rather than shrinking a chip under the words beside it; there the count fades first, then the words, and the pull request's chip stays whole.
-        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-center gap-x-tight-gap gap-y-tight-gap overflow-clip [overflow-clip-margin:var(--ui-inline-ref-bleed)] py-row-inset">
-          {sender == null ? null : (
-            <span className="inline-flex min-w-0 max-w-full overflow-clip">{sender}</span>
+        <span className="github-line-head flex min-w-0 flex-1 flex-wrap items-baseline gap-x-tight-gap gap-y-tight-gap overflow-clip [overflow-clip-margin:var(--ui-inline-ref-bleed)] py-row-inset">
+          {by == null ? null : (
+            <span className="inline-flex min-w-0 max-w-full overflow-clip">{by}</span>
           )}
-          <span className="flex min-w-0 max-w-full flex-1 basis-auto items-center gap-tight-gap whitespace-nowrap">
-            <OneLine className="min-w-0 text-muted-foreground">{head.does}</OneLine>
+          <span className="flex min-w-0 max-w-full flex-1 basis-auto items-baseline gap-tight-gap whitespace-nowrap">
+            <OneLine className="min-w-0 text-muted-foreground">{does}</OneLine>
             <span className="inline-flex flex-none">
               <ChipOrLink href={pullRequestPage(line)} words={head.target} doors={doors} />
             </span>

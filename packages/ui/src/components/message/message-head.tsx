@@ -9,7 +9,12 @@
  * ("Thread answer" and the thread's chip, a `SubjectLine` fitted to its own
  * width). Neither grows past its own width, so the line reads as words
  * rather than as columns, and what they did breaks under the sender where
- * the column has no room for both. The reader's own message has no head.
+ * the column has no room for both. The two stand on one baseline rather
+ * centered on each other, because the sender's chip, its face beside its
+ * name, stands taller than the words after it, and centering boxes of
+ * different heights sets their words a fraction of a pixel apart, which a
+ * Retina screen rounds to a name sitting lower than the words that follow
+ * it. The reader's own message has no head.
  *
  * It is drawn in the Tailwind theme's utilities, in the caption's size and
  * the muted ink, at the bubble's inset.
@@ -28,7 +33,7 @@ export function MessageHead({
   children?: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="ui-message-head flex min-w-0 max-w-full flex-wrap items-center gap-x-ui-6 gap-y-ui-2 px-ui-4 text-caption-inline text-muted-foreground">
+    <div className="ui-message-head flex min-w-0 max-w-full flex-wrap items-baseline gap-x-ui-4 gap-y-ui-2 px-ui-4 text-caption-inline text-muted-foreground">
       <span className="ui-message-head-sender flex min-w-0 max-w-full items-center">{sender}</span>
       {children == null ? null : (
         <span className="flex min-w-0 max-w-full items-center">{children}</span>

@@ -314,7 +314,7 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   if (github !== undefined) return githubLineWords(github, messageWords(message));
   const comment = commentLineOf(message);
   if (comment !== undefined) {
-    return `${COMMENT_LINE_LEAD} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
+    return `${COMMENT_LINE_LEAD.OWN} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
   }
   const slack = slackLineOf(message);
   if (slack !== undefined) return `${SLACK_LINE_LEAD.OWN} ${SLACK_LINE_SUBJECT}\n\n${slack.words}`;
