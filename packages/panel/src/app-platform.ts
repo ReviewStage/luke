@@ -112,6 +112,14 @@ export interface AppPlatform {
    * is left, so a shell whose ways out save nothing asks before those too.
    */
   unsavedPlanWords?(unsaved: boolean): void;
+  /**
+   * Ends a maintainer's sign-in as the member signed in (`impersonated` on
+   * the account) and takes them back to that member's page of the admin
+   * dashboard, as themselves; answers why not, in the service's own words,
+   * where the service refused. Only a browser tab holds such a sign-in, so
+   * the Mac app leaves this out.
+   */
+  stopImpersonating?(memberId: string): Promise<string | undefined>;
 }
 
 let installed: AppPlatform | undefined;

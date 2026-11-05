@@ -786,14 +786,14 @@ interface AppNotificationsSlice {
 /**
  * Whether this machine can reach the service (`client/network-watch.ts`):
  * whether it has a network, as its platform last answered, and whether the
- * service answered the last call made to it. Each is true until something
- * says otherwise. An answer of offline is a reliable one; online says
+ * service answers its calls (`@repo/features`'s `ServiceReach`). Each is
+ * true until something says otherwise. An answer of offline is a reliable one; online says
  * nothing of whether the service itself answers, which is what `reachable`
  * says, so `networkConnected` reads the two together.
  */
 interface AppNetworkSlice {
   online: boolean;
-  /** Whether the last call to the service was answered, with any status, rather than ending with no answer: a transport fault or its deadline. */
+  /** Whether the service answers: false once a call ends with no answer, a transport fault or its deadline, after the service answered nothing for longer than a held read waits; true again at its next answer, with any status. */
   reachable: boolean;
   /** How many changes made offline the service refused as they were sent again, until a window clears the count; none where none was. */
   offlineRefused?: number;
@@ -801,7 +801,7 @@ interface AppNetworkSlice {
 
 /**
  * Whether the app can reach the service now: the platform says this machine
- * has a network, and the service answered the last call made to it. The one
+ * has a network, and the service answers its calls. The one
  * reading of the `network` slice every surface that asks "are we connected?"
  * goes by.
  */
@@ -812,8 +812,9 @@ export function networkConnected(network: Pick<AppNetworkSlice, "online" | "reac
 /**
  * What the signed-in account may open in the app, as the host last read it
  * from the service for that account (`account-access-client.ts`): whether
- * it is an admin, which the sidebar offers the admin dashboard by, and
- * whether a Start on a task with no repository runs. Not while nobody is
+ * it is an admin, which the sidebar offers the admin dashboard by,
+ * whether a Start on a task with no repository runs, and until when its
+ * grant of support access stands. Not while nobody is
  * signed in, for another account than the one read, or where the read
  * failed. A window draws by it and authorizes nothing: the dashboard's own
  * gate on the service decides every admin read, and the Start route every
@@ -827,6 +828,12 @@ export interface AppAccessSlice {
    * alone; absent everywhere else.
    */
   startsWithoutRepository?: true;
+  /**
+   * When the member's grant of support access runs out, in epoch
+   * milliseconds, while one stands, so Settings says until when a
+   * maintainer may sign in as them; absent where none does.
+   */
+  supportAccessUntil?: number;
   /**
    * Whether the access is not read yet for whoever is signed in, as it is
    * for a moment after a sign-in or a launch: a window holds back on what it

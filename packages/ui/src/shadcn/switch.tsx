@@ -14,7 +14,7 @@ import { ignoredByReplay } from "../session-replay-marks.js";
  * or ring utilities, because the window's own focus ring (`@repo/panel`'s
  * base.css) draws the keyboard's ring, and a utility would outrank it
  * (`anti-slop/no-shadcn-focus-ring`), and its hidden input kept out of the
- * screen recording (`session-replay-marks.ts`). `@repo/ui`'s `Switch`
+ * screen recording (`session-replay-marks.tsx`). `@repo/ui`'s `Switch`
  * (`components/switch/switch.tsx`) is what an app draws; this is its inside.
  * `SWITCH_TRACK` and `SWITCH_THUMB` are exported so the switch's drawing
  * alone, inside a row that is itself the switch, wears the same classes.

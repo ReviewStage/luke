@@ -11,7 +11,11 @@ import { sessionCredential } from "../auth/session-credential.js";
 import { INTEGRATION, type IntegrationDefinition } from "../integrations/integrations.js";
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { SENTRY_ENVIRONMENT } from "../observability/sentry.js";
-import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
+import {
+  POSTHOG_ENVIRONMENT,
+  posthogPersonConsoleUrl,
+  posthogProjectConsoleUrl,
+} from "../providers/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 import { readAdminCost } from "./admin-cost-queries.js";
@@ -27,8 +31,9 @@ import { buildAdminReliability } from "./admin-reliability.js";
 import { readAdminReliabilitySource } from "./admin-reliability-queries.js";
 import { buildAdminUserDetail } from "./admin-user.js";
 import { buildAdminUserList } from "./admin-users.js";
+import { buildAdminWorkspaceDetail } from "./admin-workspace.js";
 import { buildAdminWorkspaceList } from "./admin-workspaces.js";
-import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
+import { readAdminWorkspaceSource, readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 import type { AdminViewerResolver } from "./gate.js";
 
 /**
@@ -145,7 +150,12 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
           ],
           { concurrency: "unbounded" },
         ),
-        ([source, support]) => source && buildAdminUserDetail(source, support, now, windowDays),
+        ([source, support]) =>
+          source && {
+            ...buildAdminUserDetail(source, support, now, windowDays),
+            analyticsPersonUrl:
+              analyticsConsoleUrl && posthogPersonConsoleUrl(analyticsConsoleUrl, userId),
+          },
       ),
     readDay: (day, now, scope) =>
       Effect.map(readAdminDaySource({ day, scope }), (source) =>
@@ -159,6 +169,11 @@ export function hostedAdminSeams(api: AdminSessionApi): AdminProcedureSeams {
     readWorkspaces: (now, scope, kind, search) =>
       Effect.map(readAdminWorkspacesSource({ now, scope, kind, search }), (source) =>
         buildAdminWorkspaceList(source, now, kind, search),
+      ),
+    readWorkspace: (id, now) =>
+      Effect.map(
+        readAdminWorkspaceSource({ now, id }),
+        (source) => source && buildAdminWorkspaceDetail(source, now),
       ),
     writeFavorite: (adminId, userId, favorite) => writeAdminFavorite({ adminId, userId, favorite }),
   };

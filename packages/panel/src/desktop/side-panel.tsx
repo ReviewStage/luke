@@ -190,7 +190,6 @@ import { PhoneBack, PhoneHead, PlaceMore, phoneFindGroups } from "./phone-head.j
 import {
   type AddEntry,
   AddTabButton,
-  AddTabSkeleton,
   DoorsTab,
   entryRow,
   HandTabActionsContext,
@@ -201,7 +200,6 @@ import {
   type TabDoors,
   type TabLook,
   type TabPin,
-  TabSkeleton,
   type TabViews,
   type TranscriptCopier,
   useTranscriptCopier,
@@ -2864,8 +2862,8 @@ function PanelTabsRow({ children }: { children: React.ReactNode }): React.JSX.El
 
 /**
  * The side panel while its task is read, in the frame it lands in: at its
- * width, its edge and its full-screen button its own, and one tab's block
- * and the "+"'s where its strip will stand.
+ * width, its edge and its full-screen button its own, and its strip empty
+ * until its tabs land, never in blocks for them.
  */
 export function SidePanelSkeleton({
   drawing,
@@ -2875,18 +2873,7 @@ export function SidePanelSkeleton({
   panel: SidePanelControl;
 }): React.JSX.Element {
   return (
-    <PanelFrame
-      {...drawing}
-      panel={panel}
-      label="Panel"
-      tabs={
-        <PanelTabsRow>
-          <TabSkeleton />
-          <AddTabSkeleton />
-        </PanelTabsRow>
-      }
-      actions={null}
-    >
+    <PanelFrame {...drawing} panel={panel} label="Panel" tabs={null} actions={null}>
       {null}
     </PanelFrame>
   );

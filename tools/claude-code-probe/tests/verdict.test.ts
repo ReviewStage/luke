@@ -25,7 +25,9 @@ const FULL_CAPABILITIES = "000001ffffffffff";
 const PRIVATE_REPORT = {
   sudo: false,
   env_token: false,
+  env_token_shaped: false,
   proc_environ_with_token: 0,
+  proc_environ_token_shaped: 0,
   files_with_token_shape: 0,
   shadow_readable: false,
   cap_eff: NO_CAPABILITIES,
@@ -36,6 +38,16 @@ const TERMINAL_CAPS_DROPPED = {
   user: "vercel-sandbox",
   ...PRIVATE_REPORT,
   agent_home_listable: false,
+  anthropic_http: "401",
+};
+
+/** A command the agent runs, which inherits the CLI's placeholder and reads the CLI's environment, but finds no token. */
+const AGENT_REPORT = {
+  user: "agent",
+  ...PRIVATE_REPORT,
+  env_token: true,
+  proc_environ_with_token: 2,
+  agent_home_listable: true,
   anthropic_http: "401",
 };
 
@@ -103,14 +115,7 @@ function firstLaunch(
     account("max"),
     toolUse("Write", { file_path: `agent-probe/${NONCE}.txt`, content: NONCE }),
     toolUse("Bash", { command: "bash /opt/agent-probe/leak-check.sh" }),
-    leakResult(
-      overrides.agentReport ?? {
-        user: "agent",
-        ...PRIVATE_REPORT,
-        agent_home_listable: true,
-        anthropic_http: "000",
-      },
-    ),
+    leakResult(overrides.agentReport ?? AGENT_REPORT),
     toolUse("Bash", { command: `sleep 45 && echo done`, run_in_background: true }),
     toolUse("ScheduleWakeup", { delaySeconds: 60, reason: "wait", prompt: "go", noop: false }),
     result(SESSION),
@@ -141,14 +146,7 @@ function observations(overrides: Partial<ProbeObservations> = {}): ProbeObservat
     ],
     terminalAsToday: TERMINAL_CAPS_DROPPED,
     terminalCapsDropped: TERMINAL_CAPS_DROPPED,
-    agentUid: {
-      user: "agent",
-      ...PRIVATE_REPORT,
-      agent_home_listable: true,
-      anthropic_http: "401",
-    },
-    bubblewrapCapsKept: "started",
-    bubblewrapCapsDropped: "started",
+    placeholderOutside: "401",
     rootFilesWithTokenShape: 0,
     ...overrides,
   };
@@ -175,24 +173,20 @@ describe("verdict", () => {
     expect(failing(conditions)).toEqual(["Anthropic bills the plan"]);
   });
 
-  it("fails the token check when a command the agent runs sees the token", () => {
+  it("fails the token check when the CLI was handed the token itself rather than a placeholder", () => {
     const conditions = verdict(
       observations({
         firstLaunch: firstLaunch({
-          agentReport: {
-            user: "agent",
-            ...PRIVATE_REPORT,
-            env_token: true,
-            agent_home_listable: true,
-            anthropic_http: "200",
-          },
+          agentReport: { ...AGENT_REPORT, env_token_shaped: true, proc_environ_token_shaped: 2 },
         }),
+        placeholderOutside: "400",
       }),
     );
 
     expect(failing(conditions)).toEqual([
-      "a command the agent runs cannot read the token",
-      "a command the agent runs cannot call Anthropic",
+      "Claude Code runs on a placeholder, not the token",
+      "a command the agent runs finds no token",
+      "Anthropic refuses the placeholder outside the sandbox",
     ]);
   });
 
@@ -205,12 +199,12 @@ describe("verdict", () => {
 
     expect(failing(conditions)).toEqual([
       "a Terminal's shell, capabilities dropped, has no sudo and no capabilities",
-      "a Terminal's shell, capabilities dropped, cannot read the token, the session, or /etc/shadow",
+      "a Terminal's shell, capabilities dropped, cannot read the token, the CLI's environment, the session, or /etc/shadow",
     ]);
     expect(passed(conditions)).toBe(false);
   });
 
-  it("reports a Terminal's shell as it is today reading the token without failing the check that rests on dropped capabilities", () => {
+  it("reports a Terminal's shell as it is today reading the placeholder without failing the check that rests on dropped capabilities", () => {
     const conditions = verdict(
       observations({
         terminalAsToday: {
@@ -219,21 +213,11 @@ describe("verdict", () => {
           proc_environ_with_token: 1,
           shadow_readable: true,
         },
-        agentUid: {
-          user: "agent",
-          ...PRIVATE_REPORT,
-          proc_environ_with_token: 1,
-          agent_home_listable: true,
-          anthropic_http: "401",
-        },
-        bubblewrapCapsKept: "refused",
       }),
     );
 
     expect(failing(conditions)).toEqual([
-      "a Terminal's shell as it is today, capabilities kept, cannot read the token",
-      "the agent's own uid, outside the command sandbox, cannot read the CLI's environment",
-      "bubblewrap starts in a Terminal's shell as it is today, capabilities kept",
+      "a Terminal's shell as it is today, capabilities kept, cannot read the token or the CLI's environment",
     ]);
     expect(passed(conditions)).toBe(true);
   });
@@ -266,9 +250,7 @@ describe("verdict", () => {
         resumedLaunch: [],
         terminalAsToday: undefined,
         terminalCapsDropped: undefined,
-        agentUid: undefined,
-        bubblewrapCapsKept: undefined,
-        bubblewrapCapsDropped: undefined,
+        placeholderOutside: undefined,
         rootFilesWithTokenShape: undefined,
       }),
     );

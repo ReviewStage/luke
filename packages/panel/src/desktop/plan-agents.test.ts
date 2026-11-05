@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  AGENT_MACHINE,
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
@@ -15,7 +16,7 @@ import { PlanAgents } from "./plan-agents.js";
 
 /**
  * plan-agents.test.ts -- the plan's agents list those at work first, then
- * the newest started; a row opens its agent, its pull request's chip opens
+ * the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
  * the pull request and not the agent, and a task with no agent draws no
  * list; on a phone the group ends with New agent, even on a task with no
  * agent, and the task's Inbox follows it only while something waits there,
@@ -39,18 +40,16 @@ function agent(id: string, title: string, createdAt: number, status: AgentSummar
   } satisfies AgentSummary;
 }
 
-const OLDEST = agent(
-  "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d21",
-  "Research providers",
-  1,
-  AGENT_STATUS.COMPLETED,
-);
-const WORKING = agent(
-  "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d22",
-  "Expired invite page",
-  2,
-  AGENT_STATUS.RUNNING,
-);
+// Note that the oldest ran on a device since removed, and the one at work runs on the member's Studio.
+const OLDEST = {
+  ...agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d21", "Research providers", 1, AGENT_STATUS.COMPLETED),
+  machine: AGENT_MACHINE.DEVICE,
+} satisfies AgentSummary;
+const WORKING = {
+  ...agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d22", "Expired invite page", 2, AGENT_STATUS.RUNNING),
+  machine: AGENT_MACHINE.DEVICE,
+  mac: { name: "Studio", deviceId: "6f0c1d0e-6b1a-4d43-9a49-2b7b6f1f0a11" },
+} satisfies AgentSummary;
 const NEWEST = agent(
   "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d23",
   "Invite email",
@@ -102,7 +101,6 @@ function mount(agents: readonly AgentSummary[], folded = false, waiting?: number
         agents: control,
         held: { agents: new Map(), workers: new Map() },
         tab: undefined,
-        runsOn: undefined,
         folded,
         onOpenAgent: (agentId) => opened.agents.push(agentId),
         onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
@@ -130,7 +128,7 @@ test("the agents at work come first, then the newest, each saying where it runs,
   const rows = [...list.querySelectorAll("li")].map((row) => row.textContent ?? "");
   assert.deepEqual(
     rows.map((row) => row.replace(/#42$/u, "")),
-    ["Expired invite pageCloud", "Invite emailCloud", "Research providersCloud"],
+    ["Expired invite pageStudio", "Invite emailCloud", "Research providersRemoved device"],
   );
   const chip = host.querySelector<HTMLAnchorElement>(
     'a[href="https://github.com/acme/relay/pull/42"]',

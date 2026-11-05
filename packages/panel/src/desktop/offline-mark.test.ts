@@ -28,7 +28,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Main's document with the Mac's network, the host's live state, and whether the service answered its last call, as given. */
+/** Main's document with the Mac's network, the host's live state, and whether the service answers its calls, as given. */
 function documentOf(
   online: boolean,
   live: HostLive | undefined,

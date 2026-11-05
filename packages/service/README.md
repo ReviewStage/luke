@@ -1348,10 +1348,20 @@ it on for agents, otherwise the account's own API key for the model's
 provider, and a Start with neither is refused; an agent recorded with the
 older Mac sign-in payer launches on the account's saved credential as one
 would. Each is opened from its sealed row under
-`PROVIDER_KEY_ENCRYPTION_KEYS` into the runner's environment alone, and a
-Codex agent on a ChatGPT plan asks the service for its token as it needs one
-(`src/agents/native-events/runner-token-app.ts`). The deployment holds no
-model key of its own. The calls beside an account's agents run on its own
+`PROVIDER_KEY_ENCRYPTION_KEYS`. In a sandbox it is set at the sandbox's
+firewall as a placeholder swap (`src/agents/sandbox-firewall.ts`), as the
+runner's bearer is, the runner's environment holding only the placeholder
+minted for the launch, and the sweep renews a ChatGPT plan's token there; on
+a host it is in the runner's environment, and a Codex agent on a ChatGPT plan
+asks the service for its token as it needs one
+(`src/agents/native-events/runner-token-app.ts`). Neither harness runs a
+command sandbox of its own, in a sandbox or on a host, so in a sandbox the
+firewall is what keeps a credential from the agent's commands: they can read
+the placeholders, each good only through that sandbox's firewall, and never
+the value it swaps in; on a host a Claude Code agent's commands can read its
+credential. Codex's commands inherit neither the bearer nor its credential's
+variable (`shell_environment_policy`). The deployment holds no model key of
+its own. The calls beside an account's agents run on its own
 key too, through `ownKeyOf` (`src/agents/coder-host/account-keys.ts`), the
 provider they prefer first and the other where it saved only that, and never
 on Vespin's: an agent's title on the provider's small model (Haiku, or
@@ -1774,6 +1784,26 @@ did not open discards the agent again (`discardAgent`) and answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
 (`PUT /api/account/preferences`) changes the account's default.
+
+Every Start, a fresh one, one from another agent (`POST /api/agents/{id}/agents`,
+a continue or a fork), the agent a task's start names, and `start_agent`,
+takes an optional `runsOn`, `{ machine: "vercel" }` for the cloud or
+`{ machine: "device", deviceId }` for one of the starter's own devices, and
+its agent runs there (`machineOfStart` in `src/agents/coder-host/start.ts`).
+One that names none runs where the agent it is started from runs, for a
+continue or a fork; else where the starter's newest agent on the task runs,
+never a teammate's, since a device is one member's; else where the starter
+last named a place (`account_preference.runs_on_*`,
+`packages/database/src/models/runs-on-pick.ts`); else where the task runs;
+else in the cloud. An automation's run reads neither of its owner's own, so
+it runs where its task does. A device, named or defaulted, must be the
+starter's, registered, not removed, and there lately, or the Start is
+refused by name and makes no agent; nothing falls back to the cloud on its
+own. A place a Start names is kept as the starter's last pick once its agent
+is made, which is what a later Start naming none and a task an agent makes
+for them (`create_task`) run at; a task's start that names an agent and no
+`runsOn` of its own runs it where the task's `runsOn` names, which released
+desktops still send.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its

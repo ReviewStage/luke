@@ -4,9 +4,9 @@
  * A Vercel Sandbox starts every command as its default user holding the
  * whole capability set, ambient and inheritable, with no sudo needed: such a
  * process reads `/etc/shadow`, the environment of another user's process
- * through `/proc/<pid>/environ`, and any file whatever its mode, and
- * bubblewrap refuses to start under it, and it reaches root whatever sudoers
- * says, so taking its sudo away would take none of that away; the image
+ * through `/proc/<pid>/environ`, and any file whatever its mode, and it
+ * reaches root whatever sudoers says, so taking its sudo away would take
+ * none of that away; the image
  * keeps it (`agent-runtime/sandbox-image.ts`), since the sandbox's API runs a root
  * command through it. This drop is the boundary instead: a Terminal tab's
  * shells (`terminal/tmux.ts`), the native runner, which root drops to the

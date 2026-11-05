@@ -151,7 +151,7 @@ export const HOSTED_API_ERROR = {
   SANDBOX_STOPPED: "sandbox-stopped",
   /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
   SKILL_NAME_TAKEN: "skill-name-taken",
-  /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
+  /** A skill's files were refused: a file past its bound, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
   SKILL_FILES_REFUSED: "skill-files-refused",
   /** A slug the owner chose is spelled other than a slug may be (`workspaceSlugProblemOf`). Nothing was written. */
   WORKSPACE_SLUG_MALFORMED: "workspace-slug-malformed",

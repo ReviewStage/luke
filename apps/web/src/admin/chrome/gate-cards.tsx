@@ -1,9 +1,16 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
-import { AuthPage, BUTTON_VARIANT, Button, ProductMark, SocialSignInCard } from "@repo/ui";
+import {
+  AuthPage,
+  BUTTON_VARIANT,
+  Button,
+  ProductMark,
+  SocialSignInCard,
+  ViewingAsBanner,
+} from "@repo/ui";
 import { UNREPORTED } from "@repo/ui/reported-failure";
+import { authClient, stopImpersonating } from "../../auth-client";
 import { useSocialSignIn } from "../../sign-in-choices";
-import { authClient } from "../auth-client";
 
 /** The app's mark at the head of the gate's cards. */
 function AdminMark(): React.JSX.Element {
@@ -52,7 +59,12 @@ function Centered({
   );
 }
 
-/** The gate's one non-admin refusal, worded the same on both views. */
+/**
+ * The gate's one non-admin refusal, worded the same on both views. A
+ * maintainer signed in as a member is refused here as any non-admin is, so
+ * the Viewing as strip stands over it then, whose Stop takes them back to
+ * that member's page as themselves.
+ */
 export function ForbiddenCard({
   email,
   onSignOut,
@@ -60,7 +72,8 @@ export function ForbiddenCard({
   email: string | undefined;
   onSignOut: () => void;
 }): React.JSX.Element {
-  return (
+  const session = authClient.useSession().data;
+  const card = (
     <Centered
       title="Not authorized"
       description={
@@ -71,5 +84,15 @@ export function ForbiddenCard({
       }
       action={{ label: "Sign out", onPress: onSignOut }}
     />
+  );
+  if (!session?.session.impersonatedBy) return card;
+  return (
+    <>
+      <ViewingAsBanner
+        member={{ name: session.user.name, email: session.user.email }}
+        onStop={() => stopImpersonating(session.user.id)}
+      />
+      {card}
+    </>
   );
 }

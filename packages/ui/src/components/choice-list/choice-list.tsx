@@ -5,7 +5,7 @@ import { RadioGroup } from "@base-ui/react/radio-group";
 import type { ReactNode } from "react";
 import { cn } from "../../cn.js";
 import { pulsePress } from "../../press-pulse.js";
-import { ignoredByReplay } from "../../session-replay-marks.js";
+import { ignoredByReplay, REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import {
   ROVING_ORIENTATION,
@@ -211,6 +211,8 @@ export interface ChoiceOption<Value extends string> {
   disabled?: boolean | undefined;
   /** What a marked row's control fills with once checked; the accent where none is given. */
   tone?: StatusTone | undefined;
+  /** Whether its label and detail name a person's thing, a workspace's or a repository's name, kept masked in a screen recording even where the list stands under `ReplayUnmask`. */
+  replayMasked?: boolean | undefined;
 }
 
 interface ChoiceListBase<Value extends string> {
@@ -330,7 +332,7 @@ function ChoiceWords({
             labelFlex(option, look),
           )}
         >
-          {option.label}
+          <ReplayWords masked={option.replayMasked}>{option.label}</ReplayWords>
           {hung}
         </span>
         {option.badge === undefined && number === undefined ? null : (
@@ -353,7 +355,9 @@ function ChoiceWords({
         )}
       </span>
       {option.detail === undefined ? null : (
-        <span className="ui-choice-detail text-caption">{option.detail}</span>
+        <span className="ui-choice-detail text-caption">
+          <ReplayWords masked={option.replayMasked}>{option.detail}</ReplayWords>
+        </span>
       )}
     </span>
   );
@@ -422,7 +426,12 @@ function RowInside({
         />
       ) : null}
       {option.mark === undefined ? null : (
-        <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
+        <span
+          className="ui-choice-mark inline-flex flex-none"
+          {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
+        >
+          {option.mark}
+        </span>
       )}
       <ChoiceWords option={option} look={look} number={number} />
     </>
@@ -670,7 +679,12 @@ function SettledChoices<Value extends string>({
         return (
           <li key={option.value} className={ROW} data-picked={picked}>
             {option.mark === undefined ? null : (
-              <span className="ui-choice-mark inline-flex flex-none">{option.mark}</span>
+              <span
+                className="ui-choice-mark inline-flex flex-none"
+                {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
+              >
+                {option.mark}
+              </span>
             )}
             <ChoiceWords
               option={option}

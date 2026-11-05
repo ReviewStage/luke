@@ -306,7 +306,7 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
   act(() => more.click());
   chooseMenuItem("Remove");
 
-  await press("Remove");
+  await press("Remove host");
 
   const said = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(said.includes("Could not reach the service. Try again."), said);

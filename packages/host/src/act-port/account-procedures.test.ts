@@ -77,6 +77,10 @@ function windowPort(
     deleteAccount: () =>
       Effect.sync(() => happened.push(["deleteAccount"])).pipe(Effect.andThen(ended)),
     accountSnapshot: () => Effect.succeed(Option.some(SIGNED_IN)),
+    supportAccess: (grant) =>
+      Effect.sync(() => happened.push(["supportAccess", grant])).pipe(
+        Effect.as({ supportAccessUntil: null }),
+      ),
   };
   port = testActPort(
     accountProcedures({

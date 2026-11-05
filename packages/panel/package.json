@@ -22,6 +22,7 @@
     "./admin/screens/day": "./src/admin/screens/day.js",
     "./admin/screens/reliability": "./src/admin/screens/reliability.js",
     "./admin/screens/users": "./src/admin/screens/users.js",
+    "./admin/screens/workspace": "./src/admin/screens/workspace.js",
     "./admin/screens/workspaces": "./src/admin/screens/workspaces.js",
     "./admin/use-admin-read": "./src/admin/use-admin-read.js",
     "./app": "./src/app.js",

@@ -129,14 +129,14 @@ function changed(path: string, overrides: Partial<AgentChangedFile> = {}): Agent
   };
 }
 
-/** The commits the service names for a pull request's changed images, each where it named one. */
-interface ImageCommits {
+/** The commits the service names for a pull request's changed files to be read whole at, each where it named one. */
+interface ReadCommits {
   readonly headSha?: string;
   readonly baseSha?: string;
 }
 
-/** The commits the service names for the pull request's changed images; none unless a test names them. */
-let commits: ImageCommits = {};
+/** The commits the service names for the pull request's changed files to be read whole at; none unless a test names them. */
+let commits: ReadCommits = {};
 
 /** The pull request's files, in the order GitHub lists them, which is not the tree's. */
 let files: AgentChangedFile[] = [changed("src/seats.ts")];
@@ -2221,15 +2221,18 @@ const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join
 const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
-/** Answers each read of a file whole as given, keeping every such read asked. */
-function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
+/** Answers each read of a file whole as given, by its path and the commit it is read at, keeping every such read asked. */
+function answerFileReads(answer: (path: string, ref?: string) => TasksFileAnswer): AnyAct[] {
   const asked: AnyAct[] = [];
   fakeActs({
     act: (request: AnyAct) => {
       if (request.kind === ACT_KIND.TASKS_FILE) asked.push(request);
       const outcome: FakeActAnswer = {
         status: FAKE_ANSWER.DONE,
-        value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
+        value:
+          request.kind === ACT_KIND.TASKS_FILE
+            ? answer(request.payload.path, request.payload.ref)
+            : undefined,
       };
       return Promise.resolve(outcome);
     },
@@ -2573,6 +2576,37 @@ test("a file's header draws the whole file on Expand full file, read once, and b
     asked.filter((request) => request.kind === ACT_KIND.TASKS_FILE).length,
     2,
     "each file is read once",
+  );
+});
+
+test("a file whose diff was too large to send draws it from Load diff, its texts read at the merge base and at the head", async () => {
+  const base = "b".repeat(40);
+  commits = { headSha: "a".repeat(40), baseSha: base };
+  files = [changed("PRIVACY.md", { patch: null, omitted: PATCH_OMITTED.TOO_LARGE })];
+  const asked = answerFileReads((path, ref) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: ref ?? "main",
+      text: ref === base ? BASE_TEXT : HEAD_TEXT,
+    },
+  }));
+  await drawTab();
+  const lead = lastDrawn().renderAnnotation("PRIVACY.md", "lead");
+  document.body.append(lead);
+  await flush();
+  const load = lead.querySelector<HTMLButtonElement>('button[aria-label="Load diff: PRIVACY.md"]');
+  assert.ok(load, "what a file too large to diff says offers its diff");
+  assert.equal(asked.length, 0, "nothing is read before the press");
+
+  act(() => load.click());
+  await flush();
+  const drawn = lastDrawn().files.find((file) => file.path === "PRIVACY.md");
+  assert.deepEqual(drawn?.whole, { before: BASE_TEXT, after: HEAD_TEXT });
+  assert.equal(drawn?.lead, false, "and once loaded, draws its lines");
+  assert.deepEqual(
+    asked.flatMap((request) => (request.kind === ACT_KIND.TASKS_FILE ? [request.payload.ref] : [])),
+    [base, "a".repeat(40)],
   );
 });
 

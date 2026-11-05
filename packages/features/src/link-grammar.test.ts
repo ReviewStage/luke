@@ -126,6 +126,7 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],
   [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.USERS }, `${HOME}/admin/users`],
   [{ kind: LINK_PLACE.ADMIN, userId: "user_9Fq2-x" }, `${HOME}/admin/user/user_9Fq2-x`],
+  [{ kind: LINK_PLACE.ADMIN, workspaceId: "org_4kT1" }, `${HOME}/admin/workspace/org_4kT1`],
   [{ kind: LINK_PLACE.ADMIN, day: "2026-10-12" }, `${HOME}/admin/day/2026-10-12`],
 ];
 

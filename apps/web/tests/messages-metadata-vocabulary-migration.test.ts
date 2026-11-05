@@ -3,8 +3,6 @@ import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
-import { Database } from "@repo/database/core/query";
-import { user } from "@repo/database/schemas/auth";
 import {
   openInboxItem,
   openWorkspace,
@@ -152,9 +150,7 @@ it.effect(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBefore);
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
-        );
+        yield* sql`insert into "user" (id, name, email) values ('dean', 'dean', 'dean@app.test')`;
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);
         const itemId = yield* openInboxItem("dean", workspaceId, null, agentId, true);
@@ -279,9 +275,7 @@ it.effect(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersUpTo(STRAGGLERS));
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
-        );
+        yield* sql`insert into "user" (id, name, email) values ('dean', 'dean', 'dean@app.test')`;
         const workspaceId = yield* openWorkspace("dean");
         const agentId = yield* openEarlierAgent(workspaceId);
         const [agent] = yield* sql<{

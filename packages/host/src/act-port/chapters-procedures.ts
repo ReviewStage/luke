@@ -11,10 +11,10 @@ import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
- * chapters-procedures.ts -- a coding agent's Pull request tab's asks of the host about a pull request's chapters: hold them, read them again, or generate them; and Settings' read and write of the model the member's Generate runs on.
+ * chapters-procedures.ts -- a coding agent's Pull request tab's asks of the host about a pull request's chapters: hold them, read them again, or generate them; and the write of the model the member's Generate runs on, picked on Generate's own chevron.
  *
  * The one check these procedures make is who asked: only a panel draws the
- * Pull request tab and Settings, so the takeover and any other window are refused
+ * Pull request tab, so the takeover and any other window are refused
  * in each one's own sentence. A pull request's chapters are held followed
  * while a panel holds their stream open: the host holds them on the first
  * stream and lets them go with the last, and what it holds reaches every

@@ -428,12 +428,16 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
  * answer, whichever member started its agent, at the revision the member
  * was shown, and answers as an answer does: the item as it then stands, and
  * whether the close was taken, which it is not where the agent changed the
- * item first or it was settled already. A close taken is handed to the
- * agent, under its own lead, only where the item asks to be heard back, so
- * an agent waiting on it is not left waiting; otherwise the agent reads it
- * the next time it reads its inbox. A hand-off that fails, is interrupted,
- * or dies opens the item again, so it never reads closed while an agent
- * waiting on it was not told; a close sent again under the key it was taken
+ * item first or it was settled already. A close may carry the member's
+ * note of why, written on the thread as their message under the close's
+ * key in the close's own write. A close taken is handed to the agent, under
+ * its own lead and the note after it, in one message, where the item asks
+ * to be heard back, so an agent waiting on it is not left waiting, or where
+ * it carries a note, which reaches the agent as any message on the thread
+ * does; otherwise the agent reads it the next time it reads its inbox. A
+ * hand-off that fails, is interrupted, or dies opens the item again and
+ * takes the note back off the thread, so it never reads closed while an
+ * agent waiting on it was not told; a close sent again under the key it was taken
  * by is handed off again, which the steer's own key makes reach the agent
  * once. An agent whose session has ended for good can hear nothing again,
  * so its item stays closed.
@@ -446,11 +450,18 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   itemId: string,
-  asked: { readonly revision: number; readonly clientKey: string },
+  asked: {
+    readonly revision: number;
+    readonly clientKey: string;
+    readonly text?: string | undefined;
+    readonly attachments?: readonly AgentAttachment[] | undefined;
+  },
 ) {
   const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
   if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { revision, clientKey } = asked;
+  const note = { text: asked.text ?? "", files: asked.attachments ?? [] };
+  const noted = note.text !== "" || note.files.length > 0;
   const { item, answerKey } = stored.value;
   // A close sent again is the one taken only while the item still stands as that close left it, never once its agent moved it on.
   const retried =
@@ -465,7 +476,7 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? undefined
       : Option.getOrUndefined(
           yield* hostedStoreOrUnavailable(
-            closeInboxItemAsMember(userId, itemId, revision, clientKey),
+            closeInboxItemAsMember(userId, itemId, revision, clientKey, note),
           ),
         );
   if (written === undefined) {
@@ -477,7 +488,7 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   const { txid, ...taken } = written;
   const writtenIn = txid === undefined ? {} : { txid };
   const dmSettled = afterResponse("a closed thread's Slack DM", settleThreadDms(itemId));
-  if (!taken.needsReply) {
+  if (!taken.needsReply && !noted) {
     yield* dmSettled;
     yield* settleAgentTaskIfFinished(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
@@ -487,8 +498,8 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
-      text: inboxClosedMessage(taken),
-      attachments: [],
+      text: inboxClosedMessage(taken, note.text),
+      attachments: note.files,
       clientKey,
       sender: { kind: MESSAGE_SENDER.MEMBER, userId },
       metadata: threadLine(THREAD_LINE_EVENT.CLOSE, itemId),
@@ -503,6 +514,15 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     ),
   );
+  // Counted once the hand-off stands, as a message on the thread is, since a failed one takes the note back above.
+  if (noted && !retried) {
+    yield* recordServerEventIn(
+      SERVER_EVENT.THREAD_POST,
+      userId,
+      readVisibleAgentWorkspace(userId, taken.agentId),
+      { answered_ask: false, has_media: note.files.length > 0 },
+    );
+  }
   yield* dmSettled;
   yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };

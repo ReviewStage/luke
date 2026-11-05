@@ -276,7 +276,7 @@ function ChannelRow({
         question={{
           title: `Remove the Slack bot from ${name}?`,
           body: `Members of ${name} can no longer start ${PRODUCT_NAME} agents there, and its repository is forgotten. Anyone in the channel can add the bot back with /invite.`,
-          verb: "Remove",
+          verb: "Remove Slack bot",
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

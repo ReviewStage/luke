@@ -23,6 +23,7 @@ import { adminFrame } from "./admin-frame.js";
 /** A view by the words a find's scope is keyed by, so moving to another view closes the bar. */
 function adminViewKey(view: AdminView): string {
   if (view.kind === ADMIN_PAGE.ACCOUNT) return `account:${view.id}`;
+  if (view.kind === ADMIN_PAGE.WORKSPACE) return `workspace:${view.id}`;
   if (view.kind === ADMIN_PAGE.DAY) return `day:${view.day}`;
   return view.kind;
 }

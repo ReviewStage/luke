@@ -253,7 +253,7 @@ function askForget(page: HTMLElement, memory: MemorySummary): void {
 async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
   askForget(page, memory);
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.MEMORIES_FORGET);
-  act(() => button(dialog(), "Forget").click());
+  act(() => button(dialog(), "Forget memory").click());
   await settle();
   return askedFirst;
 }
@@ -399,7 +399,7 @@ test("several memories chosen are forgotten on one question, one after another, 
     dialog().textContent ?? "",
     /Forget 3 memories\?.*1 memory you may not forget stays\./u,
   );
-  act(() => button(dialog(), "Forget").click());
+  act(() => button(dialog(), "Forget memories").click());
   await settle();
 
   assert.deepEqual(

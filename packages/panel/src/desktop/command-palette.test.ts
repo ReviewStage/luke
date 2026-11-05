@@ -2155,6 +2155,66 @@ test("under All, a query nothing else matches says the repository's files are st
   assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
 });
 
+test("Files says a failed read with a Retry that reads the repository's files again", async () => {
+  const answers: Array<(listed: TasksTreeAnswer) => void> = [];
+  const failures: Array<(cause: Error) => void> = [];
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+  });
+  handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
+  openPalette(
+    { ...tasks, workspace: ACME },
+    () =>
+      new Promise((resolve, reject) => {
+        answers.push(resolve);
+        failures.push(reject);
+      }),
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.TASKS,
+    AtomRegistry.make(),
+  );
+  await settle();
+  chooseFilter("Files");
+  await settle();
+  await act(async () => failures[0]?.(new Error("the host went away")));
+  await settle();
+  assert.match(emptyLine() ?? "", /The files could not be read\./u);
+
+  const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "Retry is offered");
+  act(() => retry.click());
+  await settle();
+  assert.equal(emptyLine(), "Reading the repository's files");
+  await act(async () =>
+    answers[1]?.({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: "src/relay.ts", kind: TASK_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  await settle();
+  assert.deepEqual(rows(), ["relay.ts · src"]);
+});
+
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
   const member = {
     userId: "user-charles",

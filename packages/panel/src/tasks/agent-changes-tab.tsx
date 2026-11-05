@@ -1,5 +1,11 @@
 import { AGENT_CALL_FAILURE, type AgentChangesAnswerView } from "@repo/features/agent-view";
-import { type AgentChangedFile, DIFF_SIDE, type ReviewThread } from "@repo/features/agent-wire";
+import {
+  type AgentChangedFile,
+  CHANGED_FILE_STATUS,
+  DIFF_SIDE,
+  PATCH_OMITTED,
+  type ReviewThread,
+} from "@repo/features/agent-wire";
 import { imageTypeOfPath } from "@repo/features/github-image";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wire";
@@ -69,6 +75,7 @@ import {
 } from "../diff-view/contract.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { useRegained } from "../use-regained.js";
 import {
   type ChangesList,
   FileHead,
@@ -84,6 +91,7 @@ import {
   changeMarks,
   commentLines,
   commentLinesLabel,
+  DIFF_LOAD_REFUSED_WORDS,
   EXPANSION_REFUSAL,
   EXPANSION_REFUSED_WORDS,
   type ExpansionRefusal,
@@ -98,6 +106,7 @@ import {
   suggestedLines,
   textsOf,
   threadsOn,
+  tooLargeToDiff,
   treeOrder,
   wholeable,
 } from "./changes-model.js";
@@ -221,10 +230,12 @@ const UNANSWERED: AgentChangesAnswerView = { failure: AGENT_CALL_FAILURE.UNANSWE
  * asked as the tab first comes on screen and again the moment the agent
  * ends, since that is when what it published settles; every ask is
  * numbered, so only the latest one's answer is drawn, and a read that threw
- * rather than answered lands as `unanswered`. The Changes and Pull request
- * tabs read through it alike.
+ * rather than answered lands as `unanswered`. One that failed, or is still
+ * out, is asked again as the app reaches the service again while the tab
+ * shows it (`useRegained`), since one out then may have been sent while the
+ * connection was gone. The Changes and Pull request tabs read through it alike.
  */
-export function useAgentRead<A>(
+export function useAgentRead<A extends object>(
   agentId: string,
   shown: boolean,
   ended: boolean,
@@ -256,6 +267,9 @@ export function useAgentRead<A>(
     readFor.current = ended;
     ask();
   }, [shown, ended, ask]);
+  useRegained(() => {
+    if (shown && (out || (answer !== undefined && "failure" in answer))) ask();
+  });
 
   return { answer, out, ask };
 }
@@ -684,22 +698,36 @@ function entryOf(
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
   // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
   const notice = drawnWhole === undefined ? fileNotice(file) : undefined;
-  // A file that only moved offers its lines from what it says, its read waiting for the press.
+  // A file that only moved offers its lines, and one too large to diff its diff, from what it says, its read waiting for the press.
+  const offer =
+    !whole.offered || whole.texts !== undefined
+      ? undefined
+      : notice === CHANGES_WORDS.UNCHANGED_CONTENTS
+        ? LIST_WORDS.SHOW_FILE
+        : file.omitted === PATCH_OMITTED.TOO_LARGE
+          ? LIST_WORDS.LOAD_DIFF
+          : undefined;
   const shown =
-    notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
+    offer === undefined ? null : (
       <>
         {" · "}
-        <TextButton aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`} onClick={whole.toggle}>
-          {LIST_WORDS.SHOW_FILE}
+        <TextButton aria-label={`${offer}: ${path}`} onClick={whole.toggle}>
+          {offer}
         </TextButton>
       </>
-    ) : null;
+    );
+  // Note that a file too large to diff whose texts could not be read says why after its notice, since it draws no hunk to say it above.
+  const loadRefused =
+    file.omitted === PATCH_OMITTED.TOO_LARGE && gaps.refused !== undefined
+      ? ` ${DIFF_LOAD_REFUSED_WORDS[gaps.refused]}`
+      : null;
   const lead =
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
       <p className="diff-list-notice m-0 py-list-inset pr-list-inset pl-ui-40 text-caption-inline text-muted-foreground">
         {notice}
+        {loadRefused}
         {shown}
       </p>
     );
@@ -900,7 +928,7 @@ const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
  * it is, its refusal said as a gap's is.
  */
 function useWholeFiles(texts: FileTexts): (file: AgentChangedFile) => FileWhole {
-  const { read, refused, whole } = texts;
+  const { read, refused, whole, wholeable } = texts;
   const [held, setHeld] = useState<{
     readonly of: unknown;
     readonly files: ReadonlyMap<string, DiffFileTexts>;
@@ -1447,9 +1475,17 @@ interface FileTexts {
   readonly expandable: (file: AgentChangedFile) => boolean;
   /** Whether a file is the answer's own, every hunk of it drawn, rather than one a chapter cut down, which is never read whole. */
   readonly whole: (file: AgentChangedFile) => boolean;
+  /** Whether a file can be drawn whole: one `wholeable`, or one too large to diff whose text before stands at a commit the service named. */
+  readonly wholeable: (file: AgentChangedFile) => boolean;
   readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   readonly refused: ReadonlyMap<string, ExpansionRefusal>;
 }
+
+/** A file's text at a commit as the service read it raw, or why it could not be. */
+type RawRead = { readonly text: string } | { readonly refused: ExpansionRefusal };
+
+/** A file's texts on both sides, or why they could not be read. */
+type TextsRead = { readonly texts: DiffFileTexts } | { readonly refused: ExpansionRefusal };
 
 /**
  * How Files changed reads a changed file whole, for the lines between its
@@ -1457,6 +1493,9 @@ interface FileTexts {
  * (`TASKS_FILE`, raw, at that commit) the first time a gap of it is
  * opened, and kept for the answer's life, and its text before turned back
  * from that text and its patch (`textsOf`), so one read stands for both.
+ * A file whose patch was too large to send has no patch to turn back, so
+ * its Load diff reads its text before as well, at the merge base the
+ * service named (`tooLargeToDiff`), and the diff bundle diffs the two.
  * None where the read could not be promised to reach the pull request's own
  * files: an agent on no task, a head the service did not name, or a task
  * whose repository is not the one the pull request is in, since the read
@@ -1471,6 +1510,7 @@ function useFileTexts(
   pullRequest: {
     readonly url: string;
     readonly headSha?: string;
+    readonly baseSha?: string;
     readonly files: readonly AgentChangedFile[];
   } | null,
   files: readonly AgentChangedFile[],
@@ -1482,6 +1522,15 @@ function useFileTexts(
   }>({ of: pullRequest, refused: new Map() });
   // Note that a new answer offers every gap again, since a push may have mended what was refused.
   const refused = refusals.of === pullRequest ? refusals.refused : NONE_REFUSED;
+  const baseSha = pullRequest?.baseSha;
+  // Note that a file too large to diff that stood before is drawn only where the merge base it stood at was named.
+  const drawable = useCallback(
+    (file: AgentChangedFile) =>
+      wholeable(file) ||
+      (tooLargeToDiff(file) &&
+        (file.status === CHANGED_FILE_STATUS.ADDED || baseSha !== undefined)),
+    [baseSha],
+  );
   const read = useMemo(() => {
     const headSha = pullRequest?.headSha;
     const own = pullRequest === null ? undefined : repositoryOf(pullRequest.url);
@@ -1495,40 +1544,56 @@ function useFileTexts(
         of: pullRequest,
         refused: new Map(was.of === pullRequest ? was.refused : NONE_REFUSED).set(path, why),
       }));
+    const rawAt = (ref: string, path: string): Promise<RawRead> =>
+      act(ACT_KIND.TASKS_FILE, { taskId, path, firstLine: 1, lastLine: 1, raw: true, ref }).then(
+        (answer) =>
+          "text" in answer
+            ? { text: answer.text.text }
+            : {
+                refused:
+                  "refusal" in answer
+                    ? expansionRefusalOf(answer.refusal)
+                    : EXPANSION_REFUSAL.UNAVAILABLE,
+              },
+        () => ({ refused: EXPANSION_REFUSAL.UNAVAILABLE }),
+      );
+    const textsAt = async (file: AgentChangedFile): Promise<TextsRead> => {
+      if (!tooLargeToDiff(file)) {
+        const after = await rawAt(headSha, file.path);
+        if ("refused" in after) return after;
+        const texts = await checkedTextsOf(file, after.text);
+        return texts === undefined ? { refused: EXPANSION_REFUSAL.CHANGED } : { texts };
+      }
+      const nothing: RawRead = { text: "" };
+      const [before, after] = await Promise.all([
+        file.status === CHANGED_FILE_STATUS.ADDED
+          ? nothing
+          : baseSha === undefined
+            ? { refused: EXPANSION_REFUSAL.UNAVAILABLE }
+            : rawAt(baseSha, file.previousPath ?? file.path),
+        file.status === CHANGED_FILE_STATUS.DELETED ? nothing : rawAt(headSha, file.path),
+      ]);
+      if ("refused" in before) return before;
+      if ("refused" in after) return after;
+      if (file.blobSha !== undefined && (await blobShaOf(after.text)) !== file.blobSha) {
+        return { refused: EXPANSION_REFUSAL.CHANGED };
+      }
+      return { texts: { before: before.text, after: after.text } };
+    };
     return (path: string) => {
       const file = files.find((each) => each.path === path);
-      if (file === undefined || !wholeable(file)) return Promise.resolve(undefined);
+      if (file === undefined || !drawable(file)) return Promise.resolve(undefined);
       const held = kept.get(path);
       if (held !== undefined) return held;
-      const reading = act(ACT_KIND.TASKS_FILE, {
-        taskId,
-        path,
-        firstLine: 1,
-        lastLine: 1,
-        raw: true,
-        ref: headSha,
-      }).then(
-        async (answer) => {
-          const texts = "text" in answer ? await checkedTextsOf(file, answer.text.text) : undefined;
-          if (texts !== undefined) return texts;
-          const why =
-            "text" in answer
-              ? EXPANSION_REFUSAL.CHANGED
-              : "refusal" in answer
-                ? expansionRefusalOf(answer.refusal)
-                : EXPANSION_REFUSAL.UNAVAILABLE;
-          refuse(path, why);
-          return undefined;
-        },
-        () => {
-          refuse(path, EXPANSION_REFUSAL.UNAVAILABLE);
-          return undefined;
-        },
-      );
+      const reading = textsAt(file).then((read) => {
+        if ("texts" in read) return read.texts;
+        refuse(path, read.refused);
+        return undefined;
+      });
       kept.set(path, reading);
       return reading;
     };
-  }, [act, taskId, repository, pullRequest, files]);
+  }, [act, taskId, repository, pullRequest, files, baseSha, drawable]);
   // Note that a file a chapter cut down to some of its hunks is not the answer's own, and offers no gap, because its text before cannot be turned back from the hunks it kept.
   const own = useMemo(() => new Set(pullRequest?.files), [pullRequest]);
   const whole = useCallback((file: AgentChangedFile) => own.has(file), [own]);
@@ -1537,7 +1602,7 @@ function useFileTexts(
       read !== undefined && whole(file) && expandable(file) && !refused.has(file.path),
     [read, whole, refused],
   );
-  return { expandable: offered, read, refused, whole };
+  return { expandable: offered, wholeable: drawable, read, refused, whole };
 }
 
 /**

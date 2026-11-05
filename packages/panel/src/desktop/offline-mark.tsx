@@ -13,7 +13,7 @@ import { APP_SLICE, useAppSlice } from "../use-app-state.js";
  * its read could not be done; the pill says once why, where the window keeps
  * its own state, beside a release on its way in (`sidebar-foot.tsx`). It
  * reads the document's `network` slice, which main keeps from the
- * platform's answer and from whether the service answered its last call,
+ * platform's answer and from whether the service answers its calls,
  * and the host's live state beside the task list (`HOST_LIVE`), which its
  * follow keeps, and draws nothing while both are well, once the pill has
  * faded out. It is a status rather than a press, so

@@ -193,7 +193,6 @@ const SANDBOX_LAYOUT: MachineLayout = {
   sharedFiles: SHARED_FILES_DIRECTORY,
   claudeExecutable: undefined,
   codexExecutable: undefined,
-  writableRoots: [],
   linesRead: true,
 };
 

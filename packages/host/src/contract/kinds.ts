@@ -10,13 +10,14 @@
  * kind by its own name.
  */
 
-/** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, and the account deleted. */
+/** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, the account deleted, and its grant of support access. */
 export const ACCOUNT_ACT_KIND = {
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
+  ACCOUNT_SUPPORT_ACCESS: "account.supportAccess",
 } as const;
 
 /**
@@ -767,6 +768,7 @@ export const PORT_ACT_USE = {
   ACCOUNT_CANCEL_SIGN_IN: ACT_USE.WRITE,
   ACCOUNT_SIGN_OUT: ACT_USE.WRITE,
   ACCOUNT_DELETE: ACT_USE.WRITE,
+  ACCOUNT_SUPPORT_ACCESS: ACT_USE.WRITE,
 
   PROVIDER_KEYS_FOLLOW: ACT_USE.READ,
   PROVIDER_KEYS_RETRY: ACT_USE.READ,

@@ -500,7 +500,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
       [...(inline.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
-      ["Play", "Expand", "Full screen"],
+      ["Play", "Previous frame", "Next frame", "Playback speed: 1×", "Expand", "Full screen"],
       "under Vespin's own bar, with an Expand into the viewer",
     );
     assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
@@ -533,7 +533,7 @@ test("a recording an agent's words draw plays where it stands, left out of the r
       [...(player.closest(".ui-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
         each.getAttribute("aria-label"),
       ),
-      ["Play", "Full screen"],
+      ["Play", "Previous frame", "Next frame", "Playback speed: 1×", "Full screen"],
       "under Vespin's own bar",
     );
     assert.equal(player.hasAttribute("controls"), false, "and not the browser's");

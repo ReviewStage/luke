@@ -22,6 +22,7 @@
 
 import type {
   AgentAttachment,
+  AgentRunsOnRequest,
   AgentSummary,
   AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
@@ -150,9 +151,11 @@ export function forkStart(input: {
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
+  /** Where the new agent runs, where one was picked; none for where its source runs. */
+  readonly runsOn?: AgentRunsOnRequest | undefined;
 }): ForkStart {
   const note = input.words.trim();
-  const { attachments, choice, disabledServers } = input;
+  const { attachments, choice, disabledServers, runsOn } = input;
   return {
     idempotencyKey: input.draftId,
     from: forkFrom(input.fork),
@@ -161,6 +164,7 @@ export function forkStart(input: {
     // Note that the servers go even when none is off, because a Start naming none runs on the source's.
     disabledServers,
     ...(choice === undefined ? undefined : choiceRequest(choice)),
+    ...(runsOn === undefined ? undefined : { runsOn }),
   };
 }
 

@@ -1,15 +1,16 @@
 /**
- * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown while the app reached the service, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
+ * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online unless its call got no answer, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
  * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
  * alike. Each becomes one Sentry log line, searchable by every attribute
  * below: at `warn` for a refusal something named, such as a limit or a
- * refusal the service or the host worded, or for any failure of a call that
- * got no answer, and at `error` for anything else. One nothing named, shown
- * while the app reached the service, becomes an issue besides, grouped by
- * where it was shown and its code rather than by its stack, since one
- * surface shows the same failure from many paths.
+ * refusal the service or the host worded, or for any failure shown while the
+ * machine had no network or of a call that got no answer, and at `error` for
+ * anything else. One nothing named, shown while online and not of a call
+ * that got no answer, becomes an issue besides, grouped by where it was
+ * shown and its code rather than by its stack, since one surface shows the
+ * same failure from many paths.
  *
  * What it carries is chosen here rather than read from the failure whole:
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
@@ -95,7 +96,7 @@ export const FAILURE_SURFACE = {
   AUTOMATION_TOGGLE: "automation.toggle",
   BROWSER_OPEN: "browser.open",
   BUNDLE_LOAD: "bundle.load",
-  CHAPTERS_MODEL_READ: "chapters_model.read",
+  CHAPTERS_MODEL_WRITE: "chapters_model.write",
   COPY: "copy",
   DICTATION: "dictation",
   DIFF_READ: "diff.read",
@@ -259,8 +260,6 @@ export interface FailureAbout {
 interface FailureState {
   /** Whether the machine had a network, as its platform last answered. */
   readonly online: boolean;
-  /** Whether the app reached the service: online, and the service answered the last call made to it (`@repo/host`'s `networkConnected`). */
-  readonly connected: boolean;
   /** Where the account stood: signed in, signing in, or signed out. */
   readonly account: string;
   /** The live stream's state, where one stands. */
@@ -378,7 +377,6 @@ const FAILURE_ATTRIBUTE = {
   CODE: "failure.code",
   ACT: "failure.act",
   ONLINE: "app.online",
-  CONNECTED: "app.connected",
   ACCOUNT: "app.account",
   LIVE: "app.live",
   /** The trace the hosted call that failed traveled under, which the service's log lines for it carry. */
@@ -559,7 +557,6 @@ function attributesOf(
     ...(trace === undefined ? {} : { [FAILURE_ATTRIBUTE.HOSTED_TRACE]: trace }),
     ...aboutAttributes(report.about),
     [FAILURE_ATTRIBUTE.ONLINE]: report.state.online,
-    [FAILURE_ATTRIBUTE.CONNECTED]: report.state.connected,
     [FAILURE_ATTRIBUTE.ACCOUNT]: report.state.account,
     ...(report.state.live === undefined ? {} : { [FAILURE_ATTRIBUTE.LIVE]: report.state.live }),
   } satisfies FailureAttributes;
@@ -601,8 +598,8 @@ function sendableError(chain: readonly unknown[], facts: readonly CauseFacts[]):
 /**
  * Whether a failure's own facts say its call got no answer: a network fault
  * or the call's deadline, anywhere down its chain (`account-call.ts`). Read
- * beside the app's state, because the state can lag behind the very failure
- * that moved it.
+ * beside the platform's online flag, because a phone with no signal, or a
+ * Mac just after waking, can still read online.
  */
 function unansweredOf(chain: readonly CauseFacts[]): boolean {
   return chain.some(
@@ -638,15 +635,15 @@ export function failureAboutOf(payload: unknown): FailureAbout {
 
 /**
  * Sends Sentry a failure the app showed: a log line, at `warn` for a refusal
- * something named or a failure of a call that got no answer and at `error`
- * for anything else, and for anything else an issue besides, grouped by
- * where it was shown and its code. Answers the issue's event id, where it
- * opened one, and the trace both went in. Note that a failure shown while
- * the app did not reach the service, or whose own facts say its call got no
- * answer, opens no issue, because a read or a write that could not reach the
- * service is the network's failure rather than the app's, as a Mac waking
- * from sleep, or a phone with no signal that still reads online, shows every
- * live read failed before the service answers again.
+ * something named, a failure shown offline, or a failure of a call that got
+ * no answer, and at `error` for anything else, and for anything else an
+ * issue besides, grouped by where it was shown and its code. Answers the
+ * issue's event id, where it opened one, and the trace both went in. Note
+ * that a failure shown while the machine had no network, or whose own facts
+ * say its call got no answer, opens no issue, because a read or a write that
+ * could not reach the service is the network's failure rather than the
+ * app's, as a Mac waking from sleep, or a phone with no signal that still
+ * reads online, shows every live read failed before the service answers.
  */
 export function sendShownFailure(
   sentry: ShownFailureSentry,
@@ -657,7 +654,7 @@ export function sendShownFailure(
   const traceId =
     sentry.getActiveSpan()?.spanContext().traceId ??
     sentry.getCurrentScope().getPropagationContext().traceId;
-  if (report.kind === FAILURE_KIND.REFUSED || !report.state.connected || unansweredOf(facts)) {
+  if (report.kind === FAILURE_KIND.REFUSED || !report.state.online || unansweredOf(facts)) {
     sentry.logger.warn(line, attributes);
     return { traceId };
   }

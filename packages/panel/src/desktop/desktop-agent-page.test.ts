@@ -1976,7 +1976,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   );
   assert.deepEqual(deletes, []);
 
-  await act(async () => dialogAnswer("Permanently delete").click());
+  await act(async () => dialogAnswer("Permanently delete agent").click());
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
@@ -1993,7 +1993,7 @@ test("a delete the service refused for an agent still starting says why in the d
 
   const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
-  await act(async () => dialogAnswer("Permanently delete").click());
+  await act(async () => dialogAnswer("Permanently delete agent").click());
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);

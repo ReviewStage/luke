@@ -3,8 +3,6 @@ import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
-import { Database } from "@repo/database/core/query";
-import { user } from "@repo/database/schemas/auth";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
 import { INBOX_ASK } from "@repo/features/inbox-wire";
 import { postInboxThread, readInboxItem } from "@repo/service/inbox/inbox-store";
@@ -39,8 +37,12 @@ const foldersBefore = Effect.gen(function* () {
   return folder;
 });
 
+/** An account's row, in raw SQL naming only the columns it needs, since Drizzle's insert names every column the schema declares today. */
 const openUser = (id: string) =>
-  Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@app.test` }));
+  Effect.flatMap(
+    SqlClient.SqlClient,
+    (sql) => sql`insert into "user" (id, name, email) values (${id}, ${id}, ${`${id}@app.test`})`,
+  );
 
 it.effect(
   "an item that stood before unread was kept reads as read for every member, and one posted after it as unread",

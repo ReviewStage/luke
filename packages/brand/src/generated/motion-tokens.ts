@@ -19,5 +19,6 @@ export const MOTION_DELAY_MS = {
   HINT: 500,
   LATE: 1000,
   CONFIRM: 1200,
+  FLASH: 800,
   SETTLE: 180,
 } as const;

@@ -231,7 +231,7 @@ export function UsersScreen({
   const search = (
     <SearchField
       label="Search accounts by name or email"
-      placeholder="Search by name or email…"
+      placeholder="Search by name or email"
       value={query}
       onChange={changeQuery}
       onClear={() => changeQuery("")}

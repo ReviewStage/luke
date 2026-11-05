@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "6abd9520-95a6-4084-9ba2-78348ad36aef",
-  "prevIds": ["37bbbce6-17ac-4d4a-ac05-c28e23e26700", "bf42aab1-5feb-4293-acae-3d06b37b44c7"],
+  "id": "5013ae4e-93f4-464d-9972-8efd442f092f",
+  "prevIds": ["e365a093-d260-405c-a5fc-8722946a2d73"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -37,12 +37,6 @@
     {
       "isRlsEnabled": false,
       "name": "agent_pin",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "agent_read",
       "entityType": "tables",
       "schema": "public"
     },
@@ -487,12 +481,6 @@
     {
       "isRlsEnabled": false,
       "name": "task_pin",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "task_read",
       "entityType": "tables",
       "schema": "public"
     },
@@ -1312,19 +1300,6 @@
       "table": "agent"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "read_through",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent"
-    },
-    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -1609,58 +1584,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "agent_pin"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_read"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "agent_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_read"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "read_through",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_read"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "marked_unread",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "agent_read"
     },
     {
       "type": "uuid",
@@ -4213,6 +4136,19 @@
     {
       "type": "text",
       "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "impersonated_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
@@ -4323,6 +4259,58 @@
       "generated": null,
       "identity": null,
       "name": "role",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "banned",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ban_reason",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ban_expires",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "user"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "support_access_until",
       "entityType": "columns",
       "schema": "public",
       "table": "user"
@@ -10556,19 +10544,6 @@
       "table": "task"
     },
     {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "read_through",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -10723,58 +10698,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "task_pin"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "task_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "read_through",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "marked_unread",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task_read"
     },
     {
       "type": "text",
@@ -11589,27 +11512,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_pin"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "agent_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "agent_read_agent",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "agent_read"
     },
     {
       "nameExplicit": true,
@@ -14310,27 +14212,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "task_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "task_read_task",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "agent_id",
           "isExpression": false,
           "asc": true,
@@ -14750,32 +14631,6 @@
       "entityType": "fks",
       "schema": "public",
       "table": "agent_pin"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agent_read_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_read"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["agent_id"],
-      "schemaTo": "public",
-      "tableTo": "agent",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "agent_read_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "agent_read"
     },
     {
       "nameExplicit": false,
@@ -16540,32 +16395,6 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "task_read_user_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["task_id"],
-      "schemaTo": "public",
-      "tableTo": "task",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "task_read_task_id_task_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "task_read"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["user_id"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
       "name": "agent_section_entry_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -16757,14 +16586,6 @@
       "table": "agent_pin"
     },
     {
-      "columns": ["user_id", "agent_id"],
-      "nameExplicit": false,
-      "name": "agent_read_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "agent_read"
-    },
-    {
       "columns": ["admin_id", "user_id"],
       "nameExplicit": false,
       "name": "admin_favorite_admin_id_user_id_pk",
@@ -16867,14 +16688,6 @@
       "entityType": "pks",
       "schema": "public",
       "table": "task_pin"
-    },
-    {
-      "columns": ["user_id", "task_id"],
-      "nameExplicit": false,
-      "name": "task_read_pkey",
-      "entityType": "pks",
-      "schema": "public",
-      "table": "task_read"
     },
     {
       "columns": ["user_id", "agent_id"],
@@ -17626,7 +17439,7 @@
       "table": "installed_skill_file"
     },
     {
-      "value": "octet_length(\"bytes\") <= 1048576 and (\"path\" <> 'SKILL.md' or octet_length(\"bytes\") <= 65536)",
+      "value": "octet_length(\"bytes\") <= 3000000 and (\"path\" <> 'SKILL.md' or octet_length(\"bytes\") <= 65536)",
       "name": "installed_skill_file_bytes_bound",
       "entityType": "checks",
       "schema": "public",

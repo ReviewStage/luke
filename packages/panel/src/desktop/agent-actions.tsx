@@ -17,6 +17,7 @@ import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { useThisMac } from "../machine-name.js";
 import { useSteadyDoor } from "../steady-door.js";
 import type { AgentFork } from "../tasks/fork-model.js";
+import { useMoveToEntry } from "../tasks/move-agent.js";
 import { markReadItem, type ReadMark } from "../tasks/task-menu-items.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import {
@@ -50,7 +51,9 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * where the platform runs one, and none for an archived agent, whose sandbox
  * takes no shell, which for a local agent opens the Mac's own Terminal in
  * its worktree instead of the relayed tab; Open in Slack, for an agent
- * started from a Slack message, which opens that message; Archive, asked
+ * started from a Slack message, which opens that message; Move to ›, the
+ * cloud or another of the member's devices, while the agent may be
+ * continued there (`move-agent.tsx`); Archive, asked
  * first while a teammate's agent works (`agent-archive.tsx`), or Unarchive once it is
  * archived; and last and alone, Permanently delete, always asked first
  * (`agent-delete.tsx`), which closes the surface once it landed. A row
@@ -99,6 +102,8 @@ export interface AgentMenuDoors {
   onOpenInTask?: (() => void) | undefined;
   /** Opens the Slack message the agent was started from, for an agent started from Slack whose link Slack answered. */
   onOpenInSlack?: (() => void) | undefined;
+  /** Move to ›, the places the agent may be continued at (`move-agent.tsx`). */
+  moveTo?: MenuEntry | undefined;
   /** Archives the agent, or Unarchive once it is archived (`agent-archive.tsx`). */
   archive?: MenuAction | undefined;
   /** Deletes the agent for good, asked first (`agent-delete.tsx`). */
@@ -113,7 +118,7 @@ export interface AgentMenuDoors {
  * copies; Rename and the read mark; Pin and Move to section; Show terminal,
  * Show browser where a phone offers it, Open in task, for an agent drawn
  * apart from its task, and Open in Slack, for one started from Slack;
- * Archive or Unarchive; and last and alone, Permanently delete. The copies, Show
+ * Move to › and Archive or Unarchive; and last and alone, Permanently delete. The copies, Show
  * terminal, Open in task, and Permanently delete print ⌥⌘C, ⇧⌥⌘C, ⌘J, ⌘O,
  * and ⌘⌫ only where the menu is the chosen tab's or the agent's page's,
  * since each chord acts on that agent; the read mark and Pin print U and P
@@ -125,7 +130,7 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
   const { copyLink, onCopy, onRename, read, agentPin, section, onOpenTerminal, onOpenInTask } =
     doors;
   const { onOpenBrowser, onOpenInSlack } = doors;
-  const { archive, deletion } = doors;
+  const { moveTo, archive, deletion } = doors;
   const chosen = doors.chosen === true;
   const lettered = chosen || doors.rowKeys === true;
   const copies: MenuEntry[] = [
@@ -180,7 +185,7 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
     named,
     organized,
     opened,
-    archive === undefined ? [] : [archive],
+    [...(moveTo === undefined ? [] : [moveTo]), ...(archive === undefined ? [] : [archive])],
     deletion === undefined
       ? []
       : [chosen ? { ...deletion, command: APP_COMMAND.DELETE } : deletion],
@@ -195,6 +200,7 @@ export type AgentDoors = Pick<
   | "onOpenTerminal"
   | "onOpenBrowser"
   | "onOpenInSlack"
+  | "moveTo"
   | "archive"
   | "deletion"
   | "copyLink"
@@ -316,6 +322,7 @@ export function useAgentActions(
     | "mac"
     | "startedBy"
     | "source"
+    | "pilot"
   >,
   agents: AgentsControl,
   input: {
@@ -337,6 +344,7 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
+  const moveTo = useMoveToEntry(agent, agents);
   // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
   // an archived agent is renamed then.
   const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
@@ -368,6 +376,7 @@ export function useAgentActions(
           ? undefined
           : () => onOpenBrowser(agent.id),
       onOpenInSlack: slackUrl === undefined ? undefined : () => appPlatform().openWeb(slackUrl),
+      moveTo,
       archive: agent.archivedAt === undefined ? archive.action : unarchive,
       deletion: deletion.action,
       copyLink,

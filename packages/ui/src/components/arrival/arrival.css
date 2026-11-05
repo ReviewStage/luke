@@ -1,0 +1,49 @@
+/* arrival.css -- what of a region's arrival utilities cannot say: the wait
+   line held back until the wait has stood, and the content's fade in, both
+   keyframed (`arrival.tsx`). */
+
+@layer components {
+  /* The line stands hidden for --ui-late-delay, which reduced motion keeps,
+     since it holds back a blip rather than moving anything. */
+  .ui-arrival-wait {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-tight-gap);
+    margin: var(--ui-space-4) var(--ui-row-inset);
+    color: var(--ui-color-text-muted);
+    font-family: var(--ui-font-sans);
+    font-size: var(--ui-type-caption-size);
+    line-height: var(--ui-type-caption-leading);
+    animation: ui-arrival-late 0s var(--ui-late-delay) both;
+  }
+
+  /* Note that the region is no box, so its content stands in its
+     container's flow and each of its children fades on its own. */
+  .ui-arrival {
+    display: contents;
+  }
+
+  .ui-arrival[data-waited] > * {
+    animation: ui-arrival-fade var(--ui-duration-quick) var(--ui-motion-exit) both;
+  }
+
+  @keyframes ui-arrival-late {
+    from {
+      visibility: hidden;
+    }
+
+    to {
+      visibility: visible;
+    }
+  }
+
+  @keyframes ui-arrival-fade {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+}

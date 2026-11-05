@@ -11,6 +11,7 @@ import { KEPT_GUARD_RULE } from "./shared/kept-guard.ts";
 import { LIVE_REGION_GUARD_RULE } from "./shared/live-region-guard.ts";
 import { LUCIDE_GUARD_RULE } from "./shared/lucide-guard.ts";
 import { OPEN_PAGE_GUARD_RULE } from "./shared/open-page-guard.ts";
+import { namesEllipsisPlaceholder, PLACEHOLDER_GUARD_RULE } from "./shared/placeholder-guard.ts";
 import {
   configWeakensGuard,
   guardSuppressionLines,
@@ -46,7 +47,10 @@ import {
  * silence `no-lucide-outside-door` or, where it adds a listener,
  * `no-document-press-listener` or, where it names the window's storage or
  * its helpers, `no-direct-view-storage`, whose baselines are the only way past
- * them, on any of the panel's or the design system's own TypeScript files
+ * them, on any TypeScript file that names a placeholder and words ending in
+ * an ellipsis and holds one that would silence `no-placeholder-ellipsis`,
+ * which has no way past it, on any of the panel's or the design system's own
+ * TypeScript files
  * holding one that would silence `no-follow-outside-host-read`, which has no
  * way past it, on any TypeScript file that spells
  * a retired name and holds one that would silence `retired`, whose retired
@@ -145,6 +149,17 @@ const GUARDS = [
       existsSync(absolute) &&
       readFileSync(absolute, "utf8").includes("lucide-react"),
     remedy: "Import the icon from @repo/ui/icons instead",
+  },
+  {
+    rule: PLACEHOLDER_GUARD_RULE,
+    sources: TYPESCRIPT_SOURCE,
+    // A file that names no placeholder, or holds no words ending in an ellipsis, has nothing to silence; the guards' own tests spell fixtures.
+    watches: (absolute: string) =>
+      !path.relative(REPOSITORY_ROOT, absolute).startsWith("tools/anti-slop/") &&
+      existsSync(absolute) &&
+      namesEllipsisPlaceholder(readFileSync(absolute, "utf8")),
+    remedy:
+      "Drop the trailing ellipsis, so the placeholder ends on its last word; a value's shape such as `ghp_…` keeps its own",
   },
   {
     rule: PRESS_LISTENER_GUARD_RULE,

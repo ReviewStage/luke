@@ -1,6 +1,6 @@
 # Privacy
 
-Effective date: November 4, 2026
+Effective date: November 5, 2026
 
 ## 1\. Introduction
 
@@ -108,17 +108,13 @@ prompts, or error text. The Service counts work done through it (such as
 tasks created and agents started) the same way. Counts are grouped by
 workspace, with each workspace's name and creation date.
 
-While you are signed in, released builds of the Mac app and the web app also
-record the layout of Vespin's own window, never your screen or other apps.
-Before a recording leaves your device, every word, label, and link address is
-replaced with blocks of the same length, and the parts that hold the most of
-your words are left out entirely, including the feedback form, plan editing,
-File tabs, pages, version history, Inbox items, agent and Terminal tabs,
-Browser tabs, the API keys page, and hover previews. Canvas recording is off,
-and clicks are not reported. Each recording is filed under your account's
-name and email and carries the app version, operating system, browser,
-language, time zone, and screen size. There is no switch for recordings;
-nothing is recorded before you sign in.
+While you are signed in, the Mac app and the web app record how you use
+Vespin's window, such as the screens you visit and where you click, never your
+screen or other apps. Text you type and other content that may be sensitive is
+masked before a recording leaves your device. Recordings are linked to your
+account. While a maintainer is signed in as your account with your support
+access (section 4), their use of the web app is counted and recorded the same
+way, under your account.
 
 ### Error and performance data
 
@@ -176,8 +172,11 @@ laws:
 Our operators can read what the Service stores. Vespin's maintainers also have
 an admin page showing each account's name, email, activity counts, workspaces
 and members, agents' status and models, and which providers and integrations
-are connected. It never shows a task's title, plan, prompt, message, pull
-request title, key, or an error's own words.
+are connected. A maintainer may sign in to the web app as your account only
+while you have granted support access from Settings. A grant lasts seven days
+and you can revoke it at any time, which also ends any such sign-in under way;
+each sign-in lasts up to an hour. While signed in as you, a maintainer sees and
+can do what you can in the web app.
 
 We do not use your code or conversations to train AI models.
 

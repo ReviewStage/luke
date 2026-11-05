@@ -1,17 +1,26 @@
 /**
  * Who may open the admin dashboard is the account's `role`, a plain-text column
- * on the `user` table that Better Auth manages — declared as an additional user
- * field (`auth-policy.ts`'s `USER_FIELDS`), generated into `@repo/database/schemas/auth`, and returned on the
- * session — not a constant in this file. The gate is a Better Auth session
+ * on the `user` table that Better Auth's admin plugin owns (`auth-policy.ts`'s
+ * `ADMIN_OPTIONS`), declared in `@repo/database/schemas/auth`, and returned on
+ * the session — not a constant in this file. The gate is a Better Auth session
  * whose account carries the admin role: the maintainer's own sign-in on this
  * site, or the same account's session as a signed bearer, and never the
  * desktop's OAuth token, which names no session.
+ *
+ * The same role is what lets a maintainer sign in as another account to help
+ * its member, through the plugin's impersonation, and only while that member
+ * has granted support access (`auth/support-access.ts`); an account holding
+ * the role can never be signed in as. Such a sign-in is a session of the
+ * member's own, marked with the maintainer who started it, so the dashboard's
+ * gate reads it as the member's and lets it in only where the member is an
+ * admin, which is never.
  *
  * The database is the source of truth and the only place the role is set. New
  * accounts default to `user`; grant admin by setting the column directly
  * (`update "user" set role = 'admin' where email = '…';`) and withdraw it by
  * setting it back to `user`. There is no environment allowlist and no code path
- * that promotes an account — the grant is a deliberate write a maintainer makes.
+ * that promotes an account — the grant is a deliberate write a maintainer makes,
+ * and every endpoint of the plugin's that would write it is shut.
  */
 
 /** The user roles this build knows. Plain-text in the column, a fixed set here. */

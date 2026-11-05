@@ -15,7 +15,8 @@
  *
  * Our changes, against shadcn's own strings: an item is a menu row's
  * height and corner, lit by the `aria-selected` the field or the engine sets
- * rather than Base UI's `data-highlighted`, dimmed by `aria-disabled`, its
+ * rather than Base UI's `data-highlighted`, its glyph, name, and end dimmed by
+ * `aria-disabled` while its detail and hint, which say why, are not, its
  * indicator a slot of its own at the row's end rather than an absolute
  * check; the list is capped by the app's placement hook
  * (`--ui-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
@@ -33,31 +34,33 @@ export const COMBOBOX_LIST =
 export const COMBOBOX_WELL =
   "flex min-w-0 flex-col *:data-[slot=combobox-list]:rounded-b-control *:data-[slot=combobox-list]:border *:data-[slot=combobox-list]:border-t-0 *:data-[slot=combobox-list]:border-border-strong *:data-[slot=combobox-list]:bg-input";
 
-/** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option. */
+/** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option; its parts dim themselves while it cannot be chosen. */
 export const COMBOBOX_ITEM =
-  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-disabled";
+  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary";
 
 /** What leads an item before its glyph, a task's key say, in a column wide enough for a long one, so the glyphs and names it leads line up down the list. */
-export const COMBOBOX_ITEM_LEAD = "inline-flex min-w-combobox-lead flex-none items-center";
+export const COMBOBOX_ITEM_LEAD =
+  "inline-flex min-w-combobox-lead flex-none items-center group-aria-disabled/option:opacity-disabled";
 
 /** An item's leading glyph, muted, a glyph's size whatever it is handed. */
 export const COMBOBOX_ITEM_GLYPH =
-  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground [&_:is(svg,img)]:size-menu-glyph";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-disabled/option:opacity-disabled [&_:is(svg,img)]:size-menu-glyph";
 
 /** An item's name, which gives way only after its detail does. */
-export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-label";
+export const COMBOBOX_ITEM_LABEL =
+  "min-w-0 flex-initial overflow-hidden font-label group-aria-disabled/option:opacity-disabled";
 
-/** An item's detail, quieter, giving way first where the row runs short. */
+/** An item's detail, quieter, giving way first where the row runs short, and never dimmed, since it may say why the item cannot be chosen. */
 export const COMBOBOX_ITEM_DETAIL =
   "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-ui-12 text-caption leading-[inherit] text-muted-foreground";
 
-/** An item's hint at its end, at a menu's distance from what stands before it, as a chord is. */
+/** An item's hint at its end, at a menu's distance from what stands before it, as a chord is; never dimmed, for the same reason as the detail. */
 export const COMBOBOX_ITEM_HINT =
   "inline-flex flex-none items-center gap-ui-4 pl-ui-16 text-caption leading-[inherit] text-muted-foreground";
 
 /** An item's end slot, one glyph wide: a chevron, or the check of the one chosen now in the text's own ink. */
 export const COMBOBOX_ITEM_END =
-  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-aria-current/option:text-foreground group-aria-disabled/option:opacity-disabled [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
 /** Where a group's heading stands over its run; its words are `Text`'s group role. */
 export const COMBOBOX_HEADING = "px-row-inset pt-row-inset pb-ui-4";

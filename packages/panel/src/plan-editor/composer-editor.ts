@@ -800,7 +800,19 @@ function commanded(editor: Editor, tr: Transaction): void {
   );
 }
 
-/** The words laid in whole, each known skill's `/name` its chip, the caret at their end. */
+/**
+ * The box focused, the browser's caret laid anew where the editor's caret
+ * stands. Note that the browser's selection is let go first, because a
+ * quote laid in over an empty line leaves Chrome saying its caret stands
+ * where the editor's does, so ProseMirror lays none, while Chrome's own
+ * caret stands nowhere it can type, and the words typed next are lost.
+ */
+function focusedAtCaret(editor: Editor): void {
+  editor.view.dom.ownerDocument.getSelection()?.removeAllRanges();
+  editor.view.focus();
+}
+
+/** The words laid in whole, each known skill's `/name` its chip, the caret at their end, and the browser's there too where the box holds the focus. */
 function laidIn(editor: Editor, state: ComposerState, text: string): void {
   const { doc, schema } = editor.state;
   const tr = editor.state.tr.replaceWith(
@@ -809,6 +821,7 @@ function laidIn(editor: Editor, state: ComposerState, text: string): void {
     documentOf(schema, text, state).content,
   );
   commanded(editor, tr.setSelection(TextSelection.atEnd(tr.doc)).setMeta(CHIPPED_META, true));
+  if (editor.view.hasFocus()) focusedAtCaret(editor);
 }
 
 /** Whether words put in beside an inline node need a space from it: it ends, or starts where it stands after them, in a character that is no space. */
@@ -921,7 +934,7 @@ function laidInQuote(
     const over = textOf(tr.doc).length - maxLength;
     if (over <= 0) {
       editor.view.dispatch(tr.scrollIntoView());
-      editor.view.focus();
+      focusedAtCaret(editor);
       return true;
     }
     kept = cutReply(kept, kept.length - over);

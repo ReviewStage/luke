@@ -3,11 +3,13 @@
  *
  * The provider is OpenAI's documented one for a ChatGPT plan
  * (developers.openai.com/siwc/token-sharing-open-source/codex-app-server):
- * Codex reads the OAuth access token from `ACCESS_TOKEN` and sends it as a
- * bearer to the Responses API, with no Codex sign-in of its own. The token is
- * set in the app-server process's environment and nowhere else: the launch
- * passes it through the Sandbox API's command environment, never argv, and
- * `shell_environment_policy` keeps it out of every command Codex runs. Each
+ * Codex reads its bearer from `ACCESS_TOKEN` and sends it to the Responses
+ * API, with no Codex sign-in of its own. The bearer is set in the app-server
+ * process's environment and nowhere else: the launch passes it through the
+ * Sandbox API's command environment, never argv, and
+ * `shell_environment_policy` keeps it out of what every command Codex runs
+ * inherits. The probe hands it the placeholder its sandbox's firewall swaps
+ * for the access token (`probe.ts`), as a Vespin agent's launch does. Each
  * value here is a pure description a test can read; the probe runs them.
  */
 
@@ -97,14 +99,14 @@ function providerOverrides(baseUrl: string = CHATGPT_PROVIDER.BASE_URL): readonl
 }
 
 /**
- * What keeps the token with Codex: commands inherit only the core variables
- * (`PATH`, `HOME`, and the like) with `ACCESS_TOKEN` excluded by name beside
- * Codex's own default `*TOKEN*` exclusion, and the fake MCP server, the
- * stand-in for Vespin's, is configured with no environment of ours. Note that
- * the policy filters only what a command inherits: a command running as the
- * same user can still read the app-server's own `/proc/<pid>/environ`, so
- * the token stays with Codex only where its bwrap sandbox puts commands in
- * a PID namespace of their own (`workspace-write`), which the probe checks.
+ * What a command Codex runs inherits: only the core variables (`PATH`,
+ * `HOME`, and the like) with `ACCESS_TOKEN` excluded by name beside Codex's
+ * own default `*TOKEN*` exclusion, and the fake MCP server, the stand-in for
+ * Vespin's, is configured with no environment of ours. Codex runs no sandbox
+ * of its own (`danger-full-access`), as the runner runs it, so a command
+ * running as the same user can still read the app-server's own
+ * `/proc/<pid>/environ`: what keeps the token from it is that the sandbox
+ * holds only the placeholder, which the probe checks.
  */
 function isolationOverrides(): readonly ConfigOverride[] {
   return [
@@ -116,7 +118,8 @@ function isolationOverrides(): readonly ConfigOverride[] {
     // Note that we approve the server's tools up front, because under `approval_policy = "never"`
     // Codex 0.163.0 otherwise fails every MCP call as needing an approval it may not ask for.
     [`mcp_servers.${PROBE_MCP.SERVER}.default_tools_approval_mode`, toml("approve")],
-    ["sandbox_workspace_write.network_access", "true"],
+    ["approval_policy", toml("never")],
+    ["sandbox_mode", toml("danger-full-access")],
   ];
 }
 
@@ -125,7 +128,7 @@ function overrideArgs(overrides: readonly ConfigOverride[]): readonly string[] {
   return overrides.flatMap(([key, value]) => ["-c", `${key}=${value}`]);
 }
 
-/** What the Sandbox API is asked to run: a root command whose environment carries the token. */
+/** What the Sandbox API is asked to run: a root command whose environment carries Codex's bearer. */
 export interface LaunchSpec {
   readonly cmd: string;
   readonly args: readonly string[];
@@ -139,13 +142,14 @@ export interface LaunchSpec {
  * dropped to `agent` by `setpriv`, which keeps the environment, with every
  * capability set emptied, the bounding set included. A Vercel Sandbox hands
  * its default user's processes the full capability set without sudo, so a
- * launch that only changed user would leave bwrap refusing to run
- * ("Unexpected capabilities but not setuid") and Codex's commands unsandboxed. Note that the SDK's own
+ * launch that only changed user would leave Codex and its commands able to
+ * read any process's environment and any file, and to reach root. Note that the SDK's own
  * `asUser()` is not used, because it carries a command's environment into
  * argv as `env KEY=value`, where every process in the sandbox can read it.
  */
 export function launchSpec(input: {
-  readonly accessToken: string;
+  /** What Codex sends as its bearer: the placeholder in the probe's sandbox. */
+  readonly bearer: string;
   readonly baseUrl?: string;
 }): LaunchSpec {
   const overrides = [...providerOverrides(input.baseUrl), ...isolationOverrides()];
@@ -166,7 +170,7 @@ export function launchSpec(input: {
       ...overrideArgs(overrides),
     ],
     env: {
-      [CHATGPT_PROVIDER.ENV_KEY]: input.accessToken,
+      [CHATGPT_PROVIDER.ENV_KEY]: input.bearer,
       HOME: AGENT_USER.HOME,
       CODEX_HOME: AGENT_USER.CODEX_HOME,
       USER: AGENT_USER.NAME,

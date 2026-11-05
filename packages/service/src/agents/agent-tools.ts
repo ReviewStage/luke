@@ -55,11 +55,13 @@ import {
 import {
   AGENT_ARCHIVER,
   AGENT_BOUNDS,
+  AGENT_MACHINE,
   AGENT_STATUS,
   type AgentFailure,
   type AgentPullRequestAnswer,
   type AgentStartFrom,
   type AgentStatus,
+  agentRunsOnRequestSchema,
   contextWindowSchema,
   disabledServersSchema,
   LOCAL_AGENT_REFUSAL,
@@ -376,6 +378,9 @@ export const READ_PAGE_REFUSAL = {
     "Not read: no page of a task of your workspace has that id, or that page has no such version.",
 } as const;
 
+/** The cloud as `start_agent`'s runsOn names it, which a device's refusal offers instead. */
+const IN_THE_CLOUD_WORDS = JSON.stringify({ machine: AGENT_MACHINE.VERCEL });
+
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
 export const START_AGENT_REFUSAL = {
   UNREADABLE:
@@ -383,7 +388,8 @@ export const START_AGENT_REFUSAL = {
     `${AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     `bounded the same or none, a title of at most ${AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, a model with its effort, " +
-    `both or neither, a taskId or none, a repository as owner/name, null, or none, and images as ` +
+    "both or neither, a taskId or none, a repository as owner/name, null, or none, runsOn as " +
+    `${IN_THE_CLOUD_WORDS}, a device of the member's by its id, or none, and images as ` +
     `at most ${AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids or none.`,
   NO_PROMPT:
     "Not started: you work on no task, so there is no plan to hand it; give it a prompt, or name " +
@@ -428,8 +434,7 @@ export const START_AGENT_REFUSAL = {
   CREDENTIAL_MISSING: `Not started: no subscription or API key of its starter's pays for that model, and ${PRODUCT_NAME}'s key pays for no agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.`,
   API_KEY_UNREADABLE:
     "Not started: the API key that would pay for it is saved but cannot be read here; its starter saves it again in Settings › Agents.",
-  DEVICE_REMOVED:
-    "Not started: the host it would run on was removed. Continue it in the cloud, or ask the member to add the host again.",
+  DEVICE_REMOVED: `Not started: the host it would run on was removed. Start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}, or ask the member to add the host again.`,
   NO_SOURCE:
     "Not started: no agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -491,15 +496,11 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
 
 /** Why a start on a device refused it, in words the calling model can act on: by what the device refused it for, bar another member's device, which names whose it is (`notOwnerWords`). */
 const LOCAL_AGENT_REFUSAL_WORDS = {
-  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device this task runs its agents on is offline, so it cannot take an agent (its vespin-host is not connected). Try again once it is back, or ask the member to start a new task in the cloud.`,
-  [LOCAL_AGENT_REFUSAL.CODEX]:
-    "Not started: the device this task runs its agents on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or ask the member to start a new task in the cloud.",
-  [LOCAL_AGENT_REFUSAL.NO_HARNESS]:
-    "Not started: the device this task runs its agents on cannot run this model. Start on another model, or ask the member to start a new task in the cloud.",
-  [LOCAL_AGENT_REFUSAL.PREPARING]:
-    "Not started: the device this task runs its agents on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes.",
-  [LOCAL_AGENT_REFUSAL.SETUP_FAILED]:
-    "Not started: the device this task runs its agents on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to turn Bring your own host off and on in Settings › Hosts on that Mac, or to restart vespin-host on that Linux server, to try again, or to start a new task in the cloud.",
+  [LOCAL_AGENT_REFUSAL.MAC_AWAY]: `Not started: the device it would run on is offline, so it cannot take an agent (its vespin-host is not connected). Try again once it is back, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`,
+  [LOCAL_AGENT_REFUSAL.CODEX]: `Not started: the device it would run on has no Codex set up yet, so it cannot run this model. Start on a Claude model, or in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`,
+  [LOCAL_AGENT_REFUSAL.NO_HARNESS]: `Not started: the device it would run on cannot run this model. Start on another model, or in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`,
+  [LOCAL_AGENT_REFUSAL.PREPARING]: `Not started: the device it would run on is still getting ready for local agents, downloading Claude Code, Codex, and GitHub's CLI. Try again in a few minutes, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`,
+  [LOCAL_AGENT_REFUSAL.SETUP_FAILED]: `Not started: the device it would run on couldn't set up local agents, since its download of Claude Code, Codex, or GitHub's CLI failed. Ask the member to turn Bring your own host off and on in Settings › Hosts on that Mac, or to restart vespin-host on that Linux server, to try again, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`,
 } as const satisfies Record<
   Exclude<LocalAgentRefusal, typeof LOCAL_AGENT_REFUSAL.NOT_OWNER>,
   string
@@ -509,7 +510,7 @@ const LOCAL_AGENT_REFUSAL_WORDS = {
 function notOwnerWords(device: RefusedDevice | undefined): string {
   const where = device === undefined ? "another member's device" : device.name;
   const who = device?.owner ?? "its owner";
-  return `Not started: this task runs on ${where}. Only ${who} can start agents on it, so ask them to, or start the work on a task that runs elsewhere.`;
+  return `Not started: it would run on ${where}. Only ${who} can start agents on it, so ask them to, or start it in the cloud with runsOn ${IN_THE_CLOUD_WORDS}.`;
 }
 
 /** Who calls an agent tool: a coding agent from its own session, or a member through the member MCP server. */
@@ -692,6 +693,18 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       modelChoiceSchema.fields.effort,
       "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
+    ),
+  ),
+  runsOn: Schema.optionalKey(
+    describeWire(
+      agentRunsOnRequestSchema,
+      `Where the agent runs: ${IN_THE_CLOUD_WORDS} for the cloud, or ` +
+        `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} for one of the ` +
+        "member's own devices (a Mac or a host) by its id, which must be registered and online. " +
+        "With from, another place than that agent's moves it there. " +
+        "Leave it out for where the agent it starts from runs, with from; else where the " +
+        "member's newest agent on the task runs; else where the member last chose to run one; " +
+        "else where its task runs; else the cloud.",
     ),
   ),
   from: Schema.optionalKey(
@@ -1921,6 +1934,7 @@ export function runStartAgent(
         title: asked.success.title,
         branch: asked.success.branch,
         from,
+        runsOn: asked.success.runsOn,
         summaryModel: call.summaryModel,
         ...(calling === undefined
           ? undefined

@@ -396,19 +396,12 @@ function MentionCard({
       standing={standing}
     />
   );
-  // A pull request GitHub answered for hangs the one card every pull request hangs, with what GitHub answered of it (`pull-request-card.tsx`).
+  // A pull request GitHub answered for hangs the one card every pull request hangs, which reads what GitHub answered of it through the same workspace (`pull-request-card.tsx`).
   const card =
     mention.kind === MENTION_KIND.LINK && standing?.pullRequest !== undefined ? (
       <PullRequestCard
         pullRequest={{ ...standing.pullRequest, title: standing.title, url: mention.url }}
-        lines={standing.pullRequest.lines}
-        files={standing.pullRequest.files}
-        when={standing.pullRequest.when}
-        branches={standing.pullRequest.branches}
-        labels={standing.pullRequest.labels}
-        comments={standing.pullRequest.comments}
-        commits={standing.pullRequest.commits}
-        opener={standing.opener}
+        place={{ taskId: null, workspaceId }}
       />
     ) : (
       <HoverCard data-mention-card="">

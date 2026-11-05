@@ -25,15 +25,17 @@ import {
 } from "@repo/features/admin-wire";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
+import { and, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { describe, test } from "vitest";
 import { USER_ROLE } from "./admin-access.js";
+import { buildAdminWorkspaceDetail } from "./admin-workspace.js";
 import {
   type AdminWorkspaceListSource,
   buildAdminWorkspaceList,
   INVITATION_STATUS,
 } from "./admin-workspaces.js";
-import { readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
+import { readAdminWorkspaceSource, readAdminWorkspacesSource } from "./admin-workspaces-queries.js";
 
 /**
  * The read's builder over hand-made sources, its handler's refusal, and its
@@ -481,3 +483,50 @@ inSeededWorld(
     assert.equal(wildcard.total, 0);
   }),
 );
+
+it.layer(getTestDB())("one workspace's page", (it) => {
+  it.effect(
+    "lists its own members, an owner of several roles first, and its own installations, and no other workspace's",
+    () =>
+      Effect.gen(function* () {
+        yield* insertAccount("grace", "Grace Hopper");
+        yield* insertAccount("linus", "Linus Torvalds");
+        yield* insertAccount("margaret", "Margaret Hamilton");
+        const feldspar = yield* insertWorkspace("Feldspar", ["grace", "linus"]);
+        // The plugin's role text may list several roles; here the owner joined second.
+        yield* Database.use((db) =>
+          db
+            .update(member)
+            .set({ role: `${WORKSPACE_ROLE.ADMIN},${WORKSPACE_ROLE.OWNER}` })
+            .where(and(eq(member.organizationId, feldspar), eq(member.userId, "linus"))),
+        );
+        yield* Database.use((db) =>
+          db
+            .update(member)
+            .set({ role: WORKSPACE_ROLE.MEMBER })
+            .where(and(eq(member.organizationId, feldspar), eq(member.userId, "grace"))),
+        );
+        yield* insertInstallation(feldspar, "feldspar-io", GITHUB_INSTALLATION_STATUS.SUSPENDED);
+        const northwind = yield* insertWorkspace("Northwind", ["margaret", "grace"]);
+        yield* insertInstallation(northwind, "northwind", GITHUB_INSTALLATION_STATUS.ACTIVE);
+
+        const source = yield* readAdminWorkspaceSource({ now: NOW, id: feldspar });
+        assert.ok(source !== undefined);
+        const detail = buildAdminWorkspaceDetail(source, NOW);
+
+        assert.equal(detail.workspace.name, "Feldspar");
+        assert.equal(detail.workspace.owner?.id, "linus");
+        assert.deepEqual(
+          detail.members.map((each) => [each.account.name, each.role]),
+          [
+            ["Linus Torvalds", WORKSPACE_ROLE.OWNER],
+            ["Grace Hopper", WORKSPACE_ROLE.MEMBER],
+          ],
+        );
+        assert.deepEqual(detail.workspace.installations, [
+          { login: "feldspar-io", status: GITHUB_INSTALLATION_STATUS.SUSPENDED },
+        ]);
+        assert.equal(yield* readAdminWorkspaceSource({ now: NOW, id: "gone" }), undefined);
+      }),
+  );
+});

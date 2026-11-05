@@ -1,7 +1,7 @@
 import type { FileChip } from "@repo/features/attachment-model";
 import { inboxAttachmentOf } from "@repo/features/inbox-attachment-link";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { cssCustomProperties, ErrorState, joinRefs, useNearView } from "@repo/ui";
+import { cssCustomProperties, joinRefs, useNearView } from "@repo/ui";
 import { PICTURE_STATE } from "@repo/ui/picture-cache";
 import {
   createContext,
@@ -51,9 +51,6 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * Every picture is left out of the session recording (`picture-block.tsx`).
  */
 
-/** What an item's picture says where its read did not answer. */
-const IMAGE_FAILED_LINE = "The image could not be read.";
-
 /** What a picture is called in the viewer where its Markdown gives it no alt text. */
 const UNNAMED_PICTURE = "Picture";
 
@@ -100,8 +97,8 @@ function viewerFile(alt: string, name: string | undefined, url: string): FileChi
  * One of an item's pictures: drawn as a plan's picture is, at its own size
  * up to the column's width and a screenful's height, once its bytes are
  * held, its caption under it, pressed to open the item's pictures larger
- * over the window from it; a quiet box while they are read, and a line
- * with Retry where the read did not answer. It asks for its bytes as it
+ * over the window from it; a quiet box while they are read, and the same
+ * box with Retry in the spinner's place where the read did not answer. It asks for its bytes as it
  * first comes near the screen, and away from it stands as a box of the
  * height it last stood. Nothing is drawn outside `InboxPictures`.
  */
@@ -158,18 +155,16 @@ export function InboxPicture({
   }
   if ("failed" in image) {
     return (
-      <span
+      <PictureBlock
         ref={placed}
-        className="picture-block my-block-gap block w-fit max-w-full"
-        data-inbox-image-failed=""
-      >
-        <ErrorState
-          failure={unreadShown(FAILURE_SURFACE.PICTURE_READ)}
-          onRetry={() => door.onRetryImage(attachmentId)}
-        >
-          {IMAGE_FAILED_LINE}
-        </ErrorState>
-      </span>
+        state={{
+          kind: PICTURE_STATE.FAILED,
+          retry: () => door.onRetryImage(attachmentId),
+          failure: unreadShown(FAILURE_SURFACE.PICTURE_READ),
+        }}
+        alt={alt}
+        caption={caption}
+      />
     );
   }
   return (

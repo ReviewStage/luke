@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type AgentChangedFile, CHANGED_FILE_STATUS } from "@repo/features/agent-wire";
+import {
+  type AgentChangedFile,
+  CHANGED_FILE_STATUS,
+  PATCH_OMITTED,
+} from "@repo/features/agent-wire";
 import { Effect, Option, Redacted } from "effect";
 import { githubReaching, type SentToGitHub } from "../testing/github-app-fake.js";
-import { imageCommits } from "./pull-requests.js";
+import { readCommits } from "./pull-requests.js";
 
 /**
- * image-commits.test.ts -- the commits a pull request's changed images are
- * read at, off a scripted GitHub: its head always, and where an image stood
- * before the pull request, the merge base one compare of its base and head
- * answers, asked for a single commit and file; no compare at all where no
- * image stood before, and no merge base where the compare does not land,
- * never the base branch's head in its place.
+ * read-commits.test.ts -- the commits a pull request's changed files are
+ * read whole at, off a scripted GitHub: its head always, and where an image
+ * or a text file whose patch was too large to send stood before the pull
+ * request, the merge base one compare of its base and head answers, asked
+ * for a single commit and file; no compare at all where no such file stood
+ * before, and no merge base where the compare does not land, never the base
+ * branch's head in its place.
  */
 
 const REPOSITORY = "acme/relay";
@@ -37,7 +42,7 @@ function changed(
   };
 }
 
-/** The image commits for `files`, GitHub's compare answering as `compare` says, and every request it was sent. */
+/** The read commits for `files`, GitHub's compare answering as `compare` says, and every request it was sent. */
 const commitsOf = (files: readonly AgentChangedFile[], compare: () => Response) =>
   Effect.gen(function* () {
     const sent: SentToGitHub[] = [];
@@ -45,7 +50,7 @@ const commitsOf = (files: readonly AgentChangedFile[], compare: () => Response) 
       sent.push(request);
       return new URL(request.url).pathname === COMPARE ? compare() : undefined;
     });
-    const commits = yield* imageCommits(
+    const commits = yield* readCommits(
       TOKEN,
       REPOSITORY,
       Option.some({ headSha: HEAD, baseSha: BASE }),
@@ -69,7 +74,7 @@ it.effect(
 );
 
 it.effect(
-  "a removed image needs the merge base too, and an added one or a text file asks no compare",
+  "a removed image or a text file too large to diff needs the merge base too, and an added one or a text file with a patch asks no compare",
   () =>
     Effect.gen(function* () {
       const removed = yield* commitsOf(
@@ -77,6 +82,12 @@ it.effect(
         mergeBase,
       );
       assert.equal(removed.commits.baseSha, MERGE_BASE);
+
+      const tooLarge = yield* commitsOf(
+        [{ ...changed("PRIVACY.md"), omitted: PATCH_OMITTED.TOO_LARGE }],
+        mergeBase,
+      );
+      assert.equal(tooLarge.commits.baseSha, MERGE_BASE);
 
       const added = yield* commitsOf(
         [changed("logo.png", CHANGED_FILE_STATUS.ADDED), changed("src/seats.ts")],

@@ -1,4 +1,5 @@
 import { CloseIcon } from "../../face/glyphs.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button, ButtonLink, IconButton } from "../button/button.js";
 import { CopyButton } from "../copy-button/copy-button.js";
 import { Tooltip } from "../tooltip/hint.js";
@@ -49,12 +50,15 @@ export function ToastActions({
   copy,
   dismissLabel,
   onDismiss,
+  replayUnmasked = false,
 }: ToastActionProps & {
   /** The details a press of its copy button copies, where it says a failure. */
   copy?: ToastCopy | undefined;
   /** What the × is called, for whoever cannot see it. */
   dismissLabel: string;
   onDismiss: () => void;
+  /** Whether the action's label is the app's own words ("Undo", "Open"), which a screen recording shows as they read. */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   return (
     <>
@@ -66,7 +70,7 @@ export function ToastActions({
             onPress?.();
           }}
         >
-          {label}
+          <ReplayWords unmasked={replayUnmasked}>{label}</ReplayWords>
         </Button>
       ) : (
         <ButtonLink
@@ -78,7 +82,7 @@ export function ToastActions({
             onPress?.();
           }}
         >
-          {label}
+          <ReplayWords unmasked={replayUnmasked}>{label}</ReplayWords>
         </ButtonLink>
       )}
       {copy === undefined ? null : (

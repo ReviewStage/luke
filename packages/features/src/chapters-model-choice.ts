@@ -2,9 +2,9 @@ import type { UnparsedWireValue } from "@repo/wire";
 import { Schema } from "effect";
 
 /**
- * chapters-model-choice.ts -- the Claude model a member's Generate chapters runs on, as Settings offers it and the service reads it.
+ * chapters-model-choice.ts -- the Claude model a member's Generate chapters runs on, as the Chapters view offers it and the service reads it.
  *
- * Each member picks it in Settings › Coding agents, and a Generate reads the
+ * Each member picks it on Generate chapters' own chevron, and a Generate reads the
  * choice of the member who pressed it. The chapters stay the workspace's,
  * and the row they land in names the model that told them. Every choice
  * runs on the member's own API key, OpenAI's model of the same tier standing

@@ -1,4 +1,5 @@
 import { useCallback, useId, useRef } from "react";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { BackButton, NO_BACK_KEY } from "../back-button/back-button.js";
 import { DIALOG_SIZE, Dialog } from "../dialog/dialog.js";
 import { OneLine } from "../one-line/one-line.js";
@@ -121,6 +122,7 @@ export function MenuSheetFrame({
   hold,
   name,
   detail,
+  replayUnmasked = false,
   mark,
   back,
   field,
@@ -142,6 +144,8 @@ export function MenuSheetFrame({
   name: string;
   /** The muted line under the name: what the menu acts on is, or the menu a submenu was opened from. */
   detail?: string | undefined;
+  /** Whether the name and its line are the app's own words (a picker's "Model"), which a screen recording shows as they read; masked otherwise, as a menu named by what it acts on is. */
+  replayUnmasked?: boolean | undefined;
   /** What the menu acts on's mark, decoration before its name. */
   mark?: React.ReactNode;
   /** The way back out of a submenu standing in the sheet's place, drawn in the mark's. */
@@ -195,11 +199,15 @@ export function MenuSheetFrame({
             ) : null}
             <span className="ui-menu-sheet-words">
               <span id={nameId} className="ui-menu-sheet-name">
-                <OneLine>{name}</OneLine>
+                <OneLine words={name}>
+                  <ReplayWords unmasked={replayUnmasked}>{name}</ReplayWords>
+                </OneLine>
               </span>
               {detail === undefined ? null : (
                 <span className="ui-menu-sheet-detail">
-                  <OneLine>{detail}</OneLine>
+                  <OneLine words={detail}>
+                    <ReplayWords unmasked={replayUnmasked}>{detail}</ReplayWords>
+                  </OneLine>
                 </span>
               )}
             </span>

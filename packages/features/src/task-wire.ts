@@ -4,6 +4,7 @@ import {
   AGENT_MACHINE,
   AGENT_STATUS,
   agentPullRequestSchema,
+  agentRunsOnRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
@@ -197,27 +198,22 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Where a task's coding agents run, as a request names it: the cloud, or one
- * of the asking member's own devices (a Mac's desktop app or a host) by its
- * id, which the service checks is theirs, beat lately, and runs some model
- * before it keeps it. It decides where every agent started on the task runs
- * (`startAgent`'s resolver), and is set when the task is created.
+ * Where a task's coding agents run, as a request names it, in a Start's own
+ * shape (`agentRunsOnRequestSchema`), which the service checks is the asking
+ * member's, beat lately, and runs some model before it keeps it. It is set
+ * when the task is created, and an agent started on the task runs there
+ * only where neither its Start, nor its starter's newest agent on the task,
+ * nor its starter's last pick says otherwise (`startAgent`'s resolver).
  */
-const taskRunsOnRequestSchema = EffectSchema.Union([
-  EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),
-  EffectSchema.Struct({
-    machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
-    deviceId: wireUuidSchema,
-  }),
-]);
+const taskRunsOnRequestSchema = agentRunsOnRequestSchema;
 
 export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, and the servers switched off, held to the same
- * words-or-files rule, but never `from` or a note, since a new task has no
+ * a prompt and its files, the servers switched off, and where it runs,
+ * held to the same words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
  * desktop's own Start params name it by: the `task` an agent Start's body
  * spells it as is a released desktop's, which never sends this.
@@ -230,6 +226,7 @@ const taskAgentStartSchema = EffectSchema.Struct({
   prompt: agentStartRequestFields.prompt,
   attachments: agentStartRequestFields.attachments,
   disabledServers: agentStartRequestFields.disabledServers,
+  runsOn: agentStartRequestFields.runsOn,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -330,7 +327,9 @@ function relationsEachOnce(request: {
  * unless `status` and `priority` say otherwise, and assigned to no one
  * unless `assigneeId` names a member of its workspace. Its agents run in the
  * cloud unless `runsOn` names one of the starter's devices, kept on the task
- * before the agent the start asks for starts, so that agent runs there too.
+ * and as the starter's last pick; the agent the start asks for runs where its
+ * own `runsOn` names, else where the task's does, else where any Start naming
+ * none runs (`agent-wire.ts`'s `agentStartRequestFields`).
  * A `parentTaskId` makes it the child of a task the starter reaches in the
  * same workspace, to any depth: the child takes its parent's repository and
  * where its agents run, so a start naming another repository is refused

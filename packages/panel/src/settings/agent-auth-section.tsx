@@ -753,7 +753,7 @@ function HeldLine({
 const CLAUDE_DISCONNECT: DialogQuestion = {
   title: "Disconnect your Claude plan?",
   body: `Claude agents stop running on your Claude plan, and ${PRODUCT_NAME} deletes its token.`,
-  verb: WORDS.DISCONNECT,
+  verb: "Disconnect Claude plan",
   running: WORDS.DISCONNECTING,
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
@@ -761,7 +761,7 @@ const CLAUDE_DISCONNECT: DialogQuestion = {
 const CHATGPT_DISCONNECT: DialogQuestion = {
   title: "Disconnect your ChatGPT plan?",
   body: `Codex agents stop running on your ChatGPT plan, and ${PRODUCT_NAME} signs out of ChatGPT.`,
-  verb: WORDS.DISCONNECT,
+  verb: "Disconnect ChatGPT plan",
   running: WORDS.DISCONNECTING,
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };

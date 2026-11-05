@@ -30,7 +30,7 @@ import {
   type AdminMetricsScope,
   type AdminWorkspacesKind,
 } from "@repo/features/admin-wire";
-import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
+import { roleOf, WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import {
   and,
   asc,
@@ -53,6 +53,7 @@ import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { lastNDayKeys } from "./admin-metrics.js";
 import { ACCOUNT_FACE_COLUMNS, ACCOUNT_FACE_FIELDS } from "./admin-queries.js";
 import { searchLikePatterns } from "./admin-users.js";
+import type { AdminWorkspaceDetailSource } from "./admin-workspace.js";
 import {
   ADMIN_WORKSPACES_ACTIVITY_DAYS,
   ADMIN_WORKSPACES_LIMIT,
@@ -335,6 +336,104 @@ function readConnections(organizationIds: readonly string[]) {
   });
 }
 
+/** The trailing week's first instant, which every row's activity counts from. */
+function activitySince(now: number): Date {
+  const sinceDay = lastNDayKeys(now, ADMIN_WORKSPACES_ACTIVITY_DAYS)[0];
+  return new Date(`${sinceDay}T00:00:00.000Z`);
+}
+
+const { revisionsWeek: _revisionsWeek, ...WORKSPACE_DETAIL_FIELDS } = WorkspaceRowSchema.fields;
+
+/**
+ * One workspace, by its id, with the counts a row of the table carries,
+ * whatever the scope and the kind; the revisions the table ranks by are
+ * not read, since nothing here is ranked.
+ */
+const findWorkspaceRow = SqlSchema.findOneOption({
+  Request: Schema.Struct({ id: Schema.String, ...ActivityWindowSchema.fields }),
+  Result: Schema.Struct(WORKSPACE_DETAIL_FIELDS),
+  execute: (request) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: organization.id,
+          name: sql<string>`${WORKSPACE_NAME}`,
+          personal: sql<boolean>`${PERSONAL}`,
+          members: sql<number>`${MEMBER_COUNT}`,
+          tasksWeek: tasksSince(request.since),
+          agentsWeek: agentsSince(request.since),
+          prsMergedWeek: prsMergedSince(request.sinceMs),
+          createdAt: organization.createdAt,
+        })
+        .from(organization)
+        .where(eq(organization.id, request.id)),
+    ),
+});
+
+/** Every member of one workspace, the earliest to join first. */
+const findMembers = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: Schema.Struct({
+    ...ACCOUNT_FACE_FIELDS,
+    memberRole: Schema.String,
+    joinedAt: InstantColumnSchema,
+  }),
+  execute: (organizationId) =>
+    Database.use((db) =>
+      db
+        .select({
+          ...ACCOUNT_FACE_COLUMNS,
+          memberRole: member.role,
+          joinedAt: member.createdAt,
+        })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(eq(member.organizationId, organizationId))
+        .orderBy(asc(member.createdAt), asc(member.id)),
+    ),
+});
+
+/**
+ * Reads one workspace's page: its row as the table counts it, every member,
+ * and its installations, or nothing where no workspace carries the id. It
+ * reads every workspace whatever the table's scope and kind, since a page is
+ * opened by its id from somewhere that already named it.
+ */
+export function readAdminWorkspaceSource(input: {
+  now: number;
+  id: string;
+}): AdminSeamEffect<AdminWorkspaceDetailSource | undefined> {
+  return Effect.gen(function* () {
+    const since = activitySince(input.now);
+    const [found, members, installations] = yield* Effect.all(
+      [
+        findWorkspaceRow({ id: input.id, since, sinceMs: since.getTime() }),
+        findMembers(input.id),
+        findInstallations([input.id]),
+      ],
+      { concurrency: "unbounded" },
+    );
+    if (Option.isNone(found)) return undefined;
+    const { createdAt, ...row } = found.value;
+    // Note that the plugin's role text may name several roles, so each is
+    // read as the highest it names, and the owners are moved first after,
+    // keeping the order they joined in.
+    const read = members.map(({ memberRole, joinedAt, role, ...account }) => ({
+      account: { ...account, admin: isAdminRole(role) },
+      role: roleOf(memberRole),
+      joinedAt: joinedAt.getTime(),
+    }));
+    const owning = (each: (typeof read)[number]) => each.role === WORKSPACE_ROLE.OWNER;
+    return {
+      row: { ...row, createdAt: createdAt.getTime() },
+      members: [...read.filter(owning), ...read.filter((each) => !owning(each))],
+      installations: installations.map(
+        ({ organizationId: _organizationId, ...installation }) => installation,
+      ),
+    };
+  });
+}
+
 /**
  * Reads the Workspaces tab: the headline counts over the shared workspaces
  * the scope keeps, whatever the kind and the search say, and the table's
@@ -350,8 +449,7 @@ export function readAdminWorkspacesSource(input: {
   search: string | undefined;
 }): AdminSeamEffect<AdminWorkspaceListSource> {
   return Effect.gen(function* () {
-    const sinceDay = lastNDayKeys(input.now, ADMIN_WORKSPACES_ACTIVITY_DAYS)[0];
-    const since = new Date(`${sinceDay}T00:00:00.000Z`);
+    const since = activitySince(input.now);
     const filter = { scope: input.scope, kind: input.kind, search: input.search ?? null };
 
     const [total, rows, summary, invitations] = yield* Effect.all(

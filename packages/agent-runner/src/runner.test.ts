@@ -27,7 +27,6 @@ import { vi } from "vitest";
 import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
-import { SHARED_FILES_DIRECTORY } from "./pins.js";
 import { processTable } from "./processes.js";
 import {
   EFFORT,
@@ -102,7 +101,6 @@ const CONFIG: RunnerConfig = {
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://app.test/runner/mcp",
   integrations: [{ name: "linear", url: "https://app.test/runner/mcp/integrations/linear" }],
-  allowedDomains: ["github.com", "registry.npmjs.org"],
 };
 
 /** The integration server the config hands the agent. */
@@ -693,7 +691,7 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
 );
 
 it.effect(
-  "a launch on an Anthropic API key hands the key to the CLI alone: denied to commands and taken out of every event",
+  "a launch on an Anthropic API key hands the key to the CLI and takes it out of every event",
   () =>
     Effect.gen(function* () {
       const apiKey = "account-api-key-for-tests";
@@ -715,10 +713,6 @@ it.effect(
       yield* Fiber.join(run);
 
       assert.equal(cli.options?.env?.[RUNNER_ENV.API_KEY], apiKey);
-      const denied = (cli.options?.sandbox?.credentials?.envVars ?? []).map(
-        (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
-      );
-      assert.ok(denied.includes(`${RUNNER_ENV.API_KEY}:deny`));
       assert.ok(!JSON.stringify(service.applied).includes(apiKey));
     }),
 );
@@ -949,7 +943,7 @@ it.effect("ends the launch, closing the CLI, when Vespin refuses its bearer", ()
 );
 
 it.effect(
-  "starts the CLI with the plan's options, Vespin's MCP server in process with no secret, and both secrets denied to commands",
+  "starts the CLI with the plan's options, Vespin's MCP server in process with no secret, and the bearer kept from the CLI and its commands",
   () =>
     Effect.gen(function* () {
       const service = fakeService();
@@ -987,17 +981,6 @@ it.effect(
       const mcp = options.mcpServers?.workspace;
       assert.equal(mcp?.type, "sdk");
       assert.ok(!JSON.stringify(options).includes(BEARER));
-      assert.equal(options.sandbox?.enabled, true);
-      assert.equal(options.sandbox?.failIfUnavailable, true);
-      assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
-      assert.deepEqual(options.sandbox?.network?.allowedDomains, CONFIG.allowedDomains);
-      // A command may write the folder the service reads a shown picture or page from.
-      assert.deepEqual(options.sandbox?.filesystem?.allowWrite, [SHARED_FILES_DIRECTORY]);
-      const denied = (options.sandbox?.credentials?.envVars ?? []).map(
-        (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
-      );
-      assert.ok(denied.includes(`${RUNNER_ENV.CLAUDE_TOKEN}:deny`));
-      assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
       // A command's Playwright looks for its browsers in its own package: the image's where it installed them, a repository's where the agent may install them.
@@ -1005,16 +988,16 @@ it.effect(
     }),
 );
 
-/** What a launch hands the CLI that is not a function or a live server, less the place it ran in, which only the command sandbox may follow. */
+/** What a launch hands the CLI that is not a function or a live server, less the place it ran in, which nothing may follow. */
 function launchedAs(options: Options | undefined) {
   assert.ok(options);
-  const { sandbox: _sandbox, hooks: _hooks, mcpServers, env, ...rest } = options;
+  const { hooks: _hooks, mcpServers, env, ...rest } = options;
   const { [RUNNER_ENV.PLACE]: _place, ...environment } = env ?? {};
   return { ...rest, servers: Object.keys(mcpServers ?? {}), environment };
 }
 
 it.effect(
-  "starts the CLI on a host exactly as in the cloud's sandbox, with the same permission mode and tools, and only the command sandbox off",
+  "starts the CLI on a host exactly as in the cloud's sandbox, with the same permission mode and tools, and no command sandbox in either",
   () =>
     Effect.gen(function* () {
       const optionsIn = (env: Record<string, string>) =>
@@ -1029,8 +1012,7 @@ it.effect(
       const host = yield* optionsIn({ ...ENV, [RUNNER_ENV.PLACE]: RUNNER_PLACE.HOST });
 
       assert.deepEqual(launchedAs(host), launchedAs(sandbox));
-      assert.equal(host?.sandbox?.enabled, false);
-      assert.equal(sandbox?.sandbox?.enabled, true);
+      assert.equal(sandbox?.sandbox?.enabled, false);
     }),
 );
 
@@ -1299,32 +1281,15 @@ const AGENT_BROWSER: readonly FakeProcess[] = [
   },
 ];
 
-/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, the CLI's own command-sandbox bridge (a `socat`), and our browser, nothing of the agent's beside them. */
+/** The sandbox's processes while the agent waits: the sandbox's init, the runner, the CLI it spawned, and our browser, nothing of the agent's beside them. */
 const WAITING_PROCESSES: readonly FakeProcess[] = [
   ...AGENT_BROWSER,
   { pid: 1, parent: 0, emptied: false },
   { pid: RUNNER_PID, parent: 1, emptied: true },
   { pid: RUNNER_PID + 1, parent: RUNNER_PID, emptied: true },
-  {
-    pid: RUNNER_PID + 2,
-    parent: RUNNER_PID + 1,
-    emptied: true,
-    argv: [
-      "socat",
-      "UNIX-LISTEN:/tmp/claude-http-46b2d3fe1057cdcd.sock,fork,reuseaddr",
-      "TCP:localhost:38551,keepalive,keepidle=10,keepintvl=5,keepcnt=3",
-    ],
-  },
 ];
 /** A dev server the agent started, detached from its shell onto the sandbox's init. */
 const DEV_SERVER: FakeProcess = { pid: 4242, parent: 1, emptied: true };
-/** A `socat` of the agent's own beside the CLI's bridge, forwarding a port of its choosing. */
-const AGENT_SOCAT: FakeProcess = {
-  pid: 4343,
-  parent: RUNNER_PID + 1,
-  emptied: true,
-  argv: ["socat", "TCP-LISTEN:5432,fork", "UNIX-CONNECT:/tmp/db.sock"],
-};
 
 /** A Chromium of the agent's own, leading its session on another port. */
 const AGENT_CHROMIUM: FakeProcess = {
@@ -1363,7 +1328,6 @@ it.effect(
 
 it.effect.each([
   ["a dev server", DEV_SERVER],
-  ["a socat of its own", AGENT_SOCAT],
   ["a Chromium of its own", AGENT_CHROMIUM],
 ] as const)(
   "holds a wait while %s the agent started runs, and releases it once that process ends",

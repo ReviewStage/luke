@@ -384,7 +384,7 @@ function samePage(one: Place, other: Place): boolean {
 /**
  * Whether two Admin views are one page: any two of its sections, which
  * replace each other in place as Settings' pages do, so Back leaves the
- * place; or the same account's or day's page, each a step of its own.
+ * place; or the same account's, workspace's, or day's page, each a step of its own.
  */
 function samePageAdminView(one: AdminView, other: AdminView): boolean {
   if (adminSection(one) && adminSection(other)) return true;
@@ -394,6 +394,8 @@ function samePageAdminView(one: AdminView, other: AdminView): boolean {
 /** Whether two Admin views are the same view. */
 function sameAdminView(one: AdminView, other: AdminView): boolean {
   if (one.kind === ADMIN_PAGE.ACCOUNT && other.kind === ADMIN_PAGE.ACCOUNT)
+    return one.id === other.id;
+  if (one.kind === ADMIN_PAGE.WORKSPACE && other.kind === ADMIN_PAGE.WORKSPACE)
     return one.id === other.id;
   if (one.kind === ADMIN_PAGE.DAY && other.kind === ADMIN_PAGE.DAY) return one.day === other.day;
   return one.kind === other.kind;

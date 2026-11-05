@@ -52,13 +52,13 @@ import { PLAN_ACTOR, TASK_STATUS, type TaskOrigin } from "@repo/features/task-wi
 import { ACTION_RESULT_STATUS, MESSAGE_CHANNEL, START_LINE_BRIEF } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { betterAuth } from "better-auth";
-import { organization as organizationPlugin } from "better-auth/plugins";
+import { admin, organization as organizationPlugin } from "better-auth/plugins";
 import { type Cause, Clock, Data, Effect, Option, type Redacted, Result } from "effect";
 import { agentRuntimeChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { agentLineSender } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { authDatabaseAdapter } from "../auth/auth-database.js";
-import { ORGANIZATION_OPTIONS, USER_FIELDS } from "../auth/auth-policy.js";
+import { ADMIN_OPTIONS, ORGANIZATION_OPTIONS } from "../auth/auth-policy.js";
 import { HOST_VERSION, type MintedSecret, mintHostSecret } from "../auth/device-secret.js";
 import {
   RUN_EVENT,
@@ -221,8 +221,9 @@ const AUTH_ID_KIND: Readonly<Record<string, DemoIdKind>> = {
 };
 
 /**
- * A Better Auth over the database, with the organization plugin and the
- * user's fields as the deployment's (`auth.ts`), whose ids count up from
+ * A Better Auth over the database, with the admin plugin, which writes
+ * each account's role, and the organization plugin, as the deployment's
+ * (`auth.ts`), whose ids count up from
  * one for each kind. Note that Dean's and his teammates' ids are handed in
  * (`DEMO_PEOPLE`), which the internal adapter keeps; the generator mints
  * the workspaces' and the members', in the order the seed writes them.
@@ -239,9 +240,8 @@ export function demoAuth(database: DB): DemoAuth {
     database: authDatabaseAdapter(database),
     baseURL: "http://127.0.0.1",
     secret: SEED_AUTH_SECRET,
-    user: USER_FIELDS,
     advanced: { database: { generateId } },
-    plugins: [organizationPlugin(ORGANIZATION_OPTIONS)],
+    plugins: [admin(ADMIN_OPTIONS), organizationPlugin(ORGANIZATION_OPTIONS)],
   });
   return {
     countUsers: Effect.tryPromise(async () =>

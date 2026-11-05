@@ -62,6 +62,7 @@ const STILL_MOTION_CSS = `
   --ui-hint-delay: 0s !important;
   --ui-settle-delay: 0s !important;
   --ui-confirm-delay: 0s !important;
+  --ui-flash-delay: 0s !important;
   --ui-loop-motion: paused !important;
   --ui-wait-motion: paused !important;
   --ui-scroll-glide: auto !important;

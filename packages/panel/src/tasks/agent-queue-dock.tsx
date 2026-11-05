@@ -80,7 +80,7 @@ function queuedFileChips(message: QueuedMessage) {
 const DELETE_QUESTION: DialogQuestion = {
   title: "Delete queued message?",
   body: `It will not be sent, and any files it carries go with it. ${IRREVERSIBLE_WORDS}`,
-  verb: WORDS.DELETE,
+  verb: "Delete message",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };

@@ -11,9 +11,10 @@ import { GITHUB_INSTALLATION_STATUS } from "@repo/features/github-installation-w
 import { INTEGRATION_ROW_STATUS } from "@repo/features/integration-row-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
+import { type AdminDoors, AdminDoorsProvider, useAdminDoors } from "@repo/panel/admin/admin-doors";
 import { AccountScreen } from "@repo/panel/admin/screens/account";
 import { EXPERIMENT } from "@repo/settings";
-import { act, createElement } from "react";
+import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { underWebAdminDoors } from "./support/admin-doors";
@@ -25,7 +26,9 @@ import { underWebAdminDoors } from "./support/admin-doors";
  * tier's daily use and volume last, lays out
  * what a maintainer supports it from (its work, agents, workspaces, keys and
  * connections, defaults, and failures), and leads its toolbar with the way
- * back to the users, which moves in place, loading or loaded. The network,
+ * back to the users, which moves in place, loading or loaded; and offers
+ * Impersonate only where the page can sign in as a member, to a non-admin
+ * whose grant of support access stands. The network,
  * the HTTP boundary to the service, is a fake that answers the account's read.
  */
 
@@ -62,6 +65,7 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
       admin: true,
       createdAt: Date.UTC(2026, 0, 5),
       signInMethods: ["github", "google"],
+      supportAccessUntil: null,
       ...overrides,
     },
     actions: {
@@ -220,8 +224,31 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The account's page, signed in, with its read answered by `response`, or left hanging without one. */
-async function openAccount(response: Response | undefined): Promise<Opened> {
+/** The doors above with the sign-in as a member answered by `impersonate`, or left out, as the app's mount leaves it. */
+function WithImpersonate({
+  impersonate,
+  children,
+}: {
+  impersonate: AdminDoors["impersonate"];
+  children?: ReactNode;
+}): ReactElement {
+  const { impersonate: _page, ...doors } = useAdminDoors();
+  return createElement(
+    AdminDoorsProvider,
+    { value: impersonate === undefined ? doors : { ...doors, impersonate } },
+    children,
+  );
+}
+
+/**
+ * The account's page, signed in, with its read answered by `response`, or
+ * left hanging without one; under `doors`, the sign-in as a member is
+ * answered by the test's own door, or left out.
+ */
+async function openAccount(
+  response: Response | undefined,
+  doors: { impersonate: AdminDoors["impersonate"] } | undefined = undefined,
+): Promise<Opened> {
   vi.spyOn(globalThis, "fetch").mockImplementation(() =>
     response === undefined ? new Promise(() => undefined) : Promise.resolve(response),
   );
@@ -231,17 +258,21 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
   document.body.replaceChildren(page);
   root = createRoot(page);
   await act(async () => {
+    const screen = createElement(AccountScreen, {
+      id: ID,
+      windowDays: 30,
+      onWindowDaysChange: () => undefined,
+      account: undefined,
+      onSignOut: async () => undefined,
+      onBack: () => backs.push(backs.length),
+      onOpenWorkspace: () => undefined,
+      frame: (content) => content,
+    });
     root?.render(
       underWebAdminDoors(
-        createElement(AccountScreen, {
-          id: ID,
-          windowDays: 30,
-          onWindowDaysChange: () => undefined,
-          account: undefined,
-          onSignOut: async () => undefined,
-          onBack: () => backs.push(backs.length),
-          frame: (content) => content,
-        }),
+        doors === undefined
+          ? screen
+          : createElement(WithImpersonate, { impersonate: doors.impersonate }, screen),
       ),
     );
   });
@@ -290,6 +321,58 @@ test("a loaded account names itself, marks an admin in words, and says how it si
   expect(page.textContent).toContain(
     "Joined Jan 5, 2026 · last seen Oct 14, 9:30 AM UTC · signs in with GitHub, Google",
   );
+});
+
+/** The toolbar's Impersonate, where it stands. */
+function impersonateButton(page: HTMLElement): HTMLButtonElement | undefined {
+  return Array.from(page.querySelectorAll("button")).find(
+    (button) => button.textContent === "Impersonate",
+  );
+}
+
+/** A grant of support access that runs out after the account was read (Oct 14, noon). */
+const GRANT_STANDS = Date.UTC(2026, 9, 20, 12);
+
+test.each([
+  { case: "a member whose grant stands", account: { admin: false }, offered: true },
+  { case: "an admin whose grant stands", account: { admin: true }, offered: false },
+  {
+    case: "a member whose grant ran out",
+    account: { admin: false, supportAccessUntil: Date.UTC(2026, 9, 13) },
+    offered: false,
+  },
+  {
+    case: "a member on a mount that cannot sign in as one",
+    account: { admin: false },
+    offered: false,
+    doors: { impersonate: undefined },
+  },
+])("Impersonate stands for $case: $offered", async ({ account, offered, doors }) => {
+  const { page } = await openAccount(
+    answer(detail({ supportAccessUntil: GRANT_STANDS, ...account })),
+    doors,
+  );
+
+  expect(impersonateButton(page) !== undefined).toBe(offered);
+});
+
+test("the masthead says until when a member's grant stands, and a refused Impersonate says why in the service's words", async () => {
+  const asked: string[] = [];
+  const { page } = await openAccount(
+    answer(detail({ admin: false, supportAccessUntil: GRANT_STANDS })),
+    {
+      impersonate: (userId) => {
+        asked.push(userId);
+        return Promise.resolve("The member has not granted support access.");
+      },
+    },
+  );
+  expect(page.textContent).toContain("support access until Oct 20, 12:00 PM UTC");
+
+  await act(async () => impersonateButton(page)?.click());
+
+  expect(asked).toEqual([ID]);
+  expect(page.textContent).toContain("The member has not granted support access.");
 });
 
 test("an account that is no admin and links no provider says neither", async () => {

@@ -1,5 +1,4 @@
 import type { AgentPullRequest } from "@repo/features/agent-wire";
-import type { TaskRunsOn } from "@repo/features/task-wire";
 import {
   GROUP_HEADING,
   GroupHeader,
@@ -33,8 +32,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
  * task's agent as its "+" row and the summary draw it (`agentEntries`): its
  * tab's glyph, which gives way to the working mark while it works, its
- * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, which is
- * the task's and so every row's alike, the failed mark at its end once its
+ * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, each
+ * agent's own, the failed mark at its end once its
  * turn failed, and the card its tab hangs. Its pull request, where it opened
  * one, stands after it as a chip of GitHub's mark in GitHub's color for
  * where it stands and its number (`pull-request-chip.tsx`), hanging the
@@ -91,7 +90,6 @@ function PlanAgentRow({
   agents,
   held,
   tab,
-  runsOn,
   onOpenPullRequest,
 }: {
   entry: AddEntry;
@@ -99,7 +97,6 @@ function PlanAgentRow({
   agents: AgentsControl;
   held: HeldTranscripts;
   tab: MainTabsControl["tab"];
-  runsOn: TaskRunsOn | undefined;
   onOpenPullRequest: () => void;
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
@@ -118,7 +115,9 @@ function PlanAgentRow({
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
           <>
-            <RunsOnPlace runsOn={runsOn} />
+            {entry.agent === undefined ? null : (
+              <RunsOnPlace agent={entry.agent} devices={agents.macs} />
+            )}
             {endMark}
           </>
         }
@@ -129,6 +128,7 @@ function PlanAgentRow({
               card={
                 <PullRequestCard
                   pullRequest={pullRequest}
+                  place={{ taskId: entry.agent?.planId ?? null }}
                   lines={pullRequest}
                   files={pullRequest.changedFiles}
                   opener={people?.author ?? openerOf(pullRequest)}
@@ -160,7 +160,6 @@ export function PlanAgents({
   agents,
   held,
   tab,
-  runsOn,
   folded,
   onOpenAgent,
   onOpenPullRequest,
@@ -171,8 +170,6 @@ export function PlanAgents({
   held: HeldTranscripts;
   /** The column's chosen tab, whose agent's card follows its run. */
   tab: MainTabsControl["tab"];
-  /** Where the task's agents run, which every row says. */
-  runsOn: TaskRunsOn | undefined;
   /** Whether the group starts folded. */
   folded: boolean;
   onOpenAgent: (agentId: string) => void;
@@ -225,7 +222,6 @@ export function PlanAgents({
                   agents={agents}
                   held={held}
                   tab={tab}
-                  runsOn={runsOn}
                   onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
                 />
               ))}

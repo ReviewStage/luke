@@ -276,6 +276,7 @@ const FILES_READ = {
   READING: "reading",
   LISTED: "listed",
   MISSED: "missed",
+  FAILED: "failed",
 } as const;
 
 /**
@@ -288,12 +289,13 @@ type FilesHeld = { taskId: string; repository: string } & FilesRead;
 type FilesRead =
   | { read: typeof FILES_READ.READING }
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
-  | { read: typeof FILES_READ.MISSED; notice: string };
+  | { read: typeof FILES_READ.MISSED; notice: string }
+  | { read: typeof FILES_READ.FAILED };
 
 /** What the Files filter says while no plan with a repository stands open, as under an agent's page. */
 const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
-/** What the Files filter says where the read did not land. */
+/** What the Files filter says where the read did not land, beside its Retry. */
 const FILES_MISSED_LINE = "The files could not be read.";
 
 /** What the Files filter says while the repository is read. */
@@ -577,18 +579,22 @@ function filesOf(answer: TasksTreeAnswer): FilesRead {
       truncated: answer.folder.truncated,
     };
   }
-  if ("failure" in answer) return { read: FILES_READ.MISSED, notice: FILES_MISSED_LINE };
+  if ("failure" in answer) return { read: FILES_READ.FAILED };
   return { read: FILES_READ.MISSED, notice: refusalLine(answer.refusal, answer.branch) };
 }
 
-/** What the Files filter says in place of rows: why there are none to search yet, or nothing. */
+/** What the Files filter says in place of rows: why there are none to search yet, a failed read with its Retry, or nothing. */
 function filesNotice(
   repositoryOpen: boolean,
   held: FilesHeld | undefined,
+  onRetry: () => void,
 ): PaletteNotice | undefined {
   if (!repositoryOpen) return { kind: PALETTE_NOTICE.SAID, line: NO_REPOSITORY_LINE };
   if (held === undefined || held.read === FILES_READ.READING) {
     return { kind: PALETTE_NOTICE.READING, line: READING_LINE };
+  }
+  if (held.read === FILES_READ.FAILED) {
+    return { kind: PALETTE_NOTICE.FAILED, line: FILES_MISSED_LINE, onRetry };
   }
   return held.read === FILES_READ.MISSED
     ? { kind: PALETTE_NOTICE.SAID, line: held.notice }
@@ -2123,9 +2129,14 @@ export function CommandPalette({
     };
     readFiles(taskId).then(
       (answer) => keep(filesOf(answer)),
-      () => keep({ read: FILES_READ.MISSED, notice: FILES_MISSED_LINE }),
+      () => keep({ read: FILES_READ.FAILED }),
     );
   }, [filesAsked, taskId, repository, held, readFiles]);
+  // Note that a Retry drops the failed read, so the effect above reads the files again.
+  const retryFiles = () => {
+    filesAsk.current += 1;
+    setFiles(undefined);
+  };
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;
@@ -2243,7 +2254,7 @@ export function CommandPalette({
     [PALETTE_FILTER.AUTOMATIONS]: () =>
       automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>
-      fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
+      fileQuery === undefined ? undefined : filesNotice(filesOpen, held, retryFiles),
     [PALETTE_FILTER.COMMANDS]: () => undefined,
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;

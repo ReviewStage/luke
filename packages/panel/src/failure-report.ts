@@ -40,7 +40,6 @@
  * render, so a site hands the cause it holds, never one it builds.
  */
 
-import { ORPCError } from "@orpc/client";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   FAILURE_CONDITION,
@@ -53,13 +52,13 @@ import {
   type ShownFailureSent,
   shownFailureDetails,
 } from "@repo/features/shown-failure";
-import { networkConnected } from "@repo/host/app-state";
 import { ACT_ERROR, type PortActKind } from "@repo/host/contract";
 import type { ConfirmFailure } from "@repo/ui/confirm-state";
 import type { PictureUnread } from "@repo/ui/picture-cache";
 import type { ReportedFailure, ShownError } from "@repo/ui/reported-failure";
 import type { SettingRefusal } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { ORPCError } from "@orpc/client";
 import { Clock, Context, Predicate } from "effect";
 import type { ReactNode } from "react";
 import { appPlatform } from "./app-platform.js";
@@ -310,7 +309,6 @@ export function reportShownFailure(failure: ShownFailure, at: number): string | 
       act: failure.act,
       state: {
         online: state?.network.online ?? true,
-        connected: state === undefined || networkConnected(state.network),
         account: state?.account.status ?? ACCOUNT_UNREAD,
         live: failure.live,
       },

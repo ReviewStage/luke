@@ -10,10 +10,10 @@ import {
 } from "./shown-failure.js";
 
 /**
- * shown-failure.test.ts -- a failure nothing named, shown while the app did
- * not reach the service or whose own facts say its call got no answer, is a
- * log line at `warn` and opens no issue, as a Mac waking from sleep shows its
- * task list unread, or a phone that reads online with no signal shows its
+ * shown-failure.test.ts -- a failure nothing named, shown while the machine
+ * had no network or whose own facts say its call got no answer, is a log
+ * line at `warn` and opens no issue, as a Mac waking from sleep offline shows
+ * its task list unread, or a phone that reads online with no signal shows its
  * inbox unread. A recording SDK stands in for Sentry. Synthetic throughout.
  */
 
@@ -22,19 +22,13 @@ const SIGNED_IN = "signed-in";
 test.each([
   {
     shown: "offline",
-    state: { online: false, connected: false, account: SIGNED_IN },
+    state: { online: false, account: SIGNED_IN },
     cause: FAILURE_CONDITION.UNREAD,
     line: "A failure was shown on home_tasks.read: unread",
   },
   {
-    shown: "online while the service's calls go unanswered",
-    state: { online: true, connected: false, account: SIGNED_IN },
-    cause: FAILURE_CONDITION.UNREAD,
-    line: "A failure was shown on home_tasks.read: unread",
-  },
-  {
-    shown: "connected, of a call that ended in a network fault",
-    state: { online: true, connected: true, account: SIGNED_IN },
+    shown: "online, of a call that ended in a network fault",
+    state: { online: true, account: SIGNED_IN },
     cause: {
       failure: "unanswered",
       cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: "network", errorName: "TypeError" },
@@ -42,8 +36,8 @@ test.each([
     line: "A failure was shown on home_tasks.read: unanswered",
   },
   {
-    shown: "connected, of a call that ran past its deadline",
-    state: { online: true, connected: true, account: SIGNED_IN },
+    shown: "online, of a call that ran past its deadline",
+    state: { online: true, account: SIGNED_IN },
     cause: {
       failure: "unanswered",
       cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, errorName: "TimeoutError" },

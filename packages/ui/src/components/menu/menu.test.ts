@@ -549,7 +549,7 @@ function viewMenuLaidOut(): void {
   });
 }
 
-test("the mouse passing over another submenu's item on its way into a submenu leaves that submenu standing, and opens nothing it did not rest on", () => {
+test("the mouse passing slowly over another submenu's item on its way into a submenu leaves that submenu standing, and opens nothing it did not rest on", () => {
   mount(createElement(Harness, { groups: viewGroups([]) }));
   viewMenuLaidOut();
   press(button("More"));
@@ -558,8 +558,19 @@ test("the mouse passing over another submenu's item on its way into a submenu le
   expect(openMenu("Group by")).toBeNull();
   rest();
   expect(openMenu("Group by")).not.toBeNull();
-  // Note that the mouse heads down and right for None, over Order by's right end.
-  const crossing = mouseMove(resting, button("Order by"), { clientX: 203, clientY: 38 });
+  // Note that the mouse heads down and right for None, over Order by's
+  // right end, slowly enough to be over Order by for longer than a rest,
+  // though it never stops there that long.
+  const crossing = mouseMove(resting, button("Order by"), { clientX: 200, clientY: 37 });
+  act(() => {
+    vi.advanceTimersByTime(60);
+  });
+  act(() => {
+    crossing.dispatchEvent(
+      new MouseEvent("mousemove", { bubbles: true, movementX: 3, clientX: 203, clientY: 39 }),
+    );
+    vi.advanceTimersByTime(60);
+  });
   mouseMove(crossing, button("None"), { clientX: 260, clientY: 52 });
   rest();
   expect(openMenu("Group by")).not.toBeNull();

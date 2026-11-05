@@ -349,7 +349,7 @@ beforeEach(() => {
         return Promise.resolve({
           failure: INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED,
           skillName: "web-design-guidelines",
-          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES,
+          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE,
         });
       }
       const made = (payload.skills ?? ["web-design-guidelines"]).map((name, at) =>
@@ -641,7 +641,7 @@ test("Remove asks first, red for a personal skill whose files go, then takes it 
   await choose("pr-style", "Remove");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Its files are deleted/u);
-  act(() => button("Remove", question).click());
+  act(() => button("Remove skill", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
@@ -885,14 +885,14 @@ test("a refused install says which skill and why in words, keeps the dialog, and
   await settle();
   assert.match(
     document.body.textContent ?? "",
-    /web-design-guidelines holds more than 64 files\./u,
+    /web-design-guidelines has a file larger than 3 MB\./u,
   );
   assert.equal(
     announcedAsAlert(),
-    "More than 64 files",
+    "Has a file larger than 3 MB",
     "the skill's mark is announced as an alert",
   );
-  assert.match(document.body.textContent ?? "", /More than 64 files/u);
+  assert.match(document.body.textContent ?? "", /Has a file larger than 3 MB/u);
   assert.equal(primary().textContent, "Install");
   assert.equal(primary().disabled, true);
 });

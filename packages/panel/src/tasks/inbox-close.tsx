@@ -1,4 +1,5 @@
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
+import type { AgentAttachment } from "@repo/features/agent-wire";
 import { INBOX_STATUS, type InboxItem, type InboxStatus } from "@repo/features/inbox-wire";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { countWords, TERM } from "@repo/features/words";
@@ -64,18 +65,30 @@ interface CloseSaying {
   readonly quiet?: boolean | undefined;
 }
 
-/**
- * Closes an open item without an answer, and answers once the service did
- * whether it was closed, with what refused it where it was not; a close of
- * it already on its way answers as closed, since that one answers its own
- * press, and one of an item no longer open as not.
- */
-export type InboxCloser = (item: InboxItem, saying?: CloseSaying) => Promise<Kept>;
+/** The note a close carries: the words and files the box held beside a staged resolve, which reach the agent in the close's one message. */
+export interface CloseNote {
+  readonly text: string;
+  readonly attachments: readonly AgentAttachment[];
+}
 
-/** A close's key and the revision it was made for, kept so a press again on the same item goes under the same key. */
+/**
+ * Closes an open item without an answer, with the note given beside it,
+ * and answers once the service did whether it was closed, with what refused
+ * it where it was not; a close of it already on its way answers as closed,
+ * since that one answers its own press, and one of an item no longer open
+ * as not.
+ */
+export type InboxCloser = (
+  item: InboxItem,
+  saying?: CloseSaying,
+  note?: CloseNote,
+) => Promise<Kept>;
+
+/** A close's key and the revision and note it was made for, kept so a press again on the same item with the same note goes under the same key. */
 interface Attempt {
   readonly key: string;
   readonly revision: number;
+  readonly words: string;
 }
 
 /** The Inbox's closes, sent through `act`. */
@@ -85,14 +98,18 @@ export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser 
   const attempts = useRef(new Map<string, Attempt>());
   const out = useRef(new Set<string>());
   return useCallback(
-    (item: InboxItem, saying?: CloseSaying) => {
+    (item: InboxItem, saying?: CloseSaying, note?: CloseNote) => {
       if (out.current.has(item.id)) return Promise.resolve(KEPT);
       if (item.status !== INBOX_STATUS.OPEN) {
         return Promise.resolve(notKept(FAILURE_CONDITION.GONE));
       }
+      const text = note?.text.trim() ?? "";
+      const attachments = note?.attachments ?? [];
+      const words = JSON.stringify([text, attachments]);
       const was = attempts.current.get(item.id);
-      const key = was?.revision === item.revision ? was.key : crypto.randomUUID();
-      attempts.current.set(item.id, { key, revision: item.revision });
+      const key =
+        was?.revision === item.revision && was.words === words ? was.key : crypto.randomUUID();
+      attempts.current.set(item.id, { key, revision: item.revision, words });
       out.current.add(item.id);
       // Note that what the box held as the close was pressed is read now, so only that goes once it is taken.
       const pressed = writer.heldAt(
@@ -117,6 +134,8 @@ export function useInboxCloser({ act }: { act: ActHandle["act"] }): InboxCloser 
         itemId: item.id,
         revision: item.revision,
         clientKey: key,
+        ...(text === "" ? undefined : { text }),
+        ...(attachments.length === 0 ? undefined : { attachments }),
       })
         .catch(unreached)
         .then((answer) => {
@@ -148,7 +167,7 @@ function closeQuestion(item: InboxItem): DialogQuestion {
     body: item.needsReply
       ? "The agent is told you resolved it. Only the agent can open it again."
       : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
-    verb: "Resolve",
+    verb: `Resolve ${TERM.INBOX_ITEM.one}`,
     running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };
@@ -165,7 +184,7 @@ export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
   return {
     title: `Resolve ${countWords(items.length, TERM.INBOX_ITEM)} without answering?`,
     body: "Their agents are told. Only an item's agent can open it again.",
-    verb: "Resolve",
+    verb: `Resolve ${TERM.INBOX_ITEM.many}`,
     running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

@@ -54,7 +54,7 @@ function revertQuestion(takes: string | undefined): DialogQuestion {
   return {
     title: "Revert to this message?",
     body: `Everything after it${takes === undefined ? "" : `, including ${takes},`} will be removed from the transcript, and the agent stopped if it is working. Changes the agent made to its files stay as they are.`,
-    verb: "Revert",
+    verb: "Revert to message",
     running: "Reverting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

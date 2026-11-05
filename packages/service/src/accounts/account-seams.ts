@@ -1,7 +1,7 @@
 import {
   deleteAccount,
+  readAccountAccess,
   readAccountPreferences,
-  readAccountRole,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
@@ -29,7 +29,7 @@ export function accountProcedureSeams(): AccountProcedureSeams {
     standingSessions: (userId) => standingSessionsOf(userId),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
-    readRole: readAccountRole,
+    readAccess: readAccountAccess,
     accountFastOffer,
     writePreferences: writeAccountPreferences,
   };

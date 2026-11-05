@@ -3,12 +3,13 @@ import {
   accountSnapshotSchema,
   signInAnswerSchema,
 } from "@repo/credentials/snapshot";
+import { supportAccessAnswerSchema } from "@repo/features/account-wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { ACCOUNT_ACT_KIND } from "./kinds.js";
 
 /**
- * account.ts -- the account's asks of the host: signing in, signing out, and the account deleted, as procedures.
+ * account.ts -- the account's asks of the host: signing in, signing out, the account deleted, and its grant of support access, as procedures.
  *
  * Each output is its schema flipped, so oRPC's output check encodes the
  * row's value into what crosses the port, the convention every act contract
@@ -19,6 +20,9 @@ import { ACCOUNT_ACT_KIND } from "./kinds.js";
 const providerParamsSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
 });
+
+/** Whether the grant of support access is granted for seven days, or revoked. */
+const supportAccessParamsSchema = EffectSchema.Struct({ grant: EffectSchema.Boolean });
 
 export const accountActsContract = {
   [ACCOUNT_ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: actProcedure(
@@ -40,4 +44,7 @@ export const accountActsContract = {
   [ACCOUNT_ACT_KIND.ACCOUNT_DELETE]: actProcedure("Could not delete that account on this system.")
     .input(exactInput(EffectSchema.Undefined))
     .output(EffectSchema.flip(accountSnapshotSchema)),
+  [ACCOUNT_ACT_KIND.ACCOUNT_SUPPORT_ACCESS]: actProcedure("Couldn't change support access.")
+    .input(exactInput(supportAccessParamsSchema))
+    .output(EffectSchema.flip(supportAccessAnswerSchema)),
 };

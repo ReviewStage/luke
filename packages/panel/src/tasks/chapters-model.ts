@@ -82,7 +82,7 @@ export type ChaptersShown =
       readonly generatable: boolean;
     };
 
-/** The model that told the chapters as the view names it: its label where Settings offers it, else the id as stored. */
+/** The model that told the chapters as the view names it: its label where Generate offers it, else the id as stored. */
 export function chaptersModelLabel(model: string): string {
   const labels: Readonly<Record<string, string>> = CHAPTERS_MODEL_LABEL;
   return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;

@@ -372,7 +372,7 @@ test("a description changed on GitHub keeps the draft open and says so, and Relo
   );
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Reload asks first");
-  act(() => button(question, "Reload").click());
+  act(() => button(question, "Reload description").click());
   await settle();
   await settle();
 

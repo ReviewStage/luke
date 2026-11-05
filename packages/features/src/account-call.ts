@@ -8,6 +8,7 @@ import {
 } from "@repo/wire";
 import { webResponseFromClientResponse } from "@repo/wire/effect";
 import {
+  Clock,
   Context,
   Data,
   Duration,
@@ -38,6 +39,18 @@ export const DEADLINE_ERROR_NAME = "TimeoutError";
 
 /** The content type a serialized body names, the one type this call sends. */
 const JSON_CONTENT_TYPE = "application/json";
+
+/**
+ * How long the service must have answered nothing before an attempt that
+ * ends with no answer says it is unreachable: the held deadline
+ * (`hosted-link.ts`'s `HOSTED_DEADLINE.HELD`, 35 seconds), the longest a
+ * live read waits on its answer, and a margin past it. Note that one
+ * attempt is never enough, because a held read answers within its deadline
+ * while the service is well, so an attempt that runs out its own, or a gap
+ * no read was answered in that is shorter than this, says nothing of the
+ * service.
+ */
+const SILENCE_BEFORE_UNREACHABLE = Duration.seconds(45);
 
 /**
  * What authorizes one call, and what may be done about a refusal. Three
@@ -100,20 +113,19 @@ export type CallAnswer = CallResponse | CallFailure;
 
 /** The service's reach as the calls found it. */
 export interface ServiceReachState {
-  /** Whether the service answered the last word the calls had of it. */
+  /** Whether the service answers, as the calls last judged it. */
   readonly reachable: boolean;
-  /** How many attempts it has answered, which an attempt that ended with no answer is read against. */
-  readonly answered: number;
+  /** When an attempt was last answered, in the clock's milliseconds; when the reach was first kept, before any was. */
+  readonly answeredAt: number;
 }
 
 /**
  * Whether the service answers, for a client that keeps it (`@repo/host`'s
  * network watch): an attempt sets it reachable as soon as a status arrives,
  * a refusal among them, and unreachable where it ended before one did, a
- * transport fault or the deadline, unless another attempt was answered since
- * it was sent, since that answer says more of now than an older silence
- * does. Optional, so a call made where none is provided, as the service's
- * own calls are, tells nobody.
+ * transport fault or the deadline, only once no attempt has been answered
+ * for `SILENCE_BEFORE_UNREACHABLE`. Optional, so a call made where none is
+ * provided, as the service's own calls are, tells nobody.
  */
 export class ServiceReach extends Context.Service<
   ServiceReach,
@@ -234,33 +246,31 @@ function transportFailure(error: CallTransportError): CallFailure {
   };
 }
 
-/** How many attempts the service's reach has heard answered, where the client keeps one. */
-const answeredSoFar: Effect.Effect<number> = Effect.flatMap(
-  Effect.serviceOption(ServiceReach),
-  Option.match({
-    onNone: () => Effect.succeed(0),
-    onSome: (reach) => Effect.map(SubscriptionRef.get(reach), (state) => state.answered),
-  }),
-);
-
-/** Changes the service's reach, where the client keeps one. */
-function toldReach(change: (state: ServiceReachState) => ServiceReachState): Effect.Effect<void> {
+/** Changes the service's reach as of the clock's now, where the client keeps one. */
+function toldReach(
+  change: (state: ServiceReachState, now: number) => ServiceReachState,
+): Effect.Effect<void> {
   return Effect.flatMap(
     Effect.serviceOption(ServiceReach),
     Option.match({
       onNone: () => Effect.void,
-      onSome: (reach) => SubscriptionRef.update(reach, change),
+      onSome: (reach) =>
+        Effect.flatMap(Clock.currentTimeMillis, (now) =>
+          SubscriptionRef.update(reach, (state) => change(state, now)),
+        ),
     }),
   );
 }
 
 /** An attempt the service answered, with any status. */
-const heardAnswer = toldReach((state) => ({ reachable: true, answered: state.answered + 1 }));
+const heardAnswer = toldReach((_, now) => ({ reachable: true, answeredAt: now }));
 
-/** An attempt that ended with no answer, sent when `since` attempts had been answered; one answered since stands. */
-function heardNoAnswer(since: number): Effect.Effect<void> {
-  return toldReach((state) => (state.answered === since ? { ...state, reachable: false } : state));
-}
+/** An attempt that ended with no answer, which says the service is unreachable only once nothing was answered for `SILENCE_BEFORE_UNREACHABLE`. */
+const heardNoAnswer = toldReach((state, now) =>
+  now - state.answeredAt > Duration.toMillis(SILENCE_BEFORE_UNREACHABLE)
+    ? { ...state, reachable: false }
+    : state,
+);
 
 function readCredential(
   read: (() => Effect.Effect<string | undefined>) | undefined,
@@ -341,14 +351,12 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     authorization: string | undefined,
     read: Reader<Answer>,
   ): Effect.Effect<Answer, CallTransportError, HttpClient.HttpClient> {
-    return Effect.flatMap(answeredSoFar, (since) =>
-      withinDeadline(
-        Effect.flatMap(
-          Effect.tap(requested(request, authorization), () => heardAnswer),
-          read,
-        ),
-      ).pipe(Effect.tapError(() => heardNoAnswer(since))),
-    );
+    return withinDeadline(
+      Effect.flatMap(
+        Effect.tap(requested(request, authorization), () => heardAnswer),
+        read,
+      ),
+    ).pipe(Effect.tapError(() => heardNoAnswer));
   }
 
   /**

@@ -20,6 +20,16 @@ import {
  */
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true });
 
+/**
+ * The account. Its `role` is the admin plugin's, and so are `banned`,
+ * `ban_reason`, and `ban_expires`, which nothing of ours writes but which the
+ * plugin writes on every new account and reads on every sign-in; its
+ * `support_access_until` is the support-access plugin's
+ * (`@repo/service`'s `auth/support-access.ts`), the moment the member's grant
+ * of support access runs out, null while none stands. Those five are as
+ * Better Auth's CLI generates them for 1.7.7 with instants through
+ * `timestamptz()`, and `role` keeps the default it shipped with.
+ */
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -33,6 +43,10 @@ export const user = pgTable("user", {
     .notNull(),
   lastLoginMethod: text("last_login_method"),
   role: text("role").default("user"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamptz("ban_expires"),
+  supportAccessUntil: timestamptz("support_access_until"),
 });
 
 export const session = pgTable(
@@ -51,6 +65,9 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
+    // The admin plugin's, as its CLI generates it for 1.7.7: the maintainer
+    // a support sign-in was started by, null on every other session.
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );

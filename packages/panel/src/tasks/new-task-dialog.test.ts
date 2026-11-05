@@ -42,7 +42,7 @@ import {
   fakeActs,
   fakeAppBridge,
 } from "../testing/app-bridge.js";
-import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   handHostReads,
   handMembers,
@@ -111,6 +111,8 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  // Note that a card nothing pays for draws the harnesses' marks, which read the platform's assets.
+  fakeAppPlatform(QUIET_PANEL);
   // Note that the chip names the account's default as the host holds it.
   handHostReads({
     preferences: {
@@ -628,6 +630,21 @@ test("a box with no repository holds Start and says why under the card", async (
   // The chip asks for a repository too, so the note under the card is the second saying.
   assert.equal(card.dialog()?.textContent?.split("Choose a repository").length, 3);
   assert.deepEqual(card.starts, []);
+});
+
+test("a model nothing pays for holds Start and asks for an agent over the box before anything is sent, its press opening Settings at its harness's row", async () => {
+  models = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const card = await mount();
+  card.type("Dark mode toggle");
+  await card.key("Enter");
+
+  assert.equal(card.startButton().disabled, true);
+  assert.deepEqual(card.starts, []);
+  assert.match(card.dialog()?.textContent ?? "", /Connect an agent to start/u);
+  assert.ok(card.button("Connect Codex"), "with nothing connected, Codex is offered too");
+  act(() => card.button("Connect Claude").click());
+  await settle();
+  assert.deepEqual(card.links, [agentKeyLink(MODEL_PROVIDER.ANTHROPIC)]);
 });
 
 test("Command-Return on an empty box starts a bare task: no planning and no agent", async () => {

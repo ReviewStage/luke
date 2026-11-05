@@ -247,7 +247,7 @@ export function removeQuestion(
     body: shared
       ? `${everyoneIn(workspace)} loses ${skill.name}: agents they start afterwards no longer load it, and its files are deleted.`
       : "Its files are deleted, and agents started afterwards no longer load it. Installing it again takes the paste again.",
-    verb: "Remove",
+    verb: "Remove skill",
     running: "Removing",
     loss: shared ? CONFIRM_LOSS.AFFECTS_OTHERS : CONFIRM_LOSS.IRREVERSIBLE,
   };
@@ -297,12 +297,13 @@ export function fencedSkillFile(text: string): string {
 
 /* ----- Words for what went wrong ----- */
 
+/** A file's bound in decimal megabytes, as the rule is set: "3 MB". */
+const MAX_FILE_WORDS = `${INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES / 1_000_000} MB`;
+
 /** Why a skill's files were refused, after its name. */
 const FILES_REFUSAL_WORDS = {
   [INSTALLED_SKILL_FILES_REFUSAL.NO_SKILL_FILE]: "has no SKILL.md in its folder.",
-  [INSTALLED_SKILL_FILES_REFUSAL.DUPLICATE_PATH]: "holds two files at one path.",
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: `holds more than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files.`,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `is larger than ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} altogether.`,
+  [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: `has a file larger than ${MAX_FILE_WORDS}.`,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID]:
     "needs a valid name and a description in its SKILL.md.",
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: `has a SKILL.md larger than ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}.`,
@@ -375,8 +376,7 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
   [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${formatExactBytes(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
-  [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]: `More than ${INSTALLED_SKILL_BOUNDS.MAX_FILES} files`,
-  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Over ${formatExactBytes(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} of files`,
+  [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]: `Has a file larger than ${MAX_FILE_WORDS}`,
 } as const satisfies Record<InstalledSkillProblem, string>;
 
 /** A skill's problems, joined into one line. */
@@ -879,7 +879,6 @@ export function skillList(
 /** The problem a refused file names, where the preview has a word for it. */
 const REFUSAL_PROBLEM: Partial<Record<InstalledSkillFilesRefusal, InstalledSkillProblem>> = {
   [INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED]: INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED,
-  [INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES]: INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES,
   [INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE]: INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE,
   [INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE]: INSTALLED_SKILL_PROBLEM.TOO_LARGE,
 };

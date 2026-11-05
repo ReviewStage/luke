@@ -295,7 +295,8 @@ export function composeDesktop(
         yield* linkNetworkWatch({
           state,
           isOnline: () => net.isOnline(),
-          regained: operator.host.tasksResync(),
+          regained: operator.host.tasksRegained(),
+          report: config.report,
         });
       }
       const updates = yield* createUpdateServiceHost({

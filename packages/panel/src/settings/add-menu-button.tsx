@@ -31,6 +31,8 @@ interface AddMenuButtonProps {
   note?: React.ReactNode | ((close: () => void) => React.ReactNode);
   onOpen?: (() => void) | undefined;
   onPick: (id: string) => void;
+  /** Whether its menu's words are the app's own, which a screen recording shows as they read, but for a row that is `replayMasked` (`SearchableMenu`'s `replayUnmasked`). */
+  replayUnmasked?: boolean | undefined;
 }
 
 /** The Add press and its menu, as above. */
@@ -42,6 +44,7 @@ export function AddMenuButton({
   note,
   onOpen,
   onPick,
+  replayUnmasked,
 }: AddMenuButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
@@ -84,6 +87,7 @@ export function AddMenuButton({
           noMatch={noMatch}
           align={POPOVER_ALIGN.END}
           width={POPOVER_WIDTH.NARROW}
+          replayUnmasked={replayUnmasked}
           onPick={(id) => {
             close();
             onPick(id);

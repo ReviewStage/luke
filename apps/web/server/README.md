@@ -110,6 +110,18 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
+The admin plugin's columns (`user.banned`, `ban_reason`, `ban_expires`, and
+`session.impersonated_by`, beside the `role` the migrations already held) and
+the support-access plugin's `user.support_access_until`
+(`packages/service/src/auth/support-access.ts`) are transcribed the same way,
+from `auth generate` for 1.7.7, and migration
+`20261105011320_admin_impersonation_support_access` is drizzle-kit's from that
+module. The admin plugin is there for its impersonation alone: a maintainer
+signs in as an account from the web for an hour, only while its member's grant
+of support access stands, and every other admin endpoint is shut
+(`auth-policy.ts`'s `DISABLED_AUTH_PATHS`). `support-access.test.ts` holds it
+over PGlite.
+
 Every account gets a first workspace made for it, named for the account,
 slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
 (stored only; nothing reads it to behave differently), and named the
@@ -898,10 +910,12 @@ minutes, and an email to the issue's owners on a high-priority issue.
 ### Deploying
 
 The terminal relay, the Browser tab's live view, and the live reads' socket
-(`/api/live/socket`, which answers a host's live polls) are WebSocket
-functions, each exporting the `http.Server` Vercel upgrades into, so enable the
-WebSockets feature on the Vercel team and make sure Fluid compute is on for
-the project. `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
+(`/api/live/socket`) are WebSocket functions, each exporting the
+`http.Server` Vercel upgrades into, so enable the WebSockets feature on the
+Vercel team and make sure Fluid compute is on for the project. The live
+reads' socket stands no service for now and refuses every upgrade with 503,
+so a host sends its live polls over HTTP under `/api/live/`
+(`terminal/function.ts`). `PROVIDER_KEY_ENCRYPTION_KEYS` seals each account's own provider
 keys. A native agent's runner reports to the deployment's own origin, its
 production domain in production and its own host otherwise, unless
 `APP_DEPLOYMENT_ORIGIN` names another (`packages/service/src/deployment-origin.ts`).

@@ -204,7 +204,7 @@ function TaskAssigneePicker({
         )
       }
       rows={assigneeRows(members, readerId)}
-      placeholder="Assign to…"
+      placeholder="Assign to"
       noMatch={noMatchWords(TERM.MEMBER)}
       note={
         refused ? (
