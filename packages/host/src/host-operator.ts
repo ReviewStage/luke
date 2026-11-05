@@ -143,17 +143,10 @@ import {
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
-  type InstalledSkillShareParams,
-  type InstalledSkillToggleParams,
-  type InstalledSkillUpdatedView,
-  type InstalledSkillUpdateParams,
-  type InstalledSkillView,
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
-  installedSkillUpdatedViewSchema,
-  installedSkillViewSchema,
 } from "@repo/features/installed-skill-view";
 import {
   INTEGRATION_CALL_FAILURE,
@@ -847,14 +840,6 @@ export interface HostOperator {
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
   ): Effect.Effect<InstalledSkillInstallView>;
-  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
-  installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
-  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
-  installedSkillsUpdate(
-    params: InstalledSkillUpdateParams,
-  ): Effect.Effect<InstalledSkillUpdatedView>;
-  /** The account's own personal skill moved into a workspace; the skill as it then stands, or why it is unchanged. */
-  installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
@@ -2280,21 +2265,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
         answerOf(installedSkillInstallViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsSetEnabled: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
-        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsUpdate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
-        answerOf(installedSkillUpdatedViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsShare: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, params),
-        answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsRemove: (params) =>
       Effect.map(

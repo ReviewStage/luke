@@ -7,11 +7,6 @@ import type {
   InstalledSkillPreviewParams,
   InstalledSkillPreviewView,
   InstalledSkillRemovedView,
-  InstalledSkillShareParams,
-  InstalledSkillToggleParams,
-  InstalledSkillUpdatedView,
-  InstalledSkillUpdateParams,
-  InstalledSkillView,
 } from "@repo/features/installed-skill-view";
 import { Effect, MutableHashMap, Option, Stream } from "effect";
 import { INSTALLED_SKILL_ACT_KIND } from "../contract/index.js";
@@ -19,7 +14,7 @@ import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
- * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: a workspace's skills held, one read, a paste previewed or installed, one toggled, updated, shared with a workspace, or removed.
+ * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: a workspace's skills held, one read, a paste previewed or installed, or one removed.
  *
  * The one check these procedures make is who asked: only a panel draws
  * Settings, so the takeover and any other window are refused in each
@@ -42,13 +37,6 @@ export interface InstalledSkillProceduresDependencies {
     installedSkillsInstall(
       params: InstalledSkillInstallParams,
     ): Effect.Effect<InstalledSkillInstallView>;
-    installedSkillsSetEnabled(
-      params: InstalledSkillToggleParams,
-    ): Effect.Effect<InstalledSkillView>;
-    installedSkillsUpdate(
-      params: InstalledSkillUpdateParams,
-    ): Effect.Effect<InstalledSkillUpdatedView>;
-    installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
     installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   };
 }
@@ -110,28 +98,6 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
     }) {
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsInstall(input);
-    }),
-    [KIND.INSTALLED_SKILLS_SET_ENABLED]: actPort[KIND.INSTALLED_SKILLS_SET_ENABLED].effect(
-      function* ({ input, context, errors }) {
-        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        return yield* host.installedSkillsSetEnabled(input);
-      },
-    ),
-    [KIND.INSTALLED_SKILLS_UPDATE]: actPort[KIND.INSTALLED_SKILLS_UPDATE].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-      return yield* host.installedSkillsUpdate(input);
-    }),
-    [KIND.INSTALLED_SKILLS_SHARE]: actPort[KIND.INSTALLED_SKILLS_SHARE].effect(function* ({
-      input,
-      context,
-      errors,
-    }) {
-      if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-      return yield* host.installedSkillsShare(input);
     }),
     [KIND.INSTALLED_SKILLS_REMOVE]: actPort[KIND.INSTALLED_SKILLS_REMOVE].effect(function* ({
       input,

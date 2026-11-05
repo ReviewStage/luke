@@ -38,6 +38,7 @@ import {
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { DEVICE_ARCH, DEVICE_PLATFORM, HOST_UPDATE } from "@repo/features/device-agent-wire";
 import { GITHUB_TOKEN_STATUS } from "@repo/features/github-token-wire";
+import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import {
@@ -333,7 +334,7 @@ function skillId(n: number): string {
 }
 
 /** A workspace's skills as its members see them: its own, then the account's. */
-function skills(workspaceId: string) {
+function skills(workspaceId: string): InstalledSkillSummary[] {
   return [
     {
       id: skillId(1),
@@ -364,7 +365,7 @@ function skills(workspaceId: string) {
       description: "Check a schema change commutes with the migrations on every open branch.",
       userInvocable: false,
       source: { type: INSTALLED_SKILL_SOURCE.TEXT },
-      enabled: false,
+      enabled: true,
       workspaceId,
       installedBy: "Theo Lindqvist",
       manageable: true,

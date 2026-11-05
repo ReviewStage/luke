@@ -1,13 +1,11 @@
 import { Schema as EffectSchema } from "effect";
 import {
-  installedSkillAnswerSchema,
   installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
-  installedSkillUpdatedAnswerSchema,
 } from "./installed-skill-route-wire.js";
 import { INSTALLED_SKILL_REFUSAL } from "./installed-skill-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
@@ -32,7 +30,7 @@ export const INSTALLED_SKILL_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The account sees the skill or the workspace but may not do this: a workspace skill takes an owner or admin. */
   NOT_PERMITTED: "not-permitted",
-  /** The request is none the service takes: nothing to install in the paste, a workspace skill in a personal workspace, or an update of a pasted skill. */
+  /** The request is none the service takes: nothing to install in the paste, or a workspace skill in a personal workspace. */
   INVALID: "invalid",
   /** A skill of that name is already installed in the scope asked. */
   NAME_TAKEN: "name-taken",
@@ -72,34 +70,10 @@ export const installedSkillInstallParamsSchema = installedSkillInstallRequestSch
 
 export type InstalledSkillInstallParams = typeof installedSkillInstallParamsSchema.Type;
 
-/** One skill turned on or off. */
-export const installedSkillToggleParamsSchema = EffectSchema.Struct({
-  skillId: wireUuidSchema,
-  enabled: EffectSchema.Boolean,
-});
-
-export type InstalledSkillToggleParams = typeof installedSkillToggleParamsSchema.Type;
-
-/** One skill updated, read in the workspace whose GitHub installation reaches its repository. */
-export const installedSkillUpdateParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  skillId: wireUuidSchema,
-});
-
-export type InstalledSkillUpdateParams = typeof installedSkillUpdateParamsSchema.Type;
-
 /** One skill, by id. */
 export const installedSkillIdParamsSchema = EffectSchema.Struct({ skillId: wireUuidSchema });
 
 export type InstalledSkillIdParams = typeof installedSkillIdParamsSchema.Type;
-
-/** One personal skill shared with the workspace named, which it moves into. */
-export const installedSkillShareParamsSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  skillId: wireUuidSchema,
-});
-
-export type InstalledSkillShareParams = typeof installedSkillShareParamsSchema.Type;
 
 /* ----- Views ----- */
 
@@ -126,19 +100,6 @@ export const installedSkillInstallViewSchema = EffectSchema.Union([
 ]);
 
 export type InstalledSkillInstallView = typeof installedSkillInstallViewSchema.Type;
-
-/** One skill as a toggle or a share left it, or why it is unchanged. */
-export const installedSkillViewSchema = EffectSchema.Union([installedSkillAnswerSchema, failed]);
-
-export type InstalledSkillView = typeof installedSkillViewSchema.Type;
-
-/** A skill as an update left it, or why it is unchanged. */
-export const installedSkillUpdatedViewSchema = EffectSchema.Union([
-  installedSkillUpdatedAnswerSchema,
-  failed,
-]);
-
-export type InstalledSkillUpdatedView = typeof installedSkillUpdatedViewSchema.Type;
 
 /** A skill removed, or why it stands. */
 export const installedSkillRemovedViewSchema = EffectSchema.Union([
