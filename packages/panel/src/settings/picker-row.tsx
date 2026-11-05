@@ -218,8 +218,11 @@ export function PickerRow({
   error,
   density,
   indent,
+  labelReplayUnmasked = false,
   ...picker
 }: Omit<PickerProps, "describedBy" | "invalid"> & {
+  /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
+  labelReplayUnmasked?: boolean | undefined;
   /** The why under the row's name: words, and where a row needs one, a link among them. */
   detail?: React.ReactNode;
   /** Whether the stored value differs from the default, which earns the mark. */
@@ -237,7 +240,7 @@ export function PickerRow({
     <SettingsRow
       density={density}
       indent={indent}
-      label={picker.label}
+      label={<ReplayWords unmasked={labelReplayUnmasked}>{picker.label}</ReplayWords>}
       adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={replayMaskedError(error)}

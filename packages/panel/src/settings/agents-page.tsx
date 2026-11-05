@@ -220,6 +220,7 @@ function DefaultRows({
         // Note that the models are the service's catalog, the app's own words.
         replayUnmasked
         label="Default model"
+        labelReplayUnmasked
         detail={note}
         changed={read.base !== fallback.model}
         saves={modelWrite.saves}
@@ -294,6 +295,7 @@ function DefaultRows({
       ) : (
         <SwitchRow
           label={FAST_WORD}
+          labelReplayUnmasked
           detail={
             fastNote === undefined ? undefined : (
               <>

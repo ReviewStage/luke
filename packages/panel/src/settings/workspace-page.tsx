@@ -1460,6 +1460,7 @@ function SlackNotificationsRow({ workspaceId }: { workspaceId: string }): React.
   return (
     <SwitchRow
       label="Slack notifications"
+      labelReplayUnmasked
       checked={on}
       changed={!on}
       onChange={(notifications) =>

@@ -162,6 +162,7 @@ function DefaultRepositoryRow({
     <PickerRow
       indent={SETTINGS_ROW_INDENT.MARK}
       label={WORDS.DEFAULT_LABEL}
+      labelReplayUnmasked
       value={chosen ?? NONE_ROW}
       valueLabel={chosen ?? WORDS.NONE}
       valueReplayMasked={chosen !== undefined}

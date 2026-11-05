@@ -50,6 +50,7 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
   return (
     <SwitchRow
       label={entry.name}
+      labelReplayUnmasked
       anchor={EXPERIMENT_ANCHOR[entry.key]}
       detail={
         <>
