@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
-import { Database } from "@repo/database/core/query";
-import { user } from "@repo/database/schemas/auth";
 import { openWorkspace, unmigratedPgliteSqlClient } from "@repo/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -51,9 +49,7 @@ it.effect.each([MIGRATION, STRAGGLERS])(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersWhere((name) => name.localeCompare(migration) < 0));
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
-        );
+        yield* sql`insert into "user" (id, name, email) values ('dean', 'dean', 'dean@app.test')`;
         const workspaceId = yield* openWorkspace("dean");
         for (const [order, action] of BEFORE.entries()) {
           yield* sql`insert into automation (user_id, organization_id, name, enabled, trigger_kind, trigger, action, guards)
