@@ -4,6 +4,7 @@ import {
   type AgentChangesPeople,
   type AgentOrigin,
   type AgentPullRequest,
+  type AgentRunsOnRequest,
   type AgentSummary,
   CONTEXT_WINDOW,
   type TasklessAgent,
@@ -278,7 +279,9 @@ export interface AgentsControl {
   onDropFork: () => void;
   /** Writes the open task's draft: the words in its box, the choice on its chip, the MCP servers it switched off, or that the refusal it was handed was let go. */
   onDraftChange: (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "runsOn" | "refused">
+    >,
   ) => void;
   /**
    * Hands a task New task just started, whose agent the service refused, a
@@ -309,7 +312,7 @@ export interface AgentsControl {
   /**
    * Starts the draft's agent with the words as its prompt, never the task,
    * and the files attached to them, on the choice where one was made and else the account's default,
-   * with the MCP servers the draft switched off; the
+   * with the MCP servers the draft switched off, where `runsOn` names, else where the service decides; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
    * nothing once it did.
    */
@@ -319,12 +322,13 @@ export interface AgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
+    runsOn?: AgentRunsOnRequest,
   ) => Promise<StartFailure | undefined>;
   /**
    * Starts the draft's fork: from its source at its message, under the
    * draft's key, with the box's words and files as a note where it holds
-   * any, the MCP servers the draft switched off, and the choice
-   * where one was made; the agent's tab opens as a Start's does. Answers
+   * any, the MCP servers the draft switched off, the choice
+   * where one was made, and the place where one was picked; the agent's tab opens as a Start's does. Answers
    * why it did not start, or nothing once it did.
    */
   startFork: (
@@ -334,6 +338,7 @@ export interface AgentsControl {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers?: readonly string[],
+    runsOn?: AgentRunsOnRequest,
   ) => Promise<StartFailure | undefined>;
   /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
   onUnarchive: (() => void | Promise<void>) | undefined;
@@ -422,8 +427,9 @@ export interface AgentsControl {
  * An agent not yet started: the key its first message starts it under, the
  * words written so far, the files attached to them, the choice made on its
  * chip, none while it runs on the account's default, or on its source's
- * where it is a fork, the MCP servers switched off for it, and the agent
- * and message it forks, where it is a fork (`fork-model.ts`).
+ * where it is a fork, the MCP servers switched off for it, where it runs
+ * where the developer picked it, and the agent and message it forks, where
+ * it is a fork (`fork-model.ts`).
  */
 export interface AgentDraft {
   readonly id: string;
@@ -432,12 +438,17 @@ export interface AgentDraft {
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
   readonly fork?: AgentFork | undefined;
+  /** Where its agent runs, as its Runs on chip picked it; none until picked, when the service decides (`runs-on.tsx`'s `useStartRunsOn`). */
+  readonly runsOn?: AgentRunsOnRequest | undefined;
   /** Why the service refused the agent of a draft New task handed over (`onHandDraft`), which its tab shows under the box until the next send. */
   readonly refused?: StartFailure | undefined;
 }
 
 /** What a draft agent holds beside its words and files: its key, what its chips chose, the fork it is, and why New task's start of it was refused. */
-type DraftChoices = Pick<AgentDraft, "id" | "choice" | "disabledServers" | "fork" | "refused">;
+type DraftChoices = Pick<
+  AgentDraft,
+  "id" | "choice" | "disabledServers" | "fork" | "runsOn" | "refused"
+>;
 
 /** The plan's draft agent: the key and chips held, with the words and files kept for it, or the words kept under their own key where nothing is held, as after a relaunch. */
 function taskDraft(
@@ -454,6 +465,7 @@ function taskDraft(
     disabledServers: held?.disabledServers ?? [],
     // Note that a fork is kept with the words too, so a relaunch keeps the draft a fork.
     ...forkOf(held === undefined ? kept?.place.fork : held.fork),
+    ...runsOnOf(held?.runsOn),
     ...(held?.refused === undefined ? undefined : { refused: held.refused }),
   };
 }
@@ -471,6 +483,13 @@ interface HandedDraft {
 /** A draft's fork as an optional key, absent where it forks nothing. */
 function forkOf(fork: AgentFork | undefined): { readonly fork?: AgentFork } {
   return fork === undefined ? {} : { fork };
+}
+
+/** A draft's place as an optional key, absent where none was picked. */
+function runsOnOf(runsOn: AgentRunsOnRequest | undefined): {
+  readonly runsOn?: AgentRunsOnRequest;
+} {
+  return runsOn === undefined ? {} : { runsOn };
 }
 
 /** Nothing laid in after a draft's own words as they move. */
@@ -494,12 +513,13 @@ interface ClosedDraft {
 
 /** What a draft holds beside its words and files, as the drafts hold it. */
 function choicesOf(draft: AgentDraft): DraftChoices {
-  const { id, choice, disabledServers, fork, refused } = draft;
+  const { id, choice, disabledServers, fork, runsOn, refused } = draft;
   return {
     id,
     choice,
     disabledServers,
     ...forkOf(fork),
+    ...runsOnOf(runsOn),
     ...(refused === undefined ? undefined : { refused }),
   };
 }
@@ -516,6 +536,7 @@ export function holdsNothing(draft: AgentDraft): boolean {
     draft.fork === undefined &&
     draft.choice === undefined &&
     draft.disabledServers.length === 0 &&
+    draft.runsOn === undefined &&
     draft.refused === undefined
   );
 }
@@ -537,19 +558,34 @@ interface PendingStart {
   choice: ModelChoice | undefined;
 }
 
-/** Starts a new agent on the open task from one of its agents' whole transcript, with the developer's words and the files attached to them as its note where given; answers why it did not start, or nothing once it did. */
+/**
+ * Starts a new agent on the open task from one of its agents' whole
+ * transcript, with the developer's words and the files attached to them as
+ * its note where given, and where `runsOn` names, which moves the agent
+ * there (`move-agent.tsx`); answers why it did not start, or nothing once
+ * it did.
+ */
 export type AgentContinuer = (
   agentId: string,
   note?: string,
   attachments?: readonly AgentAttachment[],
+  runsOn?: AgentRunsOnRequest,
 ) => Promise<Failure | undefined>;
 
-/** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, and the note and files it carried. */
+/** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, the note and files it carried, and where it moves the agent, if anywhere. */
 interface PendingContinue {
   on: string;
   key: string;
   note: string | undefined;
   attachments: readonly AgentAttachment[];
+  runsOn: AgentRunsOnRequest | undefined;
+}
+
+/** Whether two presses name the same place, or both none. */
+function samePlace(a: AgentRunsOnRequest | undefined, b: AgentRunsOnRequest | undefined): boolean {
+  const deviceOf = (place: AgentRunsOnRequest | undefined) =>
+    place !== undefined && "deviceId" in place ? place.deviceId : undefined;
+  return a?.machine === b?.machine && deviceOf(a) === deviceOf(b);
 }
 
 /** Whether two presses carry the same files, the same ones in the same order. */
@@ -926,9 +962,9 @@ export function useAgents(input: {
   };
 
   // Note that a press carries the key its agent's last press minted while the
-  // service has not answered it and the words and files are the same, so a
-  // press asked again opens the agent the first may already have started.
-  const continueAgent: AgentContinuer = async (sourceId, note, attachments = []) => {
+  // service has not answered it and the words, files, and place are the same,
+  // so a press asked again opens the agent the first may already have started.
+  const continueAgent: AgentContinuer = async (sourceId, note, attachments = [], runsOn) => {
     if (startsOn === undefined || !startsFrom) return undefined;
     const held = continues.current.get(sourceId);
     const carried = note !== undefined || attachments.length > 0 ? (note ?? "") : undefined;
@@ -936,29 +972,36 @@ export function useAgents(input: {
       held !== undefined &&
       held.on === startsOn &&
       held.note === carried &&
-      sameFiles(held.attachments, attachments)
+      sameFiles(held.attachments, attachments) &&
+      samePlace(held.runsOn, runsOn)
         ? held.key
         : mintKey();
-    continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments });
+    continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments, runsOn });
     const answer = await askStart(startsOn, {
       idempotencyKey: key,
       from: { agentId: sourceId },
       ...(carried === undefined ? undefined : { note: carried }),
       ...(attachments.length === 0 ? undefined : { attachments }),
+      ...(runsOn === undefined ? undefined : { runsOn }),
     });
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
-      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
-        failed(START_FAILED_AWAY, {
-          surface: FAILURE_SURFACE.AGENT_START,
-          cause: answer,
-          about: { agentId: sourceId },
-        });
+      const refused = continueFailureNote(answer, taskId ?? null);
+      const shown = {
+        surface: FAILURE_SURFACE.AGENT_START,
+        cause: answer,
+        about: { agentId: sourceId },
+      };
+      // Note that a move is chosen from a menu, which has no line beside it to say why, so its
+      // refusal is said in a toast wherever the developer stands.
+      if (runsOn !== undefined) failed(refused.text, shown);
+      else if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
+        failed(START_FAILED_AWAY, shown);
       }
-      return continueFailureNote(answer, taskId ?? null);
+      return refused;
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);
@@ -1063,6 +1106,7 @@ export function useAgents(input: {
       choice: joins ? draft?.choice : undefined,
       disabledServers: joins ? (draft?.disabledServers ?? []) : (source?.disabledServers ?? []),
       fork,
+      ...runsOnOf(joins ? draft?.runsOn : undefined),
     });
     return id;
   };
@@ -1079,6 +1123,7 @@ export function useAgents(input: {
       id: draft.id,
       choice: draft.choice,
       disabledServers: draft.disabledServers,
+      ...runsOnOf(draft.runsOn),
     });
   };
 
@@ -1089,7 +1134,9 @@ export function useAgents(input: {
   };
 
   const onDraftChange = (
-    change: Partial<Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "refused">>,
+    change: Partial<
+      Pick<AgentDraft, "prompt" | "choice" | "disabledServers" | "runsOn" | "refused">
+    >,
   ) => {
     if (startsOn === undefined || draft === undefined) return;
     const { prompt, ...choices } = change;
@@ -1100,6 +1147,7 @@ export function useAgents(input: {
       choice: draft.choice,
       disabledServers: draft.disabledServers,
       ...(draft.fork === undefined ? undefined : { fork: draft.fork }),
+      ...runsOnOf(draft.runsOn),
       ...(draft.refused === undefined ? undefined : { refused: draft.refused }),
       ...choices,
     });
@@ -1197,6 +1245,7 @@ export function useAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
+    runsOn?: AgentRunsOnRequest,
   ): Promise<StartFailure | undefined> => {
     if (taskId === undefined || !taskStarts)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -1206,6 +1255,7 @@ export function useAgents(input: {
       ...(attachments.length === 0 ? undefined : { attachments }),
       ...(disabledServers.length === 0 ? undefined : { disabledServers }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
+      ...runsOnOf(runsOn),
     });
     if ("failure" in answer)
       return { ...startFailureNote(answer, taskId, input.device), cause: answer };
@@ -1223,6 +1273,7 @@ export function useAgents(input: {
     choice: ModelChoice | undefined,
     attachments: readonly AgentAttachment[],
     disabledServers: readonly string[] = [],
+    runsOn?: AgentRunsOnRequest,
   ): Promise<StartFailure | undefined> => {
     if (startsOn === undefined || !startsFrom)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
@@ -1233,6 +1284,7 @@ export function useAgents(input: {
       attachments,
       choice,
       disabledServers,
+      runsOn,
     });
     const answer = await askStart(startsOn, asked);
     if ("failure" in answer) return { ...startFailureNote(answer, taskId ?? null), cause: answer };

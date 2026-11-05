@@ -966,7 +966,7 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   );
 });
 
-test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner, starting nothing", async () => {
+test("start_agent on a task that runs on another member's device is refused in words that name the device and its owner and offer the cloud, starting nothing, and runs in the cloud once runsOn names it", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
@@ -992,10 +992,27 @@ test("start_agent on a task that runs on another member's device is refused in w
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not started: this task runs on Studio. Only Test User can start agents on it, so ask them to, or start the work on a task that runs elsewhere.",
+        'Not started: it would run on Studio. Only Test User can start agents on it, so ask them to, or start it in the cloud with runsOn {"machine":"vercel"}.',
     },
   );
   assert.equal(eve.sent.length, 0, "nothing was started, in the cloud or anywhere");
+
+  const inCloud = await call(
+    CODER_TOOL.START_AGENT,
+    {
+      taskId: onTheirDevice.id,
+      prompt: "Bill by seat.",
+      runsOn: { machine: AGENT_MACHINE.VERCEL },
+    },
+    "call-in-cloud",
+  );
+  assert.equal(inCloud.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(inCloud));
+  assert.ok(isRecord(inCloud.agent) && isWireString(inCloud.agent.id), JSON.stringify(inCloud));
+  const stored = Option.getOrThrow(
+    await database.run(readAgent(agents.caller.userId, inCloud.agent.id)),
+  );
+  assert.deepEqual([stored.machine, stored.deviceId ?? null], [AGENT_MACHINE.VERCEL, null]);
+  assert.equal(eve.sent.length, 1);
 });
 
 test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {

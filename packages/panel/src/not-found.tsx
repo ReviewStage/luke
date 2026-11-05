@@ -2,7 +2,7 @@ import { EmptyState, type EmptyStateAction } from "@repo/ui";
 import { SearchXIcon } from "lucide-react";
 
 /**
- * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox thread that is not there for whoever opened it, and the admin dashboard's for an account.
+ * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox thread that is not there for whoever opened it, and the admin dashboard's for an account or a workspace.
  *
  * A link to anything in the app may reach someone the thing is not shared
  * with, and the service answers them as it answers a thing that does not
@@ -22,6 +22,7 @@ export const NOT_FOUND_THING = {
   AUTOMATION: "automation",
   PERSON: "profile",
   ACCOUNT: "account",
+  WORKSPACE: "workspace",
 } as const;
 
 type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THING];

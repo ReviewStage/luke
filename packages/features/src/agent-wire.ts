@@ -605,6 +605,22 @@ const agentStartFromSchema = EffectSchema.Struct({
 export type AgentStartFrom = typeof agentStartFromSchema.Type;
 
 /**
+ * Where a Start's agent runs, as a request names it: the cloud, or one of
+ * the starting member's own devices (a Mac's desktop app or a host) by its
+ * id, which the service checks is theirs, registered, and not away before
+ * it makes the agent there.
+ */
+export const agentRunsOnRequestSchema = EffectSchema.Union([
+  EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),
+  EffectSchema.Struct({
+    machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
+    deviceId: wireUuidSchema,
+  }),
+]);
+
+export type AgentRunsOnRequest = typeof agentRunsOnRequestSchema.Type;
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -624,9 +640,12 @@ export type AgentStartFrom = typeof agentStartFromSchema.Type;
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
  * draft's composer: it runs where the account's routing chooses, as any
- * Start does, eve or the provider's own harness alike. A Start names no
- * machine: the agent runs where its source runs, else where its task runs
- * (`task-wire.ts`'s `runsOn`), else in the cloud.
+ * Start does, eve or the provider's own harness alike. A Start's `runsOn`
+ * names where its agent runs, from another agent too, which is how an agent
+ * moves; one that names none runs where its source runs, for a continue or
+ * a fork, else where the starting member's newest agent on the task runs,
+ * else where the member last named (`account_preference.runs_on_*`), else
+ * where its task runs (`task-wire.ts`'s `runsOn`), else in the cloud.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -640,6 +659,7 @@ export const agentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
+  runsOn: EffectSchema.optionalKey(agentRunsOnRequestSchema),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */

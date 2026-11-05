@@ -1247,8 +1247,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * The row writes waiting for the service sent again, one round at a time,
    * as each answer of the list lands: its first after a launch, after a
-   * failed read started again, and after the network came back
-   * (`TASKS_RESYNC`), each of which says the service answers again.
+   * failed read started again, and after a wake or the connection coming
+   * back (`TASKS_RESYNC`, `TASKS_REGAINED`), each of which says the service
+   * answers again.
    */
   const resending = yield* FiberHandle.make<void>();
   const resendQueued = Effect.suspend(() =>
@@ -1300,6 +1301,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         listWait = wait;
       },
     });
+  });
+
+  /** A list already followed sealed and followed again now, the time stamped so a wake's further events within `RESYNC_SETTLE` seal it no more. */
+  const resealList = Effect.gen(function* () {
+    if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return;
+    resyncedAt = yield* Clock.currentTimeMillis;
+    write({ live: HOST_LIVE.CATCHING_UP });
+    yield* FiberHandle.run(listFollow, followList);
   });
 
   /** The one follow of the account's workspaces, from the account gate opening, at a launch or a sign-in, until a sign-out. */
@@ -2452,7 +2461,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   client.create(start.request, start.request.agent === undefined ? key : undefined),
                 );
                 if (!created.ok) {
-                  const { failure, localAgentRefusal } = created;
+                  const { failure, localAgentRefusal, cause } = created;
                   const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
                   const waits =
                     went === WRITE_UNTAKEN.UNANSWERED && key !== undefined && startMayWait(start);
@@ -2464,11 +2473,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   } else if (opened !== undefined && !waits) yield* startedBack(opened, id);
                   return untaken<FieldChange<PlanRow>, WireValue>(went, {
                     kept: carried<TasksStartAnswer>({ planId: id }),
-                    refused: carried<TasksStartAnswer>(
-                      localAgentRefusal === undefined
-                        ? { failure }
-                        : { failure, localAgentRefusal },
-                    ),
+                    refused: carried<TasksStartAnswer>({
+                      failure,
+                      ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
+                      ...(cause === undefined ? undefined : { cause }),
+                    }),
                   });
                 }
                 const { task, agent, txid } = created.answer;
@@ -2682,14 +2691,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // is sealed again now, once for a wake's several events.
     [GATEWAY_METHOD.TASKS_RESYNC]: () =>
       Effect.gen(function* () {
-        if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return {};
         const at = yield* Clock.currentTimeMillis;
         if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
           return {};
         }
-        resyncedAt = at;
-        write({ live: HOST_LIVE.CATCHING_UP });
-        yield* FiberHandle.run(listFollow, followList);
+        yield* resealList;
+        return {};
+      }),
+    // The connection came back, which no settle folds away, since a read a
+    // wake started just before may have hung on the network that was not
+    // yet there. Every read a window holds is asked again as a window
+    // coming forward asks it (`window-focus.ts`), and the live follows
+    // waiting out a backoff ask as the service answered (`live-follow.ts`).
+    [GATEWAY_METHOD.TASKS_REGAINED]: () =>
+      Effect.gen(function* () {
+        yield* dependencies.focus.raise;
+        yield* resealList;
         return {};
       }),
     // A window said the changes made offline the service refused, so the count it said is cleared for every window.

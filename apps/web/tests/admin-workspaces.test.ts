@@ -82,7 +82,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The tab, signed in, with every read answered by `body`; answers the page, the addresses read, and the accounts opened. */
+/** The tab, signed in, with every read answered by `body`; answers the page, the addresses read, and the accounts and workspaces opened. */
 async function openWorkspaces(body: AdminWorkspaceList) {
   const asked: string[] = [];
   const opened: string[] = [];
@@ -105,7 +105,8 @@ async function openWorkspaces(body: AdminWorkspaceList) {
           onHideAdminsChange: () => undefined,
           account: undefined,
           onSignOut: async () => undefined,
-          onOpenAccount: (id) => opened.push(id),
+          onOpenAccount: (id) => opened.push(`account ${id}`),
+          onOpenWorkspace: (id) => opened.push(`workspace ${id}`),
           frame: (content) => content,
         }),
       ),
@@ -179,12 +180,17 @@ test("View options offer Shared only, on, beside Include admins, and clearing it
   expect(window.localStorage.getItem("app-admin-workspaces-shared-only")).toBe("false");
 });
 
-test("a row opens its owner's account, and a row with no owner opens nothing", async () => {
+test("a row opens its workspace's page, owner or none, and the owner's name opens their account", async () => {
   const { page, opened } = await openWorkspaces(workspaces());
 
   const [northwind, feldspar] = Array.from(page.querySelectorAll<HTMLElement>("tbody tr"));
   act(() => northwind?.click());
   act(() => feldspar?.click());
+  act(() => northwind?.querySelector<HTMLElement>('a[href*="user=account-grace"]')?.click());
 
-  expect(opened).toEqual(["account-grace"]);
+  expect(opened).toEqual([
+    "workspace workspace-northwind",
+    "workspace workspace-feldspar",
+    "account account-grace",
+  ]);
 });

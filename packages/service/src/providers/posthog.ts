@@ -50,6 +50,15 @@ export function posthogProjectConsoleUrl(projectId: string, host?: string): stri
 }
 
 /**
+ * One person's page in a project's console, by the distinct id the app
+ * identifies an account under, which is its account id
+ * (`session-replay.ts`, `apps/web/src/analytics.ts`).
+ */
+export function posthogPersonConsoleUrl(projectConsoleUrl: string, distinctId: string): string {
+  return `${projectConsoleUrl}/person/${encodeURIComponent(distinctId)}`;
+}
+
+/**
  * Who the account behind a batch is, as the person record should read. The
  * service reads this from its own user row rather than taking it from the
  * request, so the desktop still names nobody: these are the same fields the

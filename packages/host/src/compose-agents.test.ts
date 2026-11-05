@@ -274,7 +274,11 @@ function fakeService() {
   const asked: string[] = [];
   let scope: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let cursor = AGENT_CURSOR_START;
-  let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
+  let transcript:
+    | typeof LIVE_ANSWERED
+    | { readonly failure: "not-found" }
+    | typeof OFFLINE
+    | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
   let itemsLive: typeof LIVE_ANSWERED | undefined;
   /** What the account's items' read keeps to answer by sync id, so a read past one is answered what moved since. */
@@ -787,7 +791,7 @@ function fakeService() {
     live,
     /** Whether the service answers a transcript's live read, or that the account reaches no such agent; none answers unanswered. */
     sealTranscript: (
-      next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined,
+      next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | typeof OFFLINE | undefined,
     ) => {
       transcript = next;
     },
@@ -887,6 +891,11 @@ type TranscriptLive = PolledLive<(typeof TRANSCRIPT_PARTS)[number]>;
 
 /** That the service answers a live read, its rows polled from the test's script (`polledLive`). */
 const LIVE_ANSWERED = "answered";
+/** A live read whose call got no answer at all, as one sent offline ends. */
+const OFFLINE = {
+  failure: AGENT_CALL_FAILURE.UNANSWERED,
+  cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
+} as const;
 
 /** What a call the closed account gate kept from the service answers: unanswered, saying the gate stood closed for want of an account. */
 const GATE_CLOSED_SIGNED_OUT = {
@@ -2104,6 +2113,38 @@ it.effect(
         `messages-now:${AGENT_ID}:1:0`,
         `messages-now:${AGENT_ID}:2:0`,
       ]);
+    }),
+);
+
+it.effect(
+  "a live read that gets no answer is asked again past the bound, and the transcript reads on once the service answers",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, held, sealTranscript, live } = yield* subject();
+      const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+      sealTranscript(OFFLINE);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* TestClock.adjust("2 minutes");
+      yield* settled;
+      assert.ok(seals() > 60, `read ${seals()} times`);
+      assert.deepEqual(
+        held().at(-1)?.failure,
+        OFFLINE,
+        "the read said it got no answer, never that it gave up",
+      );
+
+      // Note that the read never gave up, so its next ask, a second on, finds the service answering.
+      sealTranscript(LIVE_ANSWERED);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      transcriptRows(live, 2);
+      yield* settled;
+      assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
+      assert.ok(
+        asked.includes(`messages-now:${AGENT_ID}:1:0`),
+        "the page past the newest is read once the live read stands",
+      );
     }),
 );
 

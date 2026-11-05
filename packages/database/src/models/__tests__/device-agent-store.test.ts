@@ -51,7 +51,8 @@ import { beatDevice, registerDevice } from "../device-store.js";
 /**
  * The work queued for a local agent's Mac, over a real dialect: a line is
  * queued in order to the Mac the agent is pinned to, at a place never
- * handed out before, claimed
+ * handed out before, listed no further than a read's budget but always the
+ * first, claimed
  * once with its secrets cleared in the claim, or again under the token its
  * claim carried but never with its secrets twice, and settled once with its
  * runner's exit; a launch's step is kept only while its own Mac holds it
@@ -361,6 +362,37 @@ it.layer(getTestDB())("the Mac agent store", (it) => {
           [DEVICE_AGENT_LINE_KIND.MESSAGE, "second"],
         ],
       );
+    }),
+  );
+
+  it.effect("a read lists the waiting lines within its budget, and the first however large", () =>
+    Effect.gen(function* () {
+      const { userId, deviceId, agentId } = yield* openAccount();
+      const budget = DEVICE_AGENT_BOUNDS.MAX_LINES_READ_BYTES;
+      const files = (bytes: number) =>
+        ({
+          agentId,
+          kind: DEVICE_AGENT_LINE_KIND.FILES,
+          payload: { files: [{ path: "/skill.md", mode: 0o644, contents: "A".repeat(bytes) }] },
+        }) as const;
+      const queued: string[] = [];
+      for (const bytes of [budget + 1, budget * 0.4, budget * 0.4, budget * 0.4]) {
+        queued.push(Option.getOrThrow(yield* queueDeviceAgentLine(userId, files(bytes))).id);
+      }
+
+      const first = yield* deviceAgentLinesWaiting(userId, deviceId);
+      for (const line of first) yield* claimDeviceAgentLine(userId, deviceId, line.id);
+      const rest = yield* deviceAgentLinesWaiting(userId, deviceId);
+
+      assert.deepEqual(
+        first.map((line) => line.id),
+        queued.slice(0, 1),
+      );
+      assert.deepEqual(
+        rest.map((line) => line.id),
+        queued.slice(1, 3),
+      );
+      assert.ok(new TextEncoder().encode(JSON.stringify(rest)).length <= budget);
     }),
   );
 

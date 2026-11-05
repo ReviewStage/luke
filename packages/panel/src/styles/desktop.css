@@ -122,7 +122,7 @@ body,
      window it measures without the pan, on every key. It keeps off a phone's
      notch and home indicator too, where its page is drawn under them
      (`viewport-fit=cover`); everywhere else those insets are zero. */
-  top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px));
+  top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px) + var(--viewing-as-height, 0px));
   right: env(safe-area-inset-right, 0px);
   bottom: max(var(--ui-keyboard-inset), env(safe-area-inset-bottom, 0px));
   left: env(safe-area-inset-left, 0px);
@@ -131,6 +131,18 @@ body,
   height: auto;
   color: var(--ui-color-text);
   font-size: var(--ui-type-body-size);
+}
+
+/* The Viewing as strip (`viewing-as.tsx`) stands across the top of what is
+   seen of the window, where the stage begins, and the stage starts under it
+   by the height the strip writes on the root (`--viewing-as-height`), so it
+   covers nothing. Its ground is the window's, under the banner's tint. */
+.viewing-as {
+  position: fixed;
+  top: calc(var(--ui-viewport-top) + env(safe-area-inset-top, 0px));
+  right: env(safe-area-inset-right, 0px);
+  left: env(safe-area-inset-left, 0px);
+  background: var(--ui-color-ground);
 }
 
 .desktop-stage {

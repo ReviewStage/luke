@@ -256,26 +256,47 @@ export function accountExperimentOn(
   );
 }
 
-const findRole = SqlSchema.findOneOption({
+const findAccess = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ role: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({
+    role: Schema.NullOr(Schema.String),
+    supportAccessUntil: Schema.NullOr(InstantColumnSchema),
+  }),
   execute: (userId) =>
     Database.use((db) =>
-      db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1),
+      db
+        .select({ role: user.role, supportAccessUntil: user.supportAccessUntil })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
     ),
 });
 
+/** What the account's own `user` row says it may open, and who may open it as them. */
+export interface AccountAccessRow {
+  /** The role as Better Auth keeps it; what a role means is the service's (`admin-access.ts`). */
+  readonly role: string | undefined;
+  /** When the member's grant of support access runs out, as it was last written, whether or not that is past. */
+  readonly supportAccessUntil: Date | undefined;
+}
+
 /**
- * The role stored on the account's own `user` row, as Better Auth keeps it,
- * or nothing where the row holds none or there is no such account. Read for
- * the one account named and no other; what a role means is the service's
- * (`admin-access.ts`), so this answers the text as it stands.
+ * The role and the grant of support access stored on the account's own
+ * `user` row, as Better Auth keeps them, each nothing where the row holds
+ * none, and both nothing where there is no such account. Read for the one
+ * account named and no other.
  */
-export function readAccountRole(
+export function readAccountAccess(
   userId: string,
-): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
-  return Effect.map(findRole(userId), (row) =>
-    Option.match(row, { onNone: () => undefined, onSome: ({ role }) => role ?? undefined }),
+): Effect.Effect<AccountAccessRow, StoreFailure, DatabaseServices> {
+  return Effect.map(findAccess(userId), (row) =>
+    Option.match(row, {
+      onNone: () => ({ role: undefined, supportAccessUntil: undefined }),
+      onSome: ({ role, supportAccessUntil }) => ({
+        role: role ?? undefined,
+        supportAccessUntil: supportAccessUntil ?? undefined,
+      }),
+    }),
   );
 }
 

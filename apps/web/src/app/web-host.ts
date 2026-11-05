@@ -50,6 +50,7 @@ import {
   linkNetworkWatch,
   linkSessionReload,
   type OperatorClient,
+  serviceReachLayer,
 } from "@repo/host/client";
 import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@repo/host/contract";
 import {
@@ -84,7 +85,7 @@ import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
-import { answerFailedChunk, PRELOAD_ERROR, staleBuildTab } from "./stale-build";
+import { failedChunkAnswer, PRELOAD_ERROR, staleBuildTab } from "./stale-build";
 import { addressHere } from "./web-address";
 import { developmentFixtureProfile } from "./web-fixture";
 import { onTabShownChanged, webNoticeDoors } from "./web-notices";
@@ -426,7 +427,8 @@ const composedWeb = (
       yield* linkNetworkWatch({
         state,
         isOnline: () => navigator.onLine,
-        regained: operator.host.tasksResync(),
+        regained: operator.host.tasksRegained(),
+        report,
       });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
@@ -496,6 +498,7 @@ export function composeWeb(
   const storage = tabStorage();
   // Only a development tab's address can name one, so a production tab's host is always live.
   const fixture = developmentFixtureProfile(location.search);
+  // Every call the host makes to the service tells the service's reach beside it, which the tab's network watch follows.
   const assembly = Layer.provide(
     hostAssemblyLayer([HOST_PLATFORM_CONCERN.TERMINALS]),
     Layer.mergeAll(
@@ -505,7 +508,7 @@ export function composeWeb(
       httpClient,
       Layer.provide(cookieAccountSourceLayer(cookieDoor(tab)), httpClient),
     ),
-  );
+  ).pipe(Layer.provideMerge(serviceReachLayer));
   const launched = Layer.unwrap(
     Effect.map(ComposedWebTag, (web) =>
       Layer.mergeAll(
@@ -519,15 +522,15 @@ export function composeWeb(
       ).pipe(Layer.provideMerge(hostStandingLayer)),
     ),
   );
-  // A tab left open across a deploy moves onto the build now live once a chunk of its own fails to load.
+  // A tab left open across a deploy asks to move onto the build now live once a chunk of its own fails to load.
   const staleBuild = Layer.effectDiscard(
     Effect.forkScoped(
-      Effect.suspend(() => {
-        const stale = staleBuildTab(tab);
-        return Stream.runForEach(Stream.fromEventListener(window, PRELOAD_ERROR), () =>
-          answerFailedChunk(stale),
-        );
-      }),
+      Effect.suspend(() =>
+        Stream.runForEach(
+          Stream.fromEventListener(window, PRELOAD_ERROR),
+          failedChunkAnswer(staleBuildTab(tab)),
+        ),
+      ),
     ),
   );
   return Layer.merge(launched, staleBuild).pipe(

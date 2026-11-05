@@ -23,6 +23,7 @@ import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import type { StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import { ANNOUNCE, announce } from "../announcer/announcer.js";
@@ -460,6 +461,7 @@ export function Tab({
   controls,
   icon,
   label,
+  labelReplayUnmasked = false,
   detail,
   detailTone,
   endMark,
@@ -484,6 +486,8 @@ export function Tab({
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
+  /** Whether its label and its detail are the app's own words (Overview, Inbox and its count), which a screen recording shows as they read; masked otherwise, as a tab named by a task or a file is. */
+  labelReplayUnmasked?: boolean | undefined;
   /** Words after the label, dimmed: a count, as an Inbox tab's. */
   detail?: string | undefined;
   /** The detail's status tone, muted where absent: attention for a count of what waits on the reader, as an Inbox tab's. */
@@ -561,7 +565,7 @@ export function Tab({
         className="ui-tab-label overflow-hidden whitespace-nowrap"
         data-overflow={String(clipped)}
       >
-        {label}
+        <ReplayWords unmasked={labelReplayUnmasked}>{label}</ReplayWords>
         {detail === undefined ? null : (
           <>
             {" "}
@@ -569,7 +573,7 @@ export function Tab({
               className="ui-tab-detail text-muted-foreground data-tone:text-tone-ink"
               data-tone={detailTone}
             >
-              {detail}
+              <ReplayWords unmasked={labelReplayUnmasked}>{detail}</ReplayWords>
             </span>
           </>
         )}
@@ -657,6 +661,7 @@ export function TabCards({
 export function TabCard({
   icon,
   label,
+  labelReplayUnmasked = false,
   detail,
   detailIcon,
   endMark,
@@ -669,6 +674,8 @@ export function TabCard({
 }: {
   icon: ReactNode;
   label: string;
+  /** Whether its name is the app's own words (Overview, Inbox), which a screen recording shows as they read; masked otherwise, as where it stands always is. */
+  labelReplayUnmasked?: boolean | undefined;
   /** Where it stands, under its name: a task and its strip; the line stands empty where absent, so every card is one height. */
   detail?: string | undefined;
   /** The glyph before the detail's words. */
@@ -730,7 +737,7 @@ export function TabCard({
       <div className="ui-tab-card-name flex min-w-0 items-center gap-icon-gap px-0.5 whitespace-nowrap [--ui-glyph-size:var(--ui-menu-glyph)] [&>:is(svg,img)]:size-menu-glyph [&>:is(svg,img)]:flex-none [&>.ui-text]:min-w-0 [&>.ui-text]:flex-auto [&>.ui-text]:overflow-hidden [&>.ui-text]:text-ellipsis">
         {icon}
         <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-          {label}
+          <ReplayWords unmasked={labelReplayUnmasked}>{label}</ReplayWords>
         </Text>
       </div>
       <div className="ui-tab-card-detail flex items-center gap-1 whitespace-nowrap [&>.ui-text]:min-w-0 [&>.ui-text]:overflow-hidden [&>.ui-text]:text-ellipsis">
@@ -738,7 +745,7 @@ export function TabCard({
           <>
             {detailIcon}
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {detail}
+              <ReplayWords unmasked={false}>{detail}</ReplayWords>
             </Text>
           </>
         )}

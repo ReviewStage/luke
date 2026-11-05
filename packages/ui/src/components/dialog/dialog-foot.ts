@@ -26,6 +26,14 @@ export const DIALOG_FOOT =
 export const DIALOG_ANSWERS =
   "ml-auto flex shrink-0 gap-dialog-action-gap [&>.ui-button]:min-w-dialog-action";
 
+/**
+ * Whether the card standing round its foot unmasks its own words in a
+ * screen recording (`Dialog`'s `replayUnmasked`), which the answers drawn at
+ * its foot read for their act's word, since a mark round the foot's buttons
+ * would stand between the answers and the layout that sizes them.
+ */
+export const DialogReplayUnmasked = createContext(false);
+
 /** A question standing in the foot, as the card hears it. */
 export interface FootClaim {
   /** Takes the question back, as Escape or a press on the dimmed window asks; false where an answer under way keeps it. */

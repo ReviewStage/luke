@@ -61,6 +61,47 @@
       "maxLength": 200,
       "description": "The reasoning effort, as the model lists it (such as high); given with the model or not at all."
     },
+    "runsOn": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "vercel"
+              ]
+            }
+          },
+          "required": [
+            "machine"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "device"
+              ]
+            },
+            "deviceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            }
+          },
+          "required": [
+            "machine",
+            "deviceId"
+          ],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Where the agent runs: {\"machine\":\"vercel\"} for the cloud, or {\"machine\":\"device\",\"deviceId\":\"<id>\"} for one of the member's own devices (a Mac or a host) by its id, which must be registered and online. With from, another place than that agent's moves it there. Leave it out for where the agent it starts from runs, with from; else where the member's newest agent on the task runs; else where the member last chose to run one; else where its task runs; else the cloud."
+    },
     "from": {
       "type": "object",
       "properties": {

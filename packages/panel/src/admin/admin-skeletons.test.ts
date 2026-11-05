@@ -33,6 +33,7 @@ const UNANSWERED: AdminReads = {
   user: unanswered,
   day: unanswered,
   workspaces: unanswered,
+  workspace: unanswered,
   favorite: async () => true,
 };
 
@@ -58,6 +59,7 @@ async function draw(
     },
     address: {
       accountHref: () => undefined,
+      workspaceHref: () => undefined,
       search: () => "",
       keepSearch: () => undefined,
       onSearchMoved: () => () => undefined,
@@ -79,6 +81,7 @@ const QUIET = {
   account: undefined,
   onSignOut: async () => undefined,
   onOpenAccount: () => undefined,
+  onOpenWorkspace: () => undefined,
   frame: (content: React.JSX.Element) => content,
 } as const;
 

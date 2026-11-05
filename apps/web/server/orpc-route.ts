@@ -2,6 +2,7 @@
 
 import { memberSeams, workspaceSeams } from "@repo/database/models/workspace-seams";
 import { accountProcedureSeams } from "@repo/service/accounts/account-seams";
+import { supportAccessCalls } from "@repo/service/accounts/support-access-calls";
 import { hostedAdminSeams } from "@repo/service/admin/admin-route";
 import { agentBrowserServices } from "@repo/service/agents/browser/agent-browser";
 import type { NativeAgentSessions } from "@repo/service/agents/coder-host/runtime-sessions";
@@ -68,6 +69,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   resolveSessionUserId: resolveBrowserSessionUserId,
   unlinkGitHub: githubUnlink(auth.api),
   deleteClientConsent: clientConsentDelete(auth.api),
+  supportAccess: supportAccessCalls(auth.api),
   memberMcpServerUrl: memberMcpResourceUrl(authDeployment(process.env).baseURL),
   workspaces: workspaceSeams(auth.api),
   sandbox: agentSandboxLayer,

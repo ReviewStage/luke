@@ -850,7 +850,6 @@ function PlanDocument({
         agents={agents}
         held={views.held}
         tab={tab}
-        runsOn={opened?.runsOn}
         // Overview's agents stand open, its list the task's own rather than a fold under the plan's head.
         folded={false}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
@@ -880,7 +879,6 @@ function PlanDocument({
       agents,
       views.held,
       tab,
-      opened?.runsOn,
       openAgentTab,
       openPullRequestDoor,
       room,

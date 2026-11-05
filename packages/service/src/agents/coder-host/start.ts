@@ -12,12 +12,14 @@ import {
   readAgent,
   readAgentByKey,
   readAgentContext,
+  readNewestAgentPlace,
   taskPilotStands,
 } from "@repo/database/models/agent-store";
 import type { HandedFile } from "@repo/database/models/attached-file-parts";
 import { devicesNamed } from "@repo/database/models/device-store";
 import { hostRemoved } from "@repo/database/models/host-store";
 import { listAccountProviderKeyRows } from "@repo/database/models/provider-key-store";
+import { keepRunsOnPick, readRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
   assignUnassignedTaskCommitted,
   beginTaskWorkCommitted,
@@ -57,6 +59,7 @@ import {
   type AgentAttachment,
   type AgentKind,
   type AgentMachineKind,
+  type AgentRunsOnRequest,
   type AgentSource,
   type AgentStartFrom,
   type AgentStartRequest,
@@ -240,7 +243,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * before eve took it, each said as an error naming the agent (`agent-log.ts`).
  * A choice an ask names runs that one agent and is never kept as the
  * account's default, which only
- * Settings writes. Who reaches the agent is the caller's: the route holds the developer's
+ * Settings writes. Where the agent runs is the place the ask names, else
+ * its source's, else its starter's default (`machineOfStart`); unlike a
+ * choice, a place the ask names is kept as the starter's last pick. Who reaches the agent is the caller's: the route holds the developer's
  * own bearer, and a coding agent's tool acts as the
  * deployment for the account; the agent's harness answers the opening, and
  * the cancel that stops a continue's source, either way
@@ -301,6 +306,8 @@ export type StartAsk = StartPlace & {
   readonly reached?: StartReach | undefined;
   /** The task the task's own start made in the same request, as it was made, which the agent's Start lands on rather than reading it again; none for every other Start. */
   readonly landed?: StoredTask | undefined;
+  /** Where the agent runs, the cloud or one of the starter's devices; none for where `machineOfStart` defaults it. */
+  readonly runsOn?: AgentRunsOnRequest | undefined;
 };
 
 /** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
@@ -1036,35 +1043,69 @@ interface StartMachine {
   readonly asked: { readonly machine: AgentMachineKind; readonly deviceId?: string | undefined };
 }
 
+/** A place a Start reads before it is checked: the cloud, or a device by its id, null once that device's row is gone. */
+interface PlaceRead {
+  readonly machine: AgentMachineKind;
+  readonly deviceId?: string | null | undefined;
+}
+
 /** A Start's agent in a sandbox, the one place that needs no device. */
 const IN_THE_CLOUD: StartMachine = { asked: { machine: AGENT_MACHINE.VERCEL } };
 
 /**
- * Where a new agent runs, one rule for every Start: where the agent it is
- * started from runs, for a continue or a fork, `start_agent` from another
- * agent among them, so a local agent goes on locally; else where its task
- * runs (`task.runsOn`); else, with no task, as an agent with no plan is,
- * in the cloud. The starter is the account the
- * Start is made for: a member's own, the calling agent's starter for
- * `start_agent`, and the automation's owner for an automation's run. A
- * device runs only its owner's agents, so a Start by anyone else is
- * refused as `not-owner`, naming the device and whose it is; a device whose
- * row is gone is refused as away, a host its starter removed is refused by
- * name, and one that is the starter's goes on to the runtime and machine choices,
- * which refuse it by name where it is away, the experiment is off, or it
- * runs no harness for the model. Nothing falls back to the cloud on its own.
+ * Where a Start that names no place and takes over from no agent runs its
+ * agent, by its starter's account: where the starter's newest agent on the
+ * task runs, never a teammate's, since a device is one member's; else where
+ * the starter last named a place (`runs-on-pick.ts`); else where the task
+ * runs; else the cloud. Note that an automation's run reads neither of the
+ * starter's own, because no member is there to have chosen for it, so it
+ * runs where its task does, as it always has.
+ */
+const defaultPlaceOf = Effect.fnUntraced(function* (
+  userId: string,
+  task: Task | undefined,
+  automated: boolean,
+): Effect.fn.Return<PlaceRead, HostedRefusal, DatabaseServices> {
+  if (!automated && task !== undefined) {
+    const newest = yield* hostedStoreOrUnavailable(readNewestAgentPlace(userId, task.id));
+    if (Option.isSome(newest)) return newest.value;
+  }
+  if (!automated) {
+    const pick = yield* hostedStoreOrUnavailable(readRunsOnPick(userId));
+    if (Option.isSome(pick)) return pick.value;
+  }
+  return task?.runsOn ?? { machine: AGENT_MACHINE.VERCEL };
+});
+
+/**
+ * Where a new agent runs, one rule for every Start: the place the ask
+ * names (`runsOn`), from another agent too, which is how an agent moves;
+ * else where the agent it is started from runs, for a continue or a fork,
+ * `start_agent` from another agent among them, so a local agent goes on
+ * locally; else the starter's default (`defaultPlaceOf`). The starter is
+ * the account the Start is made for: a member's own, the calling agent's
+ * starter for `start_agent`, and the automation's owner for an automation's
+ * run. Whichever decided it, a device runs only its owner's agents, so a
+ * Start by anyone else is refused as `not-owner`, naming the device and
+ * whose it is; a device whose row is gone is refused as away, a host its
+ * starter removed is refused by name, and one that is the starter's goes on
+ * to the runtime and machine choices, which refuse it by name where it is
+ * away, the experiment is off, or it runs no harness for the model. Nothing
+ * falls back to the cloud on its own.
  */
 const machineOfStart = Effect.fnUntraced(function* (
   userId: string,
+  ask: Pick<StartAsk, "runsOn" | "automationOrigin">,
   source: Agent | undefined,
   task: Task | undefined,
 ): Effect.fn.Return<StartMachine, HostedRefusal, DatabaseServices> {
-  const fromSource = source !== undefined;
-  const machine = fromSource
-    ? (source.machine ?? AGENT_MACHINE.VERCEL)
-    : (task?.runsOn?.machine ?? AGENT_MACHINE.VERCEL);
-  if (machine === AGENT_MACHINE.VERCEL) return IN_THE_CLOUD;
-  const deviceId = fromSource ? source.deviceId : task?.runsOn?.deviceId;
+  const place: PlaceRead =
+    ask.runsOn ??
+    (source !== undefined
+      ? { machine: source.machine ?? AGENT_MACHINE.VERCEL, deviceId: source.deviceId }
+      : yield* defaultPlaceOf(userId, task, ask.automationOrigin !== undefined));
+  if (place.machine === AGENT_MACHINE.VERCEL) return IN_THE_CLOUD;
+  const { deviceId } = place;
   const device =
     deviceId === null || deviceId === undefined
       ? undefined
@@ -1088,6 +1129,21 @@ const machineOfStart = Effect.fnUntraced(function* (
   }
   return { asked: { machine: AGENT_MACHINE.DEVICE, deviceId: device.id } };
 });
+
+/**
+ * The place a Start named, kept as its starter's last pick, which a later
+ * Start naming none and a task an agent makes for them run at; nothing for
+ * a Start that named none. Note that a pick that fails to keep fails
+ * nothing, because the agent already stands.
+ */
+const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
+  runsOn === undefined
+    ? Effect.void
+    : keepRunsOnPick(userId, runsOn).pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
+        ),
+      );
 
 /**
  * Whether a Start that landed on a task with no repository may go on where
@@ -1226,8 +1282,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
     continued && ask.startedBy === undefined
       ? yield* pilotStarterOf(userId, from.source)
       : undefined;
-  // Where it runs, the runtime, and the payer are decided as the agent is made, by the starter's account, its source or task, and its model, and never change.
-  const where = yield* machineOfStart(userId, from?.source, landing.task);
+  // Where it runs, the runtime, and the payer are decided as the agent is made, by the place it names or else its source or its starter's default, and its model, and never change.
+  const where = yield* machineOfStart(userId, ask, from?.source, landing.task);
   if (!repositorylessOnHost(ask, landing, where)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
@@ -1387,6 +1443,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       Effect.annotateLogs(agentLogIds(agent)),
     );
   }
+  // A place named is kept only once the agent stands for good, so a refused opening changes no pick.
+  yield* keptPick(userId, ask.runsOn);
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;
   // The Start answers the last transaction it committed in, which Realtime delivers after every
@@ -1501,6 +1559,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     note: note === "" ? undefined : note,
     blank: request.blank,
     call: request.call,
+    runsOn: request.runsOn,
     summaryModel,
     reached,
     landed,

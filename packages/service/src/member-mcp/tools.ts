@@ -846,6 +846,7 @@ const StartAgentInputSchema = Schema.Struct({
   branch: START_AGENT_TOOL.inputSchema.fields.branch,
   model: START_AGENT_TOOL.inputSchema.fields.model,
   effort: START_AGENT_TOOL.inputSchema.fields.effort,
+  runsOn: START_AGENT_TOOL.inputSchema.fields.runsOn,
   from: START_AGENT_TOOL.inputSchema.fields.from,
 });
 

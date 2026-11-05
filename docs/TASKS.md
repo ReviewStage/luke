@@ -686,6 +686,30 @@ the terminal picker's Start an agent, and the agent tabs ("Agent tabs"
 above), and Settings › Agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
+### Where an agent runs
+
+Each agent runs in the cloud or on one of its starter's own devices (a Mac
+or a host), chosen as it starts and kept for its life. A start may name the
+place; a continue or fork that names another place starts a new agent
+there, which is how work moves between them. A start that names none runs where the agent it continues or forks
+runs; else where the starter's newest agent on the task runs, never a
+teammate's; else where the starter last chose to run one; else where the
+task runs; else in the cloud. A device that is not the starter's, was
+removed, or is away refuses the start by name, and nothing moves it to the
+cloud on its own.
+
+While Bring your own host is on, an agent's ⋯ menu offers Move to ›: Cloud
+and each of the member's own devices, but not the place the agent runs now,
+a device that takes no agent now dimmed and saying why. It stands only
+where Continue in new agent could run: on an agent at rest, not archived,
+that the open task's tab or the agent's own page lists, on a task whose mode
+offers it a continue. A pick is that continue at the place picked: the
+source stops, a new agent named `<title> (continued)` starts there on its
+transcript, and its tab opens. A cloud agent's work comes along whole, what
+it had not committed included, on a branch of its own; from a device only
+what it pushed comes along, which each place says, and its folder stays on
+that device. A move that is refused says why in a toast.
+
 ## Copy
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
@@ -729,7 +753,9 @@ Copy copies the new document.
 - **Loading a task.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
-  reaches for the workspace (`repository-not-reachable`, 403), and answers
+  reaches for the workspace (`repository-not-reachable`, 403), on a device
+  that is not the starter's, was removed, or is away ("Where an agent runs"
+  above), and answers
   `unavailable` where the agent's session could not be started; the reason is said
   under the composer that sent it, or on the window's toast for a start from
   the terminal picker. An agent that ends `failed` or

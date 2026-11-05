@@ -52,13 +52,10 @@ const SOURCE_OF_SCOPE = {
   [INSTALLED_SKILL_SCOPE.PERSONAL]: TASK_SKILL_SOURCE.PERSONAL,
 } as const satisfies Record<InstalledSkill["scope"], TaskSkill["source"]>;
 
-/** The order the installed sources are offered in, after the repository's. */
-const INSTALLED_ORDER = [TASK_SKILL_SOURCE.WORKSPACE, TASK_SKILL_SOURCE.PERSONAL] as const;
-
 /**
  * The installed skills a developer may choose beside the repository's: the
- * enabled ones a member may name, the workspace's and then their own, each
- * by name, any name an earlier one or any repository skill holds left out,
+ * enabled ones a member may name, in the order the store lists them, the
+ * workspace's and then their own, each by name, any name an earlier one or any repository skill holds left out,
  * a model-only one left out, as many as the list carries.
  */
 function mergedSkills(
@@ -75,16 +72,11 @@ function mergedSkills(
         source: SOURCE_OF_SCOPE[skill.scope],
       }),
     );
-  const ordered = INSTALLED_ORDER.flatMap((source) =>
-    offered
-      .filter((skill) => skill.source === source)
-      .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
-  );
   // Note that a repository skill the model alone loads is not offered, but still holds its name, as the session's merge does.
   const taken = new Set<string>(reserved);
   const merged: TaskSkill[] = [...repository];
   for (const skill of repository) taken.add(skill.name);
-  for (const skill of ordered) {
+  for (const skill of offered) {
     if (taken.has(skill.name)) continue;
     taken.add(skill.name);
     merged.push(skill);

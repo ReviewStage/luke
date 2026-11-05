@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@repo/database/core/migrator";
-import { Database } from "@repo/database/core/query";
-import { user } from "@repo/database/schemas/auth";
 import { unmigratedPgliteSqlClient } from "@repo/database/testing";
 import { Effect, Layer } from "effect";
 import { FileSystem } from "effect/FileSystem";
@@ -56,9 +54,7 @@ it.effect.each(MIGRATIONS)(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* runWebMigrations(yield* foldersBefore(migration));
-        yield* Database.use((db) =>
-          db.insert(user).values({ id: "dean", name: "dean", email: "dean@app.test" }),
-        );
+        yield* sql`insert into "user" (id, name, email) values ('dean', 'dean', 'dean@app.test')`;
         for (const [order, [kind]] of KINDS.entries()) {
           yield* sql`insert into conversations (user_id, kind, created_at) values ('dean', ${kind}, ${new Date(order * 1000)})`;
         }

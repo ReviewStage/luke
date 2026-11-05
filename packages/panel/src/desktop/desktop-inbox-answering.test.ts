@@ -1603,6 +1603,47 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
 
   act(() => world.root?.unmount());
   world.root = undefined;
+  const noted = await mountThread(
+    threadItem(
+      [
+        askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnAt: 2_000 }),
+        threadMessage(
+          "e1b2c3d4-0000-4000-8000-000000000090",
+          { member: READER },
+          "Settled it in standup.",
+          2_000,
+        ),
+        threadMessage("e1b2c3d4-0000-4000-8000-000000000091", "agent", "Deploy finished.", 3_000),
+        threadMessage(
+          "e1b2c3d4-0000-4000-8000-000000000092",
+          { member: TEAMMATE },
+          "Nothing left to do.",
+          4_000,
+        ),
+      ],
+      { status: INBOX_STATUS.CLOSED, closedBy: TEAMMATE, settledAt: 4_000 },
+    ),
+  );
+  assert.deepEqual(threadLines(noted), [
+    ["message", null],
+    ["closed", "resolved this without an answer"],
+    ["message", null],
+    ["closed", "resolved this without an answer"],
+  ]);
+  assert.deepEqual(
+    [...noted.querySelectorAll("[data-inbox-comment='closed']")].map((line) => [
+      wordsOf(line.querySelector(".ui-comment-name")),
+      wordsOf(line.querySelector("[data-inbox-message-text]")),
+    ]),
+    [
+      ["You resolved this without an answer", "Settled it in standup."],
+      ["Charles Pan resolved this without an answer", "Nothing left to do."],
+    ],
+    "a close's note stands under the line saying who resolved it, never as a message of its own, and names the closer of a close no longer standing",
+  );
+
+  act(() => world.root?.unmount());
+  world.root = undefined;
   const toDo = await mountThread(
     threadItem([
       askingMessage(

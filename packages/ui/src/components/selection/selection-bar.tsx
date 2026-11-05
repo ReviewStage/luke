@@ -43,6 +43,8 @@ export type SelectionAct = {
   readonly icon?: React.JSX.Element;
   /** The act cannot be taken back, as Permanently delete: a chosen row's menu draws it red, last and alone. */
   readonly danger?: boolean | undefined;
+  /** Whether the words of the menu it drops are the app's own, which a screen recording shows as they read (`Menu`'s `replayUnmasked`). */
+  readonly replayUnmasked?: boolean | undefined;
 } & (
   | { readonly onAct: () => void; readonly menu?: undefined }
   | { readonly menu: readonly (readonly MenuAction[])[]; readonly onAct?: undefined }
@@ -63,7 +65,13 @@ function MenuAct({
         {act.label}
       </Button>
       {drop.drawn === undefined ? null : (
-        <Menu label={act.label} menu={drop.drawn} groups={menu} onClose={drop.close} />
+        <Menu
+          label={act.label}
+          menu={drop.drawn}
+          groups={menu}
+          onClose={drop.close}
+          replayUnmasked={act.replayUnmasked}
+        />
       )}
     </>
   );

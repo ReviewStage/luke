@@ -13,6 +13,7 @@ import {
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "./oauth-clients.js";
+import { supportAccess } from "./support-access.js";
 
 /**
  * The desktop's sign-in on a Preview, carried end to end across the proxy's
@@ -70,7 +71,8 @@ function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
     socialProviders: {
       github: { clientId: "luke-github", clientSecret: "github-secret", scope: ["read:user"] },
     },
-    // The plugins `auth.ts` installs, in its order.
+    // The plugins `auth.ts` installs that this flow reaches, in its order:
+    // the support-access plugin's hooks stand at the authorization it resumes.
     plugins: [
       oAuthProxy({ productionURL: deployment.productionURL, secret: deployment.proxySecret }),
       jwt(JWT_KEY_STORAGE),
@@ -81,6 +83,7 @@ function endFor(deployment: AuthDeployment, secret: string, trail: Trail) {
         clientPrivileges: denyOAuthClientPrivileges,
         cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT.id]),
       }),
+      supportAccess(),
     ],
     logger: {
       level: "debug",

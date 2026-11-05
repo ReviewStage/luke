@@ -84,6 +84,7 @@ import { cn } from "../../cn.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { joinRefs } from "../../join-refs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
 import {
   ROVING_ORIENTATION,
@@ -617,6 +618,8 @@ export interface ChoiceItem<Value extends string> {
   /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing, or its name while folded. */
   readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
+  /** Whether its name is a person's thing, a repository's or a branch's, kept masked in a screen recording even where the bar stands under `ReplayUnmask`. */
+  readonly replayMasked?: boolean | undefined;
 }
 
 /** What a hint hands the option it wraps: when to show and go, and what it says of it. */
@@ -843,7 +846,9 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
                 {item.icon}
               </span>
             )}
-            <span className="ui-choice-bar-label">{item.label}</span>
+            <span className="ui-choice-bar-label">
+              <ReplayWords masked={item.replayMasked}>{item.label}</ReplayWords>
+            </span>
             {count === undefined ? null : <span className={COUNT}>{count}</span>}
           </TogglePrimitive>
         );

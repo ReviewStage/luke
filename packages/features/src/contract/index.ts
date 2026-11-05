@@ -30,6 +30,7 @@ import { planCommentsContract } from "./plan-comments.js";
 import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { pullRequestsContract } from "./pull-requests.js";
 import { repositoryPinsContract } from "./repository-pins.js";
+import { supportAccessContract } from "./support-access.js";
 import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
@@ -74,6 +75,7 @@ export const hostedContract = {
   pullRequestChapters: pullRequestChaptersContract,
   pullRequests: pullRequestsContract,
   repositoryPins: repositoryPinsContract,
+  supportAccess: supportAccessContract,
   taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,
   workspaceGithub: workspaceGithubContract,

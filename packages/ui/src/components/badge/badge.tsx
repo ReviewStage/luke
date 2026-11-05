@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { Badge as ShadcnBadge } from "../../shadcn/badge.js";
 import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
@@ -142,6 +143,7 @@ export function Badge({
   dot = false,
   lit = false,
   hideWordsUnder,
+  replayMasked = false,
   children,
 }: {
   tone?: StatusTone;
@@ -157,6 +159,8 @@ export function Badge({
   lit?: boolean;
   /** Give the words up, to a reader alone, once the room around the badge (a `ui-room` container) is narrower than this step; kept drawn where no `icon`, `swatch`, or dot says the state in their place. */
   hideWordsUnder?: VisuallyHiddenUnder | undefined;
+  /** Whether its words name a person's thing, a GitHub label or a branch, kept masked in a screen recording even under `ReplayUnmask`; a filled badge's words stay one string. */
+  replayMasked?: boolean | undefined;
   /** The state's words, which the color only repeats; a filled badge's are one string. */
   children: ReactNode;
 }): React.JSX.Element {
@@ -190,11 +194,13 @@ export function Badge({
         className="ui-badge-words min-w-0 wrap-break-word"
         data-under={marked ? hideWordsUnder : undefined}
       >
-        {filled !== undefined && typeof children === "string" ? (
-          <FilledWords>{children}</FilledWords>
-        ) : (
-          children
-        )}
+        <ReplayWords masked={replayMasked}>
+          {filled !== undefined && typeof children === "string" ? (
+            <FilledWords>{children}</FilledWords>
+          ) : (
+            children
+          )}
+        </ReplayWords>
       </span>
     </ShadcnBadge>
   );

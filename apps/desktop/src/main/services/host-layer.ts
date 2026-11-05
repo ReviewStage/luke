@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import type { LoopbackConsentOptions } from "@repo/credentials";
 import { loopbackConsent } from "@repo/credentials/node";
+import type { ServiceReach } from "@repo/features";
 import { PRODUCT_PLATFORM } from "@repo/features/analytics";
 import type { SecretCipher as SecretCipherSeam } from "@repo/host";
+import { serviceReachLayer } from "@repo/host/client";
 import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
@@ -84,11 +86,12 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
  * A live run keeps its settings and workspace files on disk under the app's own
  * application data; a fixture or capture run keeps nothing and is
  * network-silent. Either way this process is one operator over one
- * transport, and one node.
+ * transport, and one node. Every call it makes to the service tells the
+ * service's reach beside it, which the client's network watch follows.
  */
 export function hostAssemblyLayerFor(
   dependencies: HostSeamDependencies,
-): Layer.Layer<HostAssemblyTag, DuplicateGatewayMethod> {
+): Layer.Layer<HostAssemblyTag | ServiceReach, DuplicateGatewayMethod> {
   const seams = hostSeamLayersFor(dependencies);
   return Layer.provide(
     // The desktop runs every platform concern: it is the host they were written for.
@@ -101,5 +104,5 @@ export function hostAssemblyLayerFor(
       ),
       FetchHttpClient.layer,
     ),
-  );
+  ).pipe(Layer.provideMerge(serviceReachLayer));
 }

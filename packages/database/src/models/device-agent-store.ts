@@ -33,6 +33,7 @@
 
 import { AGENT_MACHINE } from "@repo/features/agent-wire";
 import {
+  DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_CAPABILITY,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
@@ -59,6 +60,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -386,18 +388,31 @@ const insertLine = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The lines waiting for the Mac, first to last, as far as their payloads fit
+ * `DEVICE_AGENT_BOUNDS.MAX_LINES_READ_BYTES`, and always the first. Note that
+ * the read stops there, because a Vercel function answers 4.5 MB at most and
+ * a read past it fails for every agent on the Mac; the Mac reads again for
+ * the rest once it has claimed these.
+ */
 const findWaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, deviceId: Schema.String }),
   Result: WaitingLineSchema,
   execute: ({ userId, deviceId }) =>
-    Database.use((db) =>
-      db
+    Database.use((db) => {
+      const inOrder = sql`over (order by ${deviceAgentLine.seq})`;
+      const waiting = db
         .select({
           id: deviceAgentLine.id,
           agentId: deviceAgentLine.agentId,
           seq: deviceAgentLine.seq,
           kind: deviceAgentLine.kind,
           payload: deviceAgentLine.payload,
+          place: sql<number>`row_number() ${inOrder}`.as("place"),
+          // The bytes of this line's payload and of every one waiting before it.
+          through: sql<number>`sum(octet_length(${deviceAgentLine.payload}::text)) ${inOrder}`.as(
+            "through",
+          ),
         })
         .from(deviceAgentLine)
         .where(
@@ -407,8 +422,21 @@ const findWaitingLines = SqlSchema.findAll({
             isNull(deviceAgentLine.claimedAt),
           ),
         )
-        .orderBy(asc(deviceAgentLine.seq)),
-    ),
+        .as("waiting");
+      return db
+        .select({
+          id: waiting.id,
+          agentId: waiting.agentId,
+          seq: waiting.seq,
+          kind: waiting.kind,
+          payload: waiting.payload,
+        })
+        .from(waiting)
+        .where(
+          or(eq(waiting.place, 1), lte(waiting.through, DEVICE_AGENT_BOUNDS.MAX_LINES_READ_BYTES)),
+        )
+        .orderBy(asc(waiting.seq));
+    }),
 });
 
 const claimLine = SqlSchema.findOneOption({
@@ -1058,7 +1086,7 @@ export function deviceAgentLineStanding(
   return findLineStanding({ userId, id });
 }
 
-/** The lines waiting for the account's Mac, in the order they were queued, without their secrets. */
+/** The lines waiting for the account's Mac, in the order they were queued, without their secrets, as far as one read's budget goes. */
 export function deviceAgentLinesWaiting(
   userId: string,
   deviceId: string,
