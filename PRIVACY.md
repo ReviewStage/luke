@@ -243,8 +243,12 @@ removed seven days later. When you delete your account:
   preferences, and integration records) is deleted at once.
 - **Your tasks, plans, transcripts, and inbox items** are deleted at once, and
   your agents' sandboxes shortly after.
-- **Workspaces you own**, and the memories, comments, and plan text you left in
-  them, stay with the workspace without your name.
+- **Workspaces you are the only member of** are deleted at once with
+  everything in them, as a deleted task is. Their GitHub, Slack, and Sentry
+  connections are removed on our side; our apps stay installed at those
+  services until you uninstall them there.
+- **Workspaces with other members**, and the memories, comments, and plan text
+  you left in them, stay with the workspace without your name.
 - **Usage data and screen recordings:** we ask PostHog to erase them; if it
   cannot be reached, your account is deleted anyway and PostHog keeps them.
 - **Error reports** already sent to Sentry are kept until Sentry's retention

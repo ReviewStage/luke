@@ -324,11 +324,11 @@ export const ADMIN_OPTIONS = {
 export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
 /**
- * How Better Auth keeps workspaces, each an organization of its members. A
- * workspace is never deleted, so no task is lost with one, and no signed-in
- * user creates one: the plugin still lets a server-only call that names a
- * `userId` and carries no session through, which is the one way we
- * create a workspace.
+ * How Better Auth keeps workspaces, each an organization of its members. No
+ * signed-in user deletes or creates one through the plugin: a workspace is
+ * deleted only with the account of its last member (`account-store.ts`), and
+ * the plugin still lets a server-only call that names a `userId` and carries
+ * no session through, which is the one way we create a workspace.
  *
  * An invitation's id is the accept link the service emails the invitee and
  * an owner may also copy and share by hand, so it can travel outside the

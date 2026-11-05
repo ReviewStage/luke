@@ -8,8 +8,9 @@ import { organization, user } from "./auth.js";
  * otherwise a workspace like any other. One row per account and one account
  * per workspace, so two Macs ensuring it at once settle on the same row. The
  * workspace's metadata reads `{"personal":true}` as well, stored only. The
- * row leaves with the account or the workspace, whichever goes first, and the
- * workspace stands after the account goes, as any it owned does.
+ * row leaves with the account or the workspace, whichever goes first; the
+ * workspace goes with the account where the account is its only member, as
+ * any workspace does, and otherwise stands.
  */
 export const personalWorkspace = pgTable("personal_workspace", {
   userId: text("user_id")

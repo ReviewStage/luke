@@ -3,15 +3,22 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
+  GITHUB_ACCOUNT_TYPE,
+  GITHUB_INSTALLATION_STATUS,
+} from "@repo/database/github-installation-vocabulary";
+import {
   deleteAccount,
   readAccountPreferences,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
+import { agentTable } from "@repo/database/schemas/agent";
 import { member, organization, user } from "@repo/database/schemas/auth";
+import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
 import { accountPreference } from "@repo/database/schemas/preferences";
+import { conversations } from "@repo/database/schemas/storage";
 import { hostedUsage } from "@repo/database/schemas/usage";
-import { getTestDB } from "@repo/database/testing";
+import { getTestDB, openTaskAgent } from "@repo/database/testing";
 import { AGENT_DEFAULT_CHOICE } from "@repo/features/models-wire";
 import { count, eq, getColumnTable, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
@@ -147,7 +154,7 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
   );
 
   it.effect(
-    "the delete leaves the account's first workspace standing, as any it owns, and takes only its member rows",
+    "the delete takes the workspaces the account is the only member of, its first among them, and their GitHub connection, stamps their agents' conversations, and leaves a shared workspace with its other members",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -165,15 +172,31 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
           owner: kept,
           first: false,
         });
-        for (const organizationId of [first, shared]) {
-          yield* db.insert(member).values({
-            id: randomUUID(),
-            organizationId,
-            userId: organizationId === first ? kept : erased,
-            role: "member",
-            createdAt: new Date("2099-01-01T00:00:00.000Z"),
-          });
-        }
+        yield* db.insert(member).values({
+          id: randomUUID(),
+          organizationId: shared,
+          userId: erased,
+          role: "member",
+          createdAt: new Date("2099-01-01T00:00:00.000Z"),
+        });
+        const now = new Date("2099-01-01T00:00:00.000Z");
+        yield* db.insert(githubInstallation).values({
+          installationId: 4_200,
+          organizationId: first,
+          accountId: 4_201,
+          accountLogin: "acme",
+          accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
+          status: GITHUB_INSTALLATION_STATUS.ACTIVE,
+          createdAt: now,
+          updatedAt: now,
+        });
+        // A member who has since left ran this agent in the first workspace, so its conversation names them rather than the account.
+        const formerAgent = yield* openTaskAgent(kept, first, null);
+        const [former] = yield* db
+          .select({ conversationId: agentTable.conversationId })
+          .from(agentTable)
+          .where(eq(agentTable.id, formerAgent));
+        assert.ok(former !== undefined);
 
         yield* deleteAccount(erased);
 
@@ -181,14 +204,22 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
           .select({ id: organization.id })
           .from(organization)
           .where(or(eq(organization.id, first), eq(organization.id, shared)));
-        assert.equal(standing.length, 2);
-        const membersOf = (organizationId: string) =>
-          db
-            .select({ userId: member.userId })
-            .from(member)
-            .where(eq(member.organizationId, organizationId));
-        assert.deepEqual(yield* membersOf(first), [{ userId: kept }]);
-        assert.deepEqual(yield* membersOf(shared), [{ userId: kept }]);
+        assert.deepEqual(standing, [{ id: shared }]);
+        const installations = yield* db
+          .select({ id: githubInstallation.installationId })
+          .from(githubInstallation)
+          .where(eq(githubInstallation.installationId, 4_200));
+        assert.deepEqual(installations, []);
+        const [stamped] = yield* db
+          .select({ deletedAt: conversations.deletedAt })
+          .from(conversations)
+          .where(eq(conversations.id, former.conversationId));
+        assert.ok(stamped?.deletedAt != null);
+        const members = yield* db
+          .select({ userId: member.userId })
+          .from(member)
+          .where(eq(member.organizationId, shared));
+        assert.deepEqual(members, [{ userId: kept }]);
       }),
   );
 });
