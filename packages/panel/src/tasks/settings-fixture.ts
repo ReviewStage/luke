@@ -79,7 +79,12 @@ import {
   EVERY_WORKSPACE,
   RUN_PROFILE,
 } from "@repo/host/app-state";
-import type { PortActKind, PortActPayload, PortActResult } from "@repo/host/contract";
+import {
+  CLI_INSTALL_OUTCOME,
+  type PortActKind,
+  type PortActPayload,
+  type PortActResult,
+} from "@repo/host/contract";
 import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 
@@ -664,6 +669,12 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
+  // The command-line tool installed on this Mac, as Settings' MCP page's Install asks, without running the install script: a fixture run reaches no network and installs nothing.
+  [ACT_KIND.CLI_INSTALL]: () => ({
+    outcome: CLI_INSTALL_OUTCOME.INSTALLED,
+    version: "0.1.0",
+    onPath: false,
+  }),
   [ACT_KIND.ADMIN_READ]: ({ procedure, query }) =>
     procedure === ADMIN_READ.METRICS
       ? { answer: adminMetrics(query) }
