@@ -584,7 +584,6 @@ const tasklessAgent = (
       effort: "high",
       prompt: "Sweep the flaky tests.",
       repository: patch.repository ?? "acme/api",
-      repositories: [patch.repository ?? "acme/api"],
       idempotencyKey: randomUUID(),
       ...(patch.createdAt === undefined ? undefined : { createdAt: patch.createdAt }),
       ...(patch.taskId === undefined ? undefined : { planId: patch.taskId }),

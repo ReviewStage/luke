@@ -255,7 +255,6 @@ const insertAgent = (
       prompt: "A prompt no admin read may carry.",
       title: "An agent title no admin read may carry",
       repository: "northwind/web",
-      repositories: ["northwind/web"],
       idempotencyKey: randomUUID(),
       createdAt,
       ...(merged === undefined

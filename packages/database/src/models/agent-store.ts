@@ -858,7 +858,6 @@ const insertAgent = SqlSchema.findOne({
           planSnapshot: write.planSnapshot,
           prompt: write.prompt,
           repository: write.repository,
-          repositories: write.repository === null ? [] : [write.repository],
           startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,

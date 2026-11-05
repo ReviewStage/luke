@@ -45,7 +45,6 @@ export const openTaskAgent = (userId: string, organizationId: string, taskId: st
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/api",
-      repositories: ["acme/api"],
       idempotencyKey: randomUUID(),
     });
     return id;

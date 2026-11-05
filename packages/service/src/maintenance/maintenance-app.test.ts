@@ -178,7 +178,6 @@ const deleteTaskWithAgent = Effect.gen(function* () {
     model: "anthropic/claude-opus-5.5",
     effort: "high",
     repository: "acme/api",
-    repositories: ["acme/api"],
     idempotencyKey: randomUUID(),
   });
   assert.equal(yield* deleteTask(owner, task.id), true);
