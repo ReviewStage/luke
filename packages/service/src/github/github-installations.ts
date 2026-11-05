@@ -26,9 +26,8 @@ import type { StoreFailure } from "../http/store-failure.js";
  * installation, and so its GitHub account, stands for exactly one
  * workspace: connecting another adds it beside those standing, and an
  * installation already standing for another workspace is refused there
- * rather than moved, until our App is uninstalled from its account, or the
- * workspace's last member deletes their account, either of which frees the
- * account for any workspace. A connect is an intent first: a random state bound to
+ * rather than moved, until our App is uninstalled from its account, which frees
+ * the account for any workspace. A connect is an intent first: a random state bound to
  * the account and the workspace, stored only as its SHA-256, carried to
  * GitHub on the install address. At the Setup URL the installation GitHub
  * named and a PKCE code verifier are written on it, and it is spent once
@@ -66,8 +65,8 @@ export interface ConnectedInstallation {
 
 /**
  * What a link settles on: linked; refused because the installation's
- * GitHub account already stands for another workspace, one with a member,
- * with our App still installed on it; or refused because
+ * GitHub account already stands for another workspace with our App still
+ * installed on it; or refused because
  * the account linking is no longer an owner or admin of the workspace.
  */
 export const LINK_OUTCOME = {
@@ -163,12 +162,10 @@ const deleteIntent = SqlSchema.findOneOption({
  * others; the account's own row, where it stands for this workspace, takes
  * the installation's id, which a reinstall on the account changes, and its
  * login and kind; a row standing for another workspace whose installation
- * GitHub deleted, because our App was uninstalled from the account, or
- * whose workspace has no member left, because its last member's account was
- * deleted and the workspace stands after it, is taken over by this workspace
- * as if newly linked; and a row standing for another workspace with a member
- * whose installation is still live, active or suspended, is left as it is
- * and answers nothing. The row keeps the moment it was first linked
+ * GitHub deleted, because our App was uninstalled from the account, is taken
+ * over by this workspace as if newly linked; and a row standing for another
+ * workspace whose installation is still live, active or suspended, is left
+ * as it is and answers nothing. The row keeps the moment it was first linked
  * to its workspace, and a relink of the installation it already holds keeps
  * the status last written, so a callback's read of an installation since
  * suspended does not bring it back.
@@ -210,7 +207,7 @@ const upsertInstallation = SqlSchema.findOneOption({
             createdAt: sql`case when ${sameWorkspace} then ${githubInstallation.createdAt} else ${row.now} end`,
             updatedAt: row.now,
           },
-          setWhere: sql`${sameWorkspace} or ${eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.DELETED)} or not exists (select 1 from ${member} where ${member.organizationId} = ${githubInstallation.organizationId})`,
+          setWhere: sql`${sameWorkspace} or ${eq(githubInstallation.status, GITHUB_INSTALLATION_STATUS.DELETED)}`,
         })
         .returning({ installationId: githubInstallation.installationId }),
     );
