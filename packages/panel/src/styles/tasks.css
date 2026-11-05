@@ -371,16 +371,31 @@
   }
 }
 
-/* A page's comments (page-pane.tsx) stand in a column beside the page, a
-   comment card's width and the list's insets wide, past a hairline; in a
-   panel too narrow for both, the column stands over the page instead, and
-   steps aside while the page is picked in or a thread is open on it. */
+/* A page's comments (page-pane.tsx) stand in a pane beside the page, as
+   wide as it was last dragged and never over half the row, past a
+   hairline; sliding out, it stands over the page's right edge, its resize
+   edge gone. In a panel too narrow for both, the pane stands over the page
+   instead, undragged, and steps aside while the page is picked in. */
 .page-comments-column {
+  position: relative;
   display: flex;
-  width: calc(var(--comment-card-width) + 2 * var(--ui-space-16));
+  width: min(
+    var(--page-comments-width, calc(var(--comment-card-width) + 2 * var(--ui-space-16))),
+    50%
+  );
   flex: none;
   border-left: 1px solid var(--ui-color-border);
   background: var(--ui-color-ground);
+}
+
+.page-comments-column[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+}
+
+.page-comments-column[data-leaving] > .ui-resize-edge {
+  display: none;
 }
 
 @container side-panel (width < 640px) {
@@ -389,6 +404,10 @@
     inset: 0;
     width: auto;
     border-left: none;
+  }
+
+  .page-comments-column > .ui-resize-edge {
+    display: none;
   }
 
   .page-comments-column[data-aside] {
@@ -1589,7 +1608,7 @@
    stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
-  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
     border-radius: 0;
     background: var(--ui-color-fill-hover);
   }

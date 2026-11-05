@@ -24,21 +24,25 @@ import { readingWords } from "@repo/features/words";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   cn,
+  cssCustomProperties,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FILL_ELEMENT,
   Fill,
   IconButton,
   PaneBar,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
+  SidePanelIcon,
   SpinnerRegion,
   Tooltip,
+  useResizeEdge,
 } from "@repo/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CodeXmlIcon,
   GLYPH,
-  MessageSquareIcon,
   MessageSquarePlusIcon,
   RotateCwIcon,
 } from "@repo/ui/icons";
@@ -58,6 +62,8 @@ import { type PlanCommentPlace, useDraftWriter } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useLinkWorkspace } from "../copy-link-item.js";
 import type { MenuAction } from "../desktop/action-menu.js";
+import { PAGE_COMMENTS_WIDTH, usePageCommentsWidth } from "../desktop/folded-groups.js";
+import { usePaneSlide } from "../desktop/pane-motion.js";
 import { useTabActions } from "../desktop/strip-tabs.js";
 import { unreadShown } from "../failure-report.js";
 import {
@@ -134,9 +140,14 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * (`@repo/features/page-pick`), saying where each pinned element and the
  * words selected stand as the page moves; the pane takes a pick only from
  * the frame it drew, only while it asked, and only while the window holds a
- * press of the developer's, as it takes a link. Comments opens every thread
- * in a column beside the page for reference. A page an agent on no task
- * showed has no comments.
+ * press of the developer's, as it takes a link. The bar's last toggle, the
+ * side panel's own glyph as a File tab's tree has it, opens the page's
+ * comments pane on its right, listed as the plan's Comments tab lists the
+ * plan's (`PageComments`); it slides in and out as the tree does, is
+ * dragged wider or narrower by its left edge, one width for every page,
+ * and shut by a drag past its least width. The bar's comment controls stand
+ * at its end, Comment then that toggle, as the tree's toggle ends a File
+ * tab's bar. A page an agent on no task showed has no comments.
  */
 
 /** What a frame drawing a page lets it do: run its own scripts, and nothing else. */
@@ -670,6 +681,9 @@ function useCommenting(place: PlanCommentPlace | undefined) {
   };
 }
 
+/** What a drag of the comments pane leaves the page beside it, in CSS pixels: a narrow page's room. */
+const PAGE_RESERVE = 320;
+
 /** The elements holding open threads, each once, in the order their threads were started, with the words the first quotes where it was started on words selected. */
 function threadMarks(threads: readonly PlanCommentThread[]): readonly PageMark[] {
   return [...threadsByElement(threads)].map(([path, [first]]) =>
@@ -744,6 +758,18 @@ export function PagePane({
   const toggleLabel = showingSource ? "View page" : "View source";
   const toggleView = () => setView(showingSource ? PAGE_VIEW.PAGE : PAGE_VIEW.SOURCE);
   const commentsLabel = commenting.column ? "Hide comments" : "Show comments";
+  const commentsWidth = usePageCommentsWidth();
+  // Note that the edge is the tab's, which outlives the pane a drag shuts.
+  const commentsEdge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
+    width: commentsWidth.width,
+    bounds: PAGE_COMMENTS_WIDTH,
+    reserve: () => PAGE_RESERVE,
+    label: "Resize comments",
+    onResize: commentsWidth.onResize,
+    onToggleCollapsed: commenting.toggleColumn,
+  });
+  const commentsSlide = usePaneSlide(comments !== undefined && commenting.column);
   // Note that Comment asks the page itself for an element, so it shows the page where its source stood.
   const comment = () => {
     if (commenting.picking) return commenting.stopPick();
@@ -761,7 +787,7 @@ export function PagePane({
           },
           {
             label: commentsLabel,
-            icon: <MessageSquareIcon aria-hidden="true" />,
+            icon: <SidePanelIcon />,
             onSelect: commenting.toggleColumn,
           },
         ];
@@ -864,26 +890,6 @@ export function PagePane({
                     />
                   </div>
                 ) : null}
-                {comments === undefined ? null : (
-                  <>
-                    <Tooltip label={PAGE_COMMENT_WORDS.COMMENT}>
-                      <IconButton
-                        icon={<MessageSquarePlusIcon aria-hidden="true" />}
-                        label={PAGE_COMMENT_WORDS.COMMENT}
-                        pressed={commenting.picking}
-                        onClick={comment}
-                      />
-                    </Tooltip>
-                    <Tooltip label={commentsLabel}>
-                      <IconButton
-                        icon={<MessageSquareIcon aria-hidden="true" />}
-                        label={commentsLabel}
-                        pressed={commenting.column}
-                        onClick={commenting.toggleColumn}
-                      />
-                    </Tooltip>
-                  </>
-                )}
                 <Tooltip label={toggleLabel}>
                   <IconButton
                     icon={<CodeXmlIcon aria-hidden="true" />}
@@ -902,6 +908,26 @@ export function PagePane({
                 {showingSource ? (
                   <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
                 ) : null}
+                {comments === undefined ? null : (
+                  <>
+                    <Tooltip label={PAGE_COMMENT_WORDS.COMMENT}>
+                      <IconButton
+                        icon={<MessageSquarePlusIcon aria-hidden="true" />}
+                        label={PAGE_COMMENT_WORDS.COMMENT}
+                        pressed={commenting.picking}
+                        onClick={comment}
+                      />
+                    </Tooltip>
+                    <Tooltip label={commentsLabel}>
+                      <IconButton
+                        icon={<SidePanelIcon />}
+                        label={commentsLabel}
+                        aria-expanded={commenting.column}
+                        onClick={commenting.toggleColumn}
+                      />
+                    </Tooltip>
+                  </>
+                )}
               </>
             }
           />
@@ -949,12 +975,20 @@ export function PagePane({
               )}
             </PageFrame>
           )}
-          {comments === undefined || !commenting.column ? null : (
-            <div
+          {comments === undefined || !commentsSlide.drawn ? null : (
+            <aside
+              ref={(node) => {
+                commentsSlide.pane.current = node;
+              }}
               className="page-comments-column"
-              // Note that a column standing over a narrow page steps aside while the page is picked in.
+              aria-label="Comments"
+              // Note that a pane standing over a narrow page steps aside while the page is picked in.
               data-aside={commenting.picking ? "" : undefined}
+              data-leaving={commentsSlide.leaving ? "" : undefined}
+              inert={commentsSlide.leaving}
+              style={cssCustomProperties({ "--page-comments-width": `${commentsWidth.width}px` })}
             >
+              <ResizeEdge edge={commentsEdge} />
               <PageComments
                 control={comments.control}
                 doors={comments.doors}
@@ -963,7 +997,7 @@ export function PagePane({
                   commenting.setOpen(thread === undefined ? undefined : [thread.id])
                 }
               />
-            </div>
+            </aside>
           )}
         </div>
       </Fill>
