@@ -17,7 +17,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { NO_LOOKS, useTaskLooks, useUnreadTasks } from "./use-task-looks.js";
+import { NO_LOOKS, useAgentLook, useTaskLooks, useUnreadTasks } from "./use-task-looks.js";
 
 /**
  * use-task-looks.test.ts -- the sections a reader is shown as changed since
@@ -42,6 +42,10 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.TASKS_MARK_READ) {
         readMarks.push(`${request.payload.readMark}:${request.payload.taskId}`);
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: true });
+      }
+      if (request.kind === ACT_KIND.AGENTS_MARK_READ) {
+        readMarks.push(`${request.payload.readMark}:${request.payload.agentId}`);
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { failure: "unanswered" } });
       }
       return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
@@ -192,6 +196,25 @@ test("a plan's look is sent as it opens, as its agents move while it stays open,
   window.draw(undefined, DEAN.userId);
 
   assert.deepEqual(readMarks, [`read:${task.id}`, `seen:${task.id}`, `seen:${task.id}`]);
+});
+
+test("an agent with no task is looked at as its page opens, again as its row's time moves while it stays open, and as it is left", () => {
+  const agent = { id: "agent-looked", activityAt: LOOKED_AT };
+  function Page({ open }: { open: typeof agent | undefined }) {
+    useAgentLook(open);
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  const draw = (open: typeof agent | undefined) =>
+    act(() => root.render(onRegistry(registry, createElement(Page, { open }))));
+
+  draw(agent);
+  draw({ ...agent, activityAt: LOOKED_AT + 5 });
+  draw(undefined);
+
+  assert.deepEqual(readMarks, [`read:${agent.id}`, `seen:${agent.id}`, `seen:${agent.id}`]);
 });
 
 test("a task reads unread while it changed after the reader's mark or stands marked so, never for a pull request merging alone, and never while it is the one open but by hand", () => {

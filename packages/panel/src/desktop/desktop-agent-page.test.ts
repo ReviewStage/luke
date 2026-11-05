@@ -1590,9 +1590,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   act(() => pin.click());
   assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
 
-  const mark = pageMenuItem(page, "Mark as unreadU");
-  act(() => mark.click());
-  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  assert.deepEqual(offered(), [], "the menu closed on the pin");
   act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
   assert.deepEqual(offered(), [
     "Copy link",

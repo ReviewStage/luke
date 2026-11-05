@@ -168,8 +168,8 @@ export const sidebarLive = defineLiveQuery({
  * with no task, each with the account's pin, the names it shows, and what
  * its status is read from, woken on the account's topic and on each of its
  * workspaces'. A task, a block between two tasks, an agent, a member's name, a Mac's name, or a turn
- * starting or settling names the workspace; the account's pins, its
- * memberships, and what admits it to a repository name the account. Note
+ * starting or settling names the workspace; the account's pins and read
+ * marks, its memberships, and what admits it to a repository name the account. Note
  * that a message wakes no task list, because a streamed step rewrites one
  * every moment and names only its conversation: an awaiting line that moves
  * with no turn starting or settling shows

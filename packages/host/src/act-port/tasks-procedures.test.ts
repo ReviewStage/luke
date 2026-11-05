@@ -27,6 +27,7 @@ import {
   PLAN_COMMENT_REFUSAL,
   PLAN_COMMENT_SCOPE,
 } from "@repo/features/plan-comment-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@repo/features/task-wire";
 import {
@@ -73,6 +74,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_DELETE]: "Could not delete that task on this system.",
   [TASKS_ACT_KIND.TASKS_RENAME]: "Could not rename that task on this system.",
   [TASKS_ACT_KIND.TASKS_PIN]: "Could not pin that task on this system.",
+  [TASKS_ACT_KIND.TASKS_MARK_READ]: "Could not mark that task on this system.",
   [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: "Could not pin that repository on this system.",
   [TASKS_ACT_KIND.TASKS_WRITE_SECTION]: "Could not change that section on this system.",
   [TASKS_ACT_KIND.TASKS_REPOSITORIES_RETRY]:
@@ -176,6 +178,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.TASKS_DELETE, payload: TASK },
   { kind: TASKS_ACT_KIND.TASKS_RENAME, payload: { ...TASK, name: "Expiry" } },
   { kind: TASKS_ACT_KIND.TASKS_PIN, payload: { ...TASK, pinned: true } },
+  { kind: TASKS_ACT_KIND.TASKS_MARK_READ, payload: { ...TASK, readMark: READ_MARK.READ } },
   {
     kind: TASKS_ACT_KIND.TASKS_PIN_REPOSITORY,
     payload: { repository: "acme/relay", pinned: true },
@@ -473,6 +476,10 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     answer: true,
   });
   assert.deepEqual(
+    await ask(TASKS_ACT_KIND.TASKS_MARK_READ, { ...TASK, readMark: READ_MARK.READ }),
+    { answer: true },
+  );
+  assert.deepEqual(
     await ask(TASKS_ACT_KIND.TASKS_PIN_REPOSITORY, { repository: "acme/relay", pinned: false }),
     { answer: true },
   );
@@ -503,6 +510,7 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     `delete:${TASK_ID}`,
     `rename:${TASK_ID}:Expiry`,
     `pin:${TASK_ID}:true`,
+    `mark-read:${TASK_ID}:read`,
     "pin-repository:acme/relay:false",
     `section:${TASK_SECTION_WRITE.PLACE}`,
     "repositories-retry:workspace-acme",

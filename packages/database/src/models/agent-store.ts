@@ -3236,7 +3236,7 @@ export function pinAgentCommitted(
 /**
  * The account's read mark of the agent set as asked (`READ_MARK`), and the
  * transaction it was written in; none where the account may not read the
- * agent. Every other member's mark stands as it was.
+ * agent, or where it works on a task, whose mark is the task's. Every other member's mark stands as it was.
  */
 export function markAgentReadCommitted(
   userId: string,
@@ -3244,9 +3244,9 @@ export function markAgentReadCommitted(
   mark: ReadMark,
 ): AgentStoreEffect<Option.Option<AgentCommitted>> {
   return Effect.gen(function* () {
-    // Note that a read mark is gated as the member's read of the agent is, as a pin is.
+    // Note that a read mark is gated as the member's read of the agent is, as a pin is, and kept only for an agent with no task, the one a list reads it on.
     const found = yield* findVisibleAgent({ userId, agentId });
-    if (Option.isNone(found)) return Option.none();
+    if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
     const now = yield* DateTime.nowAsDate;
     const written =
       mark === READ_MARK.READ

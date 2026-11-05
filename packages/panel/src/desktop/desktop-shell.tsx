@@ -769,7 +769,9 @@ export function DesktopShell({
   const looks = useTaskLooks(
     shownTask,
     tasks.me,
-    shownTask === undefined ? undefined : tasks.tasks.find((row) => row.id === shownTask.id),
+    shownTask === undefined
+      ? undefined
+      : (tasks.tasks.find((row) => row.id === shownTask.id) ?? shownTask),
   );
   // An agent with no plan is looked at as its page is on screen, as the plan is.
   const { agentId: pageAgentId } = tasks.agentView;

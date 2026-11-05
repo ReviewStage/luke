@@ -163,8 +163,9 @@ export function SidebarAgent({
   const coarse = useCoarsePointer();
   const { act } = useAct();
   const reads = useAgentReadMarks();
-  // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike.
-  const isUnread = agentReadsUnread(agent);
+  // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike,
+  // and the agent on screen only by a mark by hand, since what it does lands before the reader's eyes.
+  const isUnread = agent.markedUnread === true || (!current && agentReadsUnread(agent));
   // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
   const actions = useAgentActions(
     agent,

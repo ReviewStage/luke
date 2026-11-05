@@ -35,7 +35,7 @@ import {
   useMenu,
 } from "@repo/ui";
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
-import { isAgentTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useCallback, useMemo, useState } from "react";
 import { useAct } from "../act.js";
@@ -268,13 +268,12 @@ function AgentPageBar({
   const listed = listedAgent(tasks, agent);
   const reads = useAgentReadMarks();
   const sectionDialogs = useSectionDialogs(tasks, shown);
-  // The agent's read mark is its sidebar row's: main's unseen dot, which a mark by hand adds to.
-  const unseen = tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agent.id);
+  // Note that the agent on screen is unread only by a mark by hand, as its sidebar row reads it while current.
   const read =
     listed === undefined
       ? undefined
       : {
-          unread: unseen || reads.markedUnread(agent.id),
+          unread: reads.markedUnread(agent.id),
           onMark: (next: boolean) => reads.mark(listed, next),
         };
   // Note that an archived agent offers neither a pin nor a section, as an archived task.

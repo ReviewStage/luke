@@ -18,8 +18,8 @@
  * agent stands in, its task or, with none, its workspace and repository,
  * and answers alike. The calls into an agent
  * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
- * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
- * MCP servers switched off, or a model and effort, and answers the agent as
+ * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, a
+ * read mark, the MCP servers switched off, or a model and effort, and answers the agent as
  * it then stands. A delete (`DELETE /api/agents/{id}`) takes the agent for
  * good by the task delete's own steps, for any member who reaches it.
  *
