@@ -559,6 +559,7 @@ function AutomationsHead({
         </Tooltip>
       }
       title={AUTOMATIONS}
+      titleReplayUnmasked
       end={
         <PlaceMore
           thing="Automation list"

@@ -214,7 +214,13 @@ function VersionHistoryLoading({
       <nav className={`version-log ${PLACE_LIST}`} aria-label="Versions" hidden={hidden.list}>
         <ReplayUnmask>
           {narrow ? (
-            <PhoneHead place="version-log" start={exit} title="Version history" end={null} />
+            <PhoneHead
+              place="version-log"
+              start={exit}
+              title="Version history"
+              titleReplayUnmasked
+              end={null}
+            />
           ) : (
             <>
               <div className="desktop-drag-strip" />
@@ -339,6 +345,7 @@ function SettingsLoading({
                 />
               }
               title="Settings"
+              titleReplayUnmasked
               end={null}
             />
           ) : (

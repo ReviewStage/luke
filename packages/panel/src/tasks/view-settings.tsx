@@ -156,6 +156,7 @@ function ThemeRow<Id extends string>({
     <PickerRow
       density={SETTINGS_ROW_DENSITY.COMPACT}
       label={label}
+      labelReplayUnmasked
       changed={changed}
       value={value}
       valueLabel={chosen?.label ?? value}
@@ -216,6 +217,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Word wrap"
+        labelReplayUnmasked
         checked={settings.wordWrap}
         changed={changed("wordWrap")}
         onChange={(wordWrap) => change("wordWrap", wordWrap)}
@@ -223,6 +225,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Line numbers"
+        labelReplayUnmasked
         checked={settings.lineNumbers}
         changed={changed("lineNumbers")}
         onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
@@ -231,6 +234,7 @@ function LinesRows({ notes }: { notes: boolean }): React.JSX.Element {
         <SwitchRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Minimize inline comments"
+          labelReplayUnmasked
           detail={
             <>
               <span className="finger:hidden">
@@ -295,6 +299,7 @@ function TypeRows(): React.JSX.Element {
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Font"
+        labelReplayUnmasked
         value={settings.diffFont}
         options={FONT_OPTIONS}
         parse={(raw) => optionOf(FONT_OPTIONS, raw)}
@@ -304,6 +309,7 @@ function TypeRows(): React.JSX.Element {
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Font size"
+        labelReplayUnmasked
         value={settings.diffFontSize}
         options={FONT_SIZE_OPTIONS}
         parse={(raw) => optionOf(FONT_SIZE_OPTIONS, raw)}
@@ -313,6 +319,7 @@ function TypeRows(): React.JSX.Element {
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Line height"
+        labelReplayUnmasked
         value={settings.diffLineHeight}
         options={LINE_HEIGHT_OPTIONS}
         parse={(raw) => optionOf(LINE_HEIGHT_OPTIONS, raw)}
@@ -322,6 +329,7 @@ function TypeRows(): React.JSX.Element {
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Ligatures"
+        labelReplayUnmasked
         checked={settings.diffLigatures}
         changed={changed("diffLigatures")}
         onChange={(diffLigatures) => change("diffLigatures", diffLigatures)}
@@ -347,6 +355,7 @@ function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       <SelectRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Changed words"
+        labelReplayUnmasked
         value={settings.inlineDiff}
         options={INLINE_DIFF_OPTIONS}
         parse={(raw) => optionOf(INLINE_DIFF_OPTIONS, raw)}
@@ -363,6 +372,7 @@ function DiffRows({ roomy }: { roomy: boolean }): React.JSX.Element {
       <SwitchRow
         density={SETTINGS_ROW_DENSITY.COMPACT}
         label="Backgrounds"
+        labelReplayUnmasked
         checked={settings.diffBackgrounds}
         changed={changed("diffBackgrounds")}
         onChange={(diffBackgrounds) => change("diffBackgrounds", diffBackgrounds)}

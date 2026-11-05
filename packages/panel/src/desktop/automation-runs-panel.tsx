@@ -416,6 +416,7 @@ export function AutomationRunsScreen({
         place="automation-runs-page"
         start={<BackButton label={name} place={name} onBack={onBack} />}
         title={RUNS}
+        titleReplayUnmasked
         end={<PhoneFindButton />}
       />
       <ReplayUnmask>
