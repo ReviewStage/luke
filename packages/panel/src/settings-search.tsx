@@ -66,6 +66,7 @@ import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
+import { coarsePointerNow } from "./coarse-pointer.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
 import { settingsPageOf, WORKSPACE_CONNECTIONS } from "./settings/pages.js";
@@ -604,7 +605,8 @@ export function landOnSettingsRow(id: string): () => void {
  * height whatever is typed, so neither the list under it nor the page beside
  * it moves as the query changes.
  *
- * Settings opens with the caret here, so the first keys typed search. A caret
+ * Settings opens with the caret here, so the first keys typed search, but
+ * under a finger, which types on no keys until it taps the field. A caret
  * the window already put somewhere, a row a link or the palette landed on,
  * keeps it. That caret is not counted as a search opened, because nobody
  * asked for it, and it holds no layer of its own: Escape in the field it left
@@ -654,21 +656,22 @@ export function SettingsSearchField({
         }
       : undefined,
   );
-  useEffect(
-    () =>
-      focusSeek({
-        find: () => field.current,
-        act: (input) => {
-          // Note that a caret already in the window keeps it, because a link
-          // or a palette result that landed on a row put it there on purpose.
-          const held = document.activeElement;
-          if (held !== null && held !== document.body) return;
-          setPlaced(true);
-          input.focus({ preventScroll: true });
-        },
-      }),
-    [setPlaced],
-  );
+  useEffect(() => {
+    // Note that under a finger Settings opens with the caret nowhere, because a phone raises no
+    // keyboard for a caret it was not tapped into, and a focused field puts the places bar aside.
+    if (coarsePointerNow()) return undefined;
+    return focusSeek({
+      find: () => field.current,
+      act: (input) => {
+        // Note that a caret already in the window keeps it, because a link
+        // or a palette result that landed on a row put it there on purpose.
+        const held = document.activeElement;
+        if (held !== null && held !== document.body) return;
+        setPlaced(true);
+        input.focus({ preventScroll: true });
+      },
+    });
+  }, [setPlaced]);
   // The caret Settings placed on its own holds no layer, so its Escape is
   // left to fall through to the window and leave Settings.
   const untouched = placed && query.length === 0;

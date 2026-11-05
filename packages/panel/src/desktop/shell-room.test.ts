@@ -5,6 +5,7 @@ import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
+import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
@@ -12,6 +13,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { useStageRoom } from "../stage-room.js";
@@ -193,13 +195,9 @@ function sidebarToggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** The places bar's Tasks, which opens a phone's drawer, the sidebar's tree, where no title bar's toggle stands. */
-function drawerTasks(page: HTMLElement): HTMLButtonElement {
-  const button = [
-    ...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button'),
-  ].find((each) => each.textContent === "Tasks");
-  assert.ok(button, "the places bar's Tasks stands");
-  return button;
+/** Opens a phone's drawer by the sidebar's chord, as a keyboard does where no title bar's toggle stands. */
+function openDrawer(): void {
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
 }
 
 /** The side panel's toggle at the window's top right, by whatever it is called now. */
@@ -288,11 +286,11 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
     );
   });
 
-  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the places bar's Tasks opens`, () => {
+  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the sidebar's chord opens`, () => {
     const page = mount(width, false);
     assert.equal(roomOf(page), "narrow");
     assert.equal(sidebarStanding(page), "away");
-    act(() => drawerTasks(page).click());
+    openDrawer();
     assert.equal(sidebarStanding(page), "drawer");
   });
 }
@@ -346,7 +344,7 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   );
 });
 
-test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's Tasks opens it over the work, and a press outside puts it away", () => {
+test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the sidebar's chord opens it over the work, and a press outside puts it away", () => {
   const sheets = layContainersAt({});
   const page = mount(PHONE, false);
   const shell = page.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
@@ -367,9 +365,8 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no tit
     null,
     "a phone's page heads itself, so no toggle stands over it",
   );
-  act(() => drawerTasks(page).click());
+  openDrawer();
   assert.equal(sidebarStanding(page), "drawer");
-  assert.equal(drawerTasks(page).getAttribute("aria-current"), "page");
 
   const main = page.querySelector("main.desktop-main");
   assert.ok(main);
@@ -393,10 +390,9 @@ test("a phone's drawer is modal: while it stands over the work, the work is iner
   const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
   assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
 
-  act(() => drawerTasks(page).click());
+  openDrawer();
   assert.equal(sidebarStanding(page), "drawer");
   assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
-  assert.equal(drawerTasks(page).closest("[inert]"), null, "the bar stays live over it");
 
   act(() => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -434,7 +430,7 @@ function historyArrows(page: HTMLElement): boolean {
 test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
   inBrowserTab();
   const page = mount(PHONE, false);
-  act(() => drawerTasks(page).click());
+  openDrawer();
   assert.equal(historyArrows(page), false);
 
   resizeStage(WIDE);
@@ -443,7 +439,7 @@ test("a phone's browser tab draws no Back and Forward in the drawer's head, its 
 
 test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
   const page = mount(PHONE, false);
-  act(() => drawerTasks(page).click());
+  openDrawer();
   assert.equal(historyArrows(page), true);
 });
 
@@ -463,7 +459,7 @@ test("Escape puts a phone's drawer away and gives the keyboard back to the work 
     assert.fail("the work holds a button");
   work.focus();
 
-  act(() => drawerTasks(page).click());
+  openDrawer();
   assert.equal(sidebarStanding(page), "drawer");
   const held = document.activeElement;
   assert.ok(

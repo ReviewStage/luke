@@ -709,6 +709,19 @@ test("Settings opens with the caret in its search, uncounted as a search opened,
   assert.ok(document.activeElement !== field, "the search let go of the caret");
 });
 
+test("under a finger Settings opens with the caret nowhere, since a phone raises no keyboard for it and a held field puts the places bar aside", () => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const page = mount(createElement(SettingsHarness, { onExit: () => undefined }));
+  assert.notEqual(document.activeElement, fieldNamed(page, SIDEBAR_SEARCH));
+});
+
 test("once the opening caret's search is typed in, Escape clears it, then lets go of the caret, and only then leaves Settings", () => {
   let exits = 0;
   const page = mount(createElement(SettingsHarness, { onExit: () => (exits += 1) }));

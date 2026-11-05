@@ -1484,13 +1484,10 @@ function SidebarHomeRow({
 function SidebarTasksRow({
   current,
   disabled,
-  phone,
   onOpen,
 }: {
   current: boolean;
   disabled: boolean;
-  /** Whether the row stands in a phone's Tasks (`mobile-bar.tsx`), which it names apart from by naming its page whole. */
-  phone: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   useWhenIdle(() => {
@@ -1506,7 +1503,7 @@ function SidebarTasksRow({
       onPointerEnter={TASKS_ROUTE.prefetch}
       onClick={onOpen}
     >
-      {phone ? "All tasks" : "Tasks"}
+      Tasks
     </NavItem>
   );
 }
@@ -1746,9 +1743,9 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * most recently first; under their creators'; or in one run. A task
  * archived by an older build, before archiving went, stands nowhere.
  * It is where the developer moves between things; what they work on is the
- * column beside it. On a phone it is the places bar's Tasks (`mobile-bar.tsx`),
- * whose bar already holds New task, Search, and the Inbox, and whose phone
- * opens on the Inbox rather than Home, so it leaves those four rows to the bar,
+ * column beside it. On a phone it is the Tasks page (`mobile-bar.tsx`),
+ * whose bar already holds New task, Search, the Inbox, and Tasks, and whose
+ * phone opens on the Inbox rather than Home, so it leaves those rows to the bar,
  * and heads itself as every phone place does, its workspaces and account
  * behind the reader's face (`phone-account.tsx`) rather than at its head and foot.
  * The open task's row is marked, or, where the task was opened from a pin,
@@ -2163,7 +2160,7 @@ function SidebarColumn({
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
-  // The pages' rows, then the rule under them, heading the tasks' scroller; a phone's bar holds the first four (`mobile-bar.tsx`).
+  // The pages' rows, then the rule under them, heading the tasks' scroller; on a phone, whose Tasks page this tree is, its bar holds the rest (`mobile-bar.tsx`).
   const phone = room === SHELL_ROOM.NARROW;
   const places = (
     <>
@@ -2198,12 +2195,13 @@ function SidebarColumn({
             />
           </>
         )}
-        <SidebarTasksRow
-          current={inBoard}
-          disabled={!tasks.signedIn}
-          phone={phone}
-          onOpen={chosen(openBoard)}
-        />
+        {phone ? null : (
+          <SidebarTasksRow
+            current={inBoard}
+            disabled={!tasks.signedIn}
+            onOpen={chosen(openBoard)}
+          />
+        )}
         <SidebarAutomationsRow
           current={inAutomations}
           failed={automationFailed}

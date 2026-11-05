@@ -1,5 +1,6 @@
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { BarAction, BarItem, BarItems, MENU_KEEPS_CLEAR, PlusIcon, SearchIcon } from "@repo/ui";
+import { raiseKeyboard } from "@repo/ui/command";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
@@ -9,7 +10,6 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { automationsTab, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useInboxWaiting } from "./places-waiting.js";
-import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 import { groupCount } from "./sidebar-fold.js";
 
 /**
@@ -19,13 +19,11 @@ import { groupCount } from "./sidebar-fold.js";
  * beside a compose button.
  *
  * The Inbox is a phone's first place, the one it opens on
- * (`navigation-history.ts`). Tasks is the sidebar's tree of tasks, the
- * pinned and each section, drawn as the drawer the sidebar is on a phone
- * but spanning the screen above the bar, which stays live over it, so a
- * phone browses its tasks as a list sized for a finger rather than the
- * Tasks page's list or board, which its Tasks row still opens. Search
- * opens the command palette, as the sidebar's Search does, and New task the
- * New task dialog.
+ * (`navigation-history.ts`). Tasks is the Tasks page, which a phone draws
+ * as the sidebar's tree of tasks, the pinned and each section, standing in
+ * place above the bar (`desktop-shell.tsx`), a list sized for a finger
+ * rather than the page's list or board. Search opens the command palette,
+ * as the sidebar's Search does, and New task the New task dialog.
  *
  * It stands only in a narrow room and only on a place's list, the Inbox's,
  * the Tasks page, Automations, or Home, so a task, an agent's page, or an
@@ -61,29 +59,20 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl): boolean {
 /** The bar; see the module's head. */
 export function MobileBar({
   tasks,
-  sidebar,
-  onPressTasks,
   leave,
 }: {
   tasks: TasksControl;
-  /** The drawer Tasks opens, the sidebar's tree. */
-  sidebar: SidebarCollapse;
-  /** Marks the press on Tasks as the drawer's own, so the press that opens it does not also put it away. */
-  onPressTasks: () => void;
   /** Leaves what stands over the places (Settings) before a press opens one; none where the bar stands among them. */
   leave?: (() => void) | undefined;
 }): React.JSX.Element {
   const { inboxView, boardView } = tasks;
   const among = leave === undefined;
-  const treeShown = sidebar.overlay === SIDEBAR_OVERLAY.OPEN;
-  const inInbox = among && !treeShown && inboxView.open;
-  const inTasks = treeShown || (among && !inboxView.open && boardView.open);
+  const inInbox = among && inboxView.open;
+  const inTasks = among && !inInbox && boardView.open;
   const waiting = useInboxWaiting(tasks);
-  // Note that a press leaves what stands over the places first, so the place it opens is the one on screen,
-  // and puts the tree away, which stands over every place but its own.
+  // Note that a press leaves what stands over the places first, so the place it opens is the one on screen.
   const go = (open: () => void) => () => {
     leave?.();
-    sidebar.onOverlay(SIDEBAR_OVERLAY.CLOSED);
     open();
   };
   return (
@@ -102,20 +91,16 @@ export function MobileBar({
           >
             Inbox
           </BarItem>
-          <BarItem
-            icon={<ListTodoIcon />}
-            current={inTasks}
-            onPointerDown={onPressTasks}
-            onPress={() => {
-              leave?.();
-              sidebar.onOverlay(SIDEBAR_OVERLAY.OPEN);
-            }}
-          >
+          <BarItem icon={<ListTodoIcon />} current={inTasks} onPress={go(boardView.onOpen)}>
             Tasks
           </BarItem>
           <BarItem
             icon={<SearchIcon />}
-            onPress={go(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
+            onPress={go(() => {
+              // A tap opening Search brings the keyboard up with it, as a phone's own search does.
+              raiseKeyboard();
+              runAppCommand(APP_COMMAND.COMMAND_PALETTE);
+            })}
           >
             Search
           </BarItem>

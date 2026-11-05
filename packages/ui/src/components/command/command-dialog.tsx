@@ -180,6 +180,8 @@ const CommandRow = memo(function CommandRow({
       {...(item.keywords === undefined ? {} : { keywords: [...item.keywords] })}
       disabled={item.disabled === true}
       onSelect={item.onSelect}
+      // Note that a press on a row leaves the focus in the field, as a combobox's option does, so a phone's keyboard stays up and the one tap chooses the row.
+      onMouseDown={(event) => event.preventDefault()}
     >
       <ComboboxOptionItem option={option} />
     </Command.Item>
@@ -191,6 +193,25 @@ const CommandRow = memo(function CommandRow({
     </Tooltip>
   );
 });
+
+/**
+ * Brings a phone's keyboard up for the field a press is about to open the
+ * palette on. iOS raises its keyboard only for a focus taken within a
+ * press, and the palette's field takes focus a render after it opens, so
+ * the press focuses a stand-in field at once and the keyboard stays up as
+ * the palette's field takes the focus from it. The stand-in goes as it
+ * loses the focus. Its text is 16px, the least iOS does not zoom to.
+ */
+export function raiseKeyboard(): void {
+  const standIn = document.createElement("input");
+  standIn.className = "ui-visually-hidden";
+  standIn.style.fontSize = "16px";
+  standIn.setAttribute("aria-hidden", "true");
+  standIn.tabIndex = -1;
+  standIn.addEventListener("blur", () => standIn.remove(), { once: true });
+  document.body.append(standIn);
+  standIn.focus({ preventScroll: true });
+}
 
 /** What a command dialog is told: whether it stands, what it lists, and what it says around the list. */
 export interface CommandDialogProps {
