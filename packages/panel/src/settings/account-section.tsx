@@ -6,7 +6,8 @@ import {
 } from "@repo/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
+import { andList, IRREVERSIBLE_WORDS, VERB } from "@repo/features/words";
+import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import {
@@ -138,7 +139,9 @@ function GitHubTokenRow({ accountId }: { accountId: string | undefined }): React
 /**
  * The account's delete, as the question asking it holds its own mutation
  * over it. Note that the delete happens at the service before anything
- * local moves, so a failure answers why and the account still stands.
+ * local moves, so a failure answers why and the account still stands, and
+ * that Better Auth deletes an account only within a day of its sign-in, so
+ * the refusal says how to get past that, which a retry alone does not.
  */
 const ACCOUNT_DELETE_MUTATION = mutationOptions({
   mutationKey: [ACT_KIND.ACCOUNT_DELETE],
@@ -147,10 +150,27 @@ const ACCOUNT_DELETE_MUTATION = mutationOptions({
       () => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
       () => ({
         status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "The account could not be deleted. Try again.",
+        reason: "The account could not be deleted. Sign out and back in, then delete it again.",
       }),
     ),
 });
+
+/**
+ * The workspaces deleting the account deletes with it, as the list it was
+ * handed reads them: the ones the account owns and is the only member of,
+ * as Better Auth deletes them (`auth-policy.ts`'s `accountDeletion`). Note
+ * that a list from a service before member counts names none.
+ */
+function deletedWorkspaces(workspaces: readonly Workspace[]): readonly string[] {
+  return workspaces
+    .filter(({ role, memberCount }) => role === WORKSPACE_ROLE.OWNER && memberCount === 1)
+    .map(({ name }) => name);
+}
+
+/** What the question adds after its warning, naming the workspaces that go with the account. */
+function deletedWorkspacesWords(names: readonly string[]): string {
+  return `Also deleted, with everything in them: ${andList(names)}.`;
+}
 
 /**
  * Who is signed in, the member's own GitHub personal access token, and the
@@ -158,16 +178,20 @@ const ACCOUNT_DELETE_MUTATION = mutationOptions({
  * opens on, and the one place either way out is offered. Sign out acts on
  * the press, since nothing is lost: the host asks first where a call or
  * unsaved words would go. Deleting asks first in the confirm dialog, since it
- * erases the account at the service for good, and a refusal to delete is said
- * in it.
+ * erases the account at the service for good, naming the workspaces that go
+ * with it, and a refusal to delete is said in it.
  */
 export function AccountSection({
   account,
+  workspaces = [],
   onSignOut,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
+  /** The account's workspaces as the Workspace page lists them; none while the list is unread. */
+  workspaces?: readonly Workspace[] | undefined;
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
+  const deleted = deletedWorkspaces(workspaces);
   const signOut = useBusyPress(() => signOutSayingFailure(onSignOut));
   // Note that the section is only drawn while its page is, so the page
   // leaving takes the question with it.
@@ -246,12 +270,17 @@ export function AccountSection({
         gate={account.email}
         question={{
           title: `Delete the account ${account.email}?`,
-          body: IRREVERSIBLE_WORDS,
+          body:
+            deleted.length > 0
+              ? `${IRREVERSIBLE_WORDS} ${deletedWorkspacesWords(deleted)}`
+              : IRREVERSIBLE_WORDS,
           verb: "Delete account",
           running: "Deleting account",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
           replayUnmasked: true,
           titleReplayMasked: true,
+          // Note that the workspaces' names are a person's words, so the body is masked once it names any.
+          bodyReplayMasked: deleted.length > 0,
         }}
       />
     </SettingsSection>
