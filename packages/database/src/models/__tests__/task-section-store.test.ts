@@ -85,7 +85,6 @@ const openAgent = (userId: string, organizationId: string, taskId?: string) =>
       effort: "high",
       prompt: "Sweep the flaky tests.",
       repository: "acme/api",
-      repositories: ["acme/api"],
       idempotencyKey: randomUUID(),
     });
     return id;

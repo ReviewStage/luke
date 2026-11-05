@@ -883,7 +883,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an agent started on a plan, and the item it posts, belong to the plan's workspace, the agent working in its one repository as the list",
+    "an agent started on a plan, and the item it posts, belong to the plan's workspace, the agent working in its one repository",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -893,7 +893,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
           db
             .select({
               organizationId: agentTable.organizationId,
-              repositories: agentTable.repositories,
+              repository: agentTable.repository,
             })
             .from(agentTable)
             .where(eq(agentTable.id, agent.agentId)),
@@ -905,7 +905,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             .where(eq(inboxItem.id, posted.id)),
         );
 
-        assert.deepEqual(agentRow, { organizationId: workspaceId, repositories: ["acme/relay"] });
+        assert.deepEqual(agentRow, { organizationId: workspaceId, repository: "acme/relay" });
         assert.deepEqual(itemRow, { organizationId: workspaceId });
       }),
   );
