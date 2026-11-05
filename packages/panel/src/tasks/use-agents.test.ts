@@ -1039,6 +1039,42 @@ test("a move is a continue naming its place, another place minting a key of its 
   );
 });
 
+test("a move that lands after another place was picked leaves that pick's key, so asking it again carries the same key", async () => {
+  const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const STUDIO = "3f2e1d0c-9b8a-4c7d-8e6f-5a4b3c2d1e0f";
+  const toStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO } as const;
+  const first = Promise.withResolvers<WireBoundaryInput>();
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
+  tab.answer(
+    ACT_KIND.AGENTS_START,
+    first.promise,
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+  );
+  await tab.mount();
+  const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
+
+  let toCloud: Promise<Failure | undefined> | undefined;
+  act(() => {
+    toCloud = continueAgent(SOURCE, undefined, [], { machine: AGENT_MACHINE.VERCEL });
+  });
+  await act(async () => {
+    await continueAgent(SOURCE, undefined, [], toStudio);
+  });
+  await act(async () => {
+    first.resolve({ agent: { ...STARTED, from: { agentId: SOURCE, steps: 3, totalSteps: 3 } } });
+    await toCloud;
+  });
+  await act(async () => {
+    await continueAgent(SOURCE, undefined, [], toStudio);
+  });
+
+  assert.deepEqual(
+    startPayloads(tab.asked).map((each) => each.idempotencyKey),
+    ["key-1", "key-2", "key-2"],
+  );
+});
+
 test("a second continue of an agent once the first landed mints a key of its own and lands a second agent, from a press or from the task's draft, never answered with the first", async () => {
   const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const from = { agentId: SOURCE, steps: 3, totalSteps: 3 };
