@@ -13,6 +13,7 @@ import {
   type StatusTone,
 } from "@repo/ui";
 import { ClockIcon } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useRef } from "react";
 import { CREATOR, RunRow } from "./automation-runs-panel.js";
 import type { WorkspaceRunsRead } from "./use-automation-runs.js";
@@ -130,23 +131,26 @@ export function WorkspaceRuns({
   if (kept.length === 0) return <EmptyState icon={<ClockIcon />}>{NONE_SHOWN[shown]}</EmptyState>;
   return (
     <div ref={body}>
-      <ListMotion root={body}>
-        <List label="Runs" moves>
-          {kept.map((run) => (
-            <RunRow
-              key={run.id}
-              run={run}
-              keyHolder={mine(run.automation.id) ? undefined : CREATOR}
-              automationId={run.automation.id}
-              automationName={run.automation.name}
-              linked={false}
-              now={now}
-              onOpenAgent={onOpenAgent}
-              onOpenAutomation={() => onOpenAutomation(run.automation.id)}
-            />
-          ))}
-        </List>
-      </ListMotion>
+      {/* Note that a run's row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
+      <ReplayMask>
+        <ListMotion root={body}>
+          <List label="Runs" moves>
+            {kept.map((run) => (
+              <RunRow
+                key={run.id}
+                run={run}
+                keyHolder={mine(run.automation.id) ? undefined : CREATOR}
+                automationId={run.automation.id}
+                automationName={run.automation.name}
+                linked={false}
+                now={now}
+                onOpenAgent={onOpenAgent}
+                onOpenAutomation={() => onOpenAutomation(run.automation.id)}
+              />
+            ))}
+          </List>
+        </ListMotion>
+      </ReplayMask>
     </div>
   );
 }

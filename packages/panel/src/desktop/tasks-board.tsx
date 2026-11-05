@@ -84,6 +84,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { actorName } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
   childTaskCounts,
@@ -340,7 +341,9 @@ function TaskBoardRepository({
         onClick={linkPressOf(openGitHub, repositoryPageUrl(repository))}
       >
         <RepositoryPicture repository={repository} pictures={pictures} size={AVATAR_SIZE.GLYPH} />
-        <ChipName>{label}</ChipName>
+        <ChipName>
+          <ReplayMask>{label}</ReplayMask>
+        </ChipName>
       </Chip>
     </Tooltip>
   );
@@ -456,7 +459,9 @@ const TaskBoardCard = memo(function TaskBoardCard({
       <span className="tasks-board-card-head flex min-h-ui-20 items-center gap-item-gap text-muted-foreground">
         {drawn(TASK_PROPERTY.KEY) ? (
           <span className={BOARD_CARD_KEY}>
-            <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+            <ReplayMask>
+              <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+            </ReplayMask>
           </span>
         ) : null}
         <span className="tasks-board-card-marks ml-auto inline-flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums">
@@ -477,7 +482,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
                   truncate
                   className="tasks-board-maker text-muted-foreground"
                 >
-                  {actorName(maker.actor)}
+                  <ReplayMask>{actorName(maker.actor)}</ReplayMask>
                 </Text>
               )}
               <CreatorFace task={task} onOpen={onOpen} />
@@ -515,11 +520,13 @@ const TaskBoardCard = memo(function TaskBoardCard({
             }}
           >
             <span id={nameId} className={BOARD_NAME}>
-              {task.name}
+              <ReplayMask>{task.name}</ReplayMask>
             </span>
             {/* Note that the key stands drawn on the first line, outside the press, so the press says it to a screen reader, and find skips it, which finds it drawn. */}
             {key === undefined || !drawn(TASK_PROPERTY.KEY) ? null : (
-              <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{`, ${key}`}</VisuallyHidden>
+              <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+                <ReplayMask>{`, ${key}`}</ReplayMask>
+              </VisuallyHidden>
             )}
           </CardPress>
         )}
@@ -588,7 +595,9 @@ const boardQuickAddLine: QuickAddLine = ({ draft, pending, refused }) =>
     >
       <span className={BOARD_CARD_TITLE}>
         {draft?.status}
-        <span className={BOARD_NAME}>{draft?.title ?? pending}</span>
+        <span className={BOARD_NAME}>
+          <ReplayMask>{draft?.title ?? pending}</ReplayMask>
+        </span>
       </span>
       {draft === undefined ? null : (
         <div className={BOARD_CARD_FOOT}>
@@ -600,13 +609,17 @@ const boardQuickAddLine: QuickAddLine = ({ draft, pending, refused }) =>
       )}
     </Card>
   ) : (
-    <li className={`tasks-board-draft-note ${BOARD_CARD_NOTE}`}>{refused}</li>
+    <li className={`tasks-board-draft-note ${BOARD_CARD_NOTE}`}>
+      <ReplayMask>{refused}</ReplayMask>
+    </li>
   );
 
 /** What heads a column: its value's mark and its name. */
 interface ColumnHead {
   readonly mark: React.JSX.Element | null;
   readonly words: string;
+  /** Whether its words name a person, which a screen recording keeps masked. */
+  readonly masked?: boolean | undefined;
 }
 
 /** The value an assignee's column stands for where no one is assigned, apart from every account's id. */
@@ -643,7 +656,11 @@ function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
   if (head.kind === TASKS_GROUP.ASSIGNEE) {
     return head.assigneeId === null
       ? { mark: <UnassignedMark size={ACTOR_SIZE.MARK} decorative />, words: NO_ASSIGNEE_WORDS }
-      : { mark: people.mark(head.assigneeId), words: people.words(head.assigneeId) };
+      : {
+          mark: <ReplayMask>{people.mark(head.assigneeId)}</ReplayMask>,
+          words: people.words(head.assigneeId),
+          masked: true,
+        };
   }
   return { mark: null, words: "" };
 }
@@ -731,7 +748,7 @@ function TaskBoardColumnView({
       onStanding(task, standing);
     },
   });
-  const { mark, words } = columnHead(column.head, people);
+  const { mark, words, masked } = columnHead(column.head, people);
   const value = columnValue(column.head);
   // Note that the properties a card under its assignee's column draws are made once, so a card handed them holds (`memo`).
   const unassigned = useMemo(
@@ -793,7 +810,7 @@ function TaskBoardColumnView({
       role={narrow ? "tabpanel" : undefined}
     >
       <GroupHeader
-        label={words}
+        label={masked === true ? <ReplayMask>{words}</ReplayMask> : words}
         glyph={mark}
         count={column.tasks.length === 0 ? undefined : groupCount(column.tasks.length)}
         surface={GROUP_SURFACE.WIDE}
@@ -971,10 +988,11 @@ export function TasksBoard({
         <ChoiceBar
           label={COLUMN_TABS}
           items={columns.map((column) => {
-            const { mark, words } = columnHead(column.head, people);
+            const { mark, words, masked } = columnHead(column.head, people);
             return {
               value: columnValue(column.head),
               label: words,
+              replayMasked: masked,
               icon: mark ?? undefined,
               count: column.tasks.length === 0 ? undefined : String(column.tasks.length),
             };

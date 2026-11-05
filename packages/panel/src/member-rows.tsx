@@ -169,6 +169,7 @@ export function peopleFilterActions({
         detail: row.detail,
         detailPlace: MENU_DETAIL.BESIDE,
         card: row.card,
+        replayMasked: true,
         checked: chosen.kind === PEOPLE_FILTER.PERSON && chosen.userId === row.member.userId,
         onSelect: () =>
           onChoose({ kind: PEOPLE_FILTER.PERSON, userId: row.member.userId, name: row.label }),

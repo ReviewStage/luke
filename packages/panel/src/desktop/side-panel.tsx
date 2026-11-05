@@ -53,6 +53,7 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { ListIcon } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -682,6 +683,7 @@ function browserEntries(
       detail: tab.owner.name,
       terms: [tab.title, tab.owner.name],
       section: ADD_SECTION.BROWSER,
+      replayMasked: true,
     },
     card: hungCard({
       kind: TAB_KIND.BROWSER,
@@ -709,6 +711,7 @@ function browserEntries(
       icon: owner.icon,
       end: agentEndMark(agent, true),
       card: agentRowCard(agent, owner.name, cards),
+      replayMasked: true,
     })),
     value: undefined,
     onPick: browsers.onAgent,
@@ -719,7 +722,11 @@ function browserEntries(
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
 function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRow {
-  return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }) };
+  return {
+    id: tab,
+    ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }),
+    replayMasked: tab === SIDE_PANEL_TAB.PLAN && plan !== undefined,
+  };
 }
 
 /**
@@ -791,6 +798,7 @@ export function panelEntries(input: {
         detail: label,
         terms: [look.label, label],
         section: ADD_SECTION.PULL_REQUESTS,
+        replayMasked: true,
       },
       card,
       onPick: () => panel.onChoose({ changes: agentId }),
@@ -801,6 +809,7 @@ export function panelEntries(input: {
       id: page.id,
       ...tabLook({ kind: TAB_KIND.PAGE, title: page.title }),
       section: ADD_SECTION.PAGES,
+      replayMasked: true,
     },
     card:
       cards === undefined
@@ -825,6 +834,7 @@ export function panelEntries(input: {
       detail: <TerminalStanding agent={agent} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.TERMINAL,
+      replayMasked: true,
     },
     // Note that the row hangs its Terminal tab's card: its agent's, saying under a rule whose sandbox its shells run in.
     endMark: agentEndMark(agent, true),
@@ -1458,7 +1468,7 @@ export function ActivityList({
         {strip.length === 0 ? (
           <div className="mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              Nothing open beside Overview
+              <ReplayUnmask>Nothing open beside Overview</ReplayUnmask>
             </Text>
           </div>
         ) : (
@@ -1506,19 +1516,21 @@ export function ActivityList({
         {/* Note that the offers stand in one block, so the column's gap between sections never stands between a section's label and its rows. */}
         {more.length === 0 ? null : (
           <div className="side-panel-activity-more flex flex-col">
-            <div className="pb-ui-4 px-row-inset">
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                Open more
-              </Text>
-            </div>
-            <MenuRowList
-              label="Open a tab"
-              rows={more.map(entryRow)}
-              onPick={(id) => {
-                onListed(false);
-                more.find((entry) => entry.row.id === id)?.onPick();
-              }}
-            />
+            <ReplayUnmask>
+              <div className="pb-ui-4 px-row-inset">
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  Open more
+                </Text>
+              </div>
+              <MenuRowList
+                label="Open a tab"
+                rows={more.map(entryRow)}
+                onPick={(id) => {
+                  onListed(false);
+                  more.find((entry) => entry.row.id === id)?.onPick();
+                }}
+              />
+            </ReplayUnmask>
           </div>
         )}
       </div>
@@ -1583,6 +1595,7 @@ function ToggleOffers({
       noMatch={entries.length === 0 ? "Nothing to open here" : "No tabs match"}
       align={POPOVER_ALIGN.END}
       bounds={POPOVER_BOUNDS.WINDOW}
+      replayUnmasked
       onPick={(id) => {
         const entry = entries.find((each) => each.row.id === id);
         close();
@@ -2732,7 +2745,7 @@ export function SidePanel({
                 />
               </p>
               <Button onClick={() => taskOfTab.onShowPanelTab(besideTask.id, tab)}>
-                {BESIDE_WORDS.OPEN_TASK}
+                <ReplayUnmask>{BESIDE_WORDS.OPEN_TASK}</ReplayUnmask>
               </Button>
             </TabNotice>
           )}
@@ -2921,6 +2934,7 @@ function PanelPhoneHead({
         <PlaceMore
           thing={PANEL_THING}
           shown
+          replayUnmasked={listing || shown === undefined}
           groups={(opener) => {
             const tabActions =
               listing || shown === undefined
@@ -2931,7 +2945,7 @@ function PanelPhoneHead({
                       group.map((item) =>
                         "items" in item || "panel" in item
                           ? item
-                          : { ...item, detail: item.detail ?? shown.label },
+                          : { ...item, detail: item.detail ?? shown.label, replayMasked: true },
                       ),
                     );
             return [
@@ -2943,6 +2957,7 @@ function PanelPhoneHead({
                       {
                         ...commandAction(PANEL_COMMAND.CLOSE_TAB, onCloseShown, true),
                         detail: shown?.label ?? title,
+                        replayMasked: true,
                       },
                     ]),
               ],

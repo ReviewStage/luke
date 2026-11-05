@@ -55,6 +55,7 @@ import {
   MailOpenIcon,
   SmilePlusIcon,
 } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   type DrawnTaskRow,
   type HiddenStatus,
@@ -283,6 +284,7 @@ export function useSectionDialogs(
     <Dialog
       open={form.open}
       title={NEW_SECTION}
+      replayUnmasked
       busy={form.settling}
       refused={form.refusal !== undefined}
       initialFocus={field}
@@ -337,7 +339,7 @@ export function useSectionDialogs(
         </FormField>
         {ask?.moving === undefined ? null : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {ask.moving}
+            <ReplayMask>{ask.moving}</ReplayMask>
           </Text>
         )}
       </Stack>
@@ -357,12 +359,13 @@ export function useSectionDialogs(
       // still stands, rather than falling to the window as it is taken away.
       if (from !== null) nextRowOrHead(from)()?.focus({ preventScroll: true });
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.DELETE, id: section.id }]);
-      toast(
-        undoToast(SECTION_DELETED, () => {
+      toast({
+        ...undoToast(SECTION_DELETED, () => {
           const now = latest.current;
           now.onWriteSections(undeleteWrites(before, now.taskSections, section, Date.now()));
         }),
-      );
+        replayUnmasked: true,
+      });
     },
     move: (members, movedTo, writes) => {
       if (members.length === 0) return;
@@ -372,13 +375,13 @@ export function useSectionDialogs(
         movedTo === null
           ? null
           : (before.sections.find((section) => section.id === movedTo)?.title ?? "");
-      toast(
-        undoToast(movedNote(members.length, title), () => {
-          const now = latest.current;
-          const back = restoreWrites(before, now.taskSections, members, movedTo, Date.now());
-          if (back.length > 0) now.onWriteSections(back);
-        }),
-      );
+      const undo = undoToast(movedNote(members.length, title), () => {
+        const now = latest.current;
+        const back = restoreWrites(before, now.taskSections, members, movedTo, Date.now());
+        if (back.length > 0) now.onWriteSections(back);
+      });
+      // Note that a move out of every section names no section, so its words are all the app's own.
+      toast(title === null ? { ...undo, replayUnmasked: true } : undo);
     },
     dialog,
   };
@@ -521,6 +524,7 @@ export function moveToSectionEntry(
     return {
       label: section.title,
       key: section.id,
+      replayMasked: true,
       ...(glyph === undefined ? undefined : { icon: glyph }),
       checked: section.id === standing,
       onSelect: () => {
@@ -617,6 +621,7 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
       const glyph = sectionGlyph(other.icon);
       return {
         label: other.title,
+        replayMasked: true,
         ...(glyph === undefined ? undefined : { icon: glyph }),
         onSelect: () => dialogs.move(members, other.id, put(other.id)),
       };
@@ -862,7 +867,7 @@ function SidebarSection({
         }
         heading={GROUP_HEADING.NONE}
         glyph={glyph}
-        label={section.title}
+        label={<ReplayMask>{section.title}</ReplayMask>}
         fold={sidebarFold(folded, () => context.onToggle(section.id))}
         // Note that a section the view leaves nothing standing in, though it holds rows, counts none, because a 0 would call it empty.
         count={
@@ -894,6 +899,7 @@ function SidebarSection({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${section.title} actions`}
+          replayUnmasked
           menu={menu.drawn}
           groups={withRowMoves(groups, place)}
           onClose={menu.close}

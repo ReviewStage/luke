@@ -18,6 +18,7 @@ import {
   Tooltip,
 } from "@repo/ui";
 import { GLYPH, NetworkIcon, PlusIcon } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { subTaskCount, subTasksOf, taskFinished } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
@@ -329,15 +330,17 @@ export function PlanRelations({
       return {
         task: other,
         relation: (
-          <RelationKindPill
-            kind={kind}
-            kinds={TASK_RELATION_ORDER}
-            words={TASK_RELATION_WORDS}
-            icon={(each) => <TaskRelationIcon kind={each} />}
-            attention={blocker && !settled}
-            onChange={doors.onChange}
-            onRemove={doors.onRemove}
-          />
+          <ReplayUnmask>
+            <RelationKindPill
+              kind={kind}
+              kinds={TASK_RELATION_ORDER}
+              words={TASK_RELATION_WORDS}
+              icon={(each) => <TaskRelationIcon kind={each} />}
+              attention={blocker && !settled}
+              onChange={doors.onChange}
+              onRemove={doors.onRemove}
+            />
+          </ReplayUnmask>
         ),
         settled: blocker && settled,
         menu: relationMenu(kind, doors),
@@ -352,7 +355,7 @@ export function PlanRelations({
       {subTasks.length === 0 ? null : (
         <GroupHeader
           heading={GROUP_HEADING.NONE}
-          label={GROUP_WORDS.SUB_TASKS}
+          label={<ReplayUnmask>{GROUP_WORDS.SUB_TASKS}</ReplayUnmask>}
           glyph={<GLYPH.SUB_TASK />}
           mark={
             <ProgressCount
@@ -384,7 +387,7 @@ export function PlanRelations({
       {relations.length === 0 ? null : (
         <GroupHeader
           heading={GROUP_HEADING.NONE}
-          label={GROUP_WORDS.RELATIONS}
+          label={<ReplayUnmask>{GROUP_WORDS.RELATIONS}</ReplayUnmask>}
           glyph={<NetworkIcon />}
           count={{
             value: relations.length,

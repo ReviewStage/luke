@@ -1,4 +1,5 @@
 import { EmptyState, type EmptyStateAction } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { SearchXIcon } from "lucide-react";
 
 /**
@@ -40,7 +41,7 @@ export function NotFound({
 }): React.JSX.Element {
   return (
     <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action}>
-      {`This ${thing} doesn't exist, or you don't have access to it.`}
+      <ReplayUnmask>{`This ${thing} doesn't exist, or you don't have access to it.`}</ReplayUnmask>
     </EmptyState>
   );
 }

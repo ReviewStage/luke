@@ -115,6 +115,7 @@ export function LinkMenu(): React.JSX.Element | null {
     <ActionMenu
       label={LINK_MENU_LABEL}
       menu={drawn}
+      replayUnmasked
       onClose={close}
       groups={[
         [

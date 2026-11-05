@@ -2218,7 +2218,7 @@ function agentRows(): {
       option.querySelector(".ui-combobox-option-glyph svg, .ui-combobox-option-glyph img") !== null,
     name: option.querySelector(".ui-combobox-option-label")?.textContent ?? null,
     detail: option.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
-    ends: [...(option.querySelector(".ui-combobox-option-hint")?.children ?? [])].map((mark) =>
+    ends: [...option.querySelectorAll(".ui-combobox-option-hint [aria-label]")].map((mark) =>
       mark.getAttribute("aria-label"),
     ),
   }));

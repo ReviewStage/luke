@@ -11,6 +11,7 @@ import {
   STATUS_TONE,
   useRovingKeys,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
 import { useRef, useState } from "react";
@@ -143,9 +144,11 @@ function HomeInbox({
   if (read.failed) {
     return (
       <div className="home-note my-tight-gap">
-        <ErrorState failure={unreadShown(FAILURE_SURFACE.HOME_INBOX_READ)} onRetry={read.onRetry}>
-          {ITEMS_NOT_READ}
-        </ErrorState>
+        <ReplayUnmask>
+          <ErrorState failure={unreadShown(FAILURE_SURFACE.HOME_INBOX_READ)} onRetry={read.onRetry}>
+            {ITEMS_NOT_READ}
+          </ErrorState>
+        </ReplayUnmask>
       </div>
     );
   }
@@ -154,12 +157,14 @@ function HomeInbox({
   return (
     <PersonSectionFrame
       label={TAB_WORDS.INBOX}
-      title={TAB_WORDS.INBOX}
+      title={<ReplayUnmask>{TAB_WORDS.INBOX}</ReplayUnmask>}
       count={waiting.length === 0 ? undefined : waiting.length}
       tone={STATUS_TONE.ATTENTION}
     >
       {waiting.length === 0 ? (
-        <NoteLine look={NOTE_LINE_LOOK.INSET}>{NEEDS_YOU.NONE}</NoteLine>
+        <NoteLine look={NOTE_LINE_LOOK.INSET}>
+          <ReplayUnmask>{NEEDS_YOU.NONE}</ReplayUnmask>
+        </NoteLine>
       ) : (
         <List label={TAB_WORDS.INBOX} joinsWalk>
           {waiting.map((listed) => (
@@ -194,15 +199,17 @@ function HomeRecent({
   const recent = recentTasks(tasks.listed.tasks, room);
   if (recent.length === 0 && !tasks.listFailed) return null;
   return (
-    <PersonSectionFrame label={RECENT} title={RECENT}>
+    <PersonSectionFrame label={RECENT} title={<ReplayUnmask>{RECENT}</ReplayUnmask>}>
       {tasks.listFailed ? (
         <div className="home-note my-tight-gap">
-          <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.HOME_TASKS_READ)}
-            onRetry={tasks.onRetryList}
-          >
-            {TASKS_NOT_READ}
-          </ErrorState>
+          <ReplayUnmask>
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.HOME_TASKS_READ)}
+              onRetry={tasks.onRetryList}
+            >
+              {TASKS_NOT_READ}
+            </ErrorState>
+          </ReplayUnmask>
         </div>
       ) : null}
       {recent.length === 0 ? null : (

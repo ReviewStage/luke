@@ -8,6 +8,7 @@ import {
   Text,
   Toolbar,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -327,13 +328,15 @@ export function TasksPage({
   return (
     <PageFind page={FIND_PAGE.BOARD} at={view} active={tasks.shown}>
       {/* A face names its assignee or its creator, and the Filter offers them, against the listed workspace's members. */}
-      <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-        {view === TASKS_VIEW.BOARD ? (
-          <TasksBoard tasks={tasks} room={room} title={TASKS} frame={frame} />
-        ) : (
-          <TasksList tasks={tasks} room={room} frame={frame} />
-        )}
-      </MemberDirectory>
+      <ReplayUnmask>
+        <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+          {view === TASKS_VIEW.BOARD ? (
+            <TasksBoard tasks={tasks} room={room} title={TASKS} frame={frame} />
+          ) : (
+            <TasksList tasks={tasks} room={room} frame={frame} />
+          )}
+        </MemberDirectory>
+      </ReplayUnmask>
     </PageFind>
   );
 }

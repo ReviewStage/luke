@@ -41,6 +41,7 @@ import {
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, accountActor, SOMEONE_REASON } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   LifeBuoyIcon,
   LightbulbIcon,
@@ -89,7 +90,11 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
   }
-  return <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.ACCOUNT} />;
+  return (
+    <ReplayMask>
+      <ActorMark actor={accountActor(account)} size={ACTOR_SIZE.ACCOUNT} />
+    </ReplayMask>
+  );
 }
 
 /**
@@ -214,7 +219,11 @@ function SidebarBuild(): React.JSX.Element | null {
     <List label="Build" density={LIST_DENSITY.DENSE}>
       <ListRow
         leading={<GLYPH.BRANCH />}
-        title={<OneLine words={branch}>{branch}</OneLine>}
+        title={
+          <OneLine words={branch}>
+            <ReplayMask>{branch}</ReplayMask>
+          </OneLine>
+        }
         ink={LIST_ROW_INK.SIDEBAR}
         hint={{ Hint: RowHint, label: `Copy ${detail}` }}
         onPress={() => copy(detail, "Branch copied")}
@@ -369,11 +378,12 @@ function AccountMenu({
         icon={<AccountAvatar account={account} />}
         menu={trigger(riseAbove)}
       >
-        {signedIn ? (account.name ?? account.email) : "Not signed in"}
+        {signedIn ? <ReplayMask>{account.name ?? account.email}</ReplayMask> : "Not signed in"}
       </NavItem>
       {drawn === undefined ? null : (
         <ActionMenu
           label="Account"
+          replayUnmasked
           menu={drawn}
           heading={signedIn ? <AccountHeading account={account} /> : undefined}
           groups={groups}

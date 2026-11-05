@@ -5,7 +5,11 @@ import {
   pinPositionsForMove,
 } from "@repo/features/pin-order";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@repo/features/task-section-wire";
+import {
+  TASK_SECTION_ICON_KIND,
+  TASK_SECTION_WRITE,
+  type TaskSectionWrite,
+} from "@repo/features/task-section-wire";
 import { isAgentEntry } from "@repo/features/task-section-writes";
 import {
   TASK_PRIORITY_ORDER,
@@ -64,6 +68,7 @@ import {
 } from "@repo/ui";
 import { actorName, creatorActor } from "@repo/ui/actor-model";
 import { GLYPH, ListTodoIcon, PinIcon, UserXIcon } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { childTaskCounts, NO_REPOSITORY, repositoryLabel } from "@repo/ui/task-list-model";
 import {
   placeWrites,
@@ -389,6 +394,8 @@ interface GroupHead {
   readonly icon: ReactNode;
   readonly name: string;
   readonly hint?: string | undefined;
+  /** Whether its name is a person's, a repository's, or a section's, which a screen recording keeps masked. */
+  readonly masked?: boolean | undefined;
 }
 
 /** How the List names and draws the people its groups stand for: by account id, null for no one. */
@@ -412,9 +419,17 @@ function groupHead(
       return { icon: <PinIcon />, name: PINNED };
     case TASKS_GROUP.SECTION: {
       const section = tasks.taskSections.sections.find((each) => each.id === head.sectionId);
+      const glyph = sectionGlyph(section?.icon) ?? <GLYPH.SECTION />;
+      // Note that a section's emoji is drawn as words, which a screen recording keeps masked, while a glyph is a picture.
       return {
-        icon: sectionGlyph(section?.icon) ?? <GLYPH.SECTION />,
+        icon:
+          section?.icon?.kind === TASK_SECTION_ICON_KIND.EMOJI ? (
+            <ReplayMask>{glyph}</ReplayMask>
+          ) : (
+            glyph
+          ),
         name: section?.title ?? "",
+        masked: true,
       };
     }
     case TASKS_GROUP.STATUS:
@@ -440,18 +455,24 @@ function groupHead(
             ),
             name: repositoryLabel(head.repository, repositories),
             hint: head.repository,
+            masked: true,
           };
     case TASKS_GROUP.ASSIGNEE:
       return head.assigneeId === null
         ? { icon: <UnassignedMark size={ACTOR_SIZE.MARK} decorative />, name: NO_ASSIGNEE_WORDS }
         : {
-            icon: people.assigneeMark(head.assigneeId),
+            icon: <ReplayMask>{people.assigneeMark(head.assigneeId)}</ReplayMask>,
             name: people.assigneeName(head.assigneeId),
+            masked: true,
           };
     case TASKS_GROUP.CREATOR:
       return head.creatorId === null
         ? { icon: <UserXIcon />, name: NO_CREATOR }
-        : { icon: people.creatorMark(head.creatorId), name: people.creatorName(head.creatorId) };
+        : {
+            icon: <ReplayMask>{people.creatorMark(head.creatorId)}</ReplayMask>,
+            name: people.creatorName(head.creatorId),
+            masked: true,
+          };
     case TASKS_GROUP.ALL:
       return { icon: null, name: TASKS };
   }
@@ -726,7 +747,7 @@ function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
       }
       name={
         <>
-          {draft?.title ?? pending}
+          <ReplayMask>{draft?.title ?? pending}</ReplayMask>
           {draft === undefined
             ? null
             : DRAFT_CELLS.filter((property) => !properties.includes(property)).map((property) => (
@@ -734,7 +755,7 @@ function listQuickAddLine(properties: readonly TaskRowCell[]): QuickAddLine {
               ))}
         </>
       }
-      note={refused}
+      note={refused === undefined ? undefined : <ReplayMask>{refused}</ReplayMask>}
       drafting={draft !== undefined}
       pending={pending !== undefined}
     />
@@ -836,28 +857,31 @@ function TasksListGroup({
             <QuickAddLines quick={quick} line={listQuickAddLine(properties)} />
           </Stack>
         ) : null}
+        {/* Note that a row's name is handed to its row as words, which no mark inside the row reaches, so the run is masked whole and the row unmasks its own chips. */}
         {drawn.length === 0 ? null : (
-          <VirtualRows
-            scroller={place.scroller}
-            shiftedBy={place.list}
-            keys={keys}
-            estimate={ROW_ESTIMATE_PX}
-            overscan={place.finding ? keys.length : undefined}
-            anchor={VIRTUAL_ROWS_ANCHOR.START}
-            listItems
-            moves
-            holdsFocus
-            className={`tasks-list-rows ${ROWS_GRID} data-[dragging=true]:cursor-grabbing`}
-            aria-label={head.name}
-            data-row-drop-rows={ordered(group.head) ? "" : undefined}
-            onPointerDown={draggable ? drag : undefined}
-            handle={run}
-          >
-            {(index, at) => {
-              const entry = drawn[index];
-              return entry === undefined ? null : row(entry.value, at);
-            }}
-          </VirtualRows>
+          <ReplayMask>
+            <VirtualRows
+              scroller={place.scroller}
+              shiftedBy={place.list}
+              keys={keys}
+              estimate={ROW_ESTIMATE_PX}
+              overscan={place.finding ? keys.length : undefined}
+              anchor={VIRTUAL_ROWS_ANCHOR.START}
+              listItems
+              moves
+              holdsFocus
+              className={`tasks-list-rows ${ROWS_GRID} data-[dragging=true]:cursor-grabbing`}
+              aria-label={head.name}
+              data-row-drop-rows={ordered(group.head) ? "" : undefined}
+              onPointerDown={draggable ? drag : undefined}
+              handle={run}
+            >
+              {(index, at) => {
+                const entry = drawn[index];
+                return entry === undefined ? null : row(entry.value, at);
+              }}
+            </VirtualRows>
+          </ReplayMask>
         )}
       </>
     );
@@ -878,7 +902,7 @@ function TasksListGroup({
       {/* Note that one run of every task, grouped by nothing, needs no head of its own, and no fold. */}
       {titled ? (
         <GroupHeader
-          label={head.name}
+          label={head.masked === true ? <ReplayMask>{head.name}</ReplayMask> : head.name}
           glyph={head.icon}
           tooltip={head.hint === head.name ? undefined : head.hint}
           fold={sidebarFold(folded, onToggle)}

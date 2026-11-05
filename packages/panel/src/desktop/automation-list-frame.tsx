@@ -10,6 +10,7 @@ import {
   Skeleton,
   Toolbar,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useCallback, useRef } from "react";
 
 /**
@@ -83,10 +84,13 @@ export function AutomationsActsSkeleton(): React.JSX.Element {
  */
 export function AutomationGroupList({
   name,
+  nameMasked = false,
   headed,
   children,
 }: {
   name: string;
+  /** Whether the name is a person's words, a workspace's name, kept masked in a screen recording. */
+  nameMasked?: boolean;
   headed: boolean;
   children: ReactNode;
 }): React.JSX.Element {
@@ -97,10 +101,16 @@ export function AutomationGroupList({
   }, []);
   const list = (
     <ListMotion root={root}>
-      <SettingsSection title={headed ? name : undefined} frame={SETTINGS_SECTION_FRAME.NONE}>
-        <List label={name} moves>
-          {children}
-        </List>
+      <SettingsSection
+        title={headed ? nameMasked ? <ReplayMask>{name}</ReplayMask> : name : undefined}
+        frame={SETTINGS_SECTION_FRAME.NONE}
+      >
+        {/* Note that every row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
+        <ReplayMask>
+          <List label={name} moves>
+            {children}
+          </List>
+        </ReplayMask>
       </SettingsSection>
     </ListMotion>
   );

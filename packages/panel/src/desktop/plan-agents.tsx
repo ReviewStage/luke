@@ -9,6 +9,7 @@ import {
   RowHintOptions,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
@@ -111,15 +112,15 @@ function PlanAgentRow({
       <ListRow
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
-        title={row.label}
+        title={<ReplayMask>{row.label}</ReplayMask>}
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
-          <>
+          <ReplayMask>
             {entry.agent === undefined ? null : (
               <RunsOnPlace agent={entry.agent} devices={agents.macs} />
             )}
             {endMark}
-          </>
+          </ReplayMask>
         }
         actions={
           pullRequest === undefined ? undefined : (
@@ -200,7 +201,7 @@ export function PlanAgents({
       {grouped ? (
         <GroupHeader
           heading={GROUP_HEADING.NONE}
-          label={AGENTS_LIST}
+          label={<ReplayUnmask>{AGENTS_LIST}</ReplayUnmask>}
           // Note that a phone's group over no agent, standing for New agent, counts none.
           count={
             entries.length === 0
@@ -245,7 +246,7 @@ export function PlanAgents({
         <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
           <ListRow
             leading={<GLYPH.INBOX />}
-            title={threadsWaitingWords(waiting.waiting)}
+            title={<ReplayUnmask>{threadsWaitingWords(waiting.waiting)}</ReplayUnmask>}
             chevron
             onPress={waiting.onOpenInbox}
           />

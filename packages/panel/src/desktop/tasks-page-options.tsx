@@ -50,6 +50,7 @@ import {
   UserIcon,
   UserXIcon,
 } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { NO_REPOSITORY, repositoryLabel, repositoryParts } from "@repo/ui/task-list-model";
 import {
   BOARD_GROUPINGS,
@@ -437,6 +438,11 @@ const PERSON_GROUPINGS: readonly TasksGrouping[] = [
   TASKS_GROUPING.CREATOR,
 ];
 
+/** Whether a field's values name a person or a repository, which a screen recording keeps masked. */
+function namesData(field: TasksFilterField): boolean {
+  return PERSON_FIELDS.includes(field) || field === TASKS_FILTER_FIELD.REPOSITORY;
+}
+
 /** The fields the Filter offers: Assignee and Creator only where the workspace is shared. */
 function offeredFields(shared: boolean): readonly TasksFilterField[] {
   return Object.values(TASKS_FILTER_FIELD).filter(
@@ -467,11 +473,18 @@ function filterEntries(
             // Note that a value is keyed by itself, because two repositories, or two people, may be named alike.
             key: value ?? undefined,
             label: label ?? words,
-            icon,
+            // Note that a person's face draws their letter, so it is masked with their name; none, No assignee or No one, is the app's own.
+            icon:
+              PERSON_FIELDS.includes(field) && value !== null ? (
+                <ReplayMask>{icon}</ReplayMask>
+              ) : (
+                icon
+              ),
             ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
             card,
             checked: kept.includes(value),
             stays: true,
+            replayMasked: value !== null && namesData(field),
             onSelect: () => onFilter(toggledFilter(filter, field, value)),
           }),
         ),
@@ -538,6 +551,7 @@ export function TasksFilterButton({
         <ActionMenu
           label={FILTER}
           menu={menu.drawn}
+          replayUnmasked
           groups={filterEntries(tasks, filter, onFilter, shared, reader, pictures)}
           onClose={menu.close}
         />
@@ -560,7 +574,7 @@ const FILTER_LINE = {
 
 /** One place on the filter line: a field's chip, with its words as last drawn, or the Clear after them. */
 type FilterLineEntry =
-  | { readonly key: TasksFilterField; readonly words: string }
+  | { readonly key: TasksFilterField; readonly words: string; readonly masked: boolean }
   | { readonly key: typeof FILTER_LINE.CLEAR };
 
 /** The filter line's places: a chip for each field filtered, its values named in the menu's order, whatever order they were chosen in, and Clear after them; none while nothing is filtered. */
@@ -576,7 +590,11 @@ function filterLineEntries(
     const words = fieldValues(field, tasks, filter, reader, false)
       .filter((each) => kept.includes(each.value))
       .map((each) => each.words);
-    return { key: field, words: `${FIELD_WORDS[field]}: ${chipWords(words)}` };
+    return {
+      key: field,
+      words: `${FIELD_WORDS[field]}: ${chipWords(words)}`,
+      masked: namesData(field),
+    };
   });
   return [...chips, { key: FILTER_LINE.CLEAR }];
 }
@@ -625,7 +643,9 @@ function FilterLine({
             onRemove={leaving ? stays : () => onFilter(clearedField(filter, value.key))}
           >
             {FIELD_ICON[value.key]}
-            <ChipName>{value.words}</ChipName>
+            <ChipName>
+              {value.masked ? <ReplayMask>{value.words}</ReplayMask> : value.words}
+            </ChipName>
           </Chip>
         ),
       )}
@@ -820,6 +840,7 @@ export function TasksViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
+          replayUnmasked
           groups={displayEntries({ board, display, initial, onDisplay, shared })}
           onClose={menu.close}
         />

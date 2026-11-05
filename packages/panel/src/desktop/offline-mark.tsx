@@ -1,6 +1,7 @@
 import { HOST_LIVE } from "@repo/features/tasks-view";
 import { ANNOUNCE, Tooltip, useAnnounce } from "@repo/ui";
 import { RefreshCwIcon, WifiOffIcon } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import * as Atom from "effect/reactivity/Atom";
 import { useRef } from "react";
@@ -77,7 +78,9 @@ export function OfflineMark(): React.JSX.Element | null {
         aria-label={word}
       >
         <Icon aria-hidden="true" />
-        <span className="offline-mark-word">{word}</span>
+        <span className="offline-mark-word">
+          <ReplayUnmask>{word}</ReplayUnmask>
+        </span>
       </span>
     </Tooltip>
   );

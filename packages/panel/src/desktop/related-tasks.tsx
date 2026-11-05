@@ -6,6 +6,7 @@ import {
   type TaskRowCell,
   TaskRows,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { childTaskCounts } from "@repo/ui/task-list-model";
 import { LIST_COLUMN, type ListColumn, TASK_PROPERTY } from "@repo/ui/tasks-page-model";
 import { type ReactNode, useMemo, useState } from "react";
@@ -132,36 +133,39 @@ export function RelatedTasks({
   return (
     // Note that the list is measured from a box of its own, the width its rows stand in, so its columns fold for the room it has.
     <div ref={setList} className="related-tasks min-w-0">
-      <TaskRows
-        id={selection.regionId}
-        label={label}
-        cells={cells}
-        more={more}
-        selection={{ selected: selection.selected, onChange: selection.onChange }}
-      >
-        {rows.map(({ task, relation, depth, fold, settled, menu, unlisted }, at) => (
-          <TaskListRow
-            key={task.id}
-            tasks={rowTab}
-            task={task}
-            opened={opened}
-            workspaceName={workspaceName}
-            cells={cells}
-            subTasks={subTasks.get(task.id)}
-            content={{ [TASK_ROW_CELL.RELATION]: relation }}
-            chosen={selection.chosenOf(task.id)}
-            onOpen={() => onOpenTask(task.id)}
-            onStanding={(standing) => setStanding(task, standing)}
-            depth={depth}
-            nest={nests[at]}
-            fold={fold}
-            settled={settled}
-            menuGroups={menu}
-            unlisted={unlisted}
-            more={more}
-          />
-        ))}
-      </TaskRows>
+      {/* Note that a row's name is handed to its row as words, which no mark inside the row reaches, so the rows are masked whole and each row unmasks its own chips. */}
+      <ReplayMask>
+        <TaskRows
+          id={selection.regionId}
+          label={label}
+          cells={cells}
+          more={more}
+          selection={{ selected: selection.selected, onChange: selection.onChange }}
+        >
+          {rows.map(({ task, relation, depth, fold, settled, menu, unlisted }, at) => (
+            <TaskListRow
+              key={task.id}
+              tasks={rowTab}
+              task={task}
+              opened={opened}
+              workspaceName={workspaceName}
+              cells={cells}
+              subTasks={subTasks.get(task.id)}
+              content={{ [TASK_ROW_CELL.RELATION]: relation }}
+              chosen={selection.chosenOf(task.id)}
+              onOpen={() => onOpenTask(task.id)}
+              onStanding={(standing) => setStanding(task, standing)}
+              depth={depth}
+              nest={nests[at]}
+              fold={fold}
+              settled={settled}
+              menuGroups={menu}
+              unlisted={unlisted}
+              more={more}
+            />
+          ))}
+        </TaskRows>
+      </ReplayMask>
       {selection.dialog}
     </div>
   );

@@ -28,6 +28,7 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
   repositoryLabel,
@@ -254,13 +255,17 @@ export function TaskListRow({
           : {
               // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
               [TASK_ROW_CELL.PRIORITY]: (
-                <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                <ReplayUnmask>
+                  <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                </ReplayUnmask>
               ),
               [TASK_ROW_CELL.KEY]: (
                 <TaskKey workspaceName={workspaceName} number={task.number} decorative />
               ),
               [TASK_ROW_CELL.STATUS]: (
-                <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                <ReplayUnmask>
+                  <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                </ReplayUnmask>
               ),
               [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
                 <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />

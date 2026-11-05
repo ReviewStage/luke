@@ -9,6 +9,7 @@ import {
   TextField,
   useConfirmDialog,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
@@ -63,6 +64,7 @@ export function useNewWorkspaceDialog(
   const dialog = (
     <Dialog
       open={form.open}
+      replayUnmasked
       title="New workspace"
       busy={form.settling}
       refused={form.refusal !== undefined}
@@ -82,7 +84,14 @@ export function useNewWorkspaceDialog(
         />
       }
     >
-      <FormField label="Workspace name" error={form.refusal}>
+      <FormField
+        label="Workspace name"
+        error={
+          form.refusal === undefined
+            ? undefined
+            : { ...form.refusal, words: <ReplayMask>{form.refusal.words}</ReplayMask> }
+        }
+      >
         {(control) => (
           <TextField
             ref={field}

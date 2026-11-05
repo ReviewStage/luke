@@ -154,6 +154,7 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { inputProblem, UNREPORTED } from "@repo/ui/reported-failure";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Result } from "effect";
@@ -409,6 +410,7 @@ export function AutomationSwitch({
       if (reason !== undefined) {
         toast({
           words: reason,
+          replayUnmasked: true,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
           failure: {
@@ -533,12 +535,14 @@ function OwnerRow({
       }
       value={owner}
       valueLabel={automationOwnerName(owner, workspace?.name, mine)}
+      replayUnmasked
       valueIcon={
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
       }
       rows={owners.map((each) => ({
         id: each.value,
         label: each.label,
+        replayMasked: each.value === AUTOMATION_SCOPE.WORKSPACE,
         icon: (
           <OwnerMark
             owner={each.value}
@@ -844,6 +848,7 @@ function ScheduleRows({
                     <Picker
                       width={CHIP_WIDTH.MIN_FIELD}
                       label="Day"
+                      replayUnmasked
                       value={String(schedule.weekday)}
                       valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
                       rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
@@ -855,6 +860,7 @@ function ScheduleRows({
                     <Picker
                       width={CHIP_WIDTH.MIN_FIELD}
                       label="Minutes past the hour"
+                      replayUnmasked
                       value={String(schedule.minute)}
                       valueLabel={hourlyLabel(schedule.minute)}
                       rows={HOURLY_MINUTES.map((minute) => ({
@@ -888,6 +894,7 @@ function ScheduleRows({
       <PickerRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Time zone"
+        replayUnmasked
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
@@ -1070,6 +1077,7 @@ function AutomationActions({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={moreLabel(ACTIONS_THING)}
+          replayUnmasked
           menu={menu.drawn}
           heading={heading}
           // Note that a phone's ⋯, the one given a lead, also stands in for ⌘F, read as the menu is drawn.
@@ -1104,7 +1112,7 @@ function EditorToolbarFrame({
       <Toolbar
         trail={[{ label: AUTOMATIONS_PLACE, icon: <ZapIcon />, onPress: onBack }]}
         pickUp={pickUp}
-        actions={children}
+        actions={<ReplayUnmask>{children}</ReplayUnmask>}
       />
     </div>
   );
@@ -1206,6 +1214,7 @@ function EditorToolbar({
             {
               label: automation.enabled ? "On" : "Off",
               detail: automation.name,
+              replayMasked: true,
               checked: automation.enabled,
               mark: MENU_ITEM_MARK.SWITCH,
               onSelect: () => onToggle(!automation.enabled),
@@ -1225,7 +1234,7 @@ function EditorToolbar({
             running={running}
             onRunNow={onRunNow}
             lead={lead.filter((group) => group.length > 0)}
-            heading={status}
+            heading={<ReplayUnmask>{status}</ReplayUnmask>}
           />
         }
       />
@@ -1713,6 +1722,7 @@ function WebhookRows({
           body: `The secret your sender uses now stops working until you give it the new one, which ${PRODUCT_NAME} shows you once. ${IRREVERSIBLE_WORDS}`,
           verb: "Make secret",
           running: "Making",
+          replayUnmasked: true,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />
@@ -1943,13 +1953,14 @@ function AgentRow({
   const rows = [
     ...(words !== "" ? [] : [{ id: FIRST_RUN_ROW, label: FIRST_RUN_LABEL }]),
     ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
-    ...listed.map((agent) => agentMenuRow(agent, drawn)),
+    ...listed.map((agent) => ({ ...agentMenuRow(agent, drawn), replayMasked: true })),
   ];
   return (
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
       detail={detail}
+      replayUnmasked
       value={draft.agentId ?? FIRST_RUN_ROW}
       valueLabel={
         chosenRow !== undefined
@@ -2028,7 +2039,7 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsSection title={EDITOR_SECTION.WHERE_IT_RUNS}>
+    <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.WHERE_IT_RUNS}</ReplayUnmask>}>
       <SettingsRow
         label="Repository"
         description={
@@ -2185,7 +2196,7 @@ function EditorForm({
     <RevealArea root={form}>
       <AutomationForm ref={form} {...revealArea()}>
         {offersOwner ? (
-          <SettingsSection title={EDITOR_SECTION.SHARING}>
+          <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.SHARING}</ReplayUnmask>}>
             <OwnerRow
               owner={draft.owner}
               owners={owners}
@@ -2197,7 +2208,7 @@ function EditorForm({
             {automation === undefined ? null : <MakerRow maker={maker} at={automation.createdAt} />}
           </SettingsSection>
         ) : null}
-        <SettingsSection title={EDITOR_SECTION.TRIGGER}>
+        <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.TRIGGER}</ReplayUnmask>}>
           <SelectRow
             width={CHIP_WIDTH.MIN_FIELD}
             label="Type"
@@ -2257,7 +2268,10 @@ function EditorForm({
             }
           </RevealChoice>
         </SettingsSection>
-        <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
+        <SettingsSection
+          title={<ReplayUnmask>{EDITOR_SECTION.PROMPT}</ReplayUnmask>}
+          frame={SETTINGS_SECTION_FRAME.NONE}
+        >
           <TextArea
             ref={prompt}
             label="Prompt"
@@ -2270,7 +2284,9 @@ function EditorForm({
           />
           {/* What stops a save, said under the prompt once a save was pressed. */}
           {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
-            <ErrorState failure={UNREPORTED.INPUT}>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
+            <ErrorState failure={UNREPORTED.INPUT}>
+              <ReplayUnmask>{problems[DRAFT_FIELD.PROMPT]}</ReplayUnmask>
+            </ErrorState>
           )}
         </SettingsSection>
         <RunsGroup
@@ -2384,17 +2400,20 @@ function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.El
         <Skeleton shape={SKELETON_SHAPE.CONTROL} />
         <AutomationForm>
           {offersOwner ? (
-            <SettingsSection title={EDITOR_SECTION.SHARING}>
+            <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.SHARING}</ReplayUnmask>}>
               <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.SHARING]} />
             </SettingsSection>
           ) : null}
-          <SettingsSection title={EDITOR_SECTION.TRIGGER}>
+          <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.TRIGGER}</ReplayUnmask>}>
             <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.TRIGGER]} />
           </SettingsSection>
-          <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
+          <SettingsSection
+            title={<ReplayUnmask>{EDITOR_SECTION.PROMPT}</ReplayUnmask>}
+            frame={SETTINGS_SECTION_FRAME.NONE}
+          >
             <PromptSkeleton />
           </SettingsSection>
-          <SettingsSection title={EDITOR_SECTION.WHERE_IT_RUNS}>
+          <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.WHERE_IT_RUNS}</ReplayUnmask>}>
             <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.WHERE_IT_RUNS]} />
           </SettingsSection>
         </AutomationForm>
@@ -2767,7 +2786,9 @@ export function AutomationEditor({
       setup={
         <AutomationSetup>
           {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-            <FailureNote failure={UNREPORTED.INPUT}>{problems[DRAFT_FIELD.NAME]}</FailureNote>
+            <FailureNote failure={UNREPORTED.INPUT}>
+              <ReplayUnmask>{problems[DRAFT_FIELD.NAME]}</ReplayUnmask>
+            </FailureNote>
           ) : null}
           {refusal === undefined ? null : (
             <FailureNote
@@ -2778,7 +2799,7 @@ export function AutomationEditor({
                 refused: true,
               })}
             >
-              {refusal}
+              <ReplayUnmask>{refusal}</ReplayUnmask>
             </FailureNote>
           )}
           <EditorForm
@@ -2824,6 +2845,7 @@ export function AutomationEditor({
           body: `Your changes to this automation are lost. ${IRREVERSIBLE_WORDS}`,
           verb: "Leave",
           running: "Leaving",
+          replayUnmasked: true,
           loss: CONFIRM_LOSS.IRREVERSIBLE,
         }}
       />

@@ -618,6 +618,7 @@ export function AddTabButton({
           noMatch={noMatch}
           align={POPOVER_ALIGN.START}
           bounds={POPOVER_BOUNDS.WINDOW}
+          replayUnmasked
           onPick={pick}
           onClose={close}
           onLeave={(left) => {
@@ -645,6 +646,7 @@ export function useTranscriptCopier(): TranscriptCopier {
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: { surface: FAILURE_SURFACE.TRANSCRIPT_COPY, cause },
+      replayUnmasked: true,
     });
   return (read) => (copy) => {
     read().then((transcript) => {

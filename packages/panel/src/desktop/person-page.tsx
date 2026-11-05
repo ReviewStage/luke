@@ -62,6 +62,7 @@ import {
   personPageEmpty,
   personRef,
 } from "@repo/ui/person-page-model";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ASSIGNED_TO } from "@repo/ui/task-list-model";
 import { ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
@@ -144,10 +145,22 @@ import { useAutomations } from "./use-automations.js";
  */
 
 /** What a page's head says under a name, by who the person is to the workspace. */
-function headLine(person: Actor): string | undefined {
+function headLine(person: Actor): ReactNode {
   if (person.kind === ACTOR_KIND.PERSON) {
     const role = person.role === undefined ? undefined : ROLE_WORDS[person.role];
-    return [role, person.email].filter((part) => part !== undefined).join(" · ") || undefined;
+    // Note that their email is masked in a screen recording, and their role, one of the workspace's own, is not.
+    const email =
+      person.email === undefined || person.email === "" ? undefined : (
+        <ReplayMask>{person.email}</ReplayMask>
+      );
+    if (role !== undefined && email !== undefined) {
+      return (
+        <>
+          {role} · {email}
+        </>
+      );
+    }
+    return role ?? email;
   }
   if (person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.FORMER) {
     return "Former member";
@@ -174,9 +187,12 @@ function PersonSection({
 }): React.JSX.Element {
   return (
     <PersonSectionFrame label={title} title={title} count={count} tone={tone}>
-      <List label={title} moves>
-        {children}
-      </List>
+      {/* Note that every row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
+      <ReplayMask>
+        <List label={title} moves>
+          {children}
+        </List>
+      </ReplayMask>
     </PersonSectionFrame>
   );
 }
@@ -402,6 +418,7 @@ function PersonActions({
           {menu.drawn === undefined ? null : (
             <ActionMenu
               label={moreLabel(PERSON)}
+              replayUnmasked
               menu={menu.drawn}
               groups={phone ? [...phoneFindGroups(), ...actions] : actions}
               onClose={menu.close}
@@ -487,14 +504,18 @@ function AutomationRow({
                 tone={TEXT_TONE.MUTED}
                 truncate
               >
-                {nextWords}
+                <ReplayUnmask>{nextWords}</ReplayUnmask>
               </Text>
             )}
           </span>
         }
         hint={{ Hint: RowHint, label: automation.name }}
         onPress={onOpen}
-        menu={copyLink === undefined ? undefined : rowMenu(AUTOMATION_THING, [[copyLink]])}
+        menu={
+          copyLink === undefined
+            ? undefined
+            : rowMenu(AUTOMATION_THING, [[copyLink]], undefined, true)
+        }
         more={!coarse}
       />
     </RowHintOptions>
@@ -541,8 +562,12 @@ function AutomationRows({
 function PersonHeading({ person }: { person: Actor }): React.JSX.Element {
   return (
     <PersonTitle
-      face={<ActorMark actor={person} size={ACTOR_SIZE.PAGE} />}
-      name={headName(person)}
+      face={
+        <ReplayMask>
+          <ActorMark actor={person} size={ACTOR_SIZE.PAGE} />
+        </ReplayMask>
+      }
+      name={<ReplayMask>{headName(person)}</ReplayMask>}
     />
   );
 }
@@ -555,7 +580,7 @@ function PersonLine({ person }: { person: Actor }): React.ReactNode {
   return (
     <>
       <YouBadge />
-      {line === undefined ? null : ` ${line}`}
+      {line === undefined ? null : <> {line}</>}
     </>
   );
 }
@@ -616,14 +641,16 @@ function PersonTaskRows({
   const shown = useMemo(() => listed.slice(0, PERSON_TASKS_SHOWN), [listed]);
   const drawn = useLeaving(shown, taskKey);
   return (
-    <RecentTasks
-      tasks={tasks}
-      label={title}
-      listed={drawn.map(({ value }) => value)}
-      unread={unread}
-      face={false}
-      moves
-    />
+    <ReplayMask>
+      <RecentTasks
+        tasks={tasks}
+        label={title}
+        listed={drawn.map(({ value }) => value)}
+        unread={unread}
+        face={false}
+        moves
+      />
+    </ReplayMask>
   );
 }
 
@@ -723,132 +750,136 @@ function PersonColumn({
     />
   );
   const detail = (
-    <DetailPage
-      frame={PAGE_FRAME.PAGE}
-      onPickUp={away === undefined ? undefined : setPickUp}
-      title={
-        unnamed ? (
-          refused ? (
-            PROFILE
+    <ReplayUnmask>
+      <DetailPage
+        frame={PAGE_FRAME.PAGE}
+        onPickUp={away === undefined ? undefined : setPickUp}
+        title={
+          unnamed ? (
+            refused ? (
+              PROFILE
+            ) : (
+              <PersonTitleSkeleton name={undefined} />
+            )
           ) : (
-            <PersonTitleSkeleton name={undefined} />
+            <PersonHeading person={person} />
           )
-        ) : (
-          <PersonHeading person={person} />
-        )
-      }
-      description={
-        unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
-      }
-      // A phone's page offers its acts from its bar's one ⋯ instead.
-      actions={away === undefined ? actions : undefined}
-    >
-      <PersonBody reading={!tasks.listRead || read.reading || theirAutomations.reading || unnamed}>
-        <PersonTop>{note}</PersonTop>
-        {tasks.listFailed ? (
-          <div className="home-note my-tight-gap">
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.PERSON_TASKS_READ)}
-              onRetry={tasks.onRetryList}
+        }
+        description={
+          unnamed ? refused ? undefined : <PersonLineSkeleton /> : <PersonLine person={person} />
+        }
+        // A phone's page offers its acts from its bar's one ⋯ instead.
+        actions={away === undefined ? actions : undefined}
+      >
+        <PersonBody
+          reading={!tasks.listRead || read.reading || theirAutomations.reading || unnamed}
+        >
+          <PersonTop>{note}</PersonTop>
+          {tasks.listFailed ? (
+            <div className="home-note my-tight-gap">
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.PERSON_TASKS_READ)}
+                onRetry={tasks.onRetryList}
+              >
+                {`${you ? "Your" : "Their"} tasks could not be read.`}
+              </ErrorState>
+            </div>
+          ) : !tasks.listRead && personPageEmpty(page) ? (
+            <RecentTasksSkeleton label={`Reading ${theirs} tasks…`} face={false} />
+          ) : null}
+          {page.working.length === 0 ? null : (
+            <PersonSection title="Working now" count={page.working.length}>
+              <AgentRows agents={page.working} tasks={tasks} now={now} />
+            </PersonSection>
+          )}
+          {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
+          {read.failed ? (
+            <div className="home-note my-tight-gap">
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.PERSON_INBOX_READ)}
+                onRetry={read.onRetry}
+              >
+                {ITEMS_NOT_READ}
+              </ErrorState>
+            </div>
+          ) : waiting.length === 0 && read.reading ? (
+            <SectionSkeleton>
+              <InboxListSkeleton />
+            </SectionSkeleton>
+          ) : null}
+          {waiting.length === 0 ? null : (
+            <PersonSection
+              title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
+              count={waiting.length}
+              tone={you ? STATUS_TONE.ATTENTION : undefined}
             >
-              {`${you ? "Your" : "Their"} tasks could not be read.`}
-            </ErrorState>
-          </div>
-        ) : !tasks.listRead && personPageEmpty(page) ? (
-          <RecentTasksSkeleton label={`Reading ${theirs} tasks…`} face={false} />
-        ) : null}
-        {page.working.length === 0 ? null : (
-          <PersonSection title="Working now" count={page.working.length}>
-            <AgentRows agents={page.working} tasks={tasks} now={now} />
-          </PersonSection>
-        )}
-        {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
-        {read.failed ? (
-          <div className="home-note my-tight-gap">
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.PERSON_INBOX_READ)}
-              onRetry={read.onRetry}
-            >
-              {ITEMS_NOT_READ}
-            </ErrorState>
-          </div>
-        ) : waiting.length === 0 && read.reading ? (
-          <SectionSkeleton>
-            <InboxListSkeleton />
-          </SectionSkeleton>
-        ) : null}
-        {waiting.length === 0 ? null : (
-          <PersonSection
-            title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
-            count={waiting.length}
-            tone={you ? STATUS_TONE.ATTENTION : undefined}
-          >
-            {waiting.map((listed) => (
-              <InboxItemRow
-                key={listed.item.id}
-                listed={listed}
-                chosen={false}
-                {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-                models={tasks.agents.models}
-                readerId={tasks.me}
-                needsYouShown={you}
-                onChoose={openItem}
-              />
-            ))}
-          </PersonSection>
-        )}
-        <PersonTasks
-          title={you ? "Assigned to you" : "Assigned"}
-          listed={page.assigned}
-          tasks={tasks}
-          unread={unread}
-          onShowAll={shared ? showTasks : undefined}
-        />
-        <PersonTasks
-          title={you ? "Created by you" : "Created"}
-          listed={page.created}
-          tasks={tasks}
-          unread={unread}
-        />
-        {page.agents.length === 0 ? null : (
-          <PersonSection title="Agents" count={page.agents.length}>
-            <AgentRows agents={page.agents} tasks={tasks} now={now} />
-          </PersonSection>
-        )}
-        {automations.length === 0 ? null : (
-          <PersonSection title="Automations" count={automations.length}>
-            <AutomationRows automations={automations} tasks={tasks} now={now} />
-          </PersonSection>
-        )}
-        {theirAutomations.failed ? (
-          <div className="home-note my-tight-gap">
-            <ErrorState
-              failure={unreadShown(FAILURE_SURFACE.PERSON_AUTOMATIONS_READ)}
-              onRetry={theirAutomations.onRetry}
-            >
-              {`${you ? "Your" : "Their"} automations could not be read.`}
-            </ErrorState>
-          </div>
-        ) : theirAutomations.reading ? (
-          <RowsSkeleton label={`Reading ${theirs} automations…`} />
-        ) : null}
-        {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
-        {unnamed ||
-        !tasks.listRead ||
-        read.failed ||
-        read.reading ||
-        theirAutomations.failed ||
-        theirAutomations.reading ? null : personPageEmpty(page) &&
-          waiting.length === 0 &&
-          automations.length === 0 ? (
-          <div className="home-note my-tight-gap">
-            <NoteLine look={NOTE_LINE_LOOK.INSET}>
-              {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
-            </NoteLine>
-          </div>
-        ) : null}
-      </PersonBody>
-    </DetailPage>
+              {waiting.map((listed) => (
+                <InboxItemRow
+                  key={listed.item.id}
+                  listed={listed}
+                  chosen={false}
+                  {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
+                  models={tasks.agents.models}
+                  readerId={tasks.me}
+                  needsYouShown={you}
+                  onChoose={openItem}
+                />
+              ))}
+            </PersonSection>
+          )}
+          <PersonTasks
+            title={you ? "Assigned to you" : "Assigned"}
+            listed={page.assigned}
+            tasks={tasks}
+            unread={unread}
+            onShowAll={shared ? showTasks : undefined}
+          />
+          <PersonTasks
+            title={you ? "Created by you" : "Created"}
+            listed={page.created}
+            tasks={tasks}
+            unread={unread}
+          />
+          {page.agents.length === 0 ? null : (
+            <PersonSection title="Agents" count={page.agents.length}>
+              <AgentRows agents={page.agents} tasks={tasks} now={now} />
+            </PersonSection>
+          )}
+          {automations.length === 0 ? null : (
+            <PersonSection title="Automations" count={automations.length}>
+              <AutomationRows automations={automations} tasks={tasks} now={now} />
+            </PersonSection>
+          )}
+          {theirAutomations.failed ? (
+            <div className="home-note my-tight-gap">
+              <ErrorState
+                failure={unreadShown(FAILURE_SURFACE.PERSON_AUTOMATIONS_READ)}
+                onRetry={theirAutomations.onRetry}
+              >
+                {`${you ? "Your" : "Their"} automations could not be read.`}
+              </ErrorState>
+            </div>
+          ) : theirAutomations.reading ? (
+            <RowsSkeleton label={`Reading ${theirs} automations…`} />
+          ) : null}
+          {/* Note that the page is said to be empty only once it names someone and the task list, the Inbox, and the automations have answered, since any may yet name something, or nobody may be found. */}
+          {unnamed ||
+          !tasks.listRead ||
+          read.failed ||
+          read.reading ||
+          theirAutomations.failed ||
+          theirAutomations.reading ? null : personPageEmpty(page) &&
+            waiting.length === 0 &&
+            automations.length === 0 ? (
+            <div className="home-note my-tight-gap">
+              <NoteLine look={NOTE_LINE_LOOK.INSET}>
+                {you ? "Nothing of yours here yet." : "Nothing of theirs here yet."}
+              </NoteLine>
+            </div>
+          ) : null}
+        </PersonBody>
+      </DetailPage>
+    </ReplayUnmask>
   );
   // Every link on the page, a row's Copy link among them, is written under the workspace it stands in.
   const linked = (

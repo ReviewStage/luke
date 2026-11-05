@@ -140,6 +140,7 @@ export function MenuTab({
             footer={ends?.footer}
             groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
             onClose={menu.close}
+            replayUnmasked={ends === undefined}
           />
         )
       }

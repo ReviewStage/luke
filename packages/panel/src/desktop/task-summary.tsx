@@ -27,6 +27,7 @@ import {
   usePressAway,
 } from "@repo/ui";
 import { openThread, usePlanCommentsControl } from "@repo/ui/plan-comments";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Schema } from "effect";
@@ -520,13 +521,14 @@ function SummaryRow({
   rowRef?: ((element: HTMLElement | null) => void) | undefined;
 }) {
   const editing = editor !== undefined;
+  const detail = description ?? entry.row.detail;
   return (
     <RowHintOptions card={entry.card}>
       <ListRow
         ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
-        title={editing ? editor : entry.row.label}
-        description={description ?? entry.row.detail}
+        title={editing ? editor : <ReplayMask>{entry.row.label}</ReplayMask>}
+        description={detail === undefined ? undefined : <ReplayMask>{detail}</ReplayMask>}
         meta={editing ? null : entry.endMark}
         hint={
           entry.card === undefined || editing
@@ -652,7 +654,7 @@ function SummaryList({
             <GroupHeader
               heading={GROUP_HEADING.NONE}
               surface={GROUP_SURFACE.NARROW}
-              label={heading}
+              label={<ReplayUnmask>{heading}</ReplayUnmask>}
               fold={sidebarFold(isFolded, () => toggle(heading))}
               count={
                 entries.length === 0
