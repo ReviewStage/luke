@@ -10,7 +10,7 @@
  * width). Neither grows past its own width, so the line reads as words
  * rather than as columns, and what they did breaks under the sender where
  * the column has no room for both. The two stand on one baseline rather
- * centered on each other, because the sender's chip, its face beside its
+ * than centered on each other, because the sender's chip, its face beside its
  * name, stands taller than the words after it, and centering boxes of
  * different heights sets their words a fraction of a pixel apart, which a
  * Retina screen rounds to a name sitting lower than the words that follow
