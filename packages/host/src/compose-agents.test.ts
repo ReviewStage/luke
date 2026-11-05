@@ -484,6 +484,11 @@ function fakeService() {
         asked.push(`servers:${agentId}:${request.disabledServers.join(",")}`);
         return { agent: { ...AGENT, disabledServers: request.disabledServers } };
       }),
+    addRepository: (agentId, request) =>
+      Effect.map(changeGate, () => {
+        asked.push(`addRepository:${agentId}:${request.addRepository.repository}`);
+        return { agent: AGENT };
+      }),
     changeQueue: (agentId, change) =>
       Effect.andThen(
         Effect.suspend(() => queueGate),

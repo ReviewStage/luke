@@ -62,6 +62,7 @@ import {
   AGENT_LIST_ARCHIVED,
   AGENT_LIST_QUERY,
   AGENT_WORKSPACE_QUERY,
+  type AgentAddRepositoryRequest,
   type AgentArchiveRequest,
   type AgentMessageRequest,
   type AgentNewestAnswer,
@@ -72,6 +73,7 @@ import {
   type AgentRenameRequest,
   type AgentServersRequest,
   type AgentStartRequest,
+  agentAddRepositoryRequestSchema,
   agentMessageRequestSchema,
   agentQueueChangeSchema,
   agentRenameRequestSchema,
@@ -243,6 +245,15 @@ const MEMORY_REFUSALS = {
 /** The refusals a call that names one row can answer with. */
 const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+} satisfies NamedRefusals;
+
+/** The refusals a repository added to an agent can answer with: the agent gone, one only its starter adds to, a repository refused beside its own for why, out of reach, or not read off GitHub. */
+const ADD_REPOSITORY_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: AGENT_CALL_FAILURE.NOT_PERMITTED,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: AGENT_CALL_FAILURE.EXTRA_REPOSITORY_REFUSED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_UNANSWERED]: AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
 } satisfies NamedRefusals;
 
 /** The refusals an archive or a delete can answer with: the agent gone, or one still starting or awaiting its turn, which has no turn to stop yet. */
@@ -1074,6 +1085,16 @@ export class HostedAgentClient {
     const admitted = Result.getOrUndefined(readEither(agentServersRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return this.#change(agentId, admitted, ROW_REFUSALS);
+  }
+
+  /** Adds a repository to one agent beside the ones it works in, answering it as it then stands; a repository refused by shape is refused here without traveling. */
+  addRepository(
+    agentId: string,
+    request: AgentAddRepositoryRequest,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(agentAddRepositoryRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return this.#change(agentId, admitted, ADD_REPOSITORY_REFUSALS);
   }
 
   /** Archives one agent, stopping a turn it still runs first, or brings it back, answering it as it then stands. */

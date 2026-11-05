@@ -944,6 +944,22 @@ export const agentServersRequestSchema = EffectSchema.Struct({
 export type AgentServersRequest = typeof agentServersRequestSchema.Type;
 
 /**
+ * Adding a repository to a running agent (PATCH): `owner/name`, and the
+ * branch its checkout is cloned at, none for its default branch, appended
+ * after the repositories it works in beside its own, checked out, and told
+ * to it, as `update_agent`'s `addRepository` adds one. Only for the agent's
+ * starter with the Several repositories experiment on, an agent in the
+ * cloud in a repository of its own, its repositories all reached through
+ * one installation of the GitHub App; refused by why
+ * (`extra-repository-refused`) otherwise. Nothing removes one.
+ */
+export const agentAddRepositoryRequestSchema = EffectSchema.Struct({
+  addRepository: agentAlsoRepositorySchema,
+});
+
+export type AgentAddRepositoryRequest = typeof agentAddRepositoryRequestSchema.Type;
+
+/**
  * The task's agent list's query (GET): `archived=include` lists the
  * archived agents among the rest, each carrying its `archivedAt`. Without
  * it they are left out, which is what a build from before archiving asks.

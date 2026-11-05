@@ -31,6 +31,7 @@ import {
   type AgentServersParams,
   type AgentStartParams,
   type AgentTranscriptOlderAnswer,
+  agentAddRepositoryParamsSchema,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
   agentDefaultWriteParamsSchema,
@@ -307,6 +308,7 @@ export type AgentClient = Pick<
   | "choose"
   | "rename"
   | "switchServers"
+  | "addRepository"
   | "changeQueue"
   | "archive"
   | "pin"
@@ -1574,6 +1576,17 @@ function composed(
           "marking an agent read names the agent and how its mark moves",
         ),
     ),
+    // Note that a repository added draws nothing on the agent's row, which lists no repositories, so it is asked and answered alone.
+    [GATEWAY_METHOD.AGENTS_ADD_REPOSITORY]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, addRepository } = yield* readParams(
+          agentAddRepositoryParamsSchema,
+          params,
+          "adding a repository to an agent names the agent and the repository",
+        );
+        const answer = yield* asked(client.addRepository(agentId, { addRepository }));
+        return carried<AgentAgentAnswer>(answer);
+      }),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
         const { agentId } = yield* readParams(

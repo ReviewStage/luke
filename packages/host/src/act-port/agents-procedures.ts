@@ -14,6 +14,7 @@
 
 import {
   AGENT_CALL_FAILURE,
+  type AgentAddRepositoryParams,
   type AgentAgentAnswer,
   type AgentArchiveParams,
   type AgentChangesAnswerView,
@@ -102,6 +103,7 @@ export interface AgentProceduresDependencies {
     agentChoose(params: AgentChooseParams): Effect.Effect<AgentAgentAnswer>;
     agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
     agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+    agentAddRepository(params: AgentAddRepositoryParams): Effect.Effect<AgentAgentAnswer>;
     agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
     agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
@@ -423,6 +425,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentServers(input));
     }),
+    [AGENT_ACT_KIND.AGENTS_ADD_REPOSITORY]: actPort[AGENT_ACT_KIND.AGENTS_ADD_REPOSITORY].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* notedAgent(host.agentAddRepository(input));
+      },
+    ),
     [AGENT_ACT_KIND.AGENTS_QUEUE]: actPort[AGENT_ACT_KIND.AGENTS_QUEUE].effect(function* ({
       input,
       context,

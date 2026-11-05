@@ -350,6 +350,8 @@ export const GATEWAY_METHOD = {
   AGENTS_RENAME: "agents.rename",
   /** One agent's MCP servers switched, the whole list of those off, for its next turn on; the agent as it then stands, or why it is unchanged. */
   AGENTS_SERVERS: "agents.servers",
+  /** A repository added to one agent beside the ones it works in, checked out and told to it; the agent as it then stands, or why it was not added. */
+  AGENTS_ADD_REPOSITORY: "agents.addRepository",
   AGENTS_QUEUE: "agents.queue",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   AGENTS_STOP: "agents.stop",

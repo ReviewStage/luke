@@ -53,6 +53,7 @@ export const FAILURE_SURFACE = {
   ADMIN_REFRESH: "admin.refresh",
   ADMIN_WRITE: "admin.write",
   AGENTS_READ: "agents.read",
+  AGENT_ADD_REPOSITORY: "agent_repository.add",
   AGENT_ARCHIVE: "agent.archive",
   AGENT_CHANGES_READ: "agent_changes.read",
   AGENT_CHANGES_REFRESH: "agent_changes.refresh",

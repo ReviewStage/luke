@@ -23,6 +23,7 @@ import { Schema as EffectSchema } from "effect";
 import {
   AGENT_LIST_QUERY,
   AGENT_WORKSPACE_QUERY,
+  agentAddRepositoryRequestSchema,
   agentAnswerSchema,
   agentArchiveRequestSchema,
   agentChangesAnswerSchema,
@@ -79,8 +80,8 @@ const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
 
 /**
  * One change of an agent (PATCH): its title, its archive, its pin, the
- * reader's read mark, its MCP servers, or its model and effort, read in that
- * order as the old group read them.
+ * reader's read mark, its MCP servers, a repository added beside its own,
+ * or its model and effort, read in that order as the old group read them.
  */
 const agentChangeRequestSchema = EffectSchema.Union([
   agentRenameRequestSchema,
@@ -88,6 +89,7 @@ const agentChangeRequestSchema = EffectSchema.Union([
   agentPinRequestSchema,
   agentReadRequestSchema,
   agentServersRequestSchema,
+  agentAddRepositoryRequestSchema,
   modelChoiceSchema,
 ]);
 
