@@ -2795,8 +2795,8 @@ export function readAgentByKey(
  * Where the account's newest agent on the task runs, archived ones among
  * them, or nothing where the account started none there; a teammate's
  * agents on the task are never read, since a device is one member's, nor an
- * automation's run's, which runs where its task does rather than where the
- * account chose.
+ * automation's run's, which runs in the cloud rather than where the account
+ * chose.
  */
 export function readNewestAgentPlace(
   userId: string,

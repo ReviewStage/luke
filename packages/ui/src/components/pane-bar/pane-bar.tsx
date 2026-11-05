@@ -1,4 +1,5 @@
 import { type ReactNode, useRef } from "react";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 import { MoreButton, moreLabel } from "../more-button/more-button.js";
@@ -105,6 +106,7 @@ export function PaneBar({
   start,
   mark,
   title,
+  titleReplayUnmasked = false,
   detail,
   middle,
   actions,
@@ -117,6 +119,8 @@ export function PaneBar({
   mark?: ReactNode;
   /** What the tab shows, on one line that fades where the bar cuts it. */
   title?: string | undefined;
+  /** Whether the title is the app's own words, which a screen recording shows as they read; masked otherwise, as a title naming a person's thing must stay (`@repo/ui/session-replay-marks`). */
+  titleReplayUnmasked?: boolean | undefined;
   /** Quiet words after the title: where a connection stands, which version is shown. */
   detail?: ReactNode;
   /** Between the lead and the actions, taking the room left: tabs, crumbs, an address. */
@@ -137,8 +141,9 @@ export function PaneBar({
     <OneLine
       className="ui-pane-bar-title flex-initial text-foreground"
       hint={wholeWordsHint(title)}
+      words={title}
     >
-      {title}
+      <ReplayWords unmasked={titleReplayUnmasked}>{title}</ReplayWords>
     </OneLine>
   ) : null;
   return (

@@ -404,17 +404,18 @@ account starts on Claude Opus 5.5 at high.
 Beside the skills a task's repository keeps in `.agents/skills` or
 `.claude/skills`, which an agent reads from GitHub as its session starts, a
 member installs skills into Vespin itself on the Skills page of Settings. Add
-skill is one paste box: an `npx skills add …` command (or `pnpx`, `pnpm dlx`,
-`bunx`, `yarn dlx`, or a bare `skills add`) naming a GitHub repository, a
-folder of one, `owner/repo@skill`, or a skills.sh link, with `--skill` picking
-which of its skills to install; or a skill's own text, frontmatter and all.
-Vespin never runs the command. The service reads the named folders from GitHub,
-on the workspace's GitHub App, the member's own token, or anonymously for a
-public repository, shows what it found before anything is installed, and pins
-the files to the commit it read; a later commit on the source is offered as
-Update available, never taken on its own. A pasted skill is held to the same
-rules as a repository's, and a file shaped like a credential is refused.
-Only GitHub sources are read for now.
+skill is one paste box: a GitHub repository as `owner/repo`, a link to it or
+to one of its folders, or an `npx skills add` line naming one, its `--skill`
+names ticked; or a skill's own text, frontmatter and all. Vespin never runs
+the command. The service reads the repository's archive, on the workspace's
+GitHub App, the member's own token, or anonymously for a public repository,
+lists its outermost skill folders, outside `node_modules`, `.git`, `dist`,
+and `build`, to tick before anything is installed, and
+pins the files to the commit it read; a later commit on the source is never
+taken on its own. Pasted text installs under the name and description the
+member confirms, which start as its frontmatter's. A skill needs a valid name
+and a description, and a file shaped like a credential is refused. Only GitHub
+repositories are read.
 
 A skill is installed for one of two scopes. A personal skill is its
 installer's alone and follows them into every workspace they belong to. A
@@ -693,10 +694,12 @@ or a host), chosen as it starts and kept for its life. A start may name the
 place; a continue or fork that names another place starts a new agent
 there, which is how work moves between them. A start that names none runs where the agent it continues or forks
 runs; else where the starter's newest agent on the task runs, never a
-teammate's; else where the starter last chose to run one; else where the
-task runs; else in the cloud. A device that is not the starter's, was
-removed, or is away refuses the start by name, and nothing moves it to the
-cloud on its own.
+teammate's; else where the starter last chose to run one; else in the
+cloud. An automation's run always runs in the cloud. A task holds no place
+of its own, a sub-task none of its parent's, so New task, New sub-task among
+it, draws the Runs on chip for the agent it starts like any other start. A
+device that is not the starter's, was removed, or is away refuses the start
+by name, and nothing moves it to the cloud on its own.
 
 While Bring your own host is on, an agent's ⋯ menu offers Move to ›: Cloud
 and each of the member's own devices, but not the place the agent runs now,
@@ -704,11 +707,13 @@ a device that takes no agent now dimmed and saying why. It stands only
 where Continue in new agent could run: on an agent at rest, not archived,
 that the open task's tab or the agent's own page lists, on a task whose mode
 offers it a continue. A pick is that continue at the place picked: the
-source stops, a new agent named `<title> (continued)` starts there on its
-transcript, and its tab opens. A cloud agent's work comes along whole, what
-it had not committed included, on a branch of its own; from a device only
-what it pushed comes along, which each place says, and its folder stays on
-that device. A move that is refused says why in a toast.
+source stops, a new agent starts there on its transcript, named
+`<title> (continued)` where the source has a title, and its tab opens. A
+cloud agent's work comes along on a branch of its own, what it had not
+committed included but files named the way credentials are kept; from a
+device only what it pushed comes along, which each place says, and its
+folder stays on that device. An agent on a device the service did not name
+is offered the cloud alone. A move that is refused says why in a toast.
 
 ## Copy
 

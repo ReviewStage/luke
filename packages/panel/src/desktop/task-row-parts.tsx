@@ -25,6 +25,7 @@ import {
   useMenu,
 } from "@repo/ui";
 import { actorName, creatorActor } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
@@ -120,6 +121,7 @@ export function useStandingDoor(
       onRefused?.();
       toast({
         words: UNCHANGED_LINE,
+        replayUnmasked: true,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
         failure: {
@@ -141,6 +143,7 @@ function StandingChip<T extends string>({
   mark,
   look,
   card,
+  masked,
   onPick,
 }: {
   /** What it changes, Status, Priority, or Assignee, which its tooltip and its menu say before the value. */
@@ -152,10 +155,13 @@ function StandingChip<T extends string>({
   look: ChipLook;
   /** The card the value standing hangs in its pill's place, as an assignee's face hangs theirs. */
   card?: ReactNode;
+  /** Whether a value names a person, its words and its face kept masked in a screen recording. */
+  masked?: ((value: T) => boolean) | undefined;
   onPick: (value: T) => void;
 }): React.JSX.Element {
   const { drawn, close, trigger } = useMenu(true);
   const name = `${label}: ${words[value]}`;
+  const hidden = (each: T) => masked?.(each) === true;
   return (
     <>
       <Tooltip label={name} card={card}>
@@ -166,18 +172,22 @@ function StandingChip<T extends string>({
           aria-label={name}
           {...trigger(dropBelowStart)}
         >
-          {mark(value)}
-          <ChipName>{words[value]}</ChipName>
+          {hidden(value) ? <ReplayMask>{mark(value)}</ReplayMask> : mark(value)}
+          <ChipName>
+            {hidden(value) ? <ReplayMask>{words[value]}</ReplayMask> : words[value]}
+          </ChipName>
         </Chip>
       </Tooltip>
       {drawn === undefined ? null : (
         <ActionMenu
           label={label}
           menu={drawn}
+          replayUnmasked
           groups={[
             order.map((each) => ({
               label: words[each],
-              icon: mark(each),
+              icon: hidden(each) ? <ReplayMask>{mark(each)}</ReplayMask> : mark(each),
+              replayMasked: hidden(each),
               checked: each === value,
               onSelect: () => {
                 if (each !== value) onPick(each);
@@ -245,6 +255,7 @@ export function AssigneeChip({
       mark={(id) => <>{icons.get(id)}</>}
       look={look}
       card={task.assignee === undefined ? undefined : actorCard(person)}
+      masked={(id) => id !== NO_ASSIGNEE}
       onPick={(id) => onStanding({ assigneeId: id === NO_ASSIGNEE ? null : id })}
     />
   );
@@ -308,12 +319,14 @@ export function CreatorFace({
         data-task-creator=""
         onClick={door ?? onOpen}
       >
-        <ActorMark
-          actor={shown}
-          size={ACTOR_SIZE.MARK}
-          forWhom={maker === undefined ? undefined : creator}
-        />
-        <ChipName>{actorName(shown)}</ChipName>
+        <ReplayMask>
+          <ActorMark
+            actor={shown}
+            size={ACTOR_SIZE.MARK}
+            forWhom={maker === undefined ? undefined : creator}
+          />
+          <ChipName>{actorName(shown)}</ChipName>
+        </ReplayMask>
       </Chip>
     </Tooltip>
   );

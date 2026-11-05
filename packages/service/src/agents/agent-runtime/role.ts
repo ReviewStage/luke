@@ -1,12 +1,11 @@
 /**
  * role.ts -- the two agents we run on our one agent runtime, and what sets each apart.
  *
- * The coding agent and the worker it delegated to, as an eve agent did,
- * each serve a role, which names the tools each is offered (`tools.ts`) and
- * the integrations its turn is handed (`servers.ts`).
+ * The coding agent and the worker it delegates to each serve a role, which
+ * names the tools each is offered (`tools.ts`) and the integrations its turn
+ * is handed (`servers.ts`).
  */
 
-/** The agents, by the role each plays. */
 export const AGENT_ROLE = {
   CODER: "coder",
   CODER_WORKER: "coder-worker",

@@ -28,6 +28,7 @@ import {
   Tooltip,
   VisuallyHidden,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { useCallback, useRef } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -398,7 +399,7 @@ function PinnedTabRow({
         ink={LIST_ROW_INK.SIDEBAR}
         leading={
           <span className="sidebar-pinned-tab-glyph flex [&_.state-glyph]:[--state-glyph-size:var(--spacing-ui-16)] [&_svg]:size-ui-16">
-            {glyph}
+            <ReplayMask>{glyph}</ReplayMask>
           </span>
         }
         title={
@@ -406,11 +407,11 @@ function PinnedTabRow({
             editor
           ) : gone ? (
             <span className="sidebar-pinned-tab-gone opacity-55">
-              {pin.label}
+              <ReplayMask>{pin.label}</ReplayMask>
               <VisuallyHidden>(unavailable)</VisuallyHidden>
             </span>
           ) : (
-            pin.label
+            <ReplayMask>{pin.label}</ReplayMask>
           )
         }
         description={description}
@@ -426,7 +427,7 @@ function PinnedTabRow({
         menu={
           editing
             ? undefined
-            : rowMenu("Pinned tab", withRowMoves(groups, place), tasks.shown && inSight)
+            : rowMenu("Pinned tab", withRowMoves(groups, place), tasks.shown && inSight, true)
         }
         more={!coarse}
         actionsAt={LIST_ROW_ACTIONS.HOVER}

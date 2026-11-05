@@ -154,6 +154,8 @@ interface HeldStill {
 
 /** How a card wears its stop: its glyph and name, and under them the words a task's tabs are named by, its agent's glyph before them and its end mark after. */
 interface CardLook extends KindLook {
+  /** Whether the name is the app's own word, a place's or the word for a thing no name is known for, which a screen recording shows as it reads (`TabCard`'s). */
+  readonly labelReplayUnmasked?: boolean | undefined;
   readonly detail: string | undefined;
   readonly detailIcon?: React.JSX.Element | undefined;
   readonly endMark?: React.JSX.Element | undefined;
@@ -222,6 +224,7 @@ function cardLook(
       return {
         icon: <PlanGlyph status={task?.status} />,
         label: live?.label ?? TASK_WORDS,
+        labelReplayUnmasked: live?.label === undefined,
         detail: live?.detail ?? (words.join(" · ") || undefined),
         detailIcon: column?.icon,
         endMark: column?.endMark,
@@ -229,7 +232,7 @@ function cardLook(
     }
     case STOP_KIND.PLACE: {
       const { icon: Icon, label } = PLACE_LOOK[stop.place];
-      return { icon: <Icon />, label, detail: undefined };
+      return { icon: <Icon />, label, labelReplayUnmasked: true, detail: undefined };
     }
     case STOP_KIND.AGENT: {
       const { standing, archived } = tasks.listedAgents;
@@ -237,6 +240,7 @@ function cardLook(
       if (agent === undefined) {
         return {
           ...tabLook({ kind: TAB_KIND.AGENT, name: undefined, agent: undefined }),
+          labelReplayUnmasked: true,
           detail: undefined,
         };
       }
@@ -248,10 +252,12 @@ function cardLook(
       };
     }
     case STOP_KIND.PERSON: {
-      const name = memberName(members, stop.userId) ?? stop.name ?? PERSON_WORDS;
+      const known = memberName(members, stop.userId) ?? stop.name;
+      const name = known ?? PERSON_WORDS;
       return {
         icon: <PersonStopFace userId={stop.userId} name={name} />,
         label: name,
+        labelReplayUnmasked: known === undefined,
         detail: undefined,
       };
     }
@@ -284,6 +290,7 @@ function StopCard({
     <TabCard
       icon={look.icon}
       label={look.label}
+      labelReplayUnmasked={look.labelReplayUnmasked}
       detail={look.detail}
       detailIcon={look.detailIcon}
       endMark={look.endMark}

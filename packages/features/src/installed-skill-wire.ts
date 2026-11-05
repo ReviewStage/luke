@@ -77,12 +77,16 @@ export function holdsFileTooLarge(sizes: readonly number[]): boolean {
   return sizes.some((bytes) => bytes > INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES);
 }
 
-/** Why a skill's files were refused. */
+/** Why a skill was refused: the one set the store, the service, and the window each name a refusal by. */
 export const INSTALLED_SKILL_REFUSAL = {
   /** None of its files is `SKILL.md` at its root. */
   NO_SKILL_FILE: "no-skill-file",
-  /** A file larger than `INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES`. */
+  /** Its `SKILL.md` names no valid skill, or carries no description. */
+  SKILL_FILE_INVALID: "skill-file-invalid",
+  /** A file larger than `INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES`, a `SKILL.md` larger than a repository's, or a repository past its archive's bound. */
   TOO_LARGE: "too-large",
+  /** A file holds a literal shaped like a provider's credential, which a skill must never carry. */
+  CREDENTIAL: "credential-shaped",
 } as const;
 
 export type InstalledSkillRefusal =

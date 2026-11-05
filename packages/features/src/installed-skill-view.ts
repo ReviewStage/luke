@@ -1,18 +1,15 @@
 import { Schema as EffectSchema } from "effect";
 import {
-  INSTALLED_SKILL_FILES_REFUSAL,
   installedSkillAnswerSchema,
   installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
-  installedSkillPreviewFileRequestSchema,
-  installedSkillPreviewFileSchema,
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
-  installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
 } from "./installed-skill-route-wire.js";
+import { INSTALLED_SKILL_REFUSAL } from "./installed-skill-wire.js";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -20,30 +17,27 @@ import { wireUuidSchema } from "./service-wire.js";
  *
  * The host asks the service on the window's behalf
  * (`installed-skill-client.ts`) and answers the window one of the shapes
- * here: the service's answer, or the failure with the skill it names and
- * why its files were refused, where the service said. Settings › Skills
+ * here: the service's answer, or why there is none, with the skill it
+ * names where the service said. Settings › Skills
  * draws the skills the host holds for it (`installed-skill-live.ts`), and
  * its Add skill dialog previews and installs a paste.
  */
 
-/** Why an installed skills call has no answer. */
+/** Why an installed skills call has no answer: a skill refused, for the store's reason, or the call's own failure. */
 export const INSTALLED_SKILL_CALL_FAILURE = {
+  ...INSTALLED_SKILL_REFUSAL,
   /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
   UNANSWERED: "unanswered",
   /** The workspace is none the account is in, or the skill none it sees. */
   NOT_FOUND: "not-found",
   /** The account sees the skill or the workspace but may not do this: a workspace skill takes an owner or admin. */
   NOT_PERMITTED: "not-permitted",
-  /** The request is none the service takes: nothing to install in the paste, a skill named that the source does not hold, a workspace skill in a personal workspace, or an update of a pasted skill. */
+  /** The request is none the service takes: nothing to install in the paste, a workspace skill in a personal workspace, or an update of a pasted skill. */
   INVALID: "invalid",
   /** A skill of that name is already installed in the scope asked. */
   NAME_TAKEN: "name-taken",
-  /** A skill's files were refused, for the reason the failure carries. */
-  FILES_REFUSED: "files-refused",
-  /** Neither the workspace's GitHub installation, the member's own token, nor an anonymous read reaches the repository. */
-  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The branch, tag, or commit the source names is none of the repository's. */
-  REF_NOT_FOUND: "ref-not-found",
+  /** GitHub serves the repository, or its ref, to none of the workspace's GitHub installation, the member's own token, and an anonymous read. */
+  UNREACHABLE: "repository-not-reachable",
   /** GitHub did not answer, or is rate limiting; the same call later may be answered. */
   GITHUB_UNANSWERED: "github-unanswered",
 } as const;
@@ -55,10 +49,6 @@ const failed = EffectSchema.Struct({
   failure: EffectSchema.Literals(Object.values(INSTALLED_SKILL_CALL_FAILURE)),
   /** The skill refused, by name, where the service read one. */
   skillName: EffectSchema.optionalKey(EffectSchema.String),
-  /** Why its files were refused, where that is the failure. */
-  skillRefusal: EffectSchema.optionalKey(
-    EffectSchema.Literals(Object.values(INSTALLED_SKILL_FILES_REFUSAL)),
-  ),
 });
 
 export type InstalledSkillFailedView = typeof failed.Type;
@@ -77,11 +67,6 @@ export const installedSkillPreviewParamsSchema = installedSkillPreviewRequestSch
 
 export type InstalledSkillPreviewParams = typeof installedSkillPreviewParamsSchema.Type;
 
-/** A previewed skill's `SKILL.md` asked for by the repository, commit, and folder the preview named. */
-export const installedSkillPreviewFileParamsSchema = installedSkillPreviewFileRequestSchema;
-
-export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileParamsSchema.Type;
-
 /** A paste installed, as the service takes it. */
 export const installedSkillInstallParamsSchema = installedSkillInstallRequestSchema;
 
@@ -95,7 +80,7 @@ export const installedSkillToggleParamsSchema = EffectSchema.Struct({
 
 export type InstalledSkillToggleParams = typeof installedSkillToggleParamsSchema.Type;
 
-/** One skill checked for an update or updated, read in the workspace whose GitHub installation reaches its repository. */
+/** One skill updated, read in the workspace whose GitHub installation reaches its repository. */
 export const installedSkillUpdateParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   skillId: wireUuidSchema,
@@ -134,14 +119,6 @@ export const installedSkillPreviewViewSchema = EffectSchema.Union([
 
 export type InstalledSkillPreviewView = typeof installedSkillPreviewViewSchema.Type;
 
-/** A previewed skill's `SKILL.md`, or why the service did not answer it. */
-export const installedSkillPreviewFileViewSchema = EffectSchema.Union([
-  installedSkillPreviewFileSchema,
-  failed,
-]);
-
-export type InstalledSkillPreviewFileView = typeof installedSkillPreviewFileViewSchema.Type;
-
 /** The skills an install made, or why it made none. */
 export const installedSkillInstallViewSchema = EffectSchema.Union([
   installedSkillInstallAnswerSchema,
@@ -154,14 +131,6 @@ export type InstalledSkillInstallView = typeof installedSkillInstallViewSchema.T
 export const installedSkillViewSchema = EffectSchema.Union([installedSkillAnswerSchema, failed]);
 
 export type InstalledSkillView = typeof installedSkillViewSchema.Type;
-
-/** Whether a skill's folder moved at its ref, or why that is unknown. */
-export const installedSkillUpdateCheckViewSchema = EffectSchema.Union([
-  installedSkillUpdateCheckSchema,
-  failed,
-]);
-
-export type InstalledSkillUpdateCheckView = typeof installedSkillUpdateCheckViewSchema.Type;
 
 /** A skill as an update left it, or why it is unchanged. */
 export const installedSkillUpdatedViewSchema = EffectSchema.Union([

@@ -11,6 +11,7 @@ import {
   Tooltip,
   useDisclosureFinding,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
@@ -291,21 +292,28 @@ function FindBar({
       {...{ [FIND_SKIP_ATTRIBUTE]: "" }}
     >
       <div className="find-bar-field mr-list-gap w-find-field">
-        <SearchField
-          ref={field}
-          label="Find"
-          placeholder="Find"
-          value={query}
-          onChange={onQuery}
-          tally={
-            query.length === 0
-              ? undefined
-              : { count: tally.count, at: tally.at < 0 ? undefined : tally.at, more: tally.more }
-          }
-          onEnter={() => onStep(FIND_STEP.NEXT)}
-          onShiftEnter={() => onStep(FIND_STEP.PREVIOUS)}
-          onEscape={onClose}
-        />
+        {/* Note that the tally shows in a screen recording, and the query, a field's value, never does. */}
+        <ReplayUnmask>
+          <SearchField
+            ref={field}
+            label="Find"
+            placeholder="Find"
+            value={query}
+            onChange={onQuery}
+            tally={
+              query.length === 0
+                ? undefined
+                : {
+                    count: tally.count,
+                    at: tally.at < 0 ? undefined : tally.at,
+                    more: tally.more,
+                  }
+            }
+            onEnter={() => onStep(FIND_STEP.NEXT)}
+            onShiftEnter={() => onStep(FIND_STEP.PREVIOUS)}
+            onEscape={onClose}
+          />
+        </ReplayUnmask>
       </div>
       <BarButton
         label="Previous match"

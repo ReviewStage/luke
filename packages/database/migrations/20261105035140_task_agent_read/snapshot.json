@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "fc56812b-8dc3-41ad-a856-822cb07ab770",
-  "prevIds": ["5013ae4e-93f4-464d-9972-8efd442f092f"],
+  "id": "8db166c0-5561-46b7-aba1-09b43fbbddd5",
+  "prevIds": ["d48b208c-09b5-4d02-bb73-a5cabec75dda"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -10530,32 +10530,6 @@
       "table": "task"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "'vercel'",
-      "generated": null,
-      "identity": null,
-      "name": "machine",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "device_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "task"
-    },
-    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": false,
@@ -16489,19 +16463,6 @@
       "onUpdate": "NO ACTION",
       "onDelete": "SET NULL",
       "name": "task_creator_agent_id_agent_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "task"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["device_id"],
-      "schemaTo": "public",
-      "tableTo": "device",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "SET NULL",
-      "name": "task_device_id_device_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "task"

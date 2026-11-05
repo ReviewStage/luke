@@ -140,7 +140,7 @@ export const AGENT_CALL_FAILURE = {
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
   /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
   OPENAI_KEY_MISSING: "openai-key-missing",
-  /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
+  /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 

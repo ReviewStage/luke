@@ -51,7 +51,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           }),
         installedSkillsRead: () => Effect.succeed(refused),
         installedSkillsPreview: () => Effect.succeed(refused),
-        installedSkillsPreviewFile: () => Effect.succeed(refused),
         installedSkillsInstall: ({ scope }) =>
           Effect.sync(() => {
             asked.push(`install:${scope}`);
@@ -62,7 +61,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             asked.push(`toggle:${skillId}`);
             return refused;
           }),
-        installedSkillsCheckUpdate: () => Effect.succeed(refused),
         installedSkillsUpdate: () => Effect.succeed(refused),
         installedSkillsShare: ({ workspaceId, skillId }) =>
           Effect.sync(() => {

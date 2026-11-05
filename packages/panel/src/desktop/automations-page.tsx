@@ -12,7 +12,11 @@ import {
   type AutomationCallFailure,
   type AutomationView,
 } from "@repo/features/automation-view";
-import type { AutomationScope, AutomationSummary } from "@repo/features/automation-wire";
+import {
+  AUTOMATION_SCOPE,
+  type AutomationScope,
+  type AutomationSummary,
+} from "@repo/features/automation-wire";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -60,6 +64,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
@@ -199,7 +204,7 @@ function OwnerCell({
         }
         name={
           <OneLine className="automation-owner-name" words={name}>
-            {name}
+            {owner === AUTOMATION_SCOPE.WORKSPACE ? <ReplayMask>{name}</ReplayMask> : name}
           </OneLine>
         }
       />
@@ -236,7 +241,7 @@ function MakerCell({
         mark={<ActorMark actor={maker} size={ACTOR_SIZE.INLINE} />}
         name={
           <OneLine className="automation-owner-name" words={name}>
-            {name}
+            <ReplayMask>{name}</ReplayMask>
           </OneLine>
         }
       />
@@ -262,6 +267,7 @@ function useRunNow(automationId: string): { readonly running: boolean; readonly 
         if ("failure" in answer) {
           toast({
             words: RUN_REFUSAL_WORDS[answer.failure],
+            replayUnmasked: true,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
             failure: {
@@ -333,6 +339,7 @@ function AutomationRow({
             {automation.name}
           </span>
         }
+        titleReplayMasked
         description={
           narrow ? (
             <>
@@ -344,6 +351,7 @@ function AutomationRow({
             trigger
           )
         }
+        descriptionReplayMasked
         meta={
           narrow ? undefined : (
             <AutomationRowMeta
@@ -362,7 +370,7 @@ function AutomationRow({
                         truncate
                         className="automation-row-when"
                       >
-                        {nextWords}
+                        <ReplayUnmask>{nextWords}</ReplayUnmask>
                       </Text>
                     </Tooltip>
                   )}
@@ -381,6 +389,8 @@ function AutomationRow({
             runNow: runNowAction(runNow.running, runNow.run),
             onDelete,
           }),
+          undefined,
+          true,
         )}
         more={!coarse}
         motionKey={automation.id}
@@ -457,6 +467,7 @@ function AutomationList({
           <AutomationGroupList
             key={group.owner}
             name={name}
+            nameMasked={group.owner === AUTOMATION_SCOPE.WORKSPACE}
             headed={groups.length > 1 || shown.narrow}
           >
             <AutomationGroupRows automations={group.automations} shown={shown} />
@@ -552,6 +563,7 @@ function AutomationsHead({
         <PlaceMore
           thing="Automation list"
           shown={tasks.shown}
+          replayUnmasked
           groups={() => [
             [
               {
@@ -614,57 +626,59 @@ function ListPage({
     view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId }),
   );
   return (
-    <CollectionPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automations"
-      toolbar={<AutomationsHead tasks={tasks} room={room} />}
-      filters={<AutomationsTabs tasks={tasks} />}
-      state={listState(workspacesUnread, read)}
-      loadingLabel={READING_AUTOMATIONS}
-      skeleton={<AutomationListSkeleton narrow={room === SHELL_ROOM.NARROW} />}
-      error={
-        workspacesUnread ? (
-          <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
-            onRetry={tasks.onRetryWorkspaces}
-            placement={ERROR_STATE_PLACEMENT.CENTERED}
-          >
-            {WORKSPACES_UNREAD_LINE}
-          </ErrorState>
+    <ReplayUnmask>
+      <CollectionPage
+        frame={PAGE_FRAME.TOOLBAR}
+        label="Automations"
+        toolbar={<AutomationsHead tasks={tasks} room={room} />}
+        filters={<AutomationsTabs tasks={tasks} />}
+        state={listState(workspacesUnread, read)}
+        loadingLabel={READING_AUTOMATIONS}
+        skeleton={<AutomationListSkeleton narrow={room === SHELL_ROOM.NARROW} />}
+        error={
+          workspacesUnread ? (
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+              onRetry={tasks.onRetryWorkspaces}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
+            >
+              {WORKSPACES_UNREAD_LINE}
+            </ErrorState>
+          ) : (
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_READ)}
+              onRetry={reload}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
+            >
+              {UNREAD_LINE}
+            </ErrorState>
+          )
+        }
+      >
+        {groups.length === 0 ? (
+          <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
+            <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
+          </div>
         ) : (
-          <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.AUTOMATIONS_READ)}
-            onRetry={reload}
-            placement={ERROR_STATE_PLACEMENT.CENTERED}
-          >
-            {UNREAD_LINE}
-          </ErrorState>
-        )
-      }
-    >
-      {groups.length === 0 ? (
-        <div className="automations-empty flex min-h-0 flex-1 flex-col before:flex-2 before:content-[''] after:flex-3 after:content-[''] [&>.ui-empty-state]:flex-none">
-          <EmptyState icon={<ZapIcon />}>No automations yet.</EmptyState>
-        </div>
-      ) : (
-        <AutomationList
-          groups={groups}
-          workspace={workspace}
-          now={now}
-          narrow={room === SHELL_ROOM.NARROW}
-          onOpen={(automation) =>
-            view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
-          }
-          onToggle={(automation, enabled) => toggle(automation.id, enabled)}
-          onDelete={deletion.ask}
+          <AutomationList
+            groups={groups}
+            workspace={workspace}
+            now={now}
+            narrow={room === SHELL_ROOM.NARROW}
+            onOpen={(automation) =>
+              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId: automation.id })
+            }
+            onToggle={(automation, enabled) => toggle(automation.id, enabled)}
+            onDelete={deletion.ask}
+          />
+        )}
+        <ConfirmDialog
+          open
+          confirm={deletion.confirm}
+          question={automationDeleteQuestion(deletion.asked?.name)}
         />
-      )}
-      <ConfirmDialog
-        open
-        confirm={deletion.confirm}
-        question={automationDeleteQuestion(deletion.asked?.name)}
-      />
-    </CollectionPage>
+      </CollectionPage>
+    </ReplayUnmask>
   );
 }
 
@@ -745,57 +759,59 @@ function RunsPage({
     listed.find((automation) => automation.id === automationId)?.mine !== false;
   const workspacesUnread = workspace === undefined && tasks.workspacesFailed;
   return (
-    <CollectionPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label={AUTOMATIONS}
-      toolbar={<AutomationsHead tasks={tasks} room={room} />}
-      filters={
-        <AutomationsTabs tasks={tasks}>
-          <ChoiceBar<RunsShown>
-            label="Runs shown"
-            items={runsShownChoices(read !== undefined && "runs" in read ? read.runs : [])}
-            value={shown}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            onChange={setShown}
+    <ReplayUnmask>
+      <CollectionPage
+        frame={PAGE_FRAME.TOOLBAR}
+        label={AUTOMATIONS}
+        toolbar={<AutomationsHead tasks={tasks} room={room} />}
+        filters={
+          <AutomationsTabs tasks={tasks}>
+            <ChoiceBar<RunsShown>
+              label="Runs shown"
+              items={runsShownChoices(read !== undefined && "runs" in read ? read.runs : [])}
+              value={shown}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              onChange={setShown}
+            />
+          </AutomationsTabs>
+        }
+        state={runsState(workspacesUnread, read)}
+        loadingLabel={READING_RUNS}
+        skeleton={<RunsSkeleton />}
+        error={
+          workspacesUnread ? (
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
+              onRetry={tasks.onRetryWorkspaces}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
+            >
+              {WORKSPACES_UNREAD_LINE}
+            </ErrorState>
+          ) : (
+            <ErrorState
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ)}
+              onRetry={reload}
+              placement={ERROR_STATE_PLACEMENT.CENTERED}
+            >
+              {RUNS_UNREAD_LINE}
+            </ErrorState>
+          )
+        }
+      >
+        {read !== undefined && "runs" in read ? (
+          <WorkspaceRuns
+            runs={read.runs}
+            shown={shown}
+            mine={mine}
+            now={now}
+            onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
+            onOpenAutomation={(automationId) =>
+              view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
+            }
           />
-        </AutomationsTabs>
-      }
-      state={runsState(workspacesUnread, read)}
-      loadingLabel={READING_RUNS}
-      skeleton={<RunsSkeleton />}
-      error={
-        workspacesUnread ? (
-          <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.WORKSPACES_READ)}
-            onRetry={tasks.onRetryWorkspaces}
-            placement={ERROR_STATE_PLACEMENT.CENTERED}
-          >
-            {WORKSPACES_UNREAD_LINE}
-          </ErrorState>
-        ) : (
-          <ErrorState
-            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_RUNS_READ)}
-            onRetry={reload}
-            placement={ERROR_STATE_PLACEMENT.CENTERED}
-          >
-            {RUNS_UNREAD_LINE}
-          </ErrorState>
-        )
-      }
-    >
-      {read !== undefined && "runs" in read ? (
-        <WorkspaceRuns
-          runs={read.runs}
-          shown={shown}
-          mine={mine}
-          now={now}
-          onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
-          onOpenAutomation={(automationId) =>
-            view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId })
-          }
-        />
-      ) : null}
-    </CollectionPage>
+        ) : null}
+      </CollectionPage>
+    </ReplayUnmask>
   );
 }
 
@@ -830,13 +846,15 @@ function AutomationAbsentPage({
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Automation"
-      toolbar={<Toolbar {...backBar(onBack, phone)} />}
-    >
-      {children}
-    </DetailPage>
+    <ReplayUnmask>
+      <DetailPage
+        frame={PAGE_FRAME.TOOLBAR}
+        label="Automation"
+        toolbar={<Toolbar {...backBar(onBack, phone)} />}
+      >
+        {children}
+      </DetailPage>
+    </ReplayUnmask>
   );
 }
 
@@ -869,7 +887,11 @@ function UnreadPage({
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
 function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
-  return <NotFound thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack, phone)} />;
+  return (
+    <ReplayUnmask>
+      <NotFound replayUnmasked thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack, phone)} />
+    </ReplayUnmask>
+  );
 }
 
 /** One automation's page opened before the list is first read: the editor's own frame as quiet blocks (`AutomationPageSkeleton`), and its way back. */

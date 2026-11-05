@@ -88,16 +88,16 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * The Runs on chip stands after the box's "+", as an agent's box draws where its
  * agent runs, its glyph alone where the card is too narrow for its words,
  * as the agent's branch chip draws its mark alone there: Cloud, and while Bring your own host is on the member's
- * devices, which the task's agents run on (`runs-on.tsx`); an automation's
- * card and a sub-task's draw none. While the experiment is off the chip offers
- * Cloud alone, the card reads no devices, and every task it makes runs in
+ * devices, which the agent it starts runs on (`runs-on.tsx`); an automation's
+ * card draws none. While the experiment is off the chip offers
+ * Cloud alone, the card reads no devices, and every agent it starts runs in
  * the cloud, a device kept as the last pick among them. Note that while it
  * is on the card reads the member's devices as it opens and, where the last
  * pick is a device, holds Start, saying so, until that read lands, a list read before it opened not
  * counting, and says a read that failed, or one still out past its bound,
  * with Retry, because a start sent before the list is read names no device, and
- * the service creates such a task in the cloud for good: Cloud is only ever
- * where a task runs because the chip said Cloud. The repository chip starts on the one the press chose
+ * the service starts such an agent in the cloud for good: Cloud is only ever
+ * where an agent runs because the chip said Cloud. The repository chip starts on the one the press chose
  * (a repository group's +), else the one the newest task in the workspace
  * was about, either only where the workspace's GitHub reaches it.
  *
@@ -182,9 +182,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * Sub-task of or Parent of stands the repository chip is held to its task's,
  * saying why, because a tree works in one repository, so every tree
  * relation must share it, and the start leaves the repository to the
- * service; while a Sub-task of stands the card draws no Runs on either,
- * because a sub-task runs where its parent runs, which the service holds it
- * to.
+ * service. A sub-task holds no place to run, as no task does, so its card
+ * draws Runs on as any other.
  *
  * The Automations page's Create with an agent opens this same card for the
  * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
@@ -416,7 +415,6 @@ export function NewTaskComposer({
     const nextTree = treeRelationOf(next);
     if (nextTree !== undefined) setChosen(nextTree.task.repository);
   };
-  const asSubTask = relations.some((each) => each.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF);
   // A refused card opened again holds the words it was pressed with, where the box holds nothing since.
   useLayoutEffect(() => {
     if (refused === undefined) return;
@@ -436,8 +434,8 @@ export function NewTaskComposer({
     () => newTask.tasks.filter((each) => each.workspaceId === workspaceId),
     [newTask.tasks, workspaceId],
   );
-  // Runs on stands on every card but an automation's agent's or a sub-task's, which runs where its parent runs.
-  const runsOnStands = !forAutomation && !asSubTask;
+  // Runs on stands on every card but an automation's agent's.
+  const runsOnStands = !forAutomation;
   // It offers the member's devices only while Bring your own host is on, and Cloud alone otherwise.
   const asksDevices = useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) && runsOnStands;
   // Note that the devices are read as the card opens rather than when the
@@ -502,6 +500,8 @@ export function NewTaskComposer({
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
   // An agent needs a repository to work in, and something to work on: words or files.
   const blocked = repository === null;
+  // Note that no pick is asked for while the tasks the default comes from are read, because the default may yet name one.
+  const awaitsDefault = blocked && chosen === undefined && repositories.reading === true;
   // Note that an agent nothing of the account's pays for is held here, with the press that connects one, rather than refused once pressed; a bare task needs none.
   const unpaid =
     newTask.models === undefined || choice === undefined
@@ -749,7 +749,7 @@ export function NewTaskComposer({
             : undefined
         }
       />
-      {blocked ? (
+      {blocked && !awaitsDefault ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {tree ? COMPOSER_WORDS.RELATED_HAS_NO_REPOSITORY : COMPOSER_WORDS.NEEDS_REPOSITORY}
         </Text>

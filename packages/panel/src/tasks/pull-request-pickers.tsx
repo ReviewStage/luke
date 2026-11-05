@@ -29,6 +29,7 @@ import {
   pendingWithout,
   type SameValue,
 } from "@repo/ui/pending-values";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
@@ -384,8 +385,9 @@ function OptionsPicker({
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={heading}
-          heading={heading}
+          heading={<ReplayUnmask>{heading}</ReplayUnmask>}
           menu={menu.drawn}
           groups={groups}
           onClose={menu.close}
@@ -452,6 +454,7 @@ function reviewerGroups(
     const on = askedTeams.has(team.slug);
     return {
       label: team.name,
+      replayMasked: true,
       icon: <UsersRoundIcon aria-hidden="true" />,
       detail: PICKER_WORDS.TEAM,
       checked: on,
@@ -466,6 +469,7 @@ function reviewerGroups(
       const actor = name(user);
       return {
         label: user.login,
+        replayMasked: true,
         icon: <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />,
         card: actorCard(actor),
         checked: on,
@@ -529,6 +533,7 @@ function labelItems(
     const labeled = on.has(label.name);
     return {
       label: label.name,
+      replayMasked: true,
       icon: <LabelDot color={label.color} />,
       checked: labeled,
       disabled: writes.pending !== undefined,

@@ -50,6 +50,7 @@ function ExperimentRow({ entry, on }: { entry: ExperimentEntry; on: boolean }): 
   return (
     <SwitchRow
       label={entry.name}
+      labelReplayUnmasked
       anchor={EXPERIMENT_ANCHOR[entry.key]}
       detail={
         <>
@@ -87,7 +88,11 @@ export function ExperimentalPage({
     );
   }
   if (entries.length === 0) {
-    return <EmptyState icon={<FlaskConicalIcon />}>{NO_EXPERIMENTS_LINE}</EmptyState>;
+    return (
+      <EmptyState icon={<FlaskConicalIcon />} replayUnmasked>
+        {NO_EXPERIMENTS_LINE}
+      </EmptyState>
+    );
   }
   return (
     <>

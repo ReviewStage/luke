@@ -76,6 +76,7 @@ export function AttachFilesButton({
       {picker.input}
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={label}
           menu={menu.drawn}
           groups={[[attachmentRow(picker.open, disabled), ...more]]}

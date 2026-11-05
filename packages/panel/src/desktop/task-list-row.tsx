@@ -28,6 +28,7 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
   repositoryLabel,
@@ -110,20 +111,23 @@ function OpenPullRequests({ task }: { task: TaskSummary }): React.JSX.Element | 
   if (open.length === 0) return null;
   return (
     <>
+      {/* Note that a pull request's number names the person's work, so it is masked in a screen recording. */}
       {open.map((pullRequest) => (
-        <PullRequestChip
-          key={pullRequest.url}
-          pullRequest={pullRequest}
-          card={
-            <PullRequestCard
-              pullRequest={pullRequest}
-              place={{ taskId: task.id }}
-              lines={pullRequest}
-              opener={openerOf(pullRequest)}
-            />
-          }
-          onOpen={() => openLink(pullRequest.url)}
-        />
+        <ReplayMask key={pullRequest.url}>
+          <PullRequestChip
+            key={pullRequest.url}
+            pullRequest={pullRequest}
+            card={
+              <PullRequestCard
+                pullRequest={pullRequest}
+                place={{ taskId: task.id }}
+                lines={pullRequest}
+                opener={openerOf(pullRequest)}
+              />
+            }
+            onOpen={() => openLink(pullRequest.url)}
+          />
+        </ReplayMask>
       ))}
     </>
   );
@@ -215,9 +219,9 @@ export function TaskListRow({
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
   // Note that a task not listed yet offers only its list's groups, because the task's own acts read the listed task, which is not there to read.
   const own = unlisted
-    ? rowMenu("Task", menuGroups, tasks.shown)
+    ? rowMenu("Task", menuGroups, tasks.shown, true)
     : {
-        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
+        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown, true),
         footer: actions.footer,
         subject: taskSubject(task, repository, key),
       };
@@ -243,7 +247,9 @@ export function TaskListRow({
       name={task.name}
       said={
         spoken === "" ? undefined : (
-          <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
+          <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+            <ReplayMask>{spoken}</ReplayMask>
+          </VisuallyHidden>
         )
       }
       beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
@@ -254,13 +260,19 @@ export function TaskListRow({
           : {
               // Note that a task from a service before priorities offers No priority, as one before statuses stands under Todo.
               [TASK_ROW_CELL.PRIORITY]: (
-                <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                <ReplayUnmask>
+                  <PriorityChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                </ReplayUnmask>
               ),
               [TASK_ROW_CELL.KEY]: (
-                <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+                <ReplayMask>
+                  <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+                </ReplayMask>
               ),
               [TASK_ROW_CELL.STATUS]: (
-                <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                <ReplayUnmask>
+                  <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
+                </ReplayUnmask>
               ),
               [TASK_ROW_CELL.ASSIGNEE]: assigneeHeld ? null : (
                 <AssigneeChip task={task} look={CHIP_LOOK.TOOLBAR} onStanding={onStanding} />
@@ -278,11 +290,13 @@ export function TaskListRow({
                   />
                 ),
               [TASK_ROW_CELL.REPOSITORY]: drawn(TASK_ROW_CELL.REPOSITORY) ? (
-                <RepositoryName
-                  repository={task.repository}
-                  label={repository}
-                  pictures={tasks.pictures}
-                />
+                <ReplayWords masked={task.repository !== null}>
+                  <RepositoryName
+                    repository={task.repository}
+                    label={repository}
+                    pictures={tasks.pictures}
+                  />
+                </ReplayWords>
               ) : null,
               [TASK_ROW_CELL.AGENTS]: drawn(TASK_ROW_CELL.AGENTS) ? (
                 <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />

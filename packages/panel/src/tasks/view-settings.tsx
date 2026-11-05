@@ -32,6 +32,7 @@ import {
   Tooltip,
 } from "@repo/ui";
 import { drawnDark } from "@repo/ui/appearance";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { MenuAction } from "../desktop/action-menu.js";
@@ -441,11 +442,14 @@ function ViewSettingsPopover({
       open={open}
       id={id}
       title={VIEW_SETTINGS_LABEL}
+      replayUnmasked
       closeLabel="Close"
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <ViewSettingsRows scope={scope} />
+      <ReplayUnmask>
+        <ViewSettingsRows scope={scope} />
+      </ReplayUnmask>
     </PopoverPanel>
   );
 }
@@ -473,10 +477,11 @@ export function useViewSettingsSheet(scope: ViewSettingsScope): {
       <Dialog
         open={open}
         title={VIEW_SETTINGS_LABEL}
+        replayUnmasked
         onDismiss={close}
         actions={
           <Button variant={BUTTON_VARIANT.PRIMARY} onClick={close}>
-            Done
+            <ReplayUnmask>Done</ReplayUnmask>
           </Button>
         }
       >

@@ -14,6 +14,11 @@ export function ProductIdentity({
   qualifier?: string | undefined;
 }): React.JSX.Element {
   return (
-    <SidebarIdentity name={PRODUCT_NAME} qualifier={qualifier} mark={<ProductMark fill small />} />
+    <SidebarIdentity
+      name={PRODUCT_NAME}
+      qualifier={qualifier}
+      mark={<ProductMark fill small />}
+      replayUnmasked
+    />
   );
 }

@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
-import { registerDevice } from "@repo/database/models/device-store";
 import { createTask, listTasks, readTask } from "@repo/database/models/task-store";
 import {
-  DEVICE_LAYOUT,
   fakeWorkspaceSeams,
   getTestDB,
   joinWorkspace,
@@ -37,7 +34,7 @@ import { tasksProcedures } from "./tasks-procedures.js";
  * token never puts another member's plan on it, since a plan on a token is
  * seen by its owner whatever the repository; an account outside the
  * workspace reaches no such plan. A child plan works where its parent
- * does, so it takes the parent's repository and machine, and its parent
+ * does, so it takes the parent's repository, and its parent
  * must be one its maker reaches. Synthetic accounts, plans, devices, and
  * tokens throughout.
  */
@@ -142,26 +139,27 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
   );
 
   it.effect(
-    "a child plan takes its parent's repository, machine, and assignee, and one naming another repository is refused with nothing made",
+    "a child plan takes its parent's repository and assignee, a released desktop's place to run naming nothing of the parent's, and one naming another repository is refused with nothing made",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
         const workspace = yield* openWorkspace(owner);
-        const studio = randomUUID();
-        yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
         const parent = yield* createTask(owner, {
           organizationId: workspace,
           name: "Side",
           repository: "octo-member/side",
           githubAccess: GITHUB_ACCESS.TOKEN,
-          runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
           assigneeId: owner,
         });
         const send = yield* standing(new Map([["Bearer owner", owner]]));
         const start = (body: object) =>
           send("POST", "/api/plans", "Bearer owner", { workspaceId: workspace, ...body });
 
-        const made = yield* start({ name: "Child", parentTaskId: parent.id });
+        const made = yield* start({
+          name: "Child",
+          parentTaskId: parent.id,
+          runsOn: { machine: AGENT_MACHINE.VERCEL },
+        });
         assert.equal(made.status, 201, JSON.stringify(made.body));
         const child = Option.getOrThrow(yield* readTask(owner, made.body.plan.id));
         assert.deepEqual(
@@ -169,14 +167,12 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
             parentTaskId: child.task.parentTaskId,
             repository: child.task.repository,
             githubAccess: child.githubAccess,
-            runsOn: child.runsOn,
             assignee: child.task.assignee?.userId,
           },
           {
             parentTaskId: parent.id,
             repository: "octo-member/side",
             githubAccess: GITHUB_ACCESS.TOKEN,
-            runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
             assignee: owner,
           },
         );

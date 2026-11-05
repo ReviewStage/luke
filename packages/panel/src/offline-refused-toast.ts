@@ -34,7 +34,12 @@ export function useOfflineRefusedToast(): void {
       tone: STATUS_TONE.ATTENTION,
       subject: OFFLINE_REFUSED_SUBJECT,
       persists: true,
-      action: { label: "OK", onPress: () => press(ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR) },
+      replayUnmasked: true,
+      action: {
+        label: "OK",
+        onPress: () => press(ACT_KIND.TASKS_OFFLINE_REFUSED_CLEAR),
+        replayUnmasked: true,
+      },
     });
   }, [toast, withdraw, press, count]);
 }

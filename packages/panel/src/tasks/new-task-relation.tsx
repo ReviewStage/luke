@@ -250,6 +250,7 @@ function relationRows(
     return {
       id: each.id,
       label: each.name,
+      replayMasked: true,
       ...(each.status === undefined ? {} : { icon: <TaskStatusMark status={each.status} /> }),
       ...(detail === undefined ? {} : { detail }),
       ...(key === undefined ? {} : { terms: [key] }),
@@ -331,6 +332,7 @@ export function relationMenuPanel(
     icon: <NetworkIcon />,
     panel: ({ back, close }) => (
       <SearchableMenu
+        replayUnmasked
         layer={SEARCHABLE_MENU_LAYER.EMBEDDED}
         id={id}
         label={WORDS.MENU}
@@ -420,6 +422,7 @@ function RelationRow({
     >
       {drawn.mounted ? (
         <SearchableMenu
+          replayUnmasked
           id={menuId}
           label={WORDS.SWAP}
           placeholder={WORDS.FIND}

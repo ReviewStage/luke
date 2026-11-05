@@ -668,7 +668,7 @@ GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Gmail
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
-name rather than its default single `exec`),
+name rather than its default single `exec`), Resend (`https://mcp.resend.com/mcp`),
 Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
 Stripe (`https://mcp.stripe.com`), Supabase (`https://mcp.supabase.com/mcp`),
 Vercel (`https://mcp.vercel.com`), and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
@@ -900,6 +900,7 @@ vercel connect create granola --name granola                   # Granola
 vercel connect create mcp.mercury.com --name vespin-mercury    # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
+vercel connect create mcp.resend.com --name vespin-resend      # Resend; asks for its scope below
 vercel connect create supabase --name supabase                 # Supabase
 vercel connect create vercel --target mcp --name vercel        # Vercel, through Connect's own Vercel MCP target
 vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
@@ -922,7 +923,10 @@ Supabase's granular scopes are better asked for in full than left to a
 default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`:
+`data.userAuthorization.scopes`. Resend's resource publishes none, and its
+authorization server (`https://api.resend.com`) publishes `full_access`
+beside the narrower `emails:send`, so its connector asks for `full_access`
+alone:
 
 ```
 vercel connect list                                        # the connector's scl_ id
@@ -1096,7 +1100,7 @@ again straight through connects.
 Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID`,
 `GOOGLE_CALENDAR_CONNECTOR_UID`, `GOOGLE_DRIVE_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
-`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `RESEND_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
 `VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
 production, preview, and development. The web is that project's one service
@@ -1194,7 +1198,7 @@ that workspace's people sign in with. Each provider has an optional
 allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
 `EXECUTOR_ALLOWED_ACCOUNTS`, `GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
 `MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
-`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
+`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`, `RESEND_ALLOWED_ACCOUNTS`,
 `SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,
 `STRIPE_ALLOWED_ACCOUNTS`, `SUPABASE_ALLOWED_ACCOUNTS`,
 `VERCEL_ALLOWED_ACCOUNTS`, `YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
@@ -1794,16 +1798,23 @@ One that names none runs where the agent it is started from runs, for a
 continue or a fork; else where the starter's newest agent on the task runs,
 never a teammate's, since a device is one member's; else where the starter
 last named a place (`account_preference.runs_on_*`,
-`packages/database/src/models/runs-on-pick.ts`); else where the task runs;
-else in the cloud. An automation's run reads neither of its owner's own, so
-it runs where its task does. A device, named or defaulted, must be the
-starter's, registered, not removed, and there lately, or the Start is
+`packages/database/src/models/runs-on-pick.ts`); else in the cloud. A task
+holds no place of its own. An automation's run reads neither of its owner's
+own and runs in the cloud, since no member chose for it and a Mac its owner
+last picked may be asleep when it fires. A device, named or defaulted, must
+be the starter's, registered, not removed, and there lately, or the Start is
 refused by name and makes no agent; nothing falls back to the cloud on its
 own. A place a Start names is kept as the starter's last pick once its agent
-is made, which is what a later Start naming none and a task an agent makes
-for them (`create_task`) run at; a task's start that names an agent and no
-`runsOn` of its own runs it where the task's `runsOn` names, which released
-desktops still send.
+is made, which is what a later Start naming none runs at.
+
+Released desktops still send a `runsOn` on a task's create and change. On a
+create it runs the agent the create starts where that agent names none, and
+with no agent it is kept as the starter's last pick, where it is the cloud or
+one of their own devices; on a change it is read and changes nothing. A
+task's summary still answers `runsOn` for them, read from the task's newest
+agent, any member's, absent for the cloud or a task with none. The task's own
+`machine` and `device_id` columns are no longer read or written, and a later
+migration drops them.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its

@@ -684,7 +684,7 @@ const rowNamed = (page: HTMLElement, name: string) =>
 /** The Members row naming `name`, the reader's own beside its You. */
 const memberNamed = (page: HTMLElement, name: string) =>
   [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
-    (row) => row.querySelector('[id$="label"]')?.firstChild?.firstChild?.textContent === name,
+    (row) => row.querySelector(".actor-card-name")?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} member`);
 
 /** A member row's line under the name: their email. */

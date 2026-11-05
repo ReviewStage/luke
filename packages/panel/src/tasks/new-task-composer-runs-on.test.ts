@@ -43,8 +43,8 @@ import type { NewTaskStart } from "./use-tasks-tab.js";
  * is the cloud is not held, the chip standing on Cloud alone. With the
  * experiment off the card reads no devices, offers Cloud alone, and starts in
  * the cloud at once, a last pick of a device unheld. A card opened as a sub-task
- * of another starts in that relation alone, naming neither a repository nor a
- * device, which the service would refuse, since a sub-task takes its parent's.
+ * of another names no repository, which it takes from its parent, but draws
+ * Runs on as any card does, since a task holds no place to run.
  * Synthetic throughout.
  */
 
@@ -383,14 +383,17 @@ test("while Bring your own host is off the card reads no devices, offers Cloud a
   assert.equal(beats, 0);
 });
 
-test("a sub-task's card starts in its relation alone, naming no repository and no device", async () => {
+test("a sub-task's card names no repository and starts on the device Runs on picked, as any card does", async () => {
   const { container, starts, named } = await mount({ devices: devicesWith() }, SUB_TASK);
-  assert.equal(container.querySelector('button[aria-label^="Runs on"]'), null);
+  act(() => runsOnChip(container).click());
+  await settle();
+  act(() => row("Studio").click());
+  await settle();
   // ⌘Return on the empty box: a bare sub-task, which carries what any sub-task's start does.
   pressInComposer(container, "Enter", { metaKey: true });
   await settle();
 
-  assert.deepEqual(starts, [undefined]);
+  assert.deepEqual(starts, [{ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
   assert.deepEqual(named, [
     { repository: null, relations: [{ kind: "sub-task-of", taskId: SUB_TASK.task.id }] },
   ]);

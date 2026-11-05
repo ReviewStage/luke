@@ -409,16 +409,12 @@ export const GATEWAY_METHOD = {
   INSTALLED_SKILLS_RETRY: "installedSkills.retry",
   /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
   INSTALLED_SKILLS_READ: "installedSkills.read",
-  /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
+  /** What a pasted GitHub source or skill text would install, read by the service; nothing is written. */
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
-  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
-  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   /** The skills a paste makes, installed for the account or its workspace, all or none, drawn over every held read whose scope they are in once the service answers; or why none were. */
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   /** One installed skill turned on or off, drawn so at once over the held skills; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
-  /** Whether a GitHub skill's folder moved at its ref since it was installed. */
-  INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   /** A GitHub skill's files read again at its ref, drawn over the held skills as the service answers it; the skill as it then stands, or why it is unchanged. */
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
   /** The account's own personal skill moved into a workspace it is a member of, drawn there at once over the held skills; the skill as it then stands, or why it is unchanged. */

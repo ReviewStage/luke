@@ -39,6 +39,7 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
@@ -176,6 +177,7 @@ export function RunRow({
         />
       }
       title={automationRunTitle(run)}
+      titleReplayMasked
       lead={
         automationName === undefined
           ? undefined
@@ -186,14 +188,18 @@ export function RunRow({
       metaAt={LIST_ROW_META.TITLE}
       description={
         <Tooltip label={line}>
-          <span>{line}</span>
+          <span>
+            <ReplayUnmask>{line}</ReplayUnmask>
+          </span>
         </Tooltip>
       }
       meta={
         <span className={AUTOMATION_ROW_META}>
           {stateEndMark(state, true)}
           <Tooltip label={momentText(run.firedAt)}>
-            <span>{sinceText(run.firedAt, now)}</span>
+            <span>
+              <ReplayUnmask>{sinceText(run.firedAt, now)}</ReplayUnmask>
+            </span>
           </Tooltip>
         </span>
       }
@@ -205,7 +211,7 @@ export function RunRow({
             ? onOpenAutomation
             : () => openLink(subject.url)
       }
-      menu={rowMenu(RUN_THING, groups)}
+      menu={rowMenu(RUN_THING, groups, undefined, true)}
       // Note that every run opens something, so under a finger none draws its ⋯ and every time stands at the row's end, in one column.
       more={!coarse}
     />
@@ -368,7 +374,9 @@ export function AutomationRunsPanel({
         className="automation-runs flex min-w-0 flex-1 flex-col border-l border-border"
         aria-label="Runs"
       >
-        <RunsBody headed {...shown} />
+        <ReplayUnmask>
+          <RunsBody headed {...shown} />
+        </ReplayUnmask>
       </aside>
     </div>
   );
@@ -410,7 +418,9 @@ export function AutomationRunsScreen({
         title={RUNS}
         end={<PhoneFindButton />}
       />
-      <RunsBody headed={false} {...shown} />
+      <ReplayUnmask>
+        <RunsBody headed={false} {...shown} />
+      </ReplayUnmask>
     </Fill>
   );
 }

@@ -134,7 +134,6 @@
     "./mcp-client-wire": "./src/mcp-client-wire.js",
     "./mcp-client-view": "./src/mcp-client-view.js",
     "./skill-file": "./src/skill-file.js",
-    "./skill-paste": "./src/skill-paste.js",
     "./connect-github-step": "./src/connect-github-step.js",
     "./feedback": "./src/feedback/index.js",
     "./contract": "./src/contract/index.js",

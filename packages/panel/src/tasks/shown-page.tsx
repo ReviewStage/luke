@@ -1,5 +1,12 @@
 import { LIVE_READ } from "@repo/features/live-wire";
 import {
+  type FrameBox,
+  PAGE_PICK_ACT,
+  PAGE_PICK_TYPE,
+  type PagePickAsk,
+  pagePickAnswerSchema,
+} from "@repo/features/page-pick";
+import {
   PAGE_FIT,
   PAGE_FIT_PENDING,
   type PageFit,
@@ -7,13 +14,15 @@ import {
   pageSizeSchema,
 } from "@repo/features/page-size";
 import type { PagePlace } from "@repo/features/page-wire";
-import { PAGE_EMBED_HEIGHT, PageEmbed, type PageEmbedHeight } from "@repo/ui";
+import { PAGE_EMBED_HEIGHT, PageEmbed, type PageEmbedHeight, usePressAway } from "@repo/ui";
+import { replyOf } from "@repo/ui/reply-quote";
 import { Option, Schema } from "effect";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useReducer, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useHostRead } from "../use-host-read.js";
 import { PAGE_SANDBOX, useFrameLinks } from "./page-pane.js";
 import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
+import { pressPlace, ReplyPress, useReplyDoor } from "./reply-to-selection.js";
 
 /**
  * shown-page.tsx -- a page an agent showed, drawn where it is told of: under the transcript row of the call that showed it, and under an Inbox thread's line naming it.
@@ -28,9 +37,25 @@ import { PAGE_ROOM, usePageTheme } from "./page-theme.js";
  * pages its plan or its agent on no task holds (`LIVE_READ.PAGES`), as a
  * page's chip hangs its card (`chip-cards.tsx`), and nothing while that read
  * is out or where the reader cannot reach the page.
+ *
+ * Words selected in the page offer Reply over them, as words selected in
+ * the transcript around it do (`reply-to-selection.tsx`), and a press lays
+ * them into the message box as a quote, the agent's or the Inbox item's,
+ * wherever a box stands to take them (`useReplyDoor`). No selection in the frame reaches this window, so the
+ * frame says the words and where they stand (`@repo/features/page-pick`),
+ * heard from that frame alone; Reply goes as they go, as a press lands
+ * anywhere else in the window, in another frame included, or as another
+ * frame says words of its own, each telling its frame to let its words go,
+ * and as the frame loads again, whose new document holds none. Note that the words are the
+ * page's own word, since its scripts share the frame with ours: the worst a
+ * page that lies does is offer a quote of itself, which the box shows before
+ * anything is sent.
  */
 
 const readSize = Schema.decodeUnknownOption(pageSizeSchema);
+
+/** Reads a message a frame posted as the words selected in it, nothing for anything else a page posts. */
+const readPick = Schema.decodeUnknownOption(pagePickAnswerSchema);
 
 /** The height the frame stands at for how the page is fitted. */
 function embedHeight(fit: PageFit): PageEmbedHeight {
@@ -58,6 +83,103 @@ function useFrameFit(frame: RefObject<HTMLIFrameElement | null>): PageFit {
   return fit;
 }
 
+/** Words selected in a frame that Reply quotes: the words, and where they stand in the frame's viewport. */
+interface FrameSelected {
+  readonly quote: string;
+  readonly box: FrameBox;
+}
+
+/** Tells the page in `frame` to let its words selected go. */
+function unselect(frame: RefObject<HTMLIFrameElement | null>): void {
+  const ask: PagePickAsk = { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.UNSELECT };
+  frame.current?.contentWindow?.postMessage(ask, "*");
+}
+
+/**
+ * Reply over words selected in the page in `frame`, which `onReply` lays
+ * into the message box; nothing while none are.
+ */
+function FrameReply({
+  frame,
+  onReply,
+}: {
+  frame: RefObject<HTMLIFrameElement | null>;
+  onReply: (reply: string) => void;
+}): ReactNode {
+  const [selected, setSelected] = useState<FrameSelected | undefined>(undefined);
+  const [, redraw] = useReducer((drawn: number) => drawn + 1, 0);
+  const layer = useRef<HTMLDivElement>(null);
+  const shown = selected !== undefined;
+  const letGo = () => {
+    setSelected(undefined);
+    unselect(frame);
+  };
+
+  // The frame says its words as they are selected, and that none are once they go; another frame's words, or a press in it, take Reply from this one's.
+  useEffect(() => {
+    const element = frame.current;
+    const hear = (event: MessageEvent) => {
+      const framed = frame.current?.contentWindow;
+      if (framed === null || framed === undefined) return;
+      const said = readPick(event.data);
+      if (Option.isNone(said)) return;
+      const words = "selected" in said.value ? said.value.selected : undefined;
+      if (event.source === framed && words !== undefined) {
+        setSelected(words === null ? undefined : { quote: words.quote, box: words.box });
+      } else if (event.source !== framed && (words != null || "pressed" in said.value)) {
+        setSelected(undefined);
+        unselect(frame);
+      }
+    };
+    // Note that a frame loading again, a reload or another version, holds a new document, whose words selected are none.
+    const loaded = () => setSelected(undefined);
+    window.addEventListener("message", hear);
+    element?.addEventListener("load", loaded);
+    return () => {
+      window.removeEventListener("message", hear);
+      element?.removeEventListener("load", loaded);
+    };
+  }, [frame]);
+
+  // Once offered, Reply follows the frame as the window scrolls, and hides with its pane.
+  useEffect(() => {
+    if (!shown) return undefined;
+    // Note that hiding a pane moves nothing, so its `hidden` attribute is watched for itself.
+    const hiding = new MutationObserver(redraw);
+    hiding.observe(document.body, { attributes: true, attributeFilter: ["hidden"], subtree: true });
+    document.addEventListener("scroll", redraw, true);
+    window.addEventListener("resize", redraw);
+    return () => {
+      hiding.disconnect();
+      document.removeEventListener("scroll", redraw, true);
+      window.removeEventListener("resize", redraw);
+    };
+  }, [shown]);
+
+  // A press anywhere else in the window lets the words go, as it lets go words selected in the window itself.
+  usePressAway(layer, () => undefined, { onPressAway: shown ? letGo : undefined });
+
+  const framed = frame.current;
+  if (selected === undefined || framed === null || framed.closest("[hidden]") !== null) return null;
+  const at = framed.getBoundingClientRect();
+  const { box } = selected;
+  return (
+    <ReplyPress
+      place={pressPlace({
+        left: at.left + box.left,
+        top: at.top + box.top,
+        right: at.left + box.right,
+        bottom: at.top + box.bottom,
+      })}
+      onReply={() => {
+        letGo();
+        onReply(replyOf(selected.quote));
+      }}
+      layer={layer}
+    />
+  );
+}
+
 /** One version of a page, drawn live in the words that tell of it. */
 export function ShownPage({
   place,
@@ -74,6 +196,7 @@ export function ShownPage({
   useFrameLinks(frame);
   usePageTheme(frame, PAGE_ROOM.WORDS);
   const fit = useFrameFit(frame);
+  const replyDoor = useReplyDoor();
   return (
     <div className="my-block-gap">
       <PageEmbed
@@ -86,6 +209,7 @@ export function ShownPage({
           lazy: true,
         }}
       />
+      {replyDoor === undefined ? null : <FrameReply frame={frame} onReply={replyDoor} />}
     </div>
   );
 }

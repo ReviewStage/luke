@@ -1225,7 +1225,7 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph")?.innerHTML,
+    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
     renderToStaticMarkup(fileLook(path).icon),
     "the row wears the file's type icon",
   );

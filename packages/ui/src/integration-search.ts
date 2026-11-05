@@ -35,6 +35,7 @@ const INTEGRATION_KEYWORDS = {
   [INTEGRATION_PROVIDER.NEON]: "postgres database sql branches",
   [INTEGRATION_PROVIDER.NOTION]: "pages docs wiki databases notes",
   [INTEGRATION_PROVIDER.POSTHOG]: "analytics events feature flags experiments insights",
+  [INTEGRATION_PROVIDER.RESEND]: "email mail send transactional broadcasts domains contacts",
   [INTEGRATION_PROVIDER.SENTRY]: "errors crashes exceptions monitoring traces issues",
   [INTEGRATION_PROVIDER.SLACK]: "chat messages channels threads team",
   [INTEGRATION_PROVIDER.STRIPE]:

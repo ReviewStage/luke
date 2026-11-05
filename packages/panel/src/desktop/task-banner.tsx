@@ -22,7 +22,7 @@ import type { ReactNode } from "react";
 
 /** The press that mends what a banner says: its words, and what it does. */
 interface TaskBannerAction {
-  readonly label: string;
+  readonly label: ReactNode;
   readonly onPress: () => void;
 }
 

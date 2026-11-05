@@ -1,8 +1,7 @@
 import {
-  INSTALLED_SKILL_PROBLEM,
   type InstalledSkillCandidate,
-  type InstalledSkillPreview,
   type InstalledSkillSummary,
+  SKILL_PASTE_KIND,
 } from "@repo/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
@@ -13,160 +12,87 @@ import {
   type InstalledSkillScope,
 } from "@repo/features/installed-skill-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
-import { countWords, TERM } from "@repo/features/words";
 import type { Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  ALIGN,
   ANNOUNCE,
-  Badge,
   BUTTON_VARIANT,
   Button,
-  CARD_LOOK,
-  CARD_PADDING,
-  Card,
   CHOICE_BAR_LOOK,
   Checkbox,
   ChoiceBar,
   DIALOG_SIZE,
   Dialog,
   ErrorState,
-  FILE_TEXT_EXTENT,
-  FileText,
   FormField,
   GAP,
   GlyphSlot,
   INSET,
   Inline,
-  JUSTIFY,
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
   SearchField,
-  Spinner,
   STATUS_TONE,
   Stack,
-  TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
-  TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
-  TextButton,
   TextField,
 } from "@repo/ui";
-import { inputProblem } from "@repo/ui/reported-failure";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
+import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { enterKeyHint, enterSubmitKey } from "../enter-sends.js";
 import { failureShown, refusedShown } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { replayMaskedError } from "./marks.js";
 import {
-  ADD_SKILL_SCREEN,
-  addSkillScreen,
-  addSkillTitle,
-  auditParts,
   candidateFacts,
-  candidateMarks,
-  candidateNote,
-  confirmView,
   type DetectedLine,
-  type DetectedTone,
-  everyTicked,
   failureLine,
   initialTicks,
-  installable,
   installLabel,
-  installPlan,
   installRequest,
   installScopes,
-  missingLine,
-  othersLine,
-  type PulledSkill,
-  pastedAtOnce,
-  pastedLine,
-  previewFailureLine,
   previewLine,
   previewRetries,
-  previewSourceLine,
-  problemsLine,
-  pulledLine,
   SKILLS_LINE,
-  type SkillListGroup,
-  type SkillTicks,
-  skillList,
-  type TextDeclares,
+  searchesSkills,
+  shownSkills,
   type TextFill,
-  textDeclares,
   textFill,
-  textProblems,
-  withEvery,
-  withRefusal,
-  withTick,
 } from "./skills-model.js";
 
 /**
- * add-skill-dialog.tsx -- Settings › Skills' Add skill: one box that takes an `npx skills add` command, a GitHub link, or a skill's text, then what it would install, and Install.
+ * add-skill-dialog.tsx -- Settings › Skills' Add skill: one box that takes a GitHub repository, a link to one of its folders, an `npx skills add` line, or a skill's text, then what it would install, and Install.
  *
- * The box is read the moment it changes (`parseSkillPaste`), so the line
- * under it says at once whether it is a GitHub repository, a skill's text,
- * or something we do not install from. A short pause after the last
- * keystroke the service previews it, and a paste folds the box into one
- * line naming where the skills come from, with Change to open it again.
- * What follows is `npx skills add`'s own choice: a paste that named skills,
- * or a repository holding one, is confirmed as a card for each, with the
- * sibling skills each hands off to coming along ticked; one that named
- * none, every one, or one the repository lacks is browsed, searched and
- * ticked by hand. Each skill says where a skill of its name already stands
- * in the scope chosen, whether it ships scripts, and skills.sh's ratings,
- * and opens its `SKILL.md` in place. Text shows its name and the
- * description agents read, the member's to type where the text lacks them.
- * Install for stands at the foot's start and the button names what Install
- * will do; it sends the paste again whole, as the service reads it afresh,
- * and a refusal is said in plain words.
+ * A short pause after the box last changed, the service previews it. A
+ * GitHub source's skills are one list to tick, with a search once it is
+ * long, the skills the paste named or the one skill there is ticked as it
+ * lands; a skill's text is its name and the description agents read, both
+ * filled from its frontmatter and both the member's to change. Install for
+ * stands at the foot's start and the button names what Install will do; a
+ * refusal is said under the box in plain words.
  */
 
 /** How long the box stands still before the service previews it. */
 const PREVIEW_PAUSE_MS = 400;
 
-/** How the line under the box is drawn: understood with its dot, a problem in the attention tint, or plain while it waits. */
+/** How the line under the box is drawn: a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
-  [STATUS_TONE.COMPLETE]: "connected",
   [STATUS_TONE.ATTENTION]: "attention",
   [STATUS_TONE.NEUTRAL]: "plain",
-} as const satisfies Record<DetectedTone, string>;
+} as const satisfies Record<DetectedLine["tone"], string>;
 
 /** The service's preview as the dialog holds it: of which text, and what it answered. */
 interface Previewed {
   readonly text: string;
   readonly view: InstalledSkillPreviewView;
-}
-
-/** A `SKILL.md` the preview carried none of, as its read stands. */
-type FileRead =
-  | { readonly reading: true }
-  | { readonly markdown: string }
-  | { readonly failed: string };
-
-/** Each found skill's `SKILL.md` as the dialog shows it: opened or not, and what was read for it. */
-interface SkillFiles {
-  readonly opened: ReadonlySet<string>;
-  readonly read: ReadonlyMap<string, FileRead>;
-  readonly onView: (candidate: InstalledSkillCandidate) => void;
-}
-
-/** What every found skill's card and row is drawn against. */
-interface SkillContext {
-  readonly scope: InstalledSkillScope;
-  readonly workspace: Workspace;
-  readonly files: SkillFiles;
-  readonly disabled: boolean;
 }
 
 /** A line in its tone's tint, announced as it lands and as it changes: an alert where it needs a hand. */
@@ -177,505 +103,84 @@ function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
   );
   return (
     <span className="settings-state" data-state={LINE_STATE[line.tone]}>
-      {line.text}
+      <ReplayMask>{line.text}</ReplayMask>
     </span>
   );
 }
 
-/** A found skill's name, or the words standing for it, and the marks beside it, its high and critical ratings among them where `ratings`. */
-function SkillName({
+/** One found skill to tick: its name, its description, and where it is and how large. */
+function SkillOption({
   candidate,
-  context,
-  ratings,
-  title = candidate.name,
+  ticked,
+  disabled,
+  onTick,
 }: {
   candidate: InstalledSkillCandidate;
-  context: SkillContext;
-  ratings: boolean;
-  title?: string;
+  ticked: boolean;
+  disabled: boolean;
+  onTick: (name: string, on: boolean) => void;
 }): React.JSX.Element {
-  const marks = candidateMarks(candidate, context.scope, context.workspace);
-  const warnings = ratings ? auditParts(candidate).filter((part) => part.warn) : [];
   return (
-    <Inline gap={GAP.ICON}>
-      <GlyphSlot>
-        <SkillMark />
-      </GlyphSlot>
-      <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>
-        {title}
-      </Text>
-      {marks.map((mark) => (
-        <Badge key={mark.text} tone={mark.tone}>
-          {mark.text}
-        </Badge>
-      ))}
-      {warnings.map((part) => (
-        <Badge key={part.text} tone={STATUS_TONE.ATTENTION}>
-          {part.text}
-        </Badge>
-      ))}
-    </Inline>
-  );
-}
-
-/** skills.sh's ratings, muted, a high or critical one marked as a warning; nothing where there are none. */
-function AuditLine({
-  candidate,
-}: {
-  candidate: InstalledSkillCandidate;
-}): React.JSX.Element | null {
-  const parts = auditParts(candidate);
-  if (parts.length === 0) return null;
-  return (
-    <Inline gap={GAP.ICON} aria-label="skills.sh ratings">
-      {parts.map((part, index) => (
-        <Inline key={part.text} gap={GAP.ICON}>
-          {index === 0 ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-              ·
-            </Text>
-          )}
-          {part.warn ? (
-            <Badge tone={STATUS_TONE.ATTENTION}>{part.text}</Badge>
-          ) : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-              {part.text}
-            </Text>
-          )}
+    <Checkbox checked={ticked} disabled={disabled} onChange={(on) => onTick(candidate.name, on)}>
+      <Stack gap={GAP.NONE}>
+        <Inline gap={GAP.ICON}>
+          <GlyphSlot>
+            <SkillMark />
+          </GlyphSlot>
+          <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>
+            <ReplayMask>{candidate.name}</ReplayMask>
+          </Text>
         </Inline>
-      ))}
-    </Inline>
-  );
-}
-
-/** The words a found skill's View SKILL.md toggles between. */
-function viewWords(candidate: InstalledSkillCandidate, files: SkillFiles): string {
-  return files.opened.has(candidate.name)
-    ? SKILLS_LINE.HIDE_SKILL_FILE
-    : SKILLS_LINE.VIEW_SKILL_FILE;
-}
-
-/** A found skill's `SKILL.md` once opened: as the preview carried it, while it is read, or why it could not be. */
-function SkillFile({
-  candidate,
-  files,
-}: {
-  candidate: InstalledSkillCandidate;
-  files: SkillFiles;
-}): React.JSX.Element | null {
-  const read: FileRead | undefined =
-    candidate.markdown === undefined
-      ? files.read.get(candidate.name)
-      : { markdown: candidate.markdown };
-  if (!files.opened.has(candidate.name) || read === undefined) return null;
-  if ("reading" in read) return <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />;
-  if ("failed" in read) {
-    return <DetectedText line={{ text: read.failed, tone: STATUS_TONE.ATTENTION }} />;
-  }
-  return <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />;
-}
-
-/** A found skill's facts, its View SKILL.md, and the file under them once opened. */
-function SkillDetail({
-  candidate,
-  context,
-}: {
-  candidate: InstalledSkillCandidate;
-  context: SkillContext;
-}): React.JSX.Element {
-  const { files } = context;
-  const note = candidateNote(candidate, context.scope);
-  return (
-    <Stack gap={GAP.ITEM}>
-      <Inline gap={GAP.CONTROL}>
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-          {candidateFacts(candidate)}
-        </Text>
-        <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => files.onView(candidate)}>
-          {viewWords(candidate, files)}
-        </TextButton>
-      </Inline>
-      <AuditLine candidate={candidate} />
-      {note === undefined ? null : <DetectedText line={note} />}
-      <SkillFile candidate={candidate} files={files} />
-    </Stack>
-  );
-}
-
-/** One skill the paste named, as a card to confirm. */
-function SkillCard({
-  candidate,
-  context,
-}: {
-  candidate: InstalledSkillCandidate;
-  context: SkillContext;
-}): React.JSX.Element {
-  return (
-    <Card look={CARD_LOOK.OUTLINE} padding={CARD_PADDING.COMPACT}>
-      <Stack gap={GAP.ITEM}>
-        <SkillName candidate={candidate} context={context} ratings={false} />
         {candidate.description === undefined ? null : (
-          <Text variant={TEXT_VARIANT.BODY} tone={TEXT_TONE.MUTED}>
-            {candidate.description}
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+            <ReplayMask>{candidate.description}</ReplayMask>
           </Text>
         )}
-        <SkillDetail candidate={candidate} context={context} />
-      </Stack>
-    </Card>
-  );
-}
-
-/** A skill a confirmed one hands off to, ticked to come along, and why. */
-function PulledCard({
-  pulled,
-  install,
-  context,
-  onTick,
-}: {
-  pulled: PulledSkill;
-  install: readonly string[];
-  context: SkillContext;
-  onTick: (name: string, on: boolean) => void;
-}): React.JSX.Element {
-  const { candidate } = pulled;
-  const may = installable(candidate, context.scope);
-  return (
-    <Card look={CARD_LOOK.TINT} padding={CARD_PADDING.COMPACT}>
-      <Stack gap={GAP.ITEM}>
-        <Checkbox
-          checked={may && install.includes(candidate.name)}
-          disabled={context.disabled || !may}
-          onChange={(on) => onTick(candidate.name, on)}
-        >
-          <Stack gap={GAP.NONE}>
-            <SkillName
-              candidate={candidate}
-              context={context}
-              ratings={false}
-              title={`Also installing ${candidate.name}`}
-            />
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-              {pulledLine(pulled)}
-            </Text>
-          </Stack>
-        </Checkbox>
-        <SkillDetail candidate={candidate} context={context} />
-      </Stack>
-    </Card>
-  );
-}
-
-/** The confirm screen: a card for each skill the paste named, the skills they pull in, and a way to the rest. */
-function ConfirmSkills({
-  skills,
-  install,
-  pulled,
-  context,
-  onTick,
-  onBrowse,
-}: {
-  skills: readonly InstalledSkillCandidate[];
-  install: readonly string[];
-  pulled: ReadonlyMap<string, string>;
-  context: SkillContext;
-  onTick: (name: string, on: boolean) => void;
-  onBrowse: () => void;
-}): React.JSX.Element {
-  const shown = confirmView(skills, { install, pulled });
-  return (
-    <Stack gap={GAP.CONTROL} aria-label="Skills to install">
-      {shown.cards.map((candidate) => (
-        <SkillCard key={candidate.path} candidate={candidate} context={context} />
-      ))}
-      {shown.pulled.map((each) => (
-        <PulledCard
-          key={each.candidate.path}
-          pulled={each}
-          install={install}
-          context={context}
-          onTick={onTick}
-        />
-      ))}
-      {shown.others === 0 ? null : (
-        <Inline gap={GAP.ICON}>
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-            {`${othersLine(shown.others)} ·`}
-          </Text>
-          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={onBrowse}>
-            {SKILLS_LINE.BROWSE}
-          </TextButton>
-        </Inline>
-      )}
-    </Stack>
-  );
-}
-
-/** One skill of the browse list: its box, its name and marks, its description on one line, who pulls it in, and its View SKILL.md beside the box. */
-function SkillRow({
-  candidate,
-  install,
-  ticks,
-  pulledBy,
-  context,
-  onTick,
-}: {
-  candidate: InstalledSkillCandidate;
-  install: readonly string[];
-  ticks: SkillTicks;
-  pulledBy: string | undefined;
-  context: SkillContext;
-  onTick: (name: string, on: boolean) => void;
-}): React.JSX.Element {
-  const may = installable(candidate, context.scope);
-  const ticked = may && install.includes(candidate.name);
-  const note = candidateNote(candidate, context.scope);
-  const along = ticked && !ticks.ticked.has(candidate.name) && pulledBy !== undefined;
-  const line = [candidate.description, along ? `with ${pulledBy}` : undefined]
-    .filter((each) => each !== undefined)
-    .join(" · ");
-  return (
-    <Stack gap={GAP.ITEM}>
-      <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false} growFirst>
-        <Checkbox
-          checked={ticked}
-          disabled={context.disabled || !may}
-          onChange={(on) => onTick(candidate.name, on)}
-        >
-          <Stack gap={GAP.NONE}>
-            <SkillName candidate={candidate} context={context} ratings />
-            {line === "" ? null : (
-              <Text
-                variant={TEXT_VARIANT.CAPTION}
-                tone={TEXT_TONE.MUTED}
-                as={TEXT_ELEMENT.SPAN}
-                truncate
-              >
-                {line}
-              </Text>
-            )}
-            {note === undefined ? null : (
-              <span className="settings-state" data-state={LINE_STATE[note.tone]}>
-                {note.text}
-              </span>
-            )}
-          </Stack>
-        </Checkbox>
-        <TextButton onClick={() => context.files.onView(candidate)}>
-          {viewWords(candidate, context.files)}
-        </TextButton>
-      </Inline>
-      <SkillFile candidate={candidate} files={context.files} />
-    </Stack>
-  );
-}
-
-/** The browse screen's head, which stays put while the list scrolls: the search, and Select all over the skills it shows. */
-function BrowseHead({
-  count,
-  query,
-  shown,
-  install,
-  disabled,
-  onQuery,
-  onEvery,
-}: {
-  count: number;
-  query: string;
-  shown: readonly string[];
-  install: readonly string[];
-  disabled: boolean;
-  onQuery: (query: string) => void;
-  onEvery: (names: readonly string[], on: boolean) => void;
-}): React.JSX.Element {
-  const every = everyTicked(shown, install);
-  return (
-    <Stack gap={GAP.CONTROL}>
-      <SearchField
-        label={SKILLS_LINE.SEARCH}
-        placeholder={`Search ${countWords(count, TERM.SKILL)}`}
-        value={query}
-        onChange={onQuery}
-        onClear={() => onQuery("")}
-      />
-      <Checkbox
-        checked={every.checked}
-        mixed={every.mixed}
-        disabled={disabled || shown.length === 0}
-        onChange={() => onEvery(shown, !every.checked)}
-      >
-        {SKILLS_LINE.SELECT_ALL}
-      </Checkbox>
-    </Stack>
-  );
-}
-
-/** The browse screen's list: the repository's skills the search shows, sorted by name, grouped where its plugins group them, after any name the paste asked for that it lacks. */
-function BrowseSkills({
-  preview,
-  groups,
-  install,
-  ticks,
-  pulled,
-  context,
-  onTick,
-}: {
-  preview: InstalledSkillPreview;
-  groups: readonly SkillListGroup[];
-  install: readonly string[];
-  ticks: SkillTicks;
-  pulled: ReadonlyMap<string, string>;
-  context: SkillContext;
-  onTick: (name: string, on: boolean) => void;
-}): React.JSX.Element {
-  const missing = missingLine(preview);
-  return (
-    <Stack gap={GAP.CONTROL}>
-      {missing === undefined ? null : (
-        <DetectedText line={{ text: missing, tone: STATUS_TONE.ATTENTION }} />
-      )}
-      {groups.length === 0 ? (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {SKILLS_LINE.NO_MATCH}
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
+          <ReplayMask>{candidateFacts(candidate)}</ReplayMask>
         </Text>
-      ) : null}
-      {groups.map((group) => (
-        <Stack key={group.title ?? ""} gap={GAP.ITEM} aria-label={group.title ?? "Skills found"}>
-          {group.title === undefined ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {`${group.title} · ${group.skills.length}`}
-            </Text>
-          )}
-          {group.skills.map((candidate) => (
-            <SkillRow
-              key={candidate.path}
-              candidate={candidate}
-              install={install}
-              ticks={ticks}
-              pulledBy={pulled.get(candidate.name)}
-              context={context}
-              onTick={onTick}
-            />
-          ))}
-        </Stack>
-      ))}
-    </Stack>
+      </Stack>
+    </Checkbox>
   );
 }
 
-/** A skill's text: its name and the description agents read, typed where the text lacks them, what still keeps it out, and a peek of the text. */
-function TextSkill({
-  preview,
-  markdown,
+/** A skill's text's name and description, filled from its frontmatter and the member's to change. */
+function TextFields({
   fill,
-  declares,
   disabled,
   onFill,
 }: {
-  preview: Extract<InstalledSkillPreview, { kind: typeof SKILL_PASTE_KIND.TEXT }>;
-  markdown: string;
   fill: TextFill;
-  declares: TextDeclares;
   disabled: boolean;
   onFill: (fill: TextFill) => void;
 }): React.JSX.Element {
-  const left = textProblems(preview.problems, fill, declares);
-  // Note that an empty field says so itself, so only what it cannot say is listed.
-  const shown = left.filter(
-    (problem) =>
-      problem !== INSTALLED_SKILL_PROBLEM.NAME_MISSING &&
-      problem !== INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING,
-  );
-  // Note that a problem of the name or the description is said on that field, so what is left is the text's own.
-  const nameProblem = shown.find((problem) => problem === INSTALLED_SKILL_PROBLEM.NAME_INVALID);
-  const descriptionProblem = shown.find(
-    (problem) => problem === INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG,
-  );
-  const rest = shown.filter((problem) => problem !== nameProblem && problem !== descriptionProblem);
   return (
-    <Card look={CARD_LOOK.OUTLINE} padding={CARD_PADDING.COMPACT}>
-      <Stack gap={GAP.FIELD}>
-        <FormField
-          label={SKILLS_LINE.NAME}
-          error={nameProblem === undefined ? undefined : inputProblem(problemsLine([nameProblem]))}
-          description={
-            declares.name
-              ? SKILLS_LINE.DECLARED
-              : "Lowercase words joined by hyphens, such as pr-style."
-          }
-        >
-          {(field) => (
-            <TextField
-              field={field}
-              value={fill.name}
-              autoCorrect={false}
-              spellCheck={false}
-              readOnly={declares.name}
-              disabled={disabled}
-              onChange={(name) => onFill({ ...fill, name })}
-            />
-          )}
-        </FormField>
-        <FormField
-          label={SKILLS_LINE.WHEN}
-          error={
-            descriptionProblem === undefined
-              ? undefined
-              : inputProblem(problemsLine([descriptionProblem]))
-          }
-          description={declares.description ? SKILLS_LINE.DECLARED : undefined}
-          count={
-            declares.description
-              ? undefined
-              : { length: fill.description.length, limit: TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS }
-          }
-        >
-          {(field) => (
-            <TextArea
-              field={field}
-              value={fill.description}
-              maxLength={TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS}
-              rows={2}
-              grow
-              readOnly={declares.description}
-              disabled={disabled}
-              onChange={(description) => onFill({ ...fill, description })}
-            />
-          )}
-        </FormField>
-        {rest.length === 0 ? null : (
-          <DetectedText line={{ text: problemsLine(rest), tone: STATUS_TONE.ATTENTION }} />
+    <Stack gap={GAP.FIELD}>
+      <FormField label={SKILLS_LINE.NAME} description={SKILLS_LINE.NAME_HINT}>
+        {(field) => (
+          <TextField
+            field={field}
+            value={fill.name}
+            autoCorrect={false}
+            spellCheck={false}
+            disabled={disabled}
+            onChange={(name) => onFill({ ...fill, name })}
+          />
         )}
-        <FileText text={markdown} label="Pasted text" extent={FILE_TEXT_EXTENT.PEEK} />
-      </Stack>
-    </Card>
-  );
-}
-
-/** The one line the box folds into: where the skills come from, and Change or Edit to open the box again. */
-function SourceRow({
-  line,
-  action,
-  disabled,
-  onOpen,
-}: {
-  line: string;
-  action: string;
-  disabled: boolean;
-  onOpen: () => void;
-}): React.JSX.Element {
-  return (
-    <Card look={CARD_LOOK.WELL} padding={CARD_PADDING.SNUG}>
-      <Inline justify={JUSTIFY.BETWEEN} wrap={false}>
-        <Text variant={TEXT_VARIANT.CAPTION} font={TEXT_FONT.MONO} as={TEXT_ELEMENT.SPAN} truncate>
-          {line}
-        </Text>
-        {disabled ? null : (
-          <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={onOpen}>
-            {action}
-          </TextButton>
+      </FormField>
+      <FormField label={SKILLS_LINE.WHEN}>
+        {(field) => (
+          <TextArea
+            field={field}
+            value={fill.description}
+            rows={2}
+            grow
+            disabled={disabled}
+            onChange={(description) => onFill({ ...fill, description })}
+          />
         )}
-      </Inline>
-    </Card>
+      </FormField>
+    </Stack>
   );
 }
 
@@ -691,7 +196,7 @@ export function AddSkillDialog({
   /** Whether the card stands; falling, it fades out, then tells its owner it is gone. Standing while mounted where it is left out. */
   open?: boolean | undefined;
   workspace: Workspace;
-  /** The skills an install made, in the order asked: the ones named, then those they pull in. */
+  /** The skills an install made, in the order asked. */
   onInstalled: (skills: readonly InstalledSkillSummary[]) => void;
   onClose: () => void;
   /** Its fade has run and it is gone, which its owner takes it out on. */
@@ -702,27 +207,18 @@ export function AddSkillDialog({
   const { act } = useAct();
   const [text, setText] = useState("");
   const [previewed, setPreviewed] = useState<Previewed | undefined>(undefined);
-  const [ticks, setTicks] = useState<SkillTicks>(() => initialTicks(undefined));
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [fill, setFill] = useState<TextFill>(() => textFill(undefined));
   const [scope, setScope] = useState<InstalledSkillScope>(INSTALLED_SKILL_SCOPE.PERSONAL);
-  const [editing, setEditing] = useState(true);
-  const [browsing, setBrowsing] = useState(false);
   const [query, setQuery] = useState("");
-  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
-  const [read, setRead] = useState<ReadonlyMap<string, FileRead>>(new Map());
   const [installing, setInstalling] = useState(false);
   // Note that Retry asks again by changing this, which the preview's effect reads.
   const [attempt, setAttempt] = useState(0);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  // Note that only a change that came at once folds the box, so a skill typed by hand keeps its box while the writer pauses.
-  const pasted = useRef(false);
   const box = useRef<HTMLTextAreaElement | null>(null);
-  const paste = useMemo(() => parseSkillPaste(text), [text]);
-  const declares = useMemo(() => textDeclares(paste), [paste]);
   const scopes = installScopes(workspace);
 
-  // Note that only a source or a skill's text goes to the service: an empty or unsupported box says all there is at once.
-  const asks = paste.kind === SKILL_PASTE_KIND.SOURCE || paste.kind === SKILL_PASTE_KIND.TEXT;
+  const asks = text.trim() !== "";
   useEffect(() => {
     if (!asks) return;
     let current = true;
@@ -739,16 +235,9 @@ export function AddSkillDialog({
         const view = answer ?? { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
         setPreviewed({ text, view });
         if ("failure" in view) return;
-        setTicks(initialTicks(view));
+        setTicked(initialTicks(view));
         setFill(textFill(view));
-        setBrowsing(false);
         setQuery("");
-        setOpened(new Set());
-        setRead(new Map());
-        const folds =
-          view.kind === SKILL_PASTE_KIND.TEXT ||
-          (view.kind === SKILL_PASTE_KIND.SOURCE && view.skills.length > 0);
-        if (folds && pasted.current) setEditing(false);
       });
     return () => {
       current = false;
@@ -757,68 +246,26 @@ export function AddSkillDialog({
 
   const view = asks && previewed?.text === text ? previewed.view : undefined;
   const preview = view === undefined || "failure" in view ? undefined : view;
-  const screen = addSkillScreen(preview, paste, browsing);
   const skills = preview?.kind === SKILL_PASTE_KIND.SOURCE ? preview.skills : [];
-  const plan = installPlan(skills, ticks, scope);
-  const groups = screen === ADD_SKILL_SCREEN.BROWSE ? skillList(skills, query) : [];
-  const shown = groups
-    .flatMap((group) => group.skills)
-    .filter((each) => installable(each, scope))
-    .map((each) => each.name);
+  const shown = shownSkills(skills, query);
+  const line = asks ? previewLine(view) : undefined;
   const failed = view !== undefined && "failure" in view ? view : undefined;
-  const line =
-    view === undefined
-      ? pastedLine(paste)
-      : "failure" in view
-        ? { text: previewFailureLine(view), tone: STATUS_TONE.ATTENTION }
-        : previewLine(view);
-  const retry = () => {
-    setPreviewed(undefined);
-    setAttempt((was) => was + 1);
-  };
   const request = installRequest({
     workspaceId: workspace.id,
     text,
     scope,
     preview,
-    install: plan.install,
+    ticked,
     fill,
-    declares,
   });
-  const label =
-    preview?.kind === SKILL_PASTE_KIND.TEXT
-      ? installLabel(fill.name.trim() === "" ? [] : [fill.name.trim()])
-      : installLabel(plan.install);
+  const toInstall = request?.skills ?? (request?.name === undefined ? [] : [request.name]);
+  const label = installLabel(toInstall);
 
-  const tick = (name: string, on: boolean) => setTicks(withTick(skills, ticks, scope, name, on));
-
-  const viewFile = (candidate: InstalledSkillCandidate) => {
-    const next = new Set(opened);
-    if (next.has(candidate.name)) next.delete(candidate.name);
-    else next.add(candidate.name);
-    setOpened(next);
-    // Note that a read that failed is asked again, since what failed it may have passed.
-    const held = read.get(candidate.name);
-    const fetched = candidate.markdown !== undefined || (held !== undefined && !("failed" in held));
-    if (fetched || preview?.kind !== SKILL_PASTE_KIND.SOURCE) return;
-    const { name } = candidate;
-    const sought = { owner: preview.owner, repo: preview.repo, sha: preview.sha };
-    setRead((held) => new Map(held).set(name, { reading: true }));
-    void act(ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE, {
-      workspaceId: workspace.id,
-      ...sought,
-      path: candidate.path,
-    })
-      .catch(() => undefined)
-      .then((answer) => {
-        const got: FileRead =
-          answer === undefined
-            ? { failed: failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }) }
-            : "failure" in answer
-              ? { failed: failureLine(answer) }
-              : { markdown: answer.markdown };
-        setRead((held) => new Map(held).set(name, got));
-      });
+  const tick = (name: string, on: boolean) => {
+    const next = new Set(ticked);
+    if (on) next.add(name);
+    else next.delete(name);
+    setTicked(next);
   };
 
   const install = () => {
@@ -829,56 +276,49 @@ export function AddSkillDialog({
       .catch(() => undefined)
       .then((answer) => {
         setInstalling(false);
-        if (answer === undefined)
+        if (answer === undefined) {
           return setRefusal(failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED }));
-        if ("failure" in answer) {
-          // Note that a skill whose files were refused is marked where it is listed, and can no longer be ticked.
-          setPreviewed((held) =>
-            held === undefined || "failure" in held.view
-              ? held
-              : { ...held, view: withRefusal(held.view, answer) },
-          );
-          return setRefusal(failureLine(answer));
         }
+        if ("failure" in answer) return setRefusal(failureLine(answer));
         onInstalled(answer.skills);
         onClose();
       });
   };
 
-  const context: SkillContext = {
-    scope,
-    workspace,
-    files: { opened, read, onView: viewFile },
-    disabled: installing,
-  };
-  const folded = !editing && preview !== undefined && screen !== ADD_SKILL_SCREEN.PASTE;
-
   return (
     <Dialog
       open={open}
-      title={addSkillTitle(screen, preview)}
+      title={SKILLS_LINE.ADD_SKILL}
       size={DIALOG_SIZE.WIDE}
+      // Note that its own words show in a screen recording, but every skill's name, description, and source, the workspace's name, and a refusal stay masked.
+      replayUnmasked
       busy={installing}
-      holding={text.trim() !== ""}
+      holding={asks}
       initialFocus={box}
       onDismiss={onClose}
       onExited={onExited}
       actionsStart={
         scopes.length > 1 ? (
-          <ChoiceBar
-            label={SKILLS_LINE.INSTALL_FOR}
-            items={scopes.map((each) => ({ value: each.value, label: each.label }))}
-            value={scope}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            disabled={installing}
-            onChange={setScope}
-          />
+          <ReplayUnmask>
+            <ChoiceBar
+              label={SKILLS_LINE.INSTALL_FOR}
+              items={scopes.map((each) => ({
+                value: each.value,
+                label: each.label,
+                replayMasked: each.value === INSTALLED_SKILL_SCOPE.WORKSPACE,
+              }))}
+              value={scope}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              disabled={installing}
+              onChange={setScope}
+            />
+          </ReplayUnmask>
         ) : undefined
       }
       actions={
         <>
           <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-            Cancel
+            <ReplayUnmask>Cancel</ReplayUnmask>
           </Button>
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
@@ -887,110 +327,81 @@ export function AddSkillDialog({
             busyLabel="Installing"
             onClick={install}
           >
-            {label}
+            {/* Note that a lone skill's Install names it, so only Install and a count show. */}
+            <ReplayWords unmasked={toInstall.length !== 1}>{label}</ReplayWords>
           </Button>
         </>
       }
     >
-      {/* Note that the card's parts are its own flex items, so the box or its folded line stays at its head, what it would install gives way and scrolls, and Install for stays at the foot however many skills a repository holds. */}
+      {/* Note that the card's parts are its own flex items, so the box stays at its head, what it would install gives way and scrolls, and Install for stays at the foot however many skills a repository holds. */}
       <Stack gap={GAP.FIELD}>
-        {folded ? (
-          <SourceRow
-            line={previewSourceLine(screen, preview)}
-            action={screen === ADD_SKILL_SCREEN.TEXT ? SKILLS_LINE.EDIT : SKILLS_LINE.CHANGE}
-            disabled={installing}
-            onOpen={() => setEditing(true)}
-          />
-        ) : (
-          <FormField
-            label={SKILLS_LINE.PASTE_LABEL}
-            description={SKILLS_LINE.PASTE_HINT}
-            error={refusedShown(refusal, FAILURE_SURFACE.SKILL_ADD)}
-          >
-            {(field) => (
-              <TextArea
-                field={field}
-                value={text}
-                rows={4}
-                grow
-                font={TEXT_FIELD_FONT.MONO}
-                spellCheck={false}
-                ref={box}
-                // Note that the card's own focus lands after this field's, so the dialog is told of it too; autoFocus is what takes it where Change or Edit draws it again.
-                autoFocus
-                busy={installing}
-                placeholder="npx skills add mattpocock/skills --skill grill-me"
-                enterKeyHint={enterKeyHint()}
-                submitKey={enterSubmitKey()}
-                onSubmit={install}
-                onChange={(next) => {
-                  pasted.current = pastedAtOnce(text, next);
-                  setText(next);
-                  setRefusal(undefined);
-                }}
-              />
-            )}
-          </FormField>
-        )}
-        {folded || line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
+        <FormField
+          label={SKILLS_LINE.PASTE_LABEL}
+          description={SKILLS_LINE.PASTE_HINT}
+          error={replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.SKILL_ADD))}
+        >
+          {(field) => (
+            <TextArea
+              field={field}
+              value={text}
+              rows={4}
+              grow
+              font={TEXT_FIELD_FONT.MONO}
+              spellCheck={false}
+              ref={box}
+              autoFocus
+              busy={installing}
+              placeholder="npx skills add vercel-labs/agent-skills --skill frontend-design"
+              onChange={(next) => {
+                setText(next);
+                setRefusal(undefined);
+              }}
+            />
+          )}
+        </FormField>
+        {line === undefined ? null : failed !== undefined && previewRetries(failed) ? (
           <ErrorState
             failure={failureShown({ surface: FAILURE_SURFACE.SKILL_PREVIEW, cause: failed })}
-            onRetry={retry}
+            onRetry={() => {
+              setPreviewed(undefined);
+              setAttempt((was) => was + 1);
+            }}
           >
-            {line.text}
+            <ReplayMask>{line.text}</ReplayMask>
           </ErrorState>
         ) : (
           <DetectedText line={line} />
         )}
-        {screen === ADD_SKILL_SCREEN.BROWSE ? (
-          <BrowseHead
-            count={skills.length}
-            query={query}
-            shown={shown}
-            install={plan.install}
-            disabled={installing}
-            onQuery={setQuery}
-            onEvery={(names, on) => setTicks(withEvery(skills, ticks, scope, names, on))}
+        {searchesSkills(skills) ? (
+          <SearchField
+            label={SKILLS_LINE.SEARCH}
+            placeholder={SKILLS_LINE.SEARCH}
+            value={query}
+            onChange={setQuery}
+            onClear={() => setQuery("")}
           />
         ) : null}
-        {folded && refusal !== undefined ? (
-          <DetectedText line={{ text: refusal, tone: STATUS_TONE.ATTENTION }} />
-        ) : null}
       </Stack>
-      {screen === ADD_SKILL_SCREEN.PASTE ? null : (
+      {preview === undefined || line !== undefined ? null : (
         <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
-          <Stack gap={GAP.CONTROL} inset={INSET.RING}>
-            {screen === ADD_SKILL_SCREEN.CONFIRM ? (
-              <ConfirmSkills
-                skills={skills}
-                install={plan.install}
-                pulled={plan.pulled}
-                context={context}
-                onTick={tick}
-                onBrowse={() => setBrowsing(true)}
-              />
-            ) : null}
-            {screen === ADD_SKILL_SCREEN.BROWSE && preview !== undefined ? (
-              <BrowseSkills
-                preview={preview}
-                groups={groups}
-                install={plan.install}
-                ticks={ticks}
-                pulled={plan.pulled}
-                context={context}
-                onTick={tick}
-              />
-            ) : null}
-            {preview?.kind === SKILL_PASTE_KIND.TEXT && paste.kind === SKILL_PASTE_KIND.TEXT ? (
-              <TextSkill
-                preview={preview}
-                markdown={paste.markdown}
-                fill={fill}
-                declares={declares}
-                disabled={installing}
-                onFill={setFill}
-              />
-            ) : null}
+          <Stack gap={GAP.CONTROL} inset={INSET.RING} aria-label="Skills to install">
+            {preview.kind === SKILL_PASTE_KIND.TEXT ? (
+              <TextFields fill={fill} disabled={installing} onFill={setFill} />
+            ) : shown.length === 0 ? (
+              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                {SKILLS_LINE.NO_MATCH}
+              </Text>
+            ) : (
+              shown.map((candidate) => (
+                <SkillOption
+                  key={candidate.path}
+                  candidate={candidate}
+                  ticked={ticked.has(candidate.name)}
+                  disabled={installing}
+                  onTick={tick}
+                />
+              ))
+            )}
           </Stack>
         </ScrollArea>
       )}

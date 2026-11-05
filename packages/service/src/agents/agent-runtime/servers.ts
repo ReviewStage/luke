@@ -6,9 +6,8 @@
  * role's connection policy (`role.ts`), among the
  * integrations this deployment offers the account
  * (`accountIntegrationConnect`): one not set up here, or withheld from the
- * account, is handed to none of its agents. The brain agents are handed
- * every one offered. A coding agent is handed every one but those the
- * developer switched off for it from its composer, which writes
+ * account, is handed to none of its agents. A coding agent is handed every
+ * one but those the developer switched off for it from its composer, which writes
  * the agent's `disabled_servers` (`agent-store.ts`); its worker's
  * session is admitted for its parent's conversation, so it follows its
  * parent agent's switches. A server the developer mentioned in a message to
@@ -23,7 +22,7 @@
  * workspaces), and each is handed as a connection of its own, under the
  * name its row goes by (`notion`, `notion-2`): every one standing connected
  * or expired, and the bare provider for one with none, so its first call
- * says how to connect it, as before. The switches and the mentions name
+ * says how to connect it. The switches and the mentions name
  * connections, and a name stored before a second account was possible is
  * the provider's own, which is its first account's. The accounts read are
  * the caller's, the member acting in the conversation, as the grant each

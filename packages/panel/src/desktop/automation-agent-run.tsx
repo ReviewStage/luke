@@ -26,6 +26,7 @@ import {
   useMinute,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { AGENT_STATUS_TONE } from "../tasks/agent-model.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
@@ -115,12 +116,14 @@ export function AutomationRunStrip({
         <Inline gap={GAP.ITEM} wrap={false}>
           <Tooltip label={momentText(run.firedAt)}>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {sinceText(run.firedAt, now)}
+              <ReplayUnmask>{sinceText(run.firedAt, now)}</ReplayUnmask>
             </Text>
           </Tooltip>
           <Tooltip label={line}>
             <span>
-              <Badge tone={AGENT_STATUS_TONE[status]}>{AGENT_STATUS_WORDS[status]}</Badge>
+              <Badge tone={AGENT_STATUS_TONE[status]}>
+                <ReplayUnmask>{AGENT_STATUS_WORDS[status]}</ReplayUnmask>
+              </Badge>
             </span>
           </Tooltip>
         </Inline>

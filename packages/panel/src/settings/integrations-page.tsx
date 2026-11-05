@@ -84,6 +84,7 @@ import {
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { searchTokens } from "@repo/ui/search-tokens";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
@@ -374,7 +375,9 @@ function RowLineText({
   return (
     <>
       {state}
-      <SettingsRowStateLine block>{line.said}</SettingsRowStateLine>
+      <SettingsRowStateLine block>
+        <ReplayMask>{line.said}</ReplayMask>
+      </SettingsRowStateLine>
     </>
   );
 }
@@ -447,12 +450,18 @@ function ToolsLine({
 function RowToolsPanel({
   id,
   name,
+  provider,
   tools,
 }: {
   id: string;
   name: string;
+  provider: IntegrationProvider;
   tools: RowTools;
 }): React.JSX.Element {
+  // Note that a catalog integration's tools are named and described by the provider, which a screen recording shows; Executor's are the apps a member set up, which stay masked.
+  const toolWordsShown = provider !== INTEGRATION_PROVIDER.EXECUTOR;
+  // Note that the row's name is the provider's own unless an account's label rides it.
+  const serverReplayMasked = name !== INTEGRATION_NAME[provider];
   const shown = byName(tools.shown);
   const [held, setHeld] = useState<string | undefined>(undefined);
   const rows = useRef(new Map<string, HTMLElement>());
@@ -501,6 +510,7 @@ function RowToolsPanel({
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
             <IntegrationToolList
               server={name}
+              toolWordsShown={toolWordsShown}
               tools={shown}
               tokens={tools.tokens}
               current={current?.name}
@@ -514,10 +524,12 @@ function RowToolsPanel({
           </div>
         </ScrollArea>
         {current !== undefined ? (
+          // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
           <IntegrationToolDetail
-            // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
             key={current.name}
             server={name}
+            serverReplayMasked={serverReplayMasked}
+            toolWordsShown={toolWordsShown}
             tool={current}
             tokens={tools.tokens}
             bodyRef={body}
@@ -744,7 +756,9 @@ function IntegrationRow({
                 onEnd={renamed}
               >
                 <AccountWords words={accountName}>
-                  <Highlighted text={accountName} tokens={tools.tokens} />
+                  <ReplayMask>
+                    <Highlighted text={accountName} tokens={tools.tokens} />
+                  </ReplayMask>
                 </AccountWords>
               </InlineEdit>
             ),
@@ -802,7 +816,7 @@ function IntegrationRow({
         }}
       />
       <Reveal shown={connected && tools.expanded && tools.shown.length > 0}>
-        <RowToolsPanel id={panelId} name={name} tools={tools} />
+        <RowToolsPanel id={panelId} name={name} provider={provider} tools={tools} />
       </Reveal>
       <ConfirmDialog
         open
@@ -817,6 +831,8 @@ function IntegrationRow({
           verb: `Disconnect ${INTEGRATION_NAME[provider]}`,
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          titleReplayMasked: true,
         }}
       />
     </Stack>
@@ -872,7 +888,12 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
 function NoMatchNote({ query }: { query: string }): React.JSX.Element {
   const words = `No integrations or tools match “${query.trim()}”`;
   useAnnounceShown(ANNOUNCE.POLITE, words);
-  return <PageNote>{words}</PageNote>;
+  // Note that the note quotes the query, so it stays masked in a screen recording.
+  return (
+    <ReplayMask>
+      <PageNote>{words}</PageNote>
+    </ReplayMask>
+  );
 }
 
 /** The rows each section stands, by its heading, as the connections the rows are followed by. */

@@ -147,6 +147,17 @@ test("an agent on a device moves to the cloud or another device, never its own, 
   assert.deepEqual(continued, [{ agentId: AGENT, runsOn: { machine: AGENT_MACHINE.VERCEL } }]);
 });
 
+test("an agent on a device the service did not name is offered the cloud alone", async () => {
+  const unnamed = { ...ON_STUDIO, mac: { name: "Studio" } };
+  const entry =
+    moveTo(await menuOf(unnamed, controlOf(unnamed))) ?? assert.fail("Move to is offered");
+
+  assert.deepEqual(
+    entry.items.map((each) => each.label),
+    ["Cloud"],
+  );
+});
+
 test("Move to is offered nowhere while the agent works, where no Continue is offered, or with Bring your own host off", async () => {
   const working = { ...AT_REST, status: AGENT_STATUS.RUNNING };
   const pilotsHelper = controlOf(AT_REST, { mode: TASK_MODE.PILOT });

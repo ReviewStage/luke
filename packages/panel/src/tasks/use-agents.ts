@@ -55,7 +55,6 @@ import {
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
-  type RefusingDevice,
   SERVERS_FAILED,
   type SentLine,
   START_FAILED_AWAY,
@@ -694,8 +693,9 @@ export function useAgents(input: {
   /**
    * Whether a Start runs on the open task though it names no repository:
    * where the service says such a Start runs, as it does in the local demo
-   * alone (the account's access), and the task's agents run on a host. None
-   * everywhere else, where a task naming no repository starts nothing.
+   * alone (the account's access), on a host, which the service holds it to
+   * as the Start lands. None everywhere else, where a task naming no
+   * repository starts nothing.
    */
   startsWithoutRepository?: boolean | undefined;
   /** How a task is worked, by its id, as the task list names it; none before the list names the task. */
@@ -732,8 +732,6 @@ export function useAgents(input: {
   keywords?: readonly string[];
   /** Mints one press's key. */
   mintKey?: () => string;
-  /** The device the open task runs its agents on, which a refused Start names; none for the cloud. */
-  device?: RefusingDevice | undefined;
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
@@ -778,7 +776,13 @@ export function useAgents(input: {
   const toast = useToast();
   const failed = useCallback(
     (words: string, failure: ShownFailure) =>
-      toast({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED, failure }),
+      toast({
+        replayUnmasked: true,
+        words,
+        tone: STATUS_TONE.DANGER,
+        hold: TOAST_HOLD.FAILED,
+        failure,
+      }),
     [toast],
   );
   // Note that the acts and the opening are read through a ref, because the
@@ -954,7 +958,7 @@ export function useAgents(input: {
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
+      return { ...startFailureNote(answer, taskId), cause: answer };
     }
     pending.current = undefined;
     landed(taskId, answer.agent);
@@ -977,6 +981,11 @@ export function useAgents(input: {
         ? held.key
         : mintKey();
     continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments, runsOn });
+    // Note that only this press's own key is let go, because another press of the agent, to another
+    // place or with other words, may have replaced it while this one was out.
+    const forgetPress = () => {
+      if (continues.current.get(sourceId)?.key === key) continues.current.delete(sourceId);
+    };
     const answer = await askStart(startsOn, {
       idempotencyKey: key,
       from: { agentId: sourceId },
@@ -986,9 +995,7 @@ export function useAgents(input: {
     });
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
-      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
-        continues.current.delete(sourceId);
-      }
+      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) forgetPress();
       const refused = continueFailureNote(answer, taskId ?? null);
       const shown = {
         surface: FAILURE_SURFACE.AGENT_START,
@@ -1003,7 +1010,7 @@ export function useAgents(input: {
       }
       return refused;
     }
-    continues.current.delete(sourceId);
+    forgetPress();
     landed(startsOn, answer.agent);
     return undefined;
   };
@@ -1195,6 +1202,7 @@ export function useAgents(input: {
     undoable.current = closed.choices.id;
     toast({
       ...undoToast(DRAFT_CLOSED, () => restoreNow.current(closed)),
+      replayUnmasked: true,
       subject: closed.choices.id,
     });
   };
@@ -1257,8 +1265,7 @@ export function useAgents(input: {
       ...(choice === undefined ? undefined : choiceRequest(choice)),
       ...runsOnOf(runsOn),
     });
-    if ("failure" in answer)
-      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
+    if ("failure" in answer) return { ...startFailureNote(answer, taskId), cause: answer };
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(taskId, answer.agent);
@@ -1419,7 +1426,7 @@ export function useAgents(input: {
       (asked ? undefined : pressed.keep(words.done)) ??
       (() =>
         void archiveNow.current(agentId, !archived).then((result) => sayRefusal(result, agentId)));
-    toast(undoToast(words.done, undo));
+    toast({ ...undoToast(words.done, undo), replayUnmasked: true });
     return { status: ACTION_RESULT_STATUS.ACCEPTED };
   };
   const archiveNow = useRef(onArchive);

@@ -18,6 +18,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { agentRow, taskRowName } from "@repo/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
@@ -232,7 +233,7 @@ export function SidebarAgent({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-ui-16)]">
-              {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
+              <ReplayMask>{tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}</ReplayMask>
             </span>
           }
           title={
@@ -249,7 +250,9 @@ export function SidebarAgent({
               />
             ) : (
               <>
-                <OneLine words={name}>{name}</OneLine>
+                <OneLine words={name}>
+                  <ReplayMask>{name}</ReplayMask>
+                </OneLine>
                 {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
               </>
             )
@@ -259,7 +262,9 @@ export function SidebarAgent({
             editing ? null : (
               <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
+                  <span className={SIDEBAR_ROW_REPOSITORY}>
+                    <ReplayMask>{repository}</ReplayMask>
+                  </span>
                 )}
                 {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
                 {agent.source?.kind === AGENT_SOURCE.SLACK ? (
@@ -284,7 +289,7 @@ export function SidebarAgent({
           unread={isUnread}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
-          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown)}
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown, true)}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing || coarse ? null : <RowMarks marks={marks} />}

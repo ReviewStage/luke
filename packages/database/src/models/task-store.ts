@@ -51,6 +51,7 @@ import {
   Database,
   type DatabaseServices,
   type QueryError,
+  queryBuilder,
   readConcurrency,
   type StoreFailure,
 } from "../core/query.js";
@@ -222,26 +223,7 @@ export interface StoredTask {
   readonly sectionWriters: readonly PlanSectionWriter[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
-  /** Where the task's agents run, as its row holds it, which a Start on it resolves its machine from. */
-  readonly runsOn: TaskRunsOnWrite;
 }
-
-/**
- * Where a task's agents run, as a write names it and its row holds it: a
- * sandbox with no device, or a device by its id, which the caller confirmed
- * is the writer's own before it wrote it; a device whose row is gone since
- * reads as none.
- */
-export interface TaskRunsOnWrite {
-  readonly machine: AgentMachineKind;
-  readonly deviceId: string | null;
-}
-
-/** Where a task's agents run where nothing named it: a sandbox. */
-export const TASK_RUNS_IN_CLOUD: TaskRunsOnWrite = {
-  machine: AGENT_MACHINE.VERCEL,
-  deviceId: null,
-};
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
@@ -264,9 +246,7 @@ export interface NewTask {
   readonly assigneeId?: string;
   /** Who made the task for its member, where they did not make it by hand: the brain on their call, or a coding agent by its id. */
   readonly origin?: TaskOrigin;
-  /** Where its agents run; a sandbox where none is named. */
-  readonly runsOn?: TaskRunsOnWrite;
-  /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository and machine it took; none for a task at the top. */
+  /** The task it is a child of, which the caller confirmed it reaches in the same workspace, and whose repository it took; none for a task at the top. */
   readonly parentTaskId?: string;
   /** How the task is worked, fixed as it starts; by its agents where none is named. */
   readonly mode?: TaskMode;
@@ -300,8 +280,24 @@ export interface TaskChanges {
 /** How a task's repository was reached, as a write takes it. */
 const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
-/** Where a task's agents run, as its row holds it. */
+/** Where an agent runs, as its row holds it. */
 const MachineSchema = Schema.Literals(Object.values(AGENT_MACHINE));
+
+/**
+ * The column `column` names of the task's newest agent, any member's,
+ * archived ones among them; null for a task with none. Note that a task
+ * holds no place of its own, so this is what a released desktop is told the
+ * task runs on (`runsOnOf`).
+ */
+function newestAgentColumn<T>(column: typeof agentTable.machine | typeof agentTable.deviceId) {
+  const newest = queryBuilder
+    .select({ value: column })
+    .from(agentTable)
+    .where(eq(agentTable.taskId, task.id))
+    .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
+    .limit(1);
+  return sql<T | null>`(${newest})`;
+}
 
 /** Who made a task, as its row holds it. */
 const TaskCreatorActorSchema = Schema.Literals([
@@ -330,8 +326,8 @@ const TASK_SUMMARY_COLUMNS = {
   creatorAgentId: task.creatorAgentId,
   repository: task.repository,
   githubAccess: task.githubAccess,
-  machine: task.machine,
-  deviceId: task.deviceId,
+  machine: newestAgentColumn<AgentMachineKind>(agentTable.machine),
+  deviceId: newestAgentColumn<string>(agentTable.deviceId),
   parentTaskId: task.parentTaskId,
   mode: task.mode,
   completedAt: task.completedAt,
@@ -360,7 +356,8 @@ const TaskSummaryRowSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
-  machine: MachineSchema,
+  /** Where the task's newest agent runs (`newestAgentColumn`); null for a task with none. */
+  machine: Schema.NullOr(MachineSchema),
   deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
   mode: taskModeSchema,
@@ -716,7 +713,6 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters,
       brief: row.brief ?? undefined,
-      runsOn: { machine: row.machine, deviceId: row.deviceId },
     };
   });
 }
@@ -743,22 +739,23 @@ function namedAccountsOf(
 function devicesOf(rows: readonly TaskSummaryRow[]): TaskStoreEffect<ReadonlyMap<string, Device>> {
   return devicesNamed(
     rows.flatMap((row) =>
-      row.machine === AGENT_MACHINE.VERCEL || row.deviceId === null ? [] : [row.deviceId],
+      row.machine !== AGENT_MACHINE.DEVICE || row.deviceId === null ? [] : [row.deviceId],
     ),
   );
 }
 
 /**
- * Where a line's agents run, as the wire says it: nothing for a sandbox;
- * for a device, its id, its owner named by `names`, and its name, kind, platform, and
- * last beat, each left out once the device's row is gone.
+ * Where a line's newest agent runs, as the wire says it for released
+ * desktops: nothing for a sandbox or a task with no agent; for a device, its
+ * id, its owner named by `names`, and its name, kind, platform, and last
+ * beat, each left out once the device's row is gone.
  */
 function runsOnOf(
   row: TaskSummaryRow,
   names: ReadonlyMap<string, string>,
   devices: ReadonlyMap<string, Device>,
 ): { readonly runsOn?: TaskRunsOn } {
-  if (row.machine === AGENT_MACHINE.VERCEL) return {};
+  if (row.machine !== AGENT_MACHINE.DEVICE) return {};
   const found = row.deviceId === null ? undefined : devices.get(row.deviceId);
   const owner = found === undefined ? undefined : names.get(found.userId);
   return {
@@ -853,8 +850,6 @@ const TaskInsertSchema = Schema.Struct({
   creatorAgentId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
-  machine: MachineSchema,
-  deviceId: Schema.NullOr(Schema.String),
   parentTaskId: Schema.NullOr(Schema.String),
   document: Schema.String,
   brief: Schema.NullOr(Schema.String),
@@ -885,8 +880,6 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     madeByStart: write.madeByStart,
     repository: write.repository,
     githubAccess: write.githubAccess,
-    machine: write.machine,
-    deviceId: write.deviceId,
     parentTaskId: write.parentTaskId,
     document: write.document,
     brief: write.brief,
@@ -1006,8 +999,6 @@ const findTaskHeaders = SqlSchema.findAll({
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
     status: taskStatusSchema,
-    machine: MachineSchema,
-    deviceId: Schema.NullOr(Schema.String),
     parentTaskId: Schema.NullOr(Schema.String),
     mode: taskModeSchema,
     assigneeId: Schema.NullOr(Schema.String),
@@ -1023,8 +1014,6 @@ const findTaskHeaders = SqlSchema.findAll({
           name: task.name,
           repository: task.repository,
           status: task.status,
-          machine: task.machine,
-          deviceId: task.deviceId,
           parentTaskId: task.parentTaskId,
           mode: task.mode,
           assigneeId: task.assigneeId,
@@ -1180,8 +1169,6 @@ const TaskColumnChangesSchema = Schema.Struct({
   priority: Schema.optionalKey(taskPrioritySchema),
   assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   parentTaskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  machine: Schema.optionalKey(MachineSchema),
-  deviceId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
@@ -1264,8 +1251,6 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
       repository: started.repository ?? null,
       githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
-      machine: (started.runsOn ?? TASK_RUNS_IN_CLOUD).machine,
-      deviceId: (started.runsOn ?? TASK_RUNS_IN_CLOUD).deviceId,
       parentTaskId: started.parentTaskId ?? null,
       document: "",
       brief: brief.length > 0 ? brief : null,
@@ -1513,8 +1498,6 @@ export interface TaskHeader {
   readonly repository: string | null;
   /** Where the task stands. */
   readonly status: TaskStatus;
-  /** Where the task's agents run, as its row holds it. */
-  readonly runsOn: TaskRunsOnWrite;
   /** The task it is a child of; null for a task at the top. */
   readonly parentTaskId: string | null;
   /** How the task is worked. */
@@ -1558,7 +1541,6 @@ export function readTaskHeaders(
             name: row.name,
             repository: row.repository,
             status: row.status,
-            runsOn: { machine: row.machine, deviceId: row.deviceId },
             parentTaskId: row.parentTaskId,
             mode: row.mode,
             assigneeId: row.assigneeId,

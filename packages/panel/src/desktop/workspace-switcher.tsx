@@ -8,6 +8,7 @@ import {
   PlusIcon,
   useMenu,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -47,7 +48,12 @@ function workspaceMenuGroups(
     (workspace): MenuAction => ({
       label: workspace.name,
       key: workspace.id,
-      icon: <WorkspaceTile workspace={workspace} />,
+      replayMasked: true,
+      icon: (
+        <ReplayMask>
+          <WorkspaceTile workspace={workspace} />
+        </ReplayMask>
+      ),
       detail: sharedWords(workspace.memberCount, workspace.id === first),
       card: <WorkspaceCard workspace={workspace} personal={workspace.id === first} />,
       checked: workspace.id === listed.id,
@@ -70,7 +76,7 @@ function sharedLine(count: number | undefined, personal: boolean): React.JSX.Ele
   return (
     <span className="sidebar-workspace-shared inline-flex items-center gap-tight-gap text-muted-foreground text-caption-inline [&>svg]:size-workspace-shared-glyph">
       {personal && count <= 1 ? null : <UsersIcon aria-hidden="true" />}
-      {words}
+      <ReplayUnmask>{words}</ReplayUnmask>
     </span>
   );
 }
@@ -112,6 +118,7 @@ export function WorkspaceSwitcher({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Workspaces"
+          replayUnmasked
           menu={menu.drawn}
           groups={workspaceMenuGroups(listed, tasks, naming.ask)}
           onClose={menu.close}
