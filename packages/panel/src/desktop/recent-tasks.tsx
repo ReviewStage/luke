@@ -162,7 +162,7 @@ export function RecentTasks({
             edges={TASK_ROW_EDGES.UNCHOSEN}
             unread={unread(task)}
             card={taskCardOf(tasks, task, now)}
-            onOpen={() => tasks.onSelect(task.id)}
+            onOpen={() => tasks.onResume(task.id)}
             onStanding={(standing) => setStanding(task, standing)}
           />
         ))

@@ -319,8 +319,8 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
     null,
     "the header's way back stands for the sidebar's toggle and New task",
   );
-  // Note that the panel opens on the board, a tab pushed over the column's Overview, which its way back names.
-  assert.equal(headBack(page).getAttribute("aria-label"), "Back to Overview");
+  // Note that the panel opens on the board, a tab pushed over the column's plan, which its way back names by the task.
+  assert.equal(headBack(page).getAttribute("aria-label"), `Back to ${DOCUMENT_TASK.name}`);
 
   resizeStage(WIDE);
   assert.deepEqual(

@@ -2081,7 +2081,8 @@ export function CommandPalette({
         ? taskRows(
             tasks,
             members,
-            (id) => onTasks(() => tasks.onSelect(id)),
+            // Note that a task jumped to goes back to work on it, as a sidebar row does (`onResume`).
+            (id) => onTasks(() => tasks.onResume(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
             (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,

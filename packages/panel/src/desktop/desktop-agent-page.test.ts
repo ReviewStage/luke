@@ -820,6 +820,40 @@ test("the chip of a page an agent on a task showed hangs the page's card, read f
   );
 });
 
+test("an agent on a task, an archived one's page among them, opens on its plan sent by the task, whose name opens the task's plan", async () => {
+  const task: Task = {
+    id: PAGE_TASK,
+    workspaceId: PAGE.workspaceId,
+    name: "Teammate invitations",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: "acme/relay",
+    document: { body: "", assumptions: [] },
+  };
+  listed = { ...PAGE, planId: PAGE_TASK, automationId: null, brief: AGENT_BRIEF.PLAN };
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "# Invitations" }] },
+    ],
+    cursor: "1:0",
+    status: AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const links: ReadLink[] = [];
+  const page = mount(tasksControl({ tasks: [task] }), (link) => links.push(link));
+  await settle();
+
+  const named =
+    page.querySelector<HTMLElement>(".agent-origin [data-task-ref]") ??
+    assert.fail("the card is sent by the task");
+  assert.equal(named.textContent, task.name);
+  act(() => named.click());
+  assert.deepEqual(
+    links.map((link) => link.place),
+    [{ kind: LINK_PLACE.TASK, planId: PAGE_TASK }],
+  );
+});
+
 /** The page drawn over the window's own side panel, held by the agent. */
 async function mountPanelPage(): Promise<HTMLElement> {
   localStorage.clear();

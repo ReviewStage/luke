@@ -142,6 +142,7 @@ function mount(
     listed: { tasks: TASKS, ...holding },
     ...holding,
     onSelect: (taskId) => opened.tasks.push(taskId),
+    onResume: (taskId) => opened.tasks.push(taskId),
     inboxView: {
       ...tasksControl().inboxView,
       onOpenItem: (chosen) => opened.items.push(chosen),

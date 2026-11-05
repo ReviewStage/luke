@@ -106,6 +106,7 @@ import {
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { useTabViews } from "./strip-tabs.js";
 import { tabCard } from "./tab-card.js";
+import { taskCardOf } from "./task-card.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -528,6 +529,10 @@ export function DesktopAgentPage({
       );
     }
     if (target.kind === TOOL_TARGET.TASK) openPlace?.(placeOfTaskTarget(target));
+    // Its plan's card names its task, an archived agent's among them, whose press opens the plan.
+    if (target.kind === TOOL_TARGET.PLAN && planId !== null) {
+      openPlace?.({ kind: LINK_PLACE.TASK, planId });
+    }
     // An agent's chip, such as one it was continued or forked to, opens that agent's own page.
     if (target.kind === TOOL_TARGET.AGENT) tasks.agentView.onOpen(target.agent);
     // A page the agent showed on itself opens in the panel beside it, as a task's opens beside its plan.
@@ -580,6 +585,7 @@ export function DesktopAgentPage({
   const runPlace = useAutomationRunPlace(agent);
   const sideTab = sidePanel.tab;
   const planId = agent?.planId ?? null;
+  const planTask = planId === null ? undefined : tasks.tasks.find((each) => each.id === planId);
   const cards = useMemo(
     () =>
       taskCards({
@@ -589,8 +595,16 @@ export function DesktopAgentPage({
           sameTab(opened, tab) || (sideTab !== undefined && sameTab(opened, sideTab)),
         // Note that an agent on a task shows its pages on the task, so its rows read them there.
         pages: planId === null ? { agentId } : { taskId: planId },
+        task:
+          planTask === undefined
+            ? undefined
+            : {
+                name: planTask.name,
+                status: planTask.status,
+                card: taskCardOf(tasks, planTask, undefined),
+              },
       }),
-    [control, views.held, tab, sideTab, planId, agentId],
+    [control, views.held, tab, sideTab, planId, agentId, planTask, tasks],
   );
   // The agent's repository, which the panel beside it reads a file of by its workspace, once the read named both.
   const repositoryPlace = useMemo(

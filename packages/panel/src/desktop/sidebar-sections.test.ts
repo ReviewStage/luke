@@ -635,7 +635,7 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
   const settled: [string[], string][] = [];
   const opened: string[] = [];
   const sidebar = await mountSidebar([], SECTIONS, {
-    onSelect: (taskId) => opened.push(taskId),
+    onResume: (taskId) => opened.push(taskId),
     onSettleTasks: (taskIds, status) => settled.push([[...taskIds], status]),
   });
   const rowOf = (name: string) =>

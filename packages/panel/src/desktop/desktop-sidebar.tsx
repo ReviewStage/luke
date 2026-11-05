@@ -1828,10 +1828,11 @@ function SidebarColumn({
   // The Inbox's row marks its threads read from its right-click.
   const readAll = useSidebarReadAll(tasks);
   // A press in the list is always about tasks, so it brings the Tasks tab
-  // forward from Settings as well as choosing.
+  // forward from Settings as well as choosing; a task's row goes back to work
+  // on it, on the agent waiting on the developer where one does (`onResume`).
   const openTask = (taskId: string) => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
-    tasks.onSelect(taskId);
+    tasks.onResume(taskId);
   };
   const showTasks = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);

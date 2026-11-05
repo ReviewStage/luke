@@ -152,6 +152,7 @@ import {
   withUndrawnPassed,
 } from "./closed-tabs.js";
 import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { holdsAsk } from "./inbox-model.js";
 import type { MessageReveal } from "./message-links.js";
 import type { NewTaskPress } from "./new-task-composer.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
@@ -673,8 +674,10 @@ export interface TasksControl {
   agents: AgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
-  /** Opens a task wherever it is pressed, a list, the drawer, ⌘K, the Inbox, a crumb, or a related task's row, on its plan. */
+  /** Opens a task on its plan: what a chip, a link, the Tasks list, the Board, the Inbox, a crumb, or a related task's row asks. */
   onSelect: (taskId: string) => void;
+  /** Opens a task the developer goes back to work on, from a sidebar row, ⌘K, or Recent, on the agent waiting on them, else one at work, else the one last active, else its plan. */
+  onResume: (taskId: string) => void;
   /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
   onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a row's press or the call card's way back asks. */
@@ -1048,6 +1051,31 @@ function chosenPinOf(
 /** Whether a pin of the sidebar's is of the task: a tab pinned on it, or an agent on it. */
 function pinOnTask(pin: SidebarPin, taskId: string): boolean {
   return "task" in pin && pin.task === taskId;
+}
+
+/**
+ * The agent a task the developer goes back to work on lands on, so they
+ * arrive in the conversation: one with a thread waiting on them, a question
+ * before a notice, as the Inbox lists what waits; else the agent its row
+ * names that was last active, one at work counting as active now; none where
+ * its row names none, so it opens on its plan. Note that the row names a few
+ * of its agents, archived ones left out and those at work first
+ * (`TaskAgentsSummary`), so the latest it names is the latest it can say.
+ */
+function resumingAgentOf(
+  taskId: string,
+  tasks: readonly TaskSummary[],
+  waiting: readonly AppInboxTask[],
+): string | undefined {
+  const items = waiting.find((each) => each.taskId === taskId)?.items ?? [];
+  const waitingOn = items.find(holdsAsk) ?? items[0];
+  if (waitingOn !== undefined) return waitingOn.agentId;
+  const lines = tasks.find((task) => task.id === taskId)?.agents?.agents ?? [];
+  const working = lines.find((line) => agentStillWriting(line.status));
+  if (working !== undefined) return working.id;
+  let latest = lines[0];
+  for (const line of lines) if ((line.at ?? 0) > (latest?.at ?? 0)) latest = line;
+  return latest?.id;
 }
 
 /** A pin pressed in the sidebar, and the task open when it was, or its own once that opens. */
@@ -2595,6 +2623,15 @@ export function useTasksTab(input: {
     if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
     mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
+  // One the developer goes back to work on, from a sidebar row, ⌘K, or Recent, lands on its
+  // agent (`resumingAgentOf`), else its plan; in a narrow room the agent stands as a screen
+  // over the plan, which its header's Back, named for the task, returns to.
+  const resumeListed = (taskId: string) => {
+    openUnpinned(taskId);
+    if (input.room === SHELL_ROOM.NARROW) sidePanel.onSetOpen(false);
+    const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
+    mainTabs.onShow(taskId, agentId === undefined ? MAIN_TAB.OVERVIEW : { agent: agentId });
+  };
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
   // it gives way. It starts in the chosen workspace; with none listed the
@@ -3632,6 +3669,7 @@ export function useTasksTab(input: {
     // (`openLink`), and the history opens a task through `onRestoreTask`
     // instead, standing the pane its step held.
     onSelect: guard(selectListed),
+    onResume: guard(resumeListed),
     onRestoreTask: guard((taskId: string) => {
       setChosen((held) => (held !== undefined && pinOnTask(held.pin, taskId) ? undefined : held));
       select(taskId);
