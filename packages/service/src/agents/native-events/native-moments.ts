@@ -81,7 +81,6 @@ export const NATIVE_MOMENT = {
 
 /** How a launch ended, as the turn row keeps it. */
 export const NATIVE_ENDING = {
-  /** The work is done. */
   DONE: "done",
   /** The app's Stop ended it. */
   STOPPED: "stopped",

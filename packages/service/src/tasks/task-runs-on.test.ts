@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { createAgent } from "@repo/database/models/agent-store";
 import { registerDevice } from "@repo/database/models/device-store";
 import { readRunsOnPick } from "@repo/database/models/runs-on-pick";
-import { createTask, readTask } from "@repo/database/models/task-store";
+import { createTask } from "@repo/database/models/task-store";
+import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   DEVICE_LAYOUT,
   fakeWorkspaceSeams,
@@ -26,12 +28,13 @@ import { keepAwakeDetached } from "../testing/session-sandboxes-fake.js";
 import { tasksProcedures } from "./tasks-procedures.js";
 
 /**
- * Where a task runs its agents is set when the task is created and kept,
- * changed through the hosted oRPC router as the web route answers it, over
- * a real dialect: a change that names the place the task already holds is
- * taken as no change, and any other is refused by name and leaves the task
- * as it stood; an account outside the workspace reaches no such task.
- * Synthetic accounts and devices throughout.
+ * A task holds no place to run, each agent its own, so the place a released
+ * desktop still names on a task's create or change goes through the hosted
+ * oRPC router as the web route answers it, over a real dialect: a change is
+ * taken and changes nothing, the task answering where its newest agent runs
+ * for those builds, and a create keeps it as the member's last pick; an
+ * account outside the workspace reaches no such task. Synthetic accounts
+ * and devices throughout.
  */
 
 const ORIGIN = "https://app.test";
@@ -89,7 +92,7 @@ const deviceOf = (userId: string, name: string) =>
 
 it.layer(getTestDB())("where a task runs its agents", (it) => {
   it.effect(
-    "a change naming the place a task holds is no change, any other is refused by name leaving it as it stood, and a task outside their workspace is not found",
+    "a released desktop's change naming any place is taken and changes nothing, the task answering where its newest agent runs, and a task outside their workspace is not found",
     () =>
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
@@ -97,13 +100,20 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         const workspace = yield* openWorkspace(owner);
         const studio = yield* deviceOf(owner, "Studio");
         const laptop = yield* deviceOf(owner, "Laptop");
-        const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
-        const task = yield* createTask(owner, {
-          organizationId: workspace,
-          name: "Relay",
-          runsOn: onStudio,
+        const task = yield* createTask(owner, { organizationId: workspace, name: "Relay" });
+        yield* createAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Relay\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          machine: AGENT_MACHINE.DEVICE,
+          deviceId: studio,
         });
-        const inCloud = yield* createTask(owner, { organizationId: workspace, name: "Kept" });
+        const empty = yield* createTask(owner, { organizationId: workspace, name: "Kept" });
         const send = yield* standing(
           new Map([
             ["Bearer owner", owner],
@@ -112,37 +122,19 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
         );
         const patch = (taskId: string, bearer: string, runsOn: TaskRunsOnRequest) =>
           send("PATCH", `/api/plans/${taskId}`, bearer, { runsOn });
-        const runsOnNow = (taskId: string) =>
-          Effect.map(
-            readTask(owner, taskId),
-            (read) => Option.getOrThrow(read).task.runsOn?.deviceId,
-          );
-        const locked = { status: 409, body: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED } };
 
-        // The place it holds, named again, is taken and changes nothing.
-        const same = yield* patch(task.id, "Bearer owner", onStudio);
-        assert.equal(same.status, 200);
-        assert.equal(same.body.plan.runsOn.deviceId, studio);
-        const stays = yield* patch(inCloud.id, "Bearer owner", {
-          machine: AGENT_MACHINE.VERCEL,
-        });
-        assert.equal(stays.status, 200);
-        assert.equal(stays.body.plan.runsOn, undefined);
-
-        // Another device, or the cloud, is refused, even a device of the member's own.
-        const another = yield* patch(task.id, "Bearer owner", {
+        const toLaptop = yield* patch(task.id, "Bearer owner", {
           machine: AGENT_MACHINE.DEVICE,
           deviceId: laptop,
         });
-        assert.deepEqual(another, locked);
-        const toCloud = yield* patch(task.id, "Bearer owner", {
-          machine: AGENT_MACHINE.VERCEL,
+        assert.equal(toLaptop.status, 200, JSON.stringify(toLaptop.body));
+        assert.equal(toLaptop.body.plan.runsOn?.deviceId, studio);
+        const toDevice = yield* patch(empty.id, "Bearer owner", {
+          machine: AGENT_MACHINE.DEVICE,
+          deviceId: studio,
         });
-        assert.deepEqual(toCloud, locked);
-        const toDevice = yield* patch(inCloud.id, "Bearer owner", onStudio);
-        assert.deepEqual(toDevice, locked);
-        assert.equal(yield* runsOnNow(task.id), studio);
-        assert.equal(yield* runsOnNow(inCloud.id), undefined);
+        assert.equal(toDevice.status, 200, JSON.stringify(toDevice.body));
+        assert.equal(toDevice.body.plan.runsOn, undefined);
 
         // An account outside the workspace reaches no such task.
         const byStranger = yield* patch(task.id, "Bearer stranger", {
@@ -152,23 +144,25 @@ it.layer(getTestDB())("where a task runs its agents", (it) => {
       }),
   );
 
-  it.effect("a task made to run somewhere keeps that place as its member's last pick", () =>
-    Effect.gen(function* () {
-      const owner = yield* openTokenMember();
-      const workspace = yield* openWorkspace(owner);
-      const studio = yield* deviceOf(owner, "Studio");
-      const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
-      const send = yield* standing(new Map([["Bearer owner", owner]]));
+  it.effect(
+    "a released desktop's task made to run somewhere keeps that place as its member's last pick",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openTokenMember();
+        const workspace = yield* openWorkspace(owner);
+        const studio = yield* deviceOf(owner, "Studio");
+        const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+        const send = yield* standing(new Map([["Bearer owner", owner]]));
 
-      const made = yield* send("POST", "/api/plans", "Bearer owner", {
-        name: "Relay",
-        workspaceId: workspace,
-        planning: false,
-        runsOn: onStudio,
-      });
+        const made = yield* send("POST", "/api/plans", "Bearer owner", {
+          name: "Relay",
+          workspaceId: workspace,
+          planning: false,
+          runsOn: onStudio,
+        });
 
-      assert.equal(made.status, 201, JSON.stringify(made.body));
-      assert.deepEqual(yield* readRunsOnPick(owner), Option.some(onStudio));
-    }),
+        assert.equal(made.status, 201, JSON.stringify(made.body));
+        assert.deepEqual(yield* readRunsOnPick(owner), Option.some(onStudio));
+      }),
   );
 });

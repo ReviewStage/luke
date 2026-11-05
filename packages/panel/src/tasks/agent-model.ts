@@ -540,8 +540,8 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
-/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only a new task in the cloud or the host added again goes on from here. */
-const HOST_REMOVED = "This host was removed. Start a new task in the cloud or add it again.";
+/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only a new agent in the cloud or the host added again goes on from here. */
+const HOST_REMOVED = "This host was removed. Start a new agent in the cloud or add it again.";
 
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
 const MESSAGE_NOT_SENT = "The message could not be sent.";
@@ -736,7 +736,7 @@ export interface RefusedCall {
   readonly refusedDevice?: RefusedDevice | undefined;
 }
 
-/** The device a task runs its agents on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
+/** The device a Start would run its agent on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
 export interface RefusingDevice {
   readonly name: string;
   readonly platform?: DevicePlatform | undefined;
@@ -746,8 +746,8 @@ export interface RefusingDevice {
 /** What a device refusing a Start is called where its name is not known. */
 const UNNAMED_DEVICE = "Your device";
 
-/** The way out every device refusal ends on, since the cloud takes any agent. Note that a task's runs-on is fixed once it is set, so the way out is a new task, never a change to this one. */
-const RUN_IN_CLOUD = "or start a new task in the cloud";
+/** The way out every device refusal ends on, since the cloud takes any agent: the same start with Runs on on Cloud. */
+const RUN_IN_CLOUD = "or start it in the cloud";
 
 /** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own `vespin-host` checked. */
 const DEVICE_WAKE = {
@@ -763,7 +763,7 @@ const SETUP_RETRY = {
 } as const satisfies Record<DevicePlatform, string>;
 
 /**
- * Why the device a task runs its agents on would not take a Start, as New
+ * Why the device a Start would run its agent on would not take it, as New
  * task and an agent's Start alike say it, naming the device where the
  * panel knows it and ending on the way out, the cloud. A refusal the
  * service named no reason for says the device would not take it.

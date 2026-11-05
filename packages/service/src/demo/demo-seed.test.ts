@@ -170,7 +170,7 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
         assert.ok(kept !== undefined);
         const opened = openProviderKey(ring, owner, kept);
         assert.equal(Result.isSuccess(opened) && Redacted.value(opened.success), CLAUDE_TOKEN);
-        // The host the run starts is Dean's, its record's secret calls in as it, and every task, and his pick, runs on it.
+        // The host the run starts is Dean's, its record's secret calls in as it, and his pick runs on it.
         assert.deepEqual(
           hosts.map((host) => host.id),
           [DEMO_HOST.id],
@@ -180,10 +180,6 @@ it.effect("Dean reads back acme, its tasks, his Inbox, and his agents' credentia
             Option.map(caller, ({ deviceId, userId }) => ({ deviceId, userId })),
           ),
           { deviceId: DEMO_HOST.id, userId: DEMO_DEAN.id },
-        );
-        assert.deepEqual(
-          new Set(tasks.map((task) => task.runsOn?.deviceId)),
-          new Set([DEMO_HOST.id]),
         );
         assert.deepEqual(Option.getOrUndefined(pick), {
           machine: AGENT_MACHINE.DEVICE,

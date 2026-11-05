@@ -4,14 +4,11 @@ import type {
   InstalledSkillIdParams,
   InstalledSkillInstallParams,
   InstalledSkillInstallView,
-  InstalledSkillPreviewFileParams,
-  InstalledSkillPreviewFileView,
   InstalledSkillPreviewParams,
   InstalledSkillPreviewView,
   InstalledSkillRemovedView,
   InstalledSkillShareParams,
   InstalledSkillToggleParams,
-  InstalledSkillUpdateCheckView,
   InstalledSkillUpdatedView,
   InstalledSkillUpdateParams,
   InstalledSkillView,
@@ -22,7 +19,7 @@ import { actPort } from "./base.js";
 import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /**
- * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: a workspace's skills held, one read, a paste previewed, a previewed skill's `SKILL.md` read, a paste installed, one toggled, checked for an update, updated, shared with a workspace, or removed.
+ * installed-skill-procedures.ts -- Settings' Skills page's asks of the host: a workspace's skills held, one read, a paste previewed or installed, one toggled, updated, shared with a workspace, or removed.
  *
  * The one check these procedures make is who asked: only a panel draws
  * Settings, so the takeover and any other window are refused in each
@@ -42,18 +39,12 @@ export interface InstalledSkillProceduresDependencies {
     installedSkillsPreview(
       params: InstalledSkillPreviewParams,
     ): Effect.Effect<InstalledSkillPreviewView>;
-    installedSkillsPreviewFile(
-      params: InstalledSkillPreviewFileParams,
-    ): Effect.Effect<InstalledSkillPreviewFileView>;
     installedSkillsInstall(
       params: InstalledSkillInstallParams,
     ): Effect.Effect<InstalledSkillInstallView>;
     installedSkillsSetEnabled(
       params: InstalledSkillToggleParams,
     ): Effect.Effect<InstalledSkillView>;
-    installedSkillsCheckUpdate(
-      params: InstalledSkillUpdateParams,
-    ): Effect.Effect<InstalledSkillUpdateCheckView>;
     installedSkillsUpdate(
       params: InstalledSkillUpdateParams,
     ): Effect.Effect<InstalledSkillUpdatedView>;
@@ -112,12 +103,6 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
       return yield* host.installedSkillsPreview(input);
     }),
-    [KIND.INSTALLED_SKILLS_PREVIEW_FILE]: actPort[KIND.INSTALLED_SKILLS_PREVIEW_FILE].effect(
-      function* ({ input, context, errors }) {
-        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        return yield* host.installedSkillsPreviewFile(input);
-      },
-    ),
     [KIND.INSTALLED_SKILLS_INSTALL]: actPort[KIND.INSTALLED_SKILLS_INSTALL].effect(function* ({
       input,
       context,
@@ -130,12 +115,6 @@ export function installedSkillProcedures(dependencies: InstalledSkillProceduresD
       function* ({ input, context, errors }) {
         if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
         return yield* host.installedSkillsSetEnabled(input);
-      },
-    ),
-    [KIND.INSTALLED_SKILLS_CHECK_UPDATE]: actPort[KIND.INSTALLED_SKILLS_CHECK_UPDATE].effect(
-      function* ({ input, context, errors }) {
-        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
-        return yield* host.installedSkillsCheckUpdate(input);
       },
     ),
     [KIND.INSTALLED_SKILLS_UPDATE]: actPort[KIND.INSTALLED_SKILLS_UPDATE].effect(function* ({

@@ -22,8 +22,6 @@ import { RECORDING_CURSOR_FILE, RECORDING_CURSOR_SOURCE } from "../browser/recor
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
-/** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
-
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
  * and to the SHA-256 GitHub publishes for its Linux x86-64 binary, the
@@ -199,7 +197,6 @@ const CHECK_CAPABILITY_DROP = [
  */
 const STAGE_HEAD = ["set -e", SUDO_LINE];
 
-/** A stage as the one command it runs as. */
 function stage(lines: readonly string[]): string {
   return [...STAGE_HEAD, ...lines].join("\n");
 }
@@ -222,15 +219,12 @@ const SYSTEM_STAGE = stage([
   "pnpm --version && python3 --version",
   // tmux holds each Terminal tab's shell, so it outlives any connection to it (`terminal/tmux.ts`).
   ...PREPARE_TMUX,
-  // Playwright and its Chromium, so a coding agent opens what it built and screenshots it; the
-  // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
-  // Note that we install the full browser beside the headless shell `playwright screenshot` runs,
-  // though it costs about 400 MB in every snapshot, because the agent's own browser
-  // (`../browser/sandbox-browser.ts`) runs it headful under Xvfb, where a site sees an ordinary
-  // Chrome rather than a headless one that a sign-in would refuse.
-  // Note that both are root's, the browsers inside the package, where every user reaches them
-  // (`PLAYWRIGHT_PIN`), since the default user's home, where they once went, is closed to the
-  // cloud's `agent`; the last line fails the image where npm put them elsewhere.
+  // Playwright and its Chromium, so a coding agent screenshots what it built. Note that we install
+  // the full browser beside the headless shell, though it costs about 400 MB in every snapshot,
+  // because the agent's own browser (`../browser/sandbox-browser.ts`) runs it headful under Xvfb,
+  // where a sign-in sees an ordinary Chrome rather than a headless one it would refuse.
+  // Both are root's, the browsers inside the package (`PLAYWRIGHT_PIN`), since the default user's
+  // home is closed to the cloud's `agent`; the last line fails the image where npm put them elsewhere.
   `$SUDO env HOME=/root npm install --global --prefix ${PLAYWRIGHT_PIN.PREFIX} --no-audit --no-fund playwright@${PLAYWRIGHT_PIN.VERSION}`,
   `$SUDO env HOME=/root PLAYWRIGHT_BROWSERS_PATH=${SANDBOX_TOOL_ENV.PLAYWRIGHT_BROWSERS_PATH} ${PLAYWRIGHT_PIN.PREFIX}/bin/playwright install --with-deps chromium`,
   `$SUDO chmod -R a+rX ${PLAYWRIGHT_PIN.BROWSERS}`,
@@ -263,7 +257,6 @@ export const PREPARE_STAGES: readonly string[] = [
 /** Every stage as one script, which the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from. */
 export const PREPARE_SCRIPT = PREPARE_STAGES.join("\n");
 
-/** One stage run, failing the preparation where it fails. */
 async function runStage(sandbox: SandboxSession, command: string): Promise<void> {
   const prepared = await sandbox.run({ command });
   if (prepared.exitCode !== 0) {

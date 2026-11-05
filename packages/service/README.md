@@ -1816,16 +1816,23 @@ One that names none runs where the agent it is started from runs, for a
 continue or a fork; else where the starter's newest agent on the task runs,
 never a teammate's, since a device is one member's; else where the starter
 last named a place (`account_preference.runs_on_*`,
-`packages/database/src/models/runs-on-pick.ts`); else where the task runs;
-else in the cloud. An automation's run reads neither of its owner's own, so
-it runs where its task does. A device, named or defaulted, must be the
-starter's, registered, not removed, and there lately, or the Start is
+`packages/database/src/models/runs-on-pick.ts`); else in the cloud. A task
+holds no place of its own. An automation's run reads neither of its owner's
+own and runs in the cloud, since no member chose for it and a Mac its owner
+last picked may be asleep when it fires. A device, named or defaulted, must
+be the starter's, registered, not removed, and there lately, or the Start is
 refused by name and makes no agent; nothing falls back to the cloud on its
 own. A place a Start names is kept as the starter's last pick once its agent
-is made, which is what a later Start naming none and a task an agent makes
-for them (`create_task`) run at; a task's start that names an agent and no
-`runsOn` of its own runs it where the task's `runsOn` names, which released
-desktops still send.
+is made, which is what a later Start naming none runs at.
+
+Released desktops still send a `runsOn` on a task's create and change. On a
+create it runs the agent the create starts where that agent names none, and
+with no agent it is kept as the starter's last pick, where it is the cloud or
+one of their own devices; on a change it is read and changes nothing. A
+task's summary still answers `runsOn` for them, read from the task's newest
+agent, any member's, absent for the cloud or a task with none. The task's own
+`machine` and `device_id` columns are no longer read or written, and a later
+migration drops them.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its

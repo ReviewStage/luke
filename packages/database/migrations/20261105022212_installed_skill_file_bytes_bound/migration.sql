@@ -1,0 +1,1 @@
+ALTER TABLE "installed_skill_file" DROP CONSTRAINT "installed_skill_file_bytes_bound", ADD CONSTRAINT "installed_skill_file_bytes_bound" CHECK (octet_length("bytes") <= 3000000 and ("path" <> 'SKILL.md' or octet_length("bytes") <= 65536));

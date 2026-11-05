@@ -1,5 +1,5 @@
 import type { LocalAgentRefusal, RefusedDevice } from "@repo/features/agent-wire";
-import type { InstalledSkillFilesRefusal } from "@repo/features/installed-skill-route-wire";
+import type { InstalledSkillRefusal } from "@repo/features/installed-skill-wire";
 import type { ModelProvider } from "@repo/features/models-wire";
 import type { RepositoryUnreached } from "@repo/features/repository-reach-wire";
 import { readEither } from "@repo/wire/effect";
@@ -68,7 +68,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -87,7 +86,7 @@ export type HostedRefusal = {
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
   readonly skillName?: string;
-  readonly skillRefusal?: InstalledSkillFilesRefusal;
+  readonly skillRefusal?: InstalledSkillRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
   readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
@@ -184,8 +183,6 @@ export const HOSTED_REFUSAL = {
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
   /** The agent ran on a host its starter removed; nothing was sent. */
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
-  /** Where a task runs is set when it is created (`taskRunsOnRequestSchema`); a change that names another is refused, nothing written. */
-  RUNS_ON_LOCKED: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED },
   /** A child task works in its parent's repository; a create that names another is refused, nothing written. */
   CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
   /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */
@@ -240,11 +237,11 @@ export function credentialMissing(provider: ModelProvider): HostedRefusal {
   return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
 }
 
-/** A skill refused, by name where one was read, and why its files were where they were. */
+/** A skill refused, by name where one was read, and why where the store says. */
 export function installedSkillRefused(
   refusal: typeof HOSTED_REFUSAL.SKILL_NAME_TAKEN | typeof HOSTED_REFUSAL.SKILL_FILES_REFUSED,
   skillName: string | undefined,
-  skillRefusal?: InstalledSkillFilesRefusal,
+  skillRefusal?: InstalledSkillRefusal,
 ): HostedRefusal {
   return {
     ...refusal,

@@ -197,12 +197,12 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Where a task's coding agents run, as a request names it, in a Start's own
- * shape (`agentRunsOnRequestSchema`), which the service checks is the asking
- * member's, beat lately, and runs some model before it keeps it. It is set
- * when the task is created, and an agent started on the task runs there
- * only where neither its Start, nor its starter's newest agent on the task,
- * nor its starter's last pick says otherwise (`startAgent`'s resolver).
+ * Where a task's coding agents run, as a released desktop still names it on
+ * a task's create or change, in a Start's own shape
+ * (`agentRunsOnRequestSchema`). A task holds no place, each agent its own,
+ * so the service reads it only for those builds: a create runs the agent it
+ * starts there and keeps it as the starter's last pick, and a change ignores
+ * it.
  */
 const taskRunsOnRequestSchema = agentRunsOnRequestSchema;
 
@@ -324,16 +324,16 @@ function relationsEachOnce(request: {
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
  * unless `status` and `priority` say otherwise, and assigned to no one
- * unless `assigneeId` names a member of its workspace. Its agents run in the
- * cloud unless `runsOn` names one of the starter's devices, kept on the task
- * and as the starter's last pick; the agent the start asks for runs where its
- * own `runsOn` names, else where the task's does, else where any Start naming
- * none runs (`agent-wire.ts`'s `agentStartRequestFields`).
+ * unless `assigneeId` names a member of its workspace. A task holds no place
+ * to run: the agent the start asks for runs where its own `runsOn` names,
+ * else where the start's `runsOn` names, which only a released desktop sends
+ * and which is kept as the starter's last pick where no agent is asked for,
+ * else where any Start naming none runs (`agent-wire.ts`'s
+ * `agentStartRequestFields`).
  * A `parentTaskId` makes it the child of a task the starter reaches in the
- * same workspace, to any depth: the child takes its parent's repository and
- * where its agents run, so a start naming another repository is refused
- * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
- * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
+ * same workspace, to any depth: the child takes its parent's repository, so
+ * a start naming another repository is refused
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and a parent the starter
  * cannot reach is not found. `relations` start the task related to others
  * the starter reaches in the same workspace, written in the start's own
  * transaction, so the task and every relation land together or not at all,
@@ -431,10 +431,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
  * the task's repository, and lets its assignee go where they are no member there.
- * Where its agents run (`runsOn`) is set when the task is created and never
- * changed: the field is still read so a build that sends it decodes, a value
- * equal to the one the task holds changes nothing, and any other is refused
- * (`HOSTED_API_ERROR.RUNS_ON_LOCKED`).
+ * A task holds no place to run, so `runsOn`, which a released desktop still
+ * sends, is read so that build's change decodes, and changes nothing.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -616,15 +614,16 @@ const taskOriginSchema = EffectSchema.Struct({
 export type TaskOrigin = typeof taskOriginSchema.Type;
 
 /**
- * Where a task's agents run, said only of a task that runs them on a
- * device: which one by its id, whose it is, since only that member's agents
- * run on it and a teammate's run in the cloud, and the name it registered
- * with, what kind of device it is, its platform, which its glyph follows
- * and which a service older than it leaves out, and the epoch milliseconds it last beat,
- * which a window does not judge by, since its own clock may differ from the service's: it reads the beats
- * from `hosts.presence` (`deviceStanding`). The device and
- * its owner are absent once the device's row is gone, where a start on the
- * task is refused until it is changed.
+ * Where a task's newest agent runs, kept for released desktops, which draw a
+ * task's agent rows and Runs on chip from it; a task holds no place of its
+ * own. Said only where that agent runs on a device: which one by its id,
+ * whose it is, since only that member's agents run on it, and the name it
+ * registered with, what kind of device it is, its platform, which its glyph
+ * follows and which a service older than it leaves out, and the epoch
+ * milliseconds it last beat, which a window does not judge by, since its own
+ * clock may differ from the service's: it reads the beats from
+ * `hosts.presence` (`deviceStanding`). The device and its owner are absent
+ * once the device's row is gone.
  */
 const taskRunsOnSchema = EffectSchema.Struct({
   machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
@@ -700,7 +699,11 @@ const taskSummaryFields = {
    * be assigned.
    */
   assignee: EffectSchema.optionalKey(memberRefSchema),
-  /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
+  /**
+   * Where the task's newest agent runs (`taskRunsOnSchema`), kept for
+   * released desktops alone: absent for the cloud, for a task with no agent,
+   * and from a service before tasks said.
+   */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
   /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),

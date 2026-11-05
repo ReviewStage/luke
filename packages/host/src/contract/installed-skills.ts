@@ -5,14 +5,11 @@ import {
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
   installedSkillInstallViewSchema,
-  installedSkillPreviewFileParamsSchema,
-  installedSkillPreviewFileViewSchema,
   installedSkillPreviewParamsSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
   installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
-  installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
   installedSkillUpdateParamsSchema,
   installedSkillViewSchema,
@@ -50,11 +47,6 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillPreviewParamsSchema))
     .output(EffectSchema.flip(installedSkillPreviewViewSchema)),
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE]: actProcedure(
-    "Could not read that skill's SKILL.md on this system.",
-  )
-    .input(exactInput(installedSkillPreviewFileParamsSchema))
-    .output(EffectSchema.flip(installedSkillPreviewFileViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_INSTALL]: actProcedure(
     "Could not install the skill on this system.",
   )
@@ -65,11 +57,6 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillToggleParamsSchema))
     .output(EffectSchema.flip(installedSkillViewSchema)),
-  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: actProcedure(
-    "Could not check the skill for an update on this system.",
-  )
-    .input(exactInput(installedSkillUpdateParamsSchema))
-    .output(EffectSchema.flip(installedSkillUpdateCheckViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_UPDATE]: actProcedure(
     "Could not update the skill on this system.",
   )

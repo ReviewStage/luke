@@ -645,7 +645,8 @@ export type AgentRunsOnRequest = typeof agentRunsOnRequestSchema.Type;
  * moves; one that names none runs where its source runs, for a continue or
  * a fork, else where the starting member's newest agent on the task runs,
  * else where the member last named (`account_preference.runs_on_*`), else
- * where its task runs (`task-wire.ts`'s `runsOn`), else in the cloud.
+ * in the cloud; a task holds no place of its own. An automation's run reads
+ * neither of its owner's own and runs in the cloud.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),

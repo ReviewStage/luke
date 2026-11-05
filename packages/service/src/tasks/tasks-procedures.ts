@@ -55,6 +55,7 @@
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
 import { accountExperimentOn } from "@repo/database/models/account-store";
 import { listAgents, readAgentByKey } from "@repo/database/models/agent-store";
+import { devicesNamed } from "@repo/database/models/device-store";
 import { listRevisions, readRevision } from "@repo/database/models/plan-revisions";
 import { keepRunsOnPick } from "@repo/database/models/runs-on-pick";
 import {
@@ -77,7 +78,6 @@ import {
   type StoredTask,
   setTaskParent,
   type TaskHeader,
-  type TaskRunsOnWrite,
   updateTaskCommitted,
 } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
@@ -104,7 +104,6 @@ import {
 import { EXPERIMENT } from "@repo/settings";
 import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import { LocalAgentRefused, taskRunsOnChoice } from "../agents/coder-host/agent-runtime-choice.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
@@ -132,7 +131,6 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
-  localAgentRefused,
   pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
@@ -388,37 +386,32 @@ const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedR
 ]);
 
 /**
- * Where a task runs its agents as a start or a change asks it, checked
- * against the asking member's own devices (`taskRunsOnChoice`) before
- * anything is written; a device refused is answered as a Start on it would
- * be, naming why.
+ * Keeps the place a create names as its member's last pick, which a later
+ * Start of theirs naming none runs at: the cloud, or a device of the
+ * member's own, never another's, which no Start of theirs could run on. A
+ * task holds no place, so this is all a create's place does where it starts
+ * no agent. Note that a pick that fails to keep fails nothing, because the
+ * task is already committed, and a create answered with an error would be
+ * retried into a second task.
  */
-const runsOnAsked = (userId: string, asked: TaskRunsOnRequest) =>
-  Effect.map(
-    taskRunsOnChoice(userId, asked).pipe(
-      Effect.catch((failure) =>
-        failure instanceof LocalAgentRefused
-          ? Effect.fail(localAgentRefused(failure.reason))
-          : hostedStoreOrUnavailable(Effect.fail(failure)),
-      ),
+const pickKept = (userId: string, asked: TaskRunsOnRequest) =>
+  Effect.gen(function* () {
+    if (asked.machine === AGENT_MACHINE.DEVICE) {
+      const device = (yield* devicesNamed([asked.deviceId])).get(asked.deviceId);
+      if (device?.userId !== userId) return;
+    }
+    yield* keepRunsOnPick(userId, asked);
+  }).pipe(
+    Effect.catch((failure) =>
+      Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
     ),
-    (choice) => ({ machine: choice.machine, deviceId: choice.deviceId ?? null }),
   );
-
-/** Whether a place a request names is the one a task holds: the cloud, or the same device. */
-function runsOnStands(asked: TaskRunsOnRequest, held: TaskRunsOnWrite): boolean {
-  return (
-    asked.machine === held.machine &&
-    (asked.machine === AGENT_MACHINE.VERCEL || asked.deviceId === held.deviceId)
-  );
-}
 
 /**
  * The parent a start names, confirmed in the workspace it starts in
  * (`task-parent.ts`): one the account does not reach is not found, as any
  * task it does not reach is, and a start naming another repository than the
- * parent's, or another place to run, is refused by name; nothing is written
- * either way.
+ * parent's is refused by name; nothing is written either way.
  */
 const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -426,7 +419,6 @@ const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   input: {
     readonly parentTaskId: string;
     readonly repository?: string | null;
-    readonly runsOn?: TaskRunsOnRequest;
   },
 ): Effect.fn.Return<TaskParent, HostedRefusal, DatabaseServices> {
   const parent = yield* taskParentOf(
@@ -443,9 +435,6 @@ const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
       return hostedStoreOrUnavailable(Effect.fail(failure));
     }),
   );
-  if (input.runsOn !== undefined && !runsOnStands(input.runsOn, parent.runsOn)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
-  }
   return parent;
 });
 
@@ -461,24 +450,6 @@ const modeAsked = (userId: string, asked: TaskMode | undefined) =>
         hostedStoreOrUnavailable(accountExperimentOn(userId, EXPERIMENT.PILOT)),
         (on) => (on ? Effect.void : Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
       );
-
-/**
- * Where a task runs is set when it is created and kept: a change that names
- * the place it already holds is nothing to write, and one that names another
- * is refused (`RUNS_ON_LOCKED`) before anything is stopped or written. The
- * field stays on the wire for builds that still send it. Note that the
- * stored place is compared, not the device's row, so a task whose device
- * was removed still holds it.
- */
-const runsOnChange = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  taskId: string,
-  asked: TaskRunsOnRequest | undefined,
-): Effect.fn.Return<void, HostedRefusal, DatabaseServices> {
-  if (asked === undefined) return;
-  const { runsOn } = yield* reachedTask(userId, taskId);
-  if (!runsOnStands(asked, runsOn)) return yield* Effect.fail(HOSTED_REFUSAL.RUNS_ON_LOCKED);
-});
 
 /**
  * A relation's refusal answered by name: a task blocking itself and a task
@@ -574,7 +545,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * also before anything is written, to an account without the Pilot
      * experiment (`modeAsked`). A plan started as a child of another, by
      * `parentTaskId` or a relation as its sub-task, takes its parent's
-     * repository, place to run, and, where it names none, its assignee
+     * repository and, where it names none, its assignee
      * (`parentAsked`), confirmed again as any start's repository is; one
      * started as others' parent takes their repository, which the tree
      * shares, and one started blocking or blocked by others takes nothing of
@@ -631,12 +602,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (agent !== undefined && (repository === undefined || repository === null)) {
         return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
       }
-      // Where its agents run is checked before anything is written, so a device refused starts no task;
-      // a child runs where its parent runs, which was confirmed as the parent was made.
-      const runsOn =
-        parent === undefined && input.runsOn !== undefined
-          ? yield* runsOnAsked(userId, input.runsOn)
-          : parent?.runsOn;
       const reached = yield* reachableRepository(
         Effect.succeed(organizationId),
         repository,
@@ -662,7 +627,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(input.status === undefined ? undefined : { status: input.status }),
           ...(input.priority === undefined ? undefined : { priority: input.priority }),
           ...(assigneeId === undefined ? undefined : { assigneeId }),
-          ...(runsOn === undefined ? undefined : { runsOn }),
           ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
           ...(input.mode === undefined ? undefined : { mode: input.mode }),
         },
@@ -679,17 +643,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           }
         }),
       );
-      // Where the task runs is kept as the member's last pick, which a task an agent makes for them starts on
-      // (`agentMadeRunsOn`), though a child's is its parent's rather than a pick. Note that a pick that fails
-      // to keep fails nothing, because the task is already committed, and a create answered with an error
-      // would be retried into a second task.
-      if (input.runsOn !== undefined && parent === undefined) {
-        yield* keepRunsOnPick(userId, input.runsOn).pipe(
-          Effect.catch((failure) =>
-            Effect.logWarning(`the last Runs on pick could not be kept: ${failure._tag}`),
-          ),
-        );
-      }
+      // A task holds no place: the place a released desktop names on the task alone runs the agent the
+      // create starts, which keeps it as the member's pick once it stands, or is kept as that pick where
+      // the create starts none.
+      if (input.runsOn !== undefined && agent === undefined) yield* pickKept(userId, input.runsOn);
       // A start sent again under its id made no plan, so it counts none.
       if (made) {
         yield* recordServerEvent(
@@ -700,7 +657,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           },
         );
       }
-      // The agent runs where it names, else where the task was asked to run, which a released desktop names on the task alone.
+      // The agent runs where it names, else where a released desktop named on the task alone.
       const runsOnOfAgent = agent?.runsOn ?? input.runsOn;
       const answer: TaskStartAnswer =
         agent === undefined
@@ -798,8 +755,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         );
         if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
-      // Where its agents run is set at creation, so a change that names another place is refused before anything is stopped.
-      yield* runsOnChange(userId, taskId, changes.runsOn);
+      // Note that a place a released desktop names (`runsOn`) is read and goes nowhere, because a task holds none.
       // A repository another than its tree's is refused before anything is stopped too; the store holds it again under the lock.
       // Note that the name GitHub resolved is asked, not the one typed, so a renamed repository's old name is the one held.
       if (reached !== undefined) {

@@ -216,7 +216,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const bearer = presentedBearer(request);
   if (bearer === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
-  // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
+  // Note that a runner's bearer is admitted first, so one whose random bearer happens to begin like a device secret still reads as a runner's.
   if (Option.isNone(admitted)) {
     return yield* deviceGithubToken(yield* deviceCallerOf(request), brake);
   }

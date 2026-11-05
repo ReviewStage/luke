@@ -22,9 +22,7 @@ import {
 import {
   createTaskOnce,
   savePlanText,
-  TASK_RUNS_IN_CLOUD,
   type TaskAssigneeNotMember,
-  type TaskRunsOnWrite,
   type TaskTreeRepositoryLocked,
   updateTask,
 } from "@repo/database/models/task-store";
@@ -38,7 +36,7 @@ import {
 } from "@repo/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { AGENT_TOOL } from "@repo/features/agent-tools";
-import { AGENT_MACHINE, MESSAGE_SENDER } from "@repo/features/agent-wire";
+import { AGENT_MACHINE, type AgentMachineKind, MESSAGE_SENDER } from "@repo/features/agent-wire";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { INBOX_REPLY, openAskOf } from "@repo/features/inbox-wire";
 import { PAGE_OWNER, PAGE_SHOWER } from "@repo/features/page-wire";
@@ -131,8 +129,8 @@ import {
  * token is never logged, written to a fixture, or traced: it goes from the
  * environment to its sealed row alone. Where the run starts a host on this
  * Mac for Dean (`APP_DEMO_HOST_STATE`), it is enrolled as his own under
- * `DEMO_HOST`'s id, and every task runs its agents there, with no Runs on
- * to pick, the seeded ones among them, so a follow-up to one runs on the
+ * `DEMO_HOST`'s id, and every agent runs there, kept as his last pick, the
+ * seeded ones among them, so a follow-up to one runs on the
  * Mac. Note that Dean started every agent, those on his teammates' tasks
  * and those his pilot started too, because a host runs its owner's agents
  * alone, and an agent on a host takes words from its starter alone
@@ -198,6 +196,14 @@ export interface DemoSeeded {
   readonly memberIds: readonly string[];
   readonly taskIds: readonly string[];
 }
+
+/** Where the seed's agents run: Dean's host, or the cloud where there is none. */
+interface DemoPlace {
+  readonly machine: AgentMachineKind;
+  readonly deviceId: string | undefined;
+}
+
+const DEMO_IN_THE_CLOUD: DemoPlace = { machine: AGENT_MACHINE.VERCEL, deviceId: undefined };
 
 /** Every way the seed fails: a refused step, Better Auth's own failure, or the store's. */
 type DemoSeedEffect<A> = Effect.Effect<
@@ -435,14 +441,12 @@ function seedComment(
 
 /**
  * The task under its fixed id, made by its maker, or by the agent named,
- * under its parent and assigned, running its agents where `runsOn` names,
- * its plan saved, and the comments on it; one that is done or canceled
+ * under its parent and assigned, its plan saved, and the comments on it; one that is done or canceled
  * stands to do until it is moved there.
  */
 function seedTask(
   workspaceId: string,
   task: DemoTask,
-  runsOn: TaskRunsOnWrite,
   origin: TaskOrigin | undefined,
   clock: SeedClock,
   key: () => string,
@@ -457,7 +461,6 @@ function seedTask(
         status: task.settledAgo === undefined ? task.status : TASK_STATUS.TODO,
         priority: task.priority,
         assigneeId: task.assignee.id,
-        runsOn,
         text: "",
         ...(task.parent === undefined ? undefined : { parentTaskId: task.parent.id }),
         ...(origin === undefined ? undefined : { origin }),
@@ -685,14 +688,14 @@ function seededRuntime(userId: string, model: string) {
 /**
  * One finished agent's row on its task, started by whoever sent its first
  * line, and by the agent whose steps started it where one did, of its kind,
- * running where its task runs its agents and paid for as a Start there
+ * running where `place` names and paid for as a Start there
  * records it. Its transcript is written once every agent stands, since a
  * pilot's names the agents it started.
  */
 function seedAgent(
   agent: DemoAgent,
   starter: Agent | undefined,
-  runsOn: TaskRunsOnWrite,
+  place: DemoPlace,
   clock: SeedClock,
 ) {
   return Effect.gen(function* () {
@@ -713,8 +716,8 @@ function seedAgent(
         title: agent.title,
         runtime,
         payer,
-        machine: runsOn.machine,
-        deviceId: runsOn.deviceId ?? undefined,
+        machine: place.machine,
+        deviceId: place.deviceId,
       }),
     );
     const { agent: row } = yield* written(agent.title, started);
@@ -758,7 +761,7 @@ function seedPages(agent: DemoAgent, row: Agent, clock: SeedClock) {
  */
 function seedAgents(
   workspaceId: string,
-  runsOn: TaskRunsOnWrite,
+  place: DemoPlace,
   writer: StoreWriter,
   clock: SeedClock,
   key: () => string,
@@ -769,11 +772,11 @@ function seedAgents(
     for (const agent of DEMO_AGENTS) {
       const starter = starterOf(agent);
       const starterRow = starter === undefined ? undefined : agents.get(starter);
-      const row = yield* seedAgent(agent, starterRow, runsOn, clock);
+      const row = yield* seedAgent(agent, starterRow, place, clock);
       agents.set(agent, row);
       const origin = { actor: PLAN_ACTOR.AGENT, agentId: row.id } as const;
       for (const task of tasksMadeBy(agent)) {
-        madeIds.push(yield* seedTask(workspaceId, task, runsOn, origin, clock, key));
+        madeIds.push(yield* seedTask(workspaceId, task, origin, clock, key));
       }
     }
     yield* seedBlocks(clock);
@@ -942,7 +945,7 @@ export function demoHostSecret(): MintedSecret {
 /**
  * The demo's host enrolled as Dean's own under its fixed id, keyed with the
  * hash of the secret its record holds, and kept as where he last ran a
- * task; where every task runs its agents. Note that Bring your own host is
+ * task, where every agent the seed makes runs. Note that Bring your own host is
  * left off for him, because with it on the app keeps the Mac's one account
  * install (~/.local/state/vespin-host) running for the account signed in, and
  * would enroll a Mac with none with the run's server; and that the host is
@@ -958,9 +961,9 @@ function seedHost(host: DemoHost) {
       machine: { name: DEMO_HOST.name, platform: DEMO_HOST.platform, arch: DEMO_HOST.arch },
     });
     if (!enrolled) return yield* Effect.fail(new DemoSeedRefused({ step: "the demo's host" }));
-    const runsOn = { machine: AGENT_MACHINE.DEVICE, deviceId: DEMO_HOST.id } as const;
-    yield* keepRunsOnPick(DEMO_DEAN.id, runsOn);
-    return runsOn;
+    const place = { machine: AGENT_MACHINE.DEVICE, deviceId: DEMO_HOST.id } as const;
+    yield* keepRunsOnPick(DEMO_DEAN.id, place);
+    return place;
   });
 }
 
@@ -968,8 +971,8 @@ function seedHost(host: DemoHost) {
 
 /**
  * Writes the acme world into a freshly migrated database, and Dean's
- * credential and host where they are handed in, every task running its
- * agents on that host, or in the cloud where there is none; the ids it
+ * credential and host where they are handed in, every agent running on
+ * that host, or in the cloud where there is none; the ids it
  * chose. A database that holds any account already is refused, a seeded
  * one among them, so a seed runs once per database. Note that the seed is
  * no one transaction, since Better Auth writes through a pool of its own,
@@ -990,15 +993,15 @@ export function seedDemoWorld(
     const clock = yield* seedClock;
     const key = clientKeys();
     const { personalWorkspaceId, workspaceId, memberIds } = yield* seedPeople(auth, clock);
-    const runsOn = Option.isSome(host) ? yield* seedHost(host.value) : TASK_RUNS_IN_CLOUD;
+    const place = Option.isSome(host) ? yield* seedHost(host.value) : DEMO_IN_THE_CLOUD;
     const madeByAgents = new Set(DEMO_AGENTS.flatMap(tasksMadeBy));
     const madeByMembers = DEMO_TASKS.filter((task) => !madeByAgents.has(task));
     const taskIds = yield* Effect.forEach(madeByMembers, (task) =>
-      seedTask(workspaceId, task, runsOn, undefined, clock, key),
+      seedTask(workspaceId, task, undefined, clock, key),
     );
     if (Option.isSome(sealed)) yield* seedCredential(sealed.value);
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const { agents, madeIds } = yield* seedAgents(workspaceId, runsOn, writer, clock, key);
+    const { agents, madeIds } = yield* seedAgents(workspaceId, place, writer, clock, key);
     yield* seedThreads(agents, clock, key);
     return {
       deanId: DEMO_DEAN.id,

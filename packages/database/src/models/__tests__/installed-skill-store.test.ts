@@ -399,13 +399,11 @@ it.layer(getTestDB())("the installed skill store", (it) => {
   );
 
   it.effect(
-    "a skill's files are refused past their bounds or without a SKILL.md, and nothing is written",
+    "a skill's files are refused without a SKILL.md or with a file past its bound, and nothing is written",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const workspace = yield* openWorkspace(owner);
-        const extra = (count: number) =>
-          Array.from({ length: count }, (_, at) => ({ path: `notes/${at}.md`, bytes: text("x") }));
 
         assert.equal(
           yield* refusalOf(
@@ -417,27 +415,9 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         assert.equal(
           yield* refusalOf(
             owner,
-            skill(PERSONAL, "twice", [skillFile("twice"), skillFile("twice")]),
-          ),
-          INSTALLED_SKILL_REFUSAL.DUPLICATE_PATH,
-        );
-        assert.equal(
-          yield* refusalOf(
-            owner,
-            skill(PERSONAL, "crowded", [
-              skillFile("crowded"),
-              ...extra(INSTALLED_SKILL_BOUNDS.MAX_FILES),
-            ]),
-          ),
-          INSTALLED_SKILL_REFUSAL.TOO_MANY_FILES,
-        );
-        assert.equal(
-          yield* refusalOf(
-            owner,
             skill(PERSONAL, "heavy", [
               skillFile("heavy"),
-              { path: "a.bin", bytes: new Uint8Array(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES / 2) },
-              { path: "b.bin", bytes: new Uint8Array(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES / 2) },
+              { path: "a.bin", bytes: new Uint8Array(INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES + 1) },
             ]),
           ),
           INSTALLED_SKILL_REFUSAL.TOO_LARGE,
@@ -447,11 +427,11 @@ it.layer(getTestDB())("the installed skill store", (it) => {
             owner,
             skill(PERSONAL, "full", [
               skillFile("full"),
-              ...extra(INSTALLED_SKILL_BOUNDS.MAX_FILES - 1),
+              { path: "a.bin", bytes: new Uint8Array(INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES) },
             ]),
           ),
           "installed",
-          "exactly the most files is installed",
+          "a file of exactly the most bytes is installed",
         );
         assert.deepEqual(yield* namesSeen(owner, workspace), ["personal:full"]);
       }),

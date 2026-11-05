@@ -81,6 +81,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 export interface RepositoryChooser {
   /** The repositories the account's tasks were about lately, the newest first, each once. */
   recent: readonly string[];
+  /** Whether those tasks are still being read, so the newest's repository, a card's default, is not yet known; never where left out. */
+  reading?: boolean | undefined;
   /** Opens a page of GitHub's in the browser, such as a repository's own. */
   openGitHub: (url: string) => void;
   /** Whether a repository is drawn with its owner's picture: not in a fixture run (`RepositoryPicture`). */
@@ -117,6 +119,9 @@ const PLACE_LOOK = {
 
 /** The chip's words while it waits on a pick. */
 export const CHOOSE_LABEL = "Choose a repository";
+
+/** The chip's words while the tasks its default is read from are still being read, which ask nothing yet. */
+const READING_LABEL = "Repository";
 
 /** The id of the row pinned under the list that chooses no repository. */
 const NONE_ROW = "none";
@@ -328,7 +333,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.
   const none = onClear !== undefined || (rows.length === 0 && listed !== undefined);
-  const label = value ?? (none ? NO_REPOSITORY : CHOOSE_LABEL);
+  const label =
+    value ?? (none ? NO_REPOSITORY : chooser.reading === true ? READING_LABEL : CHOOSE_LABEL);
   // A list with nothing to pick says why, then offers an owner Settings and a member the owners to ask.
   const deadEnd = (lines: readonly string[], ask: OwnerAsk, askedOf: string | undefined) => (
     <>
