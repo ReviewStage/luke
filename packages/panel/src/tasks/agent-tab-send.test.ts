@@ -29,6 +29,8 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { menuItem } from "../testing/desktop-inbox.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
+import { newestToastSays } from "../testing/toast.js";
+import { ToastHost } from "../toast.js";
 import { AgentTab } from "./agent-tab.js";
 
 /**
@@ -155,16 +157,21 @@ async function drawnTab(
       root.render(
         onRegistry(
           registry,
-          open
-            ? createElement(AgentTab, {
-                agent,
-                control,
-                shown: true,
-                onOpenSubagent: () => undefined,
-                onOpenTarget: () => undefined,
-                onHeld: () => undefined,
-              })
-            : createElement("div"),
+          createElement(
+            "div",
+            null,
+            open
+              ? createElement(AgentTab, {
+                  agent,
+                  control,
+                  shown: true,
+                  onOpenSubagent: () => undefined,
+                  onOpenTarget: () => undefined,
+                  onHeld: () => undefined,
+                })
+              : null,
+            createElement(ToastHost),
+          ),
         ),
       ),
     );
@@ -402,6 +409,16 @@ test("a refusal for good marks the lines refused for now before it as not delive
     [],
     "its menu says why with nothing to press",
   );
+});
+
+test("a refusal for good that lands while the tab is closed says the message was not delivered in a toast", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.close();
+
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.AGENT_RETIRED });
+
+  assert.match(newestToastSays() ?? "", /^Message not delivered/);
 });
 
 test("a refusal that lands while the tab is closed is drawn where the line went once the tab opens again, never in the box", async () => {

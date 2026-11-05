@@ -67,7 +67,9 @@ import { type FailedLine, failedLinesAtom, failedLinesOf } from "./failed-lines.
  * the line where it went, marked as not delivered, as it does every line
  * still waiting to go behind it, the box drawing none of the words its draft
  * keeps for Continue, so they show once; those marks are this tab's alone,
- * and a tab opened again draws the words in its box. Another agent's tab
+ * and a tab opened again draws the words in its box, so a refusal for good
+ * that lands while the tab is not on screen is said in a toast as one for now
+ * is. Another agent's tab
  * starts from nothing of this one's but the lines not delivered to it,
  * though a line sent from it still goes.
  *
@@ -351,6 +353,8 @@ export function useAgentComposer(input: {
       if ("failure" in answer && !closesComposer(answer.failure)) {
         keepFailedLine(line, answer, rewound !== undefined && !("failure" in rewound), taskId);
       }
+      // Either refusal is said in a toast where the tab is not on screen as it lands.
+      if ("failure" in answer) sayWhereAway(answer);
       // An answer to another agent's tab, or to a tab since remounted, is nobody's.
       if (latest.current.agentId !== agentId) return;
       // A rewind that did not go drops nothing, so the messages it would have dropped are drawn again.
@@ -405,7 +409,7 @@ export function useAgentComposer(input: {
    * Keeps a line refused for now past the tab, marked as not delivered with
    * why, and marks it so in the tab where the tab still shows its agent,
    * where it went, or at the end where the tab was drawn afresh while it was
-   * out; says so in a toast where the tab is not on screen.
+   * out.
    */
   const keepFailedLine = (
     line: SentLine,
@@ -438,6 +442,11 @@ export function useAgentComposer(input: {
         ? was.sent.map((each) => (each.id === line.id ? failed : each))
         : [...was.sent, failed],
     }));
+  };
+
+  /** Says a message to the agent was not delivered in a toast, where its tab is not on screen, which offers to open it. */
+  const sayWhereAway = (answer: RefusedCall) => {
+    const at = latest.current;
     if (mounted.current && at.agentId === agentId && at.shown !== false) return;
     const { onOpen } = at;
     toast({
