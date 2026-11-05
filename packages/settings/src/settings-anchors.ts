@@ -63,4 +63,5 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.SKILLS]: "experiment-skills",
   [EXPERIMENT.BRING_YOUR_OWN_HOST]: "experiment-bring-your-own-host",
   [EXPERIMENT.SEVERAL_REPOSITORIES]: "experiment-several-repositories",
+  [EXPERIMENT.PLANS]: "experiment-plans",
 } as const satisfies Record<Experiment, string>;
