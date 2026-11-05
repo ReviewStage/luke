@@ -78,9 +78,11 @@ const SETUP_FINISHED = keptKey(
 const SETUP_START: SetupPlace = { audience: SETUP_AUDIENCE.ME, at: 0 };
 const INVITED_START: SetupPlace = { audience: SETUP_AUDIENCE.INVITED, at: 0 };
 
-/** Whether the account belongs to a team's workspace; none before its workspaces are read. */
-function invitedOf(tasks: TasksControl): boolean {
-  return tasks.newTask.workspaces.some((workspace) => workspace.personal !== true);
+/** Whether the account belongs to a team's workspace; nothing before its workspaces are read, and none where that read failed. */
+function invitedOf(tasks: TasksControl): boolean | undefined {
+  const { workspaces } = tasks.newTask;
+  if (workspaces.length === 0) return tasks.workspacesFailed ? false : undefined;
+  return workspaces.some((workspace) => workspace.personal !== true);
 }
 
 /**
@@ -144,7 +146,7 @@ export function SetupSteps({
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
-  const start = invitedOf(tasks) ? INVITED_START : SETUP_START;
+  const start = invitedOf(tasks) === true ? INVITED_START : SETUP_START;
   const place = places[accountId] ?? start;
   const { audience, team } = place;
   const [creating, setCreating] = useState(false);

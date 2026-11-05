@@ -66,9 +66,10 @@ export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
  * alone. Finished is the account's, so it holds on every machine. Once setup
  * has started on this machine it stands until finished, whatever it has
  * connected or made meanwhile. Until the account's preferences are read,
- * which say whether it finished on another machine, and the agent's read
- * answers, a new account waits on them rather than glimpsing setup or the
- * app; one a team invited is let in meanwhile, since most have an agent.
+ * which say whether it finished on another machine, its workspaces, which
+ * say whether a team invited it, and the agent's read answer, a new account
+ * waits on them rather than glimpsing setup or the app; one a team invited
+ * is let in meanwhile, since most have an agent.
  */
 export function setupGate(account: {
   readonly id: string | undefined;
@@ -78,17 +79,19 @@ export function setupGate(account: {
   /** Whether the account's preferences were read, so `finished` speaks for every machine. */
   readonly accountRead: boolean;
   readonly started: boolean;
-  /** Whether the account belongs to a team's workspace. */
-  readonly invited: boolean;
+  /** Whether the account belongs to a team's workspace; nothing while its workspaces are still read. */
+  readonly invited: boolean | undefined;
   /** Whether an agent is connected; nothing while the models are still read. */
   readonly agent: boolean | undefined;
 }): SetupGate {
   if (account.id === undefined || account.finished) return SETUP_GATE.NONE;
   if (account.started) return account.accountRead ? SETUP_GATE.OWED : SETUP_GATE.WAIT;
   if (account.agent === true) return SETUP_GATE.NONE;
-  if (account.invited) {
+  if (account.invited === true) {
     return account.accountRead && account.agent === false ? SETUP_GATE.OWED : SETUP_GATE.NONE;
   }
   if (!account.fresh) return SETUP_GATE.NONE;
-  return !account.accountRead || account.agent === undefined ? SETUP_GATE.WAIT : SETUP_GATE.OWED;
+  const unread =
+    !account.accountRead || account.invited === undefined || account.agent === undefined;
+  return unread ? SETUP_GATE.WAIT : SETUP_GATE.OWED;
 }

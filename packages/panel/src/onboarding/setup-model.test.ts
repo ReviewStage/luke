@@ -39,6 +39,11 @@ test.each([
     account: { ...NEW, invited: true, fresh: false, agent: undefined },
     gate: SETUP_GATE.NONE,
   },
+  {
+    case: "a new account whose workspaces are still read, which may say a team invited it",
+    account: { ...NEW, invited: undefined },
+    gate: SETUP_GATE.WAIT,
+  },
   { case: "an account with tasks", account: { ...NEW, fresh: false }, gate: SETUP_GATE.NONE },
   {
     case: "an account that finished, on any machine",
