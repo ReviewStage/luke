@@ -22,7 +22,7 @@
  * screenshots drawn in it, which experiment the note is about where its
  * title names one (opened from that experiment's row in Settings ›
  * Experimental), and — only while "Include my name and email" is
- * ticked — the signed-in account's name and address, the line beside the
+ * ticked — the signed-in account's name and address, the line under the
  * box reads out. Nothing else rides along, a credential least of all. All the
  * card holds between its title and its answers is left out of the screen
  * recording (`ph-no-capture`), because a screenshot is a picture of the
@@ -53,19 +53,18 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
-  FormField,
   GAP,
-  IconButton,
   ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
+  LengthCounter,
   LIST_MOTION_WAY,
   ListMotion,
   TEXT_ELEMENT,
+  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
-  Tooltip,
   useFilePicker,
   useLeaving,
 } from "@repo/ui";
@@ -78,24 +77,31 @@ import { failureShown } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
+/** What the dialog is called, whichever kind of note it holds, the choice at its head naming the kind. */
+const DIALOG_TITLE = "Send feedback";
+
 /**
- * Each kind in its own words: the title its dialog carries, the field's
- * name, and the hint the empty field shows. The wire still
- * calls the second kind a prompt; to the person writing it, it is a feature
- * they would like the app to have.
+ * Each kind in its own words: the field's name, said to a screen reader
+ * since the choice above it shows the kind, and the hint the empty field
+ * shows. The wire still calls the second kind a prompt; to the person
+ * writing it, it is a feature they would like the app to have.
  */
 const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
-    title: "Send feedback",
     field: "Feedback",
     placeholder: "What happened, and what did you expect?",
   },
   [FEEDBACK_KIND.PROMPT]: {
-    title: "Suggest a feature",
-    field: "Feature suggestion",
+    field: "Feature idea",
     placeholder: `What would you want ${PRODUCT_NAME} to do?`,
   },
 } as const;
+
+/** What the line under the field says while nothing is wrong: that a screenshot is pasted or dropped in. */
+const ATTACH_HINT = "Paste or drop screenshots to attach them.";
+
+/** What the signature's line says while the note goes unsigned. */
+const UNSIGNED = "Sent without your name or email";
 
 /**
  * Why an attachment did not come along, in the dialog's own words. Said
@@ -169,10 +175,10 @@ function draftSubmission(
   };
 }
 
-/** The dialog's title: the kind's own, or which experiment a note is about where it was opened from that experiment's row. */
-function dialogTitle(kind: FeedbackKind, about: Experiment | undefined): string {
+/** The dialog's title: Send feedback, or which experiment a note is about where it was opened from that experiment's row. */
+function dialogTitle(about: Experiment | undefined): string {
   const experiment = EXPERIMENTS.find((entry) => entry.key === about);
-  return experiment ? `Feedback on ${experiment.name}` : FEEDBACK_COPY[kind].title;
+  return experiment ? `Feedback on ${experiment.name}` : DIALOG_TITLE;
 }
 
 function feedbackImageUrl(image: FeedbackImage): string {
@@ -310,6 +316,7 @@ export function FeedbackDialog({
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const signatureId = useId();
+  const footId = useId();
   const signature = accountSignature(account);
 
   /**
@@ -435,7 +442,7 @@ export function FeedbackDialog({
     <Dialog
       open={open}
       size={DIALOG_SIZE.WIDE}
-      title={dialogTitle(shown.kind, shown.about)}
+      title={dialogTitle(shown.about)}
       busy={busy}
       refused={rejection !== undefined}
       holding={hasWords(draft)}
@@ -445,14 +452,14 @@ export function FeedbackDialog({
       dropTarget={fileDrop.target}
       actionsStart={
         <>
-          <Tooltip label="Attach screenshot">
-            <IconButton
-              icon={<ImageIcon />}
-              label="Attach screenshot"
-              disabled={busy || full}
-              onClick={picker.open}
-            />
-          </Tooltip>
+          <Button
+            variant={BUTTON_VARIANT.QUIET}
+            icon={<ImageIcon />}
+            disabled={busy || full}
+            onClick={picker.open}
+          >
+            Attach screenshot
+          </Button>
           {picker.input}
         </>
       }
@@ -484,46 +491,50 @@ export function FeedbackDialog({
             onChange={onKind}
           />
         ) : null}
-        <FormField
-          label={FEEDBACK_COPY[shown.kind].field}
-          description={
-            cutWords === shown.draft.message
-              ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
-              : undefined
-          }
-          count={{
-            length: shown.draft.message.length,
-            limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
-          }}
-        >
-          {(control) => (
-            <TextArea
-              ref={field}
-              field={control}
-              placeholder={FEEDBACK_COPY[shown.kind].placeholder}
-              maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-              value={shown.draft.message}
-              disabled={busy}
-              rows={MESSAGE_ROWS}
-              grow
-              enterKeyHint={enterKeyHint()}
-              submitKey={enterSubmitKey()}
-              onSubmit={() => void send()}
-              onChange={(message) => changeDraft({ message })}
-              onPaste={(event) => {
-                // A screenshot on the clipboard is an attachment, not text
-                // that failed to paste; text pastes as it always does.
-                const pasted = imageFiles(event.clipboardData.files);
-                if (pasted.length === 0) {
-                  noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
-                  return;
-                }
-                event.preventDefault();
-                void attach(pasted);
-              }}
+        <div className="feedback-dialog-note flex min-w-0 flex-col gap-ui-6">
+          <TextArea
+            ref={field}
+            label={FEEDBACK_COPY[shown.kind].field}
+            describedBy={footId}
+            placeholder={FEEDBACK_COPY[shown.kind].placeholder}
+            maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+            value={shown.draft.message}
+            disabled={busy}
+            rows={MESSAGE_ROWS}
+            grow
+            enterKeyHint={enterKeyHint()}
+            submitKey={enterSubmitKey()}
+            onSubmit={() => void send()}
+            onChange={(message) => changeDraft({ message })}
+            onPaste={(event) => {
+              // A screenshot on the clipboard is an attachment, not text
+              // that failed to paste; text pastes as it always does.
+              const pasted = imageFiles(event.clipboardData.files);
+              if (pasted.length === 0) {
+                noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
+                return;
+              }
+              event.preventDefault();
+              void attach(pasted);
+            }}
+          />
+          <div className="feedback-dialog-foot flex min-w-0 items-baseline justify-between gap-control-gap">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.CAPTION}
+              tone={TEXT_TONE.MUTED}
+              id={footId}
+            >
+              {cutWords === shown.draft.message
+                ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
+                : ATTACH_HINT}
+            </Text>
+            <LengthCounter
+              length={shown.draft.message.length}
+              limit={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
             />
-          )}
-        </FormField>
+          </div>
+        </div>
         <FeedbackImages
           kind={shown.kind}
           images={shown.draft.images}
@@ -535,27 +546,28 @@ export function FeedbackDialog({
           }
         />
         {signature ? (
-          <div className="feedback-dialog-signature flex min-w-0 items-center gap-control-gap">
-            <Checkbox
-              checked={shown.draft.signed}
-              disabled={busy}
-              aria-describedby={signatureId}
-              onChange={(signed) => changeDraft({ signed })}
-            >
-              Include my name and email
-            </Checkbox>
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.INHERIT}
-              truncate
-              id={signatureId}
-              className="feedback-dialog-identity ml-auto text-caption text-muted-foreground"
-            >
-              {shown.draft.signed
-                ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
-                : null}
-            </Text>
-          </div>
+          // Note that who the note is signed by stands under the box's words, so a long address is cut there rather than squeezing the words onto two lines.
+          <Checkbox
+            checked={shown.draft.signed}
+            disabled={busy}
+            aria-describedby={signatureId}
+            onChange={(signed) => changeDraft({ signed })}
+            detail={
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.CAPTION}
+                tone={TEXT_TONE.MUTED}
+                truncate
+                id={signatureId}
+              >
+                {shown.draft.signed
+                  ? [signature.name, signature.email].filter(Boolean).join(" · ")
+                  : UNSIGNED}
+              </Text>
+            }
+          >
+            Include my name and email
+          </Checkbox>
         ) : null}
         {rejection === undefined ? null : (
           <ErrorState

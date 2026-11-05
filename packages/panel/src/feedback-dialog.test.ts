@@ -141,7 +141,8 @@ test("Help's item opens the feedback dialog, with the field taking the keyboard,
   );
 
   act(() => button("Feature idea").click());
-  assert.equal(dialog()?.querySelector("h2")?.textContent, "Suggest a feature");
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
+  assert.equal(field().getAttribute("aria-label"), "Feature idea");
   assert.equal(field().placeholder, "What would you want Vespin to do?");
 });
 
