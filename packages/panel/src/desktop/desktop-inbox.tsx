@@ -197,7 +197,8 @@ export const DesktopInbox = memo(function DesktopInbox({
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
   // A task chosen narrows the Inbox to its own items, which a chip over the list names and clears.
   const narrowedTask = useInboxTask();
-  const narrowedTaskName = tasks.tasks.find((task) => task.id === narrowedTask)?.name;
+  const narrowedTaskRow = tasks.tasks.find((task) => task.id === narrowedTask);
+  const narrowedTaskName = narrowedTaskRow?.name;
   const {
     view,
     act,
@@ -639,7 +640,11 @@ export const DesktopInbox = memo(function DesktopInbox({
                     task:
                       narrowedTask === undefined
                         ? undefined
-                        : { name: narrowedTaskName, onClear: leaveInboxTask },
+                        : {
+                            name: narrowedTaskName,
+                            status: narrowedTaskRow?.status,
+                            onClear: leaveInboxTask,
+                          },
                   }}
                   models={named.models}
                   readerId={tasks.me}
