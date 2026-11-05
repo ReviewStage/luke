@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { identityHue, identityLetter } from "../../actor-model.js";
 import { UserIcon } from "../../face/glyphs.js";
+import { ReplayMask } from "../../session-replay-marks.js";
 import {
   Avatar as ShadcnAvatar,
   AvatarFallback as ShadcnAvatarFallback,
@@ -214,7 +215,8 @@ export const UNASSIGNED_WORDS = "Unassigned";
 /** What stands on the disc while no picture is shown: the caller's glyph, the letter, or the figure where there is no letter. */
 function standIn(glyph: ReactNode, letter: string): ReactNode {
   if (glyph !== undefined) return <span className={GLYPH_BOX}>{glyph}</span>;
-  if (letter !== "") return letter;
+  // Note that the letter is always a person's or a workspace's name, so a screen recording masks it whatever stands round the disc.
+  if (letter !== "") return <ReplayMask>{letter}</ReplayMask>;
   return (
     <span className={GLYPH_BOX}>
       <UserIcon />

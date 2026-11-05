@@ -1,15 +1,16 @@
 /**
- * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
+ * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online unless its call got no answer, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
  * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
  * alike. Each becomes one Sentry log line, searchable by every attribute
  * below: at `warn` for a refusal something named, such as a limit or a
  * refusal the service or the host worded, or for any failure shown while the
- * machine had no network, and at `error` for anything else. One nothing
- * named, shown while online, becomes an issue besides, grouped by where it
- * was shown and its code rather than by its stack, since one surface shows
- * the same failure from many paths.
+ * machine had no network or of a call that got no answer, and at `error` for
+ * anything else. One nothing named, shown while online and not of a call
+ * that got no answer, becomes an issue besides, grouped by where it was
+ * shown and its code rather than by its stack, since one surface shows the
+ * same failure from many paths.
  *
  * What it carries is chosen here rather than read from the failure whole:
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
@@ -35,6 +36,7 @@
  */
 
 import { Predicate } from "effect";
+import { CALL_FAULT, DEADLINE_ERROR_NAME } from "./account-call.js";
 import { redactCredentials } from "./credential-redaction.js";
 import { PRODUCT_NAME } from "./product-name.js";
 
@@ -94,7 +96,7 @@ export const FAILURE_SURFACE = {
   AUTOMATION_TOGGLE: "automation.toggle",
   BROWSER_OPEN: "browser.open",
   BUNDLE_LOAD: "bundle.load",
-  CHAPTERS_MODEL_READ: "chapters_model.read",
+  CHAPTERS_MODEL_WRITE: "chapters_model.write",
   COPY: "copy",
   DICTATION: "dictation",
   DIFF_READ: "diff.read",
@@ -593,6 +595,18 @@ function sendableError(chain: readonly unknown[], facts: readonly CauseFacts[]):
   return sent;
 }
 
+/**
+ * Whether a failure's own facts say its call got no answer: a network fault
+ * or the call's deadline, anywhere down its chain (`account-call.ts`). Read
+ * beside the platform's online flag, because a phone with no signal, or a
+ * Mac just after waking, can still read online.
+ */
+function unansweredOf(chain: readonly CauseFacts[]): boolean {
+  return chain.some(
+    (facts) => facts.fault === CALL_FAULT.NETWORK || facts.name === DEADLINE_ERROR_NAME,
+  );
+}
+
 /** A failure read for sending: its chain, what each cause says, its code, and its attributes. */
 function readReport(report: ShownFailureReport) {
   const chain = chainOf(report.cause);
@@ -621,13 +635,15 @@ export function failureAboutOf(payload: unknown): FailureAbout {
 
 /**
  * Sends Sentry a failure the app showed: a log line, at `warn` for a refusal
- * something named or a failure shown offline and at `error` for anything
- * else, and for anything else an issue besides, grouped by where it was
- * shown and its code. Answers the issue's event id, where it opened one, and
- * the trace both went in. Note that a failure shown while the machine had no
- * network opens no issue, because a read or a write that could not reach the
- * service then is the network's failure rather than the app's, as a Mac
- * waking from sleep shows every live read failed before its network is back.
+ * something named, a failure shown offline, or a failure of a call that got
+ * no answer, and at `error` for anything else, and for anything else an
+ * issue besides, grouped by where it was shown and its code. Answers the
+ * issue's event id, where it opened one, and the trace both went in. Note
+ * that a failure shown while the machine had no network, or whose own facts
+ * say its call got no answer, opens no issue, because a read or a write that
+ * could not reach the service is the network's failure rather than the
+ * app's, as a Mac waking from sleep, or a phone with no signal that still
+ * reads online, shows every live read failed before the service answers.
  */
 export function sendShownFailure(
   sentry: ShownFailureSentry,
@@ -638,7 +654,7 @@ export function sendShownFailure(
   const traceId =
     sentry.getActiveSpan()?.spanContext().traceId ??
     sentry.getCurrentScope().getPropagationContext().traceId;
-  if (report.kind === FAILURE_KIND.REFUSED || !report.state.online) {
+  if (report.kind === FAILURE_KIND.REFUSED || !report.state.online || unansweredOf(facts)) {
     sentry.logger.warn(line, attributes);
     return { traceId };
   }

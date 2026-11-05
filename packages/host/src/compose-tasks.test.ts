@@ -165,6 +165,8 @@ interface FakeService extends TasksClient {
   /** What a relation change's answer waits on, so a test can see what is drawn while it is out. */
   relationAnswered: Effect.Effect<void>;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
+  /** The idempotency key each start asked was sent under, in order. */
+  createKeys: (string | undefined)[];
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a repository is refused as one the App does not reach. */
@@ -576,6 +578,7 @@ function fakeService(tasks: Task[]): FakeService {
     relationFails: false,
     relationAnswered: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
+    createKeys: [],
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
     reads: [],
@@ -1096,7 +1099,11 @@ function fakeService(tasks: Task[]): FakeService {
           ? { ok: false, failure: TASK_CALL_FAILURE.NOT_FOUND }
           : { ok: true, answer: found };
       }),
-    create: () => Effect.sync(() => service.createAnswer),
+    create: (_request, key) =>
+      Effect.sync(() => {
+        service.createKeys.push(key);
+        return service.createAnswer;
+      }),
     repositories: (workspaceId) =>
       Effect.sync(() => {
         service.reads.push(
@@ -1707,6 +1714,172 @@ it.effect(
         ["Teammate invitations"],
       );
       assert.equal(refused.times, 1);
+    }),
+);
+
+it.effect(
+  "a start the service did not answer stays drawn and open through a relaunch, and is sent once more under its key, opening nothing",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("tasks-queue-");
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.UNANSWERED,
+      };
+      const options = { mintKey: () => "start-key", replayRefused: Effect.void };
+      const opened = (pool: EntityPool) =>
+        openEntityStore({
+          directory,
+          cipher: testCipher(),
+          accountId: "user-dana",
+          queued: pool.queued,
+        });
+      const quit = yield* Scope.make();
+      const before = yield* Scope.provide(quit)(entityPool(options));
+      const kept = yield* Scope.provide(quit)(opened(before));
+      const first = yield* Scope.provide(quit)(subject(service, { entities: kept, pool: before }));
+      yield* first.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* first.listed();
+      const answered = yield* first.call(GATEWAY_METHOD.TASKS_START, {
+        name: "Invitation expiry",
+        workspaceId: billing.workspaceId,
+      });
+      const waiting = first.last();
+      yield* Scope.close(quit, Exit.void);
+
+      const pool = yield* entityPool(options);
+      const entities = yield* opened(pool);
+      const relaunched = yield* subject(service, { entities, pool });
+      yield* pool.requeue(entities.queue, relaunched.tasks.queueable);
+      const made = { ...task(INVITES, "Invitation expiry", "", 30), createdAt: 3_000 };
+      service.tasks = [...service.tasks, made];
+      service.createAnswer = { ok: true, answer: { task: made } };
+      yield* relaunched.call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* relaunched.listed();
+      yield* relaunched.settled;
+
+      assert.deepEqual(answered, { planId: INVITES });
+      assert.equal(waiting?.activeTaskId, INVITES, "the task stands open while it waits");
+      assert.equal(
+        waiting?.tasks.some((row) => row.id === INVITES),
+        true,
+        "its row is drawn",
+      );
+      assert.deepEqual(service.createKeys, ["start-key", "start-key"]);
+      assert.equal(relaunched.last()?.activeTaskId, undefined, "sent again, it opens nothing");
+      assert.deepEqual(
+        relaunched.last()?.tasks.map((row) => row.id),
+        [INVITES, BILLING],
+      );
+      assert.deepEqual(pool.queued(), []);
+    }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect(
+  "a start the service took already as it is sent again stands open and follows its task's record, so a save someone else makes reaches its plan",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.UNANSWERED,
+      };
+      const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
+      const { call, listed, last, settled, plan } = yield* subject(service, { pool });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* call(GATEWAY_METHOD.TASKS_START, {
+        name: "Invitation expiry",
+        workspaceId: billing.workspaceId,
+      });
+
+      // The first send landed though its answer was lost, so the service holds the task, its record, and its key.
+      service.tasks = [...service.tasks, task(INVITES, "Invitation expiry", "", 30)];
+      const record = polledRecord(service, INVITES);
+      service.recordLives[INVITES] = record;
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.ALREADY_WRITTEN,
+      };
+      yield* listed();
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+      // A teammate saves the plan, which the next poll carries.
+      service.tasks = service.tasks.map((each) =>
+        each.id === INVITES
+          ? { ...each, updatedAt: 40, document: { ...each.document, body: "# Theirs" } }
+          : each,
+      );
+      record.move();
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* followSettled;
+
+      assert.deepEqual(service.createKeys, ["start-key", "start-key"]);
+      assert.equal(last()?.activeTaskId, INVITES);
+      assert.equal(plan(INVITES)?.document.body, "# Theirs");
+      assert.deepEqual(pool.queued(), []);
+    }),
+);
+
+it.effect(
+  "a start that names an agent waits where the service did not answer, its call held until it is sent again, and then answers its agent's start",
+  () =>
+    Effect.gen(function* () {
+      const billing = task(BILLING, "Billing export", "# Billing", 20);
+      const service = fakeService([billing]);
+      service.createAnswer = {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.UNANSWERED,
+      };
+      const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
+      const { call, listed, last, settled } = yield* subject(service, { pool });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_START, {
+          workspaceId: billing.workspaceId,
+          agent: { idempotencyKey: "agent-key", prompt: "Expire invitations." },
+          quiet: true,
+        }),
+      );
+      yield* settled;
+      const meanwhile = starting.pollUnsafe();
+      const drawn = last()?.tasks.some((row) => row.id === INVITES);
+      const made = task(INVITES, "Untitled", "", 30);
+      const agentStart = {
+        agent: {
+          id: "3c9e1d2a-6b7f-4e8a-9c0d-1e2f3a4b5c6d",
+          planId: INVITES,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: null,
+          createdAt: 31,
+          status: AGENT_STATUS.STARTING,
+          turnId: null,
+        },
+      };
+      service.tasks = [...service.tasks, made];
+      service.createAnswer = { ok: true, answer: { task: made, agent: agentStart } };
+      yield* listed();
+
+      assert.equal(meanwhile, undefined, "no answer while it waits");
+      assert.equal(drawn, true, "its row is drawn while it waits");
+      assert.deepEqual(yield* Fiber.join(starting), { planId: INVITES, agentStart });
+      assert.deepEqual(
+        service.createKeys,
+        [undefined, undefined],
+        "sent under the agent's key alone",
+      );
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 
@@ -5412,7 +5585,7 @@ it.effect(
 );
 
 it.effect(
-  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed",
+  "a resync reads a followed list again at once, once for a wake's several events, and asks nothing of a list not followed; a regain right after a wake reads it again",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(LIVE_NOW);
@@ -5442,6 +5615,11 @@ it.effect(
         "behind until the fresh rows land",
       );
       assert.equal(last()?.live, HOST_LIVE.LIVE);
+
+      // The connection comes back a moment after the wake, which may have read the list before the network was there.
+      yield* call(GATEWAY_METHOD.TASKS_REGAINED);
+      yield* settled;
+      assert.equal(service.liveListReads, before + 2, "a regain reads the list again");
 
       yield* TestClock.adjust(Duration.seconds(10));
       const later = service.liveListReads;

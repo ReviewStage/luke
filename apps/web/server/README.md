@@ -110,6 +110,18 @@ inside `client.withTransaction`: Better Auth writes over its own pool, outside
 the fiber's `SqlClient`. `auth-database.test.ts` creates a workspace and adds a
 member through the plugin over PGlite.
 
+The admin plugin's columns (`user.banned`, `ban_reason`, `ban_expires`, and
+`session.impersonated_by`, beside the `role` the migrations already held) and
+the support-access plugin's `user.support_access_until`
+(`packages/service/src/auth/support-access.ts`) are transcribed the same way,
+from `auth generate` for 1.7.7, and migration
+`20261105011320_admin_impersonation_support_access` is drizzle-kit's from that
+module. The admin plugin is there for its impersonation alone: a maintainer
+signs in as an account from the web for an hour, only while its member's grant
+of support access stands, and every other admin endpoint is shut
+(`auth-policy.ts`'s `DISABLED_AUTH_PATHS`). `support-access.test.ts` holds it
+over PGlite.
+
 Every account gets a first workspace made for it, named for the account,
 slugged `personal-<user id>`, with `{"personal":true}` as its metadata text
 (stored only; nothing reads it to behave differently), and named the

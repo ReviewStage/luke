@@ -89,6 +89,7 @@ import {
 import { useSignIn } from "./use-sign-in.js";
 import { usePrefetchBundles, useSessionReplay } from "./use-startup-work.js";
 import { useVisualViewport } from "./use-visual-viewport.js";
+import { ViewingAs } from "./viewing-as.js";
 import { useWindowFullScreen } from "./window-full-screen.js";
 import { useWindowZoom } from "./window-zoom.js";
 
@@ -674,6 +675,8 @@ function AppWindow(): React.JSX.Element {
                 <RepositoryRemedyProvider value={repositoryRemedies}>
                   <GitHubConnectProvider value={gitHubConnect}>
                     <ListedAutomations tasks={tasks}>
+                      {/* A maintainer's sign-in as the member, said above the stage on the web. */}
+                      <ViewingAs />
                       <div
                         ref={stage.ref}
                         className="app-stage"

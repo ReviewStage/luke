@@ -35,6 +35,7 @@ import {
   type DataTableMinWidth,
   GAP,
   Inline,
+  MARK_PROVIDER,
   Skeleton,
   STATUS_TONE,
   Stack,
@@ -43,8 +44,10 @@ import {
   TEXT_TONE,
   Text,
 } from "@repo/ui";
+import { repositoryPageUrl } from "@repo/ui/tasks-model";
 import { AGENT_STATUS_TONE } from "../../tasks/agent-model.js";
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
+import { ExternalLink } from "../chrome/external-links.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import {
   connectionTone,
@@ -54,6 +57,7 @@ import {
   pullRequestTone,
   pullRequestWord,
 } from "../status-words.js";
+import { WorkspaceCell } from "../workspace-cell.js";
 
 /** What the page draws where a value is absent. */
 const NONE = "—";
@@ -128,7 +132,22 @@ function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[]
 
 const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
   { key: "started", label: "Started", cell: (agent) => formatInstant(agent.createdAt) },
-  { key: "repository", label: "Repository", cell: (agent) => agent.repository },
+  {
+    key: "repository",
+    label: "Repository",
+    cell: (agent) =>
+      agent.repository === null ? (
+        NONE
+      ) : (
+        <ExternalLink
+          place={{
+            provider: MARK_PROVIDER.GITHUB,
+            label: agent.repository,
+            href: repositoryPageUrl(agent.repository),
+          }}
+        />
+      ),
+  },
   {
     key: "model",
     label: "Model",
@@ -158,43 +177,47 @@ const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
   },
 ];
 
-const WORKSPACE_COLUMNS: readonly DataTableColumn<AdminAccountWorkspace>[] = [
-  {
-    key: "workspace",
-    label: "Workspace",
-    cell: (workspace) => (
-      <Inline gap={GAP.TIGHT}>
-        <Text>{workspace.name}</Text>
-        <Badge>
-          {workspace.kind === ADMIN_WORKSPACE_KIND.PERSONAL ? "Personal" : "Shared workspace"}
-        </Badge>
-      </Inline>
-    ),
-  },
-  { key: "role", label: "Role", cell: (workspace) => workspace.role },
-  {
-    key: "members",
-    label: "Members",
-    kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (workspace) => formatCount(workspace.memberCount),
-  },
-  {
-    key: "github",
-    label: "GitHub",
-    cell: (workspace) =>
-      workspace.github.length === 0 ? (
-        <Text tone={TEXT_TONE.MUTED}>not installed</Text>
-      ) : (
+function workspaceColumns(
+  onOpenWorkspace: (id: string) => void,
+): readonly DataTableColumn<AdminAccountWorkspace>[] {
+  return [
+    {
+      key: "workspace",
+      label: "Workspace",
+      cell: (workspace) => (
         <Inline gap={GAP.TIGHT}>
-          {[...new Set(workspace.github)].map((status) => (
-            <Badge key={status} tone={INSTALLATION_TONE[status]}>
-              {INSTALLATION_LABEL[status]}
-            </Badge>
-          ))}
+          <WorkspaceCell workspace={workspace} onOpen={onOpenWorkspace} />
+          <Badge>
+            {workspace.kind === ADMIN_WORKSPACE_KIND.PERSONAL ? "Personal" : "Shared workspace"}
+          </Badge>
         </Inline>
       ),
-  },
-];
+    },
+    { key: "role", label: "Role", cell: (workspace) => workspace.role },
+    {
+      key: "members",
+      label: "Members",
+      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+      cell: (workspace) => formatCount(workspace.memberCount),
+    },
+    {
+      key: "github",
+      label: "GitHub",
+      cell: (workspace) =>
+        workspace.github.length === 0 ? (
+          <Text tone={TEXT_TONE.MUTED}>not installed</Text>
+        ) : (
+          <Inline gap={GAP.TIGHT}>
+            {[...new Set(workspace.github)].map((status) => (
+              <Badge key={status} tone={INSTALLATION_TONE[status]}>
+                {INSTALLATION_LABEL[status]}
+              </Badge>
+            ))}
+          </Inline>
+        ),
+    },
+  ];
+}
 
 /** One key or connection as the credentials table draws it. */
 interface CredentialRow {
@@ -323,6 +346,7 @@ function SupportTable<Row>({
   empty,
   minWidth,
   skeletonRows,
+  onRowPress,
 }: {
   label: string;
   columns: readonly DataTableColumn<Row>[];
@@ -331,6 +355,7 @@ function SupportTable<Row>({
   empty: string;
   minWidth: DataTableMinWidth;
   skeletonRows: number;
+  onRowPress?: ((row: Row) => void) | undefined;
 }): React.JSX.Element {
   return rows === undefined ? (
     <DataTableSkeleton label={label} columns={columns} rows={skeletonRows} minWidth={minWidth} />
@@ -342,6 +367,7 @@ function SupportTable<Row>({
       rowKey={rowKey}
       empty={empty}
       minWidth={minWidth}
+      onRowPress={onRowPress}
     />
   );
 }
@@ -353,9 +379,11 @@ function SupportTable<Row>({
 export function AccountSupportSections({
   support,
   windowDays,
+  onOpenWorkspace,
 }: {
   support: AdminAccountSupport | undefined;
   windowDays: number;
+  onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -378,12 +406,13 @@ export function AccountSupportSections({
       <AdminSection title="Workspaces">
         <SupportTable
           label="The account's workspaces"
-          columns={WORKSPACE_COLUMNS}
+          columns={workspaceColumns(onOpenWorkspace)}
           rows={support?.workspaces}
           rowKey={(workspace) => workspace.id}
           empty="In no workspace."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
           skeletonRows={SKELETON_ROWS.WORKSPACES}
+          onRowPress={(workspace) => onOpenWorkspace(workspace.id)}
         />
       </AdminSection>
 

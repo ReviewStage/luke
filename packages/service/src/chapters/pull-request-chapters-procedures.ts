@@ -23,7 +23,7 @@
  * title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
  * the API key the member who pressed it saved, never ours
- * (`chapters-generator.ts`), on the Claude model they chose in Settings
+ * (`chapters-generator.ts`), on the Claude model they chose on Generate
  * (Haiku where they never chose, or where what they stored is no model this
  * build offers), or OpenAI's of its tier where they saved only an OpenAI
  * key, then answers as the read does. A member who saved no API key, as one
@@ -312,7 +312,7 @@ export const agentChaptersAdmission = /* @__PURE__ */ Effect.fnUntraced(function
   return { kept, generatable: own !== undefined };
 });
 
-/** The model the member chose in Settings, Haiku where they never chose (the store reads one no build offers as Haiku too). */
+/** The model the member chose on Generate, Haiku where they never chose (the store reads one no build offers as Haiku too). */
 const chosenModelOf = (userId: string) =>
   Effect.map(
     hostedStoreOrUnavailable(readAccountPreferences(userId)),

@@ -563,6 +563,17 @@ interface NewTaskCardKept {
 }
 
 /**
+ * New task's agent start under way: the line its agent opens on, and the
+ * model it was started with, which the page draws while it waits. It names
+ * no task, since the task stands Untitled until its agent names it.
+ */
+export interface StartingTask {
+  readonly line: SentLine;
+  /** The model the card's chip picked; none where the start takes the default. */
+  readonly choice: ModelChoice | undefined;
+}
+
+/**
  * What a start comes from beyond its name, repository, and workspace: where
  * its agents run, and the agent New task's composer starts on its words in
  * the task's own start (`handed`).
@@ -585,12 +596,11 @@ export interface NewTaskStart {
 export interface TasksControl {
   page: TasksPage;
   /**
-   * The line New task's agent start under way opens its agent on, which the
-   * window draws on a task's page in its shape until the start answers
-   * (`StartingAgentTab`); none otherwise, or once the developer went to
-   * another task or page meanwhile.
+   * New task's agent start under way, which the window draws on a task's
+   * page in its shape until the start answers (`StartingAgentTab`); none
+   * otherwise, or once the developer went to another task or page meanwhile.
    */
-  starting: SentLine | undefined;
+  starting: StartingTask | undefined;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's tasks stand in for one. */
@@ -1332,9 +1342,9 @@ export function useTasksTab(input: {
   >(undefined);
   // How many times New task was pressed while Home stood, whose own composer takes the caret on each.
   const [homeNewTasks, setHomeNewTasks] = useState(0);
-  // New task's agent start under way: the line its agent opens on, and the navigation it was pressed at.
+  // New task's agent start under way: what its page draws, and the navigation it was pressed at.
   const [startingTask, setStartingTask] = useState<
-    { readonly line: SentLine; readonly navigation: number } | undefined
+    (StartingTask & { readonly navigation: number }) | undefined
   >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [relationMenu, setRelationMenu] = useState<TasksControl["relationMenu"]>(undefined);
@@ -2663,7 +2673,7 @@ export function useTasksTab(input: {
     // Staying, an agent's start puts the card away at once and opens nothing.
     if (handed !== undefined && stays) setNewTaskAsk(undefined);
     else if (line !== undefined) {
-      setStartingTask({ line, navigation: pressedAt });
+      setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
       setHistoryFor(undefined);
@@ -3573,7 +3583,7 @@ export function useTasksTab(input: {
     startingTask.navigation === navigations.current &&
     standIn === undefined &&
     historyFor === undefined
-      ? startingTask.line
+      ? startingTask
       : undefined;
 
   return useSteadyDoors({

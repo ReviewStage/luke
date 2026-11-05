@@ -31,6 +31,7 @@ import {
   type TreeStanding,
 } from "../file-tree/contract.js";
 import { usePhoneRoom } from "../stage-room.js";
+import { useRegained } from "../use-regained.js";
 import type { PaneOver } from "./file-view.js";
 import { entriesOf } from "./folder-listings.js";
 
@@ -273,6 +274,11 @@ function FileTreeBody({
     revealed.current = file;
     handle.current.reveal(file, { focus: false });
   }, [file]);
+
+  // A root that could not be listed is listed again as the app reaches the service again, as Retry lists it.
+  useRegained(() => {
+    if (standing.kind === TREE_STANDING.FAILED && standing.retry) handle.current?.relist();
+  });
 
   // Note that the whole repository is read the first time a search is
   // typed rather than as the tree opens, because most trees are browsed and

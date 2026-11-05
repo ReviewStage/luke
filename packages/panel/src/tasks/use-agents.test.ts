@@ -4,10 +4,12 @@ import assert from "node:assert/strict";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   AGENT_BRIEF,
+  AGENT_MACHINE,
   AGENT_RUNTIME,
   AGENT_STATUS,
   type AgentSummary,
   CHECK_SUMMARY,
+  LOCAL_AGENT_REFUSAL,
   PULL_REQUEST_STATE,
   type TasklessAgent,
 } from "@repo/features/agent-wire";
@@ -987,6 +989,53 @@ test("a continue carries the developer's words and files as its note, other word
         attachments: [notes],
       },
     ],
+  );
+});
+
+test("a move is a continue naming its place, another place minting a key of its own, and its refusal is said in a toast though the developer stayed on the task", async () => {
+  const SOURCE = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const STUDIO = "3f2e1d0c-9b8a-4c7d-8e6f-5a4b3c2d1e0f";
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [] });
+  tab.answer(
+    ACT_KIND.AGENTS_START,
+    { failure: AGENT_CALL_FAILURE.UNANSWERED },
+    {
+      failure: AGENT_CALL_FAILURE.LOCAL_AGENT_REFUSED,
+      localAgentRefusal: LOCAL_AGENT_REFUSAL.PREPARING,
+      refusedDevice: { name: "Studio" },
+    },
+  );
+  await tab.mount();
+  const continueAgent = tab.control().continueAgent ?? assert.fail("a Start could run");
+
+  await act(async () => {
+    await continueAgent(SOURCE, undefined, [], { machine: AGENT_MACHINE.VERCEL });
+    await continueAgent(SOURCE, undefined, [], {
+      machine: AGENT_MACHINE.DEVICE,
+      deviceId: STUDIO,
+    });
+  });
+  await settle();
+
+  assert.deepEqual(startPayloads(tab.asked), [
+    {
+      taskId: TASK,
+      idempotencyKey: "key-1",
+      from: { agentId: SOURCE },
+      runsOn: { machine: AGENT_MACHINE.VERCEL },
+    },
+    {
+      taskId: TASK,
+      idempotencyKey: "key-2",
+      from: { agentId: SOURCE },
+      runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO },
+    },
+  ]);
+  assert.ok(
+    document.body.textContent?.includes(
+      "Studio is still getting ready for local agents. Try again in a few minutes.",
+    ),
+    "the refusal is said in a toast",
   );
 });
 

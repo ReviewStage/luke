@@ -287,10 +287,10 @@ test("renaming needs a workspace the reader manages that is not their own first"
   );
 });
 
-test("model finds the default model and the Chapters model, each under a label no other page's row wears", () => {
+test("model finds the default model under a label no other page's row wears", () => {
   assert.deepEqual(
     labelsFound("model").filter((label) => label.toLowerCase().includes("model")),
-    ["Default model", "Chapters model"],
+    ["Default model"],
   );
 });
 

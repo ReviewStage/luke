@@ -780,41 +780,56 @@ function tarOctal(value: number, length: number): string {
   return `${value.toString(8).padStart(length - 1, "0")}\0`;
 }
 
+/** One ustar header block, its name cut to the hundred bytes the field holds. */
+function tarHeader(name: string, mode: number, size: number, type: "0" | "x"): Uint8Array {
+  const header = new Uint8Array(TAR_BLOCK);
+  tarField(header, 0, 100, name);
+  tarField(header, 100, 8, tarOctal(mode, 8));
+  tarField(header, 108, 8, tarOctal(0, 8));
+  tarField(header, 116, 8, tarOctal(0, 8));
+  tarField(header, 124, 12, tarOctal(size, 12));
+  tarField(header, 136, 12, tarOctal(0, 12));
+  tarField(header, 148, 8, "        ");
+  tarField(header, 156, 1, type);
+  tarField(header, 257, 6, "ustar\0");
+  tarField(header, 263, 2, "00");
+  const checksum = header.reduce((sum, byte) => sum + byte, 0);
+  tarField(header, 148, 8, `${checksum.toString(8).padStart(6, "0")}\0 `);
+  return header;
+}
+
+/** A file's bytes, padded to a whole block. */
+function tarBody(contents: Uint8Array): Uint8Array[] {
+  const padding = (TAR_BLOCK - (contents.byteLength % TAR_BLOCK)) % TAR_BLOCK;
+  return padding > 0 ? [contents, new Uint8Array(padding)] : [contents];
+}
+
+/** A pax extended header's `path` record, `<length> path=<path>\n`, whose length counts its own digits. */
+function paxPathRecord(path: string): Uint8Array {
+  const rest = Buffer.byteLength(` path=${path}\n`);
+  let length = rest + String(rest).length;
+  if (String(length).length !== String(rest).length) length = rest + String(length).length;
+  return Buffer.from(`${length} path=${path}\n`, "utf8");
+}
+
 /**
- * The files as one gzipped ustar archive, each under its path relative to
+ * The files as one gzipped tar archive, each under its path relative to
  * the root, which is what the file write takes. Note that a path past a
- * hundred bytes is split at a slash into ustar's prefix, and one that will
- * not split is refused, since every path here is our own.
+ * hundred bytes, which ustar's name field cannot hold, is written whole in
+ * a pax extended header ahead of its file's own.
  */
-function tarOf(files: readonly SandboxFile[]): Uint8Array | undefined {
+function tarOf(files: readonly SandboxFile[]): Uint8Array {
   const blocks: Uint8Array[] = [];
   for (const file of files) {
     const path = file.path.replace(/^\/+/u, "");
-    let name = path;
-    let prefix = "";
     if (Buffer.byteLength(path) > 100) {
-      const cut = path.lastIndexOf("/", 155);
-      if (cut <= 0 || Buffer.byteLength(path.slice(cut + 1)) > 100) return undefined;
-      prefix = path.slice(0, cut);
-      name = path.slice(cut + 1);
+      const record = paxPathRecord(path);
+      blocks.push(tarHeader("PaxHeader", file.mode, record.byteLength, "x"), ...tarBody(record));
     }
-    const header = new Uint8Array(TAR_BLOCK);
-    tarField(header, 0, 100, name);
-    tarField(header, 100, 8, tarOctal(file.mode, 8));
-    tarField(header, 108, 8, tarOctal(0, 8));
-    tarField(header, 116, 8, tarOctal(0, 8));
-    tarField(header, 124, 12, tarOctal(file.contents.byteLength, 12));
-    tarField(header, 136, 12, tarOctal(0, 12));
-    tarField(header, 148, 8, "        ");
-    tarField(header, 156, 1, "0");
-    tarField(header, 257, 6, "ustar\0");
-    tarField(header, 263, 2, "00");
-    tarField(header, 345, 155, prefix);
-    const checksum = header.reduce((sum, byte) => sum + byte, 0);
-    tarField(header, 148, 8, `${checksum.toString(8).padStart(6, "0")}\0 `);
-    blocks.push(header, file.contents);
-    const padding = (TAR_BLOCK - (file.contents.byteLength % TAR_BLOCK)) % TAR_BLOCK;
-    if (padding > 0) blocks.push(new Uint8Array(padding));
+    blocks.push(
+      tarHeader(path, file.mode, file.contents.byteLength, "0"),
+      ...tarBody(file.contents),
+    );
   }
   blocks.push(new Uint8Array(TAR_BLOCK * 2));
   return gzipSync(Buffer.concat(blocks));
@@ -1351,8 +1366,6 @@ export function vercelSandboxApi(
       writeFiles: (sandboxSessionId, files) =>
         Effect.gen(function* () {
           const archive = tarOf(files);
-          if (archive === undefined)
-            return yield* new SandboxUnavailable({ call: SANDBOX_CALL.FS_WRITE });
           const asked = yield* credentials(SANDBOX_CALL.FS_WRITE);
           const url = apiUrl(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/fs/write`,

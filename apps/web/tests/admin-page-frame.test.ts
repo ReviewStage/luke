@@ -53,6 +53,7 @@ const SHELL = {
   account: undefined,
   onSignOut: async () => undefined,
   onOpenAccount: () => undefined,
+  onOpenWorkspace: () => undefined,
   frame: (content: React.JSX.Element) => content,
 } as const;
 

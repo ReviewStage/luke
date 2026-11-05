@@ -39,9 +39,7 @@ export const INSTALLED_SKILL_PROBLEM = {
   ...SKILL_TEXT_PROBLEM,
   /** A file holds a literal shaped like a provider's credential, which a skill must never carry. */
   CREDENTIAL_SHAPED: "credential-shaped",
-  /** It holds more files than a skill may. */
-  TOO_MANY_FILES: "too-many-files",
-  /** Its files hold more bytes together than a skill may. */
+  /** One of its files holds more bytes than a file may. */
   FILES_TOO_LARGE: "files-too-large",
 } as const;
 

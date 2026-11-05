@@ -12,6 +12,7 @@ import {
   viewFromLocation,
   windowFromLocation,
   windowHref,
+  workspaceHref,
 } from "@repo/panel/admin/routing";
 import { AccountScreen } from "@repo/panel/admin/screens/account";
 import { CostScreen } from "@repo/panel/admin/screens/cost";
@@ -19,12 +20,13 @@ import { DashboardScreen, useMetricsRead } from "@repo/panel/admin/screens/dashb
 import { DayScreen } from "@repo/panel/admin/screens/day";
 import { ReliabilityScreen } from "@repo/panel/admin/screens/reliability";
 import { UsersScreen } from "@repo/panel/admin/screens/users";
+import { WorkspaceScreen } from "@repo/panel/admin/screens/workspace";
 import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { useCallback, useEffect, useState } from "react";
-import { authClient } from "./admin/auth-client";
 import { SignInCard } from "./admin/chrome/gate-cards";
 import { AdminShell } from "./admin/chrome/sidebar";
 import { WebAdminDoors } from "./admin/web-admin-doors";
+import { authClient } from "./auth-client";
 
 /** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
 export function AdminDashboard(): React.JSX.Element {
@@ -49,7 +51,7 @@ function AdminDashboardPage(): React.JSX.Element {
   const account = session.data?.user;
 
   // The address bar owns which view is open — and which window it covers — so
-  // a tab, an account page, or a 90-day view can be reloaded, shared, and left
+  // a tab, an account or workspace page, or a 90-day view can be reloaded, shared, and left
   // with the browser's own back button.
   const [view, setView] = useState<AdminView>(viewFromLocation);
   const [windowDays, setWindowDays] = useState<AdminMetricsWindow>(windowFromLocation);
@@ -64,6 +66,10 @@ function AdminDashboardPage(): React.JSX.Element {
   const openAccount = useCallback((id: string) => {
     window.history.pushState(null, "", accountHref(id));
     setView({ kind: ADMIN_PAGE.ACCOUNT, id });
+  }, []);
+  const openWorkspace = useCallback((id: string) => {
+    window.history.pushState(null, "", workspaceHref(id));
+    setView({ kind: ADMIN_PAGE.WORKSPACE, id });
   }, []);
   const openDay = useCallback((day: string) => {
     window.history.pushState(null, "", dayHref(day));
@@ -150,7 +156,21 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onBack={() => navigate(ADMIN_TAB.USERS)}
+        onOpenWorkspace={openWorkspace}
         frame={(content) => shell(ADMIN_TAB.USERS, content)}
+      />
+    );
+  }
+
+  if (view.kind === ADMIN_PAGE.WORKSPACE) {
+    return (
+      <WorkspaceScreen
+        id={view.id}
+        account={viewer}
+        onSignOut={signOut}
+        onBack={() => navigate(ADMIN_TAB.WORKSPACES)}
+        onOpenAccount={openAccount}
+        frame={(content) => shell(ADMIN_TAB.WORKSPACES, content)}
       />
     );
   }
@@ -208,6 +228,7 @@ function AdminDashboardPage(): React.JSX.Element {
         account={viewer}
         onSignOut={signOut}
         onOpenAccount={openAccount}
+        onOpenWorkspace={openWorkspace}
         frame={(content) => shell(ADMIN_TAB.WORKSPACES, content)}
       />
     );

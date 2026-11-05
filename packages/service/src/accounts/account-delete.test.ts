@@ -5,8 +5,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
   deleteAccount,
+  readAccountAccess,
   readAccountPreferences,
-  readAccountRole,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
@@ -136,7 +136,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
       standingSessions: (userId) => standingSessionsOf(userId),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
-      readRole: readAccountRole,
+      readAccess: readAccountAccess,
       accountFastOffer,
       writePreferences: writeAccountPreferences,
     });

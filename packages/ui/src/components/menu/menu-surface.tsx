@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { cn } from "../../cn.js";
+import { REPLAY_MASKED } from "../../session-replay-marks.js";
 import { DROPDOWN_MENU_SURFACE } from "../../shadcn/dropdown-menu.js";
 
 /**
@@ -96,9 +97,19 @@ export function MenuSurface({
 }
 
 /** A glyph in a menu row's column, muted beside the words it leads, as a crumb heading a menu's narrowed list leads with its kind's mark. */
-export function MenuGlyph({ children }: { children: React.ReactNode }): React.JSX.Element {
+export function MenuGlyph({
+  masked = false,
+  children,
+}: {
+  /** Whether the glyph stands for a person's thing, a person's face or a workspace's tile, kept masked in a screen recording as its item's words are. */
+  masked?: boolean | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
-    <span className="ui-menu-item-glyph inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-data-[variant=destructive]/menu-item:text-inherit [&_svg]:size-menu-glyph [&_svg]:flex-none [&>img]:size-menu-glyph [&>img]:flex-none">
+    <span
+      {...(masked ? REPLAY_MASKED : undefined)}
+      className="ui-menu-item-glyph inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground group-data-[variant=destructive]/menu-item:text-inherit [&_svg]:size-menu-glyph [&_svg]:flex-none [&>img]:size-menu-glyph [&>img]:flex-none"
+    >
       {children}
     </span>
   );

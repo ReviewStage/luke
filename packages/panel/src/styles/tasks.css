@@ -371,16 +371,31 @@
   }
 }
 
-/* A page's comments (page-pane.tsx) stand in a column beside the page, a
-   comment card's width and the list's insets wide, past a hairline; in a
-   panel too narrow for both, the column stands over the page instead, and
-   steps aside while the page is picked in or a thread is open on it. */
+/* A page's comments (page-pane.tsx) stand in a pane beside the page, as
+   wide as it was last dragged and never over half the row, past a
+   hairline; sliding out, it stands over the page's right edge, its resize
+   edge gone. In a panel too narrow for both, the pane stands over the page
+   instead, undragged, and steps aside while the page is picked in. */
 .page-comments-column {
+  position: relative;
   display: flex;
-  width: calc(var(--comment-card-width) + 2 * var(--ui-space-16));
+  width: min(
+    var(--page-comments-width, calc(var(--comment-card-width) + 2 * var(--ui-space-16))),
+    50%
+  );
   flex: none;
   border-left: 1px solid var(--ui-color-border);
   background: var(--ui-color-ground);
+}
+
+.page-comments-column[data-leaving] {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+}
+
+.page-comments-column[data-leaving] > .ui-resize-edge {
+  display: none;
 }
 
 @container side-panel (width < 640px) {
@@ -389,6 +404,10 @@
     inset: 0;
     width: auto;
     border-left: none;
+  }
+
+  .page-comments-column > .ui-resize-edge {
+    display: none;
   }
 
   .page-comments-column[data-aside] {
@@ -435,6 +454,23 @@
 .page-comment-float {
   width: var(--comment-card-width);
   max-width: 100%;
+}
+
+/* The threads open by an element stand no taller than the room their side
+   of it leaves (`--ui-popover-room`, which their float measures), so a
+   card's entries scroll inside it with its reply field in view under them,
+   as an open card over the plan does, and several scroll together. */
+.page-comment-threads {
+  display: flex;
+  max-height: var(--ui-popover-room);
+  flex-direction: column;
+}
+
+.page-comment-threads .comment-card[data-open="true"] {
+  display: flex;
+  min-height: 0;
+  max-height: var(--ui-popover-room);
+  flex-direction: column;
 }
 
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
@@ -1589,7 +1625,7 @@
    stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
-  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
     border-radius: 0;
     background: var(--ui-color-fill-hover);
   }
@@ -1797,8 +1833,9 @@ summary button[data-tool-agent-ref]:focus-visible {
    follows is its own: the app's mark beside a note of its, drawn at the row's
    16px in his voice's color; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
-   (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
-   the newest lines draw, on the log's own inset, over the composer's card. */
+   (`agent-tab-skeleton.tsx`): the log's last exchange stands at its foot,
+   where the newest lines draw, on the log's own inset, its turns a turn's
+   room apart, over the composer's card. */
 .agent-log-skeleton-wait {
   display: flex;
   min-height: 0;
@@ -1810,7 +1847,7 @@ summary button[data-tool-agent-ref]:focus-visible {
 .agent-log-skeleton {
   display: flex;
   flex-direction: column;
-  gap: var(--ui-control-gap);
+  gap: var(--ui-space-20);
   padding: var(--ui-section-gap) var(--ui-space-16) var(--ui-space-20);
 }
 

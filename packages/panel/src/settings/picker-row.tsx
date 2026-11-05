@@ -58,6 +58,8 @@ interface PickerProps {
   valueIcon?: React.ReactNode;
   /** Whether the chip draws that mark alone, its words read as its name and its hover, where its place is too narrow for them. */
   iconOnly?: boolean | undefined;
+  /** Whether its menu's words are the app's own, which a screen recording shows as they read, but for a row that is `replayMasked` (`SearchableMenu`'s `replayUnmasked`). */
+  replayUnmasked?: boolean | undefined;
   rows: readonly MenuRow[];
   /** Present, the menu opens on a search over the rows; absent, the list is short enough to read whole. */
   placeholder?: string | undefined;
@@ -101,6 +103,7 @@ export function Picker({
   valueLabel,
   valueIcon,
   iconOnly = false,
+  replayUnmasked,
   rows,
   placeholder,
   noMatch,
@@ -180,6 +183,7 @@ export function Picker({
           noMatch={noMatch}
           align={align}
           width={menuWidth}
+          replayUnmasked={replayUnmasked}
           onSearch={onSearch}
           onPick={(id) => {
             close();

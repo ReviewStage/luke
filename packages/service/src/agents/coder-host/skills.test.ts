@@ -23,20 +23,17 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { offeredSkills, skillsOpenSandbox } from "../agent-runtime/skills.js";
 import { SKILL_ROOT } from "../repository-skills.js";
-import { agentSkills, nativeSkills } from "./skills.js";
+import { nativeSkills } from "./skills.js";
 
 /**
- * The skills a coding agent's session is offered, through `agentSkills`
+ * The installed skills a native harness is handed, through `nativeSkills`
  * over the real migrations on PGlite and a GitHub answering the agent's
- * repository's skills: the repository's, then the workspace's installed
- * skills, then the member's personal ones, a name offered once by the
- * earliest; installed skills for an agent with no repository too; an
- * installed skill's supporting files handed to eve; a native harness handed
- * the installed skills alone, whole; a skill turned off left out; none
- * installed offered while the member has the Skills experiment off; and an
- * installed read that fails offering the repository's alone.
+ * repository's skills: the workspace's, then the member's personal ones, a
+ * name offered once by the earliest, less a name the repository holds where
+ * the harness reads it; a skill turned off left out; none while the member
+ * has the Skills experiment off; and an installed read that fails offering
+ * none.
  *
  * Synthetic accounts, repositories, and skills throughout.
  */
@@ -126,143 +123,25 @@ const startAgent = (repository: string | null, skillsOn = true) =>
     return { userId, agent, target, workspace };
   });
 
-it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills", (it) => {
-  it.effect(
-    "offers the repository's skills, then the workspace's, then the member's own, a name offered once by the earliest",
-    () =>
-      Effect.gen(function* () {
-        const { userId, agent, target, workspace } = yield* startAgent(REPOSITORY);
-        yield* install(userId, workspace, "testing", "The workspace's testing.");
-        yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
-        yield* install(userId, PERSONAL, "release-notes", "My release notes.");
-        yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-
-        const skills = yield* agentSkills(target, agent).pipe(
-          Effect.provide(repositoryWithSkills(["testing"])),
-        );
-
-        assert.deepEqual(
-          skills.map((skill) => skill.name),
-          ["testing", "release-notes", "pr-style"],
-        );
-        const [testing, notes, style] = skills;
-        assert.match(testing?.markdown ?? "", /From the repository\./u);
-        assert.match(
-          testing?.markdown ?? "",
-          /\.agents\/skills\/testing\/SKILL\.md` in the checkout/u,
-        );
-        assert.match(notes?.markdown ?? "", /The workspace's release notes\./u);
-        assert.match(style?.markdown ?? "", /My pr style\./u);
-        // The installed body is handed without its frontmatter, as a repository skill's is.
-        assert.ok(!(style?.markdown ?? "").includes("---"));
-      }),
-  );
-
-  it.effect("offers an agent with no repository its member's installed skills", () =>
-    Effect.gen(function* () {
-      const { userId, agent, target, workspace } = yield* startAgent(null);
-      yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
-      yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-
-      const skills = yield* agentSkills(target, agent).pipe(
-        Effect.provide(repositoryWithSkills(["testing"])),
-      );
-
-      assert.deepEqual(
-        skills.map((skill) => skill.name),
-        ["release-notes", "pr-style"],
-      );
-    }),
-  );
-
-  it.effect(
-    "offers an agent none of its member's installed skills while they have Skills off",
-    () =>
-      Effect.gen(function* () {
-        const { userId, agent, target, workspace } = yield* startAgent(null, false);
-        yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
-        yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-
-        const skills = yield* agentSkills(target, agent).pipe(
-          Effect.provide(repositoryWithSkills([])),
-        );
-
-        assert.deepEqual(skills, []);
-      }),
-  );
-
-  it.effect(
-    "hands eve an installed skill's supporting files, its body told where eve writes them, and says eve opens the sandbox for them",
-    () =>
-      Effect.gen(function* () {
-        const { userId, agent, target } = yield* startAgent(null);
-        const script = text("#!/bin/sh\necho triage\n");
-        yield* install(userId, PERSONAL, "sentry-triage", "Run `scripts/triage.sh`.", [
-          { path: "scripts/triage.sh", bytes: script },
-        ]);
-        yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-
-        const skills = yield* agentSkills(target, agent).pipe(
-          Effect.provide(repositoryWithSkills([])),
-        );
-        const offered = offeredSkills(skills);
-
-        const triage = offered?.["sentry-triage"];
-        assert.deepEqual(triage?.files, { "scripts/triage.sh": script });
-        assert.match(triage?.markdown ?? "", /`\$HOME\/\.agents\/skills\/sentry-triage\/`/u);
-        assert.match(triage?.markdown ?? "", /`\/workspace\/skills\/sentry-triage\/`/u);
-        assert.match(triage?.markdown ?? "", /Run `scripts\/triage\.sh`\./u);
-        // A skill with nothing beside its `SKILL.md` has no files for eve to write, and says of none.
-        const style = offered?.["pr-style"];
-        assert.equal(style?.files, undefined);
-        assert.ok(!(style?.markdown ?? "").includes(".agents/skills"));
-        // eve opens the sandbox to write those files, which the session records so its turn's end stops it.
-        assert.equal(skillsOpenSandbox(skills), true);
-        assert.equal(skillsOpenSandbox(skills.filter((skill) => skill.name === "pr-style")), false);
-      }),
-  );
-
-  it.effect("leaves out an installed skill turned off", () =>
-    Effect.gen(function* () {
-      const { userId, agent, target, workspace } = yield* startAgent(null);
-      const off = yield* install(userId, workspace, "release-notes", "Turned off.");
-      yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-      yield* setInstalledSkillEnabled(userId, off.id, false);
-
-      const skills = yield* agentSkills(target, agent).pipe(
-        Effect.provide(repositoryWithSkills([])),
-      );
-
-      assert.deepEqual(
-        skills.map((skill) => skill.name),
-        ["pr-style"],
-      );
-    }),
-  );
-});
-
-it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills, unread", (it) => {
-  it.effect("offers the repository's skills alone where the installed skills cannot be read", () =>
+it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills, unread", (it) => {
+  it.effect("hands a native harness no installed skills where they cannot be read", () =>
     Effect.gen(function* () {
       const { userId, agent, target } = yield* startAgent(REPOSITORY);
       yield* install(userId, PERSONAL, "pr-style", "My pr style.");
-      const offered = agentSkills(target, agent).pipe(
+      const handed = nativeSkills(target, agent, [SKILL_ROOT.AGENTS]).pipe(
         Effect.provide(repositoryWithSkills(["testing"])),
       );
-      const before = yield* offered;
+      const before = yield* handed;
       const db = yield* Database;
       yield* db.execute(sql`drop table installed_skill cascade`);
 
-      const after = yield* offered;
+      const after = yield* handed;
 
       assert.deepEqual(
         before.map((skill) => skill.name),
-        ["testing", "pr-style"],
+        ["pr-style"],
       );
-      assert.deepEqual(
-        after.map((skill) => skill.name),
-        ["testing"],
-      );
+      assert.deepEqual(after, []);
     }),
   );
 });
@@ -303,5 +182,37 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (i
           skillText("release-notes", "The workspace's release notes."),
         );
       }),
+  );
+
+  it.effect("leaves out an installed skill turned off", () =>
+    Effect.gen(function* () {
+      const { userId, agent, target, workspace } = yield* startAgent(null);
+      const off = yield* install(userId, workspace, "release-notes", "Turned off.");
+      yield* install(userId, PERSONAL, "pr-style", "My pr style.");
+      yield* setInstalledSkillEnabled(userId, off.id, false);
+
+      const skills = yield* nativeSkills(target, agent, [SKILL_ROOT.AGENTS]).pipe(
+        Effect.provide(repositoryWithSkills([])),
+      );
+
+      assert.deepEqual(
+        skills.map((skill) => skill.name),
+        ["pr-style"],
+      );
+    }),
+  );
+
+  it.effect("hands none of the installed skills while the member has Skills off", () =>
+    Effect.gen(function* () {
+      const { userId, agent, target, workspace } = yield* startAgent(null, false);
+      yield* install(userId, workspace, "release-notes", "The workspace's release notes.");
+      yield* install(userId, PERSONAL, "pr-style", "My pr style.");
+
+      const skills = yield* nativeSkills(target, agent, [SKILL_ROOT.AGENTS]).pipe(
+        Effect.provide(repositoryWithSkills([])),
+      );
+
+      assert.deepEqual(skills, []);
+    }),
   );
 });

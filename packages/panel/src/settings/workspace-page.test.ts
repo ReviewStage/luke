@@ -95,7 +95,8 @@ import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.j
  * are read and listed, the page holding itself back while they are, an
  * owner or an admin is offered Remove in a row's ⋯ for anyone but an owner,
  * a member leaves, a refusal the role earns says so, an owner or admin
- * invites by address and role and copies or cancels what is pending, and
+ * invites addresses as a role from Members' Invite and copies or cancels
+ * what is pending, and
  * every workspace's GitHub group, the first one's too, holds GitHub:
  * an owner's or an admin's to connect, or to manage on GitHub from its one
  * button once connected, its accounts listed under it, and a member's to
@@ -155,10 +156,8 @@ let heldInvitations: AppWorkspaceInvitations = NO_KEYS_HELD;
 let refuseRemoval = false;
 /** The invitations the test's service holds pending. */
 let invitations: WorkspaceInvitation[] = [];
-/** Whether the service refuses the next invitation as the address already invited. */
-let refuseInvitation = false;
-/** Where the next invitation waits before the service makes it, so a test can hold it on the wire. */
-let inviteHeld: Promise<void> | undefined;
+/** The addresses the service refuses as already invited. */
+let alreadyInvited: string[] = [];
 /** Whether the browser could not be opened on GitHub's page. */
 let refuseGitHubOpen = false;
 /** The workspace's Sentry on a deployment that holds no Sentry integration, which every test reads unless it says otherwise. */
@@ -354,12 +353,7 @@ function answer(request: Asked): Promise<Answered> {
       layInvitations(request.payload.workspaceId);
       return Promise.resolve(done(undefined));
     case ACT_KIND.WORKSPACE_INVITE: {
-      if (inviteHeld !== undefined) {
-        const held = inviteHeld;
-        inviteHeld = undefined;
-        return held.then(() => answer({ ...request }));
-      }
-      if (refuseInvitation) {
+      if (alreadyInvited.includes(request.payload.email)) {
         return Promise.resolve({
           status: FAKE_ANSWER.REFUSED,
           reason: ALREADY_INVITED_REFUSAL,
@@ -513,8 +507,7 @@ beforeEach(() => {
   refuseInvitationsRead = false;
   refuseRemoval = false;
   invitations = [];
-  refuseInvitation = false;
-  inviteHeld = undefined;
+  alreadyInvited = [];
   refuseGitHubOpen = false;
   sentry = SENTRY_NOT_SET_UP;
   slackBot = { configured: false };
@@ -1548,14 +1541,14 @@ test("a member leaves after confirming, which names what stays and what stops, a
   assert.deepEqual(buttons(owner.page, "Leave"), []);
 });
 
-test("the account's first workspace reads like any other: its members with the invite form, and Connect for its GitHub", async () => {
+test("the account's first workspace reads like any other: its members with Invite, and Connect for its GitHub", async () => {
   stored = [OWNER];
   const { page } = await mount(FIRST);
   const row = rowNamed(page, "GitHub");
   act(() => button(row, "Connect").click());
   await settle();
 
-  assert.ok(page.querySelector(".workspace-invite"));
+  assert.equal(buttons(page, "Invite").length, 1);
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_GITHUB_CONNECT),
@@ -2033,76 +2026,135 @@ test("the page has no workspace picker of its own, and shows another workspace, 
   );
 });
 
-/** The invite form's role chip, which names the role an invitation is sent as. */
-const roleChip = (form: HTMLElement) =>
-  form.querySelector<HTMLButtonElement>('button[aria-label^="Invite as"]') ??
-  assert.fail("no role chip");
-
-/** The role menu's items, each its role's name and what it may do. */
-const roleItems = () => [
-  ...document.querySelectorAll<HTMLElement>(
-    '[role="menu"] [role="menuitemcheckbox"], [role="menu"] [role="menuitem"], [role="menu"] [role="menuitemradio"]',
-  ),
-];
-
-/** Opens the role chip's menu and chooses `words`. */
-function chooseRole(form: HTMLElement, words: string): void {
-  act(() => roleChip(form).click());
-  const item =
-    roleItems().find((each) => each.textContent?.startsWith(words)) ??
-    assert.fail(`no ${words} in the role's menu`);
-  act(() => item.click());
+/** The Invite card standing over the page. */
+function inviteDialog(): HTMLElement {
+  return document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("no Invite card");
 }
 
-/** Types an address, chooses a role, and presses Invite in the page's form, as many times as asked before any answer. */
-async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  const address = form.querySelector("input") ?? assert.fail("no address field");
-  const roleWords = role === WORKSPACE_ROLE.ADMIN ? "Admin" : "Member";
+/** The Invite card's address field. */
+const addressField = () =>
+  inviteDialog().querySelector<HTMLInputElement>("input") ?? assert.fail("no address field");
+
+/** The Invite card's act, whatever count it names. */
+const inviteAct = () =>
+  [...inviteDialog().querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+    each.textContent?.startsWith("Invite"),
+  ) ?? assert.fail("no Invite act");
+
+/** The Invite card's roles, each its name and whether it is checked; none where the card offers no role. */
+const roleOptions = () =>
+  [...inviteDialog().querySelectorAll<HTMLElement>('[role="radio"]')].map((each) => [
+    each.textContent,
+    each.getAttribute("aria-checked"),
+  ]);
+
+/**
+ * Opens Members' Invite where its card is not already standing, types
+ * `addresses`, chooses `role` where the card offers one, and presses the
+ * card's act, as many times as asked before any answer.
+ */
+async function invite(
+  page: HTMLElement,
+  addresses: string,
+  role: string,
+  presses = 1,
+): Promise<void> {
+  if (document.querySelector('[role="dialog"]') === null) {
+    act(() => button(page, "Invite").click());
+    await settle();
+  }
+  const field = addressField();
   act(() => {
     // React reads a typed value off the element's own setter, as a keystroke sets it.
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(address, email);
-    address.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      addresses,
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  if (roleWords !== roleChip(form).textContent) chooseRole(form, roleWords);
+  const admin = [...inviteDialog().querySelectorAll<HTMLElement>('[role="radio"]')].find(
+    (each) => each.textContent === "Admin",
+  );
+  if (role === WORKSPACE_ROLE.ADMIN) act(() => admin?.click());
   act(() => {
-    for (let press = 0; press < presses; press += 1) form.requestSubmit();
+    for (let press = 0; press < presses; press += 1) inviteAct().click();
   });
   await settle();
 }
 
-test("the invite form's address field is named by a visible label, and, being required, is not marked Optional", async () => {
+/** The addresses the page has invited, in the order sent. */
+const invitedAddresses = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.email] : [],
+  );
+
+test("the Invite card's address field is named by a visible label, and, being required, is not marked Optional", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  const address = form.querySelector("input") ?? assert.fail("no address field");
+  act(() => button(page, "Invite").click());
+  await settle();
+  const address = addressField();
   assert.deepEqual(
     [...(address.labels ?? [])].map((each) => each.textContent),
-    ["Email address"],
+    ["Email addresses"],
   );
   assert.equal(address.getAttribute("aria-required"), "true");
 });
 
-test("an address the service would refuse is said under the field, in the app's error line rather than the browser's, and nothing is sent until it is fixed", async () => {
+test("an address the service would refuse is said under the field and nothing is sent until it is fixed", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  const address = form.querySelector("input") ?? assert.fail("no address field");
 
-  await invite(page, "alan", WORKSPACE_ROLE.MEMBER);
+  await invite(page, "alan@example.com, ada", WORKSPACE_ROLE.MEMBER);
 
   assert.equal(
-    form.querySelector('[data-slot="field-error"]')?.textContent,
-    "Enter an address like name@example.com.",
+    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
+    "Enter only email addresses.",
   );
-  assert.equal(address.getAttribute("aria-invalid"), "true");
-  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 0);
+  assert.equal(addressField().getAttribute("aria-invalid"), "true");
+  assert.deepEqual(invitedAddresses(), []);
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
-  assert.equal(address.getAttribute("aria-invalid"), null);
-  assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
+  assert.deepEqual(invitedAddresses(), ["alan@example.com"]);
+});
+
+test("several addresses typed at once are invited in turn, each once", async () => {
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+  act(() => button(page, "Invite").click());
+  await settle();
+  const field = addressField();
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "alan@example.com, ada@example.com;\nALAN@example.com",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  act(() => inviteAct().click());
+  await settle();
+
+  assert.deepEqual(invitedAddresses(), ["alan@example.com", "ada@example.com"]);
+  assert.deepEqual(
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
+    ["alan@example.com", "ada@example.com"],
+  );
+});
+
+test("an address refused partway stops the run there, saying why, and leaves it and those after it in the field", async () => {
+  alreadyInvited = ["sam@example.com"];
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
+
+  await invite(page, "alan@example.com, sam@example.com, ada@example.com", WORKSPACE_ROLE.MEMBER);
+
+  assert.deepEqual(invitedAddresses(), ["alan@example.com", "sam@example.com"]);
+  assert.equal(addressField().value, "sam@example.com, ada@example.com");
+  assert.equal(
+    inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
+    ALREADY_INVITED_REFUSAL,
+  );
+  assert.deepEqual(
+    invitationRows(page).map((row) => addressOf(row)?.textContent),
+    ["alan@example.com"],
+  );
 });
 
 test("the owner invites an address as a role, sees it pending with its link to copy, and cancels it from its ⋯", async () => {
@@ -2114,7 +2166,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
   const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
   const face = row.querySelector<HTMLElement>(".actor-mark")?.dataset.kind;
   const listed = [addressOf(row)?.textContent, row.querySelector("p")?.textContent];
-  act(() => button(row, "Copy invite link").click());
+  act(() => button(row, "Copy link").click());
   await settle();
   const invitationLink = copied.slice();
   await chooseAction(row, "Cancel invitation");
@@ -2157,21 +2209,17 @@ test("the owner invites an address as a role, sees it pending with its link to c
   assert.deepEqual(copied, ["https://vespin.dev/accept-invitation.html?id=inv-alan@example.com"]);
 });
 
-test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
+test("the owner chooses the role from Member and Admin, Member at first, and the invitation is sent as the role chosen", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  const before = roleChip(form).textContent;
-  act(() => roleChip(form).click());
-  const offered = roleItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
-  act(() => roleChip(form).click());
+  act(() => button(page, "Invite").click());
+  await settle();
+  const offered = roleOptions();
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.ADMIN);
 
-  assert.equal(before, "Member");
   assert.deepEqual(offered, [
-    ["MemberWorks on tasks and agents", "true"],
-    ["AdminAlso manages members and GitHub", "false"],
+    ["Member", "true"],
+    ["Admin", "false"],
   ]);
   assert.deepEqual(
     sent.flatMap((request) =>
@@ -2181,21 +2229,15 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
   );
 });
 
-test("an admin's role menu offers Admin dimmed, since only the owner invites admins, and an admin invites a member", async () => {
+test("an admin's Invite card offers no role, since only the owner invites admins, and invites a member", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  act(() => roleChip(form).click());
-  const admin = roleItems().find((item) => item.textContent?.startsWith("Admin"));
-  const offered = [
-    admin?.textContent,
-    admin?.getAttribute("aria-disabled") === "true" || admin?.hasAttribute("disabled"),
-  ];
-  act(() => roleChip(form).click());
+  act(() => button(page, "Invite").click());
+  await settle();
+  const offered = roleOptions();
 
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
 
-  assert.deepEqual(offered, ["AdminOnly the owner invites admins", true]);
+  assert.deepEqual(offered, []);
   assert.deepEqual(
     sent.flatMap((request) =>
       request.kind === ACT_KIND.WORKSPACE_INVITE ? [request.payload.role] : [],
@@ -2242,66 +2284,29 @@ test("each pending invitation's Cancel invitation stands in a group named by its
   assert.deepEqual(named, ["sam@example.com", "ada@example.com"]);
 });
 
-test("Cancel invitation, drawn red, sends nothing while an invitation is on its way", async () => {
-  invitations = [
-    {
-      id: "inv-sam",
-      email: "sam@example.com",
-      role: WORKSPACE_ROLE.MEMBER,
-      expiresAt: "2026-10-16T12:00:00.000Z",
-      acceptUrl: "https://vespin.dev/accept-invitation.html?id=inv-sam",
-    },
-  ];
-  let release: () => void = () => undefined;
-  inviteHeld = new Promise<void>((resolve) => {
-    release = () => resolve();
-  });
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-
-  await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER);
-  const row = invitationRows(page)[0] ?? assert.fail("no pending invitation");
-  const cancel =
-    row.querySelector<HTMLButtonElement>('button[aria-label="Cancel invitation"]') ??
-    assert.fail("no Cancel invitation");
-  act(() => cancel.click());
-  release();
-  await settle();
-
-  assert.equal(
-    sent.some((request) => request.kind === ACT_KIND.WORKSPACE_INVITATION_CANCEL),
-    false,
-  );
-});
-
 test("Invite pressed again while one is on its way sends one invitation", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
 
-  // The second press lands before the first answer: the form refuses it.
+  // The second press lands before the first answer: the card refuses it.
   await invite(page, "alan@example.com", WORKSPACE_ROLE.MEMBER, 2);
 
   assert.equal(sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITE).length, 1);
   assert.equal(page.querySelector('[role="alert"]'), null);
 });
 
-test("Invite is drawn as the form's act, its primary button", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const form =
-    page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
-  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-
-  assert.equal(submit?.textContent, "Invite");
-});
-
-test("an address already invited is said under the form, and a member is offered no invitations", async () => {
-  refuseInvitation = true;
+test("an address already invited is said in the Invite card, and a member is offered no Invite", async () => {
+  alreadyInvited = ["sam@example.com"];
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   await invite(admin.page, "sam@example.com", WORKSPACE_ROLE.MEMBER);
+  const said = inviteDialog().querySelector('[data-slot="field-error"]')?.textContent;
+  act(() => button(inviteDialog(), "Cancel").click());
+  await settle();
   const member = await mount(ACME);
   await settle();
 
-  assert.equal(admin.page.querySelector('[role="alert"]')?.textContent, ALREADY_INVITED_REFUSAL);
+  assert.equal(said, ALREADY_INVITED_REFUSAL);
   assert.deepEqual(invitationRows(admin.page), []);
-  assert.equal(member.page.querySelector(".workspace-invite"), null);
+  assert.deepEqual(buttons(member.page, "Invite"), []);
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.WORKSPACE_INVITATIONS_FOLLOW).length,
     1,
@@ -2544,44 +2549,4 @@ test("each member's ⋯ holds Copy link, which copies that person's link under t
 
   assert.deepEqual(copied, [`https://vespin.dev/acme/person/${MEMBER.userId}`]);
   assert.match(document.body.textContent ?? "", /Link copied/u);
-});
-
-/**
- * Presses Escape in `field` with the caret in it, and reports what the window's own
- * Escape would see: whether the press arrived marked taken, which it passes by.
- */
-function escapeIn(field: HTMLInputElement): { taken: boolean } {
-  const seen = { taken: false };
-  const listen = (event: KeyboardEvent) => {
-    seen.taken = event.defaultPrevented;
-  };
-  window.addEventListener("keydown", listen);
-  act(() => field.focus());
-  act(() => {
-    field.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-    );
-  });
-  window.removeEventListener("keydown", listen);
-  return seen;
-}
-
-test("Escape in the invite email field lets go of it, its words kept, and the window never takes it to leave Settings", async () => {
-  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const address =
-    page.querySelector<HTMLInputElement>(".workspace-invite form input") ??
-    assert.fail("no address field");
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
-      address,
-      "alan@example.com",
-    );
-    address.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  const seen = escapeIn(address);
-
-  assert.equal(seen.taken, true, "the window's Escape passes a taken press by");
-  assert.notEqual(document.activeElement, address, "the caret is let go");
-  assert.equal(address.value, "alan@example.com");
 });

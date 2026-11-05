@@ -446,7 +446,7 @@ test("an update ready to install offers Restart in the sidebar on the desktop, a
 
 test("the Mac offline says so in the foot, and nothing does while it is online", async () => {
   const offlineShown = async (online: boolean) => {
-    handState({}, { network: { online } });
+    handState({}, { network: { online, reachable: true } });
     mount(DEAN);
     await act(async () => {
       for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();

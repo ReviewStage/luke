@@ -44,7 +44,9 @@ import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { useOpenSettings } from "../open-settings.js";
 import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
+import { unrunnableChoice } from "./agent-model.js";
 import type { AgentServersControl } from "./agent-servers.js";
+import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import {
@@ -500,7 +502,12 @@ export function NewTaskComposer({
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
   // An agent needs a repository to work in, and something to work on: words or files.
   const blocked = repository === null;
-  const canStart = !blocked && !devicesUnread && filled;
+  // Note that an agent nothing of the account's pays for is held here, with the press that connects one, rather than refused once pressed; a bare task needs none.
+  const unpaid =
+    newTask.models === undefined || choice === undefined
+      ? undefined
+      : unrunnableChoice(newTask.models, choice);
+  const canStart = !blocked && !devicesUnread && unpaid === undefined && filled;
   // What an `@` and a `/` offer: the chosen repository's, read through the workspace, as on an agent's page no task holds.
   const { act } = useAct();
   const readMentionAgents = useMentionAgentsReader(workspaceId, newTask.tasks, newTask.models);
@@ -697,12 +704,20 @@ export function NewTaskComposer({
           <NewTaskRelationRows control={relationControl} />
         </div>
       )}
+      {unpaid === undefined || newTask.models === undefined ? null : (
+        <ConnectAgentBanner models={newTask.models} unpaid={unpaid} />
+      )}
       <AgentComposer
         status={AGENT_STATUS.STARTING}
         composer={composer}
         wording={startsBare ? BARE_WORDS : PURPOSE_WORDS[purpose]}
         // Note that an automation's agent is held without words, since its brief fences them as the request, files alone saying none.
-        sendable={!blocked && !devicesUnread && (!forAutomation || said !== "")}
+        sendable={
+          !blocked &&
+          !devicesUnread &&
+          (startsBare || unpaid === undefined) &&
+          (!forAutomation || said !== "")
+        }
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         modelsFailed={newTask.modelsFailed}

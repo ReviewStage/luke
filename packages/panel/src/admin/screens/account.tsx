@@ -7,8 +7,11 @@ import { readFailedWords } from "@repo/features/words";
 import {
   AVATAR_SIZE,
   Badge,
+  BUTTON_VARIANT,
+  Button,
   GAP,
   Inline,
+  MARK_PROVIDER,
   PICTURE_TILE_FACE,
   PictureTile,
   SKELETON_SHAPE,
@@ -36,6 +39,7 @@ import {
 import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { UsageChart, UsageChartSkeleton } from "../charts/usage-chart.js";
 import { AdminViewOptions, windowWords } from "../chrome/controls.js";
+import { ExternalLinks } from "../chrome/external-links.js";
 import { AccountActionsNote, AccountActivityNote, retiredTitle } from "../chrome/notes.js";
 import {
   AccountAvatar,
@@ -183,15 +187,17 @@ const VOLUME_STATS: readonly StatSpec<AdminUserDetail>[] = [
   },
 ];
 
-/** The masthead's frame: `avatar` beside the email line over the joined line. */
+/** The masthead's frame: `avatar` beside the email line over the joined line and the account's pages elsewhere. */
 function MastheadFrame({
   avatar,
   email,
   joined,
+  links,
 }: {
   avatar: React.ReactNode;
   email: React.ReactNode;
   joined: React.ReactNode;
+  links: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Inline gap={GAP.FIELD}>
@@ -199,6 +205,7 @@ function MastheadFrame({
       <Stack gap={GAP.TIGHT}>
         {email}
         {joined}
+        {links}
       </Stack>
     </Inline>
   );
@@ -241,7 +248,74 @@ function MastheadAvatar({ account }: { account: ViewerAccount }): React.JSX.Elem
   );
 }
 
-/** Who the account is: its avatar, its email with an admin's badge, and when it joined, was last seen, and signs in with. */
+/**
+ * Whether the member's grant of support access stood as the account was
+ * read: a maintainer may sign in as them only while it does.
+ */
+function supportAccessLive(detail: AdminUserDetail): boolean {
+  const until = detail.account.supportAccessUntil;
+  return until !== null && until > detail.generatedAt;
+}
+
+/** What the masthead says of the member's grant of support access. */
+function supportAccessWords(detail: AdminUserDetail): string {
+  const until = detail.account.supportAccessUntil;
+  return until !== null && supportAccessLive(detail)
+    ? `support access until ${formatInstant(until)}`
+    : "no support access";
+}
+
+/**
+ * Impersonate: signs the maintainer in as the member through the mount's
+ * door, which leaves the page where it lands, so only a refusal comes back,
+ * said beside the press in the service's own words.
+ */
+function ImpersonateControl({
+  impersonate,
+  userId,
+}: {
+  impersonate: (userId: string) => Promise<string | undefined>;
+  userId: string;
+}): React.JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string>();
+  const press = () => {
+    setBusy(true);
+    setRefusal(undefined);
+    void impersonate(userId).then((refused) => {
+      setBusy(false);
+      setRefusal(refused);
+    });
+  };
+  return (
+    <Inline>
+      {refusal === undefined ? null : (
+        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          {refusal}
+        </Text>
+      )}
+      <Button
+        variant={BUTTON_VARIANT.OUTLINE}
+        busy={busy}
+        busyLabel="Signing in as this account"
+        onClick={press}
+      >
+        Impersonate
+      </Button>
+    </Inline>
+  );
+}
+
+/**
+ * Whether the page offers Impersonate for `detail`, where the mount can sign
+ * in as a member at all: the account is no admin, and its grant of support
+ * access stands.
+ */
+function offersImpersonate(detail: AdminUserDetail): boolean {
+  return !detail.account.admin && supportAccessLive(detail);
+}
+
+/** Who the account is: its avatar, its email with an admin's badge, and when it joined, was last seen, signs in with, and grants support access until. */
 function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
   const subject = detail.account;
   return (
@@ -268,7 +342,23 @@ function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
           {subject.signInMethods.length > 0
             ? ` · signs in with ${subject.signInMethods.map(signInMethodLabel).join(", ")}`
             : ""}
+          {` · ${supportAccessWords(detail)}`}
         </Text>
+      }
+      links={
+        <ExternalLinks
+          places={
+            detail.analyticsPersonUrl === undefined
+              ? []
+              : [
+                  {
+                    provider: MARK_PROVIDER.POSTHOG,
+                    label: "Person in PostHog",
+                    href: detail.analyticsPersonUrl,
+                  },
+                ]
+          }
+        />
       }
     />
   );
@@ -289,6 +379,7 @@ function MastheadSkeleton(): React.JSX.Element {
           <Skeleton width={SKELETON_JOINED_WIDTH} />
         </Text>
       }
+      links={null}
     />
   );
 }
@@ -301,9 +392,11 @@ function MastheadSkeleton(): React.JSX.Element {
 function AccountSections({
   detail,
   windowDays,
+  onOpenWorkspace,
 }: {
   detail: AdminUserDetail | undefined;
   windowDays: number;
+  onOpenWorkspace: (id: string) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -331,6 +424,7 @@ function AccountSections({
       <AccountSupportSections
         support={detail?.support}
         windowDays={detail?.windowDays ?? windowDays}
+        onOpenWorkspace={onOpenWorkspace}
       />
 
       {/* Note that the hosted tier stands last, under everything the account
@@ -374,6 +468,7 @@ export function AccountScreen({
   account,
   onSignOut,
   onBack,
+  onOpenWorkspace,
   frame,
 }: {
   id: string;
@@ -382,10 +477,11 @@ export function AccountScreen({
   account: ViewerAccount | undefined;
   onSignOut: () => Promise<void>;
   onBack: () => void;
+  onOpenWorkspace: (id: string) => void;
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
-  const { reads, gate } = useAdminDoors();
+  const { reads, gate, impersonate } = useAdminDoors();
   const query = accountReadQuery(id, windowDays);
   const { state, refreshing, reload, withdraw } = useAdminRead(
     { procedure: ADMIN_READ.USER, query: query },
@@ -409,7 +505,11 @@ export function AccountScreen({
     loading: () =>
       frame(
         <PageSkeleton title={ACCOUNT_TITLE} note={note} back={back} controls={controls}>
-          <AccountSections detail={undefined} windowDays={windowDays} />
+          <AccountSections
+            detail={undefined}
+            windowDays={windowDays}
+            onOpenWorkspace={onOpenWorkspace}
+          />
         </PageSkeleton>,
       ),
     missing: () =>
@@ -426,8 +526,28 @@ export function AccountScreen({
       ),
     ready: (detail, refreshed) =>
       frame(
-        <AdminPage title={accountLabel(detail.account)} back={back} note={note} controls={controls}>
-          {refreshed(<AccountSections detail={detail} windowDays={windowDays} />)}
+        <AdminPage
+          title={accountLabel(detail.account)}
+          back={back}
+          note={note}
+          controls={
+            impersonate !== undefined && offersImpersonate(detail) ? (
+              <>
+                <ImpersonateControl impersonate={impersonate} userId={detail.account.id} />
+                {controls}
+              </>
+            ) : (
+              controls
+            )
+          }
+        >
+          {refreshed(
+            <AccountSections
+              detail={detail}
+              windowDays={windowDays}
+              onOpenWorkspace={onOpenWorkspace}
+            />,
+          )}
         </AdminPage>,
       ),
   });

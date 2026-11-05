@@ -183,7 +183,12 @@ import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
-import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import {
+  AgentTabSkeleton,
+  type ComposerModel,
+  ComposerSkeleton,
+  TranscriptSkeleton,
+} from "./agent-tab-skeleton.js";
 import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
@@ -1576,11 +1581,11 @@ export function AgentMessage({
     const received = sender !== undefined;
     const threadHead =
       comment !== undefined ? (
-        <CommentLineHead line={comment} fit={SUBJECT_FIT.OWN} />
+        <CommentLineHead line={comment} received={received} fit={SUBJECT_FIT.OWN} />
       ) : slack !== undefined ? (
         <SlackLineHead line={slack} received={received} />
       ) : thread === undefined ? null : (
-        <ThreadLineHead line={thread} words={words} fit={SUBJECT_FIT.OWN} />
+        <ThreadLineHead line={thread} words={words} received={received} fit={SUBJECT_FIT.OWN} />
       );
     // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
     const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
@@ -3044,9 +3049,17 @@ const NO_RETRY = () => undefined;
  * started on some, as the agent's own transcript will draw them, and its
  * working line saying it is starting, over the composer's card, which the
  * agent's own tab takes the place of once the start answers, its first line
- * drawn in the same place. One started on no words is briefed on the plan.
+ * drawn in the same place, and its model's chip where the start named the
+ * model. One started on no words is briefed on the plan.
  */
-export function StartingAgentTab({ line }: { line?: SentLine | undefined }): React.JSX.Element {
+export function StartingAgentTab({
+  line,
+  model,
+}: {
+  line?: SentLine | undefined;
+  /** The model the start named, which the composer's chip draws; none where the start takes the default. */
+  model?: ComposerModel | undefined;
+}): React.JSX.Element {
   const messages = useMemo(() => (line === undefined ? [] : agentLines([], [line])), [line]);
   return (
     <AgentTabFrame>
@@ -3063,7 +3076,7 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
         overComposer
       />
       <AgentTabFoot>
-        <ComposerSkeleton />
+        <ComposerSkeleton model={model} />
       </AgentTabFoot>
     </AgentTabFrame>
   );

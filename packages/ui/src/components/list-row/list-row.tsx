@@ -20,6 +20,7 @@ import {
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon, FoldChevronIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
@@ -543,7 +544,9 @@ export function List({
 export function ListRow({
   leading,
   title,
+  titleReplayMasked = false,
   description,
+  descriptionReplayMasked = false,
   lead,
   leadAt = LIST_ROW_LEAD.DESCRIPTION,
   attachments,
@@ -588,7 +591,11 @@ export function ListRow({
   leading?: ReactNode;
   /** What the row is, which its name opens with. */
   title: ReactNode;
+  /** Whether the title names a person's thing, a task's or a repository's name, kept masked in a screen recording even where the row stands under `ReplayUnmask`; a title in words stays measured as words. */
+  titleReplayMasked?: boolean | undefined;
   description?: ReactNode;
+  /** Whether the description holds a person's words, kept masked on the same terms as the title. */
+  descriptionReplayMasked?: boolean | undefined;
   /** What the row belongs to, drawn as a chip of its glyph and its name before the description, on its line. */
   lead?: ListRowLead | undefined;
   /** Where the lead stands: a chip before the description, on its line, or a line of its own over the title. */
@@ -735,7 +742,7 @@ export function ListRow({
       {unread === true && unreadWords !== undefined ? (
         <VisuallyHidden>{unreadWords}</VisuallyHidden>
       ) : null}
-      {title}
+      <ReplayWords masked={titleReplayMasked}>{title}</ReplayWords>
     </span>
   );
   // Note that the metadata and the chevron stand together at the row's end,
@@ -824,7 +831,7 @@ export function ListRow({
             {leadAt === LIST_ROW_LEAD.INLINE && lead !== undefined && said(description)
               ? LEAD_SEPARATOR
               : null}
-            {description}
+            <ReplayWords masked={descriptionReplayMasked}>{description}</ReplayWords>
           </span>
         ) : null}
         {metaAt === LIST_ROW_META.LAST ? end : null}

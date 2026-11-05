@@ -11,9 +11,10 @@ import {
   type HeldConfirm,
   useConfirm,
 } from "../../confirm-state.js";
+import { ReplayMask, ReplayWords } from "../../session-replay-marks.js";
 import { DIALOG_ROLE, Dialog, type RestoreTo } from "../dialog/dialog.js";
 import { DIALOG_TONE, DialogActions, type DialogTone } from "../dialog/dialog-actions.js";
-import { DIALOG_ANSWERS, useDialogFoot } from "../dialog/dialog-foot.js";
+import { DIALOG_ANSWERS, DialogReplayUnmasked, useDialogFoot } from "../dialog/dialog-foot.js";
 import { ErrorLine } from "../error-line/error-line.js";
 import { FormField } from "../form-field/form-field.js";
 import { TEXT_VARIANT, Text } from "../text/text.js";
@@ -71,6 +72,17 @@ export interface DialogQuestion {
   running: string;
   /** What the act costs, which decides its color: no question asks without saying it. */
   loss: ConfirmLoss;
+  /**
+   * Whether its words are the app's, which a screen recording shows as they
+   * read: its title, its body, and its act's word, but for a title or a
+   * body that names a person's thing (`titleReplayMasked`,
+   * `bodyReplayMasked`). The name a gate asks for, a refusal, and what the
+   * card holds under its body stay masked, the last unless its owner marks
+   * its own words in it (`ReplayUnmask`).
+   */
+  replayUnmasked?: boolean | undefined;
+  titleReplayMasked?: boolean | undefined;
+  bodyReplayMasked?: boolean | undefined;
 }
 
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
@@ -173,6 +185,8 @@ function ConfirmCard({
       role={DIALOG_ROLE.ALERT_DIALOG}
       title={question.title}
       describedBy={question.body ? bodyId : undefined}
+      replayUnmasked={question.replayUnmasked}
+      titleReplayMasked={question.titleReplayMasked}
       busy={settling}
       refused={rejection !== undefined && !acting}
       initialFocus={field ?? (gate === undefined ? cancel : gateField)}
@@ -200,15 +214,20 @@ function ConfirmCard({
     >
       {question.body ? (
         <p id={bodyId} className={BODY}>
-          {question.body}
+          <ReplayWords masked={question.bodyReplayMasked}>{question.body}</ReplayWords>
         </p>
       ) : null}
-      {children}
+      {/* What the owner hands under the body is its own to mark, masked here even where the question unmasks its words. */}
+      <ReplayMask>{children}</ReplayMask>
       {gate === undefined ? null : (
         <FormField
           label={
             <>
-              Type <span className={GATE}>{gate}</span> to confirm
+              Type{" "}
+              <span className={GATE}>
+                <ReplayMask>{gate}</ReplayMask>
+              </span>{" "}
+              to confirm
             </>
           }
         >
@@ -225,7 +244,9 @@ function ConfirmCard({
           )}
         </FormField>
       )}
-      <ErrorLine error={rejection !== undefined && !acting ? rejection : undefined} />
+      <ReplayMask>
+        <ErrorLine error={rejection !== undefined && !acting ? rejection : undefined} />
+      </ReplayMask>
     </Dialog>
   );
 }
@@ -386,29 +407,41 @@ export function FootQuestion({
     >
       <div className={FOOT_WORDS}>
         <Text id={titleId} variant={TEXT_VARIANT.LABEL}>
-          {question.title}
+          <ReplayWords
+            unmasked={question.replayUnmasked === true}
+            masked={question.titleReplayMasked}
+          >
+            {question.title}
+          </ReplayWords>
         </Text>
         {question.body ? (
           <p id={bodyId} className={BODY}>
-            {question.body}
+            <ReplayWords
+              unmasked={question.replayUnmasked === true}
+              masked={question.bodyReplayMasked}
+            >
+              {question.body}
+            </ReplayWords>
           </p>
         ) : null}
         <ErrorLine error={refused ? confirm.rejection : undefined} />
       </div>
       <div className={DIALOG_ANSWERS}>
-        <DialogActions
-          onCancel={withdraw}
-          cancelRef={cancel}
-          act={{
-            verb: question.verb,
-            tone: LOSS_TONE[question.loss],
-            onPress: () => confirm.run(),
-            running: question.running,
-            busy: acting,
-            landed,
-            onShown: answer.onShown,
-          }}
-        />
+        <DialogReplayUnmasked.Provider value={question.replayUnmasked === true}>
+          <DialogActions
+            onCancel={withdraw}
+            cancelRef={cancel}
+            act={{
+              verb: question.verb,
+              tone: LOSS_TONE[question.loss],
+              onPress: () => confirm.run(),
+              running: question.running,
+              busy: acting,
+              landed,
+              onShown: answer.onShown,
+            }}
+          />
+        </DialogReplayUnmasked.Provider>
       </div>
     </div>,
     foot.slot,

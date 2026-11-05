@@ -8,14 +8,13 @@ import type {
   WorkspaceSentryInstallation,
 } from "@repo/features/sentry-install-wire";
 import type { FailureSurface } from "@repo/features/shown-failure";
-import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
+import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { SlackListedChannel } from "@repo/features/slack-bot-wire";
 import { dayAndTimeText } from "@repo/features/time-format";
 import { readingWords } from "@repo/features/words";
 import type { WorkspaceSlack } from "@repo/features/workspace-integrations-live";
 import {
   INVITATION_ROLE,
-  isInvitableEmail,
   type WorkspaceInvitation,
 } from "@repo/features/workspace-invitation-wire";
 import { managesWorkspace } from "@repo/features/workspace-role";
@@ -30,11 +29,9 @@ import { ACT_KIND, WORKSPACE_SLUG_REFUSAL } from "@repo/host/acts";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@repo/settings/settings-views";
 import {
-  BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
-  CHIP_WIDTH,
   Chip,
   ChipName,
   CONFIRM_LOSS,
@@ -47,11 +44,8 @@ import {
   FormField,
   GAP,
   INLINE_EDIT_LOOK,
-  Inline,
   InlineEdit,
   type InlineEditEnd,
-  JUSTIFY,
-  LAYOUT_ELEMENT,
   MENU_DETAIL,
   OneLine,
   ProviderMark,
@@ -71,7 +65,6 @@ import {
   SettingsSectionsSkeleton,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
-  TEXT_FIELD_TYPE,
   TextField,
   TrashIcon,
   useConfirmDialog,
@@ -104,12 +97,13 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
-import { confirmFailure, failureShown, refusedShown, unreadShown } from "../failure-report.js";
+import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
+import { useInviteDialog } from "./invite-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { WORKSPACE_CONNECTIONS } from "./pages.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -177,29 +171,8 @@ const REMOVE_MEMBER = "Remove from workspace";
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
-/** The roles an invitation offers, in the order the role's menu lists them, the default first. */
-const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
-
-/** What each role may do, as the role menu's second lines say it. */
-const ROLE_DETAIL = {
-  [INVITATION_ROLE.MEMBER]: "Works on tasks and agents",
-  [INVITATION_ROLE.ADMIN]: "Also manages members and GitHub",
-} as const satisfies Record<WorkspaceInvitation["role"], string>;
-
-/** What an admin's role menu says under Admin, which only the owner invites. */
-const OWNER_INVITES_ADMINS = "Only the owner invites admins";
-
 /** What the toast says once an invitation's accept link is on the clipboard. */
 const INVITE_LINK_COPIED = "Invite link copied";
-
-/** What the address field says of a refused invite: nothing typed, or no address the service invites. */
-const INVITE_EMAIL_PROBLEM = {
-  EMPTY: "Enter an email address.",
-  MALFORMED: "Enter an address like name@example.com.",
-} as const;
-
-/** What the invitations say where none is pending, with the one fact a reader cannot guess: the invitee is emailed their link. */
-const INVITATIONS_EMPTY = `No invitations. ${PRODUCT_NAME} emails each invitee their link, which you can also copy and send yourself.`;
 
 /** What a list's line says where its read did not land, in `ErrorState`'s words. */
 const READ_FAILED = {
@@ -904,139 +877,46 @@ function TeamMembers({
 }
 
 /**
- * The role an invitation is sent as: the field chip a Settings picker wears,
- * "Member ⌄", whose menu checks the role chosen and says under each what it
- * may do, as the composer's model chip stands beside its field and its send.
- * It is `@repo/ui`'s field `Chip`, its one width its container's.
+ * Members' Invite, at the end of the section's head, for an owner or an
+ * admin: an outline `Button` that opens the card inviting addresses
+ * (`useInviteDialog`), where a link or a search result naming the
+ * invitations lands.
  */
-function RoleChip({
-  value,
-  disabled,
-  adminAllowed,
-  onChange,
-}: {
-  value: WorkspaceInvitation["role"];
-  disabled: boolean;
-  /** Whether the reader may invite an admin, which only the owner may; an admin's menu offers Admin dimmed. */
-  adminAllowed: boolean;
-  onChange: (role: WorkspaceInvitation["role"]) => void;
-}): React.JSX.Element {
-  // The page is drawn whenever the chip is, so the menu closes with the chip unmounting.
-  const menu = useMenu(true);
-  const door = useRef<HTMLButtonElement | null>(null);
+function InviteButton({ workspace }: { workspace: Workspace }): React.JSX.Element {
+  const invite = useInviteDialog({
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    owner: workspace.role === WORKSPACE_ROLE.OWNER,
+  });
   return (
-    <Inline wrap={false}>
-      <Chip
-        look={CHIP_LOOK.FIELD}
-        width={CHIP_WIDTH.FIXED}
-        chevron
-        ref={door}
-        aria-label={`Invite as ${ROLE_WORDS[value]}`}
-        disabled={disabled}
-        {...menu.trigger()}
-      >
-        {ROLE_WORDS[value]}
-      </Chip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label="Invite as"
-          menu={menu.drawn}
-          groups={[
-            INVITATION_ROLES.map((role) => {
-              const barred = role === INVITATION_ROLE.ADMIN && !adminAllowed;
-              return {
-                label: ROLE_WORDS[role],
-                detail: barred ? OWNER_INVITES_ADMINS : ROLE_DETAIL[role],
-                checked: role === value,
-                disabled: barred,
-                onSelect: () => onChange(role),
-              };
-            }),
-          ]}
-          onClose={menu.close}
-        />
-      )}
-    </Inline>
+    <div {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}>
+      <Button variant={BUTTON_VARIANT.OUTLINE} onClick={invite.ask}>
+        Invite
+      </Button>
+      {invite.dialog}
+    </div>
   );
 }
 
 /**
- * The workspace's invitations, for an owner or an admin, under the members:
- * the form that invites an address as a member or an admin, where a link
- * or a search result naming the invitations lands, then those still pending,
- * each under the outline face a person not yet in wears, saying as what and
- * until when, with its link to copy and Cancel invitation in its ⋯, which asks
- * first in the accent rather than red: inviting the address again undoes it,
- * but the link already sent to the invitee stops working. An invite refused
- * is said under the form; a cancel is drawn by the host on the press, and
- * one refused, its invitation back, is said in a toast. The form is
- * `@repo/ui`'s `TextField`, the role's chip, and Invite its outline
- * `Button`; each pending one is a `SettingsRow` led by the face, through
- * `MenuRow`, Copy link its outline `Button`.
+ * The workspace's invitations still pending, for an owner or an admin, under
+ * the members, and nothing where none is: each under the outline face a
+ * person not yet in wears, saying as what and until when, with its link to
+ * copy and Cancel invitation in its ⋯, which asks first in the accent rather
+ * than red: inviting the address again undoes it, but the link already sent
+ * to the invitee stops working. A cancel is drawn by the host on the press,
+ * and one refused, its invitation back, is said in a toast. Each is a
+ * `SettingsRow` led by the face, through `MenuRow`, Copy link its outline
+ * `Button`.
  */
-function Invitations({
-  workspaceId,
-  owner,
-}: {
-  workspaceId: string;
-  /** Whether the reader owns the workspace, the one role that invites an admin. */
-  owner: boolean;
-}): React.JSX.Element {
-  const { act, press } = useAct();
+function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Element {
+  const { press } = useAct();
   const copy = useCopyToast();
   const {
     rows: pending,
     status,
     retry,
   } = useHostRead(LIVE_READ.WORKSPACE_INVITATIONS, workspaceId);
-  const [email, setEmail] = useState("");
-  const [emailProblem, setEmailProblem] = useState<string>();
-  const emailField = useRef<HTMLInputElement>(null);
-  const [role, setRole] = useState<WorkspaceInvitation["role"]>(INVITATION_ROLE.MEMBER);
-  const [note, setNote] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  // Note that the press reads a ref rather than `busy`, because a second
-  // press can land before the render that would disable the button.
-  const sending = useRef(false);
-  // Note that one invite runs at a time, and what it moves is drawn by the
-  // host from its answer, so nothing here lays it.
-  const write = (made: () => Promise<unknown>, done?: () => void) => {
-    if (sending.current) return;
-    sending.current = true;
-    setBusy(true);
-    setNote(undefined);
-    made()
-      .then(
-        () => done?.(),
-        (refused: Error) => setNote(refused.message),
-      )
-      .finally(() => {
-        sending.current = false;
-        setBusy(false);
-      });
-  };
-
-  // The invitation made is listed at once, its link copyable, as the host
-  // draws it from its answer until the held read carries it.
-  const invite = (event: React.FormEvent) => {
-    event.preventDefault();
-    // Note that the address is checked here, as the service reads it, because the browser never checks a form.
-    const problem =
-      email.trim() === ""
-        ? INVITE_EMAIL_PROBLEM.EMPTY
-        : isInvitableEmail(email)
-          ? undefined
-          : INVITE_EMAIL_PROBLEM.MALFORMED;
-    setEmailProblem(problem);
-    if (problem !== undefined) {
-      emailField.current?.focus();
-      return;
-    }
-    write(
-      () => act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }),
-      () => setEmail(""),
-    );
-  };
 
   const cancel = (invitationId: string) =>
     void press(ACT_KIND.WORKSPACE_INVITATION_CANCEL, { workspaceId, invitationId });
@@ -1057,60 +937,6 @@ function Invitations({
 
   return (
     <>
-      <Stack gap={GAP.NONE}>
-        <div
-          className="workspace-invite flex min-h-settings-row items-center px-settings-row-inline py-settings-row-block"
-          {...searchAnchorProps(SETTINGS_SECTION.INVITATIONS)}
-        >
-          {/* Note that the field's label stands over the whole row and its error under it, so Member and Invite keep the address's line. */}
-          <Inline as={LAYOUT_ELEMENT.FORM} grow growFirst onSubmit={invite}>
-            <FormField label="Email address" error={inputProblem(emailProblem)}>
-              {(field) => (
-                <Inline justify={JUSTIFY.END} growFirst>
-                  <TextField
-                    ref={emailField}
-                    field={field}
-                    type={TEXT_FIELD_TYPE.EMAIL}
-                    placeholder="name@example.com"
-                    autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-                    spellCheck={false}
-                    value={email}
-                    disabled={busy}
-                    // Note that Escape lets go of the field and keeps the words, rather than leaving Settings.
-                    onEscape={() => emailField.current?.blur()}
-                    onChange={(typed) => {
-                      setEmail(typed);
-                      setEmailProblem(undefined);
-                    }}
-                  />
-                  <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-                  <Button
-                    type={BUTTON_TYPE.SUBMIT}
-                    variant={BUTTON_VARIANT.PRIMARY}
-                    busy={busy}
-                    busyLabel="Inviting"
-                  >
-                    Invite
-                  </Button>
-                </Inline>
-              )}
-            </FormField>
-          </Inline>
-        </div>
-        {note === undefined ? null : (
-          <SettingsLine>
-            <ErrorState
-              failure={failureShown({
-                surface: FAILURE_SURFACE.WORKSPACE_INVITE,
-                cause: FAILURE_CONDITION.REFUSED,
-                refused: true,
-              })}
-            >
-              {note}
-            </ErrorState>
-          </SettingsLine>
-        )}
-      </Stack>
       {status === HOST_READ_STATUS.FAILED ? (
         <ReadFailed
           line={READ_FAILED.INVITATIONS}
@@ -1122,8 +948,6 @@ function Invitations({
           label={readingWords("the invitations")}
           rows={[INVITATION_ROW_SKELETON]}
         />
-      ) : pending.length === 0 ? (
-        <SettingsLine>{INVITATIONS_EMPTY}</SettingsLine>
       ) : null}
       {(pending ?? []).map((one) => (
         <MenuRow
@@ -1135,7 +959,6 @@ function Invitations({
               label: "Cancel invitation",
               icon: <XIcon />,
               danger: true,
-              disabled: busy,
               onSelect: () => {
                 setCanceling(one);
                 cancellation.ask();
@@ -1152,7 +975,7 @@ function Invitations({
                 variant={BUTTON_VARIANT.OUTLINE}
                 onClick={() => copy(one.acceptUrl, INVITE_LINK_COPIED)}
               >
-                Copy invite link
+                Copy link
               </Button>
             ),
           }}
@@ -1997,16 +1820,18 @@ function ShownWorkspace({
       <SettingsSection>
         <WorkspaceIdentity workspace={workspace} />
       </SettingsSection>
-      <SettingsSection title="Members" anchor={SETTINGS_SECTION.MEMBERS}>
+      <SettingsSection
+        title="Members"
+        action={managesWorkspace(workspace) ? <InviteButton workspace={workspace} /> : undefined}
+        anchor={SETTINGS_SECTION.MEMBERS}
+      >
         <TeamMembers
           workspace={workspace}
           readerId={readerId}
           members={members.read}
           onRetry={members.retry}
         />
-        {managesWorkspace(workspace) ? (
-          <Invitations workspaceId={workspace.id} owner={workspace.role === WORKSPACE_ROLE.OWNER} />
-        ) : null}
+        {managesWorkspace(workspace) ? <Invitations workspaceId={workspace.id} /> : null}
       </SettingsSection>
       <SettingsSection title={WORKSPACE_CONNECTIONS} anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         {WORKSPACE_INTEGRATIONS.map(({ service, Row }) => (

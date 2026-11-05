@@ -271,6 +271,17 @@ test("a task item emptied above its nested checklist is saved as a checkbox and 
   assert.equal(reopened.handedOver(), "- [ ] again\n  - [ ] nested\n");
 });
 
+test("a task item with a checklist nested under it is checked from its checkbox", () => {
+  const { host, handedOver } = opened("- [ ] parent\n  - [ ] nested\n");
+  const checkbox = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  assert.ok(checkbox);
+
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new Event("change"));
+
+  assert.equal(handedOver(), "- [x] parent\n  - [ ] nested\n");
+});
+
 test("a list mixing bullets and task items opens editable, untouched byte for byte, and an edit to a task item changes its line alone", () => {
   const text = "## Notes\n\n- one\n- two\n\n- [x] test\n- [ ] &nbsp;\n\nAfter.\n";
   const { host, editor, handedOver } = opened(text);

@@ -23,8 +23,9 @@
  *   sends every ask over HTTP for `HTTP_AFTER_FAILED_OPEN`, as a deployment
  *   serving no socket, such as the local server, does always;
  * - an ask unanswered within `ANSWER_WITHIN` takes its socket as stalled
- *   and closes it, and fails, as does every ask a socket held when it ended,
- *   which the read answers as any poll that failed in transport;
+ *   and closes it, and is asked again over HTTP, as is every ask a socket
+ *   held when it ended, so a socket's end is never a poll's failure, nor
+ *   the service's silence where the client keeps its reach (`ServiceReach`);
  * - a 401 closes the socket, whose credential may be one since renewed or
  *   another account's, and asks again over HTTP, where the account call
  *   renews the credential as it does for any request.
@@ -39,12 +40,7 @@ import {
 } from "@repo/features/live-wire";
 import { unparsedWire } from "@repo/wire";
 import { Clock, Deferred, Duration, Effect, Exit, Result, Schema, Scope, Stream } from "effect";
-import {
-  HttpClient,
-  HttpClientError,
-  type HttpClientRequest,
-  HttpClientResponse,
-} from "effect/http";
+import { HttpClient, type HttpClientRequest, HttpClientResponse } from "effect/http";
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";
 import { openedUnderCredential } from "./relay-credential.js";
 
@@ -113,16 +109,6 @@ function responseOf(
       ? new Response(null, { status: answer.status })
       : new Response(answer.body, { status: answer.status, headers: JSON_HEADERS });
   return HttpClientResponse.fromWeb(request, response);
-}
-
-/** An ask its socket never answered, as the transport failure a request that reached nothing is. */
-function unanswered(request: HttpClientRequest.HttpClientRequest): HttpClientError.HttpClientError {
-  return new HttpClientError.HttpClientError({
-    reason: new HttpClientError.TransportError({
-      request,
-      description: "the live socket ended before it answered",
-    }),
-  });
 }
 
 /**
@@ -256,15 +242,15 @@ export function liveSocketClient(
         );
       });
 
-    /** A live read asked over the socket where one answers, and over HTTP where none does or it was refused. */
+    /** A live read asked over the socket where one answers, and over HTTP where none does, it ended or stalled first, or it was refused. */
     const live = (request: HttpClientRequest.HttpClientRequest, url: URL) =>
       Effect.gen(function* () {
         const standing = yield* socketFor;
         if (standing === undefined) return yield* http.execute(request);
-        const answer = yield* Effect.mapError(ask(standing, `${url.pathname}${url.search}`), () =>
-          unanswered(request),
-        );
-        if (answer.status !== UNAUTHORIZED) return responseOf(request, answer);
+        const asked = yield* Effect.result(ask(standing, `${url.pathname}${url.search}`));
+        if (Result.isSuccess(asked) && asked.success.status !== UNAUTHORIZED) {
+          return responseOf(request, asked.success);
+        }
         yield* end(standing);
         return yield* http.execute(request);
       });

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  INSTALLED_SKILL_BOUNDS,
+  holdsFileTooLarge,
   INSTALLED_SKILL_MAIN_FILE,
   INSTALLED_SKILL_REFUSAL,
   INSTALLED_SKILL_SCOPE,
@@ -35,9 +35,10 @@ import { roleAmong } from "./workspace-store.js";
  * installer's account, which is kept for attribution alone. Every statement names the account beside the skill
  * and gates on that rule in SQL, so a member who leaves a workspace reaches
  * none of its skills at once. A skill and its files are written in one
- * transaction: the files are checked first, at least `SKILL.md` and within
- * `INSTALLED_SKILL_BOUNDS`, which a check on one row cannot hold, while the
- * name's rule and each file's own bound are the tables' checks. A name
+ * transaction: the files are checked first, at least `SKILL.md` and none
+ * past `INSTALLED_SKILL_BOUNDS`, so an oversized file is refused in words
+ * rather than by the table's check, which holds the same bound beside the
+ * name's rule and a path held once per skill. A name
  * already held in its scope is refused as `InstalledSkillNameTaken`. Every
  * write answers the transaction it committed in, which a reader holding the
  * skills live (`installedSkillsLiveStatement`) waits for.
@@ -250,16 +251,10 @@ function skillHash(files: readonly InstalledSkillFile[]): string {
 function refusalOf(
   files: readonly InstalledSkillFileInput[],
 ): Option.Option<InstalledSkillRefusal> {
-  const paths = new Set(files.map((file) => file.path));
-  const bytes = files.reduce((total, file) => total + file.bytes.byteLength, 0);
-  if (!paths.has(INSTALLED_SKILL_MAIN_FILE)) {
+  if (!files.some((file) => file.path === INSTALLED_SKILL_MAIN_FILE)) {
     return Option.some(INSTALLED_SKILL_REFUSAL.NO_SKILL_FILE);
   }
-  if (paths.size !== files.length) return Option.some(INSTALLED_SKILL_REFUSAL.DUPLICATE_PATH);
-  if (files.length > INSTALLED_SKILL_BOUNDS.MAX_FILES) {
-    return Option.some(INSTALLED_SKILL_REFUSAL.TOO_MANY_FILES);
-  }
-  if (bytes > INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES) {
+  if (holdsFileTooLarge(files.map((file) => file.bytes.byteLength))) {
     return Option.some(INSTALLED_SKILL_REFUSAL.TOO_LARGE);
   }
   return Option.none();

@@ -102,6 +102,8 @@ interface ToastAction {
   readonly label: string;
   readonly href?: string | undefined;
   readonly onPress: () => void;
+  /** Whether its label is the app's own word ("Undo", "Open"), which a screen recording shows as it reads. */
+  readonly replayUnmasked?: boolean | undefined;
 }
 
 /**
@@ -132,6 +134,10 @@ export type ToastNotice = {
   readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
   readonly subject?: string;
+  /** Whether its words and detail are the app's own, which a screen recording shows as they read; one that quotes a name, a person's words, or a refusal's words leaves this off. */
+  readonly replayUnmasked?: boolean | undefined;
+  /** What the developer sending it away, by its × or Escape, tells whoever showed it, so a question they set aside can be asked again. */
+  readonly onDismiss?: () => void;
 } & ToastSaying &
   (
     | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -441,7 +447,7 @@ export function undoToast(words: string, undo: () => void): ToastNotice {
   return {
     words,
     tone: STATUS_TONE.COMPLETE,
-    action: { label: UNDO_LABEL, onPress: undo },
+    action: { label: UNDO_LABEL, onPress: undo, replayUnmasked: true },
     hold: TOAST_HOLD.UNDO,
   };
 }
@@ -537,7 +543,11 @@ function ToastCard({
   const { id, notice, leaving } = shown;
   const { action, details } = notice;
   const hold = holdOf(notice);
-  const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
+  const dismiss = () => {
+    step({ kind: TOAST_STEP.DISMISS, id });
+    // Note that a toast on its way out still draws its controls, so only the first dismissal is told.
+    if (!leaving) notice.onDismiss?.();
+  };
   const copy: ToastCopy | undefined =
     details === undefined
       ? undefined
@@ -549,6 +559,7 @@ function ToastCard({
       glyph={notice.glyph}
       words={notice.words}
       detail={notice.detail}
+      replayUnmasked={notice.replayUnmasked}
       leaving={leaving}
       countdown={!acts || hold === undefined ? undefined : Duration.toMillis(hold)}
       actions={
@@ -560,6 +571,7 @@ function ToastCard({
             copy={copy}
             dismissLabel={DISMISS_LABEL}
             onDismiss={dismiss}
+            replayUnmasked={action?.replayUnmasked}
           />
         )
       }
