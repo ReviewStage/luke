@@ -57,7 +57,7 @@ import {
 } from "../agents/coder-host/inbox-page.js";
 import { titleModel } from "../agents/coder-host/model.js";
 import { routedSessions } from "../agents/coder-host/runtime-sessions.js";
-import { steerAgent } from "../agents/coder-host/steer.js";
+import { agentTakingMessage, steerAgent } from "../agents/coder-host/steer.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import type { EveTypedTurn } from "../agents/eve-host/eve-sessions.js";
@@ -201,6 +201,15 @@ function threadLine(event: ThreadLineMetadata["event"], itemId: string): ThreadL
 }
 
 /**
+ * The item's agent as the member's words on its thread reach it, brought
+ * back first where it stands archived (`agentTakingMessage`), as a message
+ * in its Slack thread brings it back; nothing where it is gone.
+ */
+function agentHearing(userId: string, agentId: string) {
+  return hostedStoreOrUnavailable(agentTakingMessage(userId, agentId, readAgent));
+}
+
+/**
  * An answer taken, handed to its item's agent as the member's message under
  * the answer's key through the one steer path (`coder-host/steer.ts`), then
  * counted and the agent's task settled where the answer finished its work.
@@ -224,7 +233,7 @@ const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const { text, clientKey, attachments } = message;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, agentId));
+    const agent = yield* agentHearing(userId, agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
@@ -314,6 +323,8 @@ const acknowledged = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * A member's answer to the thread's open ask, taken first, with its words
  * and files, as the member's message that carries it (`answerInboxAsk`),
+ * its agent brought back before it where it stands archived, which opens
+ * again the ask the archive settled,
  * and then, by the rule every answer follows (`inboxAnswerHeard`), handed
  * to the agent under the answer's own lead, its files with it, under the
  * answer's key through the one steer path; otherwise kept for the agent to
@@ -347,6 +358,10 @@ export const answerAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
   chosen?: SlackChosen,
 ) {
   const { text, clientKey, attachments, answers } = sent;
+  const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+  if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // Note that the agent is brought back before the answer is taken, because its archive settled the ask, which the bring-back opens again.
+  yield* agentHearing(userId, stored.value.item.agentId);
   const answered = yield* hostedStoreOrUnavailable(
     answerInboxAsk(userId, itemId, { answers, text, clientKey, files: attachments }),
   );
@@ -430,7 +445,8 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
  * whether the close was taken, which it is not where the agent changed the
  * item first or it was settled already. A close may carry the member's
  * note of why, written on the thread as their message under the close's
- * key in the close's own write. A close taken is handed to the agent, under
+ * key in the close's own write. A close taken is handed to the agent,
+ * brought back first where it stands archived, under
  * its own lead and the note after it, in one message, where the item asks
  * to be heard back, so an agent waiting on it is not left waiting, or where
  * it carries a note, which reaches the agent as any message on the thread
@@ -494,7 +510,7 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
     return { item: taken, taken: true, ...writtenIn };
   }
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, taken.agentId));
+    const agent = yield* agentHearing(userId, taken.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
@@ -536,7 +552,8 @@ export const closeAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
  * but that it settles the notice at the revision the request names as the
  * member's nod does, and then handed
  * to the agent as one of the developer's messages, under
- * its own lead and its files with it, through the one steer path
+ * its own lead and its files with it, the agent brought back first where
+ * it stands archived, through the one steer path
  * (`coder-host/steer.ts`), which opens a turn for an agent that stopped as
  * a message typed in its tab does. A hand-off that fails, is interrupted,
  * or dies takes the message back off the thread, so the thread never shows
@@ -592,7 +609,7 @@ export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? withdrawInboxMessage(userId, itemId, clientKey)
       : Effect.void;
   const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readAgent(userId, item.agentId));
+    const agent = yield* agentHearing(userId, item.agentId);
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
     const eve = yield* routedSessions<EveTypedTurn>(userId);
     yield* steerAgent(eve, writer, userId, agent.value, {
@@ -621,7 +638,8 @@ export const messageAsMember = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * A thread a member starts with an agent, written and handed to the agent
- * as a message on it is (`messageAsMember`): the agent hears the member's words
+ * as a message on it is (`messageAsMember`), brought back first where it
+ * stands archived: the agent hears the member's words
  * under the thread's key, which it answers on with its own posts. Refused
  * before anything is written where the member may not message the agent,
  * so a thread the agent could never hear never stands; a hand-off that
@@ -666,8 +684,12 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
       ? withdrawInboxThread(userId, item.id, clientKey)
       : Effect.void;
   const handedOver = Effect.gen(function* () {
+    const hearing = yield* hostedStoreOrUnavailable(
+      agentTakingMessage(userId, agentId, readVisibleAgent),
+    );
+    if (Option.isNone(hearing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const eve = yield* routedSessions<EveTypedTurn>(userId);
-    yield* steerAgent(eve, writer, userId, agent.value, {
+    yield* steerAgent(eve, writer, userId, hearing.value, {
       text: inboxThreadMessage(item, text),
       attachments,
       clientKey,
