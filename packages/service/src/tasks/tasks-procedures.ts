@@ -700,13 +700,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           },
         );
       }
+      // The agent runs where it names, else where the task was asked to run, which a released desktop names on the task alone.
+      const runsOnOfAgent = agent?.runsOn ?? input.runsOn;
       const answer: TaskStartAnswer =
         agent === undefined
           ? { plan: stored.task }
           : yield* startedAgentOn(
               userId,
               stored,
-              agent,
+              runsOnOfAgent === undefined ? agent : { ...agent, runsOn: runsOnOfAgent },
               reached.repository === null
                 ? undefined
                 : { repository: reached.repository, access: reached.githubAccess },

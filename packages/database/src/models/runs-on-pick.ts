@@ -1,9 +1,9 @@
 /**
- * runs-on-pick.ts -- where an account last chose to run a task, kept so a task an agent makes for it starts there too.
+ * runs-on-pick.ts -- where an account last chose to run an agent, kept so a start naming no place, and a task an agent makes for it, run there too.
  *
- * New task's Runs on, and a quick add's, are the window's, but a task an
- * agent makes for the member (`create_task`) is made where no window
- * stands, so the service keeps the last place a start named on the
+ * A start may name where its agent runs, but one that names none, or a task
+ * an agent makes for the member (`create_task`), is made where no window
+ * chose, so the service keeps the last place a start named on the
  * account's preference row: the cloud, or one of its devices by id. Note
  * that it is written alone, never through the preferences snapshot, and
  * moves no `updated_at`, because that instant tells a Mac the preferences
