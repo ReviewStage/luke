@@ -26,6 +26,8 @@ const runOnMacOnSchema = EffectSchema.Struct({ on: EffectSchema.Literal(true) })
 const runOnMacOffSchema = EffectSchema.Struct({
   on: EffectSchema.Literal(false),
   reason: EffectSchema.Literals(Object.values(RUN_ON_MAC_OFF)),
+  /** The account whose Mac the agent's commands run on, its task's assignee or else its starter, so only that reader is told of their own Settings. */
+  owner: EffectSchema.String,
 });
 
 /** Whether `run_on_mac` would run for the agent now, and why not where it would not. */

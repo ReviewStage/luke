@@ -15,15 +15,15 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * opening the app on their Mac; each answer stands until the next lands, and
  * one held lately draws at once. Whether this Mac's Settings let no agent
  * run commands on it is the window's own to say, and counts only where the
- * reader started the agent, whose Mac its commands run on, and reads on a
- * Mac.
+ * reader is the member whose Mac the agent's commands run on, as the
+ * service names them, and reads on a Mac.
  */
 
-/** The agent whose built-in tools the popover draws, and whether its reader started it. */
+/** The agent whose built-in tools the popover draws, and who reads it. */
 export interface WorkspaceToolsDoor {
   readonly agentId: string;
-  /** Whether the reader started the agent, so this Mac's setting is the one its commands meet. */
-  readonly starterReading: boolean;
+  /** The reader's account, which says whether this Mac's setting is the one the agent's commands meet. */
+  readonly reader: string | undefined;
 }
 
 /** Our own tools as the popover draws them. */
@@ -47,12 +47,19 @@ export function useWorkspaceTools(door: WorkspaceToolsDoor | undefined): Workspa
   const { rows, status } = useHostRead(LIVE_READ.WORKSPACE_TOOLS, door?.agentId);
   const onMac = useCapability(HOST_CAPABILITY.MAC_COMMANDS);
   const never = useAppSlice(MAC_COMMANDS_NEVER);
+  const standing = rows?.runOnMac;
+  // Note that only the member whose Mac the commands run on can mend it in their own Settings.
+  const ownMac =
+    standing !== undefined &&
+    !standing.on &&
+    door?.reader !== undefined &&
+    standing.owner === door.reader;
   return {
     answer: rows,
     failed: status === HOST_READ_STATUS.FAILED,
     reason: runOnMacReason({
-      settingsOff: onMac && never && door?.starterReading === true,
-      standing: rows?.runOnMac,
+      settingsOff: onMac && never && ownMac,
+      standing,
     }),
   };
 }

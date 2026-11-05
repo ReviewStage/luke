@@ -9,15 +9,14 @@
  * until it has its line. A name the service answers that this build does not
  * know, a tool added after it, stands under the last group with no words.
  *
- * `run_on_mac` is on for an agent unless one of three things stops it,
- * said in this order: this Mac's Settings › This Mac lets no agent run
- * commands on it, which only the agent's starter reading on a Mac can be
- * told; no Mac of the starter's is listening for commands; or someone
- * other than the starter has put words into the agent's conversation,
- * which turns it off for the rest of the agent's life. This Mac's setting
+ * `run_on_mac` runs on the Mac of the agent's task's assignee, or its
+ * starter's where no one is assigned, and is on unless one of two things
+ * stops it, said in this order: this Mac's Settings › This Mac lets no
+ * agent run commands on it, which only that member reading on a Mac can be
+ * told; or no Mac of theirs is listening for commands. This Mac's setting
  * is the reason only where the service says `run_on_mac` is off, because
- * the service counts any listening Mac of the starter's: one set to Never
- * beside another that listens still runs the agent's commands there.
+ * the service counts any listening Mac of theirs: one set to Never beside
+ * another that listens still runs the agent's commands there.
  */
 
 import { AGENT_TOOL, type AgentTool } from "./agent-tools.js";
@@ -52,7 +51,7 @@ interface WorkspaceToolWords {
 const WORKSPACE_TOOL_WORDS = {
   [AGENT_TOOL.RUN_ON_MAC]: {
     group: WORKSPACE_TOOL_GROUP.MAC,
-    summary: "Runs a shell command on the developer's own Mac",
+    summary: "Runs a shell command on the task assignee's Mac",
   },
   [AGENT_TOOL.POST_THREAD]: {
     group: WORKSPACE_TOOL_GROUP.THREADS,
@@ -291,13 +290,13 @@ export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
     short: "No Mac listening",
-    detail: `${PRODUCT_NAME} isn't open on the Mac this agent's commands run on, its task assignee's, or it stopped listening.`,
+    detail: `${PRODUCT_NAME} isn't open on any Mac of the member this agent's commands run on, its task's assignee or, where no one is assigned, its starter, or it stopped listening.`,
   },
 } as const satisfies Record<RunOnMacReason, RunOnMacReasonWords>;
 
 /** What `run_on_mac`'s own page says it does, above why it is off where it is. */
 export const RUN_ON_MAC_DESCRIPTION =
-  "Runs one shell command on the developer's own Mac, in their login shell from their home folder, and reads what it printed. It reaches what their account on the Mac reaches: local checkouts, uncommitted work, installed tools, and running servers. The Mac asks first unless Settings › This Mac says otherwise.";
+  "Runs one shell command on the Mac of the member the agent's task is assigned to, or of its starter where no one is, in their login shell from their home folder, and reads what it printed. It reaches what their account on the Mac reaches: local checkouts, uncommitted work, installed tools, and running servers. The Mac asks first unless Settings › This Mac says otherwise.";
 
 /** The sentence of detail `run_on_mac`'s page says under its reason, where it has one. */
 export function runOnMacDetail(reason: RunOnMacReason): string | undefined {
@@ -307,16 +306,16 @@ export function runOnMacDetail(reason: RunOnMacReason): string | undefined {
 
 /** What decides whether `run_on_mac` is on: this Mac's setting, where the reader may be told it, and the service's answer. */
 export interface RunOnMacInput {
-  /** Whether this Mac's Settings let no agent run commands on it; false where the reader is not the agent's starter or reads on no Mac. */
+  /** Whether this Mac's Settings let no agent run commands on it; false where the reader is not the member the agent's commands run on or reads on no Mac. */
   readonly settingsOff: boolean;
   /** The service's answer; nothing while it is read or where it could not be. */
   readonly standing: RunOnMacStanding | undefined;
 }
 
-/** Why `run_on_mac` is off for the agent, the first of the three reasons that holds; nothing where it is on, or not known to be off. */
+/** Why `run_on_mac` is off for the agent, the first of the two reasons that holds; nothing where it is on, or not known to be off. */
 export function runOnMacReason(input: RunOnMacInput): RunOnMacReason | undefined {
   const { standing } = input;
-  // Note that the service's answer comes first, because another Mac of the starter's may listen while this one is set to Never.
+  // Note that the service's answer comes first, because another Mac of the same member's may listen while this one is set to Never.
   if (standing === undefined || standing.on) return undefined;
   return input.settingsOff ? RUN_ON_MAC_REASON.SETTINGS_OFF : standing.reason;
 }

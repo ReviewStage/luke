@@ -38,11 +38,12 @@ export function offeredWorkspaceTools(input: WorkspaceToolsOfferedTo): readonly 
   return [...WORKSPACE_MCP_TOOLS.keys()].filter(offered);
 }
 
-/** Whether the agent's `run_on_mac` would run now: off where no Mac of its task's assignee's listens. */
+/** Whether the agent's `run_on_mac` would run now: off where no Mac of its task's assignee's, or else its starter's, listens, naming whose. */
 export function runOnMacStanding(target: ConversationTarget): TaskStoreEffect<RunOnMacStanding> {
   return Effect.gen(function* () {
-    if (!(yield* macListening(yield* macOwnerOf(target)))) {
-      return { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY } as const;
+    const owner = yield* macOwnerOf(target);
+    if (!(yield* macListening(owner))) {
+      return { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY, owner } as const;
     }
     return { on: true } as const;
   });
