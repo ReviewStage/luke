@@ -278,26 +278,22 @@ function TaskPageSkeleton({
 
 /**
  * A phone's head over a task that is not drawn yet, or cannot be: its way
- * back, as the task's own head leads (`TaskHead`), and its title its name
- * where that is known already, as a starting task's typed name is, a block
+ * back, as the task's own head leads (`TaskHead`), and its title a block
  * while it is read, nothing where it cannot be; no ⋯, since a task not
  * drawn offers no menu.
  */
 function TaskWaitHead({
   away,
   reading,
-  name,
 }: {
   away: TaskHeadBack;
   reading: boolean;
-  /** The task's name where it is known before the task is read; none otherwise. */
-  name?: string | undefined;
 }): React.JSX.Element {
   return (
     <PhoneHead
       place="task"
       start={<PhoneBack back={away} />}
-      title={name ?? (reading ? <TaskTitleSkeleton /> : null)}
+      title={reading ? <TaskTitleSkeleton /> : null}
       end={null}
     />
   );
@@ -1370,9 +1366,9 @@ function PlanDocument({
  * column standing as the agent's tab with the developer's words as its first
  * line and no side panel beside it, since the task lands on its agent alone
  * (`useTasksTab`'s `openAgent`), so Start opens the page at once and the
- * start's answer only fills it in. What the start already knows stands as
- * itself rather than a block: the name typed in a phone's head, and the
- * model picked in the composer's chip.
+ * start's answer only fills it in. The model the start named stands as
+ * itself in the composer's chip rather than a block; the task's title stays
+ * a block, since the task is Untitled until its agent names it.
  */
 function StartingTaskPage({
   tasks,
@@ -1402,11 +1398,7 @@ function StartingTaskPage({
             ? undefined
             : { choice: starting.choice, models: tasks.agents.models ?? [] },
       }}
-      head={
-        phoneAway === undefined ? undefined : (
-          <TaskWaitHead away={phoneAway} reading name={starting.name} />
-        )
-      }
+      head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
     />
   );
 }

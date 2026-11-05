@@ -563,19 +563,21 @@ interface NewTaskCardKept {
 }
 
 /**
- * What a start comes from beyond its name, repository, and workspace: where
- * its agents run, and the agent New task's composer starts on its words in
- * the task's own start (`handed`).
+ * New task's agent start under way: the line its agent opens on, and the
+ * model it was started with, which the page draws while it waits. It names
+ * no task, since the task stands Untitled until its agent names it.
  */
-/** New task's agent start under way: the line its agent opens on, and the name and the model it was started with, which the page draws while it waits. */
 export interface StartingTask {
   readonly line: SentLine;
-  /** The task's name as typed; none where it was left blank, and the task is named once it lands. */
-  readonly name: string | undefined;
   /** The model the card's chip picked; none where the start takes the default. */
   readonly choice: ModelChoice | undefined;
 }
 
+/**
+ * What a start comes from beyond its name, repository, and workspace: where
+ * its agents run, and the agent New task's composer starts on its words in
+ * the task's own start (`handed`).
+ */
 export interface NewTaskStart {
   /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
   readonly runsOn?: TaskRunsOnRequest;
@@ -2671,12 +2673,7 @@ export function useTasksTab(input: {
     // Staying, an agent's start puts the card away at once and opens nothing.
     if (handed !== undefined && stays) setNewTaskAsk(undefined);
     else if (line !== undefined) {
-      setStartingTask({
-        line,
-        name: name.length === 0 ? undefined : name,
-        choice: handed?.choice,
-        navigation: pressedAt,
-      });
+      setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
       setHistoryFor(undefined);

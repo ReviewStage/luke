@@ -3247,7 +3247,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
   act(() => tab.control().onNewTask());
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
-    note = tab.control().newTask.start("Sidebar folds", "acme/web", undefined, {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
       handed: {
         idempotencyKey: AGENT_KEY,
         prompt,
@@ -3260,7 +3260,6 @@ test("New task's agent start opens its page at once on the words as its agent's 
 
   assert.equal(tab.control().newTask.open, false, "the dialog closes as Start is pressed");
   assert.equal(tab.control().starting?.line.text, prompt, "the page stands on the words at once");
-  assert.equal(tab.control().starting?.name, "Sidebar folds", "and on the name typed");
   assert.deepEqual(tab.control().starting?.choice, choice, "and on the model picked");
 
   await act(async () => {
