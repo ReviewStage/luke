@@ -8,8 +8,7 @@ import {
   Stack,
   useFilePicker,
 } from "@repo/ui";
-import { inputProblem } from "@repo/ui/reported-failure";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -38,28 +37,20 @@ function Picks(): React.JSX.Element {
 
 function Photo({ name }: { name: string }): React.JSX.Element {
   const [photo, setPhoto] = useState<string | undefined>(undefined);
-  const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const picker = useFilePicker({
     accept: "image/*",
     onFiles: ([picked]) => {
-      if (picked === undefined) return;
-      if (!picked.type.startsWith("image/")) {
-        setRefusal(`${picked.name} isn't an image.`);
-        return;
-      }
-      setRefusal(undefined);
-      setPhoto(URL.createObjectURL(picked));
+      if (picked !== undefined) setPhoto(URL.createObjectURL(picked));
     },
   });
-  return (
-    <PhotoPick
-      name={name}
-      unnamed="Workspace"
-      photo={photo}
-      picker={picker}
-      error={inputProblem(refusal)}
-    />
+  // Note that a picture replaced or left behind lets its blob go, since the page holds it until then.
+  useEffect(
+    () => () => {
+      if (photo !== undefined) URL.revokeObjectURL(photo);
+    },
+    [photo],
   );
+  return <PhotoPick name={name} unnamed="Workspace" photo={photo} picker={picker} />;
 }
 
 function FilePickers(): React.JSX.Element {

@@ -268,7 +268,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
               next={{
                 label: "Create",
                 onPress: teamForm.create,
-                disabled: !teamForm.named,
+                disabled: !teamForm.ready,
                 busy: teamForm.busy,
                 busyLabel: "Creating",
               }}

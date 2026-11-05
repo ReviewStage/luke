@@ -4,7 +4,7 @@ import {
   workspacePhotoOfDataUrl,
 } from "@repo/features/workspace-wire";
 import { type FilePicker, useFilePicker } from "@repo/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { encodeImage } from "./feedback-images.js";
 
 /**
@@ -49,9 +49,10 @@ export async function photoOfFile(file: File): Promise<PhotoRead> {
   return { photo };
 }
 
-/** A photo picked for a workspace not yet made: the photo read, the picker, and the press that lets it go. */
+/** A photo picked for a workspace not yet made: the photo read, whether a pick is still being read, the picker, and the press that lets it go. */
 export interface WorkspacePhotoPick {
   readonly photo: string | undefined;
+  readonly reading: boolean;
   readonly picker: FilePicker;
   readonly clear: () => void;
 }
@@ -60,17 +61,26 @@ export interface WorkspacePhotoPick {
  * A photo picked ahead of the workspace it is for, as setup's team step and
  * New workspace hold one until the workspace is made. `onRefusal` hears why
  * a pick did not become the photo, and nothing once one did; a refused pick
- * leaves the photo picked before it standing.
+ * leaves the photo picked before it standing. Note that only the newest
+ * pick's read lands, because a slow read of an earlier pick, or of one let
+ * go since, would otherwise put back a photo no longer asked for.
  */
 export function useWorkspacePhotoPick(
   onRefusal: (refusal: string | undefined) => void,
 ): WorkspacePhotoPick {
   const [photo, setPhoto] = useState<string | undefined>(undefined);
+  const [reading, setReading] = useState(false);
+  const picks = useRef(0);
   const picker = useFilePicker({
     accept: PHOTO_ACCEPT,
     onFiles: ([picked]) => {
       if (picked === undefined) return;
+      picks.current += 1;
+      const asked = picks.current;
+      setReading(true);
       photoOfFile(picked).then((read) => {
+        if (picks.current !== asked) return;
+        setReading(false);
         if ("refusal" in read) onRefusal(read.refusal);
         else {
           onRefusal(undefined);
@@ -79,5 +89,14 @@ export function useWorkspacePhotoPick(
       });
     },
   });
-  return { photo, picker, clear: () => setPhoto(undefined) };
+  return {
+    photo,
+    reading,
+    picker,
+    clear: () => {
+      picks.current += 1;
+      setReading(false);
+      setPhoto(undefined);
+    },
+  };
 }

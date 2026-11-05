@@ -51,6 +51,7 @@ import {
   type TasksEditAnswer,
   type TasksView,
 } from "@repo/features/tasks-view";
+import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { managesWorkspace } from "@repo/features/workspace-role";
 import { type Workspace, workspaceOfSlug } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
@@ -597,6 +598,12 @@ export interface NewTaskStart {
   readonly card?: NewTaskCardKept;
 }
 
+/** What a workspace is made with beyond its name: its photo, and the addresses invited to it. */
+export interface WorkspaceMade {
+  readonly photo?: string | undefined;
+  readonly invite?: readonly string[] | undefined;
+}
+
 /** Everything the Tasks tab draws and presses, handed to the panel body whole. */
 export interface TasksControl {
   page: TasksPage;
@@ -644,11 +651,12 @@ export interface TasksControl {
   /** Lists the account's own workspace, else the first other, once one is left, and turns to the home page. */
   onLeftWorkspace: (workspaceId: string) => void;
   /**
-   * Creates a workspace of that name and lists it, then sets its photo where
-   * one is given; answers why it was not created, or nothing once it was. A
-   * photo refused does not undo the workspace, and says why in a toast.
+   * Creates a workspace of that name and lists it, then sets its photo and
+   * invites its addresses where they are given; answers why it was not
+   * created, or nothing once it was. A photo or an invitation refused does
+   * not undo the workspace, and says why in a toast.
    */
-  onCreateWorkspace: (name: string, photo?: string) => Promise<string | undefined>;
+  onCreateWorkspace: (name: string, made?: WorkspaceMade) => Promise<string | undefined>;
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
   /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
@@ -2389,25 +2397,37 @@ export function useTasksTab(input: {
   // photo set once it stands; the invite and the connect open the browser,
   // and a refusal of the photo or either says why in a toast, since the
   // menu or card that asked has closed.
-  const createWorkspace = (name: string, photo?: string): Promise<string | undefined> => {
+  const createWorkspace = (
+    name: string,
+    { photo, invite = [] }: WorkspaceMade = {},
+  ): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
+    const refusedAfter =
+      (kind: typeof ACT_KIND.WORKSPACE_PHOTO_SET | typeof ACT_KIND.WORKSPACE_INVITE, about = "") =>
+      (refused: Error) =>
+        toast({
+          words: `${about}${refused.message}`,
+          tone: STATUS_TONE.DANGER,
+          hold: TOAST_HOLD.FAILED,
+          failure: { surface: FAILURE_SURFACE.WORKSPACE_WRITE, act: kind, cause: refused },
+        });
     return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
       async (created) => {
-        switchWorkspace(created.id);
-        if (photo === undefined) return undefined;
-        await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId: created.id, photo }).catch(
-          (refused: Error) =>
-            toast({
-              words: refused.message,
-              tone: STATUS_TONE.DANGER,
-              hold: TOAST_HOLD.FAILED,
-              failure: {
-                surface: FAILURE_SURFACE.WORKSPACE_WRITE,
-                act: ACT_KIND.WORKSPACE_PHOTO_SET,
-                cause: refused,
-              },
-            }),
-        );
+        const workspaceId = created.id;
+        switchWorkspace(workspaceId);
+        // Note that the photo and the invitations follow the workspace made, and one refused leaves the rest standing.
+        if (photo !== undefined) {
+          await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo }).catch(
+            refusedAfter(ACT_KIND.WORKSPACE_PHOTO_SET),
+          );
+        }
+        for (const email of invite) {
+          await act(ACT_KIND.WORKSPACE_INVITE, {
+            workspaceId,
+            email,
+            role: INVITATION_ROLE.MEMBER,
+          }).catch(refusedAfter(ACT_KIND.WORKSPACE_INVITE, `${email}: `));
+        }
         return undefined;
       },
       (refused: Error) => refused.message,
