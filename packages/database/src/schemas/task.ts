@@ -1,4 +1,3 @@
-import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@repo/features/plan-template";
 import {
@@ -28,7 +27,6 @@ import {
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable, type StoredArchive } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { device } from "./device.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
@@ -134,17 +132,6 @@ export const task = pgTable(
      * with none. Kept as written, like the document.
      */
     brief: text("brief"),
-    /**
-     * Where the task's coding agents once ran (`AGENT_MACHINE`). A task
-     * holds no place now, each agent its own (`agent.machine`), so this
-     * column is no longer read or written, and a later migration drops it.
-     */
-    machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
-    /**
-     * The device the task's coding agents once ran on. No longer read or
-     * written, as `machine` is not, and dropped by a later migration.
-     */
-    deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
