@@ -114,9 +114,9 @@ import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
+import { useConnected } from "../connection.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
-import { useConnected } from "../connection.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import {
