@@ -29,7 +29,7 @@ import { codeChallenge, createCodeVerifier } from "./pkce.js";
 const LOOPBACK_HOST = "127.0.0.1";
 
 /** The ports a pasted-back redirect names where its flow names none: the dynamic range, one picked per trip, since nothing listens on it. */
-const DYNAMIC_PORTS = { FIRST: 49_152, COUNT: 16_384 } as const;
+const DYNAMIC_PORTS = { FIRST: 49_152, MASK: 0x3fff } as const;
 
 /** The state's random bytes, as many as the loopback's. */
 const STATE_BYTES = 32;
@@ -60,7 +60,8 @@ function portOf(ports: readonly number[] | undefined): number {
   const [named] = ports ?? [];
   if (named !== undefined) return named;
   const [random = 0] = crypto.getRandomValues(new Uint16Array(1));
-  return DYNAMIC_PORTS.FIRST + (random % DYNAMIC_PORTS.COUNT);
+  // Note that the range is a power of two, so masking the draw keeps every port equally likely.
+  return DYNAMIC_PORTS.FIRST + (random & DYNAMIC_PORTS.MASK);
 }
 
 /**
