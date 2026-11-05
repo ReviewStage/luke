@@ -973,8 +973,8 @@ const MEMBER_STOP_AGENT_TOOL = memberMcpTool({
   description:
     "Stop a coding agent the member can see, by its id, as their Stop button would: its turn " +
     "under way is canceled and its status reads canceled, while the agent stays available, its " +
-    "transcript and branch kept, and a later message starts a new turn. An archived one is " +
-    "refused. Answers `accepted` with the agent's status now and whether it was stopped, " +
+    "transcript and branch kept, and a later message starts a new turn. Answers `accepted` " +
+    "with the agent's status now and whether it was stopped, " +
     "`stopped` false for an agent already idle, which changes nothing, or `rejected` and why. " +
     `${MEMBER_MCP_TOOL.READ_AGENT} reads where it stopped.`,
   input: AgentIdInputSchema,
@@ -1003,8 +1003,8 @@ const UpdateAgentInputSchema = Schema.Struct({
       Schema.Boolean,
       "true to archive it, as the member's Archive agent would: it leaves the sidebar, its " +
         "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
-        "its transcript, branch, and pull request kept; only an idle agent is archived. false to " +
-        "bring an archived one back.",
+        "its transcript, branch, and pull request kept; a turn still running is stopped first. " +
+        "false to bring an archived one back.",
     ),
   ),
   reason: Schema.optionalKey(
@@ -1041,8 +1041,8 @@ const MEMBER_UPDATE_AGENT_TOOL = memberMcpTool({
     "member's own, or add a repository it works in beside its own, alone. Name at least one " +
     "change, a model only with its effort, a contextWindow only with them, and a reason only " +
     "with archived true; an archive is checked first, and " +
-    "the rest land together or not at all. One still starting or working is not archived: " +
-    `stop it with ${MEMBER_MCP_TOOL.STOP_AGENT} first. Answers \`accepted\` with the agent ` +
+    "the rest land together or not at all. One still working is stopped first, as the Stop " +
+    "button would, and one still starting is refused until it can be. Answers `accepted` with the agent " +
     "as it then stands, whether archived among it, or `rejected` and why; a rejected model " +
     "or effort lists the choices.",
   input: UpdateAgentInputSchema,

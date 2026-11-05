@@ -3314,16 +3314,6 @@ export function archiveAgentCommitted(
   );
 }
 
-/** What an archive of an idle agent came to: archived now, archived already, still working, or no agent the account reaches. */
-export const IDLE_ARCHIVE = {
-  ARCHIVED: "archived",
-  ALREADY: "already",
-  WORKING: "working",
-  NOT_FOUND: "not-found",
-} as const;
-
-export type IdleArchive = (typeof IDLE_ARCHIVE)[keyof typeof IDLE_ARCHIVE];
-
 /** The agent's conversation row under its own lock, the one every write of its lines and turns takes; nothing where no such conversation stands. */
 const lockAgentConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -3337,61 +3327,6 @@ const lockAgentConversation = SqlSchema.findOneOption({
         .for("update"),
     ),
 });
-
-const archiveIfUnarchived = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    agentId: Schema.String,
-    archivedAt: Schema.Date,
-    archivedBy: ArchivedByColumnSchema,
-  }),
-  Result: IdRowSchema,
-  execute: ({ userId, agentId, archivedAt, archivedBy }) =>
-    Database.use((db) =>
-      db
-        .update(agentTable)
-        .set({ archivedAt, archivedBy })
-        .where(and(reachableAgent(userId, agentId), isNull(agentTable.archivedAt)))
-        .returning({ id: agentTable.id }),
-    ),
-});
-
-/**
- * Archives the agent under who archived it, but only while `idle` says it
- * is, read under its conversation's lock, the one every write of its lines
- * and turns takes, so no turn queued and no message handed over between
- * the read and the stamp leaves an agent archived at work. An agent
- * archived already keeps the archive standing.
- */
-export function archiveIdleAgent(
-  userId: string,
-  agentId: string,
-  archivedBy: StoredArchive,
-  idle: (agent: Agent) => AgentStoreEffect<boolean>,
-): AgentStoreEffect<IdleArchive> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const found = yield* findAgent({ userId, agentId });
-        if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
-        const locked = yield* lockAgentConversation({
-          conversationId: found.value.conversationId,
-        });
-        if (Option.isNone(locked)) return IDLE_ARCHIVE.NOT_FOUND;
-        // The row is read again under the lock, so an archive made meanwhile is seen.
-        const agent = yield* findAgent({ userId, agentId });
-        if (Option.isNone(agent)) return IDLE_ARCHIVE.NOT_FOUND;
-        if (agent.value.archivedAt !== null) return IDLE_ARCHIVE.ALREADY;
-        if (!(yield* idle(agent.value))) return IDLE_ARCHIVE.WORKING;
-        const archivedAt = yield* DateTime.nowAsDate;
-        const rows = yield* archiveIfUnarchived({ userId, agentId, archivedAt, archivedBy });
-        if (rows.length === 0) return IDLE_ARCHIVE.ALREADY;
-        yield* settleAgentInboxItems([agentId], archivedAt);
-        return IDLE_ARCHIVE.ARCHIVED;
-      }),
-    ),
-  );
-}
 
 const unarchiveIfStamped = SqlSchema.findAll({
   Request: Schema.Struct({

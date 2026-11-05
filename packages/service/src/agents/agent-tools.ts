@@ -2,23 +2,15 @@ import type { DatabaseServices } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentLatestTurn,
-  archiveIdleAgent,
   awaitingLinesOfReached,
   continuationsOf,
-  IDLE_ARCHIVE,
   latestTurnsOfReached,
   type NativeRoute,
   nativeRouteOfReached,
-  pinAgent,
   RUNNING_TURN_STATUSES,
   readAgent,
   readAgentByKey,
-  readAgentRouting,
-  renameAgent,
   taskNamesOf,
-  unarchiveAgentFrom,
-  updateAgentChoice,
-  updateAgentServers,
 } from "@repo/database/models/agent-store";
 import { currentAutomationRun } from "@repo/database/models/automation-store";
 import { type Device, devicesSeenSince } from "@repo/database/models/device-store";
@@ -119,7 +111,8 @@ import {
 } from "../providers/model-catalog.js";
 import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "../tasks/task-change.js";
 import { createTaskAsked } from "../tasks/task-create-relation.js";
-import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
+import { archivedAgent, changedAgent } from "./agent-change.js";
+import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { addAgentRepository, addedRepositoryLine } from "./coder-host/agent-repository-add.js";
@@ -131,22 +124,18 @@ import {
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
 import {
   accountModelChoices,
   placeOfAgent,
   type StartWhere,
   startAgent,
 } from "./coder-host/start.js";
+import { agentFailureOf, agentStatusOf, startedBlank } from "./coder-host/status.js";
 import {
-  agentFailureOf,
-  agentStatusOf,
-  lineAwaitsTurn,
-  startedBlank,
-} from "./coder-host/status.js";
-import { canceledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+  stoppedAgent,
+  standingsOf as turnStandingsOf,
+} from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
-import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
 import { deploymentSandboxStops } from "./session-sandboxes.js";
 import {
@@ -239,17 +228,14 @@ import {
  * source's brief, its replay with our summary of what does not fit, a
  * copy of its work, and the note, and takes no prompt and no branch. A read
  * names the message each entry of the tail stands in, which a fork names.
- * An archive takes the rule the Archive agent menu's does for the member
- * the caller acts for: any agent of the workspace that member could
- * archive, a teammate's among them, with the stamp the menu writes, and
- * beside it who archived it, the caller on that member's behalf, and the
- * reason given, which the archived agent's banner shows. Where the menu asks
- * the developer before it stops a working agent, a tool has no one to ask,
- * so only an idle agent is archived, read idle under its conversation's
- * lock, which every turn queued and every message handed over takes; an
- * agent never archives itself, and an unarchive brings back only the
- * archive it read, never one made again since. An archive or an unarchive already standing answers as done, so
- * a call eve runs again does nothing twice.
+ * An archive and every other change of an agent take the one operation the
+ * Archive agent menu and the agent's menu run (`agent-change.ts`) for the
+ * member the caller acts for: any agent of the workspace that member could
+ * archive, a teammate's among them, a turn still running stopped first, with
+ * the stamp the menu writes, and beside it who archived it, the caller on
+ * that member's behalf, and the reason given, which the archived agent's
+ * banner shows; an agent never archives itself. An archive or an unarchive
+ * already standing answers as done.
  * A task's change takes the one path the member's own task menu does
  * (`tasks-procedures.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
  * the caller acts for: a new name, a repository confirmed through the
@@ -260,16 +246,14 @@ import {
  * pull request merged, without asking and without stopping the task's
  * agents, and an unarchive puts it back to work (`tasks/archive-settle.ts`);
  * a change already standing answers as done.
- * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
+ * A stop takes the one path the Stop button's does (`coder-host/stop.ts`'s `stoppedAgent`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
  * row's stamp, which `list_agents` then reads as canceled. The agent stays
  * as it was, its transcript and branch kept, and a later message starts a
  * new turn. A Stop already standing on a turn still ending answers as done,
  * so a call eve runs again cancels nothing twice; an agent already idle is
- * answered as idle and nothing changes; one whose turn is still coming, a
- * session coming up or a line awaiting the turn it opens, has nothing a Stop
- * can name yet and is refused as such; an archived agent and the caller
- * itself are never stopped.
+ * answered as it stands and nothing changes; the caller itself is never
+ * stopped.
  * A page read finds a page an agent showed on any task of the caller's
  * workspace by the page's id, as the caller's member could open it in the
  * side panel, and answers its HTML cut on a line to a bound, which a
@@ -358,10 +342,6 @@ export const UPDATE_TASK_REFUSAL = {
 export const STOP_AGENT_REFUSAL = {
   UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
   SELF: "Not stopped: that id is your own, and an agent does not stop itself; end your turn by finishing it.",
-  ARCHIVED:
-    "Not stopped: that agent is archived, and an archived agent's turn was stopped as it was archived.",
-  NOT_READY:
-    "Not stopped: that agent's turn is still coming up, so there is no turn to stop yet; call again in a moment.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
   NATIVE_NOT_HERE:
@@ -474,12 +454,6 @@ export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
   UNREADABLE: `Not listed: name an agent, if any, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
 } as const;
-
-/** Whether the caller may write to the agent under the plan's policy (`agent-reach.ts`'s `writesToAgent`), its payer read now. */
-const writesAsPlanPolicy = (userId: string, agent: Agent) =>
-  Effect.map(readAgentRouting(userId, agent.id), (routing) =>
-    writesToAgent(userId, agent, Option.isSome(routing) ? routing.value.payer : null),
-  );
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -1076,7 +1050,7 @@ export const STOP_AGENT_TOOL = {
     "an agent you or the developer started that is going the wrong way, or one the developer " +
     "asked you to stop; never a teammate's agent still in use unless the developer asked for " +
     "it. No " +
-    "agent stops itself, and an archived one is refused. Answers `accepted` with the " +
+    "agent stops itself. Answers `accepted` with the " +
     "agent's status now and whether it was stopped, `stopped` false for an agent already " +
     "idle, which changes nothing, or `rejected` and why. Then say which agent you stopped and why.",
   inputSchema: READ_AGENT_INPUT,
@@ -1123,12 +1097,15 @@ export const UPDATE_AGENT_REFUSAL = {
   UNAVAILABLE_ADD:
     "Not added: the service could not be reached just now. The call may be made again.",
   SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
-  WORKING:
-    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
-    "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
-  REARCHIVED:
-    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
-    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+  NOT_READY:
+    "Not archived: that agent's turn is still coming up, so there is no turn to stop yet; call " +
+    "again in a moment. Nothing else asked was changed.",
+  NATIVE_NOT_HERE:
+    "Not archived: that agent runs on Claude Code or Codex, which cannot be reached from here " +
+    "to stop its turn yet; a member archives it from the agent's own tab. Nothing else asked was changed.",
+  UNAVAILABLE_ARCHIVE:
+    "Not archived: the service could not reach that agent's session to stop its turn just now. " +
+    "The call may be made again. Nothing else asked was changed.",
 } as const;
 
 /** The lead a refused choice of a change is said under. */
@@ -1242,8 +1219,8 @@ const UPDATE_AGENT_INPUT = Schema.Struct({
       Schema.Boolean,
       "true to archive it, as the developer's Archive agent would: it leaves the sidebar, its " +
         "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
-        "its transcript, branch, and pull request kept; only an idle agent is archived, never " +
-        "yourself. false to bring an archived one back.",
+        "its transcript, branch, and pull request kept; a turn still running is stopped first, " +
+        "and never yourself. false to bring an archived one back.",
     ),
   ),
   reason: Schema.optionalKey(
@@ -1282,7 +1259,7 @@ export const UPDATE_AGENT_TOOL = {
     "or bring it back, or add a repository it works in beside its own, alone. Name at least " +
     "one change; an archive is checked first, and the rest land together or not at all. Archive an idle helper agent whose work is done, such as one " +
     "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
-    "its archived banner shows beside your name; one still starting or working is refused, and " +
+    "its archived banner shows beside your name; a turn still running is stopped first, and " +
     "no agent archives itself. Change a teammate's agent still in use only where the developer " +
     "asked for it. Answers `accepted` " +
     "with the agent as it then stands, whether archived among " +
@@ -2217,72 +2194,6 @@ function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArch
 }
 
 /**
- * Whether an agent stands idle for an archive: no line awaits its turn, its
- * newest turn is neither queued nor running, a Stop requested of it or not,
- * since a stopped turn still runs until eve ends it, and it is past its
- * start where it has no turn yet.
- */
-const idleForArchive = (agent: Agent) =>
-  Effect.gen(function* () {
-    const turns = yield* latestTurnsOfReached([agent.conversationId]);
-    const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
-    const now = yield* Clock.currentTimeMillis;
-    const turn = turns.get(agent.conversationId);
-    if (lineAwaitsTurn(turn, { now, awaitingLineAt: awaiting.get(agent.conversationId) })) {
-      return false;
-    }
-    if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
-    return (
-      agentStatusOf(undefined, {
-        createdAt: agent.createdAt,
-        now,
-        blank: startedBlank(agent),
-      }) !== AGENT_STATUS.STARTING
-    );
-  });
-
-/**
- * An agent archived for the caller's member, by the caller and for the reason
- * given, as the Archive agent menu archives it, only while it stands idle,
- * read idle under its conversation's lock, so a turn queued or a message
- * handed over meanwhile waits on the archive and is seen by it; or brought
- * back, only the archive read cleared, so one made again since stands as its
- * maker left it. An archive or an unarchive already standing is no refusal.
- * Answers why nothing was changed, or nothing where the change stands.
- */
-const archiveChange = (
-  caller: AgentCaller,
-  agent: Agent,
-  archived: boolean,
-  reason: string | undefined,
-) =>
-  Effect.gen(function* () {
-    const userId = callerUserId(caller);
-    if (archived) {
-      const outcome = yield* archiveIdleAgent(
-        userId,
-        agent.id,
-        archiverOf(caller, reason),
-        idleForArchive,
-      );
-      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
-      if (outcome === IDLE_ARCHIVE.WORKING) return UPDATE_AGENT_REFUSAL.WORKING;
-      // A local agent archived now is let go of on its device, as an archive by hand lets it go.
-      // Note that the agent's line is queued under its starter, whoever archived it.
-      if (outcome === IDLE_ARCHIVE.ARCHIVED) {
-        yield* discardedOrLogged({ id: agent.id, userId: agent.userId });
-      }
-      return undefined;
-    }
-    if (agent.archivedAt === null) return undefined;
-    if (yield* unarchiveAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
-    const now = yield* readAgent(userId, agent.id);
-    return Option.isSome(now) && now.value.archivedAt === null
-      ? undefined
-      : UPDATE_AGENT_REFUSAL.REARCHIVED;
-  });
-
-/**
  * A task's key, where it stands, how much it matters, and who it is assigned
  * to, as every task tool answers them: its key drawn from its workspace's
  * name as the member reads it (`workspace-key.ts`), and its assignee by their
@@ -2569,14 +2480,18 @@ export function runUpdateTask(
   );
 }
 
-/** A stop's refusal in the model's words: an agent gone meanwhile is none, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal): string {
-  if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
-  if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
-    return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
-  }
-  return STOP_AGENT_REFUSAL.UNAVAILABLE;
-}
+/** A stop's refusal in the model's words, naming the agent's starter where only they may stop it: an agent gone meanwhile is none, and anything else is the service down. */
+const stopRefusalWords = (refusal: HostedRefusal, agent: Agent) =>
+  Effect.gen(function* () {
+    if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
+    if (refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
+      return `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`;
+    }
+    if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+      return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
+    }
+    return STOP_AGENT_REFUSAL.UNAVAILABLE;
+  });
 
 /** Whether a Stop already stands on the turn, which is still ending. */
 function stopStands(turn: AgentLatestTurn | undefined): boolean {
@@ -2586,30 +2501,26 @@ function stopStands(turn: AgentLatestTurn | undefined): boolean {
 }
 
 /**
- * The agent stopped as the Stop button stops it under the call's key, and
- * where it stands: whether it was stopped, by this call now or when it first
- * ran, by eve taking its cancel, or by a Stop already standing on the turn
- * it stood on as the call began and still stands on, and its status read
- * after. A call run again finds the turn it stopped by its key and cancels
- * nothing, so a turn begun since, by a message the agent took meanwhile,
- * runs on.
+ * The agent stopped by the Stop every surface makes (`stoppedAgent`) under
+ * the call's key, and where it stands: whether it was stopped, by this call
+ * now or when it first ran, by eve taking its cancel, or by a Stop already
+ * standing on the turn it stood on as the call began and still stands on,
+ * and its status read after. A call run again finds the turn it stopped by
+ * its key and cancels nothing, so a turn begun since, by a message the agent
+ * took meanwhile, runs on.
  */
-const stopOf = (
-  eve: AgentSessions,
-  writer: Effect.Effect<StoreWriter>,
-  agent: Agent,
-  key: string,
-  by: string | undefined,
-) =>
+const stopOf = (call: AgentCall, agent: Agent) =>
   Effect.gen(function* () {
+    const { caller, clientKey: key } = call;
     const earlier = yield* hostedStoreOrUnavailable(
       turnStoppedUnderReached(agent.conversationId, key),
     );
     const before = (yield* turnStandingsOf([agent.conversationId]))(agent.conversationId);
     // A member's Stop names no agent that made it, as the developer's names none.
+    const by = callerAgent(caller)?.id;
     const canceled = earlier
       ? false
-      : yield* canceledTurn(Effect.succeed(eve), writer, agent, {
+      : yield* stoppedAgent(call.writer, callerUserId(caller), agent, {
           key,
           ...(by === undefined ? undefined : { by }),
         });
@@ -2624,7 +2535,7 @@ const stopOf = (
     return { stopped: earlier || canceled || standing, status };
   });
 
-/** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as a Stop stops it, an idle one answered as idle, or why nothing was stopped. */
+/** One call of `stop_agent`: the turn under way of an agent of the caller's workspace stopped as the app's Stop stops it, an idle one answered as idle, or why nothing was stopped. */
 export function runStopAgent(
   call: AgentCall,
   input: UnparsedWireValue,
@@ -2634,7 +2545,7 @@ export function runStopAgent(
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.UNREADABLE));
   }
   const { agentId } = asked.success;
-  const { caller, eve } = call;
+  const { caller } = call;
   if (agentId === callerAgent(caller)?.id) {
     return Effect.succeed(agentToolRejected(STOP_AGENT_REFUSAL.SELF));
   }
@@ -2643,21 +2554,13 @@ export function runStopAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
-      if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
-      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
-        return agentToolRejected(
-          `Not stopped: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop it.`,
-        );
+      const stop = yield* Effect.result(stopOf(call, agent));
+      if (Result.isFailure(stop)) {
+        return agentToolRejected(yield* stopRefusalWords(stop.failure, agent));
       }
-      const stop = yield* Effect.result(
-        stopOf(eve, call.writer, agent, call.clientKey, callerAgent(caller)?.id),
-      );
-      if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
       // the developer's, and is answered as stopped so a call run again reads as it first did.
       const { stopped, status } = stop.success;
-      const working = status === AGENT_STATUS.STARTING || status === AGENT_STATUS.RUNNING;
-      if (!stopped && working) return agentToolRejected(STOP_AGENT_REFUSAL.NOT_READY);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
@@ -2673,62 +2576,33 @@ export function runStopAgent(
   );
 }
 
-/** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
-class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
-
 /** A task's change refused inside its transaction, its words for the model: its section or its parent gone meanwhile, or the change refused under the row's lock, which takes every change back. */
 class TaskChangeRefused extends Data.TaggedError("TaskChangeRefused")<{ readonly words: string }> {}
 
-/** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
-class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{
-  readonly refusal: string;
-}> {}
-
-/** The changes a call asks of an agent, each already read and its choice already the catalog's. */
-interface AgentChanges {
-  readonly title: string | undefined;
-  readonly choice: ModelChoice | undefined;
-  readonly pinned: boolean | undefined;
-  readonly disabledServers: readonly string[] | undefined;
-}
-
-/**
- * Writes every change asked of an agent in one transaction and answers the
- * agent as the last write left it, nothing where none was asked; a write that
- * finds no row fails it, so either every change stands or none does.
- */
-const changedAgent = (userId: string, agentId: string, changes: AgentChanges) =>
-  Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const kept = (changed: Option.Option<Agent>) =>
-          Option.isSome(changed) ? Effect.succeed(changed) : Effect.fail(new AgentChangeLost());
-        const { title, choice, pinned, disabledServers } = changes;
-        let last = Option.none<Agent>();
-        if (title !== undefined) {
-          last = yield* kept(
-            yield* renameAgent(userId, agentId, title.length === 0 ? null : title),
-          );
-        }
-        if (choice !== undefined)
-          last = yield* kept(yield* updateAgentChoice(userId, agentId, choice));
-        if (pinned !== undefined) last = yield* kept(yield* pinAgent(userId, agentId, pinned));
-        if (disabledServers !== undefined) {
-          last = yield* kept(yield* updateAgentServers(userId, agentId, disabledServers));
-        }
-        return last;
-      }),
-    ),
-  );
+/** An archive's refusal in the model's words, naming the agent's starter where only they may stop it: an agent gone meanwhile is none, and anything else is the service down. */
+const archiveRefusalWords = (refusal: HostedRefusal, agent: Agent) =>
+  Effect.gen(function* () {
+    if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return AGENT_TOOL_REFUSAL.NO_AGENT;
+    if (refusal.error === HOSTED_API_ERROR.AGENT_NOT_READY) return UPDATE_AGENT_REFUSAL.NOT_READY;
+    if (refusal.error === HOSTED_API_ERROR.NOT_PERMITTED) {
+      return `Not archived: ${yield* agentStarterName(agent)}'s own subscription pays for that agent, so only they and their agents can stop and archive it. Nothing else asked was changed.`;
+    }
+    if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+      return UPDATE_AGENT_REFUSAL.NATIVE_NOT_HERE;
+    }
+    return UPDATE_AGENT_REFUSAL.UNAVAILABLE_ARCHIVE;
+  });
 
 /**
  * One call of `update_agent`: an agent of the caller's workspace renamed,
  * moved to another choice the catalog takes, pinned or unpinned for the
- * caller's member, or given another list of servers switched off, each by
- * the store's own write the agent's menu, chip, and composer make. A choice
- * is checked before anything is written, so one refused changes nothing, and
- * every change asked is written in one transaction, so none stands where
- * another failed.
+ * caller's member, given another list of servers switched off, or archived
+ * or brought back, each by the one operation the app's menu runs
+ * (`agent-change.ts`). A choice is checked before anything is written, so
+ * one refused changes nothing; an archive goes first, stopping a turn still
+ * running as the app's does, so one refused changes nothing either; and
+ * every other change asked is written in one transaction, so none stands
+ * where another failed.
  */
 export function runUpdateAgent(
   call: AgentCall,
@@ -2774,39 +2648,32 @@ export function runUpdateAgent(
       }
       // The catalog's own reading of the choice is written, a window the model does not offer apart dropped.
       const choice = accepted === undefined ? undefined : Result.getOrUndefined(accepted);
-      // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
-      // The archive and every other change are one transaction: a refused archive writes nothing, and
-      // a change that finds no row takes the archive back with it.
-      const written = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
-        client.withTransaction(
-          Effect.gen(function* () {
-            if (archived !== undefined) {
-              const refusal = yield* archiveChange(caller, found.value.agent, archived, reason);
-              if (refusal !== undefined)
-                return yield* Effect.fail(new AgentChangeRefused({ refusal }));
-            }
-            return yield* changedAgent(userId, agentId, { title, choice, pinned, disabledServers });
-          }),
-        ),
-      ).pipe(
-        Effect.map(
-          (changed): Result.Result<Option.Option<Agent>, string> => Result.succeed(changed),
-        ),
-        Effect.catchTag("AgentChangeLost", () =>
-          Effect.succeed(Result.fail(AGENT_TOOL_REFUSAL.NO_AGENT)),
-        ),
-        Effect.catchTag("AgentChangeRefused", (refused) =>
-          Effect.succeed(Result.fail(refused.refusal)),
-        ),
-      );
-      if (Result.isFailure(written)) return agentToolRejected(written.failure);
-      // A native agent's runner that runs is handed the change now; eve reads the row at its next step.
-      if (choice !== undefined) yield* runnerChoiceApplied(found.value.agent);
-      // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
-      const now = Option.isSome(written.success)
-        ? written.success
-        : yield* readAgent(userId, agentId);
-      const agent = Option.getOrElse(now, () => found.value.agent);
+      let agent = found.value.agent;
+      if (archived !== undefined) {
+        const archive = yield* Effect.result(
+          archivedAgent(
+            deploymentSandboxStops,
+            call.writer,
+            userId,
+            agent,
+            archived,
+            archiverOf(caller, reason),
+          ),
+        );
+        if (Result.isFailure(archive)) {
+          return agentToolRejected(yield* archiveRefusalWords(archive.failure, agent));
+        }
+        if (Option.isNone(archive.success)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
+        agent = archive.success.value.agent;
+      }
+      const written = yield* changedAgent(userId, agent, {
+        title,
+        choice,
+        pinned,
+        disabledServers,
+      });
+      if (Option.isNone(written)) return agentToolRejected(AGENT_TOOL_REFUSAL.NO_AGENT);
+      agent = written.value.agent;
       const step = yield* workspaceStepOf(userId, workspaceId);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
