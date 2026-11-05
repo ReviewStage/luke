@@ -26,6 +26,8 @@ import { STATUS_TONE, type StatusTone } from "../status-tone.js";
  * - Our inks, type, spacing, and radii from the theme rather than
  *   `bg-card` and `text-sm`, and no `text-balance`, link underline, or
  *   `md:` breakpoint, because a banner measures its own width.
+ * - A card's glyph may be the bare mark a failure note wears rather than its
+ *   disc (`AlertGlyph`'s `mark`), standing a heading's first line tall.
  * - `AlertTitle` is dropped, because a banner's words are one slot whose
  *   heading, where it has one, is the caller's own `Text`.
  * - Each part keeps the `ui-banner-*` class it wore before the move, which
@@ -70,7 +72,7 @@ const alertGlyphVariants = cva(
     variants: {
       look: {
         strip: "text-muted-foreground",
-        card: "size-banner-disc rounded-full",
+        card: "",
         row: "h-control text-muted-foreground",
         inset: "",
       },
@@ -79,10 +81,19 @@ const alertGlyphVariants = cva(
         true: "",
         false: "",
       },
+      // Whether a card's glyph is the bare mark a failure note wears, a heading's first line tall, rather than a disc.
+      mark: {
+        true: "",
+        false: "",
+      },
     },
     compoundVariants: [
-      { look: "card", neutral: true, class: "bg-secondary text-muted-foreground" },
-      { look: "card", neutral: false, class: "bg-tone-tint text-tone-ink" },
+      { look: "card", mark: false, class: "size-banner-disc rounded-full" },
+      { look: "card", mark: false, neutral: true, class: "bg-secondary text-muted-foreground" },
+      { look: "card", mark: false, neutral: false, class: "bg-tone-tint text-tone-ink" },
+      { look: "card", mark: true, class: "h-banner-mark-row self-start" },
+      { look: "card", mark: true, neutral: true, class: "text-muted-foreground" },
+      { look: "card", mark: true, neutral: false, class: "text-tone-ink" },
       // An inset line has no fill to tint, so its tone is its glyph's ink, and its words'.
       { look: "inset", neutral: true, class: "text-muted-foreground" },
       { look: "inset", neutral: false, class: "text-tone-ink" },
@@ -133,13 +144,14 @@ function AlertRow({ look, ...props }: React.ComponentProps<"div"> & { look: Aler
 function AlertGlyph({
   look,
   tone,
+  mark = false,
   ...props
-}: React.ComponentProps<"span"> & { look: AlertLook; tone: AlertTone }) {
+}: React.ComponentProps<"span"> & { look: AlertLook; tone: AlertTone; mark?: boolean }) {
   return (
     <span
       data-slot="alert-glyph"
       aria-hidden="true"
-      className={alertGlyphVariants({ look, neutral: tone === STATUS_TONE.NEUTRAL })}
+      className={alertGlyphVariants({ look, neutral: tone === STATUS_TONE.NEUTRAL, mark })}
       {...props}
     />
   );

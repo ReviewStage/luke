@@ -596,6 +596,9 @@
   --spacing-banner-card: var(--ui-space-12);
   --spacing-banner-card-start: var(--ui-space-16);
   --spacing-banner-disc: var(--ui-space-32); /* the card's glyph disc */
+  --spacing-banner-mark-row: var(
+    --ui-type-label-leading
+  ); /* the card's bare mark, its heading's first line tall */
   --spacing-banner-words-gap: var(--ui-space-2);
   --spacing-banner-row-inset: calc((var(--ui-control-height) - var(--ui-type-body-leading)) / 2);
   --spacing-pagination-gap: var(--ui-space-4);

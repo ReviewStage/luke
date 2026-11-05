@@ -1,4 +1,5 @@
 import {
+  BANNER_GLYPH,
   BANNER_LOOK,
   Banner,
   BUTTON_VARIANT,
@@ -28,7 +29,9 @@ import { useRef, useState } from "react";
  * sentence it replaces told the developer to, so the same agent launches
  * anew and its first message with it; the transcript then draws the line
  * going in the card's place, and the press holds off a second send
- * meanwhile. Move to cloud is Move to's Cloud (`move-agent.tsx`).
+ * meanwhile. Move to cloud is Move to's Cloud (`move-agent.tsx`), wearing
+ * its cloud. The failure is marked as a failed turn's end line marks one,
+ * the bare failed glyph in the danger ink (`BANNER_GLYPH.MARK`).
  */
 
 /** What the card says and presses. */
@@ -82,10 +85,11 @@ export function GitHubSignInCard({
       look={BANNER_LOOK.CARD}
       tone={STATUS_TONE.DANGER}
       glyph={<GLYPH.FAILED />}
+      glyphLook={BANNER_GLYPH.MARK}
       actions={
         <>
           {onMoveToCloud === undefined ? null : (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={onMoveToCloud}>
+            <Button variant={BUTTON_VARIANT.OUTLINE} icon={<GLYPH.CLOUD />} onClick={onMoveToCloud}>
               {GITHUB_SIGN_IN_WORDS.MOVE_TO_CLOUD}
             </Button>
           )}
