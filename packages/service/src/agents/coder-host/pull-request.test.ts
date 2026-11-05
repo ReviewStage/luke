@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   createAgent,
@@ -175,7 +176,99 @@ const openOnToken = (
     return { result, openings: github.openings, author: row.author };
   });
 
+const DOCS = { owner: "Acme", name: "Docs", defaultBranch: "main" } as const;
+const DOCS_FULL_NAME = `${DOCS.owner}/${DOCS.name}`;
+
+/** An agent writing as the App on the repository, working in the docs beside it, its checkout there cloned at `next`. */
+const openAgentBesideDocs = (installationId: number) =>
+  Effect.gen(function* () {
+    const installation: InstallationFixture = {
+      id: installationId,
+      login: RELAY.owner,
+      repositories: [RELAY, DOCS],
+    };
+    const userId = yield* openGithubUser();
+    const task = yield* startTask(userId, { name: "Invitations", repository: RELAY_FULL_NAME });
+    yield* connectWorkspaceGitHub(task.workspaceId, installation);
+    const started = yield* createAgent(userId, {
+      taskId: task.id,
+      idempotencyKey: "start-1",
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      planSnapshot: "# Invitations\n",
+      prompt: null,
+      repository: RELAY_FULL_NAME,
+      extraRepositories: [{ repository: DOCS_FULL_NAME, baseBranch: "next" }],
+      runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+    });
+    const { agent } = Option.getOrThrow(started);
+    yield* settleAgentAuthor(userId, agent.id, AGENT_AUTHOR.APP_AUTOMATION);
+    const settled = Option.getOrThrow(yield* readAgent(userId, agent.id));
+    assert.ok(hasRepository(settled));
+    return {
+      installation,
+      agent: settled,
+      target: { userId, conversationId: agent.conversationId },
+    };
+  });
+
 it.layer(getTestDB())("a coding agent's pull request", (it) => {
+  it.effect(
+    "an agent in several repositories names the one to open in, refused with their names where it names none or another, and its pull request in an extra one opens there against the branch it was cloned at, its head written on that repository's row alone",
+    () =>
+      Effect.gen(function* () {
+        const besideDocs = yield* openAgentBesideDocs(41);
+        const openings: SentToGitHub[] = [];
+        const script = (sent: SentToGitHub): Response | undefined => {
+          const path = new URL(sent.url).pathname;
+          if (sent.method !== "POST" || !path.endsWith("/pulls")) return undefined;
+          openings.push(sent);
+          return Response.json(
+            { number: 7, html_url: `https://github.com/${DOCS_FULL_NAME}/pull/7` },
+            { status: 201 },
+          );
+        };
+        const call = (input: WireBoundaryInput) =>
+          openPullRequest(besideDocs.target, besideDocs.agent, unparsedWire(input)).pipe(
+            Effect.provide(githubReaching([besideDocs.installation], undefined, {}, script).layer),
+          );
+
+        const unnamed = yield* call(INPUT);
+        const elsewhere = yield* call({ ...INPUT, repository: "acme/web" });
+        assert.deepEqual(
+          [unnamed, elsewhere],
+          [
+            {
+              status: ACTION_RESULT_STATUS.REJECTED,
+              reason:
+                "Not opened: you work in several repositories, so name the one to open it in as repository: `Acme/Relay`, `Acme/Docs`.",
+            },
+            {
+              status: ACTION_RESULT_STATUS.REJECTED,
+              reason:
+                "Not opened: you work in several repositories, so name the one to open it in as repository: `Acme/Relay`, `Acme/Docs`.",
+            },
+          ],
+        );
+        assert.equal(openings.length, 0, "GitHub hears of no refused call");
+
+        const inDocs = yield* call({ ...INPUT, repository: "acme/docs" });
+        assert.ok(inDocs.status === ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(inDocs.number, 7);
+        assert.deepEqual(
+          openings.map((sent) => new URL(sent.url).pathname),
+          [`/repos/${DOCS_FULL_NAME}/pulls`],
+        );
+        assert.equal(JSON.parse(openings[0]?.body ?? "{}").base, "next");
+        const [own, docs] = yield* readAgentRepositories(
+          besideDocs.target.userId,
+          besideDocs.agent.id,
+        );
+        assert.equal(own?.headBranch, null, "the agent's own repository is left as it stood");
+        assert.equal(docs?.headBranch, INPUT.head);
+      }),
+  );
+
   it.effect(
     "an agent on its starter's own token opens on that token alone, as them, and a refusal of the token opens nothing in its place",
     () =>

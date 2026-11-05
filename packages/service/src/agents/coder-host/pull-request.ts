@@ -1,5 +1,10 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
+  type AgentRepositoryEntry,
+  readAgentRepositories,
+  recordAgentRepositoryHead,
+} from "@repo/database/models/agent-repositories";
+import {
   type Agent,
   recordAgentAuthor,
   updateAgentBranch,
@@ -7,10 +12,13 @@ import {
 } from "@repo/database/models/agent-store";
 import type { ConversationTarget } from "@repo/database/models/writer";
 import { AGENT_AUTHOR, type AgentAuthor } from "@repo/features/agent-wire";
-import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  githubRepositoryFullNameSchema,
+} from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@repo/wire";
-import { readEither } from "@repo/wire/effect";
+import { describeWire, readEither } from "@repo/wire/effect";
 import { Effect, type Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -64,6 +72,16 @@ import { agentPublished } from "./published.js";
  * request are written on the agent's row at once rather than only as the
  * turn ends, so a comment on it finds the agent (`github/agent-wakes.ts`);
  * a refused call moves nothing.
+ *
+ * An agent that works in other repositories beside its own
+ * (`readAgentRepositories`) names the one each call opens in, refused with
+ * their names where it names none or one it does not work in; an agent in
+ * one repository may leave it out, and opens as it always did. A pull
+ * request in an extra repository opens on the one token minted for the
+ * agent's set, against the branch that repository's checkout was cloned at
+ * unless it names another base, and its head is written on that
+ * repository's row rather than the agent's (`recordAgentRepositoryHead`),
+ * so GitHub's deliveries about it find the agent as they find its own.
  */
 
 /** GitHub's own bounds on what a pull request carries. */
@@ -90,6 +108,12 @@ const openPullRequestInputSchema = Schema.Struct({
     Schema.Trim.check(
       Schema.isNonEmpty(),
       Schema.isMaxLength(PULL_REQUEST_BOUNDS.MAX_BRANCH_CHARS),
+    ),
+  ),
+  repository: Schema.optionalKey(
+    describeWire(
+      githubRepositoryFullNameSchema,
+      "The repository to open it in, as owner/name, where you work in several; leave it out where you work in one.",
     ),
   ),
 });
@@ -128,6 +152,14 @@ const PULL_REQUEST_REFUSAL = {
   TOKEN_REFUSED:
     "Not opened: GitHub refused the developer's own GitHub token on this repository. Tell them.",
 } as const;
+
+/** Why a call naming no repository, or one the agent does not work in, opened nothing, listing those it works in. */
+function repositoryRefusal(repositories: readonly AgentRepositoryEntry[]): string {
+  const listed = repositories.map((each) => `\`${each.repository}\``).join(", ");
+  return repositories.length > 1
+    ? `Not opened: you work in several repositories, so name the one to open it in as repository: ${listed}.`
+    : `Not opened: you work in ${listed} alone; name it as repository, or leave repository out.`;
+}
 
 /** The headers GitHub marks a rate limit with, which it may answer 403 rather than 429. */
 const RATE_LIMIT_HEADER = {
@@ -315,11 +347,11 @@ const attemptAsDeveloper = /* @__PURE__ */ Effect.fn("web/openPullRequestAsDevel
   );
 });
 
-/** The pull request GitHub is asked to open: the agent's branch against the base it named or the default branch, its description as the agent wrote it. */
-function pullRequestOf(input: OpenPullRequestInput, defaultBranch: string): PullRequestAsked {
+/** The pull request GitHub is asked to open: the agent's branch against the base it named, else the branch given, its description as the agent wrote it. */
+function pullRequestOf(input: OpenPullRequestInput, base: string): PullRequestAsked {
   return {
     head: input.head,
-    base: input.base ?? defaultBranch,
+    base: input.base ?? base,
     title: input.title,
     body: input.body.trimEnd(),
     draft: input.draft ?? false,
@@ -349,14 +381,14 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
 const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
-  input: UnparsedWireValue,
+  input: OpenPullRequestInput,
+  extra: AgentRepositoryEntry | undefined,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
-  const read = readInput(input);
-  if (Result.isFailure(read)) return pullRequestRejected(PULL_REQUEST_REFUSAL.UNREADABLE);
-  const minted = yield* Effect.result(agentRepositoryToken(target, agent));
+  const minted = yield* Effect.result(agentRepositoryToken(target, agent, extra?.repository));
   if (Result.isFailure(minted)) return pullRequestRejected(`Not opened: ${minted.failure.reason}`);
   const { token, fullName, defaultBranch, access } = minted.success;
-  const pullRequest = pullRequestOf(read.success, defaultBranch);
+  // Note that an extra's pull request opens against the branch its checkout was cloned at, as it was named at the Start.
+  const pullRequest = pullRequestOf(input, extra?.baseBranch ?? defaultBranch);
   // Note that an agent on its starter's own token opens on it alone, since no installation reaches the repository.
   if (access.kind === GITHUB_ACCESS.TOKEN) {
     const asMember = yield* attempt(token, fullName, pullRequest);
@@ -392,10 +424,21 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
  * finds the agent at once. Either failing is logged by its kind and the
  * call still answers as opened.
  */
-const recordOpened = (target: ConversationTarget, agent: Agent, head: string) =>
+const recordOpened = (
+  target: ConversationTarget,
+  agent: Agent,
+  head: string,
+  extra: AgentRepositoryEntry | undefined,
+) =>
   Effect.gen(function* () {
-    yield* updateAgentBranch(target.userId, agent.id, head);
-    yield* agentPublished(target.userId, { ...agent, branch: head });
+    if (extra === undefined) {
+      yield* updateAgentBranch(target.userId, agent.id, head);
+      yield* agentPublished(target.userId, { ...agent, branch: head });
+      return;
+    }
+    // An extra's head is written on its own row, and its pull request read back with the agent's.
+    yield* recordAgentRepositoryHead(target.userId, agent.id, extra.repository, head);
+    yield* agentPublished(target.userId, agent);
   }).pipe(
     Effect.catch((failure) =>
       Effect.logWarning(
@@ -405,19 +448,51 @@ const recordOpened = (target: ConversationTarget, agent: Agent, head: string) =>
   );
 
 /**
- * Runs one call: the opening above, and where GitHub opened it, its branch
- * and pull request recorded on the agent. A refused call leaves the row as
- * it stood, the branch and pull request the agent already had among it.
+ * Which of the agent's repositories (`readAgentRepositories`) the call opens
+ * its pull request in: its own, where it names none or names that one,
+ * answered as undefined; one it works in beside it, where it names that one;
+ * else why it opened nothing, listing them, where it works in several and
+ * names none, or names one it does not work in.
+ */
+function chosenExtra(
+  named: string | undefined,
+  repositories: readonly AgentRepositoryEntry[],
+): Result.Result<AgentRepositoryEntry | undefined, string> {
+  const [own, ...extras] = repositories;
+  if (named === undefined) {
+    return extras.length === 0
+      ? Result.succeed(undefined)
+      : Result.fail(repositoryRefusal(repositories));
+  }
+  const lowered = named.toLowerCase();
+  if (own === undefined || own.repository.toLowerCase() === lowered)
+    return Result.succeed(undefined);
+  const extra = extras.find((each) => each.repository.toLowerCase() === lowered);
+  return extra === undefined ? Result.fail(repositoryRefusal(repositories)) : Result.succeed(extra);
+}
+
+/**
+ * Runs one call: the opening above in the repository it names, and where
+ * GitHub opened it, its branch and pull request recorded on the agent's row
+ * for its own repository, or on that repository's row for one it works in
+ * beside it. A refused call leaves the rows as they stood, the branch and
+ * pull request the agent already had among them.
  */
 export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
   input: UnparsedWireValue,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
-  const result = yield* attemptOpening(target, agent, input);
   const read = readInput(input);
-  if (result.status === ACTION_RESULT_STATUS.ACCEPTED && Result.isSuccess(read)) {
-    yield* recordOpened(target, agent, read.success.head);
+  if (Result.isFailure(read)) return pullRequestRejected(PULL_REQUEST_REFUSAL.UNREADABLE);
+  const repositories = yield* Effect.result(readAgentRepositories(target.userId, agent.id));
+  if (Result.isFailure(repositories)) return pullRequestRejected(PULL_REQUEST_REFUSAL.UNAVAILABLE);
+  const chosen = chosenExtra(read.success.repository, repositories.success);
+  if (Result.isFailure(chosen)) return pullRequestRejected(chosen.failure);
+  const extra = chosen.success;
+  const result = yield* attemptOpening(target, agent, read.success, extra);
+  if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
+    yield* recordOpened(target, agent, read.success.head, extra);
     yield* recordServerEvent(
       SERVER_EVENT.PULL_REQUEST_CREATE,
       { userId: target.userId, workspaceId: agent.organizationId },

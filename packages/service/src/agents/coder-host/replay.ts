@@ -1,5 +1,9 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import {
+  type AgentRepositoryEntry,
+  readAgentRepositories,
+} from "@repo/database/models/agent-repositories";
+import {
   type Agent,
   type LineSent,
   lineSendersOf,
@@ -694,6 +698,31 @@ function whereOf(
   );
 }
 
+/**
+ * What the new agent is told of the repositories its source worked in
+ * beside its own, which it works in too, checked out again at the branches
+ * they started on: that only the source's own checkout was copied (`snapshot.ts`),
+ * so nothing it had not pushed in them came along, and where it pushed a
+ * branch and opened a pull request in one, that branch to go on from;
+ * nothing for a source in one repository, whose preamble is then the text
+ * it always was.
+ */
+function extrasWords(extras: readonly AgentRepositoryEntry[]): string {
+  if (extras.length === 0) return "";
+  const named = extras.map((each) => `\`${each.repository}\``).join(", ");
+  const pushed = extras.flatMap((each) => {
+    if (each.headBranch === null) return [];
+    const quoted = shellQuoted(each.headBranch);
+    return [
+      ` In \`${each.repository}\` it pushed \`${each.headBranch}\`${pullWords(each.pullRequest)}: in that repository's folder, switch to it with \`git fetch origin ${quoted} && git switch ${quoted}\` and continue there.`,
+    ];
+  });
+  return (
+    ` It also worked in ${named} beside its own repository, which you work in too, each checked out again at the branch it started on; ` +
+    `only its own checkout was copied, so what it had not pushed in them did not come along and only what it pushed stands.${pushed.join("")}`
+  );
+}
+
 /** A fork's warning that the code may be ahead of its message, naming the files the source edited after it, or saying they could not be read; nothing for a continue. */
 function forkCaveat(forked: boolean, edited: readonly string[] | undefined): string {
   if (!forked) return "";
@@ -723,12 +752,13 @@ function preambleOf(
   counts: { readonly kept: number; readonly total: number; readonly summarized: number },
   unkept: readonly string[],
   inPullRequest: boolean,
+  extras: readonly AgentRepositoryEntry[],
 ): string {
   const name = agentNamedWithId(source);
   const lead = forked.at
     ? `You are a fork of the agent ${name}, taken at one of its messages: you start from its transcript as it stood there, and it may have gone on since without you.`
     : `You continue the work of the agent ${name}, which stopped before it was done.`;
-  const where = `${whereOf(source, published, copy, carried, inPullRequest)}${forkCaveat(forked.at, forked.edited)}`;
+  const where = `${whereOf(source, published, copy, carried, inPullRequest)}${extrasWords(extras)}${forkCaveat(forked.at, forked.edited)}`;
   const left = counts.total - counts.kept - counts.summarized;
   const unfit = counts.total - counts.kept;
   // Note that a summary beside steps left out may cover the newest of those that did not fit rather than the oldest, so it names none as the oldest.
@@ -784,6 +814,8 @@ interface ReplayTold {
   readonly unkept: readonly string[];
   /** Whether a continue goes on in its source's pull request, which GitHub says is still open; never a fork. */
   readonly inPullRequest: boolean;
+  /** The repositories the source works in beside its own, with the branch and pull request it left in each; none for a source in one. */
+  readonly extras: readonly AgentRepositoryEntry[];
   readonly messageId: string | undefined;
   /** Where the fork cut that message, where it was of a reply still being written; none where it kept the message whole. */
   readonly cut?: StepCut | undefined;
@@ -817,6 +849,7 @@ export function replayOf(
     counts,
     told.unkept,
     told.inPullRequest,
+    told.extras,
   );
   const message = told.messageId === undefined ? undefined : { messageId: told.messageId };
   return {
@@ -1104,6 +1137,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
   const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
   const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
+  const [, ...extras] = yield* hostedStoreOrUnavailable(readAgentRepositories(userId, source.id));
   const edited =
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));
   return {
@@ -1124,6 +1158,7 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       forked: { at: forked, edited },
       unkept: files.unkept,
       inPullRequest,
+      extras,
       messageId: from.messageId,
       cut,
     },

@@ -308,16 +308,19 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
  * the repository as GitHub spells it. An agent that works in other
  * repositories beside its own (`readAgentRepositories`) is minted one token
  * for them all, on the one installation that reaches them
- * (`repositoriesWriteToken`), its own repository still the one answered;
- * refused as not reachable, naming the first repository the token does not
- * reach, where one is no longer reached, is reached only on its starter's
- * token, or moved to another installation since it started. Note that an
- * agent in one repository is minted as it always was.
+ * (`repositoriesWriteToken`), its own repository the one answered unless
+ * the caller names another of them, as `open_pull_request` does for a pull
+ * request in one; refused as not reachable, naming the first repository the
+ * token does not reach, where one is no longer reached, is reached only on
+ * its starter's token, or moved to another installation since it started,
+ * and where the one named is none of its repositories. Note that an agent in
+ * one repository is minted as it always was.
  */
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
     agent: WithRepository<Agent>,
+    named?: string,
   ): Effect.fn.Return<
     {
       readonly token: Redacted.Redacted;
@@ -334,11 +337,18 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
       Effect.mapError(refusedBy),
     );
     if (repositories.length > 1) {
-      return yield* agentRepositoriesToken(
-        target,
-        agent,
-        repositories.map((each) => each.repository),
-      );
+      const names = repositories.map((each) => each.repository);
+      const answered =
+        named === undefined
+          ? 0
+          : names.findIndex((each) => each.toLowerCase() === named.toLowerCase());
+      if (answered < 0) {
+        return yield* new CheckoutRefused({
+          reason: CODER_REFUSAL.NOT_REACHABLE,
+          detail: `Not reached: ${named}.`,
+        });
+      }
+      return yield* agentRepositoriesToken(target, agent, names, answered);
     }
     const reached = yield* Effect.gen(function* () {
       const workspace = yield* agentWorkspace(target, agent);
@@ -357,11 +367,12 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
   },
 );
 
-/** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several. */
+/** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several, answering the repository at the place given among them. */
 const agentRepositoriesToken = Effect.fnUntraced(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
   repositories: readonly string[],
+  answered: number,
 ) {
   const app = yield* GitHubApp;
   const minted = yield* Effect.gen(function* () {
@@ -385,9 +396,10 @@ const agentRepositoriesToken = Effect.fnUntraced(function* (
     });
   }
   const { repositories: reached, token, access } = minted.value.success;
-  const [own] = reached;
-  if (own === undefined) return yield* Effect.die("a set of repositories answered none");
-  return { token, defaultBranch: own.defaultBranch, fullName: own.fullName, access };
+  const one = reached[answered];
+  if (one === undefined)
+    return yield* Effect.die("a set of repositories answered fewer than asked");
+  return { token, defaultBranch: one.defaultBranch, fullName: one.fullName, access };
 });
 
 /**

@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
+  recordAgentRepositoryHead,
+  recordAgentRepositoryPublished,
+} from "@repo/database/models/agent-repositories";
+import {
   type AgentLatestTurn,
   archiveAgent,
   createAgent,
@@ -571,6 +575,87 @@ test("a person's review reaches an agent at work or not, Vespin's App's only an 
 });
 
 it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) => {
+  it.effect(
+    "a review on the branch of an agent's pull request in a repository it works in beside its own, and a comment on that pull request by its number, are told to the agent",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const web = { owner: RELAY.owner, name: "Web" } as const;
+        const installation: InstallationFixture = {
+          id: 8_200,
+          login: RELAY.owner,
+          accountId: 82_000,
+          repositories: [web, RELAY],
+        };
+        const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
+        const task = yield* startTask(owner, { name: "Invitations", repository: "Acme/Web" });
+        yield* connectWorkspaceGitHub(task.workspaceId, installation);
+        const started = yield* createAgent(owner, {
+          taskId: task.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Invitations\n",
+          prompt: null,
+          repository: "Acme/Web",
+          extraRepositories: [{ repository: RELAY_FULL_NAME }],
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: AGENT_PAYER.API_KEY,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          `wrun_${randomUUID()}`,
+          new Date(MADE_AT - 3_600_000),
+        );
+        yield* endedTurn(owner, agent.conversationId, MADE_AT - 60_000);
+        const ref = "luke/relay-invitations";
+        yield* recordAgentRepositoryHead(owner, agent.id, RELAY_FULL_NAME, ref);
+        yield* recordAgentRepositoryPublished(
+          owner,
+          agent.id,
+          RELAY_FULL_NAME,
+          {
+            number: 41,
+            title: "Expire invitations",
+            url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PENDING,
+            additions: 1,
+            deletions: 0,
+            changedFiles: 1,
+          },
+          { at: MADE_AT, branch: ref, pushed: true },
+        );
+        const github = githubReaching([installation]).layer;
+        const review = Option.getOrThrow(
+          Option.fromNullishOr(
+            agentWakeOf("pull_request_review", unparsedWire(reviewDelivery(ref, "octocat")), 0),
+          ),
+        );
+        const comment: AgentWake = {
+          kind: AGENT_WAKE.COMMENT,
+          repository: RELAY_FULL_NAME.toLowerCase(),
+          branches: [],
+          pullRequest: 41,
+          url: `https://github.com/${RELAY_FULL_NAME}/pull/41#issuecomment-7`,
+          by: "octocat",
+          byId: "583231",
+          at: MADE_AT,
+          words: "Cover the expired invitation too.",
+        };
+
+        const told = yield* Effect.forEach([review, comment], (wake) =>
+          wakeAgents(eve.sessionsFor, wake, randomUUID(), APP_BOT).pipe(Effect.provide(github)),
+        );
+
+        assert.deepEqual(told, [1, 1]);
+        assert.ok(sentText(eve.sent[0]?.message.message).includes("@octocat requested changes"));
+        assert.ok(sentText(eve.sent[1]?.message.message).includes("@octocat commented"));
+      }),
+  );
+
   it.effect(
     "a person's review is told to the agent on the branch once under the delivery's id, drawn as theirs, and Vespin's App's reply made while the agent was at work is told to nobody",
     () =>
