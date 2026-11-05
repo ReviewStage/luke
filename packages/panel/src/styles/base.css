@@ -389,6 +389,8 @@ body:has(.app-stage[data-capture="true"]) {
   /* A confirmation stands for a beat and goes (a Saved, a landed check), so a
      capture holds none rather than catching one wherever the shutter fell. */
   --ui-confirm-delay: 0s;
+  /* A video's key flash stands for a beat and goes the same way. */
+  --ui-flash-delay: 0s;
   /* The working rows' spinners loop with no end to wait for, so a capture
      would otherwise land wherever in them the shutter happened to fall. */
   --ui-loop-motion: paused;

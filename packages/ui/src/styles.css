@@ -56,6 +56,7 @@
 @import "./components/landing/landing.css";
 @import "./components/public-page/public-page.css";
 @import "./components/saved-tick/saved-tick.css";
+@import "./components/video-player/video-player.css";
 @import "./components/time/time.css";
 @import "./components/toast/toast.css";
 @import "./components/toolbar/toolbar.css";

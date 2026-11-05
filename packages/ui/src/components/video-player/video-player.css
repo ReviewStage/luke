@@ -1,0 +1,18 @@
+/* video-player.css -- the flash a key gives over a video, standing for the
+   flash delay and fading over the exit. The pill is drawn in utilities and
+   arrives as the window's hint does (`video-player.tsx`), which takes it once
+   its fade ends; each press draws the pill anew, which stands it again. Only
+   the fade's keyframes and the rule that plays them stand here. */
+
+@layer components {
+  .ui-video-player-flash {
+    animation: ui-video-player-flash-out var(--ui-duration-exit) var(--ui-motion-exit)
+      var(--ui-flash-delay) forwards;
+  }
+
+  @keyframes ui-video-player-flash-out {
+    to {
+      opacity: 0;
+    }
+  }
+}

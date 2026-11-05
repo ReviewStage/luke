@@ -76,5 +76,6 @@
   --ui-hint-delay: 500ms;
   --ui-late-delay: 1000ms;
   --ui-confirm-delay: 1200ms;
+  --ui-flash-delay: 800ms;
   --ui-settle-delay: 180ms;
 }
