@@ -276,7 +276,7 @@ export function initialAppState(
     [LIVE_READ.PLAN_DOCUMENT]: NO_KEYS_HELD,
     macCommands: { asks: [] },
     notifications: { status: NOTIFICATIONS_STATUS.UNKNOWN },
-    network: { online: true, reachable: true },
+    network: { online: true },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };
 }

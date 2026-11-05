@@ -15,7 +15,6 @@ import type { AgentAgentAnswer } from "./agent-view.js";
 import type { LocalAgentRefusal } from "./agent-wire.js";
 import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
 import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
-import type { FailureFacts } from "./failure-facts.js";
 import type {
   GitHubRepositoriesAnswer,
   GitHubRepositoryIssueAnswer,
@@ -151,8 +150,6 @@ export type TaskCallResult<Answer, Failure> =
       readonly failure: Failure;
       /** Why the device the call named would not take the task's agents, where that is why and the service said. */
       readonly localAgentRefusal?: LocalAgentRefusal;
-      /** The facts of what failed beneath a call no refusal named (`failure-facts.ts`), which a window reports and never draws. */
-      readonly cause?: FailureFacts;
     };
 
 export interface HostedTaskClientOptions {
@@ -242,11 +239,7 @@ function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): Ta
     : { task: changed.plan, txid: changed.txid };
 }
 
-/**
- * A procedure's answer as a result: its refusal where it is one the caller
- * names, unanswered for everything else, with the failure beneath it, which
- * the window reports and never draws.
- */
+/** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
 function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -258,10 +251,9 @@ function hostedResult<Answer, Failure extends string>(
   return Effect.match(asked, {
     onSuccess: succeeded,
     onFailure: (failed) => {
-      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-      if (failed._tag !== "HostedRefused" || failure === undefined) {
-        return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
-      }
+      if (failed._tag !== "HostedRefused") return UNANSWERED;
+      const failure = named[failed.refusal];
+      if (failure === undefined) return UNANSWERED;
       const localAgentRefusal = failed.data?.localAgentRefusal;
       return localAgentRefusal === undefined
         ? ({ ok: false, failure } as const)

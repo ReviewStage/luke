@@ -115,11 +115,11 @@ test("a delivery naming one slice replaces that slice alone, and every slice it 
   const { drawn, push } = await window(first);
   const held = drawn.at(-1);
 
-  await push({ version: 2, entries: { network: { online: false, reachable: true } } });
+  await push({ version: 2, entries: { network: { online: false } } });
   const now = drawn.at(-1);
 
   assert.ok(held && now);
-  assert.deepEqual(now, { ...first, version: 2, network: { online: false, reachable: true } });
+  assert.deepEqual(now, { ...first, version: 2, network: { online: false } });
   assert.equal(now.settings, held.settings);
   assert.equal(now.tasks, held.tasks);
   assert.equal(now.audio, held.audio);
@@ -132,6 +132,6 @@ test("a delivery older than the document held is dropped", async () => {
   const { drawn, push } = await window(first);
   const held = drawn.at(-1);
 
-  await push({ version: 2, entries: { network: { online: false, reachable: true } } });
+  await push({ version: 2, entries: { network: { online: false } } });
   assert.equal(drawn.at(-1), held);
 });

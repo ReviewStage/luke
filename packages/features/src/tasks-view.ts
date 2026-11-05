@@ -8,7 +8,6 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
-import { failureFactsSchema } from "./failure-facts.js";
 import {
   githubRepositoryFullNameSchema,
   workspaceTokenRepositoriesAnswerSchema,
@@ -399,9 +398,7 @@ export type StartCallFailure = (typeof START_CALL_FAILURES)[number];
 /**
  * Starting a task, as the window hears it: the task now active, with the
  * agent started on it, or why it was not, where the start named one, as an
- * agent's Start answers; or why no task started, with the facts of what
- * failed beneath it where the host caught it (`failure-facts.ts`), which the
- * window reports and never draws.
+ * agent's Start answers; or why no task started.
  */
 export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -411,7 +408,6 @@ export const tasksStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     failure: EffectSchema.Literals(START_CALL_FAILURES),
     localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
-    cause: EffectSchema.optionalKey(failureFactsSchema),
   }),
 ]);
 
