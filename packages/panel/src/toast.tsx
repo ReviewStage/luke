@@ -65,6 +65,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
+  type MarkProvider,
   STATUS_TONE,
   TOAST_HOLD,
   Toast,
@@ -136,6 +137,8 @@ export type ToastNotice = {
   readonly words: string;
   /** The glyph it leads with in place of its tone's, where what it says has one of its own (`Toast`'s `glyph`). */
   readonly glyph?: () => React.JSX.Element;
+  /** The provider whose mark it leads with, where it is about one of the account's connections (`Toast`'s `mark`). */
+  readonly mark?: MarkProvider;
   readonly detail?: string;
   readonly subject?: string;
   /** Whether its words and detail are the app's own, which a screen recording shows as they read; one that quotes a name, a person's words, or a refusal's words leaves this off. */
@@ -570,6 +573,7 @@ function ToastCard({
     <Toast
       tone={notice.tone}
       glyph={notice.glyph}
+      mark={notice.mark}
       words={notice.words}
       detail={notice.detail}
       replayUnmasked={notice.replayUnmasked}

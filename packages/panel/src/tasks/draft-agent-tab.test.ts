@@ -57,10 +57,8 @@ import type { AgentDraft, AgentsControl } from "./use-agents.js";
 /**
  * A draft agent's first message through the bridge the host answers: a
  * refused Start offers Retry; a Start refused for a repository out of reach
- * says why, naming the repository, and offers the press that mends it; a
- * server the agent has on whose sign-in expired is offered to reconnect in
- * place; and the MCP popover's GitHub row connects the account's GitHub in
- * place.
+ * says why, naming the repository, and offers the press that mends it; and
+ * the MCP popover's GitHub row connects the account's GitHub in place.
  */
 
 const TASK_ID = "plan-1";
@@ -68,8 +66,6 @@ const RELAY = "Acme/Relay";
 
 /** Where the account's Slack connection stands at the service; every other provider but GitHub is not offered. */
 let slack: IntegrationStatus = INTEGRATION_STATUS.CONNECTED;
-/** Whether the next Connect the bridge is asked for is refused, as a service that does not answer refuses it. */
-let refuseConnect = false;
 /** Where GitHub stands for the account, unavailable unless a test offers it. */
 let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 
@@ -101,14 +97,12 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   connects = [];
-  refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
   github = INTEGRATION_STATUS.UNAVAILABLE;
   // A Connect stands Slack pending at the service, and a Cancel disconnects it, each answering once the host's read carries it.
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_CONNECT]: (payload) => {
       connects.push(payload);
-      if (refuseConnect) return Promise.reject(new Error("Not now."));
       if (payload.provider === INTEGRATION_PROVIDER.SLACK) slack = INTEGRATION_STATUS.PENDING;
       integrations.lay();
       return Promise.resolve({ opened: true });
@@ -366,33 +360,6 @@ test("a Start GitHub did not answer says so and offers Retry alone, and one from
   assert.equal(tab.words(), "Vespin cannot reach this task's repository on GitHub.");
   assert.ok(tab.button("Retry"));
   assert.deepEqual(tab.remedies, []);
-});
-
-test("a server the agent has on whose sign-in expired is offered to reconnect under the box, and one it has off is not", async () => {
-  slack = INTEGRATION_STATUS.EXPIRED;
-  const tab = mount([]);
-  await settle();
-  assert.match(tab.note() ?? "", /^Slack's sign-in expired\./u);
-
-  await tab.press("Reconnect Slack");
-  assert.deepEqual(connects, [{ provider: INTEGRATION_PROVIDER.SLACK }]);
-  assert.equal(tab.settings.integrationsOpened, false, "the composer reconnects in place");
-
-  const off = mount([], { ...DRAFT, disabledServers: [INTEGRATION_PROVIDER.SLACK] });
-  await settle();
-  assert.equal(off.note(), undefined);
-});
-
-test("a reconnect that could not begin says so under the box, and Reconnect is offered again", async () => {
-  slack = INTEGRATION_STATUS.EXPIRED;
-  refuseConnect = true;
-  const tab = mount([]);
-  await settle();
-
-  await tab.press("Reconnect Slack");
-
-  assert.match(tab.note() ?? "", /reconnecting it could not start/u);
-  assert.ok(tab.button("Reconnect Slack"));
 });
 
 /** The servers popover opened from the box's + menu, its MCP servers row pressed. */

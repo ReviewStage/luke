@@ -1,13 +1,14 @@
 /**
  * toasts.tsx -- the passing notices in each tone, stacked as the window stacks
  * them: a plain one that lets clicks through, one with a second line, and
- * ones carrying an action, whose × shows under the pointer or focus, the
+ * ones carrying an action, one of them led by a provider's mark, whose × shows under the pointer or focus, the
  * Undo one draining its countdown, paused under the pointer; then one whose
  * work is under way, turned in place into done or failed by a press, and
  * one to drag or sweep sideways away, shown again by a press; and failures
  * that offer their details to copy, alone and beside a Retry.
  */
 
+import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   BUTTON_VARIANT,
@@ -75,7 +76,7 @@ function Toasts(): React.JSX.Element {
       <div className="catalog-toast-stage">
         <ToastStack
           label="Notifications"
-          polite="Link copied. Task archived. Should withdrawn invitations count?"
+          polite="Link copied. Task archived. Should withdrawn invitations count? Linear's sign-in expired"
           alert="Couldn't save the plan"
         >
           <Toast tone={STATUS_TONE.COMPLETE} words="Link copied" />
@@ -95,6 +96,19 @@ function Toasts(): React.JSX.Element {
             words="Should withdrawn invitations count?"
             detail="Relay · Retry the webhook"
             label="View"
+          />
+          <Toast
+            tone={STATUS_TONE.ATTENTION}
+            mark={INTEGRATION_PROVIDER.LINEAR}
+            words="Linear's sign-in expired"
+            actions={
+              <ToastActions
+                label="Reconnect"
+                onPress={noop}
+                dismissLabel="Dismiss"
+                onDismiss={noop}
+              />
+            }
           />
           <Acting
             tone={STATUS_TONE.DANGER}
