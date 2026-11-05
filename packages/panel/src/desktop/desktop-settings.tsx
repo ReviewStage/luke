@@ -27,6 +27,7 @@ import {
   SettingsPage,
   Stack,
   TEXT_ELEMENT,
+  TEXT_FONT,
   TEXT_VARIANT,
   Text,
   TOOLBAR_LOOK,
@@ -87,11 +88,11 @@ export interface SettingsStep {
 }
 
 /**
- * The line under the title of the two pages that connect agents, each
- * naming the other: Integrations holds what the account's own agents use,
- * and the product's MCP lets outside agents use the account, so a reader
- * who landed on one looking for the other is sent across. No other page
- * has one.
+ * The line under the title of the pages that connect agents, each naming
+ * the one a reader may have meant: Integrations holds what the account's own
+ * agents use, the product's MCP lets outside agents use the account, and
+ * CLI is the `vespin` command an agent with a shell runs, so a reader who
+ * landed on one looking for another is sent across. No other page has one.
  */
 function pageDescription(view: SettingsView): ReactNode {
   switch (view) {
@@ -107,7 +108,18 @@ function pageDescription(view: SettingsView): ReactNode {
         <ReplayUnmask>
           Use {PRODUCT_NAME} from Claude Code, Codex, Cursor, ChatGPT, and other agents. To give
           your {PRODUCT_NAME} agents tools like Linear or Sentry, go to{" "}
-          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} />.
+          <SettingsPageLink page={SETTINGS_VIEW.INTEGRATIONS} />. For the command line, go to{" "}
+          <SettingsPageLink page={SETTINGS_VIEW.CLI} />.
+        </ReplayUnmask>
+      );
+    case SETTINGS_VIEW.CLI:
+      return (
+        <ReplayUnmask>
+          Use {PRODUCT_NAME} from your terminal and your agents with the{" "}
+          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+            {PRODUCT_NAME.toLowerCase()}
+          </Text>{" "}
+          command.
         </ReplayUnmask>
       );
     default:

@@ -265,17 +265,13 @@ test("skills and rename each find the row the page draws", () => {
   assert.deepEqual(labelsFound("rename"), ["Rename workspace"]);
 });
 
-test("mcp finds the Vespin MCP page's three groups and none of the integrations", () => {
+test("mcp finds the Vespin MCP page's two groups and none of the integrations", () => {
   const groups = searchSettings(settingsSearchEntries(FULL_INPUT), "mcp")?.groups ?? [];
   assert.deepEqual(
     groups.map((group) => group.page),
     [SETTINGS_VIEW.MCP],
   );
-  assert.deepEqual(labelsFound("mcp"), [
-    "Connected agents",
-    "Connect an agent",
-    "Command-line tool",
-  ]);
+  assert.deepEqual(labelsFound("mcp"), ["Connected agents", "Connect an agent"]);
 });
 
 test("renaming needs a workspace the reader manages that is not their own first", () => {

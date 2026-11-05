@@ -34,6 +34,7 @@ const SETTINGS_PAGE = {
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
   // Note that the outside agents' page is named and marked for the product, never the protocol alone, because the MCP glyph and "MCP servers" are what the window calls the servers its own agents use.
   [SETTINGS_VIEW.MCP]: { title: `${PRODUCT_NAME} MCP`, icon: <ProductMark small glyph /> },
+  [SETTINGS_VIEW.CLI]: { title: "CLI", icon: <GLYPH.TERMINAL /> },
   [SETTINGS_VIEW.SKILLS]: { title: "Skills", icon: <GLYPH.SKILL /> },
   [SETTINGS_VIEW.MEMORY]: { title: "Memory", icon: <GLYPH.MEMORY /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },

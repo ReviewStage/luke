@@ -52,6 +52,8 @@ import {
 import { LIVE_READ } from "@repo/features/live-wire";
 import type { MemorySummary } from "@repo/features/memory-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@repo/features/models-wire";
+import { FIRST_PARTY_OAUTH_CLIENT_ID } from "@repo/features/oauth-client-ids";
+import { PRODUCT_NAME } from "@repo/features/product-name";
 import { PROVIDER_KEY_KIND, PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import type { WorkspaceSlackBot } from "@repo/features/slack-bot-wire";
 import type { TasksView } from "@repo/features/tasks-view";
@@ -689,7 +691,7 @@ export function settingsLaunchLink(profile: string): SettingsLink | undefined {
   return SETTINGS_LINKS.get(profile);
 }
 
-/** The outside agents the account allowed: one on this computer that refreshed lately, one on the web that never has. */
+/** The clients the account allowed: an outside agent on this computer that refreshed lately, one on the web that never has, and the vespin command, signed in. */
 const STAGED_MCP_CLIENTS: AppMcpClients = {
   [ACCOUNT_ID]: {
     rows: {
@@ -708,6 +710,14 @@ const STAGED_MCP_CLIENTS: AppMcpClients = {
           redirectUris: ["https://chatgpt.example/connector/oauth/callback"],
           allowedAt: NOW - 9 * DAY,
           lastRefreshedAt: null,
+        },
+        // The vespin command, signed in, which Settings › CLI shows and Connected leaves out.
+        {
+          clientId: FIRST_PARTY_OAUTH_CLIENT_ID.CLI,
+          name: `${PRODUCT_NAME} CLI`,
+          redirectUris: ["http://127.0.0.1/callback"],
+          allowedAt: NOW - 4 * DAY,
+          lastRefreshedAt: NOW - 20 * MINUTE,
         },
       ],
     },
