@@ -12,7 +12,8 @@ import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
  * comma and period, like the bar's frame buttons, pause it and step one
  * frame of the length its header states, none of them reaching the place
  * around it, whose arrows may walk files; a button's own Space is left to
- * the button. In the viewer it starts at
+ * the button. Where no element may fill the screen, as on an iPhone, Full
+ * screen opens the video in its own player. In the viewer it starts at
  * once, unless motion is held still. The browser's media element is
  * the boundary, so a stand-in plays, pauses, and seeks as one does, telling
  * its events, and the player is read by what its bar shows.
@@ -233,4 +234,16 @@ test("in the viewer the video waits for Play where motion is held still", () => 
   // Note that reduced motion holds motion at the tokens, which the setting's stylesheet would zero.
   document.documentElement.style.setProperty(DURATION_FAST, "1ms");
   expect(mountInViewer().autoplay).toBe(false);
+});
+
+test("where the page can let no element fill the screen, as on an iPhone, Full screen opens the video in its own player", () => {
+  const { container, pressButton } = mountPlayer();
+  const video =
+    container.querySelector("video") ?? expect.unreachable("the player draws its video");
+  // Note that jsdom, like Safari on an iPhone, has no element's `requestFullscreen`, only the stand-in's video player.
+  expect(video.requestFullscreen).toBeUndefined();
+  let filling = false;
+  Object.defineProperty(video, "webkitEnterFullscreen", { value: () => (filling = true) });
+  pressButton("Full screen");
+  expect(filling).toBe(true);
 });

@@ -272,11 +272,22 @@ function frameSecondsOf(dataUrl: string): number {
   return FALLBACK_FRAME_S;
 }
 
+/** A video as Safari on an iPhone draws it, which fills the screen in its own player rather than as an element does. */
+interface WebKitVideo extends HTMLVideoElement {
+  webkitEnterFullscreen?: () => void;
+}
+
 /**
  * Whether `frame` fills the screen, and the press that toggles it. Note that
- * the frame is what fills it, not the video, so the bar comes with it.
+ * the frame is what fills it, not the video, so the bar comes with it; and
+ * that Safari on an iPhone lets no element fill the screen, only a video in
+ * its own player (`webkitEnterFullscreen`), whose controls stand in for the
+ * bar there and whose Done brings it back.
  */
-function useFullScreen(frame: RefObject<HTMLElement | null>): [boolean, () => void] {
+function useFullScreen(
+  frame: RefObject<HTMLElement | null>,
+  video: RefObject<WebKitVideo | null>,
+): [boolean, () => void] {
   const [full, setFull] = useState(false);
   useEffect(() => {
     const follow = () => setFull(document.fullscreenElement === frame.current);
@@ -284,11 +295,17 @@ function useFullScreen(frame: RefObject<HTMLElement | null>): [boolean, () => vo
     return () => document.removeEventListener("fullscreenchange", follow);
   }, [frame]);
   const toggle = () => {
-    if (document.fullscreenElement === frame.current) {
+    const shown = frame.current;
+    if (shown === null) return;
+    if (document.fullscreenElement === shown) {
       document.exitFullscreen().catch(() => undefined);
       return;
     }
-    frame.current?.requestFullscreen().catch(() => undefined);
+    if (typeof shown.requestFullscreen === "function") {
+      shown.requestFullscreen().catch(() => undefined);
+      return;
+    }
+    video.current?.webkitEnterFullscreen?.();
   };
   return [full, toggle];
 }
@@ -641,9 +658,9 @@ export function VideoPlayer({
   onExpand?: (() => void) | undefined;
 }): React.JSX.Element {
   const url = useBlobUrl(dataUrl);
-  const video = useRef<HTMLVideoElement>(null);
+  const video = useRef<WebKitVideo>(null);
   const frame = useRef<HTMLSpanElement>(null);
-  const [full, toggleFullScreen] = useFullScreen(frame);
+  const [full, toggleFullScreen] = useFullScreen(frame, video);
   const [playback, setPlayback] = useState<Playback>({
     playing: false,
     at: 0,
