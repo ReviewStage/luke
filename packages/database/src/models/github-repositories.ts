@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
+import { agentRepository } from "../schemas/agent-repository.js";
 import { automation } from "../schemas/automation.js";
 import { githubRepository } from "../schemas/github-repository.js";
 import { githubRepositoryRead } from "../schemas/github-repository-read.js";
@@ -147,6 +148,17 @@ const relabelAgents = SqlSchema.void({
             listsName(agentTable.repositories, move),
           ),
         ),
+    ),
+});
+
+const relabelAgentRepositories = SqlSchema.void({
+  Request: RelabelSchema,
+  execute: ({ from, to }) =>
+    Database.use((db) =>
+      db
+        .update(agentRepository)
+        .set({ repository: to })
+        .where(and(namedAs(agentRepository.repository, from), ne(agentRepository.repository, to))),
     ),
 });
 
@@ -332,6 +344,7 @@ function relabel(move: typeof RelabelSchema.Type): TaskStoreEffect<void> {
   return Effect.gen(function* () {
     yield* relabelTasks(move);
     yield* relabelAgents(move);
+    yield* relabelAgentRepositories(move);
     yield* relabelAutomations(move);
     yield* copyPins(move);
     yield* deleteRelabeledPins(move);
