@@ -10,6 +10,18 @@
 
 import { ACCOUNT_COMMANDS } from "./account.js";
 import { apiCommand } from "./api.js";
+import { inboxCommand } from "./inbox.js";
+import { mcpCommand } from "./mcp.js";
+import { modelsCommand } from "./models.js";
 import { versionCommand } from "./version.js";
+import { workspaceCommand } from "./workspace.js";
 
-export const COMMANDS = [...ACCOUNT_COMMANDS, apiCommand, versionCommand] as const;
+export const COMMANDS = [
+  ...ACCOUNT_COMMANDS,
+  workspaceCommand,
+  inboxCommand,
+  modelsCommand,
+  mcpCommand,
+  apiCommand,
+  versionCommand,
+] as const;
