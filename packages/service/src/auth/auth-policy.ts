@@ -226,6 +226,8 @@ export const DISABLED_AUTH_PATHS = [
   "/organization/create",
   "/organization/update",
   "/organization/delete",
+  "/delete-user",
+  "/delete-user/callback",
   "/organization/check-slug",
   "/organization/set-active",
   "/organization/add-member",
@@ -325,10 +327,11 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
 
 /**
  * How Better Auth keeps workspaces, each an organization of its members. No
- * signed-in user deletes or creates one through the plugin: a workspace is
- * deleted only with the account of its last member (`account-store.ts`), and
- * the plugin still lets a server-only call that names a `userId` and carries
- * no session through, which is the one way we create a workspace.
+ * signed-in user creates or deletes one over HTTP: `/organization/create`
+ * and `/organization/delete` are shut (`DISABLED_AUTH_PATHS`), and the
+ * server calls `auth.api` instead. A workspace is created by a server-only
+ * call that names a `userId` and carries no session, and deleted only with
+ * the account of its last member (`accountDeletion`).
  *
  * An invitation's id is the accept link the service emails the invitee and
  * an owner may also copy and share by hand, so it can travel outside the
@@ -338,9 +341,59 @@ export const DESKTOP_SESSION = { clientID: DESKTOP_SESSION_CLIENT_ID } as const;
  */
 export const ORGANIZATION_OPTIONS = {
   allowUserToCreateOrganization: false,
-  disableOrganizationDeletion: true,
   requireEmailVerificationOnInvitation: true,
 } as const;
+
+/** What `accountDeletion` asks of the organization plugin, as `auth.api` answers it, under the headers of the session being deleted. */
+export interface OrganizationDeletionApi {
+  listOrganizations(input: { headers: Headers }): Promise<readonly { id: string }[]>;
+  listMembers(input: {
+    headers: Headers;
+    query: { organizationId: string };
+  }): Promise<{ total: number }>;
+  hasPermission(input: {
+    headers: Headers;
+    body: { organizationId: string; permissions: { organization: ["delete"] } };
+  }): Promise<{ success: boolean }>;
+  deleteOrganization(input: {
+    headers: Headers;
+    body: { organizationId: string };
+  }): Promise<unknown>;
+}
+
+/**
+ * Better Auth's account deletion
+ * (https://www.better-auth.com/docs/concepts/users-accounts#delete-user),
+ * reached only through `auth.api.deleteUser`, since `/delete-user` and its
+ * callback are shut (`DISABLED_AUTH_PATHS`). Better Auth checks the session
+ * is fresh, then deletes the account's sessions, sign-in accounts, and user
+ * row. Before it does, every workspace the account is the only member of and
+ * may delete is deleted through the organization plugin, under the same
+ * session, so nothing stays behind that nobody can open; a workspace others
+ * belong to keeps them, and loses only the account's member row. The
+ * organization calls need the session's headers, so the caller hands
+ * `deleteUser` the request they ride on.
+ */
+export function accountDeletion(api: () => OrganizationDeletionApi) {
+  return {
+    enabled: true,
+    beforeDelete: async (_user: unknown, request?: Request) => {
+      if (request === undefined)
+        throw new Error("An account is deleted only with its session's request.");
+      const { headers } = request;
+      for (const { id: organizationId } of await api().listOrganizations({ headers })) {
+        const { total } = await api().listMembers({ headers, query: { organizationId } });
+        if (total !== 1) continue;
+        const permissions: { organization: ["delete"] } = { organization: ["delete"] };
+        const { success } = await api().hasPermission({
+          headers,
+          body: { organizationId, permissions },
+        });
+        if (success) await api().deleteOrganization({ headers, body: { organizationId } });
+      }
+    },
+  };
+}
 
 export const JWT_KEY_STORAGE = {
   jwks: {

@@ -1473,8 +1473,11 @@ store, which `apps/web/server/orpc-route.ts` hands the router; the reads and the
 `packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the procedures as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `apps/web/tests/hosted-account-store.test.ts`
-exercises the erasure's cascade and the snapshot's replacement against a real
-dialect; the analytics erasure key and project are
+exercises what the erasure settles and the snapshot's replacement against a real
+dialect. The erasure itself is Better Auth's `deleteUser`, called under the
+caller's Better Auth session (`src/accounts/account-deletion-calls.ts`), whose
+`beforeDelete` deletes the workspaces the account is the only member of
+(`src/auth/auth-policy.ts`'s `accountDeletion`); the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`

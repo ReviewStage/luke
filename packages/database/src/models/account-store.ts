@@ -21,13 +21,13 @@ import {
   NO_EXPERIMENTS,
 } from "@repo/settings";
 import { WireValueSchema } from "@repo/wire";
-import { count, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentTable } from "../schemas/agent.js";
-import { member, organization, user } from "../schemas/auth.js";
+import { member, user } from "../schemas/auth.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { conversations } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
@@ -35,8 +35,8 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 import { stampConversationsDeleted } from "./soft-delete.js";
 
 /**
- * What the account group reads and writes of an account: the erasure, the
- * cross-device snapshot behind `/api/account/preferences`, which is the
+ * What the account group reads and writes of an account: what its erasure
+ * settles beside Better Auth's own delete, the cross-device snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
  * context window, the model the account's Generate chapters runs on, and
  * the experiments the account turned on. Every function here is an effect over the ambient `SqlClient`
@@ -93,102 +93,35 @@ export interface AccountPreferencesWrite {
 export type AccountSeamEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /**
- * The account's erasure is the one delete, and the row's own foreign keys are
- * what carry it: every table naming a user declares `on delete cascade`, so
- * the dependent rows go with the row that names them, in one statement and
- * therefore as one unit. Nothing here enumerates the dependents, because a
- * list here could fall behind a table added later and leave a row standing
- * after the account it belongs to is gone. A workspace names the account only
- * through its member row, so a workspace with other members stands and only
- * that row goes; a workspace the account is the only member of is deleted
- * beside it, by its own row, whose foreign keys carry its dependents the same
- * way.
+ * What an account's deletion keeps of its own beside Better Auth's
+ * `deleteUser` (`auth-policy.ts`'s `accountDeletion`), which deletes the user
+ * row and the workspaces the account is the only member of, every dependent
+ * row cascading with them. Two things outlast those rows, so they are read
+ * before the delete and settled after it: the eve session each of the
+ * account's conversations ran in, a deleted task's too, which is queued for
+ * its sandbox's deletion since nothing after the delete names it; and the
+ * conversations of the agents in the account's workspaces, which name the
+ * account that ran them rather than the workspace, so a deleted workspace's
+ * agents of other members leave theirs behind, stamped deleted for the purge
+ * as a deleted task's are (`soft-delete.ts`).
  */
-const deleteUserRow = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) => Database.use((db) => db.delete(user).where(eq(user.id, userId))),
-});
-
-const lockUserRow = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) =>
-    Database.use((db) =>
-      db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
-    ),
-});
-
-const IdRowSchema = Schema.Struct({ id: Schema.String });
-
-/**
- * Locks the row of every workspace the account is a member of. Note that a
- * member row written meanwhile waits on the lock, because its foreign key
- * check takes a key share of the workspace's row, so the count that follows
- * sees every member that will stand.
- */
-const lockAccountWorkspaces = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: IdRowSchema,
-  execute: (userId) =>
-    Database.use((db) =>
-      db
-        .select({ id: organization.id })
-        .from(organization)
-        .innerJoin(member, eq(member.organizationId, organization.id))
-        .where(eq(member.userId, userId))
-        .for("update", { of: organization }),
-    ),
-});
-
-const countMembers = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
-  Result: Schema.Struct({ id: Schema.String, members: Schema.Number }),
-  execute: (organizationIds) =>
-    Database.use((db) =>
-      db
-        .select({ id: member.organizationId, members: count() })
-        .from(member)
-        .where(inArray(member.organizationId, organizationIds))
-        .groupBy(member.organizationId),
-    ),
-});
+export interface AccountDeletionReach {
+  readonly conversationIds: readonly string[];
+  readonly sessionIds: readonly string[];
+}
 
 const findWorkspaceConversations = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
+  Request: Schema.String,
   Result: Schema.Struct({ conversationId: Schema.String }),
-  execute: (organizationIds) =>
+  execute: (userId) =>
     Database.use((db) =>
       db
         .select({ conversationId: agentTable.conversationId })
         .from(agentTable)
-        .where(inArray(agentTable.organizationId, organizationIds)),
+        .innerJoin(member, eq(member.organizationId, agentTable.organizationId))
+        .where(eq(member.userId, userId)),
     ),
 });
-
-const deleteWorkspaceRows = SqlSchema.void({
-  Request: Schema.Array(Schema.String),
-  execute: (organizationIds) =>
-    Database.use((db) => db.delete(organization).where(inArray(organization.id, organizationIds))),
-});
-
-/**
- * Deletes every workspace the account is the only member of, as a task's
- * delete deletes a task: its agents' conversations are read first, since
- * they name the account that ran them rather than the workspace and so
- * outlast its row, and stamped deleted after it, for the purge to take them
- * and their sandboxes (`soft-delete.ts`).
- */
-function deleteSoloWorkspaces(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
-  return Effect.gen(function* () {
-    const workspaces = yield* lockAccountWorkspaces(userId);
-    if (workspaces.length === 0) return;
-    const counted = yield* countMembers(workspaces.map(({ id }) => id));
-    const solo = counted.filter(({ members }) => members === 1).map(({ id }) => id);
-    if (solo.length === 0) return;
-    const agents = yield* findWorkspaceConversations(solo);
-    yield* deleteWorkspaceRows(solo);
-    yield* stampConversationsDeleted(agents.map(({ conversationId }) => conversationId));
-  });
-}
 
 const findAccountSessions = SqlSchema.findAll({
   Request: Schema.String,
@@ -198,29 +131,54 @@ const findAccountSessions = SqlSchema.findAll({
       db
         .select({ runtimeSessionId: conversations.runtimeSessionId })
         .from(conversations)
-        .where(eq(conversations.userId, userId))
-        .for("update"),
+        .where(eq(conversations.userId, userId)),
     ),
 });
 
+const findUnnamedConversations = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (conversationIds) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .leftJoin(agentTable, eq(agentTable.conversationId, conversations.id))
+        .where(and(inArray(conversations.id, conversationIds), isNull(agentTable.id))),
+    ),
+});
+
+/** What the account's deletion settles once Better Auth has deleted it, read while its rows stand. */
+export function readAccountDeletionReach(
+  userId: string,
+): Effect.Effect<AccountDeletionReach, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const agents = yield* findWorkspaceConversations(userId);
+    const sessions = yield* findAccountSessions(userId);
+    return {
+      conversationIds: agents.map(({ conversationId }) => conversationId),
+      sessionIds: sessionsOf(sessions),
+    };
+  });
+}
+
 /**
- * Erases the user row; every dependent row cascades with it, and every
- * workspace the account is the only member of is deleted with it. The eve
- * session each of the account's conversations ran in, a deleted task's too,
- * is queued for its sandbox's deletion in the same transaction, since nothing
- * after it names them. The user's row is locked first, so a conversation
- * opened meanwhile waits on it and finds no account, and every conversation
- * of the account is locked as its session is read, so a session claimed
- * meanwhile waits and finds no row to claim, rather than landing unqueued.
+ * Settles what the deletion read: each conversation no agent names any more,
+ * its workspace gone, is stamped deleted, and each session is queued for its
+ * sandbox's deletion. A conversation whose agent still stands, in a
+ * workspace others kept, is left as it is.
  */
-export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure, DatabaseServices> {
+export function settleAccountDeletion(
+  reach: AccountDeletionReach,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        yield* lockUserRow(userId);
-        yield* deleteSoloWorkspaces(userId);
-        yield* queueSessionSandboxes(sessionsOf(yield* findAccountSessions(userId)));
-        yield* deleteUserRow(userId);
+        if (reach.conversationIds.length > 0) {
+          const unnamed = yield* findUnnamedConversations(reach.conversationIds);
+          yield* stampConversationsDeleted(unnamed.map(({ id }) => id));
+        }
+        yield* queueSessionSandboxes(reach.sessionIds);
       }),
     ),
   );

@@ -3,17 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
-  GITHUB_ACCOUNT_TYPE,
-  GITHUB_INSTALLATION_STATUS,
-} from "@repo/database/github-installation-vocabulary";
-import {
-  deleteAccount,
+  readAccountDeletionReach,
   readAccountPreferences,
+  settleAccountDeletion,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { agentTable } from "@repo/database/schemas/agent";
 import { member, organization, user } from "@repo/database/schemas/auth";
-import { githubInstallation } from "@repo/database/schemas/github-installation";
 import { personalWorkspace } from "@repo/database/schemas/personal-workspace";
 import { accountPreference } from "@repo/database/schemas/preferences";
 import { conversations } from "@repo/database/schemas/storage";
@@ -134,33 +130,14 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
     }),
   );
 
-  it.effect("the delete takes the account's dependent rows and leaves another's standing", () =>
-    Effect.gen(function* () {
-      const db = yield* Database;
-      const erased = yield* openUser;
-      const kept = yield* openUser;
-      for (const userId of [erased, kept]) {
-        yield* writeAccountPreferences(userId, { preferences: {} });
-        yield* db.insert(hostedUsage).values({ userId, day: "2099-01-01", calls: 3 });
-      }
-
-      yield* deleteAccount(erased);
-
-      const remaining = yield* db.select({ id: user.id }).from(user).where(eq(user.id, erased));
-      assert.equal(remaining.length, 0);
-      assert.deepEqual(yield* countRows(erased), { preferences: 0, usage: 0 });
-      assert.deepEqual(yield* countRows(kept), { preferences: 1, usage: 1 });
-    }),
-  );
-
   it.effect(
-    "the delete takes the workspaces the account is the only member of, its first among them, and their GitHub connection, stamps their agents' conversations, and leaves a shared workspace with its other members",
+    "a deletion stamps the conversations a workspace gone with the account left no agent of, and leaves those of a workspace that stands",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
         const erased = yield* openUser;
         const kept = yield* openUser;
-        const first = yield* openWorkspace({
+        const solo = yield* openWorkspace({
           name: "Test User",
           slug: `personal-${erased}`,
           owner: erased,
@@ -179,47 +156,35 @@ it.layer(getTestDB())("the account group's seams over effect/sql", (it) => {
           role: "member",
           createdAt: new Date("2099-01-01T00:00:00.000Z"),
         });
-        const now = new Date("2099-01-01T00:00:00.000Z");
-        yield* db.insert(githubInstallation).values({
-          installationId: 4_200,
-          organizationId: first,
-          accountId: 4_201,
-          accountLogin: "acme",
-          accountType: GITHUB_ACCOUNT_TYPE.ORGANIZATION,
-          status: GITHUB_INSTALLATION_STATUS.ACTIVE,
-          createdAt: now,
-          updatedAt: now,
-        });
-        // A member who has since left ran this agent in the first workspace, so its conversation names them rather than the account.
-        const formerAgent = yield* openTaskAgent(kept, first, null);
-        const [former] = yield* db
-          .select({ conversationId: agentTable.conversationId })
-          .from(agentTable)
-          .where(eq(agentTable.id, formerAgent));
-        assert.ok(former !== undefined);
+        // A member who has since left ran an agent in each workspace, so its conversation names them rather than the account.
+        const conversationOf = (agentId: string) =>
+          Effect.map(
+            db
+              .select({ conversationId: agentTable.conversationId })
+              .from(agentTable)
+              .where(eq(agentTable.id, agentId)),
+            (rows) => rows[0]?.conversationId ?? assert.fail("the agent stands"),
+          );
+        const left = yield* conversationOf(yield* openTaskAgent(kept, solo, null));
+        const stays = yield* conversationOf(yield* openTaskAgent(kept, shared, null));
 
-        yield* deleteAccount(erased);
+        const reach = yield* readAccountDeletionReach(erased);
+        // Better Auth deletes the account and its solo workspace between the read and the settling.
+        yield* db.delete(organization).where(eq(organization.id, solo));
+        yield* db.delete(user).where(eq(user.id, erased));
+        yield* settleAccountDeletion(reach);
 
-        const standing = yield* db
-          .select({ id: organization.id })
-          .from(organization)
-          .where(or(eq(organization.id, first), eq(organization.id, shared)));
-        assert.deepEqual(standing, [{ id: shared }]);
-        const installations = yield* db
-          .select({ id: githubInstallation.installationId })
-          .from(githubInstallation)
-          .where(eq(githubInstallation.installationId, 4_200));
-        assert.deepEqual(installations, []);
-        const [stamped] = yield* db
-          .select({ deletedAt: conversations.deletedAt })
+        const stamped = yield* db
+          .select({ id: conversations.id, deletedAt: conversations.deletedAt })
           .from(conversations)
-          .where(eq(conversations.id, former.conversationId));
-        assert.ok(stamped?.deletedAt != null);
-        const members = yield* db
-          .select({ userId: member.userId })
-          .from(member)
-          .where(eq(member.organizationId, shared));
-        assert.deepEqual(members, [{ userId: kept }]);
+          .where(or(eq(conversations.id, left), eq(conversations.id, stays)));
+        assert.deepEqual(
+          stamped.map(({ id, deletedAt }) => [id, deletedAt !== null]).sort(),
+          [
+            [left, true],
+            [stays, false],
+          ].sort(),
+        );
       }),
   );
 });

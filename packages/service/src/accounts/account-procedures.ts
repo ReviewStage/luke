@@ -40,6 +40,7 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import type {
   AccountAccessRow,
+  AccountDeletionReach,
   AccountPreferencesRow,
   AccountPreferencesWrite,
   AccountPreferencesWritten,
@@ -47,6 +48,7 @@ import type {
 } from "@repo/database/models/account-store";
 import type { StandingSession } from "@repo/database/models/recorded-session";
 import type { TaskStoreFailure } from "@repo/database/models/task-store";
+import type { MemberFailure } from "@repo/database/models/workspace-seams";
 import { contextWindowSchema } from "@repo/features/agent-wire";
 import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@repo/features/chapters-model-choice";
 import type { ModelChoice } from "@repo/features/models-wire";
@@ -73,11 +75,12 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
-import { accountMiddleware, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import {
   type AccountFastOffer,
   acceptedModelChoice,
@@ -85,6 +88,7 @@ import {
   providerModelOf,
 } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
+import type { AccountDeletionCalls } from "./account-deletion-calls.js";
 import { memoriesProcedures } from "./memories-procedures.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
@@ -92,8 +96,14 @@ export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
   /** The eve sessions the account's standing conversations run in, which the delete retires first. */
   standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
-  /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
-  deleteUser: (userId: string) => AccountSeamEffect<void>;
+  /** The caller by its Better Auth session alone, a cookie or the Mac's session bearer, which the delete hands on to Better Auth. */
+  resolveSessionUserId: SessionUserIdResolver;
+  /** What the delete settles once Better Auth has deleted the account, read while its rows stand. */
+  readDeletionReach: (userId: string) => AccountSeamEffect<AccountDeletionReach>;
+  /** Stamps the conversations the delete left no agent of, and queues the sandboxes of the account's sessions. */
+  settleDeletion: (reach: AccountDeletionReach) => AccountSeamEffect<void>;
+  /** Better Auth's own account deletion, under the session the headers carry (`account-deletion-calls.ts`). */
+  accountDeletion: AccountDeletionCalls;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
   /** The role and the grant of support access on the account's own row, as Better Auth stores them. */
   readAccess: (userId: string) => AccountSeamEffect<AccountAccessRow>;
@@ -217,37 +227,63 @@ const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   return accepted;
 });
 
+/**
+ * What a refusal of Better Auth's delete answers: a session that went stale
+ * between the check and the delete as the stale one it is, and anything
+ * else as unavailable, logged, since nothing the caller sent decides it.
+ */
+function deletionRefusal(failure: MemberFailure): HostedRefusal {
+  if (failure._tag === "OrganizationRefused" && failure.code === "SESSION_EXPIRED") {
+    return HOSTED_REFUSAL.SESSION_NOT_FRESH;
+  }
+  return HOSTED_REFUSAL.UNAVAILABLE;
+}
+
 /** The account resource: every procedure but the provider keys' own, which are `provider-keys-procedures.ts`'s. */
 export function accountProcedures(seams: AccountProcedureSeams) {
   const signedIn = hosted.account.use(accountMiddleware(seams.resolveUserId));
+  const inSession = hosted.account.use(sessionMiddleware(seams.resolveSessionUserId));
   return {
     /**
-     * Erases the signed-in account. The caller's bearer, or for a request
-     * that carries none the browser's session cookie, is the whole
-     * authority, so nothing a caller sends can choose a different account
-     * to erase. Where the deployment can, the analytics person is asked to
-     * be erased first, because nothing after the delete would still name
-     * it; a refusal or an outage there must not hold up the delete, so it
-     * is logged as a status and the delete proceeds. Every session the
-     * account's standing conversations run in is retired before anything is
-     * deleted, for the account the request resolved to, while those
-     * conversations still stand (`retire-sessions.ts`); a session not
-     * retired is logged and the delete proceeds. The delete itself queues the sandbox of
-     * every session the account ran for the sweep. Every grant the
-     * account's integration rows name is revoked at Vercel Connect once the
-     * rows are gone, as a Disconnect revokes one, so no grant outlives the
-     * account; a revoke that fails is logged by its word and the account is
-     * deleted all the same.
+     * Erases the signed-in account through Better Auth's own `deleteUser`,
+     * under the caller's Better Auth session, a browser's cookie or the
+     * Mac's session bearer, which is the whole authority, so nothing a
+     * caller sends can choose a different account to erase. Better Auth
+     * deletes the account only for a session signed in within its fresh
+     * age, so that is asked first, and an older one is refused before
+     * anything is undone. Every session the account's standing
+     * conversations run in is then retired, for the account the request
+     * resolved to, while those conversations still stand
+     * (`retire-sessions.ts`); a session not retired is logged and the
+     * delete proceeds. Where the deployment can, the analytics person is
+     * asked to be erased, because nothing after the delete would still name
+     * it; a refusal or an outage there must not hold up the delete, so it is
+     * logged as a status and the delete proceeds. Better Auth deletes the
+     * account, and before it every workspace the account is the only member
+     * of (`auth-policy.ts`'s `accountDeletion`); what outlasts their rows is
+     * settled after (`account-store.ts`). Every grant the account's
+     * integration rows name is revoked at Vercel Connect once the rows are
+     * gone, as a Disconnect revokes one, so no grant outlives the account; a
+     * revoke that fails is logged by its word and the account is deleted
+     * all the same.
      */
-    delete: signedIn.delete.effect(function* ({ context }) {
-      const { userId } = context;
+    delete: inSession.delete.effect(function* ({ context }) {
+      const { userId, sessionHeaders } = context;
+      const fresh = yield* seams.accountDeletion
+        .sessionFresh(sessionHeaders)
+        .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+      if (!fresh) return yield* Effect.fail(HOSTED_REFUSAL.SESSION_NOT_FRESH);
       const retiring = yield* retiringReach(userId);
       const sessions = yield* hostedStoreOrUnavailable(seams.standingSessions(userId));
       yield* retireSessions(retiring, sessions);
       yield* forgetAnalytics(userId);
-      // Note that the grants are read before the delete, because an added account's subject is no id the account still names after it.
+      // Note that the grants and the reach are read before the delete, because nothing names them once the account's rows are gone.
       const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
-      yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
+      const reach = yield* hostedStoreOrUnavailable(seams.readDeletionReach(userId));
+      yield* seams.accountDeletion
+        .deleteUser(sessionHeaders)
+        .pipe(Effect.mapError(deletionRefusal));
+      yield* hostedStoreOrUnavailable(seams.settleDeletion(reach));
       yield* revokeIntegrationGrants(userId, grants);
       return { deleted: true } as const;
     }),

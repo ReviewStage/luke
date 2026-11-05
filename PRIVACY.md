@@ -243,7 +243,7 @@ removed seven days later. When you delete your account:
   preferences, and integration records) is deleted at once.
 - **Your tasks, plans, transcripts, and inbox items** are deleted at once, and
   your agents' sandboxes shortly after.
-- **Workspaces you are the only member of** are deleted at once with
+- **Workspaces you own and are the only member of** are deleted at once with
   everything in them, as a deleted task is. Their GitHub, Slack, and Sentry
   connections are removed on our side; our apps stay installed at those
   services until you uninstall them there.

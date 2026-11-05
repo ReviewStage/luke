@@ -416,8 +416,8 @@ const DELETE_TIMEOUT_MS = 15_000;
 interface AccountDeletionOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
-  /** The signed-in account's current access token. */
-  accessToken: string;
+  /** The Mac's own Better Auth session, the signed token the service hands out, which Better Auth deletes the account under. */
+  sessionToken: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
@@ -425,16 +425,19 @@ interface AccountDeletionOptions {
 
 /**
  * A deletion that did not land, as the caller reads it: a refusal the
- * service answered, an expired access token among them as the 401 it is, or
- * a request that reached no answer this build could read.
+ * service answered, or a request that reached no answer this build could
+ * read. A session the service did not take and one signed in longer ago
+ * than Better Auth deletes an account for are both answered by a new
+ * session, so both carry the 401 (`deletionNeedsNewSession`).
  */
 function deletionFailure(failed: HostedFailure): AccountClientFailure {
   if (failed._tag === "HostedRefused") {
+    const needsSession =
+      failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN ||
+      failed.refusal === HOSTED_API_ERROR.SESSION_NOT_FRESH;
     return new AccountClientError({
       message: `Account service refused the deletion: ${failed.refusal}`,
-      ...(failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
-        ? { status: HTTP_STATUS.UNAUTHORIZED }
-        : undefined),
+      ...(needsSession ? { status: HTTP_STATUS.UNAUTHORIZED } : undefined),
     });
   }
   if (failed.fault === undefined) {
@@ -446,20 +449,26 @@ function deletionFailure(failed: HostedFailure): AccountClientFailure {
   });
 }
 
+/** Whether a deletion's refusal is answered by a new session of the Mac's own and the deletion asked once more. */
+export function deletionNeedsNewSession(error: AccountClientFailure): boolean {
+  return error._tag === "AccountClientError" && error.status === HTTP_STATUS.UNAUTHORIZED;
+}
+
 /**
- * Asks the hosted service to erase the signed-in account. The bearer token is
- * the whole request — the service resolves who to delete from it, so nothing
- * here can name a different account. The token is the one handed in and is
- * never renewed here: a refusal fails with an `AccountClientError`, an
- * expired access token carrying its 401, which is what lets the caller tell
- * an expired access token (refresh and retry) from a service that actually
+ * Asks the hosted service to erase the signed-in account, which it has
+ * Better Auth do under the Mac's own session. The session is the whole
+ * request — the service resolves who to delete from it, so nothing here can
+ * name a different account. The session is the one handed in and is never
+ * renewed here: a refusal fails with an `AccountClientError`, one a new
+ * session answers carrying its 401, which is what lets the caller tell a
+ * session to renew (ask for one and retry) from a service that actually
  * said no.
  */
 export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("credentials/deleteHostedAccount")(
   function* (options: AccountDeletionOptions): Effect.fn.Return<void, AccountClientFailure> {
     const hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
-      credential: fixedBearer(options.accessToken),
+      credential: fixedBearer(options.sessionToken),
       requestTimeoutMs: options.timeoutMs ?? DELETE_TIMEOUT_MS,
     });
     yield* askHosted(hosted.account.delete, undefined).pipe(

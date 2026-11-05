@@ -129,6 +129,8 @@ const desktopAccount = (input: {
         settings.store.setAccount({
           accessToken: "access-1",
           refreshToken: "refresh-1",
+          // The Mac's own session, which a deletion is made under.
+          sessionToken: "session-1",
           id: "user-1",
           email: "dev@example.com",
           provider: ACCOUNT_PROVIDER.GITHUB,

@@ -1,12 +1,16 @@
 import {
-  deleteAccount,
   readAccountAccess,
+  readAccountDeletionReach,
   readAccountPreferences,
+  settleAccountDeletion,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { auth } from "../auth/auth.js";
 import { resolveHostedUserId } from "../auth/bearer.js";
+import { resolveBrowserSessionUserId } from "../auth/browser-session.js";
+import { accountDeletionCalls } from "./account-deletion-calls.js";
 import type { AccountProcedureSeams } from "./account-procedures.js";
 
 /**
@@ -27,7 +31,13 @@ export function accountProcedureSeams(): AccountProcedureSeams {
   return {
     resolveUserId: resolveHostedUserId,
     standingSessions: (userId) => standingSessionsOf(userId),
-    deleteUser: deleteAccount,
+    resolveSessionUserId: resolveBrowserSessionUserId,
+    readDeletionReach: readAccountDeletionReach,
+    settleDeletion: settleAccountDeletion,
+    accountDeletion: accountDeletionCalls(
+      auth.api,
+      async () => (await auth.$context).sessionConfig.freshAge,
+    ),
     readPreferences: readAccountPreferences,
     readAccess: readAccountAccess,
     accountFastOffer,

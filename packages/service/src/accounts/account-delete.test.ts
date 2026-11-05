@@ -1,12 +1,13 @@
-// account-delete.test.ts -- an account's deletion retires its agents' sessions, over a bearer or a browser's session cookie, then erases it.
+// account-delete.test.ts -- an account's deletion retires its agents' sessions, over a session bearer or a browser's session cookie, then has Better Auth erase it.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
-  deleteAccount,
   readAccountAccess,
+  readAccountDeletionReach,
   readAccountPreferences,
+  settleAccountDeletion,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { standingSessionsOf } from "@repo/database/models/recorded-session";
@@ -14,7 +15,7 @@ import { user } from "@repo/database/schemas/auth";
 import { conversations } from "@repo/database/schemas/storage";
 import { CONVERSATION_KIND } from "@repo/database/storage-vocabulary";
 import { getTestDB } from "@repo/database/testing";
-import { HOSTED_SERVICE_PATH } from "@repo/features";
+import { HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@repo/features";
 import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
@@ -24,13 +25,13 @@ import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import type { NativeAgentSessions } from "../agents/coder-host/runtime-sessions.js";
 import { type AgentSessions, EVE_RESET_OUTCOME } from "../agents/eve-host/eve-sessions.js";
-import { requestUserId, type SessionEndpoint, type UserInfoEndpoint } from "../auth/bearer.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { modelCatalogOf } from "../providers/model-catalog.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
 import { harnessFor, scriptedHarnessLayer } from "../testing/native-harness-fake.js";
+import type { AccountDeletionCalls } from "./account-deletion-calls.js";
 import { accountProcedures } from "./account-procedures.js";
 
 /**
@@ -111,30 +112,41 @@ const sessionOf = (
   });
 
 /**
- * Two accounts, each behind its bearer and its browser's session cookie, and
- * the procedures answering on the test's database and clock over the harness
- * given.
+ * Two accounts, each behind its session bearer and its browser's session
+ * cookie, and the procedures answering on the test's database and clock over
+ * the harness given. Better Auth's own delete is faked: it holds a session
+ * fresh as `fresh` says and deletes the user row the session names, as
+ * Better Auth's does, every dependent row cascading.
  */
-const openAccounts = (eve: ReturnType<typeof retiringEve>) =>
+const openAccounts = (eve: ReturnType<typeof retiringEve>, fresh = true) =>
   Effect.gen(function* () {
     const db = yield* Database;
+    const services = yield* Effect.context<Database | SqlClient.SqlClient>();
     const owner = yield* openUser;
     const other = yield* openUser;
     const accounts = [owner, other];
-    const userInfo: UserInfoEndpoint = (input) => {
-      const sub = accounts.find((id) => input.headers.get("authorization") === `Bearer ${id}`);
-      return Effect.succeed(sub === undefined ? undefined : { sub });
-    };
-    const session: SessionEndpoint = (input) =>
-      Effect.succeed(
-        Option.fromNullishOr(
-          accounts.find((id) => input.headers.get("cookie") === sessionCookieOf(id)),
-        ),
+    const accountOf = (headers: Headers) =>
+      accounts.find(
+        (id) =>
+          headers.get("authorization") === `Bearer ${id}` ||
+          headers.get("cookie") === sessionCookieOf(id),
       );
+    const accountDeletion: AccountDeletionCalls = {
+      sessionFresh: () => Effect.succeed(fresh),
+      deleteUser: (headers) =>
+        Effect.orDie(
+          Effect.provide(db.delete(user).where(eq(user.id, accountOf(headers) ?? "")), services),
+        ),
+    };
     const procedures = accountProcedures({
-      resolveUserId: (incoming) => requestUserId(incoming, userInfo, session),
+      resolveUserId: (incoming) =>
+        Effect.succeed(Option.fromNullishOr(accountOf(incoming.headers))),
+      resolveSessionUserId: (incoming) =>
+        Effect.succeed(Option.fromNullishOr(accountOf(incoming.headers))),
       standingSessions: (userId) => standingSessionsOf(userId),
-      deleteUser: deleteAccount,
+      readDeletionReach: readAccountDeletionReach,
+      settleDeletion: settleAccountDeletion,
+      accountDeletion,
       readPreferences: readAccountPreferences,
       readAccess: readAccountAccess,
       accountFastOffer,
@@ -232,6 +244,29 @@ it.layer(getTestDB())("an account's deletion", (it) => {
         assert.deepEqual(eve.retired, [[harnessFor(owner), agentSession]]);
         assert.equal(yield* stands(owner), false);
         assert.equal(yield* stands(other), true);
+      }),
+  );
+
+  it.effect(
+    "over a session signed in longer ago than Better Auth deletes for is refused, retiring nothing and erasing nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = retiringEve();
+        const { owner, stands, ask } = yield* openAccounts(eve, false);
+        yield* sessionOf(owner, CONVERSATION_KIND.AGENT);
+
+        const refused = yield* ask(
+          sent(HOSTED_SERVICE_PATH.ACCOUNT_DELETE, HTTP_METHOD.POST, {
+            authorization: `Bearer ${owner}`,
+          }),
+        );
+
+        assert.deepEqual(refused, {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.SESSION_NOT_FRESH },
+        });
+        assert.deepEqual(eve.retired, []);
+        assert.equal(yield* stands(owner), true);
       }),
   );
 });
