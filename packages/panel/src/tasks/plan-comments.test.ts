@@ -787,7 +787,7 @@ test("a fold's counts stand in the order of their lines, so the keyboard meets t
   // Note that the thread listed first stands on the lower line, and jsdom lays nothing out, so each mark is given its line's top.
   const lower = threadOn(ID.GONE, "Admins can withdraw", "Who else?", { section: "Approach" });
   const upper = threadOn(ID.OPEN, "**single-use link** that expires", "A setting?");
-  const at = new Map([
+  const at = new Map<string, number>([
     [ID.GONE, 300],
     [ID.OPEN, 100],
   ]);
