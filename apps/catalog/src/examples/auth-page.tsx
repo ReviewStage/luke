@@ -202,7 +202,16 @@ function AuthPages(): React.JSX.Element {
             <AuthPage
               mark={<Mark />}
               title="Connect GitHub"
-              foot={<AuthStepFoot at={3} total={4} onBack={IGNORE} onSkip={IGNORE} />}
+              description="Agents work in your repositories and open pull requests."
+              foot={
+                <AuthStepFoot
+                  at={3}
+                  total={4}
+                  onBack={IGNORE}
+                  next={{ label: "Continue", onPress: IGNORE, disabled: true }}
+                />
+              }
+              exit={{ label: "Sign out", onPress: IGNORE }}
             >
               <ProviderChoices />
             </AuthPage>

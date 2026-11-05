@@ -18,11 +18,12 @@ import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { welcomed } from "../desktop/desktop-welcome.js";
+import { signOutSayingFailure } from "../settings/account-section.js";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { GITHUB_OPTIONAL, GitHubSetup } from "./setup-github.js";
+import { GITHUB_REQUIRED, GitHubSetup } from "./setup-github.js";
 import {
   SETUP_AUDIENCE,
   SETUP_STEP,
@@ -37,12 +38,13 @@ import { ToolRows } from "./setup-tools.js";
 /**
  * setup-steps.tsx -- a new account's setup, alone in the window after sign-in: who it is for, a team's workspace where there is one, an agent, GitHub, and the tools, one card each.
  *
- * Each card is the sign-in's own, so setup reads as the sign-in going on.
+ * Each card is the sign-in's own, so setup reads as the sign-in going on,
+ * and each offers a quiet Sign out, since setup stands with no sidebar.
  * An account invited into a team's workspace starts on Connect an agent
- * alone, which it may skip as any other account may. The team's workspace,
- * an agent, and GitHub may each be skipped; what an
- * agent needs and was skipped is asked again on Home
- * (`setup-sections.tsx`, on Home). Finish lets the app in and keeps, on the
+ * alone. An agent and GitHub are required: their steps go on only once
+ * Claude or Codex is connected and the workspace reaches a repository. The
+ * team's workspace may be skipped, and the tools need nothing done. Finish
+ * lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
  * stands once on every machine.
  */
@@ -155,7 +157,7 @@ interface SetupStepsProps {
 
 /** The step setup stands at. */
 function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
-  const { tell } = useAct();
+  const { act, tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
   // Note that where setup starts is decided as it first stands, so a team's workspace made midway keeps the steps it was making.
@@ -199,15 +201,22 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
     (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
-  const foot = (done: boolean, optional: boolean, label = "Continue") => (
+  // Note that no step's foot offers Skip but the team's, which draws its own: an agent and GitHub go on only once done, and the rest need nothing done.
+  const foot = (done: boolean, label = "Continue") => (
     <AuthStepFoot
       at={at + 1}
       total={steps.length}
       onBack={back}
-      onSkip={optional && !done ? forward : undefined}
-      next={done || !optional ? { label, onPress: forward, disabled: !done } : undefined}
+      next={{ label, onPress: forward, disabled: !done }}
     />
   );
+  const exit = {
+    label: "Sign out",
+    onPress: () =>
+      void signOutSayingFailure(async () => {
+        await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+      }),
+  };
   const teamForm = useTeamForm({
     onCreated: (made) => {
       setCreating(true);
@@ -225,8 +234,9 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     return (
       <AuthPage
         mark={<ProductMark />}
+        exit={exit}
         title={`Welcome to ${PRODUCT_NAME}`}
-        foot={foot(true, false)}
+        foot={foot(true)}
       >
         <ChoiceList
           legend="Who you'll use it with"
@@ -245,6 +255,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     return (
       <AuthPage
         mark={<ProductMark />}
+        exit={exit}
         title="Create a team workspace"
         foot={
           forming ? (
@@ -262,7 +273,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
               }}
             />
           ) : (
-            foot(true, false)
+            foot(true)
           )
         }
       >
@@ -287,9 +298,10 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     return (
       <AuthPage
         mark={<ProductMark />}
+        exit={exit}
         title="Connect an agent"
         description="Run agents on your ChatGPT or Claude plan, or an API key."
-        foot={foot(agent, true, last ? "Finish" : "Continue")}
+        foot={foot(agent, last ? "Finish" : "Continue")}
       >
         <AgentConnectSection onConnected={onConnected} />
       </AuthPage>
@@ -299,9 +311,10 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     return (
       <AuthPage
         mark={<ProductMark />}
+        exit={exit}
         title="Connect GitHub"
-        description={GITHUB_OPTIONAL}
-        foot={foot(reached, true)}
+        description={GITHUB_REQUIRED}
+        foot={foot(reached)}
       >
         {workspaceId === undefined ? null : (
           <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={onReached} />
@@ -310,7 +323,12 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     );
   }
   return (
-    <AuthPage mark={<ProductMark />} title="Connect your tools" foot={foot(true, false, "Finish")}>
+    <AuthPage
+      mark={<ProductMark />}
+      title="Connect your tools"
+      foot={foot(true, "Finish")}
+      exit={exit}
+    >
       <ToolRows />
     </AuthPage>
   );

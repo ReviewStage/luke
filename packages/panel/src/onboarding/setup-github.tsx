@@ -49,9 +49,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * so a trip finished in the browser lands on its own.
  */
 
-/** What setup and Home say over GitHub's cards: that it is optional, since an agent works in no repository where none is chosen. */
-export const GITHUB_OPTIONAL =
-  "Optional. Agents can work without a repository; connect GitHub to have them work in your code and open pull requests.";
+/** What setup says over GitHub's cards, which setup requires: agents work in the account's repositories. */
+export const GITHUB_REQUIRED = "Agents work in your repositories and open pull requests.";
 
 /** How the workspace reaches its repositories. */
 const ROUTE = {
@@ -161,7 +160,6 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
   return (
     <Stack gap={GAP.BLOCK}>
       <Stack gap={GAP.CONTROL} align={ALIGN.START}>
-        <CardWords>No admin needed. Reviews and checks reach agents up to a minute late.</CardWords>
         <ButtonLink
           href={GITHUB_TOKEN_CREATE_URL}
           variant={BUTTON_VARIANT.OUTLINE}
