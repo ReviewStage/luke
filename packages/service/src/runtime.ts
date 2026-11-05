@@ -10,6 +10,7 @@
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { invitationMailFromEnvironment } from "./accounts/invitation-mail.js";
+import { welcomeMailFromEnvironment } from "./accounts/welcome-mail.js";
 import { settledTurnListener } from "./agents/coder-host/settled-turns.js";
 import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
@@ -152,6 +153,7 @@ export const webServices = Layer.mergeAll(
     Layer.provide(Layer.mergeAll(FetchHttpClient.layer, hostedEnvironment, webSqlClient)),
   ),
   invitationMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
+  welcomeMailFromEnvironment.pipe(Layer.provide(FetchHttpClient.layer)),
   localDemoFromEnvironment,
 ).pipe(Layer.provide(webConfigProvider));
 
