@@ -187,7 +187,10 @@ function AuthPages(): React.JSX.Element {
           </div>
         </div>
       </CatalogSection>
-      <CatalogSection id="auth-steps" title="A step of several, first and skippable">
+      <CatalogSection
+        id="auth-steps"
+        title="A step of several, first, skippable, and with a way out at the top right"
+      >
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
@@ -198,7 +201,7 @@ function AuthPages(): React.JSX.Element {
               <ProviderChoices />
             </AuthPage>
           </div>
-          <div className="catalog-screen catalog-screen-phone">
+          <div className="catalog-screen">
             <AuthPage
               mark={<Mark />}
               title="Connect GitHub"
