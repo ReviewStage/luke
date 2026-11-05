@@ -2927,23 +2927,44 @@ export function withdrawInboxAnswer(
  * The item closed by a member without an answer, at the revision named and
  * under the key their client sent the close with, where it is open there,
  * and the ask it held open withdrawn with no reason, which is how a
- * member's close reads on the thread; nothing where it is not open there.
+ * member's close reads on the thread; nothing where it is not open there,
+ * or where it carries a note and a message of the thread holds the key.
  * The revision stays, as an answer's does. The close is the member's own,
- * so it leaves the item read for them, as an answer does; no message is
- * written for it. Answers the transaction it was written in beside the item.
+ * so it leaves the item read for them, as an answer does; a message is
+ * written for it only where it carries a note, words or files, which is
+ * written as the member's under the close's key in the same write. Answers
+ * the transaction it was written in beside the item.
  */
 export function closeInboxItemAsMember(
   userId: string,
   itemId: string,
   revision: number,
   closeKey: string,
+  note: { readonly text: string; readonly files: readonly AgentAttachment[] } = {
+    text: "",
+    files: [],
+  },
 ): InboxStoreEffect<Option.Option<InboxItemWritten>> {
+  const noted = note.text !== "" || note.files.length > 0;
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
+        // A key a message of the thread holds names that message, never this close's note.
+        if (noted && (yield* keyTaken(itemId, closeKey))) return Option.none();
         const closed = yield* memberCloseItem({ userId, itemId, revision, closeKey, now });
         if (Option.isNone(closed)) return Option.none();
+        if (noted) {
+          yield* keepMemberMessage({
+            userId,
+            itemId,
+            clientKey: closeKey,
+            words: note.text,
+            files: note.files,
+            answers: null,
+            now,
+          });
+        }
         // Note that the reason is left out, because an agent's close always says why and a member's never does.
         yield* settleOpenAsks({
           itemId,
@@ -3034,7 +3055,7 @@ function askTheCloseWithdrew(itemId: string): InboxStoreEffect<string | null> {
   );
 }
 
-/** The member's close taken under the key withdrawn, the item open again and the ask it withdrew open again, where it still stands; nothing where it does not. */
+/** The member's close taken under the key withdrawn, the item open again, the ask it withdrew open again, and the note written beside it taken back off the thread, where it still stands; nothing where it does not. */
 export function withdrawInboxClose(
   userId: string,
   itemId: string,
@@ -3047,6 +3068,7 @@ export function withdrawInboxClose(
         const openAsk = yield* askTheCloseWithdrew(itemId);
         const withdrawn = yield* withdrawClose({ userId, itemId, closeKey, openAsk, now });
         if (Option.isNone(withdrawn)) return Option.none();
+        yield* deleteMessage({ itemId, clientKey: closeKey });
         if (openAsk !== null) {
           yield* standAsk({
             messageId: openAsk,
@@ -3085,9 +3107,10 @@ interface AnswerWrite {
 }
 
 /**
- * The member's message that carries an answer, written under the answer's
- * key; the caller found no message under it first, so one standing there
- * now is a race that rolls the answer back rather than leaving it unheard.
+ * The member's message that carries an answer or a close's note, written
+ * under its key; the caller found no message under it first, so one
+ * standing there now is a race that rolls the write back rather than
+ * leaving it unheard.
  */
 function answeringMessage(
   message: typeof MessageWriteSchema.Type,
@@ -3096,25 +3119,27 @@ function answeringMessage(
     Effect.flatMap((written) =>
       Option.isSome(written)
         ? Effect.succeed(written)
-        : Effect.die(new Error("a message took the answer's key while it was written")),
+        : Effect.die(new Error("a message took the key while it was written")),
     ),
   );
 }
 
 /**
- * What an answer taken writes beside the item: the ask it settles stood
- * answered, and the member's message carrying the answer, under the
- * answer's key, with the answer's words and its files.
+ * The member's message written under the key with its words, its files,
+ * and the answer it carries, where it carries one: what an answer taken and
+ * a close with a note write on the thread (`answeringMessage`).
  */
-function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
+function keepMemberMessage(write: {
+  readonly userId: string;
+  readonly itemId: string;
+  readonly clientKey: string;
+  readonly words: string;
+  readonly files: readonly AgentAttachment[];
+  readonly answers: InboxAnswers | null;
+  readonly now: Date;
+}): InboxStoreEffect<void> {
   return Effect.gen(function* () {
     const { itemId, now } = write;
-    yield* standAsk({
-      messageId: write.askId,
-      status: INBOX_ASK_STATUS.ANSWERED,
-      withdrawnReason: null,
-      withdrawnAt: null,
-    });
     const written = yield* answeringMessage({
       itemId,
       author: INBOX_MESSAGE_AUTHOR.MEMBER,
@@ -3123,7 +3148,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
       ask: null,
       answers: write.answers,
       addresseeId: null,
-      clientKey: write.answerKey,
+      clientKey: write.clientKey,
       now,
     });
     if (write.files.length === 0) return;
@@ -3141,6 +3166,23 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
       })),
     );
   });
+}
+
+/**
+ * What an answer taken writes beside the item: the ask it settles stood
+ * answered, and the member's message carrying the answer, under the
+ * answer's key, with the answer's words and its files.
+ */
+function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
+  return Effect.andThen(
+    standAsk({
+      messageId: write.askId,
+      status: INBOX_ASK_STATUS.ANSWERED,
+      withdrawnReason: null,
+      withdrawnAt: null,
+    }),
+    keepMemberMessage({ ...write, clientKey: write.answerKey }),
+  );
 }
 
 /** Whether a message of the item's thread stands under the key. */

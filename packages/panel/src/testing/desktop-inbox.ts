@@ -1026,16 +1026,17 @@ export function subjectOf(page: HTMLElement): string[] {
   return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-/** Every close the Inbox sends, answered as the service takes it: the item closed by the reader. */
-export function takenCloses(): { itemId: string; revision: number }[] {
-  const sent: { itemId: string; revision: number }[] = [];
+/** Every close the Inbox sends, with the note's words where it carries one, answered as the service takes it: the item closed by the reader. */
+export function takenCloses(): { itemId: string; revision: number; text?: string }[] {
+  const sent: { itemId: string; revision: number; text?: string }[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
-      sent.push({ itemId: request.payload.itemId, revision: request.payload.revision });
+      const { itemId, revision, text } = request.payload;
+      sent.push({ itemId, revision, ...(text === undefined ? undefined : { text }) });
       const asked = [...world.inboxes.values()]
         .flat()
         .find((each) => each.id === request.payload.itemId);

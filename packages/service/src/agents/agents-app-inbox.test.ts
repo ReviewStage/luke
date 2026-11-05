@@ -813,7 +813,45 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "a close the agent's session did not take opens the item again, so it never reads closed while the waiting agent was not told",
+    "a member's close carrying a note stands the note on the thread as theirs and reaches the agent as one message, the close's lead and then the note",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { post, read, close } = yield* openInbox(eve);
+        const asked = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(asked));
+        const before = eve.sent.length;
+        yield* TestClock.adjust(Duration.seconds(1));
+
+        const closed = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* close(asked.success.id, {
+            revision: asked.success.revision,
+            clientKey: randomUUID(),
+            text: "We dropped invitations from this release.",
+          }),
+        );
+
+        assert.equal(closed.taken, true);
+        assert.equal(closed.item.status, INBOX_STATUS.CLOSED);
+        assert.equal(eve.sent.length, before + 1, "the agent is told once");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(`${INBOX_CLOSE_LEAD} on`), "it reads as an Inbox close");
+        assert.ok(handed.includes("We dropped invitations from this release."), "with the note");
+        const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
+        assert.deepEqual(
+          kept?.thread?.map((each) => [each.author, each.text]),
+          [
+            [INBOX_MESSAGE_AUTHOR.AGENT, QUESTION.body],
+            [INBOX_MESSAGE_AUTHOR.MEMBER, "We dropped invitations from this release."],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a close the agent's session did not take opens the item again and takes its note back off the thread, so it never reads closed while the waiting agent was not told",
     () =>
       Effect.gen(function* () {
         const { post, read, close } = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
@@ -823,12 +861,18 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         const sent = yield* close(asked.success.id, {
           revision: asked.success.revision,
           clientKey: randomUUID(),
+          text: "Not needed anymore.",
         });
 
         assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.equal(kept?.status, INBOX_STATUS.OPEN);
         assert.equal(kept?.closedBy, undefined);
+        assert.deepEqual(
+          kept?.thread?.map((each) => [each.author, each.text]),
+          [[INBOX_MESSAGE_AUTHOR.AGENT, QUESTION.body]],
+          "its note is taken back off the thread",
+        );
       }),
   );
 

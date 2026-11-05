@@ -988,12 +988,21 @@ export const INBOX_ANSWER_LEAD = "Thread answer";
  * A member's close of one item without an answer: the revision they were
  * shown, so an item the agent changed since is not closed unseen, and a key
  * the client made, so a close sent again after a lost reply reaches the
- * agent once. It answers as a nod does (`inboxAnsweredSchema`): the item
+ * agent once. It may carry the member's note of why, words or files bounded
+ * as a message's on the thread are, which is written on the thread as their
+ * message under the close's key and reaches the agent in the one message
+ * the close does. It answers as a nod does (`inboxAnsweredSchema`): the item
  * as it then stands, and whether the close was taken.
  */
 export const inboxCloseRequestSchema = EffectSchema.Struct({
   revision: countedNumber,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
+  /** The note's words, absent or empty where it has none. */
+  text: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
+  ),
+  /** The note's files, absent where it has none. */
+  attachments: agentMessageRequestSchema.fields.attachments,
 });
 
 export type InboxCloseRequest = typeof inboxCloseRequestSchema.Type;
@@ -1005,11 +1014,13 @@ export const INBOX_CLOSE_LEAD = "Thread closed";
  * The message a member's close reaches the agent as: a first line naming
  * the item by its key and title, as an answer's does, and that it was
  * closed without an answer, which the agent takes as the developer not
- * wanting what it asked.
+ * wanting what it asked; then the note of why the member closed it, where
+ * they wrote one.
  */
-export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): string {
+export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">, note = ""): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  return `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+  const header = `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+  return note.trim() === "" ? header : `${header}\n\n${note.trim()}`;
 }
 
 /**
@@ -1196,19 +1207,19 @@ const PARAGRAPH = "\n\n";
  * A member's thread line as a person reads it under its head: what they
  * wrote, without the first line that names the item to the agent by its
  * title and key (`inboxThreadMessage`, `inboxAnswerMessage`), but for what
- * an answer's first line says they did after the key ("Declined."); nothing
- * of a close, which says only that it closed. Note that the line is read by
+ * an answer's first line says they did after the key ("Declined."); of a
+ * close, only the note written beside it, its first line saying only that it
+ * closed. Note that the line is read by
  * its metadata's word that it is a thread's, so its first line is always
  * that header: a message's is the header alone, dropped whole, and an
  * answer's key is found by its last opening on that line, since a title is
  * free text that may spell one and the words after the key never do.
  */
 export function threadLineWords(text: string, event: ThreadLineMetadata["event"]): string {
-  if (event === THREAD_LINE_EVENT.CLOSE) return "";
   const cut = text.indexOf(PARAGRAPH);
   const head = cut === -1 ? text : text.slice(0, cut);
   const rest = cut === -1 ? "" : text.slice(cut + PARAGRAPH.length);
-  if (event === THREAD_LINE_EVENT.MESSAGE) return rest.trim();
+  if (event !== THREAD_LINE_EVENT.ANSWER) return rest.trim();
   const key = head.lastIndexOf(KEY_OPENS);
   const close = key === -1 ? -1 : head.indexOf(KEY_CLOSES, key + KEY_OPENS.length);
   const did = close === -1 ? head : head.slice(close + KEY_CLOSES.length).trim();

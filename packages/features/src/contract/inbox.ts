@@ -34,8 +34,12 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 
-/** A nod or a close is a revision and a key, so a few hundred bytes hold it. */
-const CLOSE_BODY_BYTES = 1_024;
+/** A nod is a revision and a key, so a few hundred bytes hold it. */
+const NOD_BODY_BYTES = 1_024;
+
+/** A close is a revision, a key, and the note it may carry: the note's words at JSON's widest escape, its files, and room for the rest. */
+const CLOSE_BODY_BYTES =
+  6 * INBOX_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048;
 
 /** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
 const MESSAGE_BODY_BYTES =
@@ -105,7 +109,7 @@ export const inboxContract = {
     .input(pathIdSchema)
     .output(EffectSchema.flip(inboxItemHomeSchema)),
   answer: hostedProcedure
-    .meta(bodyCap(CLOSE_BODY_BYTES))
+    .meta(bodyCap(NOD_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
