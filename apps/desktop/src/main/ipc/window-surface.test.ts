@@ -101,6 +101,7 @@ function fixture() {
         heard.push(`build label:${shown}`);
         return true;
       },
+      tellMenuOffers: (_sender, commands) => heard.push(`offers:${commands.join()}`),
     }),
   );
   ports.push(port);

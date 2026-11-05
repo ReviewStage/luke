@@ -174,6 +174,49 @@ describe("the command palette and the task steps", () => {
   });
 });
 
+describe("the menu bar's dimmed items", () => {
+  test("an item that hands the window a command nothing there offers stands dimmed, an item main runs itself never does, and nothing is dimmed before the window tells", () => {
+    const enabledIn = (template: MenuItemConstructorOptions[], menu: string) => {
+      const items = template.find((each) => each.label === menu)?.submenu;
+      assert.ok(Array.isArray(items), `the menu bar has ${menu}`);
+      return items
+        .filter((item) => item.type !== "separator")
+        .map((item) => [item.label, item.enabled !== false]);
+    };
+    const offering = appMenuTemplate(
+      "Vespin",
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (command) => command === APP_COMMAND.COPY_LINK,
+    );
+
+    assert.deepEqual(enabledIn(offering, "File"), [
+      ["New Task", true],
+      ["New Tab", false],
+      ["New Terminal", false],
+      ["Reopen Closed Tab", false],
+      ["Close Tab", true],
+      ["Close Other Tabs", false],
+      ["Close Window", true],
+      ["Copy Link", true],
+      ["Copy Plan or Transcript", false],
+      ["Copy Full Transcript", false],
+      ["Version History", false],
+      ["Mark Done", false],
+      ["Permanently Delete…", false],
+    ]);
+    assert.ok(
+      enabledIn(appMenuTemplate("Vespin"), "File").every(([, enabled]) => enabled),
+      "a menu bar no window has told dims nothing",
+    );
+  });
+});
+
 /** Every item, every submenu walked. */
 function everyItem(items: readonly MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
   return items.flatMap((item) => [

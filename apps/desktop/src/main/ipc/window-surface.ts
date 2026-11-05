@@ -15,6 +15,7 @@ import {
   type MicrophoneRoute,
   type MicrophoneStatus,
 } from "@repo/settings/microphone";
+import type { AppCommand } from "@repo/settings/shortcuts";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -56,6 +57,8 @@ interface WindowSurfaceDependencies {
   tellUnsavedWork: (sender: WebContents, holding: boolean) => void;
   /** Draws or hides a development build's label, answering false in a build that draws none. */
   showBuildLabel: (shown: boolean) => boolean;
+  /** Keeps which commands a panel offers now, which the menu bar dims the rest of while it is focused. */
+  tellMenuOffers: (sender: WebContents, commands: readonly AppCommand[]) => void;
 }
 
 /** The part of a window a still is asked of, in its CSS pixels. */
@@ -166,6 +169,12 @@ export function windowSurfaceProcedures(
       WINDOW_SURFACE_ACT_KIND.WINDOW_SHOW_BUILD_LABEL
     ].handler(({ input, context, errors }) => {
       if (!context.actor.panel || !dependencies.showBuildLabel(input.shown)) throw errors.REFUSED();
+    }),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_MENU_OFFERS
+    ].handler(({ input, context, errors }) => {
+      if (!context.actor.panel) throw errors.REFUSED();
+      dependencies.tellMenuOffers(context.actor.sender, input.commands);
     }),
     [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: surfacePort[
       WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND

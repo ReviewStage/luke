@@ -3,8 +3,10 @@
  *
  * A command item does nothing of its own. Its click hands the command to the
  * window it was chosen over, which runs it as its shortcut would and only
- * where it can run, so the menu holds no state to keep in step with the
- * window. The chord beside each item is the shortcut table's, so the menu
+ * where it can run. What the menu keeps of the window is which commands the
+ * focused panel offers now, as it tells them (`offered`): an item handing a
+ * command no control offers stands dimmed, as a Mac app's does, rather than
+ * taking a click that does nothing. The chord beside each item is the shortcut table's, so the menu
  * says the key the window answers; the window's keymap is what answers it.
  * What it does hold is the drawer's: the update item, the account's
  * experiments, and a development build's developer tools, each told on its
@@ -118,9 +120,16 @@ function menuTitle(label: string): string {
     .join(" ");
 }
 
+/** The command each item that only hands one to the window hands, by its click, so the gate can dim an item whose command nothing offers. */
+const HANDED = new WeakMap<NonNullable<MenuItemConstructorOptions["click"]>, AppCommand>();
+
 /** Hands a chosen item's command to the window it was chosen over. */
 function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOptions["click"]> {
-  return (_item, window: BaseWindow | undefined, event) => {
+  const hand: NonNullable<MenuItemConstructorOptions["click"]> = (
+    _item,
+    window: BaseWindow | undefined,
+    event,
+  ) => {
     // Note that a key reaching the menu is one the window chose not to
     // claim: nothing offered its command, a text field kept its own ⌘⌫,
     // or it was the window's layered Escape. The keymap is the one reader
@@ -132,6 +141,8 @@ function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOption
       windowPushes.push(window.webContents, PUSH.MENU_COMMAND, command);
     }
   };
+  HANDED.set(hand, command);
+  return hand;
 }
 
 function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
@@ -371,12 +382,30 @@ export function appMenuTemplate(
   reload?: ReloadMenu,
   named: (command: KeyedCommand) => string = (command) => APP_SHORTCUTS[command].label,
   buildLabel?: BuildLabelMenu,
+  offered: (command: AppCommand) => boolean = () => true,
 ): MenuItemConstructorOptions[] {
   return gated(
     fullMenuTemplate(appName, update, developerTools, panel, reload, buildLabel),
     shown,
     named,
+    offered,
   );
+}
+
+/** Whether a command is offered, by the commands the focused panel told; every one, while none has told. */
+function offeredBy(commands: readonly AppCommand[] | undefined): (command: AppCommand) => boolean {
+  if (commands === undefined) return () => true;
+  const held = new Set(commands);
+  return (command) => held.has(command);
+}
+
+/** An item that only hands a command to the window, dimmed while nothing there offers it, so a click on it is never one that does nothing. */
+function dimmedItem(
+  item: MenuItemConstructorOptions,
+  offered: (command: AppCommand) => boolean,
+): MenuItemConstructorOptions {
+  const handed = item.click === undefined ? undefined : HANDED.get(item.click);
+  return handed === undefined || offered(handed) ? item : { ...item, enabled: false };
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -410,20 +439,22 @@ function renamedItem(
 /**
  * The menus with a gated feature's items taken out while its experiment is
  * off, every submenu walked, and a separator the removal stranded taken out
- * with them, so an off experiment leaves no gap where its item stood; and a
- * command item an experiment renames called as it says.
+ * with them, so an off experiment leaves no gap where its item stood; a
+ * command item an experiment renames called as it says; and an item handing
+ * the window a command nothing there offers dimmed.
  */
 function gated(
   items: readonly MenuItemConstructorOptions[],
   shown: (command: KeyedCommand) => boolean,
   named: (command: KeyedCommand) => string,
+  offered: (command: AppCommand) => boolean,
 ): MenuItemConstructorOptions[] {
   const kept = items
     .filter((item) => !gatedOut(item, shown))
     .map((item) =>
       Array.isArray(item.submenu)
-        ? { ...item, submenu: gated(item.submenu, shown, named) }
-        : renamedItem(item, named),
+        ? { ...item, submenu: gated(item.submenu, shown, named, offered) }
+        : dimmedItem(renamedItem(item, named), offered),
     );
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
@@ -437,6 +468,7 @@ interface MenuBarState {
   readonly panel: PanelMenu | undefined;
   readonly reload: ReloadMenu | undefined;
   readonly buildLabel: BuildLabelMenu | undefined;
+  readonly offered: readonly AppCommand[] | undefined;
 }
 
 /** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the developer tools offered, the panel window, the reload, or the build's label. */
@@ -449,7 +481,9 @@ export type MenuBarChange =
   | { readonly developerTools: boolean }
   | { readonly panel: PanelMenu }
   | { readonly reload: ReloadMenu }
-  | { readonly buildLabel: BuildLabelMenu };
+  | { readonly buildLabel: BuildLabelMenu }
+  /** The commands the focused panel offers now; none known while no panel has told it, which dims nothing. */
+  | { readonly offered: readonly AppCommand[] | undefined };
 
 /**
  * The menu bar's one drawer: it draws the menus from what it was last told,
@@ -474,6 +508,7 @@ export function menuBarDrawer(
     panel: undefined,
     reload: undefined,
     buildLabel: undefined,
+    offered: undefined,
   };
   let drawn = false;
   return (change) => {
@@ -484,6 +519,7 @@ export function menuBarDrawer(
       next.panel !== state.panel ||
       next.reload !== state.reload ||
       next.buildLabel !== state.buildLabel ||
+      next.offered?.join() !== state.offered?.join() ||
       JSON.stringify(next.experiments) !== JSON.stringify(state.experiments) ||
       JSON.stringify(next.capabilities) !== JSON.stringify(state.capabilities);
     if (drawn && !moved) return;
@@ -499,6 +535,7 @@ export function menuBarDrawer(
         state.reload,
         (command) => shortcutLabel(command, state.experiments),
         state.buildLabel,
+        offeredBy(state.offered),
       ),
     );
   };

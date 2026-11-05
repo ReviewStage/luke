@@ -113,6 +113,13 @@ export interface AppPlatform {
    */
   unsavedPlanWords?(unsaved: boolean): void;
   /**
+   * Hears the commands the window's controls offer now, each time that set
+   * changes, so a shell with a menu bar dims an item whose command nothing
+   * would run. A browser tab has no menu bar of its own, so the web leaves
+   * this out.
+   */
+  menuOffers?(commands: readonly AppCommand[]): void;
+  /**
    * Ends a maintainer's sign-in as the member signed in (`impersonated` on
    * the account) and takes them back to that member's page of the admin
    * dashboard, as themselves; answers why not, in the service's own words,

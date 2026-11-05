@@ -36,6 +36,7 @@ import { BrowserWindow, net, type WebContents } from "electron";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { moveToApplications } from "../move-to-applications";
 import { createElectronUpdaterEngine } from "../update-installer";
+import { type MenuOffers, menuOffers } from "../window/menu-offers";
 import { electronNoticeDoors } from "../window/notice-doors";
 import { askBeforeLeaving } from "../window/quit-dialog";
 import type { DesktopConfig } from "./desktop-config";
@@ -95,6 +96,8 @@ export interface DesktopServices {
   readonly services: Context.Context<never>;
   /** Which panels say they hold unsaved work, as each tells it. */
   readonly unsavedWork: UnsavedWorkHolders<WebContents>;
+  /** Which commands each panel offers the menu bar, as each tells it. */
+  readonly menuOffers: MenuOffers;
   /**
    * Asks before a way out of the app while something would be lost, answering
    * whether to go on: the one sheet the quit, Restart to update, and Sign
@@ -245,6 +248,12 @@ export function composeDesktop(
       // asks before it loses anything; while nothing would be lost none of
       // them asks at all.
       const unsavedWork = unsavedWorkHolders<WebContents>((sender) => sender.isDestroyed());
+      // The menu bar dims the commands the focused panel offers none of, drawn again as the focus moves.
+      const offers = menuOffers(config.showMenuBar);
+      yield* Effect.acquireRelease(
+        Effect.sync(() => windows.onPanelFocusChanged(() => offers.focusMoved())),
+        (stop) => Effect.sync(stop),
+      );
       const atStake = () => ({ unsavedWork: unsavedWork.holding() });
       const askFirst = leaveGate({
         atStake,
@@ -326,6 +335,7 @@ export function composeDesktop(
         run,
         services,
         unsavedWork,
+        menuOffers: offers,
         askBeforeLeaving: askFirst,
       };
     }),

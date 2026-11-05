@@ -55,6 +55,32 @@ const HELD_UNDER_OVERLAY: ReadonlySet<AppCommand> = new Set([
   APP_COMMAND.PREVIOUS_RECENT_TAB,
 ]);
 
+/** Who hears the commands offered each time the set changes: the shell's menu bar, through `useMenuOffers`. */
+const offersHeard = new Set<(commands: readonly AppCommand[]) => void>();
+
+/** Whether a telling of the offers waits on the current commit's offers and withdrawals to settle. */
+let offersTellingDue = false;
+
+/**
+ * Tells who hears the offers the commands offered now, once the offers made
+ * and withdrawn in this commit have settled, so a page's many controls
+ * mounting at once are told as one set.
+ */
+function offersChanged(): void {
+  if (offersTellingDue || offersHeard.size === 0) return;
+  offersTellingDue = true;
+  queueMicrotask(() => {
+    offersTellingDue = false;
+    const commands = offeredCommands();
+    for (const hear of offersHeard) hear(commands);
+  });
+}
+
+/** The commands an offer stands for now, in one order, so an unchanged set reads the same. */
+function offeredCommands(): readonly AppCommand[] {
+  return [...offers.keys()].filter((command) => (offers.get(command)?.length ?? 0) > 0).toSorted();
+}
+
 /** How many overlays holding the keyboard stand now that are no dialog: the command palette, while open. */
 let overlaysStanding = 0;
 
@@ -137,11 +163,13 @@ export function useAppCommand(
     if (!offered) return;
     const offer: CommandRun = { current: () => latest.current?.(), over: latestOver };
     offers.set(command, [...(offers.get(command) ?? []), offer]);
+    offersChanged();
     return () => {
       offers.set(
         command,
         (offers.get(command) ?? []).filter((held) => held !== offer),
       );
+      offersChanged();
     };
   }, [command, offered]);
 }
@@ -188,6 +216,31 @@ export function useAppKeymap(enabled: boolean): void {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [enabled]);
+}
+
+/**
+ * Tells the shell the commands offered now, each time the set changes, so
+ * its menu bar dims an item whose command nothing would run; a shell with no
+ * menu bar is told nothing.
+ */
+export function useMenuOffers(): void {
+  useEffect(() => {
+    const tell = appPlatform().menuOffers;
+    if (tell === undefined) return;
+    let told: string | undefined;
+    const hear = (commands: readonly AppCommand[]) => {
+      const joined = commands.join();
+      if (joined === told) return;
+      told = joined;
+      tell(commands);
+    };
+    offersHeard.add(hear);
+    // Note that the first telling waits on the commit as every later one does, since the controls beside this one offer theirs in the same commit.
+    offersChanged();
+    return () => {
+      offersHeard.delete(hear);
+    };
+  }, []);
 }
 
 /** The menu bar's commands, run on the same offers and the same terms as the keys. */

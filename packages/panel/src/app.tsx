@@ -37,7 +37,13 @@ import * as Atom from "effect/reactivity/Atom";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { appBridge } from "./app-bridge.js";
-import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands.js";
+import {
+  runAppCommand,
+  useAppCommand,
+  useAppKeymap,
+  useMenuCommands,
+  useMenuOffers,
+} from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-settings.js";
 import { useDraftsOwner } from "./composer-drafts.js";
@@ -556,6 +562,7 @@ function AppWindow(): React.JSX.Element {
   // The window's shortcuts, from the keys and from the menu bar alike.
   useAppKeymap(true);
   useMenuCommands(true);
+  useMenuOffers();
   useHistoryMouseButtons(history, true);
 
   // The doors the window hands every page are held across draws, each part that reads one holding while it does.

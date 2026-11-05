@@ -700,6 +700,12 @@ export const WINDOW_SURFACE_ACT_KIND = {
    * band, as View > Developer > Show Build Label turns them.
    */
   WINDOW_SHOW_BUILD_LABEL: "window.showBuildLabel",
+  /**
+   * The commands the asking panel offers now, as its controls offer them,
+   * told whenever they change, so the menu bar dims an item whose command
+   * nothing in the focused panel would run.
+   */
+  WINDOW_MENU_OFFERS: "window.menuOffers",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -964,6 +970,7 @@ export const PORT_ACT_USE = {
   WINDOW_CAPTURE: ACT_USE.FETCH,
   WINDOW_UNSAVED_WORK: ACT_USE.WRITE,
   WINDOW_SHOW_BUILD_LABEL: ACT_USE.WRITE,
+  WINDOW_MENU_OFFERS: ACT_USE.WRITE,
   FEEDBACK_SEND: ACT_USE.WRITE,
 
   WORKSPACE_CREATE: ACT_USE.WRITE,
