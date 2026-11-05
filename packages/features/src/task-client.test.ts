@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordedRoutes } from "@repo/wire/testing";
 import { Effect } from "effect";
-import { accountBearer } from "./account-call.js";
+import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { AGENT_CALL_FAILURE } from "./agent-view.js";
 import { AGENT_STATUS } from "./agent-wire.js";
+import { FAILURE_FACT } from "./failure-facts.js";
 import { WRITE_UNTAKEN } from "./keyed-write.js";
 import { LIVE_POLL, LIVE_POLL_URL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
@@ -194,6 +195,38 @@ it.effect(
     }),
 );
 
+it.effect("a start the service never answers carries what failed beneath it, by its kind", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "POST /api/plans": {
+        answer: () => {
+          throw new TypeError("Load failed");
+        },
+      },
+    });
+
+    const unanswered = yield* Effect.provide(
+      client().create({ repository: "acme/relay" }),
+      api.layer,
+    );
+
+    // Note that the trace is the call's own, which the service's log lines carry, so only its shape is known here.
+    const traceId = unanswered.ok ? undefined : unanswered.cause?.traceId;
+    assert.match(String(traceId), /^[0-9a-f]{32}$/);
+    assert.deepEqual(unanswered, {
+      ok: false,
+      failure: TASK_CALL_FAILURE.UNANSWERED,
+      cause: {
+        _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+        fault: CALL_FAULT.NETWORK,
+        errorName: "TypeError",
+        traceId,
+      },
+      untaken: WRITE_UNTAKEN.UNANSWERED,
+    });
+  }),
+);
+
 it.effect(
   "a thread's write answers it as it stands or its refusal, and a task not the account's answers as not found",
   () =>
@@ -258,10 +291,13 @@ it.effect(
 
       assert.deepEqual(unanswered, { ok: false, failure: WRITE_UNTAKEN.UNANSWERED });
       assert.deepEqual(written, { ok: false, failure: WRITE_UNTAKEN.ALREADY_WRITTEN });
+      // Note that the trace is the call's own, so only the start's own answer names it.
+      const traceId = started.ok ? undefined : started.cause?.traceId;
       assert.deepEqual(started, {
         ok: false,
         failure: TASK_CALL_FAILURE.UNANSWERED,
         untaken: WRITE_UNTAKEN.UNANSWERED,
+        cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, status: 503, traceId },
       });
       assert.deepEqual(
         api.requests().map((request) => request.headers.get(IDEMPOTENCY_KEY.HEADER)),
