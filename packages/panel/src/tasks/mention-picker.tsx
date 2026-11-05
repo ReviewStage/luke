@@ -44,6 +44,7 @@ import {
 } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import type { AppInboxItems } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import {
   BackButton,
@@ -108,7 +109,7 @@ import {
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
-import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
+import { appStateDerivedAtom, useAppSlice, useExperiment } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
@@ -1494,7 +1495,8 @@ function treeKey(
 /**
  * The kinds the place offers, in the list's order: the workspace's agents
  * where it reads them, its other tasks where it holds any, its people where
- * the window has read them, the plan where one stands, the pages of what
+ * the window has read them, the plan where one stands and the account has
+ * Plans on, the pages of what
  * holds it, its repository's files and folders where it names one, its
  * Inbox threads and automations where it holds any, the pull requests
  * the plan's agents or the agent on no task published, the repository's skills where the words go
@@ -1509,6 +1511,7 @@ function kindsOf(
   people: number,
   tasks: number,
   inbox: { readonly threads: number; readonly automations: number },
+  plans: boolean,
 ): readonly MentionKind[] {
   const { holder, repository } = source;
   const taskId = holderTaskId(holder);
@@ -1546,7 +1549,7 @@ function kindsOf(
             detail: countWords(people, TERM.MEMBER),
           },
         ]),
-    ...(taskId === undefined
+    ...(taskId === undefined || !plans
       ? []
       : [
           {
@@ -1776,7 +1779,11 @@ export function useMentionPicker({
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
     (source === undefined ? undefined : workspaceOfSlug(listed.workspaces, source.workspace))?.id;
   const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
-  const taskRowsOffered = open ? workspaceTaskRows(taskId, tasksWorkspace, listed.tasks) : [];
+  // While Plans is off there is no plan to mention, its sections or the whole of it, so the task itself is offered among the workspace's tasks.
+  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const taskRowsOffered = open
+    ? workspaceTaskRows(plansOn ? taskId : undefined, tasksWorkspace, listed.tasks)
+    : [];
   // The threads offered are the workspace's as the account's feed holds them, which the host holds for the session.
   const feed = useHostRead(LIVE_READ.INBOX_ITEMS);
   const threadsAsked = open && tasksWorkspace !== undefined;
@@ -1799,10 +1806,19 @@ export function useMentionPicker({
       : taskKey(tasksWorkspace.name, planNumber);
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
   const kinds = open
-    ? kindsOf(source, self, skills, servers, people.length, taskRowsOffered.length, {
-        threads: threadRowsOffered.length,
-        automations: automationRowsOffered.length,
-      })
+    ? kindsOf(
+        source,
+        self,
+        skills,
+        servers,
+        people.length,
+        taskRowsOffered.length,
+        {
+          threads: threadRowsOffered.length,
+          automations: automationRowsOffered.length,
+        },
+        plansOn,
+      )
     : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
@@ -1857,7 +1873,7 @@ export function useMentionPicker({
           scope,
           pathsSearched,
           {
-            plan: taskRows(taskId, source.taskName, planKey, source.text()),
+            plan: plansOn ? taskRows(taskId, source.taskName, planKey, source.text()) : [],
             tasks: taskRowsOffered,
             pages: pageRows(holder, source.pages ?? NO_PAGES, now),
             agents: agentRows(

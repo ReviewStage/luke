@@ -15,7 +15,7 @@ import type { TaskStatus } from "@repo/features/task-wire";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "@repo/features/terminal-entry";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
-import { HOST_CAPABILITY } from "@repo/settings";
+import { type ExperimentChoices, HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   Button,
@@ -160,8 +160,8 @@ import type { AgentsControl } from "../tasks/use-agents.js";
 import { OnLeavingHere, PullRequestsOnGitHub } from "../tasks/use-open-link.js";
 import { usePlanComments } from "../tasks/use-plan-comments.js";
 import {
-  DRAWN_KINDS,
   type DrawnTabs,
+  drawnKinds,
   drawsChanges,
   drawsSubagent,
   drawsTerminal,
@@ -181,7 +181,7 @@ import {
   type SidePanelTab,
   sameHolder,
 } from "../tasks/use-side-panel.js";
-import { useCapability } from "../use-app-state.js";
+import { useCapability, useExperimentChoices } from "../use-app-state.js";
 import { useHostReads, usePlacesPages } from "../use-host-read.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { AgentMenuTab, ROW_COUNT } from "./main-tabs.js";
@@ -386,20 +386,19 @@ const NO_KINDS: readonly FixedSidePanelTab[] = [];
 const NO_TERMINALS: readonly TerminalStripTab[] = [];
 
 /**
- * The fixed kinds each holder's panel offers: a task's every one it draws,
- * never the plan's, which the column's Overview holds, nor the Inbox's,
- * whose threads open in the window's Inbox; an agent's page none, the
- * plan's comments being a task's alone.
+ * The fixed kinds a holder's panel offers for the account's experiments: a
+ * task's every one it draws (`drawnKinds`), never the plan's, which the
+ * column's Overview holds, nor the Inbox's, whose threads open in the
+ * window's Inbox, nor Comments while Plans is off; an agent's page none,
+ * and the Inbox's none, the plan's comments being a task's alone. The
+ * panel's "+" and ⌘K both ask here, so neither offers what the other does
+ * not.
  */
-const HOLDER_KINDS = {
-  [SIDE_PANEL_HOLDER.TASK]: DRAWN_KINDS,
-  [SIDE_PANEL_HOLDER.AGENT]: NO_KINDS,
-  [SIDE_PANEL_HOLDER.INBOX]: NO_KINDS,
-} as const satisfies Record<SidePanelHolder, readonly FixedSidePanelTab[]>;
-
-/** The fixed kinds a holder's panel offers. The panel's "+" and ⌘K both ask here, so neither offers what the other does not. */
-export function offeredPanelKinds(holder: SidePanelHolder): readonly FixedSidePanelTab[] {
-  return HOLDER_KINDS[holder];
+export function offeredPanelKinds(
+  holder: SidePanelHolder,
+  experiments: ExperimentChoices,
+): readonly FixedSidePanelTab[] {
+  return holder === SIDE_PANEL_HOLDER.TASK ? drawnKinds(experiments) : NO_KINDS;
 }
 
 /** Which of a page's two columns holds the window's focus, which ⌘T, ⌘W, and ⌘F answer to: its own, or the side panel beside it. */
@@ -874,6 +873,8 @@ export function panelOffers(input: {
   panel: SidePanelControl;
   agents: AgentsControl;
   pages: readonly PageLine[];
+  /** The account's experiments, which hold the kinds offered (`offeredPanelKinds`). */
+  experiments: ExperimentChoices;
   /** Adds a shell to an agent's sandbox; none where the platform runs no terminals. */
   onNewTerminal: ((agentId: string) => void) | undefined;
   /** The agent whose browser a new tab is offered in first: the one the panel or the column shows. */
@@ -903,7 +904,7 @@ export function panelOffers(input: {
           .map((agent) => ({ agentId: agent.id, agent, owner: ownerOf(agent.id) }));
   return panelEntries({
     panel,
-    kinds: offeredPanelKinds(holder),
+    kinds: offeredPanelKinds(holder, input.experiments),
     changes: changesOffers(agents, changes),
     pages: input.pages,
     // Note that a panel that draws no Terminal, the Inbox's among them, offers none.
@@ -2141,7 +2142,7 @@ function TabContent({
     // A tab no delegation started stands only until the panel moves back to the board, a render away.
     return <SpinnerRegion delay label={readingWords("the worker")} />;
   }
-  // Note that the plan's and the Inbox's kinds of old stand nowhere (`DRAWN_KINDS`), so Comments is the one fixed kind drawn.
+  // Note that the plan's and the Inbox's kinds of old stand nowhere (`drawnKinds`), so Comments is the one fixed kind drawn.
   return tab === SIDE_PANEL_TAB.COMMENTS ? (
     <PlanCommentsTab
       doors={{
@@ -2684,12 +2685,14 @@ export function SidePanel({
   const wiring: PanelWiring | undefined = listing ? undefined : { tab: tabId, panel: panelId };
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  const experiments = useExperimentChoices();
   const offers = panelOffers({
     holder,
     taskId,
     panel,
     agents,
     pages: taskPages,
+    experiments,
     onNewTerminal: terminalsHere
       ? (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW)
       : undefined,

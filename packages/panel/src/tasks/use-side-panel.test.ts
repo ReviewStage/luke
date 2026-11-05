@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { readExperiments } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import {
-  DRAWN_KINDS,
+  drawnKinds,
   drawsChanges,
   drawsTerminal,
   type OpenTask,
@@ -23,6 +28,11 @@ const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER_AGENT = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
 const roots: Root[] = [];
+
+/** The fixed kinds a task with Plans on draws, which every case but the gate's own stands on. */
+const DRAWN_KINDS = drawnKinds(experimentsOn(EXPERIMENT.PLANS));
+
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -43,8 +53,8 @@ interface Stood {
   bare?: boolean;
 }
 
-/** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands. */
-function launch(stood: Stood) {
+/** Mounts the panel alone, as a launch does, over the task and agents given, answering the control as it stands; under `registry` where one is named, and the window's own, Plans on, otherwise. */
+function launch(stood: Stood, registry?: AtomRegistry.AtomRegistry) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: Stood }) {
     control = useSidePanel(
@@ -61,7 +71,10 @@ function launch(stood: Stood) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
+  const render = (held: Stood) => {
+    const probe = createElement(Probe, { held });
+    act(() => root.render(registry === undefined ? probe : onRegistry(registry, probe)));
+  };
   render(stood);
   return {
     control: () => {
@@ -83,6 +96,22 @@ test("a first launch leaves the panel shut though its plan holds a tab, and its 
 
   act(() => panel.control().onToggle());
   assert.equal(panel.control().open, true);
+});
+
+test("while Plans is off a plan holding comments draws no Comments tab, opens none asked for, and shows none of its pins", async () => {
+  const registry = AtomRegistry.make();
+  await readExperiments({}, registry);
+  const panel = launch({ task: TASK, taskAgents: [] }, registry);
+  assert.deepEqual(panel.control().strip, []);
+  assert.deepEqual(panel.control().used, []);
+
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => panel.control().onShow(TASK, SIDE_PANEL_TAB.COMMENTS));
+  assert.deepEqual(panel.control().strip, []);
+  assert.equal(panel.control().open, false);
+
+  act(() => panel.control().onPin({ task: TASK }, SIDE_PANEL_TAB.COMMENTS, "Comments"));
+  assert.deepEqual(panel.control().pins, []);
 });
 
 test("an agent's Changes tab opens on its plan, stands chosen across a launch, and stands on no other plan", () => {

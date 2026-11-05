@@ -2,14 +2,15 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
+import { EXPERIMENT } from "@repo/settings";
 import { MICROPHONE_STATUS } from "@repo/settings/microphone";
 import { NOTIFICATIONS_STATUS } from "@repo/settings/settings-controls";
 import { SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -20,7 +21,7 @@ import { useStageRoom } from "../stage-room.js";
 import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, registryWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -177,7 +178,11 @@ function mount(width: number, onTask = true): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Window, { onTask }))));
+  act(() =>
+    root?.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Window, { onTask })),
+    ),
+  );
   return container;
 }
 

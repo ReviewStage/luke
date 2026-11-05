@@ -19,6 +19,8 @@ import type {
   AppInboxWaitingItem,
   AppTranscript,
 } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { NO_TASK_SECTIONS } from "@repo/ui/task-sections-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
@@ -27,13 +29,16 @@ import type { SummaryPin } from "../desktop/task-summary.js";
 import { type AgentsControl, MODELS_READ } from "../tasks/use-agents.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
-import { DRAWN_KINDS, SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
+import { drawnKinds, SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
 import { handHostReads, holdTranscripts, type TranscriptsHeld } from "./app-state.js";
+
+/** The side panel's fixed kinds as a task with Plans on draws them, which the fake control's strip holds. */
+const PLANS_KINDS = drawnKinds(experimentsOn(EXPERIMENT.PLANS));
 
 const ignore = () => undefined;
 
@@ -418,10 +423,10 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       fullScreenOnly: false,
       newTabAsked: false,
       toggleAsked: false,
-      tabs: DRAWN_KINDS,
+      tabs: PLANS_KINDS,
       order: [],
       closedTabs: [],
-      used: DRAWN_KINDS,
+      used: PLANS_KINDS,
       pins: [],
       carried: [],
       onCarried: ignore,
@@ -433,7 +438,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       lastTerminal: undefined,
       pullRequestViews: new Map(),
       onPullRequestView: () => undefined,
-      strip: DRAWN_KINDS,
+      strip: PLANS_KINDS,
       tab: SIDE_PANEL_TAB.COMMENTS,
       preview: undefined,
       width: SIDE_PANEL_WIDTH.DEFAULT,

@@ -7,16 +7,18 @@ import { TASK_TREE_ENTRY, type Task } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { ACTOR_KIND, ACTOR_STATE } from "@repo/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
-import { handState } from "../testing/app-state.js";
+import { handState, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -85,7 +87,7 @@ async function opened(page?: TaskMentionsValue, task: Task = TASK) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   registries.push(registry);
   const body = createElement(PlanBody, {
     task: task,
@@ -365,24 +367,21 @@ test("a section's address pasted whole into the plan is laid in as its chip, cal
 });
 
 test("a section's address naming its task by its number, pasted whole into the plan, is laid in as the chip its id lays in, found among the window's tasks", async () => {
-  handState(
-    {},
-    {
-      tasks: {
-        ...IDLE_TASKS_VIEW,
-        workspaces: [
-          {
-            id: "workspace-acme",
-            name: "Acme",
-            slug: "acme",
-            role: WORKSPACE_ROLE.MEMBER,
-            github: null,
-          },
-        ],
-        tasks: [{ ...TASK, workspaceId: "workspace-acme", number: 42 }],
-      },
+  handState(experimentsOn(EXPERIMENT.PLANS), {
+    tasks: {
+      ...IDLE_TASKS_VIEW,
+      workspaces: [
+        {
+          id: "workspace-acme",
+          name: "Acme",
+          slug: "acme",
+          role: WORKSPACE_ROLE.MEMBER,
+          github: null,
+        },
+      ],
+      tasks: [{ ...TASK, workspaceId: "workspace-acme", number: 42 }],
     },
-  );
+  });
   const plan = await opened();
 
   await plan.typeAtEnd(" See ");
