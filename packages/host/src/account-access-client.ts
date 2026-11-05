@@ -51,6 +51,8 @@ export class AccountAccessClient {
     this.#inSession = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.sessionCredential,
+      // The Mac asks for its Better Auth session once where it holds none yet, as every session write does.
+      inSession: true,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }

@@ -111,6 +111,7 @@ it.effect("grants and revokes support access under the account's session, not it
     assert.equal(granted?.init?.method, "POST");
     assert.equal(revoked?.init?.method, "DELETE");
     assert.equal(new Headers(granted?.init?.headers).get("authorization"), "Bearer session-1");
+    assert.equal(new Headers(revoked?.init?.headers).get("authorization"), "Bearer session-1");
   }),
 );
 
