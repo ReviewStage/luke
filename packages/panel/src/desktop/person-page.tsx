@@ -652,6 +652,8 @@ function PersonTaskRows({
         label={title}
         listed={drawn.map(({ value }) => value)}
         unread={unread}
+        // Note that a teammate's tasks are looked at rather than gone back to, so each opens on its plan.
+        onOpen={tasks.onSelect}
         face={false}
         moves
       />

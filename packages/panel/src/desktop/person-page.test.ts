@@ -358,7 +358,6 @@ function mountWith(
       listed: { tasks: TASKS, ...HOLDING },
       ...HOLDING,
       onSelect: (taskId) => opened.tasks.push(taskId),
-      onResume: (taskId) => opened.tasks.push(taskId),
       onShowAgent: (taskId, agentId) => opened.agents.push([taskId, agentId]),
       inboxView: {
         open: false,

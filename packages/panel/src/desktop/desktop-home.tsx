@@ -219,7 +219,14 @@ function HomeRecent({
       ) : null}
       {recent.length === 0 ? null : (
         <ReplayMask>
-          <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
+          <RecentTasks
+            tasks={tasks}
+            label={RECENT}
+            listed={recent}
+            unread={unread}
+            onOpen={tasks.onResume}
+            joinsWalk
+          />
         </ReplayMask>
       )}
     </PersonSectionFrame>

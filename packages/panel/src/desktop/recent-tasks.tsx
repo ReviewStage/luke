@@ -117,6 +117,7 @@ export function RecentTasks({
   label,
   listed,
   unread,
+  onOpen,
   face = true,
   joinsWalk = false,
   moves = false,
@@ -128,6 +129,8 @@ export function RecentTasks({
   listed: readonly TaskSummary[];
   /** Whether a task is unread as the sidebar's row counts it (`useUnreadTasks`). */
   unread: (task: TaskSummary) => boolean;
+  /** Opens a row's task: Home's Recent goes back to work on it (`onResume`), a person's page opens its plan (`onSelect`). */
+  onOpen: (taskId: string) => void;
   /** Whether the rows wear who is on each task, which a person's own page says once in its head instead. */
   face?: boolean | undefined;
   /** Whether its rows join the walk of the rows of the lists beside it (`TaskRows`'s `joinsWalk`). */
@@ -162,7 +165,7 @@ export function RecentTasks({
             edges={TASK_ROW_EDGES.UNCHOSEN}
             unread={unread(task)}
             card={taskCardOf(tasks, task, now)}
-            onOpen={() => tasks.onResume(task.id)}
+            onOpen={() => onOpen(task.id)}
             onStanding={(standing) => setStanding(task, standing)}
           />
         ))
