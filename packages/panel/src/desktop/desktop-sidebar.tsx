@@ -171,7 +171,6 @@ import {
   type DrawnSection,
   moveToSectionEntry,
   NEW_SECTION,
-  newSectionAction,
   PINNED_DROP_ZONE,
   rowMember,
   type ShownSection,
@@ -1876,7 +1875,6 @@ function SidebarColumn({
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
   // The Tasks head's own menu, on a right-click and a long press, drawn only once it offers more than the buttons beside it.
-  const tasksHeadMenu = useMenu(tasks.shown && overlay.inSight);
   const newSectionButton = useRef<HTMLButtonElement | null>(null);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has people to filter by, so one nobody shares lists every task.
@@ -1993,10 +1991,7 @@ function SidebarColumn({
     const { workspace } = tasks;
     if (workspace !== undefined) sectionEdits.beginCreate(workspace.id, newSectionButton.current);
   };
-  const tasksHeadGroups: MenuAction[][] =
-    sectionsShown && tasks.workspace !== undefined ? [[newSectionAction(askNewSection)]] : [];
-  // Note that a menu holding New section alone would repeat the button beside it, so the head offers none until another item joins it.
-  const tasksHeadMenuOffered = tasksHeadGroups.flat().length > 1;
+  const newSectionOffered = sectionsShown && tasks.workspace !== undefined;
   // Note that the count reads every listed task, not the rows the view draws, which hides the finished ones by default.
   const childCounts = useMemo(() => childTaskCounts(tasks.listed.tasks), [tasks.listed.tasks]);
   const context: RowContext = {
@@ -2356,15 +2351,9 @@ function SidebarColumn({
                               tasksHead
                             )
                           }
-                          menuOpen={tasksHeadMenu.open !== undefined}
-                          contextMenu={
-                            tasksHeadMenuOffered
-                              ? tasksHeadMenu.contextMenu(newSectionButton)
-                              : undefined
-                          }
                           actions={
                             <>
-                              {tasksHeadGroups.length === 0 ? null : (
+                              {!newSectionOffered ? null : (
                                 <Tooltip label={NEW_SECTION}>
                                   <IconButton
                                     ref={newSectionButton}
@@ -2385,15 +2374,6 @@ function SidebarColumn({
                           }
                         />
                       ) : null}
-                      {tasksHeadMenu.drawn === undefined ? null : (
-                        <ActionMenu
-                          label="Tasks actions"
-                          replayUnmasked
-                          menu={tasksHeadMenu.drawn}
-                          groups={tasksHeadGroups}
-                          onClose={tasksHeadMenu.close}
-                        />
-                      )}
                       {assignedTo.kind !== ASSIGNED_TO.ANYONE &&
                       rows.length === 0 &&
                       shownSections.every((drawn) => drawn.rows.length === 0) &&

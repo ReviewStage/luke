@@ -1077,9 +1077,9 @@ function useThreadJump(
 
 /**
  * A thread's ⋯ at the end of its head: Copy link, the thread's app link in
- * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`), then View in
- * the tab's other view, where the thread is found by its id; nothing where
- * the thread offers neither.
+ * the view it is drawn in (`LINK_PLACE.PULL_REQUEST_THREAD`), then, in Files
+ * changed, View in Conversation, where the thread is found by its id;
+ * nothing where the thread offers neither.
  */
 function ThreadMenu({
   thread,
@@ -1098,21 +1098,16 @@ function ThreadMenu({
   const jump = useThreadJump(thread, there);
   const place = jumps?.place(thread, here);
   const copy = place === undefined ? undefined : copyLink(place);
+  // Note that a Conversation thread's own path and lines already open it in Files changed, so only Files changed offers a View in.
   const views: MenuAction[] =
-    jump === undefined
+    jump === undefined || there === PULL_REQUEST_THREAD_VIEW.FILES
       ? []
       : [
-          there === PULL_REQUEST_THREAD_VIEW.FILES
-            ? {
-                label: THREAD_REVEAL_WORDS.VIEW_FILES,
-                icon: <GLYPH.PULL_REQUEST_CHANGES />,
-                onSelect: jump,
-              }
-            : {
-                label: THREAD_REVEAL_WORDS.VIEW_CONVERSATION,
-                icon: <MessagesSquareIcon aria-hidden="true" />,
-                onSelect: jump,
-              },
+          {
+            label: THREAD_REVEAL_WORDS.VIEW_CONVERSATION,
+            icon: <MessagesSquareIcon aria-hidden="true" />,
+            onSelect: jump,
+          },
         ];
   const groups = [copy === undefined ? [] : [copy], views].filter((group) => group.length > 0);
   if (groups.length === 0) return null;

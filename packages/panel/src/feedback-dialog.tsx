@@ -1,14 +1,18 @@
 /**
  * feedback-dialog.tsx -- a note to the people who make the app, written in a modal over the window: words, screenshots, and whether to sign it.
  *
- * The window asks the way every desktop app's "Send feedback" asks: it dims,
- * a card holds one field and the few things that go with it, and Cancel and
- * Send sit at its foot. The field takes focus, Tab stays inside the card, and
- * focus goes back to whatever opened it. Enter in the field sends, as every
- * box's does (`enter-sends.ts`), and Shift+Enter adds a line.
+ * The window dims and a card holds the window's one composer, as New task's
+ * does: the screenshots over the words, the + that attaches more and the
+ * round send at its foot, and whether to sign it under it. The field takes
+ * focus, Tab stays inside the card, and focus goes back to whatever opened
+ * it. Enter in the field sends, as every box's does (`enter-sends.ts`), and
+ * Shift+Enter adds a line.
  *
- * Each kind keeps its own draft, so a note is always sent as the kind it was
- * written as. One rule keeps it: only a delivered send discards it; Cancel,
+ * One door opens it, Send feedback; a choice at the card's head turns the
+ * note into a prompt, written as an agent would be asked to build what the
+ * reader wants, and back, so the menus hold one item rather than one per
+ * kind. Each kind keeps its own draft, so a note is always sent as the kind
+ * it was written as. One rule keeps it: only a delivered send discards it;
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
@@ -20,7 +24,7 @@
  * screenshots drawn in it, which experiment the note is about where its
  * title names one (opened from that experiment's row in Settings ›
  * Experimental), and — only while "Include my name and email" is
- * ticked — the signed-in account's name and address, the line beside the
+ * ticked — the signed-in account's name and address, the line under the
  * box reads out. Nothing else rides along, a credential least of all. All the
  * card holds between its title and its answers is left out of the screen
  * recording (`ph-no-capture`), because a screenshot is a picture of the
@@ -43,26 +47,26 @@ import { EXPERIMENTS, type Experiment } from "@repo/settings";
 import {
   ALIGN,
   AttachmentChip,
-  BUTTON_VARIANT,
-  Button,
+  CHOICE_BAR_LOOK,
   Checkbox,
+  ChoiceBar,
+  ComposerBody,
+  ComposerFoot,
+  ComposerFrame,
+  type ComposerNote,
   DIALOG_SIZE,
   Dialog,
-  ErrorState,
-  FormField,
   GAP,
-  IconButton,
-  ImageIcon,
   Inline,
   LAYOUT_ELEMENT,
   LIST_MOTION_WAY,
   ListMotion,
+  TEXT_AREA_LOOK,
   TEXT_ELEMENT,
+  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextArea,
-  Tooltip,
-  useFilePicker,
   useLeaving,
 } from "@repo/ui";
 import { UNREPORTED } from "@repo/ui/reported-failure";
@@ -72,26 +76,34 @@ import { useAct } from "./act.js";
 import { enterKeyHint, enterSubmitKey } from "./enter-sends.js";
 import { failureShown } from "./failure-report.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
+import { AttachFilesButton } from "./tasks/attach-files-button.js";
 import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
+/** What the dialog is called, whichever kind of note it holds, the choice at its head naming the kind. */
+const DIALOG_TITLE = "Send feedback";
+
 /**
- * Each kind in its own words: the title its dialog carries, the field's
- * name, and the hint the empty field shows. The wire still
- * calls the second kind a prompt; to the person writing it, it is a feature
- * they would like the app to have.
+ * Each kind in its own words: the field's name, said to a screen reader
+ * since the choice above it shows the kind, and the hint the empty field
+ * shows. The wire still calls the second kind a prompt; to the person
+ * writing it, it is a feature they would like the app to have.
  */
 const FEEDBACK_COPY = {
   [FEEDBACK_KIND.FEEDBACK]: {
-    title: "Send feedback",
     field: "Feedback",
     placeholder: "What happened, and what did you expect?",
   },
   [FEEDBACK_KIND.PROMPT]: {
-    title: "Suggest a feature",
-    field: "Feature suggestion",
-    placeholder: `What would you want ${PRODUCT_NAME} to do?`,
+    field: "Prompt",
+    placeholder: `Write a prompt for what you would want built into ${PRODUCT_NAME}`,
   },
 } as const;
+
+/** What the + at the composer's foot says, which takes pictures alone. */
+const ATTACH_SCREENSHOTS = "Attach screenshots";
+
+/** What the signature's line says while the note goes unsigned. */
+const UNSIGNED = "Sent without your name or email";
 
 /**
  * Why an attachment did not come along, in the dialog's own words. Said
@@ -106,6 +118,16 @@ const IMAGE_REFUSAL = {
 const IMAGE_REFUSALS: ReadonlySet<string> = new Set(Object.values(IMAGE_REFUSAL));
 
 const SEND_REFUSAL = "Could not send that. Try again.";
+
+/** What the round send is named, and named while a send is out. */
+const SEND = "Send";
+const SENDING = "Sending";
+
+/** The choice at the card's head, one option per kind, named as the person writing it would. */
+const KIND_CHOICES = [
+  { value: FEEDBACK_KIND.FEEDBACK, label: "Feedback" },
+  { value: FEEDBACK_KIND.PROMPT, label: "Prompt" },
+] as const;
 
 /** How many lines the empty note stands tall before it grows with its words. */
 const MESSAGE_ROWS = 5;
@@ -159,10 +181,10 @@ function draftSubmission(
   };
 }
 
-/** The dialog's title: the kind's own, or which experiment a note is about where it was opened from that experiment's row. */
-function dialogTitle(kind: FeedbackKind, about: Experiment | undefined): string {
+/** The dialog's title: Send feedback, or which experiment a note is about where it was opened from that experiment's row. */
+function dialogTitle(about: Experiment | undefined): string {
   const experiment = EXPERIMENTS.find((entry) => entry.key === about);
-  return experiment ? `Feedback on ${experiment.name}` : FEEDBACK_COPY[kind].title;
+  return experiment ? `Feedback on ${experiment.name}` : DIALOG_TITLE;
 }
 
 function feedbackImageUrl(image: FeedbackImage): string {
@@ -257,6 +279,29 @@ async function takenImages(
 }
 
 /**
+ * The one line under the composer's foot: why the last send or attachment
+ * did not go, a screenshot refused being the person's input checked and a
+ * send refused the app's failure; else a paste cut to the room left.
+ */
+function composerNote(rejection: string | undefined, cut: boolean): ComposerNote | undefined {
+  if (rejection !== undefined) {
+    return {
+      words: rejection,
+      failure: IMAGE_REFUSALS.has(rejection)
+        ? UNREPORTED.INPUT
+        : failureShown({
+            surface: FAILURE_SURFACE.FEEDBACK_SEND,
+            cause: FAILURE_CONDITION.REFUSED,
+            refused: true,
+          }),
+    };
+  }
+  return cut
+    ? { words: pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH), failure: UNREPORTED.INPUT }
+    : undefined;
+}
+
+/**
  * The dialog for the kind asked for, while one is, and the thank-you after a
  * send lands. Always mounted by the app, because the drafts it keeps between
  * openings live here.
@@ -265,6 +310,7 @@ export function FeedbackDialog({
   kind,
   about,
   account,
+  onKind,
   onClose,
 }: {
   /** The kind being written, or nothing while the dialog is closed. */
@@ -272,6 +318,8 @@ export function FeedbackDialog({
   /** The experiment the note is about, where an experiment's row opened it. */
   about?: Experiment | undefined;
   account: AccountSnapshot | undefined;
+  /** Turns the note into the other kind, from the choice at the card's head; a note about an experiment offers no choice. */
+  onKind: (kind: FeedbackKind) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
   const { act } = useAct();
@@ -379,12 +427,6 @@ export function FeedbackDialog({
     if (shownKind.current === of) setRejection(taken.refusal);
   };
 
-  const picker = useFilePicker({
-    accept: "image/*",
-    multiple: true,
-    onFiles: (picked) => void attach(imageFiles(picked)),
-  });
-
   const send = async () => {
     if (kind === undefined) return;
     const current = latestDrafts()[kind];
@@ -422,7 +464,7 @@ export function FeedbackDialog({
     <Dialog
       open={open}
       size={DIALOG_SIZE.WIDE}
-      title={dialogTitle(shown.kind, shown.about)}
+      title={dialogTitle(shown.about)}
       busy={busy}
       refused={rejection !== undefined}
       holding={hasWords(draft)}
@@ -430,125 +472,114 @@ export function FeedbackDialog({
       onDismiss={close}
       dropping={fileDrop.dropping}
       dropTarget={fileDrop.target}
-      actionsStart={
-        <>
-          <Tooltip label="Attach screenshot">
-            <IconButton
-              icon={<ImageIcon />}
-              label="Attach screenshot"
-              disabled={busy || full}
-              onClick={picker.open}
-            />
-          </Tooltip>
-          {picker.input}
-        </>
-      }
-      actions={
-        <>
-          <Button variant={BUTTON_VARIANT.QUIET} disabled={busy} onClick={close}>
-            Cancel
-          </Button>
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            disabled={!hasWords(draft)}
-            busy={busy}
-            busyLabel="Sending"
-            onClick={() => void send()}
-          >
-            Send
-          </Button>
-        </>
-      }
     >
       <div className="feedback-dialog ph-no-capture flex min-h-0 flex-col gap-block-gap">
-        <FormField
-          label={FEEDBACK_COPY[shown.kind].field}
-          description={
-            cutWords === shown.draft.message
-              ? pasteCutWords(FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH)
-              : undefined
-          }
-          count={{
-            length: shown.draft.message.length,
-            limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
-          }}
-        >
-          {(control) => (
-            <TextArea
-              ref={field}
-              field={control}
-              placeholder={FEEDBACK_COPY[shown.kind].placeholder}
-              maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
-              value={shown.draft.message}
-              disabled={busy}
-              rows={MESSAGE_ROWS}
-              grow
-              enterKeyHint={enterKeyHint()}
-              submitKey={enterSubmitKey()}
-              onSubmit={() => void send()}
-              onChange={(message) => changeDraft({ message })}
-              onPaste={(event) => {
-                // A screenshot on the clipboard is an attachment, not text
-                // that failed to paste; text pastes as it always does.
-                const pasted = imageFiles(event.clipboardData.files);
-                if (pasted.length === 0) {
-                  noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
-                  return;
-                }
-                event.preventDefault();
-                void attach(pasted);
-              }}
-            />
-          )}
-        </FormField>
-        <FeedbackImages
-          kind={shown.kind}
-          images={shown.draft.images}
-          busy={busy}
-          onRemove={(image) =>
-            changeDraft({
-              images: latestDrafts()[shown.kind].images.filter((held) => held !== image),
-            })
-          }
-        />
-        {signature ? (
-          <div className="feedback-dialog-signature flex min-w-0 items-center gap-control-gap">
-            <Checkbox
-              checked={shown.draft.signed}
-              disabled={busy}
-              aria-describedby={signatureId}
-              onChange={(signed) => changeDraft({ signed })}
-            >
-              Include my name and email
-            </Checkbox>
-            <Text
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.INHERIT}
-              truncate
-              id={signatureId}
-              className="feedback-dialog-identity ml-auto text-caption text-muted-foreground"
-            >
-              {shown.draft.signed
-                ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
-                : null}
-            </Text>
-          </div>
+        {shown.about === undefined ? (
+          <ChoiceBar<FeedbackKind>
+            label="Kind of note"
+            items={KIND_CHOICES}
+            value={shown.kind}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            disabled={busy}
+            onChange={onKind}
+          />
         ) : null}
-        {rejection === undefined ? null : (
-          <ErrorState
-            failure={
-              IMAGE_REFUSALS.has(rejection)
-                ? UNREPORTED.INPUT
-                : failureShown({
-                    surface: FAILURE_SURFACE.FEEDBACK_SEND,
-                    cause: FAILURE_CONDITION.REFUSED,
-                    refused: true,
+        {/* Note that the note is written in the window's one composer, its screenshots over its words and the + and the round send at its foot, as an agent's box and New task's are. */}
+        <ComposerFrame
+          className="feedback-dialog-composer flex min-w-0 flex-col"
+          dropping={fileDrop.dropping}
+        >
+          <ComposerBody
+            files={
+              <FeedbackImages
+                kind={shown.kind}
+                images={shown.draft.images}
+                busy={busy}
+                onRemove={(image) =>
+                  changeDraft({
+                    images: latestDrafts()[shown.kind].images.filter((held) => held !== image),
                   })
+                }
+              />
             }
           >
-            {rejection}
-          </ErrorState>
-        )}
+            {/* Note that the bare field stands at the card's inset, as the files over it and the foot under it do. */}
+            <div className="feedback-dialog-field px-ui-12 pt-ui-12">
+              <TextArea
+                ref={field}
+                label={FEEDBACK_COPY[shown.kind].field}
+                look={TEXT_AREA_LOOK.BARE}
+                placeholder={FEEDBACK_COPY[shown.kind].placeholder}
+                maxLength={FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH}
+                value={shown.draft.message}
+                disabled={busy}
+                rows={MESSAGE_ROWS}
+                grow
+                enterKeyHint={enterKeyHint()}
+                submitKey={enterSubmitKey()}
+                onSubmit={() => void send()}
+                onChange={(message) => changeDraft({ message })}
+                onPaste={(event) => {
+                  // A screenshot on the clipboard is an attachment, not text
+                  // that failed to paste; text pastes as it always does.
+                  const pasted = imageFiles(event.clipboardData.files);
+                  if (pasted.length === 0) {
+                    noteCutPaste(event.currentTarget, event.clipboardData.getData("text"));
+                    return;
+                  }
+                  event.preventDefault();
+                  void attach(pasted);
+                }}
+              />
+            </div>
+          </ComposerBody>
+          <ComposerFoot
+            tools={
+              <AttachFilesButton
+                label={ATTACH_SCREENSHOTS}
+                accept="image/*"
+                disabled={busy || full}
+                onFiles={(picked) => void attach(imageFiles(picked))}
+              />
+            }
+            counter={{
+              length: shown.draft.message.length,
+              limit: FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
+            }}
+            send={{
+              label: SEND,
+              empty: !hasWords(draft),
+              onSend: () => void send(),
+              busy,
+              busyLabel: SENDING,
+            }}
+            note={composerNote(rejection, cutWords === shown.draft.message)}
+          />
+        </ComposerFrame>
+        {signature ? (
+          // Note that who the note is signed by stands under the box's words, so a long address is cut there rather than squeezing the words onto two lines.
+          <Checkbox
+            checked={shown.draft.signed}
+            disabled={busy}
+            aria-describedby={signatureId}
+            onChange={(signed) => changeDraft({ signed })}
+            detail={
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.CAPTION}
+                tone={TEXT_TONE.MUTED}
+                truncate
+                id={signatureId}
+              >
+                {shown.draft.signed
+                  ? [signature.name, signature.email].filter(Boolean).join(" · ")
+                  : UNSIGNED}
+              </Text>
+            }
+          >
+            Include my name and email
+          </Checkbox>
+        ) : null}
       </div>
     </Dialog>
   );

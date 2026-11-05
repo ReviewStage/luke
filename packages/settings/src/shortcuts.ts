@@ -90,7 +90,6 @@ export const APP_COMMAND = {
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
-  SUGGEST_FEATURE: "suggest-feature",
   COMMAND_PALETTE: "command-palette",
   SHOW_TERMINAL: "show-terminal",
   NEW_TERMINAL: "new-terminal",
@@ -117,7 +116,6 @@ export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
  */
 export const MENU_COMMAND_LABELS = {
   [APP_COMMAND.SEND_FEEDBACK]: "Send feedback",
-  [APP_COMMAND.SUGGEST_FEATURE]: "Suggest a feature",
   [APP_COMMAND.NEW_TERMINAL]: "New terminal",
   [APP_COMMAND.MARK_TASK_DONE]: "Mark done",
 } as const;
@@ -477,11 +475,11 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.TOGGLE_SIDEBAR]: { label: "Toggle sidebar", chord: { key: SHORTCUT_KEY.B } },
   [APP_COMMAND.TOGGLE_SIDE_PANEL]: {
-    label: "Toggle panel",
+    label: "Toggle side panel",
     chord: { key: SHORTCUT_KEY.B, option: true },
   },
   [APP_COMMAND.TOGGLE_FULL_SCREEN]: {
-    label: "Toggle panel full screen",
+    label: "Toggle expanded panel",
     chord: { key: SHORTCUT_KEY.ENTER, shift: true },
   },
   [APP_COMMAND.EXIT_FULL_SCREEN]: {

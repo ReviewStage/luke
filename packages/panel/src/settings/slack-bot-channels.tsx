@@ -227,6 +227,7 @@ function ChannelRow({
     <>
       <MenuRow
         thing={name}
+        alone
         actions={[
           [
             {

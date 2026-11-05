@@ -26,9 +26,6 @@ import { onRegistry } from "./testing/copy-feedback.js";
 import { holdMotion, releaseMotion } from "./testing/motion-held.js";
 import { ToastHost } from "./toast.js";
 
-/** The two Help items that open the dialog, one per kind of note. */
-type FeedbackCommand = typeof APP_COMMAND.SEND_FEEDBACK | typeof APP_COMMAND.SUGGEST_FEATURE;
-
 const SIGNED_IN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
   name: "Ada Lovelace",
@@ -80,12 +77,16 @@ afterEach(() => {
 function Harness({ account }: { account: AccountSnapshot }): React.JSX.Element {
   const [kind, setKind] = useState<FeedbackKind>();
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setKind(FEEDBACK_KIND.FEEDBACK));
-  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => setKind(FEEDBACK_KIND.PROMPT));
   useMenuCommands(true);
   return createElement(
     Fragment,
     null,
-    createElement(FeedbackDialog, { kind, account, onClose: () => setKind(undefined) }),
+    createElement(FeedbackDialog, {
+      kind,
+      account,
+      onKind: setKind,
+      onClose: () => setKind(undefined),
+    }),
     createElement(ToastHost),
   );
 }
@@ -113,11 +114,11 @@ function dialog(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[role="dialog"]');
 }
 
-/** Help's item for this kind of note, chosen, and the dialog it opened. */
-function openFromHelp(command: FeedbackCommand): HTMLElement {
-  act(() => menuListener?.(command));
+/** Help's Send feedback, chosen, and the dialog it opened. */
+function openFromHelp(): HTMLElement {
+  act(() => menuListener?.(APP_COMMAND.SEND_FEEDBACK));
   const opened = dialog();
-  assert.ok(opened, `${command} opens the dialog`);
+  assert.ok(opened, "Send feedback opens the dialog");
   return opened;
 }
 
@@ -126,10 +127,10 @@ function field(): HTMLTextAreaElement {
   assert.ok(found, "the dialog draws its field");
   return found;
 }
-test("each of Help's items opens the dialog of its own kind, with the field taking the keyboard", () => {
+test("Help's item opens the feedback dialog, with the field taking the keyboard, and its head turns the note into a prompt", () => {
   mount();
 
-  const feedback = openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  const feedback = openFromHelp();
   assert.equal(feedback.querySelector("h2")?.textContent, "Send feedback");
   assert.equal(document.activeElement, field());
   assert.equal(field().placeholder, "What happened, and what did you expect?");
@@ -139,9 +140,10 @@ test("each of Help's items opens the dialog of its own kind, with the field taki
     "the note and its signature are left out of the screen recording",
   );
 
-  act(() => button("Cancel").click());
-  const prompt = openFromHelp(APP_COMMAND.SUGGEST_FEATURE);
-  assert.equal(prompt.querySelector("h2")?.textContent, "Suggest a feature");
+  act(() => button("Prompt").click());
+  assert.equal(dialog()?.querySelector("h2")?.textContent, "Send feedback");
+  assert.equal(field().getAttribute("aria-label"), "Prompt");
+  assert.equal(field().placeholder, "Write a prompt for what you would want built into Vespin");
 });
 
 test("opened from an experiment's row, the dialog is titled for it and its note names the experiment", async () => {
@@ -159,6 +161,7 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
           kind: FEEDBACK_KIND.FEEDBACK,
           about: EXPERIMENT.MEMORY,
           account: SIGNED_IN,
+          onKind: () => undefined,
           onClose: () => undefined,
         }),
       ),
@@ -202,6 +205,7 @@ test("a note kept from one experiment's row is not sent under another place's ti
             kind: FEEDBACK_KIND.FEEDBACK,
             about,
             account: SIGNED_IN,
+            onKind: () => undefined,
             onClose: () => undefined,
           }),
         ),
@@ -242,13 +246,13 @@ function pressEscape(): void {
 
 test("a note being written is nudged rather than closed by the first Escape, closed by the next, and kept for the next opening", () => {
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   write("The board missed a plan.");
   pressEscape();
   const nudged = dialog()?.getAttribute("data-nudge");
   pressEscape();
   const closed = dialog() === null;
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
 
   assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
   assert.equal(closed, true, "the second closes it");
@@ -271,7 +275,7 @@ function paste(text: string): void {
 
 test("the field counts its words from four fifths of its cap, and says nothing before", () => {
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   const limit = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH;
 
   write("x".repeat(limit * 0.8 - 1));
@@ -283,7 +287,7 @@ test("the field counts its words from four fifths of its cap, and says nothing b
 
 test("a paste past the cap says it was cut until the words change", () => {
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   const limit = FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH;
   const note = `Your paste was cut to fit the ${limit.toLocaleString("en-US")}-character limit.`;
 
@@ -305,28 +309,16 @@ test("a paste past the cap says it was cut until the words change", () => {
   assert.equal(dialog()?.textContent?.includes(note), false);
 });
 
-test("Cancel closes the card and keeps the note for the next opening", () => {
-  mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
-  write("The board missed a plan.");
-  act(() => button("Cancel").click());
-  const closed = dialog() === null;
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
-
-  assert.equal(closed, true, "Cancel closes the card");
-  assert.equal(field().value, "The board missed a plan.");
-});
-
 test("an empty note is closed by the first Escape", () => {
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   pressEscape();
   assert.equal(dialog(), null);
 });
 
 test("a refused send says why and keeps the note, and Enter in the note, unlike Shift+Enter, sends it again", async () => {
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
   act(() => {
     setValue?.call(field(), "The board missed a plan.");
@@ -359,7 +351,7 @@ test("a note sent fades out still drawn, in its ending state and with its words 
   vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
   const exits = holdExits();
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   write("The board missed a plan.");
 
   await act(async () => button("Send").click());
@@ -379,7 +371,7 @@ test("a note sent takes its card away at once where motion is held", async () =>
   holdExits();
   holdMotion();
   mount();
-  openFromHelp(APP_COMMAND.SEND_FEEDBACK);
+  openFromHelp();
   write("The board missed a plan.");
 
   await act(async () => button("Send").click());

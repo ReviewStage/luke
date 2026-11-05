@@ -331,18 +331,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
   assert.deepEqual(listed(page), everything, "the pointer gone, the list sorts anew");
 
   showScope(page, "Open");
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
 
   act(() => world.root?.unmount());
   world.root = undefined;
   ({ page } = mount([], { chosen: ON_THRESHOLD }));
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
 
   showScope(page, "All");
-  assert.deepEqual(scopes(page), ["Inbox", "Open", "[All]"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "Open", "[All]"]);
   assert.deepEqual(listed(page), everything);
 });
 
@@ -415,7 +415,7 @@ test("a fresh profile opens the Inbox on Open addressed to Me, which is Needs yo
   window.localStorage.clear();
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
   assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
   openViewOptions(page);
   act(() => viewItem("Addressed to").click());
@@ -456,7 +456,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
     },
   );
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
   const rows = listed(page);
   for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
@@ -509,7 +509,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   world.root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[Open]", "All"]);
+  assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
 }, 10_000);
 
 test("each row names its task on its first line with its time at that line's end, then its title on a line of its own, then its preview", async () => {
@@ -1192,7 +1192,7 @@ test("the view's menu offers Show and Addressed to alone, and ⌘K's Mark all as
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(options, "the head offers the view's menu");
   act(() => options.click());
-  assert.deepEqual(menuWords(), ["Needs me", "Open", "All", "Snoozed", "—", "Addressed to"]);
+  assert.deepEqual(menuWords(), ["Needs you", "Open", "All", "Snoozed", "—", "Addressed to"]);
   act(() => options.click());
   act(() => {
     runAppCommand(APP_COMMAND.MARK_INBOX_READ);

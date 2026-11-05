@@ -82,6 +82,19 @@ const TRANSCRIPT_UNREAD_NOTE = "The transcript could not be copied. Try again.";
 export interface TabPin {
   pinned: boolean;
   onToggle: () => void;
+  /** Whether the pin is the agent's own, as a task column's agent tab pins its agent, rather than the tab's. */
+  agent?: boolean;
+}
+
+/** The Pin or Unpin a tab's menu offers, named for what it pins, since a tab's pin and an agent's are not the same thing. */
+function pinItem(pin: TabPin): MenuAction {
+  const pinned = pin.agent === true ? PANEL_COMMAND.UNPIN_AGENT : PANEL_COMMAND.UNPIN_TAB;
+  const unpinned = pin.agent === true ? PANEL_COMMAND.PIN_AGENT : PANEL_COMMAND.PIN_TAB;
+  const command = pin.pinned ? pinned : unpinned;
+  return {
+    ...commandAction(command, pin.onToggle, false),
+    label: `${command.verb} ${command.noun}`,
+  };
 }
 
 /**
@@ -190,10 +203,10 @@ export function tabActionItems(
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
  * them on a right-click: the tab's own keeping first, Close and Close
- * others, the plan's tab offering only the second, and Pin or Unpin, which
- * puts it in the sidebar or takes it out; then exactly what its ⋯ offers on
- * what it shows (`contentActionGroups`). Close others stands dimmed where
- * nothing else would close.
+ * others, and Pin or Unpin, which puts it in the sidebar or takes it out;
+ * then exactly what its ⋯ offers on what it shows (`contentActionGroups`).
+ * Close others is left out where nothing else would close, and on the Plan
+ * tab, whose right-click is the task's menu alone.
  */
 function tabActionGroups(doors: TabDoors): MenuEntry[][] {
   const { onClose } = doors;
@@ -204,32 +217,18 @@ function tabActionGroups(doors: TabDoors): MenuEntry[][] {
           // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
           commandAction(PANEL_COMMAND.CLOSE_TAB, onClose, doors.chosen),
         ];
-  const pin: MenuAction[] =
-    doors.pin === undefined
+  const pin: MenuAction[] = doors.pin === undefined ? [] : [pinItem(doors.pin)];
+  // Note that Close others stands only where it would close something, and never on the Plan tab, whose menu is the task's.
+  const closeOthers: MenuAction[] =
+    doors.onCloseOthers === undefined || doors.document !== undefined
       ? []
       : [
-          commandAction(
-            doors.pin.pinned ? PANEL_COMMAND.UNPIN_TAB : PANEL_COMMAND.PIN_TAB,
-            doors.pin.onToggle,
-            false,
-          ),
+          // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
+          commandAction(PANEL_COMMAND.CLOSE_OTHER_TABS, doors.onCloseOthers, doors.chosen),
         ];
-  return [
-    [
-      ...close,
-      {
-        // ⌥⌘W closes the others of the tab chosen, so only its Close others says it.
-        ...commandAction(
-          PANEL_COMMAND.CLOSE_OTHER_TABS,
-          () => doors.onCloseOthers?.(),
-          doors.chosen,
-        ),
-        disabled: doors.onCloseOthers === undefined,
-      },
-      ...pin,
-    ],
-    ...contentActionGroups(doors),
-  ];
+  return [[...close, ...closeOthers, ...pin], ...contentActionGroups(doors)].filter(
+    (group) => group.length > 0,
+  );
 }
 
 /**

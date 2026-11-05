@@ -411,11 +411,17 @@ const TaskBoardCard = memo(function TaskBoardCard({
   const unread = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const drawn = (property: TaskProperty) => properties.includes(property);
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread,
     surface: TASK_MENU_SURFACE.ROW,
+    chips: {
+      status: drawn(TASK_PROPERTY.STATUS),
+      priority: drawn(TASK_PROPERTY.PRIORITY),
+      assignee: drawn(TASK_PROPERTY.ASSIGNEE),
+    },
     opened,
   });
   const onOpen = () => onSelect(task.id);
@@ -438,7 +444,6 @@ const TaskBoardCard = memo(function TaskBoardCard({
         : chosenRowMenu(own.thing, chosen, tasks.shown),
     { disabled: actions.deletion.busy, opener: press, more: !coarse },
   );
-  const drawn = (property: TaskProperty) => properties.includes(property);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
   return (
     <Card

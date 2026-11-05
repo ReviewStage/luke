@@ -50,7 +50,7 @@ test("a + held from taking files still opens its menu of other rows, only its At
   assert.deepEqual(
     rows.map((row) => [row.textContent, row.disabled]),
     [
-      ["Attachment", true],
+      ["Attach files", true],
       ["MCP servers", false],
     ],
   );

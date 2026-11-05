@@ -128,7 +128,7 @@ function branchActions(
   return [copies, open].filter((group) => group.length > 0);
 }
 
-/** What the box's foot wears while a branch stands with no pull request: the branch's chip, which opens it compared on GitHub, and its ⋯, which its right-click drops too, offering the copies and Open on GitHub; nothing otherwise, the pull request's row standing over the box instead. */
+/** What the box's foot wears while a branch stands with no pull request: the branch's chip, which opens it compared on GitHub, and its ⋯, which its right-click drops too, offering the copies; nothing otherwise, the pull request's row standing over the box instead. */
 export function BranchChip({
   published,
   doors,
@@ -144,7 +144,8 @@ export function BranchChip({
   if (published === undefined || url === undefined) return null;
   const { pullRequest, branch } = published;
   if (pullRequest !== null || branch === null) return null;
-  const actions = branchActions(branch, doors, undefined, url);
+  // Note that the menu holds the copies alone, because the chip's own press already opens the branch on GitHub.
+  const actions = branchActions(branch, doors, undefined, undefined);
   return (
     <>
       <span className="contents">

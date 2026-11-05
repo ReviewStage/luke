@@ -136,10 +136,10 @@ import { useRefusalHeard } from "./use-refusal-heard.js";
  * keeps Change repository, since the repository under the title is words
  * whose menu opens only on that ask, and its Pin is the task's own, since
  * the tab showing the task is what stands for the task in the sidebar. A
- * row's menu (`TASK_MENU_SURFACE.ROW`) keeps them, since a row draws no chips: Status,
- * Priority, and Assignee as submenus listing what the chips list
- * (`standing-submenus.tsx`), as Linear's right-click has them, and Change
- * repository. The menu is the window's own (`action-menu.tsx`), so every door
+ * row's menu (`TASK_MENU_SURFACE.ROW`) keeps them where the row draws no chip
+ * for them, as a sidebar row draws none: Status, Priority, and Assignee as
+ * submenus listing what the chips list (`standing-submenus.tsx`), as Linear's
+ * right-click has them, and Change repository. The menu is the window's own (`action-menu.tsx`), so every door
  * draws it the same way and Permanently delete can be drawn red.
  * Each item is worded, marked, and keyed as the window's one list has it
  * (`command-items.tsx`), as ⌘K offers the same command; the open task's menu
@@ -471,11 +471,20 @@ function SidebarTaskMarks({
   return <RowMarks marks={marks} disabled={disabled} />;
 }
 
+/** Which standing chips a row draws beside its name: a Tasks list row's and a Board card's, as their properties show them. */
+export interface StandingChips {
+  status: boolean;
+  priority: boolean;
+  assignee: boolean;
+}
+
 /**
  * A row's Status, Priority, and Assignee submenus, each listing what the
  * plan's chip lists, the value standing checked: Status set as Mark done
  * sets it, with Undo, and Priority and Assignee as the row's chips set them.
  * None for a task from a service before statuses, which draws no chips.
+ * Note that a submenu whose chip the row already draws is left out, because
+ * the chip beside the name sets the same value one press away.
  */
 function standingSubmenus(
   tasks: Pick<TasksControl, "onSettleTasks">,
@@ -483,6 +492,7 @@ function standingSubmenus(
   assignees: readonly MenuRow[],
   setStanding: ReturnType<typeof useStandingDoor>,
   keyed: boolean,
+  chips: StandingChips | undefined,
 ): MenuSubmenu[] {
   const { status, priority } = task;
   if (status === undefined || priority === undefined) return [];
@@ -499,19 +509,27 @@ function standingSubmenus(
     pickAssignee,
   );
   return [
-    keyedStatusSubmenu(tasks, task.id, status, keyed),
-    chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority),
+    ...(chips?.status === true ? [] : [keyedStatusSubmenu(tasks, task.id, status, keyed)]),
+    ...(chips?.priority === true
+      ? []
+      : [chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority)]),
     // Note that the members a task may be assigned are named by their own names, kept masked in a screen recording.
-    {
-      ...assigned,
-      // Note that a member's face draws their initial as words, so the glyph is masked with the name.
-      ...(assigned.icon === undefined ? {} : { icon: <ReplayMask>{assigned.icon}</ReplayMask> }),
-      items: assigned.items.map((item, at) =>
-        assignees[at]?.id === NO_ASSIGNEE
-          ? item
-          : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
-      ),
-    },
+    ...(chips?.assignee === true
+      ? []
+      : [
+          {
+            ...assigned,
+            // Note that a member's face draws their initial as words, so the glyph is masked with the name.
+            ...(assigned.icon === undefined
+              ? {}
+              : { icon: <ReplayMask>{assigned.icon}</ReplayMask> }),
+            items: assigned.items.map((item, at) =>
+              assignees[at]?.id === NO_ASSIGNEE
+                ? item
+                : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
+            ),
+          },
+        ]),
   ];
 }
 
@@ -532,7 +550,7 @@ function relationDoor(tasks: TaskRowTab, task: TaskSummary): TaskRelationDoor {
 
 /** Which surface offers a task's menu, which decides what the menu holds (`taskActionGroups`). */
 export const TASK_MENU_SURFACE = {
-  /** A row of the task, which draws no chips, so its menu keeps Status, Priority, Assignee, and Change repository. */
+  /** A row of the task, whose menu keeps Change repository, and Status, Priority, and Assignee but for the chips the row draws (`StandingChips`). */
   ROW: "row",
   /** The Plan tab, which shows the task under chips for its status, priority, and assignee, so its menu leaves those out, and its repository as words, so its menu keeps Change repository. */
   DOCUMENT: "document",
@@ -550,8 +568,8 @@ export type TaskMenuSurface = (typeof TASK_MENU_SURFACE)[keyof typeof TASK_MENU_
  * workspace where the task may be moved; then the repository changed from
  * any row. The Plan tab's document menu leads with Copy plan, since Copy
  * formats the document drawn, and holds the same but for Status, Priority,
- * and Assignee, which the plan's chips stand for; its Change repository says
- * Choose a repository on a task with none.
+ * and Assignee, which the plan's chips stand for. Change repository says
+ * Choose a repository on a task with none, on either.
  * Permanently delete is last and alone on both. Only the open task's items
  * print their chords, since a chord acts on the open task alone.
  */
@@ -610,7 +628,7 @@ function taskActionGroups(
     () => tasks.onChangeRepository(taskId),
     drawn,
   );
-  // Note that the plan's own menu names the pick a task with no repository still needs, as its path does.
+  // Note that both menus name the pick a task with no repository still needs, as the plan's path does.
   const repository: MenuAction =
     task !== undefined && task.repository === null ? { ...change, label: CHOOSE_LABEL } : change;
   const move: MenuAction[] =
@@ -637,7 +655,7 @@ function taskActionGroups(
           [...doors.standing],
           [...relate, ...unparent],
           [...pinAction(tasks, task, lettered), ...section, ...move],
-          [change],
+          [repository],
           [remove],
         ];
   return groups.filter((group) => group.length > 0);
@@ -764,6 +782,8 @@ export function useTaskMenuItems(
     rowKeys?: boolean;
     /** Which surface offers the items, which decides what they hold. */
     surface: TaskMenuSurface;
+    /** The standing chips a row draws, whose submenus its menu leaves out; none on a sidebar row, which draws none. */
+    chips?: StandingChips | undefined;
     /** The task the window has open (`openedTaskOf`), which the items read only where it is this one. */
     opened: OpenedTask | undefined;
   },
@@ -801,7 +821,7 @@ export function useTaskMenuItems(
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
-      ? standingSubmenus(tasks, task, assignees, setStanding, doors.rowKeys === true)
+      ? standingSubmenus(tasks, task, assignees, setStanding, doors.rowKeys === true, doors.chips)
       : [];
   const groups = (): readonly (readonly MenuEntry[])[] => [
     ...withRowMoves(

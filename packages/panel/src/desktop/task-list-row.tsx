@@ -204,11 +204,17 @@ export function TaskListRow({
   const marked = useMarkedUnread(task.id);
   const rename = useInlineRename(task.id, tasks.onRenameTask);
   useAnnounceShown(ANNOUNCE.ALERT, rename.refused ? RENAME_FAILED_NOTE : "");
+  const drawn = (cell: TaskRowCell) => cells.includes(cell);
   const actions = useTaskMenuItems(tasks, task.id, task.name, {
     rename: rename.begin,
     drawn: true,
     unread: unread ?? marked,
     surface: TASK_MENU_SURFACE.ROW,
+    chips: {
+      status: drawn(TASK_ROW_CELL.STATUS),
+      priority: drawn(TASK_ROW_CELL.PRIORITY),
+      assignee: drawn(TASK_ROW_CELL.ASSIGNEE) && !assigneeHeld,
+    },
     opened,
   });
   const press = useRef<HTMLButtonElement | null>(null);
@@ -231,7 +237,6 @@ export function TaskListRow({
       ? own
       : chosenRowMenu(own.thing, chosen, tasks.shown);
   const endedByKey = useRefocusAfterEdit(rename.editing, press);
-  const drawn = (cell: TaskRowCell) => cells.includes(cell);
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
     drawn(TASK_ROW_CELL.KEY) ? key : undefined,

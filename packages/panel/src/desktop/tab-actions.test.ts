@@ -89,7 +89,16 @@ afterEach(() => {
 const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } };
 
 /** What a right-click offers on a tab itself rather than on what it shows. */
-const TAB_KEEPING = new Set(["Close", "Close others", "Pin", "Unpin", "Move left", "Move right"]);
+const TAB_KEEPING = new Set([
+  "Close",
+  "Close others",
+  "Pin tab",
+  "Unpin tab",
+  "Pin agent",
+  "Unpin agent",
+  "Move left",
+  "Move right",
+]);
 
 /** Waits out the few microtasks the window's document takes to arrive after the first draw. */
 async function settle(): Promise<void> {
@@ -257,7 +266,7 @@ test("a subagent's tab puts its right-click's content actions, and none of the t
     "Move right",
     "Close",
     "Close others",
-    "Pin",
+    "Pin agent",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",

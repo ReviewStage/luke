@@ -403,11 +403,14 @@ test("right-clicking a task outside the selection offers that task's own menu, a
   const menu = openMenu();
   assert.equal(menu.heading, undefined);
   assert.ok(menu.items.includes("Rename"), "the task's own menu offers Rename");
-  choose("Status");
-  choose("Done");
+  choose("Move to section");
+  choose("Launch");
   await settle();
 
-  assert.deepEqual(asked, [["t-36", TASK_STATUS.DONE]]);
+  assert.deepEqual(
+    placed.map(([taskId]) => taskId),
+    ["t-36"],
+  );
   assert.deepEqual(chosen(page), ["ACME-42", "ACME-39"], "the selection stands");
 });
 

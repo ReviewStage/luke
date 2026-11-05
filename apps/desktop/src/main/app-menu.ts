@@ -104,7 +104,7 @@ export interface BuildLabelMenu {
 }
 
 /** The short words a title leaves lower case after its first. */
-const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "or", "the", "to"]);
+const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "on", "or", "the", "to"]);
 
 /** The window's sentence-case name, in the title case a Mac menu writes its items in. */
 function menuTitle(label: string): string {
@@ -595,7 +595,6 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.TOGGLE_SIDE_PANEL),
         commandItem(APP_COMMAND.SHOW_TERMINAL),
         commandItem(APP_COMMAND.TOGGLE_FULL_SCREEN),
-        commandItem(APP_COMMAND.EXIT_FULL_SCREEN),
         SEPARATOR,
         roleItem("togglefullscreen", APP_COMMAND.FULL_SCREEN),
         SEPARATOR,
@@ -648,7 +647,6 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS),
         SEPARATOR,
         opening(menuItem(APP_COMMAND.SEND_FEEDBACK)),
-        opening(menuItem(APP_COMMAND.SUGGEST_FEATURE)),
       ],
     },
   ];

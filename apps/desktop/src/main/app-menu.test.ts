@@ -142,7 +142,7 @@ function ellipsizedLabels(update?: Parameters<typeof appMenuTemplate>[1]): strin
   return choosableLabels(appMenuTemplate("Vespin", update)).filter((label) => label.endsWith("…"));
 }
 
-const ASKING_ITEMS = ["Permanently Delete…", "Send Feedback…", "Settings…", "Suggest a Feature…"];
+const ASKING_ITEMS = ["Permanently Delete…", "Send Feedback…", "Settings…"];
 
 describe("the menu bar's names", () => {
   test("an item ends with an ellipsis where it opens a window or asks, and nowhere else", () => {

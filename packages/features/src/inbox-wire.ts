@@ -931,7 +931,7 @@ function inboxAsksOpen(item: InboxItem): boolean {
 /**
  * Whether a thread needs the reader: its ask stands open and waits on them.
  * The one reading of it, which a to-do count (`inbox-store.ts`'s
- * `askingReader`) must agree with and Needs me and the tint draw from.
+ * `askingReader`) must agree with and Needs you and the tint draw from.
  */
 export function threadNeedsReader(item: InboxItem, readerId: string | undefined): boolean {
   return readerId !== undefined && inboxAsksOpen(item) && inboxWaitsOn(item)?.userId === readerId;

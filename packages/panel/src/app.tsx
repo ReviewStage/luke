@@ -340,14 +340,10 @@ function AppWindow(): React.JSX.Element {
   const signIn = useSignIn();
   const lastSignIn = useLastSignIn(account, run?.fixtureMode === true);
 
-  // The menu bar's Help items open the same dialog Settings' buttons do.
+  // The menu bar's Help item opens the same dialog Settings' buttons do; its head turns the note into a feature suggestion.
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => {
     setFeedbackAbout(undefined);
     setFeedbackKind(FEEDBACK_KIND.FEEDBACK);
-  });
-  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => {
-    setFeedbackAbout(undefined);
-    setFeedbackKind(FEEDBACK_KIND.PROMPT);
   });
 
   // ⌘Z and ⇧⌘Z take back and put back the reader's last row write, offered
@@ -724,6 +720,7 @@ function AppWindow(): React.JSX.Element {
                             kind={feedbackKind}
                             about={feedbackAbout}
                             account={account}
+                            onKind={setFeedbackKind}
                             onClose={() => setFeedbackKind(undefined)}
                           />
                           {/* The window's passing notice: the thank-you after a note lands, what

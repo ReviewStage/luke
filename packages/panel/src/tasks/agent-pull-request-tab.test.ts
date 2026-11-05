@@ -5531,7 +5531,8 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
       threadLabels(each).includes("Outdated"),
     ) ?? assert.fail("the outdated thread is drawn");
   assert.equal(folded.querySelector("details")?.open, false, "an outdated thread stands folded");
-  await threadMenuItem(folded, "View in Files changed");
+  act(() => headPress(folded).click());
+  await settle();
 
   assert.deepEqual(listReveals, [INVITE_FILE.path, INVITE_FILE.path]);
   const above = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
@@ -5647,11 +5648,15 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
 
 test("every review thread's head leads with its chevron and ends with its ⋯, in the Conversation as on its line in Files changed, and a press on the row folds it", async () => {
   const tab = await drawn(
-    createElement(Routed, {
-      control: jumpControl([thread({ id: JUMPED })]),
-      heard: [],
-      first: PULL_REQUEST_VIEW.FILES,
-    }),
+    createElement(
+      LinkWorkspaceProvider,
+      { value: "acme" },
+      createElement(Routed, {
+        control: jumpControl([thread({ id: JUMPED })]),
+        heard: [],
+        first: PULL_REQUEST_VIEW.FILES,
+      }),
+    ),
   );
   const inline = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
     INVITE_FILE.path,

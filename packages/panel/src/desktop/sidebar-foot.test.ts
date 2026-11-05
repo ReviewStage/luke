@@ -64,7 +64,6 @@ async function stateArrived(): Promise<void> {
 /** The Help menu's commands, offered as `App` offers them, each press written down. */
 function HelpOffers({ ran }: { ran: string[] }): null {
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => ran.push(APP_COMMAND.SEND_FEEDBACK));
-  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => ran.push(APP_COMMAND.SUGGEST_FEATURE));
   useAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS, () => ran.push(APP_COMMAND.KEYBOARD_SHORTCUTS));
   return null;
 }
@@ -182,7 +181,7 @@ function accountItem(label: string): HTMLButtonElement {
   return item ?? assert.fail(`the account's menu offers ${label}`);
 }
 
-test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Sign out, parted by rules", async () => {
+test("the account opens its menu: who is signed in, then the changelog, Keyboard shortcuts, Contact us, and Sign out, parted by rules", async () => {
   const button = mount(DEAN);
   await stateArrived();
   act(() => button.click());
@@ -190,11 +189,7 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
   assert.deepEqual(accountMenuLines(), [
     "Dean Stratakos dean@example.com",
     "—",
-    "Settings ⌘,",
-    "—",
     "Changelog",
-    "Send feedback",
-    "Suggest a feature",
     "Keyboard shortcuts ⌘/",
     "Contact us",
     "—",
@@ -202,21 +197,17 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
   ]);
 });
 
-test("the account's menu offers the Help menu's own commands and opens the changelog, each closing the menu", async () => {
+test("the account's menu opens Keyboard shortcuts and the changelog, each closing the menu", async () => {
   const ran: string[] = [];
   const button = mount(DEAN, { ran });
   await stateArrived();
-  for (const label of ["Send feedback", "Suggest a feature", "Keyboard shortcuts", "Changelog"]) {
+  for (const label of ["Keyboard shortcuts", "Changelog"]) {
     act(() => button.click());
     act(() => accountItem(label).click());
     assert.equal(accountMenu(), null);
   }
 
-  assert.deepEqual(ran, [
-    APP_COMMAND.SEND_FEEDBACK,
-    APP_COMMAND.SUGGEST_FEATURE,
-    APP_COMMAND.KEYBOARD_SHORTCUTS,
-  ]);
+  assert.deepEqual(ran, [APP_COMMAND.KEYBOARD_SHORTCUTS]);
   assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
 });
 
@@ -226,12 +217,7 @@ test("in a browser, which is no installed app, the account's menu offers no Keyb
   await stateArrived();
   act(() => button.click());
 
-  assert.deepEqual(accountMenuLines().slice(4, 8), [
-    "Changelog",
-    "Send feedback",
-    "Suggest a feature",
-    "Contact us",
-  ]);
+  assert.deepEqual(accountMenuLines().slice(2, 4), ["Changelog", "Contact us"]);
 });
 
 test("Contact us flies out its own menu beside the account's, which stands whole behind it", async () => {
@@ -250,7 +236,7 @@ test("Contact us flies out its own menu beside the account's, which stands whole
     ["GitHub", "Email"],
   );
   assert.equal(document.activeElement?.textContent, "GitHub", "focus lands on its first item");
-  assert.equal(accountMenuLines().length, 11, "the account's menu keeps every line");
+  assert.equal(accountMenuLines().length, 7, "the account's menu keeps every line");
   assert.equal(contact.getAttribute("aria-expanded"), "true");
 });
 
@@ -364,15 +350,7 @@ test("signed out, the account says so and its menu names no one and offers no Si
 
   assert.match(button.textContent ?? "", /Not signed in$/u);
   act(() => button.click());
-  assert.deepEqual(accountMenuLines(), [
-    "Settings ⌘,",
-    "—",
-    "Changelog",
-    "Send feedback",
-    "Suggest a feature",
-    "Keyboard shortcuts ⌘/",
-    "Contact us",
-  ]);
+  assert.deepEqual(accountMenuLines(), ["Changelog", "Keyboard shortcuts ⌘/", "Contact us"]);
 });
 
 test("in the window, the account's menu opens with the reader's own profile, once their account's id is known", () => {

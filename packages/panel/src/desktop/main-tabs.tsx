@@ -602,7 +602,7 @@ export function MainTabStrip({
   // Note that an agent is pinned as itself, on the account, wherever it stands, so its tab's Pin is the agent's.
   const pinDoor = (agentId: string): TabPin => {
     const pinned = pins.pinned(agentId);
-    return { pinned, onToggle: () => pins.onPin(agentId, !pinned) };
+    return { pinned, onToggle: () => pins.onPin(agentId, !pinned), agent: true };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
     // An agent's link is its own action (`agent-actions.tsx`).

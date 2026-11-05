@@ -772,7 +772,7 @@ test("Rename from a card's ⋯ makes its name a field in place, and Enter sends 
   assert.deepEqual(opened, [], "a rename opens no task");
 });
 
-test("a right-click on a card drops the task's own menu", async () => {
+test("a right-click on a card drops the task's own menu, leaving out the Priority and Assignee its chips already set", async () => {
   const board = await mountBoard();
   act(() => {
     cardOf(board, "t-40").dispatchEvent(
@@ -783,7 +783,11 @@ test("a right-click on a card drops the task's own menu", async () => {
     (label) => label.textContent,
   );
   assert.ok(labels.includes("Rename"), "the menu offers Rename");
-  assert.ok(labels.includes("Status"), "the menu offers Status");
+  assert.deepEqual(
+    ["Priority", "Assignee"].filter((item) => labels.includes(item)),
+    [],
+    "the card's chips set these",
+  );
   assert.deepEqual(opened, []);
 });
 

@@ -102,7 +102,7 @@ import { taskCardOf } from "./task-card.js";
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
  * person, its status, or in one run, the latest first or the oldest
- * first, Needs me, the questions alone that wait on their answer, Needs
+ * first, Needs you, the questions alone that wait on their answer, Needs
  * you, the open threads that wait on them, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs

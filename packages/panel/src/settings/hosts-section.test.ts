@@ -21,7 +21,6 @@ import {
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { handBeats } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { chooseMenuItem } from "../testing/phone-head.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { HostsSection } from "./hosts-section.js";
 
@@ -190,6 +189,15 @@ test("Add hosts does not outlive the account it opened for", async () => {
 });
 
 /** The button whose words are these, pressed. */
+/** The Remove a host's row draws as its one act, found by the host's name on the row. */
+function removeOf(name: string): HTMLButtonElement {
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Remove"]')].find(
+      (button) => button.closest(".ui-settings-row")?.textContent?.includes(name) ?? false,
+    ) ?? assert.fail(`${name}'s Remove is drawn`)
+  );
+}
+
 async function press(words: string): Promise<void> {
   const button = [...document.querySelectorAll("button")].find(
     (each) => each.textContent === words,
@@ -247,7 +255,13 @@ test("This Mac stands first on the row of the machine it is, with no Remove", as
 
   assert.ok(text.indexOf("This Mac") < text.indexOf("fra-03"), "This Mac stands first");
   assert.ok(text.includes("Online · Mac"), text);
-  assert.equal(document.querySelector('button[aria-label="This Mac actions"]'), null);
+  assert.equal(
+    [...document.querySelectorAll('button[aria-label="Remove"]')].some(
+      (button) => button.closest(".ui-settings-row")?.textContent?.includes("This Mac") ?? false,
+    ),
+    false,
+    "This Mac's row offers no Remove",
+  );
 });
 
 test("a host's row says Updating… while its update runs, though the restart has left its beat past fresh", async () => {
@@ -265,18 +279,14 @@ test("a host's row says Updating… while its update runs, though the restart ha
   assert.ok(text.includes("ord-01Updating… · Linux server"), text);
 });
 
-test("each host's ⋯ is named by its host, and its Remove asks about that host first", async () => {
+test("each host draws its Remove on its own row, which asks about that host first", async () => {
   const hosts: readonly HostLine[] = [
     { id: "3f6b0c2e-8d1a-4b5e-9c7d-2a4e6f8b0d14", name: "fra-01" },
     { id: "9b2d4f6a-1c3e-4a5b-8d7f-0e2a4c6b8d31", name: "sfo-02" },
   ];
   await machinesWithThisMac(hosts, {});
-  const more =
-    document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
-    assert.fail("sfo-02's ⋯ is drawn");
 
-  act(() => more.click());
-  chooseMenuItem("Remove");
+  act(() => removeOf("sfo-02").click());
 
   const asked = document.querySelector('[role="alertdialog"]')?.textContent ?? "";
   assert.ok(asked.includes("Remove sfo-02?"), asked);
@@ -300,11 +310,7 @@ test("a refused Remove is said in the dialog that asked it, though the list drew
     },
   });
   await settle();
-  const more =
-    document.querySelector<HTMLButtonElement>('button[aria-label="sfo-02 actions"]') ??
-    assert.fail("sfo-02's ⋯ is drawn");
-  act(() => more.click());
-  chooseMenuItem("Remove");
+  act(() => removeOf("sfo-02").click());
 
   await press("Remove host");
 

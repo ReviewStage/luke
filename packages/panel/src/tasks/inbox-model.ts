@@ -1401,7 +1401,7 @@ export function agentGroups(
 }
 
 /**
- * Which items an Inbox lists, as its view's menu chooses: Needs me, the
+ * Which items an Inbox lists, as its view's menu chooses: Needs you, the
  * questions whose ask waits on the reader's answer (`threadNeedsReader`),
  * which Addressed to never narrows; Open, every
  * thread still open, a question not yet answered or a notice nobody has
@@ -1614,7 +1614,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
-/** Whether Addressed to narrows a scope: every scope but Needs me, which names the reader already. */
+/** Whether Addressed to narrows a scope: every scope but Needs you, which names the reader already. */
 export function narrowedByWhose(show: InboxShow): boolean {
   return show !== INBOX_SHOW.NEEDS_ME;
 }
@@ -1731,7 +1731,7 @@ export function isDone(item: InboxItem): boolean {
 
 /**
 /**
- * Whether a scope lists the item: Needs me every question whose ask waits
+ * Whether a scope lists the item: Needs you every question whose ask waits
  * on the reader (`threadNeedsReader`), what main's to-do count and the
  * Dock's badge count but for those snoozed, a notice never; Open every open thread, a question or an
  * update not yet opened, which narrowed to the reader's own (`needsYou`)
