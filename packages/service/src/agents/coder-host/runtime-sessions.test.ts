@@ -1611,8 +1611,18 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             AGENT_MACHINE.DEVICE,
             studio,
           ]);
-          // On a task where the owner has no agent, the pick decides over the task's cloud.
+          // An automation's run keeps its task's cloud over the owner's pick, and is no agent of the owner's
+          // there: on a task where only it stands, the pick decides over the task's cloud.
           const other = yield* taskIn();
+          const automated = {
+            ...startOn(other.id, model),
+            automationOrigin: {
+              name: "Nightly checks",
+              firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+              prompt: "Fix the flaky test.",
+            },
+          };
+          assert.deepEqual(yield* runsAt(owner, automated), [AGENT_MACHINE.VERCEL, null]);
           assert.deepEqual(yield* runsAt(owner, startOn(other.id, model)), [
             AGENT_MACHINE.DEVICE,
             studio,

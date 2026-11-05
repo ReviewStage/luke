@@ -1317,7 +1317,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
   if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { agent, created, txid } = started.value;
   if (!created) return { agent, created };
-  yield* keptPick(userId, ask.runsOn);
   // A blank agent opens no session: its first words open one as they reach it (`steer.ts`).
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
@@ -1441,6 +1440,8 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       Effect.annotateLogs(agentLogIds(agent)),
     );
   }
+  // A place named is kept only once the agent stands for good, so a refused opening changes no pick.
+  yield* keptPick(userId, ask.runsOn);
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   const stopped = continued ? yield* stoppedSource(eve, from.source, ask.startedBy?.id) : false;
   // The Start answers the last transaction it committed in, which Realtime delivers after every

@@ -628,7 +628,13 @@ const findNewestAgentPlace = SqlSchema.findOneOption({
       db
         .select({ machine: agentTable.machine, deviceId: agentTable.deviceId })
         .from(agentTable)
-        .where(and(eq(agentTable.userId, userId), eq(agentTable.taskId, taskId)))
+        .where(
+          and(
+            eq(agentTable.userId, userId),
+            eq(agentTable.taskId, taskId),
+            isNull(agentTable.automationOrigin),
+          ),
+        )
         .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
         .limit(1),
     ),
@@ -2722,7 +2728,9 @@ export function readAgentByKey(
 /**
  * Where the account's newest agent on the task runs, archived ones among
  * them, or nothing where the account started none there; a teammate's
- * agents on the task are never read, since a device is one member's.
+ * agents on the task are never read, since a device is one member's, nor an
+ * automation's run's, which runs where its task does rather than where the
+ * account chose.
  */
 export function readNewestAgentPlace(
   userId: string,

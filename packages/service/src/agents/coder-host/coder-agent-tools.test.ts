@@ -1007,6 +1007,11 @@ test("start_agent on a task that runs on another member's device is refused in w
     "call-in-cloud",
   );
   assert.equal(inCloud.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(inCloud));
+  assert.ok(isRecord(inCloud.agent) && isWireString(inCloud.agent.id), JSON.stringify(inCloud));
+  const stored = Option.getOrThrow(
+    await database.run(readAgent(agents.caller.userId, inCloud.agent.id)),
+  );
+  assert.deepEqual([stored.machine, stored.deviceId ?? null], [AGENT_MACHINE.VERCEL, null]);
   assert.equal(eve.sent.length, 1);
 });
 
