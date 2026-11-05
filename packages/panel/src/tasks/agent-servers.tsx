@@ -330,7 +330,7 @@ function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
       <ServerName name={INTEGRATION_NAME[row.provider]} />
       {row.accountName !== undefined ? (
-        <AccountWords>
+        <AccountWords words={row.accountName}>
           <ReplayMask>{row.accountName}</ReplayMask>
         </AccountWords>
       ) : null}

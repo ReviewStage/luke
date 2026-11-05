@@ -2673,7 +2673,7 @@ function ThreadList({
         </ReplayUnmask>
       ) : none ? (
         <ReplayUnmask>
-          <EmptyState icon={<CommentsIcon />} title={empty.title}>
+          <EmptyState replayUnmasked icon={<CommentsIcon />} title={empty.title}>
             {empty.line}
           </EmptyState>
         </ReplayUnmask>

@@ -406,21 +406,18 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   const { onShowHistory, place } = marks;
   return (
     <span className={UNIT_BYLINE_CLASS}>
-      <ReplayUnmask>
-        {edit.actor === PLAN_ACTOR.EARLIER ? (
-          "Edited"
-        ) : (
-          <ReplayMask>
-            <EditedBy edit={edit} place={place} faceOnly />
-          </ReplayMask>
-        )}{" "}
-        <EditTime
-          at={edit.at}
-          label={(ago) => `${heading}: edited ${ago}. Show version history`}
-          onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
-          short
-        />
-      </ReplayUnmask>
+      {/* Note that the face and the time stay the line's own children, which alone take the pointer, so only the bare word is marked. */}
+      {edit.actor === PLAN_ACTOR.EARLIER ? (
+        <ReplayUnmask>Edited</ReplayUnmask>
+      ) : (
+        <EditedBy edit={edit} place={place} faceOnly />
+      )}{" "}
+      <EditTime
+        at={edit.at}
+        label={(ago) => `${heading}: edited ${ago}. Show version history`}
+        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+        short
+      />
     </span>
   );
 }

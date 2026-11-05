@@ -863,7 +863,7 @@ function ShowEmpty({
 }): React.JSX.Element {
   return (
     <ReplayUnmask>
-      <EmptyState icon={<InboxIcon />} action={emptyWayOn(view, counts, onList)}>
+      <EmptyState replayUnmasked icon={<InboxIcon />} action={emptyWayOn(view, counts, onList)}>
         {SHOW_EMPTY[view.whose.kind][view.show]}
       </EmptyState>
     </ReplayUnmask>
@@ -1093,7 +1093,7 @@ export function InboxPaneEmpty({
   if (listed === 0) {
     return (
       <ReplayUnmask>
-        <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
+        <EmptyState replayUnmasked icon={<InboxIcon />} action={newTaskAction(newTask)}>
           {none}
         </EmptyState>
       </ReplayUnmask>
@@ -1101,7 +1101,7 @@ export function InboxPaneEmpty({
   }
   return (
     <ReplayUnmask>
-      <EmptyState icon={<InboxIcon />}>
+      <EmptyState replayUnmasked icon={<InboxIcon />}>
         {coarse ? (
           CHOOSE_AN_ITEM
         ) : (
@@ -1172,7 +1172,7 @@ export function InboxListNote({
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   return (
     <ReplayUnmask>
-      <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
+      <EmptyState replayUnmasked icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
         {none}
       </EmptyState>
     </ReplayUnmask>
