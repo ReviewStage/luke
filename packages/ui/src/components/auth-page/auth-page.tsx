@@ -9,8 +9,11 @@ import { FailureCopy } from "../failure-copy/failure-copy.js";
  * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
  * a foot under them (a step's `AuthStepFoot`, or a consent's answers),
- * what went wrong, the one way on it offers, a closing note, and a quiet
- * way out of the flow, such as setup's Sign out. The page
+ * what went wrong, the one way on it offers, and a closing note. A quiet
+ * way out of the flow, such as setup's Sign out, stands off the card in the
+ * page's top-right corner, where a toolbar's last button would, so it never
+ * competes with the step's own presses and stays clear of the desktop
+ * window's traffic lights at the other end of its title bar. The page
  * owns every length between them and the card's own width, which gives way
  * to a narrow window rather than overflowing it: its inset narrows under a
  * phone's width, and what it holds stretches to the card's inner width, so a
@@ -77,14 +80,14 @@ export function AuthPage({
   footnote?: ReactNode;
   /** The foot under what the page holds: a step's `AuthStepFoot`, or a consent's answers. */
   foot?: ReactNode;
-  /** A quiet way out under everything else, such as Sign out, or nothing where there is none. */
+  /** A quiet way out off the card, at the page's top right, such as Sign out, or nothing where there is none. */
   exit?: AuthExit | undefined;
   /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;
   return (
-    <main className="ui-auth-page @container grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
+    <main className="ui-auth-page @container relative grid grid-cols-1 place-items-center min-h-dvh p-page-inset box-border">
       <section
         className="ui-auth-card flex flex-col items-center w-full max-w-auth-card box-border border border-border rounded-dialog bg-surface shadow-auth-card text-foreground font-ui text-body text-center wrap-anywhere"
         aria-labelledby={titleId}
@@ -137,18 +140,14 @@ export function AuthPage({
             {footnote}
           </p>
         ) : null}
-        {exit === undefined ? null : (
-          <div className="ui-auth-exit flex justify-center mt-ui-16">
-            <Button
-              variant={BUTTON_VARIANT.QUIET}
-              size={BUTTON_SIZE.COMPACT}
-              onClick={exit.onPress}
-            >
-              {exit.label}
-            </Button>
-          </div>
-        )}
       </section>
+      {exit === undefined ? null : (
+        <div className="ui-auth-exit absolute top-ui-8 end-column-inset">
+          <Button variant={BUTTON_VARIANT.QUIET} onClick={exit.onPress}>
+            {exit.label}
+          </Button>
+        </div>
+      )}
     </main>
   );
 }
