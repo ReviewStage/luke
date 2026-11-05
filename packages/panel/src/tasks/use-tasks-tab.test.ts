@@ -1046,8 +1046,11 @@ test('Show panel on a plan whose strip holds no tab opens the tab last closed th
   assert.equal(fresh.control().sidePanel.toggleAsked, true, 'the "+" is asked at the toggle');
 });
 
-test('Show panel after Plans was turned off since Comments closed passes Comments over and asks for the "+" at the toggle', async () => {
-  // The account's document is delivered again with Plans off once Comments is closed.
+/**
+ * Hands the account's document with Plans on, and the press that delivers it
+ * again with Plans off, as the account turning the experiment off does.
+ */
+function handPlansThenOff(): () => void {
   const listeners = new Set<(delivery: AppStateDelivery) => void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
@@ -1057,20 +1060,43 @@ test('Show panel after Plans was turned off since Comments closed passes Comment
       return () => listeners.delete(listener);
     },
   });
+  const plansOff = deliveryOf(stateWith({}, { version: 2 }));
+  return () =>
+    act(() => {
+      for (const listener of listeners) listener(plansOff);
+    });
+}
+
+test('Show panel after Plans was turned off since Comments closed passes Comments over and asks for the "+" at the toggle', async () => {
+  const turnPlansOff = handPlansThenOff();
   const tab = mount({ shown: true, tasks: OPEN });
   await settle();
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onClose(SIDE_PANEL_TAB.COMMENTS));
 
-  const plansOff = deliveryOf(stateWith({}, { version: 2 }));
-  act(() => {
-    for (const listener of listeners) listener(plansOff);
-  });
+  turnPlansOff();
   await settle();
   act(() => panel().onToggle());
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined }, "Comments stands nowhere");
   assert.equal(panel().toggleAsked, true, 'the "+" is asked at the toggle');
+});
+
+test("⇧⌘T after Plans was turned off passes over Comments closed on another plan rather than opening that plan for nothing", async () => {
+  const turnPlansOff = handPlansThenOff();
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  await settle();
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.COMMENTS));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.COMMENTS));
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+
+  turnPlansOff();
+  await settle();
+  assert.equal(tab.control().onReopenClosedTab, undefined, "nothing left to reopen");
+  assert.deepEqual(opensAsked(tab.payloads), [], "the other plan is not opened");
 });
 
 test("Show panel beside the Inbox, its item's plan's strip holding no tab, asks for the \"+\" at the toggle rather than showing the panel empty, though another plan stands open behind it", () => {

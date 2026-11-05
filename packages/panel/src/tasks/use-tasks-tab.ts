@@ -3435,14 +3435,19 @@ export function useTasksTab(input: {
   // and a subagent's, a Terminal tab, or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
+  // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
+  // known before its task opens: the Inbox's of old and Comments with Plans off draw on none.
+  const drawsOnAnyTask = (closed: ClosedTab): boolean =>
+    closed.strip !== CLOSED_TAB_STRIP.SIDE_PANEL ||
+    typeof closed.tab !== "string" ||
+    drawnKinds(experiments).some((kind) => kind === closed.tab);
   const drawsAgain = (closed: ClosedTab): boolean => {
     const { tab } = closed;
     const agentIds = agents.agentIds;
     if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
       return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
     }
-    // Note that a fixed kind the panel no longer draws, the Inbox's of old or Comments with Plans off, is passed over.
-    if (typeof tab === "string") return drawnKinds(experiments).some((kind) => kind === tab);
+    if (typeof tab === "string") return drawsOnAnyTask(closed);
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
@@ -3451,7 +3456,7 @@ export function useTasksTab(input: {
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
-  const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain);
+  const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
 
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
@@ -3537,7 +3542,7 @@ export function useTasksTab(input: {
   const reopenClosedTab = () => {
     const waiting = latestReopenFor();
     const open = waiting.length === 0 ? tasks.activeTaskId : undefined;
-    const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain);
+    const stack = withUndrawnPassed(latestClosedTabs(), open, drawsAgain, drawsOnAnyTask);
     const closed = stack.at(-1);
     if (closed === undefined || (waiting.length > 0 && waiting[0]?.task !== closed.task)) return;
     setClosedTabs(stack.slice(0, -1));

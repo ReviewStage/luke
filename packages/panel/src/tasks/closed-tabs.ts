@@ -54,15 +54,19 @@ export function withClosedTab(was: readonly ClosedTab[], closed: ClosedTab): rea
 
 /**
  * The closed tabs without those latest closed on `task`, the open task, that
- * its strips would not draw again (`draws`), so the latest left is the one a
- * reopen opens. A tab of another task stops the walk, since what that task
- * draws is read only once it opens.
+ * its strips would not draw again (`draws`), nor those latest closed on any
+ * task that no task draws again (`drawsAnywhere`), so the latest left is the
+ * one a reopen opens. Any other tab of another task stops the walk, since
+ * what that task draws is read only once it opens.
  */
 export function withUndrawnPassed(
   was: readonly ClosedTab[],
   task: string | undefined,
   draws: (closed: ClosedTab) => boolean,
+  drawsAnywhere: (closed: ClosedTab) => boolean,
 ): readonly ClosedTab[] {
-  const kept = was.findLastIndex((closed) => closed.task !== task || draws(closed));
+  const kept = was.findLastIndex(
+    (closed) => drawsAnywhere(closed) && (closed.task !== task || draws(closed)),
+  );
   return kept === was.length - 1 ? was : was.slice(0, kept + 1);
 }
