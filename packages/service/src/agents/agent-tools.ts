@@ -411,10 +411,6 @@ export const START_AGENT_REFUSAL = {
     `Not started: start_agent no longer makes a task; make it with ${AGENT_TOOL.CREATE_TASK}, then ` +
     "start the agent on it by its taskId.",
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
-  NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
-  SOURCE_NO_REPOSITORY:
-    "Not started: that agent works on no task and in no GitHub repository, so there is no " +
-    "checkout to go on from; start a new agent with a prompt instead.",
   NO_BRANCH:
     "Not started: the task's repository has no such branch on GitHub. Push it first, or name a " +
     "branch that exists there, such as the head branch of the pull request to build on; leave " +
@@ -485,7 +481,7 @@ const writesAsPlanPolicy = (userId: string, agent: Agent) =>
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
-  [HOSTED_API_ERROR.NO_REPOSITORY, START_AGENT_REFUSAL.NO_REPOSITORY],
+  [HOSTED_API_ERROR.NO_REPOSITORY, START_AGENT_REFUSAL.BRANCH_NO_REPOSITORY],
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_AGENT_REFUSAL.NO_BRANCH],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_AGENT_REFUSAL.NOT_REACHABLE],
@@ -1754,9 +1750,8 @@ const sourceLanding = (
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_AGENT_REFUSAL.SOURCE_OTHER_TASK);
     }
-    // An agent with no task is started from in its own workspace, on the repository it cloned.
+    // An agent with no task is started from in its own workspace, on the repository it cloned, or in none.
     const place = placeOfAgent(source);
-    if (place === undefined) return Result.fail(START_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
     // A fork names one of the source's own messages, and leaves the source going on beside it.
     if (from.messageId !== undefined) {
       const { userId, conversationId } = source;

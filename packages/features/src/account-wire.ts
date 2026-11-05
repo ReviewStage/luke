@@ -78,10 +78,4 @@ export const accountAccessAnswerSchema = EffectSchema.Struct({
    * service older than it.
    */
   supportAccessUntil: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.Number)),
-  /**
-   * True where a Start on a task that names no repository runs, as it does
-   * in the local demo alone, where the task's agents run on a host; absent
-   * everywhere else, and from a service older than it.
-   */
-  startsWithoutRepository: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });

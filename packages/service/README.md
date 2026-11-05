@@ -1795,8 +1795,9 @@ declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
 where neither, checked against the catalog with `acceptedModelChoice`, which
-also refuses a stored default that has since left the catalog. It refuses a
-task with no repository (`no-repository`, 409) and one the installation of
+also refuses a stored default that has since left the catalog. On a task
+with no repository the agent works in none, with no checkout and nothing
+asked of GitHub; it refuses a task whose repository the installation of
 the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the

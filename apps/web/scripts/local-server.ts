@@ -11,9 +11,7 @@
  * environment as it loads (`@repo/service/auth/auth`). Where
  * `BETTER_AUTH_URL` names no address, the server names its own there first,
  * so Better Auth's base URL and the cookie origin guard both call it by the
- * address it listens at. It turns the local demo on for the routes it mounts
- * (`@repo/service/local/local-demo`), which the service honors only behind
- * the same guard.
+ * address it listens at.
  *
  * Every path a rewrite of the committed table takes is the deployment's,
  * answered by the function the rewrite lands it on
@@ -37,7 +35,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NodeHttpServer, NodeHttpServerRequest, NodeRuntime } from "@effect/platform-node";
 import { AUTH_DEPLOYMENT_ENVIRONMENT } from "@repo/service/auth/auth-deployment";
-import { LOCAL_DEMO_ENVIRONMENT, LOCAL_DEMO_ON } from "@repo/service/local/local-demo";
 import { localServerRefusal } from "@repo/service/local/local-server-guard";
 import {
   CRON_ENVIRONMENT,
@@ -216,10 +213,9 @@ const program = Effect.gen(function* () {
   const port = yield* Config.Port(ENV.PORT).pipe(Config.withDefault(DEFAULT_PORT));
   const cronSecret = yield* Config.option(Config.Redacted(ENV.CRON_SECRET));
   const origin = `http://${LOOPBACK}:${port}`;
-  // Note that the address and the demo are settled before any route is imported, because the services read the environment as they are built.
+  // Note that the address is settled before any route is imported, because the services read the environment as they are built.
   yield* Effect.sync(() => {
     if (!process.env[ENV.AUTH_URL]?.trim()) process.env[ENV.AUTH_URL] = origin;
-    process.env[LOCAL_DEMO_ENVIRONMENT.FLAG] = LOCAL_DEMO_ON;
   });
   yield* Effect.sync(answerRawImports);
   const { localDeployment, localPages } = yield* Effect.promise(

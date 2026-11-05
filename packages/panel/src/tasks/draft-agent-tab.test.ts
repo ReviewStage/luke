@@ -584,7 +584,6 @@ test("a draft New task handed over after its agent was refused sends nothing by 
   const tab = mount([undefined], handed, {
     start: {
       available: true,
-      reason: undefined,
       busy: false,
       onPress: () => Promise.resolve(undefined),
     },

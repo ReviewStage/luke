@@ -5,15 +5,16 @@ import { useEffect, useState } from "react";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
-import { GitHubSetup } from "./setup-github.js";
+import { GITHUB_OPTIONAL, GitHubSetup } from "./setup-github.js";
 
 /**
  * setup-sections.tsx -- Home's Finish setting up: what setup left undone that an agent needs, above New task's composer, for an account with no task yet.
  *
  * An agent and GitHub are read as Home opens; each one missing is a section
- * of its own, Connect an agent and Connect GitHub, which stays, its rows
- * saying it is connected, once it is done, so nothing moves under the
- * pointer. An agent connects in place, as onboarding's step connects one,
+ * of its own, Connect an agent and Connect GitHub. The GitHub section says it
+ * is optional, since an agent works in no repository where none is chosen.
+ * Each section stays, its rows saying it is connected, once it is done, so
+ * nothing moves under the pointer. An agent connects in place, as onboarding's step connects one,
  * since this is that step taken up later; Settings › Agents keeps the dialog. With neither missing there is nothing, and Home stands as it does
  * for anyone.
  */
@@ -73,6 +74,9 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
         ) : null}
         {missing.github ? (
           <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect GitHub">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {GITHUB_OPTIONAL}
+            </Text>
             <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={IGNORE_REACHED} />
           </SettingsSection>
         ) : null}

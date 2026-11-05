@@ -108,8 +108,6 @@ async function settle(): Promise<void> {
 async function mount(input: {
   /** The task's agents, or nothing while their read is out. */
   agents: readonly AgentSummary[] | undefined;
-  /** Why no agent can start now, where none can. */
-  cannotStart?: string;
   main?: MainTab;
   side?: SidePanelTab;
   lastTerminal?: string;
@@ -146,8 +144,7 @@ async function mount(input: {
       agents: input.agents === undefined ? undefined : [...input.agents],
       agentIds: input.agents?.map((each) => each.id),
       start: {
-        available: input.cannotStart === undefined,
-        reason: input.cannotStart,
+        available: true,
         busy: false,
         onPress: async () => input.started?.(),
       },
@@ -425,29 +422,6 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
     groups.some((group) => group.startsWith("Terminal")),
     false,
   );
-});
-
-test("where no agent can start, the picker says why beside the offer and starts nothing", async () => {
-  let started = 0;
-  const task = await mount({
-    agents: [],
-    cannotStart: "Choose a repository",
-    started: () => {
-      started += 1;
-      return undefined;
-    },
-  });
-  await task.run(APP_COMMAND.NEW_TERMINAL);
-  assert.deepEqual(picker()?.rows, [
-    {
-      name: "Start an agent",
-      detail: "Choose a repository",
-      working: false,
-      chosen: false,
-    },
-  ]);
-  await picker()?.choose("Start an agent");
-  assert.equal(started, 0);
 });
 
 test("while the plan's agents are still being read, the picker says so and offers to start none", async () => {

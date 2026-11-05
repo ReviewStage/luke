@@ -121,8 +121,8 @@ export function TerminalPicker({
   onPick: (agentId: string) => void;
   /** Starts a coding agent on the task, the picker's offer where it has none. */
   onStartAgent: () => void;
-  /** Whether a coding agent can start on the task now, and why not where it cannot. */
-  start: { readonly available: boolean; readonly reason: string | undefined };
+  /** Whether a coding agent can start on the task now. */
+  start: { readonly available: boolean };
   onClose: () => void;
 }): React.JSX.Element {
   // Note that a task whose agents are not read yet offers none, nor to start one.
@@ -164,7 +164,6 @@ export function TerminalPicker({
                   words: START_WORDS,
                   label: START_WORDS,
                   icon: <PlusIcon />,
-                  detail: start.available ? undefined : start.reason,
                   disabled: !start.available,
                   onSelect: () => choose(onStartAgent),
                 },

@@ -77,7 +77,6 @@ import {
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
-import { LocalDemo } from "../local/local-demo.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   type AccountFastOffer,
@@ -261,19 +260,15 @@ export function accountProcedures(seams: AccountProcedureSeams) {
 
     /**
      * Whether the caller's own account is an admin, any role but the admin
-     * role not; when its member's grant of support access runs out, null
-     * where none stands or it has run out; and, in the local demo alone, that
-     * a Start on a task with no repository runs where its agents run on a
-     * host (`local/local-demo.ts`).
+     * role not; and when its member's grant of support access runs out, null
+     * where none stands or it has run out.
      */
     access: signedIn.access.effect(function* ({ context }) {
       const access = yield* hostedStoreOrUnavailable(seams.readAccess(context.userId));
-      const demo = yield* LocalDemo;
       const now = yield* Clock.currentTimeMillis;
       return {
         admin: isAdminRole(access.role),
         supportAccessUntil: standingSupportAccess(access.supportAccessUntil, now),
-        ...(demo.on ? { startsWithoutRepository: true as const } : undefined),
       };
     }),
 

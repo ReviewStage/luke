@@ -99,7 +99,6 @@ import {
   localAgentRefused,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
-import { LocalDemo } from "../../local/local-demo.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -165,10 +164,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * catalog, which also
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
- * a caller can say which choices there are. The task must name a
- * repository the account still reaches through our GitHub App, and
+ * a caller can say which choices there are. A task that names a
+ * repository must name one the account still reaches through our GitHub App, and
  * through its workspace's installation where it has one, read now rather
- * than when the task named it (`packages/service/src/github/workspace-repository.ts`). The
+ * than when the task named it (`packages/service/src/github/workspace-repository.ts`);
+ * on a task that names none the agent works in none and asks nothing of GitHub. The
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the task's document as the Markdown Copy
@@ -227,9 +227,7 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * A blank Start, on a task, hands the agent nothing, neither the plan nor
  * a prompt, and opens no session: its first words, typed or spoken, open
  * one as they reach it (`steer.ts`), and leaves its task's status where it
- * stands, since no work was handed. It runs on the choice any Start does,
- * and on a task with no repository it works in none and asks nothing of
- * GitHub, where any other Start on such a task is refused.
+ * stands, since no work was handed. It runs on the choice any Start does.
  * A fresh Start on a task worked in pilot mode (`TASK_MODE.PILOT`) where no
  * pilot stands unarchived makes the task's pilot, whoever asks, a member or a
  * coding agent's `start_agent`, which is how a pilot gives a child task its
@@ -453,7 +451,8 @@ const confirmedBranch = Effect.fnUntraced(function* (
 
 /**
  * The branch the agent's checkout is cloned at: the one the ask names,
- * which GitHub must hold; else the one the agent it is started from was
+ * which GitHub must hold, and which a Start in no repository is refused for
+ * naming; else the one the agent it is started from was
  * started on, where GitHub still holds it; else none, the default branch.
  * Note that a retry whose agent already stands is not asked of GitHub
  * again, because the branch may be gone since and the agent its Start made
@@ -470,6 +469,10 @@ const startBranchOf = Effect.fnUntraced(function* (
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
+  // A branch named where there is no repository to clone it from is refused, rather than dropped.
+  if (ask.branch !== undefined && landing.repository === null) {
+    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
+  }
   const branch = ask.branch ?? inherited ?? undefined;
   if (branch === undefined || landing.repository === null) return undefined;
   const made = yield* hostedStoreOrUnavailable(readAgentByKey(userId, ask.idempotencyKey));
@@ -527,7 +530,7 @@ const freshKindOn = Effect.fnUntraced(function* (
   return AGENT_KIND.PILOT;
 });
 
-/** The task read as the account, its repository required unless the Start is blank or the local demo runs, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
+/** The task read as the account, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, in a workspace the prompt, with the replay of the agent it takes over from after either where there is one, whose brief stands for the prompt, or nothing for a blank Start on a task. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -576,12 +579,6 @@ const landingOf = Effect.fnUntraced(function* (
       mover,
       place: { taskId: place.taskId, planSnapshot: null, prompt: null, kind },
     };
-  }
-  // A task with no repository is handed words, as an agent on no task is, which works with no checkout;
-  // its plan is handed only in the local demo, which the Start then holds to an agent on a host once it
-  // knows where the agent runs (`repositorylessOnHost`), since a plan is built in a repository.
-  if (task.repository === null && brief === undefined && !(yield* LocalDemo).on) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   }
   const handed = yield* handedOf(brief ?? planMarkdown(task), place, fitter, noteFiles);
   return {
@@ -847,13 +844,15 @@ const pilotStarterOf = (userId: string, source: Agent) =>
           : undefined,
       );
 
-/** The place an agent stands in, which a Start from it puts the new agent in: its task, or its workspace and repository where it has none; none for an agent with neither, which no checkout could go on from. */
+/** The place an agent stands in, which a Start from it puts the new agent in: its task, or, where it has none, its workspace and its repository, or none where it worked in none. */
 export function placeOfAgent(
   agent: Pick<Agent, "taskId" | "organizationId" | "repository">,
-): StartWhere | undefined {
+): StartWhere {
   if (agent.taskId !== null) return { taskId: agent.taskId };
-  if (agent.repository === null) return undefined;
-  return { taskId: null, organizationId: agent.organizationId, repository: agent.repository };
+  const { organizationId, repository } = agent;
+  return repository === null
+    ? { taskId: null, organizationId, repository }
+    : { taskId: null, organizationId, repository };
 }
 
 /** The place alone, as a Start from another agent reads its source against it. */
@@ -903,8 +902,7 @@ export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   ) {
     return Option.none();
   }
-  const where = place ?? placeOfAgent(made.value);
-  if (where === undefined || !(yield* madeInPlace(userId, made.value, where))) {
+  if (!(yield* madeInPlace(userId, made.value, place ?? placeOfAgent(made.value)))) {
     return Option.none();
   }
   return made;
@@ -1144,26 +1142,6 @@ const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
         ),
       );
 
-/**
- * Whether a Start that landed on a task with no repository may go on where
- * its agent runs: a blank one anywhere, as ever, and one handed words
- * anywhere, as an agent on no task is, the cloud's sandbox and a host's
- * folder holding no checkout; one handed the plan, which only the local
- * demo lands (`landingOf`), on a host alone, where the host starts it in an
- * empty folder of its own, never in the cloud, whose sandbox would hold no
- * repository to build the plan in. A Start with no task, or on a task with
- * a repository, goes on as it landed.
- */
-function repositorylessOnHost(
-  ask: Pick<StartAsk, "blank">,
-  landing: Pick<StartLanding, "task" | "repository" | "place">,
-  where: StartMachine,
-): boolean {
-  if (landing.task === undefined || landing.repository !== null || ask.blank === true) return true;
-  if (landing.place.prompt !== null) return true;
-  return where.asked.machine === AGENT_MACHINE.DEVICE;
-}
-
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
   eve: Effect.Effect<
@@ -1283,9 +1261,6 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the place it names or else its source or its starter's default, and its model, and never change.
   const where = yield* machineOfStart(userId, ask, from?.source, landing.task);
-  if (!repositorylessOnHost(ask, landing, where)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  }
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime, reached?.access);
   const started = yield* hostedStoreOrUnavailable(

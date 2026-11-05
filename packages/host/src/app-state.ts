@@ -812,9 +812,8 @@ export function networkConnected(network: Pick<AppNetworkSlice, "online" | "reac
 /**
  * What the signed-in account may open in the app, as the host last read it
  * from the service for that account (`account-access-client.ts`): whether
- * it is an admin, which the sidebar offers the admin dashboard by,
- * whether a Start on a task with no repository runs, and until when its
- * grant of support access stands. Not while nobody is
+ * it is an admin, which the sidebar offers the admin dashboard by, and
+ * until when its grant of support access stands. Not while nobody is
  * signed in, for another account than the one read, or where the read
  * failed. A window draws by it and authorizes nothing: the dashboard's own
  * gate on the service decides every admin read, and the Start route every
@@ -822,12 +821,6 @@ export function networkConnected(network: Pick<AppNetworkSlice, "online" | "reac
  */
 export interface AppAccessSlice {
   admin: boolean;
-  /**
-   * True where a Start on a task that names no repository runs where the
-   * task's agents run on a host, as the service answers it in the local demo
-   * alone; absent everywhere else.
-   */
-  startsWithoutRepository?: true;
   /**
    * When the member's grant of support access runs out, in epoch
    * milliseconds, while one stands, so Settings says until when a

@@ -22,7 +22,7 @@ import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { GitHubSetup } from "./setup-github.js";
+import { GITHUB_OPTIONAL, GitHubSetup } from "./setup-github.js";
 import {
   SETUP_AUDIENCE,
   SETUP_STEP,
@@ -297,7 +297,12 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   }
   if (step === SETUP_STEP.GITHUB) {
     return (
-      <AuthPage mark={<ProductMark />} title="Connect GitHub" foot={foot(reached, true)}>
+      <AuthPage
+        mark={<ProductMark />}
+        title="Connect GitHub"
+        description={GITHUB_OPTIONAL}
+        foot={foot(reached, true)}
+      >
         {workspaceId === undefined ? null : (
           <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={onReached} />
         )}

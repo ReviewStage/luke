@@ -2,16 +2,13 @@
  * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
  *
  * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard, whether a Start on a task with no
- * repository runs, as it does in the local demo alone, which a window reads
- * to let that Start be pressed, and until when its grant of support access
+ * offer the admin dashboard, and until when its grant of support access
  * stands, which Settings draws. The grant is written here too, under the
  * account's own session, which the service's support-access resource
  * takes rather than the account's bearer. It draws by it and authorizes nothing: the
- * dashboard's own gate decides every admin read on the service, and the
- * Start route every Start. A read that fails, or an answer that is not the
- * shape the wire declares, is read as nothing opened, so a doubt never
- * offers either.
+ * dashboard's own gate decides every admin read on the service. A read that
+ * fails, or an answer that is not the shape the wire declares, is read as
+ * nothing opened, so a doubt never offers either.
  */
 import type { CallCredential } from "@repo/features";
 import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
@@ -61,9 +58,6 @@ export class AccountAccessClient {
       Effect.map(
         (answer): AppAccessSlice => ({
           admin: answer.admin,
-          ...(answer.startsWithoutRepository === true
-            ? { startsWithoutRepository: true }
-            : undefined),
           ...(typeof answer.supportAccessUntil === "number"
             ? { supportAccessUntil: answer.supportAccessUntil }
             : undefined),

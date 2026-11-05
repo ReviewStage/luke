@@ -77,23 +77,19 @@ it.effect("asks the service for the signed-in account's access under its bearer"
   }),
 );
 
-it.effect(
-  "a read that says a Start runs on a task with no repository, and a grant of support access, holds both beside the admin flag",
-  () =>
-    Effect.gen(function* () {
-      const { client } = service([
-        json({
-          admin: false,
-          startsWithoutRepository: true,
-          supportAccessUntil: 1_800_000_000_000,
-        }),
-      ]);
-      assert.deepEqual(yield* client.readAccess(), {
+it.effect("a read that carries a grant of support access holds it beside the admin flag", () =>
+  Effect.gen(function* () {
+    const { client } = service([
+      json({
         admin: false,
-        startsWithoutRepository: true,
         supportAccessUntil: 1_800_000_000_000,
-      });
-    }),
+      }),
+    ]);
+    assert.deepEqual(yield* client.readAccess(), {
+      admin: false,
+      supportAccessUntil: 1_800_000_000_000,
+    });
+  }),
 );
 
 it.effect("grants and revokes support access under the account's session, not its bearer", () =>
