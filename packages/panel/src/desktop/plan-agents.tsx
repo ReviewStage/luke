@@ -129,6 +129,7 @@ function PlanAgentRow({
               card={
                 <PullRequestCard
                   pullRequest={pullRequest}
+                  place={{ taskId: entry.agent?.planId ?? null }}
                   lines={pullRequest}
                   files={pullRequest.changedFiles}
                   opener={people?.author ?? openerOf(pullRequest)}

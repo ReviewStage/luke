@@ -208,6 +208,7 @@ test("a plan's, a skill's, an agent tab's, and a pull request's cards each name 
   const pullRequest = drawn(
     createElement(PullRequestCard, {
       pullRequest: PULL_REQUEST,
+      place: { taskId: null },
       lines: PULL_REQUEST,
       files: PULL_REQUEST.changedFiles,
       agent: {
@@ -286,6 +287,7 @@ test("a pull request's corner says the age of the moment its state names, and no
       drawn(
         createElement(PullRequestCard, {
           pullRequest: { ...PULL_REQUEST, state, checks: undefined },
+          place: { taskId: null },
           when: opened,
         }),
       ),

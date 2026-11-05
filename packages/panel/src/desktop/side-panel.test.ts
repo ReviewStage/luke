@@ -190,6 +190,7 @@ test("a pull request's card names the coding agent whose it is on a row by its t
         AtomRegistry.make(),
         createElement(PullRequestCard, {
           pullRequest: published,
+          place: { taskId: null },
           lines: published,
           files: published.changedFiles,
           agent: {
