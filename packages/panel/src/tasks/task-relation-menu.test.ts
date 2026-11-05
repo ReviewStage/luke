@@ -122,12 +122,12 @@ test("a pick on Parent sets the task's parent to it, and on Sub-task sets its pa
   ]);
 });
 
-/** The pinned New task row, which opens New task related to this task. */
-function newTaskRow(): HTMLElement {
+/** The pinned New task row, named for the task it makes, which opens New task related to this task. */
+function newTaskRow(name: string): HTMLElement {
   return (
     [...document.querySelectorAll<HTMLElement>('[data-steered="true"]')].find(
-      (each) => each.textContent === "New task",
-    ) ?? assert.fail("no New task row")
+      (each) => each.textContent === name,
+    ) ?? assert.fail(`no ${name} row`)
   );
 }
 
@@ -153,9 +153,9 @@ test("New task opens New task from the new task's side: on Sub-task as a sub-tas
   });
 
   ask({ kind: TASK_RELATION_KIND.SUB_TASK, request: 1 });
-  act(() => newTaskRow().click());
+  act(() => newTaskRow("New sub-task").click());
   ask({ kind: TASK_RELATION_KIND.BLOCKED_BY, request: 2 });
-  act(() => newTaskRow().click());
+  act(() => newTaskRow("New blocking task").click());
 
   assert.deepEqual(asked, ["sub-task-of", "blocks"]);
 });

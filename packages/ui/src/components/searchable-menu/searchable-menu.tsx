@@ -14,6 +14,7 @@ import {
   roomAround,
 } from "../anchored-popover/anchored-popover.js";
 import { clipsAround } from "../anchored-popover/clip-room.js";
+import { BackButton, NO_BACK_KEY } from "../back-button/back-button.js";
 import {
   COMBOBOX_LEAD,
   type ComboboxGroup,
@@ -25,7 +26,7 @@ import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
 import { MenuReplayUnmasked } from "../menu/menu-replay.js";
-import { inNarrowRoom, MenuSheetFrame } from "../menu/menu-sheet.js";
+import { inNarrowRoom, MenuSheetFrame, type SheetBack } from "../menu/menu-sheet.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { useSubmenuAim } from "../menu/submenu-aim.js";
 import { SEARCH_FIELD_LOOK, SearchField } from "../search-field/search-field.js";
@@ -91,7 +92,10 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
  * and state. An owner that already hangs a layer of its own, a picker
  * floated by a box in the words (`RectFloat`) say, asks for it embedded
  * (`SEARCHABLE_MENU_LAYER.EMBEDDED`) instead: drawn with no layer, inside
- * the owner's, which says where it stands and how wide. Its owner holds it
+ * the owner's, which says where it stands and how wide. An owner whose pick
+ * acts at once may head it with what a pick does ("Add a sub-task"), led by
+ * the folded way back to the menu it was chosen from where there is one, as
+ * a sheet's head draws a submenu's (`MenuHead`). Its owner holds it
  * drawn through its exit (`useDisclosure`), handing it `leaving`, which
  * leaves it inert and fading, focus already handed back.
  *
@@ -214,6 +218,14 @@ export interface FootRow {
   disabled?: string | undefined;
 }
 
+/** What a pick does, said over the field, and the way back to the menu it was chosen from where there is one. */
+export interface MenuHead {
+  /** What a pick does, as a sentence's start: "Add a sub-task". */
+  words: string;
+  /** The way back to the menu this one was chosen from. */
+  back?: SheetBack | undefined;
+}
+
 /** The menu's last line, pressed by nothing: who pays for the agent, and the link that manages it where its provider asks for one. */
 export interface MenuLastLine {
   words: string;
@@ -288,6 +300,13 @@ const LAST_LINE_BODY =
 
 /** The link at the last line's end, never broken across lines. */
 const LAST_LINE_END = "ui-searchable-menu-last-line-end flex-none whitespace-nowrap";
+
+/**
+ * The head over the field, its words inset as a row's are, or after the way
+ * back, folded to its glyph as a sheet's is, its words a reader's alone.
+ */
+const HEAD =
+  "ui-searchable-menu-head flex min-h-control flex-none items-center gap-icon-gap border-b border-border px-row-inset has-[.ui-folding-button]:pl-menu-inset [--ui-fold:folded]";
 
 /** A section's heading over rows drawn in place, inset as a row's words are. */
 const HEADING = "ui-searchable-menu-heading px-row-inset pt-ui-8 pb-ui-4";
@@ -485,6 +504,27 @@ function submenuOptions(open: Submenu, unmasked: boolean): ComboboxOption[] {
   }));
 }
 
+/** The head over the field: the folded way back where there is one, then what a pick does. */
+function Head({ head, unmasked }: { head: MenuHead; unmasked: boolean }): React.JSX.Element {
+  return (
+    <div className={HEAD}>
+      {head.back === undefined ? null : (
+        <BackButton
+          label={head.back.label}
+          place={head.back.label}
+          command={NO_BACK_KEY}
+          keepFocus
+          tabbable={false}
+          onBack={head.back.onBack}
+        />
+      )}
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+        <ReplayWords unmasked={unmasked}>{head.words}</ReplayWords>
+      </Text>
+    </div>
+  );
+}
+
 /** One muted line pressed by nothing, under a submenu's rows. */
 function FootNote({ words }: { words: React.ReactNode }): React.JSX.Element {
   return (
@@ -642,6 +682,8 @@ export function SearchableMenu(
     onLeave: (left: EventTarget | null) => void;
     /** Pinned under the list, always on screen, reached by the arrows past the last match. */
     foot?: readonly FootRow[] | undefined;
+    /** What a pick does, said over the field, led by the way back to the menu it was chosen from where there is one. */
+    head?: MenuHead | undefined;
     /** One muted line under its own hairline, after the pinned rows: who pays for the agent. */
     lastLine?: MenuLastLine | undefined;
     /** The menu is on its way out: drawn fading, and taking nothing. */
@@ -1085,10 +1127,10 @@ export function SearchableMenu(
         open={!leaving}
         initialFocus={list}
         hold={ownerRef}
-        name={open?.label ?? props.label}
+        name={open?.label ?? props.head?.words ?? props.label}
         detail={open === undefined ? undefined : props.label}
         replayUnmasked={unmasked}
-        back={open === undefined ? undefined : { label: props.label, onBack: closeSubmenu }}
+        back={open === undefined ? props.head?.back : { label: props.label, onBack: closeSubmenu }}
         field={open === undefined ? searchField : undefined}
         onAway={props.onClose}
         onKeyDown={onKey}
@@ -1118,6 +1160,7 @@ export function SearchableMenu(
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
+      {props.head === undefined ? null : <Head head={props.head} unmasked={unmasked} />}
       {searchField}
       {rowList}
       {open === undefined || footAt >= 0 || rowBox === undefined ? null : (

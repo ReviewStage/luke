@@ -58,9 +58,9 @@ import { chipSubmenu } from "./standing-submenus.js";
  * A related row's ⋯, right-click, and menu key lead its task's menu with
  * the same: Change relation, its four kinds, and Remove relation, which
  * acts at once and offers Undo in a toast. Each group's +, standing at rest
- * on its head, drops the add menu (`task-relation-menu.tsx`) on its kind:
- * Sub-task, or Blocked by. A refusal, a loop or another repository, is the
- * service's, said in the toast its door raises.
+ * on its head, drops the add menu (`task-relation-menu.tsx`): Sub-tasks' on
+ * Add sub-task's search, Task relations' on the kinds. A refusal, a loop or
+ * another repository, is the service's, said in the toast its door raises.
  */
 
 /** What each group is called, and its list for a reader moving between lists. */
@@ -149,8 +149,8 @@ function relationMenu(kind: TaskRelationKind, doors: RelationDoors): readonly Me
 
 /**
  * A group's +, standing at rest on its head: a glyph's button dropping the
- * add menu on `kind`, the menu hanging from the button and handing focus
- * back to it once closed.
+ * add menu on `kind`, or on the kinds where none is said, the menu hanging
+ * from the button and handing focus back to it once closed.
  */
 function RelationAdd({
   task,
@@ -160,7 +160,7 @@ function RelationAdd({
 }: {
   task: Task;
   door: TaskRelationDoor;
-  kind: TaskRelationKind;
+  kind?: TaskRelationKind | undefined;
   label: string;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -397,14 +397,7 @@ export function PlanRelations({
               noun: relations.length === 1 ? RELATIONS_NOUN.one : RELATIONS_NOUN.many,
             }}
             fold={{ defaultOpen: true }}
-            actions={
-              <RelationAdd
-                task={task}
-                door={door}
-                kind={TASK_RELATION_KIND.BLOCKED_BY}
-                label={ADD_WORDS.RELATION}
-              />
-            }
+            actions={<RelationAdd task={task} door={door} label={ADD_WORDS.RELATION} />}
             actionsShown={GROUP_ACTIONS.AT_REST}
           >
             <RelatedTasks
