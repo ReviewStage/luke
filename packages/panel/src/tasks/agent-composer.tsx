@@ -45,6 +45,7 @@ import {
 } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { useConnected } from "../connection.js";
 import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 import { modEnterSends } from "../enter-sends.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -54,6 +55,7 @@ import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contra
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
+import { noteWhileOffline } from "./agent-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { type AgentServersControl, serversMenuPanel } from "./agent-servers.js";
@@ -543,6 +545,7 @@ export function AgentComposer({
   /** How the box queues behind the turn and edits a queued message; none where it queues nothing. */
   queueing?: ComposerQueueing | undefined;
 }): React.JSX.Element {
+  const connected = useConnected();
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -615,17 +618,18 @@ export function AgentComposer({
           disabled: servers.disabled,
         });
   const unloaded = AsyncResult.isFailure(bundle) ? EDITOR_LOAD_FAILED : undefined;
+  const sendNote = noteWhileOffline(composer.note, connected);
   const words =
     composer.closed ??
     refusal ??
     // Note that a send's failure keeps its words and its Retry over the cut paste's, since a paste into a full box changes nothing a send's failure could be taken down by.
-    (cut && composer.note === undefined ? pasteCutWords(maxLength) : undefined) ??
+    (cut && sendNote === undefined ? pasteCutWords(maxLength) : undefined) ??
     unloaded ??
-    (composer.note === undefined ? model?.note : undefined);
+    (sendNote === undefined ? model?.note : undefined);
   const note: Failure | undefined =
     words !== undefined
       ? { reason: FAILURE_REASON.OTHER, text: words }
-      : (composer.note ??
+      : (sendNote ??
         (lapsed === undefined
           ? undefined
           : {
@@ -640,7 +644,7 @@ export function AgentComposer({
                 : { connection: lapsed.connection, name: lapsed.name }),
             }));
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
-  const retries = note !== undefined && note === composer.note;
+  const retries = note !== undefined && note === sendNote;
   // An editor that could not be loaded is read again by its own Retry, while its note is the one shown.
   const reloads = unloaded !== undefined && words === unloaded;
   // Note that a cut paste is the person's input checked, and an editor that did not load, a send that
@@ -653,12 +657,12 @@ export function AgentComposer({
         ? UNREPORTED.INPUT
         : reloads
           ? unreadShown(FAILURE_SURFACE.BUNDLE_LOAD)
-          : note === composer.note
+          : note === sendNote
             ? // Note that a send's failure is reported as the answer that refused it, where its note holds one,
               // so a refusal the service worded is sent as its word rather than as an unexpected failure.
               failureShown({
                 surface: FAILURE_SURFACE.AGENT_SEND,
-                cause: composer.note?.cause ?? note,
+                cause: sendNote?.cause ?? note,
                 about: { agentId },
               })
             : failureShown({

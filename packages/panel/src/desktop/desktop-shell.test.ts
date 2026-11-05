@@ -1307,6 +1307,29 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   assert.equal(titleBarOffline(online), null);
 });
 
+/** What a strip right under a phone's header says, if one stands there. */
+function stripUnderPhoneHead(page: HTMLElement): string | undefined {
+  const under = page.querySelector('header.ui-toolbar[data-look="phone"]')?.nextElementSibling;
+  return under?.classList.contains("ui-banner") === true ? (under.textContent ?? "") : undefined;
+}
+
+test("on a phone, the service not answering says so in a strip under the page's header, and nothing does once it answers", async () => {
+  const inboxView = { ...tasksControl().inboxView, open: true };
+  handState({}, { network: { online: true, reachable: false } });
+  const unreached = await mountNarrow({ inboxView });
+  assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering.");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { network: { online: true, reachable: true } });
+  const answering = await mountNarrow({ inboxView });
+  assert.ok(
+    answering.querySelector('header.ui-toolbar[data-look="phone"]'),
+    "a phone's header stands",
+  );
+  assert.equal(stripUnderPhoneHead(answering), undefined);
+});
+
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {
   handState({}, { network: { online: false, reachable: true } });
   const container = document.createElement("div");

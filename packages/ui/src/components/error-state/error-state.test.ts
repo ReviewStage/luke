@@ -1,7 +1,8 @@
 /**
  * error-state.test.ts -- a failure is one alert saying its sentence and its
  * Retry; Retry is a button the keyboard can stand on and a press of it
- * tries again; a failure with no Retry says its sentence alone; among rows
+ * tries again; a failure with no Retry, or where none is offered, says its
+ * sentence alone; among rows
  * it offers the remedy, Retry, Remove, and Dismiss in that order, each
  * press doing its own; on a toolbar it is the same one alert, its whole
  * sentence its hint; the glyph that marks it as a fault says nothing to a
@@ -17,7 +18,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
 import { recordedFailure } from "../../testing/reported-failure.js";
-import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "./error-state.js";
+import { ERROR_STATE_PLACEMENT, ErrorState, RetryOffered, RetryRowLabel } from "./error-state.js";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
@@ -84,12 +85,21 @@ test("Retry is a button the keyboard can stand on", () => {
   expect(document.activeElement).toBe(retry);
 });
 
-test("a failure with no Retry says its sentence alone, and offers Copy details alone", () => {
-  const alert = mountAlert(createElement(ErrorState, { failure: FAILURE, children: LINE }));
-  expect(alert.textContent).toBe(LINE);
-  expect([...alert.querySelectorAll("button")].map((button) => button.ariaLabel)).toEqual([
-    "Copy details",
-  ]);
+test("a failure with no Retry, or given one where Retry is not offered, says its sentence alone, and offers Copy details alone", () => {
+  const alone = mountAlert(createElement(ErrorState, { failure: FAILURE, children: LINE }));
+  const unoffered = mountAlert(
+    createElement(
+      RetryOffered.Provider,
+      { value: false },
+      createElement(ErrorState, { failure: FAILURE, onRetry: () => undefined, children: LINE }),
+    ),
+  );
+  for (const alert of [alone, unoffered]) {
+    expect(alert.textContent).toBe(LINE);
+    expect([...alert.querySelectorAll("button")].map((button) => button.ariaLabel)).toEqual([
+      "Copy details",
+    ]);
+  }
 });
 
 for (const placement of [ERROR_STATE_PLACEMENT.INLINE, ERROR_STATE_PLACEMENT.CENTERED]) {

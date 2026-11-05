@@ -29,7 +29,10 @@
  * failure toast with nothing else to press takes the pointer for it, and so
  * pauses its hold under it, drains its bar, and may be dismissed. A refusal,
  * whose words already say what happened, and a window with nothing to report
- * through offer no copy (`reportShownFailure`).
+ * through offer no copy (`reportShownFailure`). A failure that is not a
+ * refusal, shown while the app does not reach the service, is reported and
+ * not shown at all, unless it carries an action, because the Offline mark
+ * already says why (`failureOfConnection`).
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one
@@ -76,7 +79,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { appPlatform } from "./app-platform.js";
-import { reportShownFailure, type ShownFailure } from "./failure-report.js";
+import { failureOfConnection, reportShownFailure, type ShownFailure } from "./failure-report.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
@@ -398,12 +401,20 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
 /**
  * Reports the failure a notice says, where it says one, as it is shown at
  * `at` or a working toast turns into it, and answers the step with the
- * notice keeping the details of that report to copy.
+ * notice keeping the details of that report to copy. A failure the
+ * connection already says (`failureOfConnection`), on a notice with no
+ * action to lose, is reported and not shown: the step answers nothing, or
+ * withdraws the working toast it would have settled.
  */
-function reportSaid(step: ToastStep, at: number): ToastStep {
+function reportSaid(step: ToastStep, at: number): ToastStep | undefined {
   if (step.kind !== TOAST_STEP.SHOW && step.kind !== TOAST_STEP.SETTLE) return step;
   if (step.notice.tone !== STATUS_TONE.DANGER) return step;
   const details = reportShownFailure(step.notice.failure, at);
+  if (step.notice.action === undefined && failureOfConnection(step.notice.failure)) {
+    return step.kind === TOAST_STEP.SETTLE
+      ? { kind: TOAST_STEP.WITHDRAW, subject: step.subject }
+      : undefined;
+  }
   return { ...step, notice: { ...step.notice, details } };
 }
 
@@ -420,7 +431,8 @@ const toastLifeAtom = Atom.keepAlive(
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
       const said = yield* Effect.sync(() => reportSaid(step, at));
-      let stack = settle(stepped(get(toastStackAtom), said, at), at);
+      const before = get(toastStackAtom);
+      let stack = settle(said === undefined ? before : stepped(before, said, at), at);
       get.set(toastStackAtom, stack);
       // Note that the stack is carried here rather than read back, because
       // nothing else writes it while this runs, and each settle past a due

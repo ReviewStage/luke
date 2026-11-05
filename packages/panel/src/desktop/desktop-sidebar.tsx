@@ -114,6 +114,7 @@ import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
+import { useConnected } from "../connection.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { unreadShown } from "../failure-report.js";
@@ -1786,6 +1787,7 @@ function SidebarColumn({
   onPressWithin,
   room = SHELL_ROOM.WIDE,
 }: DesktopSidebarProps): React.JSX.Element {
+  const connected = useConnected();
   const onTasks = tab === PANEL_TAB.TASKS;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
   const [carrying, setCarrying] = useState(false);
@@ -2407,7 +2409,8 @@ function SidebarColumn({
                           </Button>
                         </NoteLine>
                       ) : null}
-                      {tasks.listFailed ? (
+                      {/* Note that rows the list still holds stand with no line over them while the app is offline, since the Offline mark says why; a list with none still says it. */}
+                      {tasks.listFailed && (connected || unlisted) ? (
                         <ErrorState
                           failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
                           onRetry={tasks.onRetryList}

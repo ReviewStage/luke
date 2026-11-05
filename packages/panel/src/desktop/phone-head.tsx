@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./action-menu.js";
+import { OfflineStrip } from "./offline-mark.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -36,6 +37,10 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * or its Filter, is kept whole rather than folded into the ⋯: the ⋯ offers
  * it as one item, which closes the ⋯ and opens that menu where the ⋯ stood
  * (`MenuAsk`), so a menu of submenus is never a submenu itself.
+ *
+ * Under the row stands what the Offline mark says while the window is
+ * behind (`OfflineStrip`), because a phone keeps the sidebar's foot, where
+ * the mark stands, in a drawer out of sight.
  */
 
 /** An ask, from a phone's ⋯, to open a menu of the page's own under it: the ⋯ it hangs from, and the ask's turn, so the same ask twice opens it twice. */
@@ -118,9 +123,14 @@ export function phoneBar({
   };
 }
 
-/** The row; see the module's head. */
+/** The row, and under it what the Offline mark says while the window is behind; see the module's head. */
 export function PhoneHead(slots: PhoneHeadSlots): React.JSX.Element {
-  return <Toolbar {...phoneBar(slots)} />;
+  return (
+    <>
+      <Toolbar {...phoneBar(slots)} />
+      <OfflineStrip />
+    </>
+  );
 }
 
 /**

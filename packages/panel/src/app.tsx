@@ -26,7 +26,7 @@ import {
   type SettingsLink,
 } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { cssCustomProperties } from "@repo/ui";
+import { cssCustomProperties, RetryOffered } from "@repo/ui";
 import { isComposingKey } from "@repo/ui/composing-key";
 import { useLinkOpener } from "@repo/ui/held-link";
 import { LINK_ROUTE, linkRoute } from "@repo/ui/link-route";
@@ -41,6 +41,7 @@ import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./a
 import { appPlatform } from "./app-platform.js";
 import { type SettingsDoors, useSettingsPanel, useShownUpdate } from "./app-settings.js";
 import { useDraftsOwner } from "./composer-drafts.js";
+import { useConnected } from "./connection.js";
 import { CommandPalette } from "./desktop/command-palette.js";
 import { DesktopShell } from "./desktop/desktop-shell.js";
 import { ListedAutomations } from "./desktop/listed-automations.js";
@@ -656,6 +657,7 @@ function AppWindow(): React.JSX.Element {
       signIn.cancelSignIn,
     ],
   );
+  const connected = useConnected();
   const settingsStep = useMemo(
     () => ({ listed: settingsPlace.listed, onList: history.lists.settings }),
     [settingsPlace.listed, history.lists.settings],
@@ -677,81 +679,84 @@ function AppWindow(): React.JSX.Element {
                     <ListedAutomations tasks={tasks}>
                       {/* A maintainer's sign-in as the member, said above the stage on the web. */}
                       <ViewingAs />
-                      <div
-                        ref={stage.ref}
-                        className="app-stage"
-                        data-capture={String(run.captureMode)}
-                        // The panel is drawn as an ordinary app window's content; desktop.css
-                        // lays it out.
-                        data-surface="desktop"
-                        // The sidebar's width lays out the shell and Settings' page list.
-                        style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
-                      >
-                        {/* The window's content. */}
-                        <ShellRoomContext.Provider value={room}>
-                          <div className="desktop-stage">
-                            <MessageRevealProvider value={messageReveal}>
-                              <ThreadRevealProvider value={threadReveal}>
-                                <SettingsShell
-                                  gates={gates}
-                                  tab={tab}
-                                  onTabChange={changeTab}
-                                  tasks={shellTasks}
-                                  history={history}
-                                  sidebar={sidebar}
-                                  room={room}
-                                  settingsStep={settingsStep}
-                                  doors={settingsDoors}
-                                />
-                              </ThreadRevealProvider>
-                            </MessageRevealProvider>
-                          </div>
-                        </ShellRoomContext.Provider>
-                        {/* A note to the people who make the app, written in a dialog over the
+                      {/* A failure offers no Retry while the app does not reach the service, whose reads start again once it does. */}
+                      <RetryOffered.Provider value={connected}>
+                        <div
+                          ref={stage.ref}
+                          className="app-stage"
+                          data-capture={String(run.captureMode)}
+                          // The panel is drawn as an ordinary app window's content; desktop.css
+                          // lays it out.
+                          data-surface="desktop"
+                          // The sidebar's width lays out the shell and Settings' page list.
+                          style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
+                        >
+                          {/* The window's content. */}
+                          <ShellRoomContext.Provider value={room}>
+                            <div className="desktop-stage">
+                              <MessageRevealProvider value={messageReveal}>
+                                <ThreadRevealProvider value={threadReveal}>
+                                  <SettingsShell
+                                    gates={gates}
+                                    tab={tab}
+                                    onTabChange={changeTab}
+                                    tasks={shellTasks}
+                                    history={history}
+                                    sidebar={sidebar}
+                                    room={room}
+                                    settingsStep={settingsStep}
+                                    doors={settingsDoors}
+                                  />
+                                </ThreadRevealProvider>
+                              </MessageRevealProvider>
+                            </div>
+                          </ShellRoomContext.Provider>
+                          {/* A note to the people who make the app, written in a dialog over the
           window. */}
-                        <FeedbackDialog
-                          kind={feedbackKind}
-                          about={feedbackAbout}
-                          account={account}
-                          onClose={() => setFeedbackKind(undefined)}
-                        />
-                        {/* The window's passing notice: the thank-you after a note lands, what
+                          <FeedbackDialog
+                            kind={feedbackKind}
+                            about={feedbackAbout}
+                            account={account}
+                            onClose={() => setFeedbackKind(undefined)}
+                          />
+                          {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
-                        <ToastHost />
-                        {/* A command an agent asks to run on this Mac, while main holds it for an answer. */}
-                        <MacCommandAskDialog />
-                        {/* The menu a right-click on any link in the window hangs. */}
-                        <LinkMenu />
-                        <UpdatedToast />
-                        <OfflineRefusedToast />
-                        {/* The plans, the open plan's agents and files, every command the
+                          <ToastHost />
+                          {/* A command an agent asks to run on this Mac, while main holds it for an answer. */}
+                          <MacCommandAskDialog />
+                          {/* The menu a right-click on any link in the window hangs. */}
+                          <LinkMenu />
+                          <UpdatedToast />
+                          <OfflineRefusedToast />
+                          {/* The plans, the open plan's agents and files, every command the
           window can run now, and the settings, behind ⌘K, past the sign-in
           alone. */}
-                        <SettingsPalette
-                          available={!accountGated}
-                          tab={tab}
-                          onTabChange={changeTab}
-                          tasks={tasks}
-                          links={copyLink}
-                          doors={settingsDoors}
-                          readFiles={(taskId) =>
-                            act(ACT_KIND.TASKS_TREE, {
-                              planId: taskId,
-                              path: "",
-                              recursive: true,
-                            })
-                          }
-                        />
-                        {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
-                        <ShellRoomContext.Provider value={room}>
-                          <TabSwitcher
+                          <SettingsPalette
                             available={!accountGated}
                             tab={tab}
                             onTabChange={changeTab}
                             tasks={tasks}
+                            links={copyLink}
+                            doors={settingsDoors}
+                            readFiles={(taskId) =>
+                              act(ACT_KIND.TASKS_TREE, {
+                                planId: taskId,
+                                path: "",
+                                recursive: true,
+                              })
+                            }
                           />
-                        </ShellRoomContext.Provider>
-                      </div>
+                          {/* The tabs and places stood on last, across every task, behind ⌃Tab, on a desktop app past the sign-in; in the stage's room, which names a phone's places as it stands them. */}
+                          <ShellRoomContext.Provider value={room}>
+                            <TabSwitcher
+                              available={!accountGated}
+                              tab={tab}
+                              onTabChange={changeTab}
+                              tasks={tasks}
+                            />
+                          </ShellRoomContext.Provider>
+                        </div>
+                      </RetryOffered.Provider>
                     </ListedAutomations>
                   </GitHubConnectProvider>
                 </RepositoryRemedyProvider>

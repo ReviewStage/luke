@@ -105,6 +105,7 @@ import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elemen
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
+import { useConnected } from "../connection.js";
 import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
@@ -2325,6 +2326,7 @@ function AgentTranscriptView({
   /** The row under the end line, or at the transcript's end where it has none: the agents that continued it, where an archive took the box (`continue-agent.tsx`). */
   endTrail?: ReactNode;
 }): React.JSX.Element {
+  const connected = useConnected();
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
   const unsent = useUnsentLines();
@@ -2521,7 +2523,8 @@ function AgentTranscriptView({
                     {endTrail}
                   </div>
                 )}
-                {failed ? (
+                {/* Note that the messages held keep standing with no line under them while the app is offline, since the Offline mark says why. */}
+                {failed && connected ? (
                   <ErrorState
                     failure={failureShown({
                       surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,

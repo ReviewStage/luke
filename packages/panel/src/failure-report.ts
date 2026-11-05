@@ -56,6 +56,7 @@ import {
   type ShownFailureSent,
   shownFailureDetails,
 } from "@repo/features/shown-failure";
+import { networkConnected } from "@repo/host/app-state";
 import { ACT_ERROR, type PortActKind } from "@repo/host/contract";
 import type { ConfirmFailure } from "@repo/ui/confirm-state";
 import type { PictureUnread } from "@repo/ui/picture-cache";
@@ -270,6 +271,18 @@ export function refusedShown(
   if (words === undefined || words === null || words === false || words === "") return undefined;
   const failure = failureShown({ surface, cause: FAILURE_CONDITION.REFUSED, about, refused: true });
   return { words, failure };
+}
+
+/**
+ * Whether `failure` is one the window's connection already says: a failure
+ * nothing named a refusal, shown while the app does not reach the service
+ * (`networkConnected`). The Offline mark says why once, so a surface that
+ * would only interrupt to say it again, a toast, says nothing.
+ */
+export function failureOfConnection(failure: ShownFailure): boolean {
+  if (kindOf(failure) === FAILURE_KIND.REFUSED) return false;
+  const state = appStateNow();
+  return state !== undefined && !networkConnected(state.network);
 }
 
 /** Installs what this window reports its shown failures through, and answers what takes it back. */

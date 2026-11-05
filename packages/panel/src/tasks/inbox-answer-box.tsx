@@ -18,6 +18,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { useConnected } from "../connection.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import { PANEL_SPAN } from "../panel-spans.js";
@@ -483,6 +484,7 @@ function AnswerCard({
   newThread,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
+  const connected = useConnected();
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
@@ -554,7 +556,7 @@ function AnswerCard({
   const { editor, room, module } = field;
   const { dictating } = field.pickers;
   const kept = control.notes.get(item.id);
-  const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
+  const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent, connected);
   const note =
     noted?.words ??
     refusal ??

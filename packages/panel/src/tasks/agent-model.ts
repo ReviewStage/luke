@@ -120,7 +120,7 @@ import {
   type WireValue,
 } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { devicePlatformOf } from "../device-platform.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
@@ -504,6 +504,12 @@ export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task
 
 /** What a message no answer came back for says, which may have reached the agent all the same. */
 const NOT_HEARD_BACK = "No answer came back.";
+
+/** What a message no answer came back for says while the app does not reach the service, in place of `NOT_HEARD_BACK`: in the composer, whose Retry stands again once the app does (`RetryOffered`), and alone where only the words are drawn, as an Inbox answer's are. */
+export const UNHEARD_OFFLINE = {
+  BESIDE_RETRY: "You're offline.",
+  ALONE: "You're offline. Try again once you're back online.",
+} as const;
 
 /** What a plan's reached limit says where no reset is known; with one, `limitResetsWords`. */
 const LIMIT_REACHED_WORDS = "Usage limit reached";
@@ -1171,6 +1177,23 @@ export function messageFailureNote(
     settingsFailure(refused, ACTION.MESSAGE) ??
     callFailure(planRefusalWords(refused, payer) ?? messageNoteWords(refused.failure))
   );
+}
+
+/**
+ * A composer's note as it reads while the app does not reach the service:
+ * one for a message no answer came back for says the developer is offline,
+ * its words still in the box, and its Retry stands again once the app
+ * reaches the service; any other note, or any note while connected, as it is.
+ */
+export function noteWhileOffline<Note extends Failure & { readonly cause?: unknown }>(
+  note: Note | undefined,
+  connected: boolean,
+): Note | undefined {
+  if (connected || note === undefined) return note;
+  const { cause } = note;
+  const unheard =
+    Predicate.hasProperty(cause, "failure") && cause.failure === AGENT_CALL_FAILURE.UNANSWERED;
+  return unheard ? { ...note, text: UNHEARD_OFFLINE.BESIDE_RETRY } : note;
 }
 
 /** What a message that did not reach the agent says beside the composer's Retry, which says to try again for it. */
