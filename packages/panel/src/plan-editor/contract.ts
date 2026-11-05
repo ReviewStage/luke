@@ -194,6 +194,13 @@ export interface PlanEditorProps {
    * drawing down. None where the text draws no diagrams.
    */
   readonly drawDiagram?: ((element: HTMLElement, diagram: EditorDiagram) => () => void) | undefined;
+  /**
+   * Draws a task item's box into the element the editor stands in its
+   * item's gutter, as the read view draws it, the shared `Checkbox`, so the
+   * box looks and stands the same open or drawn; answers what takes the
+   * drawing down. None where the editor draws TipTap's own box.
+   */
+  readonly drawTaskBox?: TaskBoxDrawer | undefined;
   /** What the text's pictures are drawn and taken in with; none where the text takes no pictures, as a template does not. */
   readonly pictures?: PlanEditorPictures | undefined;
   /** The open comment threads' words, in offsets of `markdown`, which the editor carries as its words move; none where the text has no comments. */
@@ -278,6 +285,16 @@ export interface EditorDiagram {
   readonly code: string;
   readonly previous: string | undefined;
 }
+
+/** A task item's box as the editor asks it drawn: its item's words, which name it, whether it is ticked, and the door that ticks or clears it. */
+export interface EditorTaskBox {
+  readonly label: string;
+  readonly checked: boolean;
+  readonly toggle: (checked: boolean) => void;
+}
+
+/** Draws a task item's box into its element; answers what takes the drawing down. */
+export type TaskBoxDrawer = (element: HTMLElement, box: EditorTaskBox) => () => void;
 
 /**
  * What the panel may do to a mention it draws: name it anew in place, the

@@ -159,6 +159,18 @@ test("a document with none of the plan's options hands a GitHub body back byte f
   assert.equal(last(), BODY.replace("This lifts the editor", "This moves the editor"));
 });
 
+test("a task item's box in the editor is the shared checkbox the read view draws, named by its item's words, and a press on it ticks that item alone", () => {
+  const { container, last } = mounted(BODY);
+  const box =
+    container.querySelector<HTMLElement>(
+      '[role="checkbox"][aria-label="A description mounts it"]',
+    ) ?? assert.fail("the item's box is drawn");
+
+  act(() => box.click());
+
+  assert.equal(last(), BODY.replace("- [ ] A description", "- [x] A description"));
+});
+
 test("words selected in a document with none of the plan's options raise the whole format toolbar, Turn into among it, and no Comment", () => {
   const { container, editor } = mounted(BODY);
 

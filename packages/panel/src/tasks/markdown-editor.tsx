@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@repo/features/mention-link";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { ANNOUNCE } from "@repo/ui";
+import { ANNOUNCE, Checkbox } from "@repo/ui";
 import { AsyncResult } from "effect/reactivity";
 import {
   type ReactNode,
@@ -19,6 +19,7 @@ import {
   type EditorAnchor,
   type EditorAnchors,
   type EditorDiagram,
+  type EditorTaskBox,
   type Finish,
   type HeadingsChange,
   type MentionNode,
@@ -188,6 +189,10 @@ function MountedEditor({
           ? undefined
           : (element, diagram) =>
               latest.current.drawDiagram?.(element, diagram) ?? (() => undefined),
+      drawTaskBox:
+        latest.current.drawTaskBox === undefined
+          ? undefined
+          : (element, box) => latest.current.drawTaskBox?.(element, box) ?? (() => undefined),
       format:
         latest.current.format === undefined
           ? undefined
@@ -246,6 +251,7 @@ export function MarkdownEditor({
   const module = useAtomValue(useSideBundles().planEditor);
   const chips = useEditorDrawings<DrawnMention>();
   const previews = useEditorDrawings<EditorDiagram>();
+  const taskBoxes = useEditorDrawings<EditorTaskBox>();
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);
   const sending = pictures?.sending === true;
@@ -340,6 +346,7 @@ export function MarkdownEditor({
               decodeMention(target, mentions.doors.place.repository) !== undefined,
           },
     drawDiagram: diagrams ? previews.draw : undefined,
+    drawTaskBox: taskBoxes.draw,
     pictures: pictures?.pictures,
     format: toolbar.doors,
     blocks: { onTrigger: blocks.onTrigger, onKey: blocks.onKey },
@@ -383,6 +390,17 @@ export function MarkdownEditor({
           each.key,
         ),
       )}
+      {taskBoxes.drawn.map((each) =>
+        createPortal(
+          <Checkbox
+            label={each.what.label}
+            checked={each.what.checked}
+            onChange={each.what.toggle}
+          />,
+          each.element,
+          each.key,
+        ),
+      )}
     </section>
   );
 }
@@ -407,8 +425,9 @@ interface EditorDrawings<A> {
 }
 
 /**
- * What the editor asks the panel to draw, a mention or a diagram, each drawn
- * into its own element while it stands, as the composer draws its chips.
+ * What the editor asks the panel to draw, a mention, a diagram, or a task
+ * item's box, each drawn into its own element while it stands, as the
+ * composer draws its chips.
  */
 function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
