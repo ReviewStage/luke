@@ -16,6 +16,10 @@ import {
   SettingsRowStateLine,
   SettingsSection,
   type SettingsSectionSkeletonShape,
+  TEXT_ELEMENT,
+  TEXT_FONT,
+  TEXT_VARIANT,
+  Text,
 } from "@repo/ui";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useState } from "react";
@@ -42,7 +46,8 @@ import { useBusyPress } from "./busy-press.js";
 const SECTION_TITLE = "Command-line tool";
 
 const ROW_LINE = {
-  WORDS: `Use ${PRODUCT_NAME} from your terminal and your agents. Then run ${CLI_COMMAND.LOGIN}.`,
+  LABEL: `Install the ${PRODUCT_NAME.toLowerCase()} command`,
+  WORDS: `Use ${PRODUCT_NAME} from your terminal and your agents. Then run `,
   INSTALL: "Install",
   REINSTALL: "Reinstall",
   INSTALLING: "Installing the command-line tool",
@@ -55,6 +60,19 @@ export function cliSectionSkeleton(installs: boolean): SettingsSectionSkeletonSh
     headed: true,
     rows: [{ described: true, controls: installs ? [SETTINGS_SKELETON_CONTROL.BUTTON] : [] }],
   };
+}
+
+/** What the row says the command is for, ending in its sign-in set as code. */
+function RowWords(): React.JSX.Element {
+  return (
+    <>
+      {ROW_LINE.WORDS}
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+        {CLI_COMMAND.LOGIN}
+      </Text>
+      .
+    </>
+  );
 }
 
 /** The row's line once the command is installed: its version, and where the shell will not find it, that its folder needs adding. */
@@ -92,10 +110,10 @@ export function CliSection(): React.JSX.Element {
   return (
     <SettingsSection title={SECTION_TITLE} anchor={SETTINGS_SEARCH_ROW.MCP_CLI}>
       <SettingsRow
-        label={SECTION_TITLE}
+        label={ROW_LINE.LABEL}
         description={
           installed === undefined ? (
-            ROW_LINE.WORDS
+            <RowWords />
           ) : (
             <InstalledLine version={installed.version} onPath={installed.onPath} />
           )
