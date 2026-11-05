@@ -84,7 +84,7 @@ export function AutomationsActsSkeleton(): React.JSX.Element {
  */
 export function AutomationGroupList({
   name,
-  nameMasked = false,
+  nameMasked = true,
   headed,
   children,
 }: {

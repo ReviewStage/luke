@@ -2140,11 +2140,13 @@ function SidebarColumn({
   const repositoryOf = (row: TaskRow) => {
     const repository = taskRowRepository(row);
     return (
-      <RepositoryName
-        repository={repository}
-        label={repository === null ? undefined : repositoryLabel(repository, named)}
-        pictures={tasks.repositories.pictures}
-      />
+      <ReplayMask>
+        <RepositoryName
+          repository={repository}
+          label={repository === null ? undefined : repositoryLabel(repository, named)}
+          pictures={tasks.repositories.pictures}
+        />
+      </ReplayMask>
     );
   };
   // The rows as the list draws them: the pinned, then each group not folded

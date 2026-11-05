@@ -894,7 +894,6 @@ function ScheduleRows({
       <PickerRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Time zone"
-        replayUnmasked
         value={timezone}
         valueLabel={zoneLabel(timezone)}
         rows={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}

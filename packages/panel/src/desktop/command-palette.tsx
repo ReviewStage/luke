@@ -1742,7 +1742,8 @@ function paletteItem(
   return {
     id,
     label: <Highlighted text={row.label} ranges={hit?.label ?? []} />,
-    icon: row.icon,
+    // Note that a person's face draws their initial as words, so a masked row's glyph is masked with it.
+    icon: row.replayMasked === true ? <ReplayMask>{row.icon}</ReplayMask> : row.icon,
     detail: words,
     hint: end,
     card: row.card,

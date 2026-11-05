@@ -502,7 +502,12 @@ function standingSubmenus(
     keyedStatusSubmenu(tasks, task.id, status, keyed),
     chipSubmenu(STANDING_WORDS.PRIORITY, PRIORITY_ROWS, priority, pickPriority),
     // Note that the members a task may be assigned are named by their own names, kept masked in a screen recording.
-    { ...assigned, items: assigned.items.map((item) => ({ ...item, replayMasked: true })) },
+    {
+      ...assigned,
+      items: assigned.items.map((item, at) =>
+        assignees[at]?.id === NO_ASSIGNEE ? item : { ...item, replayMasked: true },
+      ),
+    },
   ];
 }
 
@@ -783,15 +788,10 @@ export function useTaskMenuItems(
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
-  const placed =
+  const section =
     task !== undefined
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections, name)
       : undefined;
-  // Note that the reader's sections are named by their own titles, kept masked in a screen recording.
-  const section =
-    placed === undefined || !("items" in placed)
-      ? placed
-      : { ...placed, items: placed.items.map((item) => ({ ...item, replayMasked: true })) };
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
   const assignees = useAssigneeRows(task?.assignee);
