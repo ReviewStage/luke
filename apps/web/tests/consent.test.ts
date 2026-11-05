@@ -158,7 +158,7 @@ test("a client that is not trusted is named with its account, scopes, and redire
   const page = await openPage("consent", `/consent.html?${signedAuthorization()}`);
 
   await titled(page, "Acme Notes wants to use your Vespin account");
-  expect(page.textContent).toContain("Signed in as ada@example.com");
+  expect(page.textContent).toContain("You'll allow it as ada@example.com.");
   expect(Array.from(page.querySelectorAll("li"), (item) => item.textContent)).toEqual([
     "Know which Vespin account is yours",
     "See your email address",

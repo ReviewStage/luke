@@ -27,7 +27,7 @@ export const OAUTH_SCOPE = {
 
 type OAuthScope = (typeof OAUTH_SCOPE)[keyof typeof OAUTH_SCOPE];
 
-/** What each scope lets a client do, as the consent page lists it under "It will be able to". */
+/** What each scope lets a client do, one checked row each on the consent page. */
 const OAUTH_SCOPE_WORDS = {
   [OAUTH_SCOPE.OPENID]: `Know which ${PRODUCT_NAME} account is yours`,
   [OAUTH_SCOPE.PROFILE]: "See your name and profile picture",

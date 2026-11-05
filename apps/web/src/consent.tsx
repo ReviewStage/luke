@@ -1,13 +1,12 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { LANDING_TONE } from "@repo/features/landing-outcome";
+import { LANDING_CLOSE_TAB, LANDING_TONE } from "@repo/features/landing-outcome";
 import { oauthRedirectDestination, oauthScopeLines } from "@repo/features/oauth-consent";
 import { AuthMark, AuthPage, CONSENT_ANSWER, type ConsentAnswer, ConsentCard } from "@repo/ui";
 import { createAuthClient } from "better-auth/react";
 import { useEffect, useState } from "react";
 import { completeSiteSignIn, startSiteAnalytics } from "./analytics";
-import { openAppFromMac } from "./open-app";
 import "./styles.css";
-import { PRODUCT_NAME } from "@repo/features/product-name";
+import { readingWords } from "@repo/features/words";
 import { mountPrerenderedPage } from "./mount-page";
 
 // The provider client forwards the signed authorization on this page's
@@ -79,13 +78,22 @@ async function readRequest(): Promise<ConsentRequest | undefined> {
   };
 }
 
+/** What the page says while it reads the request, and once it cannot go on. */
+const CONSENT_WORDS = {
+  READING: `${readingWords("the request")}…`,
+  FAILED: "The agent was not connected",
+  START_AGAIN: `Start again from the agent. ${LANDING_CLOSE_TAB}`,
+} as const;
+
 /**
- * The page opens on the app's mark while it reads the request, then asks
+ * The page opens on the MCP glyph while it reads the request, then asks
  * the member through the consent card until they answer. Allow and Deny
  * each go to the client's redirect, with a code or with `access_denied`;
  * a request it cannot read, or an answer the server refuses, badges the
- * mark as failed, when the title says so and the Open link goes back to
- * start again.
+ * glyph as failed, as a connection page's provider is, and says to start
+ * again from the agent, which is where the flow began, so it offers no way
+ * into the app. It names no agent, since a request it could not read has
+ * no name to give.
  */
 function Consent(): React.JSX.Element {
   const [state, setState] = useState<ConsentState>({ step: CONSENT_STEP.READING });
@@ -125,10 +133,9 @@ function Consent(): React.JSX.Element {
   const failed = state.step === CONSENT_STEP.FAILED;
   return (
     <AuthPage
-      mark={<AuthMark tone={failed ? LANDING_TONE.DANGER : undefined} />}
-      title={failed ? `${PRODUCT_NAME} could not continue` : `Continuing to ${PRODUCT_NAME}…`}
-      description={failed ? "Start sign-in again." : undefined}
-      action={failed ? openAppFromMac() : undefined}
+      mark={<AuthMark mcpClient tone={failed ? LANDING_TONE.DANGER : undefined} />}
+      title={failed ? CONSENT_WORDS.FAILED : CONSENT_WORDS.READING}
+      description={failed ? CONSENT_WORDS.START_AGAIN : undefined}
     />
   );
 }

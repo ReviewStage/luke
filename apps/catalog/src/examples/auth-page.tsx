@@ -27,8 +27,8 @@ import { CatalogSection } from "../section";
  * ringed mark on its way, settled, and failed, with and
  * without its Open link, and a form with an error on a phone's width, each in a
  * frame the size of the screen it stands for, a step of several with its
- * foot, on its first step and on one it can skip, and an OAuth client's
- * consent, asking and with Allow out. Every name and address is made up.
+ * foot, on its first step and on one it can skip, and an MCP client's
+ * consent, asking, with Allow out, and failed. Every name and address is made up.
  */
 
 /** The Open link as a page offers it; the catalog goes nowhere. */
@@ -156,7 +156,7 @@ function AuthPages(): React.JSX.Element {
           </div>
         </div>
       </CatalogSection>
-      <CatalogSection id="auth-consent" title="A client's consent, asking and allowing">
+      <CatalogSection id="auth-consent" title="A client's consent, asking, allowing, and failed">
         <div className="catalog-screens">
           <div className="catalog-screen">
             <ConsentCard
@@ -176,6 +176,13 @@ function AuthPages(): React.JSX.Element {
               destination={ON_THIS_COMPUTER}
               answering={CONSENT_ANSWER.ALLOW}
               onAnswer={IGNORE}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark mcpClient tone={LANDING_TONE.DANGER} />}
+              title="The agent was not connected"
+              description="Start again from the agent. You can close this tab."
             />
           </div>
         </div>
