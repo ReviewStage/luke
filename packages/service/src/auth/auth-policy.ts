@@ -169,6 +169,12 @@ export const SUPPORT_ACCESS_PATH = {
 /** How long a member's grant of support access stands, in seconds: seven days from the moment they grant it. */
 export const SUPPORT_ACCESS_GRANT_SECONDS = 7 * 24 * 60 * 60;
 
+/** When a member's grant of support access ends, in epoch milliseconds, while it stands at `now`; null where none does. */
+export function standingSupportAccess(until: Date | null | undefined, now: number): number | null {
+  const end = until?.getTime();
+  return end !== undefined && end > now ? end : null;
+}
+
 /**
  * The Better Auth endpoints this deployment does not serve. `/token` is the
  * JWT plugin's, which the OAuth provider's own token endpoint stands in for.

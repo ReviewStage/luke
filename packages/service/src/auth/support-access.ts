@@ -11,7 +11,10 @@
  * Better Auth's own session delete hooks run as for any sign-out.
  *
  * An impersonation is a session whose `impersonatedBy` names the
- * maintainer, an hour long. It is held to the web, the one place it is
+ * maintainer, an hour long or until the member's grant runs out, whichever
+ * is sooner. Note that the grant is read again once the session is made, so
+ * a revoke that cleared it between the check and the session's making, and
+ * so listed no session to end, still ends this one. It is held to the web, the one place it is
  * started from: it is refused at every door of Better Auth's own that would
  * turn the session into something that outlasts it, an OAuth authorization
  * (the desktop's client skips consent, and an `offline_access` refresh token
@@ -25,7 +28,7 @@
  * bearer: they are a browser's, reached on its cookie.
  */
 
-import type { BetterAuthPlugin } from "better-auth";
+import type { AuthContext, BetterAuthPlugin } from "better-auth";
 import {
   APIError,
   createAuthEndpoint,
@@ -34,7 +37,11 @@ import {
   sessionMiddleware,
 } from "better-auth/api";
 import { Schema } from "effect";
-import { SUPPORT_ACCESS_GRANT_SECONDS, SUPPORT_ACCESS_PATH } from "./auth-policy.js";
+import {
+  SUPPORT_ACCESS_GRANT_SECONDS,
+  SUPPORT_ACCESS_PATH,
+  standingSupportAccess,
+} from "./auth-policy.js";
 
 /** The codes this plugin refuses with, on the refusal's body. */
 export const SUPPORT_ACCESS_ERROR = {
@@ -67,6 +74,18 @@ const isImpersonation = Schema.is(Schema.Struct({ impersonatedBy: Schema.NonEmpt
 /** A user row whose grant of support access has a date, read leniently: only the date is wanted. */
 const hasGrant = Schema.is(Schema.Struct({ supportAccessUntil: Schema.Date }));
 
+/** What `/admin/impersonate-user` answers once it made the session, read leniently: only the session is wanted. */
+const isStartedImpersonation = Schema.is(
+  Schema.Struct({
+    session: Schema.Struct({
+      token: Schema.String,
+      userId: Schema.String,
+      expiresAt: Schema.Date,
+      impersonatedBy: Schema.NonEmptyString,
+    }),
+  }),
+);
+
 /** The request a hook sees, in the fields read here. */
 interface HookRequest {
   readonly request?: Request | undefined;
@@ -82,6 +101,22 @@ function carriesAuthorization(context: HookRequest): boolean {
 
 function refuse(code: string, message: string): APIError {
   return new APIError("FORBIDDEN", { code, message });
+}
+
+function notGranted(): APIError {
+  return refuse(
+    SUPPORT_ACCESS_ERROR.NOT_GRANTED,
+    "The account's member has not granted support access.",
+  );
+}
+
+/** When the member's grant of support access ends, read from the store, while it stands; null where none does. */
+async function standingGrant(
+  ctx: { readonly context: AuthContext },
+  userId: string,
+): Promise<number | null> {
+  const member = await ctx.context.internalAdapter.findUserById(userId);
+  return standingSupportAccess(hasGrant(member) ? member.supportAccessUntil : null, Date.now());
 }
 
 /** Refuses a bearer, and an impersonation session, at a door that mints from the session. */
@@ -115,19 +150,36 @@ const refuseUnconsentedImpersonation = createAuthMiddleware(async (ctx) => {
   }
   if ((await getSessionFromCtx(ctx)) === null) return;
   const userId: unknown = ctx.body?.userId;
-  const target =
-    typeof userId === "string" ? await ctx.context.internalAdapter.findUserById(userId) : null;
-  if (!(hasGrant(target) && target.supportAccessUntil.getTime() > Date.now())) {
-    throw refuse(
-      SUPPORT_ACCESS_ERROR.NOT_GRANTED,
-      "The account's member has not granted support access.",
-    );
+  if (typeof userId !== "string" || (await standingGrant(ctx, userId)) === null) {
+    throw notGranted();
   }
 });
 
 /**
+ * Holds a support sign-in the admin plugin just made to the member's grant
+ * as it now stands: ended where a revoke cleared the grant meanwhile, and
+ * otherwise made to end when the grant does, where that is within its hour.
+ * Note that a browser's cookie cache may read the hour for its minute.
+ */
+const holdToGrant = createAuthMiddleware(async (ctx) => {
+  const started = ctx.context.returned;
+  if (!isStartedImpersonation(started)) return;
+  const { token, userId, expiresAt } = started.session;
+  const until = await standingGrant(ctx, userId);
+  if (until === null) {
+    await ctx.context.internalAdapter.deleteSession(token);
+    throw notGranted();
+  }
+  if (until >= expiresAt.getTime()) return;
+  const capped = new Date(until);
+  await ctx.context.internalAdapter.updateSession(token, { expiresAt: capped });
+  return ctx.json({ ...started, session: { ...started.session, expiresAt: capped } });
+});
+
+/**
  * Better Auth's plugin for support access: the grant on the user, the
- * member's grant and revoke, and the refusals above, as its before hooks.
+ * member's grant and revoke, the refusals above as its before hooks, and the
+ * hold of a support sign-in to the grant as its after hook.
  */
 export const supportAccess = () =>
   ({
@@ -148,6 +200,12 @@ export const supportAccess = () =>
         {
           matcher: (context) => context.path === IMPERSONATE_PATH,
           handler: refuseUnconsentedImpersonation,
+        },
+      ],
+      after: [
+        {
+          matcher: (context) => context.path === IMPERSONATE_PATH,
+          handler: holdToGrant,
         },
       ],
     },

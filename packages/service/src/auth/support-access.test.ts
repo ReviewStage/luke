@@ -376,6 +376,25 @@ test("a support sign-in needs the member's grant, and is refused once the grant 
   });
 });
 
+// Catches a support sign-in that outlives the member's grant: one started in the grant's last hour would run on past it.
+test("a support sign-in started in the grant's last hour ends when the grant does", async () => {
+  await withSupportAuth(async (auth) => {
+    const member = await signUp(auth, "member");
+    const { supportAccessUntil } = await grant(auth, member);
+    assert.ok(supportAccessUntil);
+    vi.setSystemTime(supportAccessUntil.getTime() - HOUR_MS / 2);
+    // A maintainer signed in late in the grant, so their own session still stands.
+    const maintainer = await signUpAdmin(auth, "maintainer");
+
+    const started = await impersonate(auth, cookieOf(maintainer.browser), member.id);
+    assert.equal(started.status, 200);
+    keep(maintainer.browser, started.headers);
+    const viewing = await sessionOf(auth, maintainer.browser, "?disableCookieCache=true");
+    assert.equal(viewing?.session.impersonatedBy, maintainer.id);
+    assert.equal(Date.parse(viewing?.session.expiresAt ?? ""), supportAccessUntil.getTime());
+  });
+});
+
 // Catches a grant of another length, a grant a support sign-in can extend, or an endpoint that can set the grant.
 test("the member grants seven days, which the account's session answers; nothing else sets it, nor can a support sign-in", async () => {
   await withSupportAuth(async (auth) => {

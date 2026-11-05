@@ -36,6 +36,7 @@ import {
 } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { standingSupportAccess } from "../auth/auth-policy.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { meaningfulActions, utcDay } from "./admin-activity-queries.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDayHostedSource } from "./admin-day.js";
@@ -306,12 +307,6 @@ const AccountRowSchema = Schema.Struct({
   createdAt: InstantColumnSchema,
   supportAccessUntil: Schema.NullOr(InstantColumnSchema),
 });
-
-/** A grant of support access's end in epoch milliseconds while it stands at `now`; null where none does. */
-function standingGrant(until: Date | null, now: number): number | null {
-  const end = until?.getTime();
-  return end !== undefined && end > now ? end : null;
-}
 
 const findAccount = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -657,7 +652,7 @@ export function readAdminUserSource(input: {
         admin: isAdminRole(row.role),
         createdAt: row.createdAt.getTime(),
         signInMethods: signInMethods.map((linked) => linked.providerId),
-        supportAccessUntil: standingGrant(row.supportAccessUntil, input.now),
+        supportAccessUntil: standingSupportAccess(row.supportAccessUntil, input.now),
       },
       actionsByDay,
       usage: {

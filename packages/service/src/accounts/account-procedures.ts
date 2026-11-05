@@ -67,6 +67,7 @@ import { isAdminRole } from "../admin/admin-access.js";
 import { unconnectedProviders } from "../agents/coder-host/agent-runtime-choice.js";
 import { accountModelChoices } from "../agents/coder-host/start.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
+import { standingSupportAccess } from "../auth/auth-policy.js";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
@@ -269,10 +270,9 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       const access = yield* hostedStoreOrUnavailable(seams.readAccess(context.userId));
       const demo = yield* LocalDemo;
       const now = yield* Clock.currentTimeMillis;
-      const until = access.supportAccessUntil?.getTime();
       return {
         admin: isAdminRole(access.role),
-        supportAccessUntil: until !== undefined && until > now ? until : null,
+        supportAccessUntil: standingSupportAccess(access.supportAccessUntil, now),
         ...(demo.on ? { startsWithoutRepository: true as const } : undefined),
       };
     }),
