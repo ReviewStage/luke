@@ -1,9 +1,5 @@
 name: Release CLI
 
-# Staged here, outside .github/workflows, because Vespin's GitHub App may not
-# push a workflow; it moves to .github/workflows/release-cli.yml, the path
-# npm's trusted publisher names, in this branch's last commit before merge.
-#
 # Builds the `vespin` command's bundle (apps/cli) once, publishes it to npm as
 # the unscoped package `vespin`, and attaches the curl install's tarballs, the
 # bundle with its own Node for linux-x64, linux-arm64, and darwin-arm64, each
