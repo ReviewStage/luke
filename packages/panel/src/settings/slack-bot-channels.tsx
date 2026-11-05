@@ -168,9 +168,7 @@ function DefaultRepositoryRow({
       valueReplayMasked={chosen !== undefined}
       valueIcon={
         chosen === undefined ? undefined : (
-          <ReplayMask>
-            <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
-          </ReplayMask>
+          <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
         )
       }
       rows={[{ id: NONE_ROW, label: WORDS.NONE }, ...repositories.rows]}
@@ -257,9 +255,7 @@ function ChannelRow({
               valueReplayMasked={named !== undefined}
               valueIcon={
                 named === undefined ? undefined : (
-                  <ReplayMask>
-                    <RepositoryPicture repository={named} pictures={repositories.pictures} />
-                  </ReplayMask>
+                  <RepositoryPicture repository={named} pictures={repositories.pictures} />
                 )
               }
               rows={[
