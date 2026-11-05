@@ -245,6 +245,52 @@ test("a task with no agent tab draws a new agent's draft", () => {
   assert.ok(page.querySelector(".desktop-agent .agent-composer"), "the draft's composer is drawn");
 });
 
+test("a wide plan with no agent offers New agent at its head, which opens the draft the + menu's New agent opens", async () => {
+  fakeAppPlatform(QUIET_PANEL);
+  fakeAppBridge({});
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
+  const chosen: MainTab[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            mainTabs: {
+              ...tasksControl().mainTabs,
+              onChoose: (tab) => chosen.push(tab),
+            },
+            agents: agentsControl({ agents: [], agentIds: [] }),
+          }),
+        }),
+      ),
+    ),
+  );
+  const newAgent = (within: Element | null) =>
+    [...(within?.querySelectorAll<HTMLElement>("button, [role='option']") ?? [])].find(
+      (each) => each.textContent === "New agent",
+    ) ?? assert.fail("New agent is offered");
+
+  act(() => newAgent(container.querySelector(".plan-agents [aria-label='Agents']")).click());
+  const plus =
+    container.querySelector<HTMLButtonElement>('button[aria-label="Open a tab"]') ??
+    assert.fail("the + stands");
+  await act(async () => plus.click());
+  act(() => newAgent(container.querySelector(".ui-searchable-menu")).click());
+
+  assert.deepEqual(chosen, [{ draft: "draft" }, { draft: "draft" }], "both open a draft alike");
+  act(() => root.unmount());
+  container.remove();
+});
+
 /** The task's page with the side panel open on `tab`, as markup. */
 function panelTab(tab: FixedSidePanelTab): HTMLElement {
   const markup = renderToStaticMarkup(

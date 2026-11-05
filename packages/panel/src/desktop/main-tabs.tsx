@@ -465,53 +465,54 @@ export function inboxEntries(
 }
 
 /**
- * The "+" menu's rows: New agent, unavailable while a Start is out, left out on an archived task and on a pilot task
- * (`startsOwnAgents`), by itself under no heading; then each of its agents under Agents (`agentEntries`).
+ * New agent, the one start the "+" menu and the plan's agents offer alike:
+ * a draft opened in the column, unavailable while a Start is out, and left
+ * out on an archived task and on a pilot task, whose agents are its pilot's
+ * to start (`startsOwnAgents`).
+ */
+export function newAgentStarts(main: MainTabsControl, agents: AgentsControl): MenuAction[] {
+  if (agents.onUnarchive !== undefined || !startsOwnAgents(agents.mode)) return [];
+  const reason = agents.start.busy ? NEW_AGENT_STARTING : undefined;
+  return [
+    {
+      label: tabLook({ kind: TAB_KIND.DRAFT }).label,
+      detail: reason,
+      disabled: reason !== undefined,
+      onSelect: () => main.onChoose({ draft: agents.onNewDraft() }),
+    },
+  ];
+}
+
+/**
+ * The "+" menu's rows: New agent (`newAgentStarts`), by itself under no
+ * heading; then each of its agents under Agents (`agentEntries`).
  */
 function addEntries(
   main: MainTabsControl,
   agents: AgentsControl,
   held: HeldTranscripts,
 ): AddEntry[] {
-  const { start } = agents;
-  const newAgent: AddEntry = {
-    row: {
-      id: NEW_AGENT_ROW,
-      ...tabLook({ kind: TAB_KIND.DRAFT }),
-      disabled: start.busy ? NEW_AGENT_STARTING : undefined,
-    },
-    onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
-  };
-  const agentRows = agentEntries(main, agents, held);
-  // A pilot task's agents are its pilot's to start, so its menu offers no New agent.
-  const starts = agents.onUnarchive === undefined && startsOwnAgents(agents.mode) ? [newAgent] : [];
-  return [...starts, ...agentRows];
+  const starts = newAgentStarts(main, agents).map(
+    (start): AddEntry => ({
+      row: { id: NEW_AGENT_ROW, ...tabLook({ kind: TAB_KIND.DRAFT }), disabled: start.detail },
+      onPick: start.onSelect,
+    }),
+  );
+  return [...starts, ...agentEntries(main, agents, held)];
 }
 
 /**
  * What a phone's Overview offers after the task's agents in place of the
- * column's hidden "+" (`plan-agents.tsx`): New agent on the "+"'s own
- * terms, unavailable while a Start is out; and the agents' read
- * again where it never landed, as the strip's Retry offers it.
+ * column's hidden "+" (`plan-agents.tsx`): New agent as the "+" offers it
+ * (`newAgentStarts`), and the agents' read again where it never landed, as
+ * the strip's Retry offers it.
  */
 export function phoneAgentStarts(main: MainTabsControl, agents: AgentsControl): MenuAction[] {
-  const reason = agents.start.busy ? NEW_AGENT_STARTING : undefined;
-  const starts: MenuAction[] =
-    agents.onUnarchive === undefined && startsOwnAgents(agents.mode)
-      ? [
-          {
-            label: tabLook({ kind: TAB_KIND.DRAFT }).label,
-            detail: reason,
-            disabled: reason !== undefined,
-            onSelect: () => main.onChoose({ draft: agents.onNewDraft() }),
-          },
-        ]
-      : [];
   const retry: MenuAction[] =
     agents.listFailed && agents.agents === undefined
       ? [{ label: RETRY_AGENTS, onSelect: agents.onRetryList }]
       : [];
-  return [...starts, ...retry];
+  return [...newAgentStarts(main, agents), ...retry];
 }
 
 /** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
