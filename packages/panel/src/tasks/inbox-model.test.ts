@@ -761,27 +761,31 @@ test("Addressed to lists anyone's items, the reader's own, items whose starter t
   });
 });
 
-test("an item the reader snoozed leaves Open and All for Snoozed until its snooze passes, then comes back unread at the top, and a change that made it unread ended its snooze early", () => {
+test("an item the reader snoozed leaves Open and All for Snoozed until its snooze passes, read or unread alike, then comes back at the top as read or unread as it was", () => {
   const groups = [
     {
       holder: taskHolder(BILLING),
       items: [
         item({ id: "snoozed", updatedAt: 10, unread: false, snoozedUntil: 500 }),
-        item({ id: "woken", updatedAt: 20, unread: true, snoozedUntil: 500 }),
+        item({ id: "unread", updatedAt: 20, unread: true, snoozedUntil: 400 }),
         item({ id: "plain", updatedAt: 30 }),
       ],
     },
   ];
   const rows = (now: number, show: InboxShow) =>
     drawn(inboxList(inboxAtNow(groups, now), { show, readerId: undefined, chosen: undefined }));
-  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain", "woken"]);
-  assert.deepEqual(rows(100, INBOX_SHOW.SNOOZED), ["snoozed"]);
-  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.SNOOZED], 1);
-  assert.deepEqual(rows(500, INBOX_SHOW.OPEN), ["snoozed", "plain", "woken"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.OPEN), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.ALL), ["plain"]);
+  assert.deepEqual(rows(100, INBOX_SHOW.SNOOZED), ["unread", "snoozed"]);
+  assert.equal(inboxCounts(inboxAtNow(groups, 100), undefined)[INBOX_SHOW.SNOOZED], 2);
+  assert.deepEqual(rows(500, INBOX_SHOW.ALL), ["snoozed", "unread", "plain"]);
   assert.deepEqual(rows(500, INBOX_SHOW.SNOOZED), []);
-  const back = inboxAtNow(groups, 500)[0]?.items.find((each) => each.id === "snoozed");
-  assert.equal(back?.unread, true, "it comes back unread");
+  const back = inboxAtNow(groups, 500)[0]?.items;
+  assert.deepEqual(
+    ["snoozed", "unread"].map((id) => back?.find((each) => each.id === id)?.unread),
+    [false, true],
+    "each comes back read or unread as it was",
+  );
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {

@@ -58,7 +58,7 @@ export interface InboxReadMarks {
   readonly onMarkAll: (items: readonly InboxItem[]) => void;
   /** Marks every item given that is unread as read, each on its own, as a task's are marked, the rest of the workspace's left as they are. */
   readonly onMarkEach: (items: readonly InboxItem[]) => void;
-  /** Snoozes one item until an instant, which marks it read, offering Undo, or ends its snooze where none is given; a refusal is toasted. */
+  /** Snoozes one item until an instant, offering Undo, or ends its snooze where none is given, leaving whether it is read alone; a refusal is toasted. */
   readonly onSnooze: InboxSnoozer;
 }
 
@@ -160,17 +160,15 @@ export function useInboxReadMarks({
           }
           if (until !== null) {
             toast({
-              // Note that snoozing marked the item read, so Undo marks an item that was unread unread again.
-              ...undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () => {
-                onSnooze(item, null);
-                if (isUnread(item)) void onMark(item, true);
-              }),
+              ...undoToast(`Snoozed until ${snoozeWords(until, Date.now())}`, () =>
+                onSnooze(item, null),
+              ),
               replayUnmasked: true,
             });
           }
         });
     },
-    [act, workspaceId, refused, toast, onMark],
+    [act, workspaceId, refused, toast],
   );
   return useMemo(
     () => ({ onMark, onMarkAll, onMarkEach, onSnooze }),

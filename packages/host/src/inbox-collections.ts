@@ -38,6 +38,8 @@ export const INBOX_CHANGE = {
   SETTLED: "settled",
   /** Items marked read or unread, as a reply of the reader's marks its item read. */
   MARKED: "marked",
+  /** The item snoozed by the reader until an instant, or its snooze ended; whether it is read stands as it was. */
+  SNOOZED: "snoozed",
   /** The item as the service answered it. */
   ANSWERED: "answered",
 } as const;
@@ -55,6 +57,14 @@ export type InboxChange =
       readonly itemIds: ReadonlySet<string>;
       readonly unread: boolean;
     }
+  | {
+      readonly kind: typeof INBOX_CHANGE.SNOOZED;
+      readonly itemId: string;
+      /** Until when, in epoch milliseconds; null where the snooze ends. */
+      readonly until: number | null;
+      /** When the write was asked, which a snooze ended comes due at. */
+      readonly at: number;
+    }
   | { readonly kind: typeof INBOX_CHANGE.ANSWERED; readonly item: InboxItem };
 
 /** What the service answered of a write: its transaction, the item as it then stands where it names one, and whether it was kept. */
@@ -62,6 +72,32 @@ export interface InboxWritten {
   readonly txid: string | undefined;
   readonly item: InboxItem | undefined;
   readonly kept: boolean;
+}
+
+/**
+ * Until when a snooze standing until `was` stands once the change is drawn
+ * over it: until the change's instant, or, where the change ends it, until
+ * when it was asked, as the service ends one by bringing the item back
+ * then; one already past, or none, stands as it was.
+ */
+export function snoozedUntilAfter(
+  was: number | null | undefined,
+  change: { readonly until: number | null; readonly at: number },
+): number | undefined {
+  if (change.until !== null) return change.until;
+  if (was === undefined || was === null) return undefined;
+  return Math.min(was, change.at);
+}
+
+/** The item as a snooze change leaves it; none where it stands so already. */
+function snoozedItem(
+  item: InboxItem,
+  change: Extract<InboxChange, { readonly kind: typeof INBOX_CHANGE.SNOOZED }>,
+): InboxItem | undefined {
+  const until = snoozedUntilAfter(item.snoozedUntil, change);
+  if (item.snoozedUntil === until) return undefined;
+  const { snoozedUntil: _was, ...rest } = item;
+  return until === undefined ? rest : { ...rest, snoozedUntil: until };
 }
 
 /**
@@ -83,6 +119,8 @@ function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefine
         ((item.unread === true) !== change.unread || (item.markedUnread === true) !== change.unread)
         ? { ...item, unread: change.unread, markedUnread: change.unread }
         : undefined;
+    case INBOX_CHANGE.SNOOZED:
+      return item.id === change.itemId ? snoozedItem(item, change) : undefined;
     case INBOX_CHANGE.ANSWERED:
       return item.id === change.item.id && item.updatedAt <= change.item.updatedAt
         ? change.item
@@ -97,6 +135,8 @@ export function changedIds(change: InboxChange): readonly string[] {
       return [change.itemId];
     case INBOX_CHANGE.MARKED:
       return [...change.itemIds];
+    case INBOX_CHANGE.SNOOZED:
+      return [change.itemId];
     case INBOX_CHANGE.ANSWERED:
       return [change.item.id];
   }

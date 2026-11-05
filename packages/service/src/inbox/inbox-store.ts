@@ -351,6 +351,7 @@ const READ = {
   readThrough: qualified(inboxItemRead, inboxItemRead.readThrough),
   markedUnread: qualified(inboxItemRead, inboxItemRead.markedUnread),
   snoozedUntil: qualified(inboxItemRead, inboxItemRead.snoozedUntil),
+  snoozedThrough: qualified(inboxItemRead, inboxItemRead.snoozedThrough),
 };
 
 /**
@@ -371,19 +372,23 @@ function markedUnreadFor(readerId: string): SQL<boolean> {
   return sql<boolean>`coalesce((select ${READ.markedUnread} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), false)`;
 }
 
-/** Until when the reader snoozed the item, as their marker holds it; null where they did not, or keep no marker. */
+/**
+ * Until when the reader snoozed the item, as their marker holds it, while
+ * the item has not changed since they snoozed it; null where they did not,
+ * ended the snooze, keep no marker, or a change woke it. Note that a snooze
+ * whose time has passed still answers its time, which the reader lists the
+ * item by, since it came back then, and that a snooze with no change of its
+ * own is weighed by the change the marker reads through, because the
+ * release before it snoozed by marking the item read and goes on serving
+ * the migrated database for a while.
+ */
 function snoozedUntilFor(readerId: string): SQL<Date | null> {
-  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId})`;
+  return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId} and coalesce(${READ.snoozedThrough}, ${READ.readThrough}) >= ${ITEM_UPDATED_AT})`;
 }
 
 /** `snoozedUntilFor` in epoch milliseconds, as the wire carries an instant; null where the reader did not snooze the item. */
 function snoozedUntilMillisFor(readerId: string): SQL<number | null> {
   return sql<number | null>`floor(extract(epoch from ${snoozedUntilFor(readerId)}) * 1000)::float8`;
-}
-
-/** Whether the reader's snooze of the item has come due, so marking it read takes the snooze off; a write reads the clock, as no live read may. */
-function snoozeDueFor(readerId: string): SQL<boolean> {
-  return sql<boolean>`coalesce(${snoozedUntilFor(readerId)} <= now(), false)`;
 }
 
 /**
@@ -1747,9 +1752,9 @@ export interface AccountItemsLiveStatements extends ScopeInboxLiveStatements {
 
 /**
  * Every inbox item the account reaches written for Neon Realtime: where
- * each stands (`stamps`), every open item, every settled one changed or
- * settled at or after `settledSince`, and every one the reader snoozed, and
- * the items among those changed at or after
+ * each stands (`stamps`), every open item, every settled one changed,
+ * settled, or brought back by the reader's snooze at or after
+ * `settledSince`, and the items among those changed at or after
  * `since` whole, with their threads and files, as a scope's inbox carries
  * them (`itemsLiveStatements`). A stamp carries what moves an item without
  * moving its last change: whether it is unread for the reader, who it waits
@@ -1779,11 +1784,10 @@ function accountItemsOf(
   const carried = and(
     // Every item the account may read, as its read of what waits names them (`accountWaiting`, `tasklessWaiting`).
     itemVisibleTo(userId),
-    // Note that a settled item stands by the later of its last change and its settling, since a nod on an old notice settles it without moving its last change, and an item the reader snoozed stays until they read it, so its snooze can bring it back.
+    // Note that a settled item stands by the latest of its last change, its settling, and the time the reader's snooze brings it back, since a nod on an old notice settles it without moving its last change, and a snooze must find it still carried when it comes back.
     or(
       eq(inboxItem.status, INBOX_STATUS.OPEN),
-      sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}) >= ${settledSince}`,
-      sql`${snoozedUntilFor(userId)} is not null`,
+      sql`greatest(${inboxItem.updatedAt}, ${inboxItem.settledAt}, ${snoozedUntilFor(userId)}) >= ${settledSince}`,
     ),
     narrowed,
   );
@@ -1975,7 +1979,7 @@ function excluded(column: AnyPgColumn): SQL {
 
 /**
  * A read written over a marker that stands: read through the later of the
- * two changes, no longer marked unread, and no longer snoozed. Note that it
+ * two changes, and no longer marked unread. Note that it
  * never moves a marker back, because the change a read selected may be
  * older than one a write of the member's own, such as their answer,
  * recorded while the read waited on the marker's lock.
@@ -1983,17 +1987,15 @@ function excluded(column: AnyPgColumn): SQL {
 const READ_ON = {
   readThrough: sql`greatest(${inboxItemRead.readThrough}, ${excluded(inboxItemRead.readThrough)})`,
   markedUnread: false,
-  snoozedUntil: null,
 };
 
 /**
- * Whether a read moves the marker that stands: it was marked unread, the
- * read reaches a later change than it had read through, or the item came
- * back from a snooze. Note that a read of a snoozed item that nothing woke
- * moves nothing, so opening it in the Snoozed list leaves it snoozed, while
- * a read once a change woke it takes the snooze off with the rest.
+ * Whether a read moves the marker that stands: it was marked unread, or the
+ * read reaches a later change than it had read through. Note that a read
+ * never touches a snooze, so opening an item in the Snoozed list leaves it
+ * snoozed.
  */
-const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)} or ${inboxItemRead.snoozedUntil} <= now()`;
+const READ_MOVES = sql`${inboxItemRead.markedUnread} or ${inboxItemRead.readThrough} is null or ${inboxItemRead.readThrough} < ${excluded(inboxItemRead.readThrough)}`;
 
 const ReaderItemSchema = Schema.Struct({ userId: Schema.String, itemId: Schema.String });
 
@@ -2060,10 +2062,15 @@ const upsertUnread = SqlSchema.findOneOption({
 });
 
 /**
- * The member's marker on the item read through its last change and snoozed
- * until the instant, or no longer snoozed where none is named, where the
- * account reaches the item. Snoozing marks it read, so a change after it
- * makes it unread, which ends the snooze (`snoozedUntil` on the wire).
+ * The member's marker on the item snoozed until the instant over its last
+ * change, or, where none is named, its snooze ended now, where the account
+ * reaches the item. Note that it leaves whether the item is read alone: a
+ * marker it makes reads through no change and is marked unread by no one,
+ * which reads the item as having none does (`unreadFor`). A change after
+ * it ends the snooze (`snoozedUntilFor`). A snooze ended is one that came
+ * due now rather than none, because the item came back then, which keeps a
+ * settled one carried as long as it would have been had it come due
+ * (`accountItemsOf`); one already past stands as it came due.
  */
 const upsertSnooze = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -2081,21 +2088,42 @@ const upsertSnooze = SqlSchema.findOneOption({
             .select({
               itemId: inboxItem.id,
               userId: sql<string>`${userId}::text`.as(inboxItemRead.userId.name),
-              readThrough: inboxItem.updatedAt,
-              markedUnread: sql<boolean>`false`.as(inboxItemRead.markedUnread.name),
               snoozedUntil:
                 sql<Date | null>`${until === null ? null : until.toISOString()}::timestamptz`.as(
                   inboxItemRead.snoozedUntil.name,
                 ),
+              snoozedThrough: (until === null
+                ? sql<Date | null>`null::timestamptz`
+                : sql<Date | null>`${inboxItem.updatedAt}`
+              ).as(inboxItemRead.snoozedThrough.name),
             })
             .from(inboxItem)
             .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
         )
         .onConflictDoUpdate({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
-          set: { ...READ_ON, snoozedUntil: excluded(inboxItemRead.snoozedUntil) },
+          set:
+            until === null
+              ? { snoozedUntil: sql`least(${inboxItemRead.snoozedUntil}, now())` }
+              : {
+                  snoozedUntil: excluded(inboxItemRead.snoozedUntil),
+                  snoozedThrough: excluded(inboxItemRead.snoozedThrough),
+                },
         })
         .returning({ itemId: inboxItemRead.itemId, txid: TXID }),
+    ),
+});
+
+/** Whether the item is unread for the member, where the account reaches it. */
+const findReaderUnread = SqlSchema.findOneOption({
+  Request: ReaderItemSchema,
+  Result: Schema.Struct({ unread: Schema.Boolean }),
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .select({ unread: unreadFor(userId) })
+        .from(inboxItem)
+        .where(and(eq(inboxItem.id, itemId), itemVisibleTo(userId))),
     ),
 });
 
@@ -2112,7 +2140,7 @@ const findReachedItem = SqlSchema.findOneOption({
     ),
 });
 
-/** Every item the account's Inbox lists that is unread for it, or whose snooze came due, in the one workspace named or in all of them, marked read through its last change and no longer snoozed: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
+/** Every item the account's Inbox lists that is unread for it, snoozed or not, in the one workspace named or in all of them, marked read through its last change: the markers moved, which leaves out one a write of the member's own moved further meanwhile. */
 const upsertAllRead = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, workspaceId: Schema.NullOr(Schema.String) }),
   Result: MarkedSchema,
@@ -2133,7 +2161,7 @@ const upsertAllRead = SqlSchema.findAll({
               and(
                 itemVisibleTo(userId),
                 workspaceId === null ? undefined : eq(inboxItem.organizationId, workspaceId),
-                or(unreadFor(userId), snoozeDueFor(userId)),
+                unreadFor(userId),
               ),
             ),
         )
@@ -2836,20 +2864,23 @@ export function markInboxItemUnread(
 }
 
 /**
- * The item snoozed for the member until `until`, which marks it read for
- * them, or its snooze ended where `until` is null; the transaction that
- * wrote it, or false where the account reaches no such item. Another
- * member's marker is never touched.
+ * The item snoozed for the member until `until`, or its snooze ended now
+ * where `until` is null, leaving whether it is read alone; the transaction that
+ * wrote it and whether the item is unread for them, or false where the
+ * account reaches no such item. Another member's marker is never touched.
  */
 export function snoozeInboxItem(
   userId: string,
   itemId: string,
   until: Date | null,
-): InboxStoreEffect<InboxMarked | false> {
+): InboxStoreEffect<(InboxMarked & { readonly unread: boolean }) | false> {
   const request = { userId, itemId };
-  return Effect.flatMap(upsertSnooze({ ...request, until }), (marked) =>
-    markerFound(marked, request),
-  );
+  return Effect.gen(function* () {
+    const marked = yield* markerFound(yield* upsertSnooze({ ...request, until }), request);
+    if (marked === false) return false;
+    const read = yield* findReaderUnread(request);
+    return { ...marked, unread: Option.isSome(read) && read.value.unread };
+  });
 }
 
 /**

@@ -93,7 +93,7 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
   unread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Whether the item holds an ask open, rather than being a notice; absent from a service before it, which the desktop reads as asking. */
   asking: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** Until when the reader snoozed the item, in epoch milliseconds, which marked it read for them; null where they did not, and absent from a service before snoozing. */
+  /** Until when the reader snoozed the item, in epoch milliseconds, while nothing has changed on it since; null where they did not or a change woke it, and absent from a service before snoozing. */
   snoozedUntil: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
 });
 

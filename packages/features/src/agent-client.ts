@@ -1687,7 +1687,7 @@ export class HostedAgentClient {
     );
   }
 
-  /** One item snoozed for the account until `until`, in epoch milliseconds, which marks it read, or its snooze ended where `until` is null, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
+  /** One item snoozed for the account until `until`, in epoch milliseconds, or its snooze ended where `until` is null, whether it is read standing as it was, under the idempotency key given where one is: its id and its read state; not found where the item is not one the account reaches. */
   snoozeInboxItem(
     itemId: string,
     until: number | null,
