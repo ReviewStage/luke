@@ -1,6 +1,3 @@
-import { Schema as EffectSchema } from "effect";
-import { SANDBOX_STATE } from "./terminal-wire.js";
-
 /**
  * listening-ports-wire.ts -- the TCP ports a server listens on in a coding agent's cloud sandbox, as the desktop's Forward to localhost control lists them.
  *
@@ -11,6 +8,9 @@ import { SANDBOX_STATE } from "./terminal-wire.js";
  * `LISTENING_PORTS.MIN_PORT`, and none of our own listeners in the
  * sandbox. An agent on a Mac has no sandbox, and lists none.
  */
+
+import { Schema as EffectSchema } from "effect";
+import { SANDBOX_STATE } from "./terminal-wire.js";
 
 /** The ports the list may hold: the unprivileged range, which no server in the sandbox needs root for. */
 export const LISTENING_PORTS = {
