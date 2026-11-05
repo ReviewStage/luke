@@ -427,14 +427,24 @@ export function agentEntries(
 }
 
 /**
- * The task's Inbox as a row: its tray and its name, then what waits on the
- * developer counted at its end in the attention tone the rows it counts
- * wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
+ * The task's Inbox as a row: its tray and its name, then at its end the
+ * Draft pencil where one of its items' boxes holds a draft, as the sidebar's
+ * row for the task wears it, and what waits on the developer counted in the
+ * attention tone the rows it counts wear, and nothing at none. It names no section, so the summary lists it under Tabs, beside the
  * panel's other kinds; picking it opens the window's Inbox narrowed to the task.
  */
-export function inboxEntry(onPick: () => void, waiting: number): AddEntry {
+export function inboxEntry(onPick: () => void, waiting: number, drafted = false): AddEntry {
   const row = { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) };
-  return { row, endMark: waitingMark(waiting), onPick };
+  const count = waitingMark(waiting);
+  const endMark = drafted ? (
+    <>
+      <DraftMark />
+      {count}
+    </>
+  ) : (
+    count
+  );
+  return { row, endMark, onPick };
 }
 
 /** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
