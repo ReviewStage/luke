@@ -366,7 +366,9 @@ test("a failure toast reports what failed: an unexpected one as an error line an
   assert.ok(!beneath.stack?.includes("fixture-secret"));
 });
 
-test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted, and is not shown, since a call that got no answer is the Offline mark's to say", () => {
+test("a failure toast for a hosted call that never answered reports what the host kept of it, the trace the service's lines carry unredacted, and copies that trace", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
   mount(WINDOW.TALL);
   const lines: { message: string; attributes: unknown }[] = [];
   const recording: ShownFailureSentry = {
@@ -417,7 +419,14 @@ test("a failure toast for a hosted call that never answered reports what the hos
       },
     },
   ]);
-  assert.deepEqual(standing(), []);
+  const copy = document.querySelector<HTMLButtonElement>(
+    '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
+  );
+  await act(async () => copy?.click());
+  assert.ok(
+    copied[0]?.split("\n").includes("hosted.trace_id: 4bf92f3577b34da6a3ce929d0e0e4736"),
+    "the copied details carry the trace the service's lines carry",
+  );
 });
 
 test("while the app does not reach the service, a failure toast nothing named is not shown, and a refusal still is", async () => {
