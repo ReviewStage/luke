@@ -434,6 +434,7 @@ test("a provider the deployment does not offer the account has no row, and every
     "Neon",
     "Notion",
     "PostHog",
+    "Resend",
     "Sentry",
     "Stripe",
     "Supabase",
