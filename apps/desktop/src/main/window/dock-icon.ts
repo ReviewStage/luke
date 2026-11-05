@@ -24,9 +24,9 @@ const BAND = {
   TILE_EDGE: 100,
   TILE_SIDE: 824,
   TILE_RADIUS: 185.4,
-  TOP: 724,
-  BASELINE: 868,
-  FONT_SIZE: 132,
+  TOP: 780,
+  BASELINE: 884,
+  FONT_SIZE: 96,
   /** The pixels the tile is drawn at, the size of the art the build ships. */
   PIXELS: 512,
 } as const;
