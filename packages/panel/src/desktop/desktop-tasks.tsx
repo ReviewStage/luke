@@ -757,7 +757,7 @@ function PlanDocument({
   const openedWorkspace = opened?.workspaceId;
   const {
     tasks: everyTask,
-    onResume: resumeTask,
+    onSelect: selectTask,
     onSetTaskBlock,
     onSetTaskParent,
     onNewRelatedTask,
@@ -767,8 +767,8 @@ function PlanDocument({
     () => everyTask.filter((each) => each.workspaceId === openedWorkspace),
     [everyTask, openedWorkspace],
   );
-  // A task the head names, a crumb or a related row, opens where it was left, rather than on its agent as a sidebar row opens it.
-  const openTask = useSteadyDoor(resumeTask);
+  // A task the head names, a crumb or a related row, opens on its plan, as a list's row does.
+  const openTask = useSteadyDoor(selectTask);
   const changeBlock = useSteadyDoor(
     openedId === undefined
       ? undefined
@@ -852,6 +852,7 @@ function PlanDocument({
         tab={tab}
         // Overview's agents stand open, its list the task's own rather than a fold under the plan's head.
         folded={false}
+        waiting={waitingOf}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
         phone={
@@ -865,7 +866,6 @@ function PlanDocument({
                     onOpen={tasks.agentView.onOpen}
                   />
                 ),
-                waiting: inbox.board.waiting.length,
                 onOpenInbox: () => {
                   if (openedId !== undefined) tasks.onShowInbox({ taskId: openedId });
                 },
@@ -884,7 +884,7 @@ function PlanDocument({
       room,
       mainTabs,
       tasks.shown,
-      inbox.board.waiting.length,
+      waitingOf,
       tasks.onShowInbox,
     ],
   );

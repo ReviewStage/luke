@@ -1,19 +1,25 @@
 import type { AgentPullRequest } from "@repo/features/agent-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import {
+  AttentionMark,
+  GAP,
   GROUP_HEADING,
   GroupHeader,
+  Inline,
   LIST_DENSITY,
+  LIST_ROW_META,
   List,
   ListRow,
   RowHint,
   RowHintOptions,
+  VisuallyHidden,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
-import { NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
+import { awaitsNod, NEEDS_YOU, threadsWaitingWords } from "../tasks/inbox-model.js";
 import { PullRequestCard, peopleOf } from "../tasks/pull-request-card.js";
 import { PullRequestChip } from "../tasks/pull-request-chip.js";
 import { RunsOnPlace } from "../tasks/runs-on.js";
@@ -44,15 +50,23 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * plan opens the agent as its tab's own press does. The chip opens the pull
  * request as the agent's own pull request chip does, in its Pull request
  * tab; it is still a link to its page, so a right-click offers its address.
- * Those at work come first, then the newest started; an archived agent is
- * not listed, and a task with no agent draws no group at all.
+ * An agent with a thread waiting on the developer is marked as that
+ * thread's Inbox row is: the attention mark at its end, before where it
+ * runs, and the thread's title, a question before a notice, as its
+ * description, on a line of its own under the name, the group's rows then
+ * compact rather than dense, so a task opened on its plan says what waits
+ * and on which agent, with no pill or word beside the mark for the eye.
+ * Those agents come first, then those at work, then the newest started; an
+ * archived agent is not listed, and a task with no agent draws no group at
+ * all.
  *
  * On a phone, Overview is the task's one page, with no strip, summary, or
  * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds what
  * those offer: New agent after the agents, as the strip's "+" offers it,
  * the archived agents folded under them as the summary folds them
  * (`ArchivedAgents`), and, after the group, the task's Inbox counting what
- * waits on the developer, only while something does. The group stands then
+ * waits on the developer that no listed agent's row marks already, such as
+ * an archived agent's thread, only while something does. The group stands then
  * even on a task with no agent, for New agent.
  */
 
@@ -62,8 +76,6 @@ interface PlanAgentsPhone {
   readonly starts: readonly MenuAction[];
   /** The archived agents' fold (`ArchivedAgents`), which draws nothing while none is archived. */
   readonly archived: React.ReactNode;
-  /** How many of the task's Inbox items wait on the developer. */
-  readonly waiting: number;
   /** Opens the window's Inbox narrowed to the task. */
   readonly onOpenInbox: () => void;
 }
@@ -74,19 +86,34 @@ const AGENTS_LIST = "Agents";
 /** What the group's count counts, said to a reader beside the figure. */
 const AGENTS_NOUN = { one: "agent", many: "agents" } as const;
 
-/** The agents in the order the list draws them: those still writing first, then the newest started, each group's order otherwise kept. */
-function listedOrder(entries: readonly AddEntry[]): readonly AddEntry[] {
+/** The agents in the order the list draws them: those waiting on the developer first, then those still writing, then the newest started, each group's order otherwise kept. */
+function listedOrder(
+  entries: readonly AddEntry[],
+  waiting: ReadonlyMap<string, readonly InboxItem[]>,
+): readonly AddEntry[] {
+  const waits = (entry: AddEntry) => waiting.has(entry.row.id);
   const writing = (entry: AddEntry) =>
     entry.agent !== undefined && agentStillWriting(entry.agent.status);
   const started = (entry: AddEntry) => entry.agent?.createdAt ?? 0;
   return entries.toSorted(
-    (a, b) => Number(writing(b)) - Number(writing(a)) || started(b) - started(a),
+    (a, b) =>
+      Number(waits(b)) - Number(waits(a)) ||
+      Number(writing(b)) - Number(writing(a)) ||
+      started(b) - started(a),
   );
 }
 
-/** One agent's row: its tab's look, where it runs, its failed mark, and its pull request's chip where it opened one. */
+/** The title of the thread a waiting agent's row names: its first question, else its first notice. */
+function waitingTitle(items: readonly InboxItem[] | undefined): string | undefined {
+  return items === undefined
+    ? undefined
+    : (items.find((item) => !awaitsNod(item)) ?? items[0])?.title;
+}
+
+/** One agent's row: its tab's look, the thread it waits on the developer in, where it runs, its failed mark, and its pull request's chip where it opened one. */
 function PlanAgentRow({
   entry,
+  waitingOn,
   pullRequest,
   agents,
   held,
@@ -94,6 +121,8 @@ function PlanAgentRow({
   onOpenPullRequest,
 }: {
   entry: AddEntry;
+  /** The title of the thread it waits on the developer in, where one waits. */
+  waitingOn: string | undefined;
   pullRequest: AgentPullRequest | undefined;
   agents: AgentsControl;
   held: HeldTranscripts;
@@ -113,14 +142,25 @@ function PlanAgentRow({
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
         title={<ReplayMask>{row.label}</ReplayMask>}
+        description={waitingOn}
+        descriptionReplayMasked
+        metaAt={LIST_ROW_META.TITLE}
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
-          <ReplayMask>
-            {entry.agent === undefined ? null : (
-              <RunsOnPlace agent={entry.agent} devices={agents.macs} />
+          <Inline gap={GAP.ITEM} wrap={false}>
+            {waitingOn === undefined ? null : (
+              <>
+                <AttentionMark />
+                <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
+              </>
             )}
-            {endMark}
-          </ReplayMask>
+            <ReplayMask>
+              {entry.agent === undefined ? null : (
+                <RunsOnPlace agent={entry.agent} devices={agents.macs} />
+              )}
+              {endMark}
+            </ReplayMask>
+          </Inline>
         }
         actions={
           pullRequest === undefined ? undefined : (
@@ -155,7 +195,8 @@ function PlanAgentRow({
 
 /**
  * The task's agents at the head of its plan, under their group's head,
- * those at work first, then the newest; nothing for a task with none. A
+ * those waiting on the developer first, then those at work, then the
+ * newest; nothing for a task with none. A
  * row's press is handed to `onOpenAgent` by its agent's id, and
  * `onOpenPullRequest` opens an agent's pull request as its own chip does.
  */
@@ -164,6 +205,7 @@ export function PlanAgents({
   held,
   tab,
   folded,
+  waiting,
   onOpenAgent,
   onOpenPullRequest,
   phone,
@@ -175,6 +217,8 @@ export function PlanAgents({
   tab: MainTabsControl["tab"];
   /** Whether the group starts folded. */
   folded: boolean;
+  /** The task's Inbox items waiting on the developer, by the agent that posted each (`waitingByAgent`). */
+  waiting: ReadonlyMap<string, readonly InboxItem[]>;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
   /** A phone's additions; none elsewhere. */
@@ -195,8 +239,13 @@ export function PlanAgents({
   // Note that a phone's group stands for its archived agents too, on a task whose every agent is archived, which starts none.
   const archived = phone === undefined ? 0 : (agents.archived?.length ?? 0);
   const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
-  const waiting = phone !== undefined && phone.waiting > 0 ? phone : undefined;
-  if (!grouped && waiting === undefined) return null;
+  // Note that a phone's Inbox row counts only what no listed agent's row marks already.
+  const listed = new Set(entries.map((entry) => entry.row.id));
+  const marked = entries.some((entry) => waiting.has(entry.row.id));
+  let unmarked = 0;
+  for (const [agentId, items] of waiting) if (!listed.has(agentId)) unmarked += items.length;
+  const inboxRow = phone !== undefined && unmarked > 0 ? phone : undefined;
+  if (!grouped && inboxRow === undefined) return null;
   return (
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
@@ -217,11 +266,16 @@ export function PlanAgents({
             fold={{ defaultOpen: !folded }}
           >
             {entries.length + starts.length === 0 ? null : (
-              <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
-                {listedOrder(entries).map((entry) => (
+              <List
+                label={AGENTS_LIST}
+                density={marked ? LIST_DENSITY.COMPACT : LIST_DENSITY.DENSE}
+                moves
+              >
+                {listedOrder(entries, waiting).map((entry) => (
                   <PlanAgentRow
                     key={entry.row.id}
                     entry={entry}
+                    waitingOn={waitingTitle(waiting.get(entry.row.id))}
                     pullRequest={agents.pullRequests.get(entry.row.id)}
                     agents={agents}
                     held={held}
@@ -247,13 +301,13 @@ export function PlanAgents({
           </GroupHeader>
         </ReplayUnmask>
       ) : null}
-      {waiting === undefined ? null : (
+      {inboxRow === undefined ? null : (
         <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
           <ListRow
             leading={<GLYPH.INBOX />}
-            title={<ReplayUnmask>{threadsWaitingWords(waiting.waiting)}</ReplayUnmask>}
+            title={<ReplayUnmask>{threadsWaitingWords(unmarked)}</ReplayUnmask>}
             chevron
-            onPress={waiting.onOpenInbox}
+            onPress={inboxRow.onOpenInbox}
           />
         </List>
       )}

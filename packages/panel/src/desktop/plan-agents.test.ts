@@ -8,19 +8,22 @@ import {
   CHECK_SUMMARY,
   PULL_REQUEST_STATE,
 } from "@repo/features/agent-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { item } from "../testing/desktop-inbox.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { PlanAgents } from "./plan-agents.js";
 
 /**
- * plan-agents.test.ts -- the plan's agents list those at work first, then
- * the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
+ * plan-agents.test.ts -- the plan's agents list those waiting on the
+ * developer first, each naming the thread it waits in, then those at work,
+ * then the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
  * the pull request and not the agent, and a task with no agent draws no
  * list; on a phone the group ends with New agent, even on a task with no
- * agent, and the task's Inbox follows it only while something waits there,
- * on a task that starts no agent too.
+ * agent, and the task's Inbox follows it only while something waits there
+ * that no listed agent's row marks, on a task that starts no agent too.
  * Synthetic agents throughout.
  */
 
@@ -65,8 +68,28 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says; every agent and pull request it opens recorded. */
-function mount(agents: readonly AgentSummary[], folded = false, waiting?: number, starts = true) {
+/** `count` threads of the agent given waiting on the developer, by that agent, as `waitingByAgent` hands them. */
+function waitingOn(agentId: string, count: number): ReadonlyMap<string, readonly InboxItem[]> {
+  const items = Array.from({ length: count }, (_, at) => ({
+    ...item(`a1b2c3d4-0000-4000-8000-00000000000${at}`, `Which retry budget, ${at}?`, at),
+    agentId,
+  }));
+  return new Map([[agentId, items]]);
+}
+
+/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says, a phone's where `phone` says; every agent and pull request it opens recorded. */
+function mount(
+  agents: readonly AgentSummary[],
+  {
+    folded = false,
+    phone,
+    waiting = new Map(),
+  }: {
+    folded?: boolean;
+    phone?: { starts: boolean };
+    waiting?: ReadonlyMap<string, readonly InboxItem[]>;
+  } = {},
+) {
   const opened: { agents: string[]; pullRequests: string[]; phone: string[] } = {
     agents: [],
     pullRequests: [],
@@ -102,17 +125,17 @@ function mount(agents: readonly AgentSummary[], folded = false, waiting?: number
         held: { agents: new Map(), workers: new Map() },
         tab: undefined,
         folded,
+        waiting,
         onOpenAgent: (agentId) => opened.agents.push(agentId),
         onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
         phone:
-          waiting === undefined
+          phone === undefined
             ? undefined
             : {
-                starts: starts
+                starts: phone.starts
                   ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
                   : [],
                 archived: null,
-                waiting,
                 onOpenInbox: () => opened.phone.push("inbox"),
               },
       }),
@@ -144,8 +167,25 @@ test("the agents at work come first, then the newest, each saying where it runs,
   assert.deepEqual(opened.agents, [OLDEST.id]);
 });
 
+test("an agent waiting on the developer comes first, naming the thread it waits in and that it needs them, and a phone's Inbox row leaves that thread to it", () => {
+  const { host } = mount([OLDEST, WORKING, NEWEST], {
+    phone: { starts: false },
+    waiting: waitingOn(OLDEST.id, 1),
+  });
+  const rows = [...(host.querySelector('[aria-label="Agents"]')?.querySelectorAll("li") ?? [])];
+  assert.deepEqual(
+    rows.map((row) => row.textContent?.replace(/#42$/u, "")),
+    [
+      "Research providersNeeds youRemoved deviceWhich retry budget, 0?",
+      "Expired invite pageStudio",
+      "Invite emailCloud",
+    ],
+  );
+  assert.doesNotMatch(host.textContent ?? "", /thread needs you/u, "no Inbox row says it again");
+});
+
 test("the group starts folded unless the page says otherwise, its head counting the agents", () => {
-  const { host } = mount([OLDEST, WORKING, NEWEST], true);
+  const { host } = mount([OLDEST, WORKING, NEWEST], { folded: true });
   const head = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
   assert.equal(head?.getAttribute("aria-expanded"), "false");
   assert.match(head?.textContent ?? "", /Agents3/u);
@@ -165,7 +205,7 @@ test("on a phone the group ends with New agent even on a task with no agent, and
     assert.ok(found !== undefined, `the group offers ${words}`);
     act(() => found.click());
   };
-  const none = mount([], false, 0);
+  const none = mount([], { phone: { starts: true } });
   assert.match(none.host.querySelector('[aria-label="Agents"]')?.textContent ?? "", /New agent/u);
   assert.doesNotMatch(none.host.textContent ?? "", /need/u, "no Inbox row while nothing waits");
   press(none.host, "New agent");
@@ -173,14 +213,15 @@ test("on a phone the group ends with New agent even on a task with no agent, and
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
-  const waiting = mount([OLDEST], false, 2);
+  // Note that the threads are an agent's the group does not list, an archived one's, so no row marks them.
+  const waiting = mount([OLDEST], { phone: { starts: true }, waiting: waitingOn(NEWEST.id, 2) });
   press(waiting.host, "2 threads need you");
   assert.deepEqual(waiting.opened.phone, ["inbox"]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   // A task whose agents are all archived starts none, and its waiting threads still stand.
-  const archived = mount([], false, 1, false);
+  const archived = mount([], { phone: { starts: false }, waiting: waitingOn(NEWEST.id, 1) });
   press(archived.host, "1 thread needs you");
   assert.deepEqual(archived.opened.phone, ["inbox"]);
 });
