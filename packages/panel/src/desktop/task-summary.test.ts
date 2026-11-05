@@ -14,7 +14,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
+import { DRAFT_PLACE, type Draft, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import type { InboxBoardView } from "../tasks/inbox-model.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -333,8 +333,8 @@ const ASKING: InboxItem = {
   updatedAt: 1_000,
 };
 
-/** Writes words into an inbox item's box, as typing an answer on its card would. */
-function DraftOnItem({ item }: { item: InboxItem }): null {
+/** Writes `draft` into an inbox item's box, as typing an answer or picking on its card would. */
+function DraftOnItem({ item, draft }: { item: InboxItem; draft: Draft }): null {
   const writer = useDraftWriter();
   useEffect(() => {
     const place = {
@@ -343,8 +343,8 @@ function DraftOnItem({ item }: { item: InboxItem }): null {
       agentId: item.agentId,
       itemId: item.id,
     };
-    writer.update(place, () => ({ ...EMPTY_DRAFT, text: "Seven days, yes" }));
-  }, [writer, item]);
+    writer.update(place, () => draft);
+  }, [writer, item, draft]);
   return null;
 }
 
@@ -357,18 +357,28 @@ test("the Inbox's row counts what needs the reader in the attention tone its row
   assert.equal(count.textContent, "1 needs you");
 });
 
-test("the Inbox's row wears the Draft pencil while one of its items' boxes holds a draft, as the task's sidebar row does", () => {
+test("the Inbox's row wears the Draft pencil beside its count while one of its items' boxes holds a draft, and none for picks made on an ask since changed", () => {
   const board = { open: [ASKING], waiting: [ASKING], settled: [] };
-  const marked = (beside?: React.ReactNode) => {
+  const marks = (draft?: Draft) => {
+    const beside =
+      draft === undefined ? undefined : createElement(DraftOnItem, { item: ASKING, draft });
     const { page } = mount("plan", undefined, board, beside);
-    const found = page.querySelector('.task-summary .draft-mark[aria-label="Draft"]') !== null;
+    const drawn = {
+      drafted: page.querySelector('.task-summary .draft-mark[aria-label="Draft"]') !== null,
+      count: page.querySelector(".task-summary .inbox-row-count")?.textContent,
+    };
     act(() => root?.unmount());
     page.remove();
-    return found;
+    return drawn;
   };
 
-  assert.equal(marked(), false);
-  assert.equal(marked(createElement(DraftOnItem, { item: ASKING })), true);
+  assert.deepEqual(marks(), { drafted: false, count: "1 needs you" });
+  assert.deepEqual(marks({ ...EMPTY_DRAFT, text: "Seven days, yes" }), {
+    drafted: true,
+    count: "1 needs you",
+  });
+  const stale = { ...EMPTY_DRAFT, choices: ["Seven days"], revision: ASKING.revision - 1 };
+  assert.equal(marks(stale).drafted, false);
 });
 
 /** What the plan's own inbox holds in these tests: nothing. */
