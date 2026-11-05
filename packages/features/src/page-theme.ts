@@ -133,7 +133,12 @@ export function pageThemeMessage(theme: PageTheme): {
  * the page. A body of
  * the wide class stands across the frame, and an element of it stands across
  * the frame from within its reading-width parent, measured against the root
- * as a container, so its width leaves out the scrollbar and the inset.
+ * as a container, so its width leaves out the scrollbar and the inset. Note
+ * that a wide row or grid centers what it holds, because a strip of mockups
+ * narrower than the frame would otherwise hug its left edge under a centered
+ * column of words; it centers safely, falling back to the start where it
+ * overflows so its scroll still reaches the first item, and by `:where`, so
+ * any `justify-content` of the page's own outweighs it.
  */
 export const PAGE_THEME_SCRIPT = `(() => {
   "use strict";
@@ -148,7 +153,8 @@ export const PAGE_THEME_SCRIPT = `(() => {
     "html{container-type:inline-size}" +
     "body{max-width:var(${PAGE_THEME_VARIABLE.READING_WIDTH})}html>body{margin-inline:auto}" +
     "body." + WIDE + "{max-width:none}" +
-    "body ." + WIDE + "{box-sizing:border-box;width:100cqw;max-width:none;margin-inline:calc((100% - 100cqw) / 2)}";
+    "body ." + WIDE + "{box-sizing:border-box;width:100cqw;max-width:none;margin-inline:calc((100% - 100cqw) / 2)}" +
+    ":where(body ." + WIDE + "){justify-content:safe center}";
   let sheet = null;
 
   const length = (value) => typeof value === "string" && value !== "" && VALUE.test(value);
