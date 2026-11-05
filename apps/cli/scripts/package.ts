@@ -27,6 +27,7 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -135,7 +136,7 @@ function thirdPartyNotices(): string {
   ].join("\n");
 }
 
-/** The npm package's manifest: the unscoped `vespin`, its one `bin`, and only the files it ships. */
+/** The npm package's manifest: the unscoped `vespin`, its one `bin`, and only the files it ships, the agent skill among them. */
 function npmManifest(release: string): string {
   const manifest = {
     name: NPM_NAME,
@@ -152,7 +153,7 @@ function npmManifest(release: string): string {
     type: "module",
     bin: { vespin: "vespin.mjs" },
     engines: { node: NODE_ENGINE },
-    files: ["vespin.mjs", "README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"],
+    files: ["vespin.mjs", "README.md", "skills", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES"],
     keywords: ["vespin", "cli", "coding-agents"],
   };
   return `${JSON.stringify(manifest, null, 2)}\n`;
@@ -171,6 +172,7 @@ function stageNpm(release: string, bundle: string, notices: string): void {
   writeFileSync(join(NPM, "package.json"), npmManifest(release));
   writeFileSync(join(NPM, "vespin.mjs"), bundle, { mode: 0o755 });
   copyFileSync(join(APP, "README.md"), join(NPM, "README.md"));
+  cpSync(join(APP, "skills"), join(NPM, "skills"), { recursive: true });
   writeNotices(NPM, notices);
   process.stdout.write(`${NPM_NAME}@${release} staged in ${NPM}\n`);
 }
