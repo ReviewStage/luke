@@ -27,15 +27,30 @@ import { VERSION } from "./commands/version.js";
 import { GLOBAL_FLAGS } from "./flags.js";
 import { CommandFailed } from "./output.js";
 
+/** What each exit code says, as `--help` lists them for a script or a coding agent to branch on. */
+const EXIT_CODES_HELP = [
+  `${CLI_EXIT.OK} done`,
+  `${CLI_EXIT.REFUSED} refused`,
+  `${CLI_EXIT.USAGE} usage`,
+  `${CLI_EXIT.AUTH} not signed in`,
+  `${CLI_EXIT.UNAVAILABLE} unreachable or a server error`,
+  `${CLI_EXIT.TURN_FAILED} the agent's turn failed or was stopped`,
+  `${CLI_EXIT.TIMED_OUT} timed out waiting`,
+].join(", ");
+
 const vespin = Command.make("vespin").pipe(
   Command.withDescription(
-    `${PRODUCT_NAME} from your terminal: sign in, call the hosted API, and print JSON for scripts and coding agents`,
+    `${PRODUCT_NAME} from your terminal: sign in, work tasks, plans, and agents, call the hosted API, and print JSON for scripts and coding agents. Exit codes: ${EXIT_CODES_HELP}.`,
   ),
   Command.withSubcommands(COMMANDS),
   Command.withGlobalFlags(GLOBAL_FLAGS),
   Command.withExamples([
     { command: "vespin login", description: "Sign in through your browser" },
     { command: "vespin whoami --json", description: "Who is signed in, as JSON" },
+    {
+      command: 'echo "Fix the login redirect" | vespin task create "Login redirect" --prompt -',
+      description: "A task in this folder's repository, and an agent on it",
+    },
     { command: "vespin api GET /api/workspaces", description: "Call any hosted procedure" },
   ]),
 );

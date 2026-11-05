@@ -63,6 +63,16 @@ export const answer = Effect.fnUntraced(function* (found: Answer) {
   for (const line of found.lines) yield* Console.log(line);
 });
 
+/**
+ * Lines of an answer a person reads as they come, such as a turn followed
+ * live, on stdout; nothing with `-q` or where the run prints JSON, whose
+ * reader takes the whole answer once it is done.
+ */
+export const streamLines = Effect.fnUntraced(function* (lines: readonly string[]) {
+  if ((yield* QUIET_FLAG) || (yield* printsJson)) return;
+  for (const line of lines) yield* Console.log(line);
+});
+
 /** A note for the person running the command, on stderr, where it never mixes with the answer. */
 export function note(line: string): Effect.Effect<void> {
   return Console.error(line);
@@ -104,3 +114,26 @@ export const readInput = Effect.fnUntraced(function* (source: string) {
     () => new CommandFailed({ exit: CLI_EXIT.USAGE, message: `Could not read ${source}.` }),
   );
 });
+
+/** The space between a table's columns. */
+const COLUMN_GAP = "  ";
+
+/**
+ * Rows of cells as a person reads a table at a terminal: each column as
+ * wide as its widest cell, the last left ragged, so a long name never pads
+ * the line past it.
+ */
+export function columns(rows: readonly (readonly string[])[]): string[] {
+  const widths: number[] = [];
+  for (const row of rows) {
+    row.forEach((cell, index) => {
+      widths[index] = Math.max(widths[index] ?? 0, cell.length);
+    });
+  }
+  return rows.map((row) =>
+    row
+      .map((cell, index) => (index === row.length - 1 ? cell : cell.padEnd(widths[index] ?? 0)))
+      .join(COLUMN_GAP)
+      .trimEnd(),
+  );
+}

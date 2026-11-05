@@ -9,15 +9,21 @@
  */
 
 import { ACCOUNT_COMMANDS } from "./account.js";
+import { agentCommand } from "./agent.js";
 import { apiCommand } from "./api.js";
 import { inboxCommand } from "./inbox.js";
 import { mcpCommand } from "./mcp.js";
 import { modelsCommand } from "./models.js";
+import { planCommand } from "./plan.js";
+import { taskCommand } from "./task.js";
 import { versionCommand } from "./version.js";
 import { workspaceCommand } from "./workspace.js";
 
 export const COMMANDS = [
   ...ACCOUNT_COMMANDS,
+  taskCommand,
+  planCommand,
+  agentCommand,
   workspaceCommand,
   inboxCommand,
   modelsCommand,
