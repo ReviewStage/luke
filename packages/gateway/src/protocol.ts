@@ -31,6 +31,8 @@ export const GATEWAY_METHOD = {
   TASKS_RENAME: "tasks.rename",
   /** One task pinned or unpinned on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_PIN: "tasks.pin",
+  /** The reader's own read mark of one task moved on the service; the list takes the mark at once. */
+  TASKS_MARK_READ: "tasks.markRead",
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
@@ -355,6 +357,8 @@ export const GATEWAY_METHOD = {
   AGENTS_ARCHIVE: "agents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
   AGENTS_PIN: "agents.pin",
+  /** The reader's own read mark of one agent moved on the service; the agent as it then stands, or why it is unchanged. */
+  AGENTS_MARK_READ: "agents.markRead",
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   AGENTS_DELETE: "agents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */

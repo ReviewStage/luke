@@ -149,7 +149,7 @@ import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { useFailedRunsMark } from "./failed-runs.js";
-import { withoutFinishedRunTasks, withoutFinishedRuns } from "./finished-runs.js";
+import { withoutFinishedRuns, withoutFinishedRunTasks } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
@@ -508,7 +508,6 @@ function TaskRows({
             agent={row.agent}
             agents={context.tasks.agents}
             current={context.currentRow(row)}
-            unread={context.unseenAgent(row.agent.id)}
             now={context.now}
             at={taskRowTime(row)}
             repository={repository?.(row)}
@@ -901,7 +900,6 @@ function PinnedRows({
                 agent={agent}
                 agents={context.tasks.agents}
                 current={context.currentRow(agentRow(agent))}
-                unread={context.unseenAgent(agent.id)}
                 now={context.now}
                 at={agent.activityAt}
                 nest={nest}
@@ -1882,10 +1880,7 @@ function SidebarColumn({
     control: taskView,
     shared,
   });
-  const unread = useUnreadTasks(tasks.tasks, {
-    listRead: tasks.listRead,
-    staged: sidebar.staged,
-  });
+  const unread = useUnreadTasks({ staged: sidebar.staged });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
@@ -2317,7 +2312,6 @@ function SidebarColumn({
                             agent={row.agent}
                             agents={tasks.agents}
                             current={currentRow(row)}
-                            unread={context.unseenAgent(row.agent.id)}
                             now={now}
                             at={taskRowTime(row)}
                             face={context.faces.creator && context.faces.assignee}

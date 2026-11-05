@@ -765,13 +765,11 @@ export function DesktopShell({
       : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
-  // and what its agents did with it, which its row in the list names.
+  // from the mark and the agents' activity its row in the list carries.
   const looks = useTaskLooks(
     shownTask,
     tasks.me,
-    shownTask === undefined
-      ? undefined
-      : tasks.tasks.find((row) => row.id === shownTask.id)?.agents,
+    shownTask === undefined ? undefined : tasks.tasks.find((row) => row.id === shownTask.id),
   );
   // An agent with no plan is looked at as its page is on screen, as the plan is.
   const { agentId: pageAgentId } = tasks.agentView;

@@ -27,6 +27,7 @@ import {
   planCommentThreadAnswerSchema,
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditConflictSchema, planEditRequestSchema } from "./plan-edit.js";
+import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
   workspaceSentryDisconnectRequestSchema,
@@ -274,6 +275,14 @@ export const tasksPinParamsSchema = EffectSchema.Struct({
 });
 
 export type TasksPinParams = typeof tasksPinParamsSchema.Type;
+
+/** Moving the reader's own read mark of a task (`read-mark.ts`), as the window asks it. */
+export const tasksMarkReadParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  readMark: readMarkSchema,
+});
+
+export type TasksMarkReadParams = typeof tasksMarkReadParamsSchema.Type;
 
 /** Pinning a repository in the sidebar, or unpinning it, as the window asks it; the service keeps it on the account. */
 export const tasksPinRepositoryParamsSchema = repositoryPinRequestSchema;

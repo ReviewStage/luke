@@ -24,6 +24,7 @@ import {
   agentGitHubImageViewSchema,
   agentListAnswerViewSchema,
   agentListParamsSchema,
+  agentMarkReadParamsSchema,
   agentMessageParamsSchema,
   agentMessagesAnswerViewSchema,
   agentMessagesParamsSchema,
@@ -189,6 +190,9 @@ export const agentActsContract = {
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
   [AGENT_ACT_KIND.AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(agentPinParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_MARK_READ]: actProcedure("Could not mark the agent on this system.")
+    .input(exactInput(agentMarkReadParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
   [AGENT_ACT_KIND.AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
     .input(exactInput(agentStopParamsSchema))

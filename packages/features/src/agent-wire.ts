@@ -17,6 +17,7 @@ import {
   PULL_REQUEST_WRITE_BOUNDS,
   REACTION,
 } from "./pull-request-write-wire.js";
+import { readMarkSchema } from "./read-mark.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
@@ -835,6 +836,15 @@ export const agentPinRequestSchema = EffectSchema.Struct({
 export type AgentPinRequest = typeof agentPinRequestSchema.Type;
 
 /**
+ * Moving the asking member's own read mark of an agent with no task (PATCH),
+ * as `read-mark.ts` says each mark moves it; every other member's stands.
+ * The answer is the agent as it then stands.
+ */
+export const agentReadRequestSchema = EffectSchema.Struct({ readMark: readMarkSchema });
+
+export type AgentReadRequest = typeof agentReadRequestSchema.Type;
+
+/**
  * Switching the agent's MCP servers (PATCH): the whole list of those off,
  * which replaces the list standing, so two quick changes land as the later
  * one. Empty switches every server back on.
@@ -1317,6 +1327,10 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** Epoch milliseconds the reader read the agent through (`read-mark.ts`), the service's instant; absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  /** Whether the reader marked the agent unread and has not opened it since; absent from a service before read marks were kept. */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
   pullRequest: EffectSchema.optionalKey(
     EffectSchema.Struct({

@@ -271,6 +271,7 @@ function windowPort(
     tasksDelete: (taskId) => ask(`delete:${taskId}`, () => true),
     tasksRename: (params) => ask(`rename:${params.taskId}:${params.name}`, () => true),
     tasksPin: (params) => ask(`pin:${params.taskId}:${params.pinned}`, () => true),
+    tasksMarkRead: (params) => ask(`mark-read:${params.taskId}:${params.readMark}`, () => true),
     tasksPinRepository: (params) =>
       ask(`pin-repository:${params.repository}:${params.pinned}`, () => true),
     tasksWriteSection: (params) =>

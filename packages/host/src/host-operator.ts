@@ -36,6 +36,7 @@ import {
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
+  type AgentMarkReadParams,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -210,6 +211,7 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksLinkStandingParams,
+  type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -463,6 +465,8 @@ export interface HostOperator {
   tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
   /** One task pinned or unpinned; answers whether the service changed it. */
   tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
+  /** The reader's own read mark of one task moved; answers whether the service took it. */
+  tasksMarkRead(params: TasksMarkReadParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
@@ -770,6 +774,8 @@ export interface HostOperator {
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
+  /** The reader's own read mark of one agent moved; the agent as it then stands, or why it is unchanged. */
+  agentMarkRead(params: AgentMarkReadParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
@@ -1369,6 +1375,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
+        }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    tasksMarkRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_MARK_READ, {
+          taskId: params.taskId,
+          readMark: params.readMark,
         }),
         (answer) => record(answer)?.changed === true,
       ),
@@ -2107,6 +2121,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
+        }),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
+      ),
+    agentMarkRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_MARK_READ, {
+          agentId: params.agentId,
+          readMark: params.readMark,
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),

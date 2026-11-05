@@ -175,7 +175,7 @@ function HomeRecent({
   staged: boolean;
 }): React.JSX.Element | null {
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
-  const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
+  const unread = useUnreadTasks({ staged });
   const recent = recentTasks(tasks.listed.tasks, room);
   if (recent.length === 0 && !tasks.listFailed) return null;
   return (

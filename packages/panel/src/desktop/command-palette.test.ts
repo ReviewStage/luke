@@ -220,7 +220,7 @@ function markRows(): string[] {
   );
 }
 
-test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
+test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", () => {
   const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
@@ -228,12 +228,18 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
+  const marks: string[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_MARK_READ]: ({ taskId, readMark }) => {
+      marks.push(`${readMark}:${taskId}`);
+      return Promise.resolve(true);
+    },
+  });
   draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(markRows(), ["Mark as read"]);
-  press("Mark as read");
-  assert.deepEqual(markRows(), ["Mark as unread"]);
+  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked.
+  assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`);
 });
 
 /** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
@@ -2317,7 +2323,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
-test("on a one-off agent's page, ⌘K marks the agent unread and then read, and offers no mark while no agent's page stands", () => {
+test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", () => {
   const agent = {
     id: "agent-8",
     planId: null,
@@ -2332,11 +2338,11 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
     repository: "acme/relay",
     activityAt: 2,
   };
-  const seen: string[] = [];
+  const marks: string[] = [];
   fakeActPort({
-    [ACT_KIND.AGENTS_SEEN]: ({ agentId }) => {
-      seen.push(agentId);
-      return Promise.resolve(undefined);
+    [ACT_KIND.AGENTS_MARK_READ]: ({ agentId, readMark }) => {
+      marks.push(`${readMark}:${agentId}`);
+      return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   });
   const draw = (agentId: string | undefined) => {
@@ -2359,10 +2365,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
   assert.deepEqual(draw(undefined), []);
   assert.deepEqual(draw(agent.id), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(draw(agent.id), ["Mark as read"]);
-  press("Mark as read");
-  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
-  assert.deepEqual(seen, [agent.id]);
+  assert.deepEqual(marks, [`unread:${agent.id}`]);
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */

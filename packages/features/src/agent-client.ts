@@ -68,6 +68,7 @@ import {
   type AgentOlderAnswer,
   type AgentPinRequest,
   type AgentQueueChange,
+  type AgentReadRequest,
   type AgentRenameRequest,
   type AgentServersRequest,
   type AgentStartRequest,
@@ -1079,6 +1080,15 @@ export class HostedAgentClient {
       ROW_REFUSALS,
       key,
     );
+  }
+
+  /** Moves the account's own read mark of one agent (`read-mark.ts`), under the idempotency key given where one is, answering it as it then stands. */
+  markRead(
+    agentId: string,
+    request: AgentReadRequest,
+    key?: string,
+  ): Effect.Effect<AgentAgentAnswer, never, HttpClient.HttpClient> {
+    return this.#change(agentId, { readMark: request.readMark }, ROW_REFUSALS, key);
   }
 
   /** One change of an agent, under the idempotency key given where one is, answering it as it then stands. */

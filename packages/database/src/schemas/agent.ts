@@ -327,6 +327,13 @@ export const agentTable = pgTable(
     deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
+    /**
+     * The instant every member without a read mark of their own
+     * (`agent-read.ts`) has read the agent through, as a task's
+     * `read_through` is (`task.ts`): stamped on the agents that stood as
+     * read marks moved to the service, null on one started since.
+     */
+    readThrough: timestamptz("read_through"),
   },
   (table) => [
     // One agent per Start: a retry carrying the same key finds this row.

@@ -11,6 +11,7 @@ import { agentName } from "@repo/features/model-label";
 import { planAttachmentIdsIn } from "@repo/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@repo/features/plan-document";
 import { type PlanAgentEdit, planAgentEditSchema } from "@repo/features/plan-template";
+import { READ_MARK, type ReadMark } from "@repo/features/read-mark";
 import {
   PLAN_ACTOR,
   type PlanLastEdit,
@@ -59,6 +60,7 @@ import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
 import { taskPin } from "../schemas/task-pin.js";
+import { taskRead } from "../schemas/task-read.js";
 import { taskSectionEntry } from "../schemas/task-section.js";
 import { agentAutomationNameSql } from "./agent-name.js";
 import { ArchivedByColumnSchema, InstantColumnSchema } from "./columns.js";
@@ -287,6 +289,8 @@ export interface TaskChanges {
   readonly pinned?: boolean;
   /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
+  /** What the change makes of the account's own read mark (`READ_MARK`). */
+  readonly readMark?: ReadMark;
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
   /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
@@ -375,11 +379,20 @@ const ReaderPinSchema = Schema.Struct({
 
 type ReaderPin = typeof ReaderPinSchema.Type;
 
+/** The reader's own read mark of a plan: the instant they read it through, and whether they marked it unread. */
+const ReaderMarkSchema = Schema.Struct({
+  readThrough: InstantColumnSchema,
+  markedUnread: Schema.Boolean,
+});
+
+type ReaderMark = typeof ReaderMarkSchema.Type;
+
 /** A line of the list with the reader's own pin beside it; null where they hold none. */
 const TaskListRowSchema = Schema.Struct({
   ...TaskSummaryRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
+  ...ReaderMarkSchema.fields,
   blocked: Schema.Boolean,
   madeByRun: Schema.Boolean,
 });
@@ -402,6 +415,37 @@ const TaskIdRowSchema = Schema.Struct({ id: Schema.String });
 function readersPin(userId: string): SQL | undefined {
   return and(eq(taskPin.taskId, task.id), eq(taskPin.userId, userId));
 }
+
+/** The reader's own read mark of the plan the row names, as a join reads it. */
+function readersMark(userId: string): SQL | undefined {
+  return and(eq(taskRead.taskId, task.id), eq(taskRead.userId, userId));
+}
+
+/**
+ * The reader's read mark as a read of the plan joined to it answers it: the
+ * instant their own mark reads through, or, with none, the instant every
+ * member read the plans that stood as marks moved to the service through, or
+ * its start for a plan started since; and whether they marked it unread.
+ */
+const READER_MARK_COLUMNS = {
+  readThrough: sql<Date>`coalesce(${taskRead.readThrough}, ${task.readThrough}, ${task.createdAt})`,
+  markedUnread: sql<boolean>`coalesce(${taskRead.markedUnread}, false)`,
+};
+
+/** The reader's read mark of the plan, as `READER_MARK_COLUMNS` answers it; none where the plan is gone. */
+const findMark = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: ReaderMarkSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select(READER_MARK_COLUMNS)
+        .from(task)
+        .leftJoin(taskRead, readersMark(userId))
+        .where(eq(task.id, taskId))
+        .limit(1),
+    ),
+});
 
 /** The reader's own pin of the plan; none where they hold none. */
 const findPin = SqlSchema.findOneOption({
@@ -470,6 +514,58 @@ const removePin = SqlSchema.findOneOption({
       db
         .delete(taskPin)
         .where(and(eq(taskPin.userId, userId), eq(taskPin.taskId, taskId)))
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The reader's read mark of the plan read through now, a mark by hand taken back. */
+const markRead = SqlSchema.findOneOption({
+  Result: TxidRowSchema,
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, now: Schema.Date }),
+  execute: ({ userId, taskId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(taskRead)
+        .values({ userId, taskId, readThrough: now })
+        .onConflictDoUpdate({
+          target: [taskRead.userId, taskRead.taskId],
+          set: { readThrough: now, markedUnread: false },
+        })
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The reader's read mark of the plan read through now, a mark by hand left standing. */
+const markSeen = SqlSchema.findOneOption({
+  Result: TxidRowSchema,
+  Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String, now: Schema.Date }),
+  execute: ({ userId, taskId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(taskRead)
+        .values({ userId, taskId, readThrough: now })
+        .onConflictDoUpdate({
+          target: [taskRead.userId, taskRead.taskId],
+          set: { readThrough: now },
+        })
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The reader's read mark of the plan marked unread, the instant it was read through left standing; nothing where it stands marked already. */
+const markUnread = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: TxidRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .insert(taskRead)
+        .values({ userId, taskId, markedUnread: true })
+        .onConflictDoUpdate({
+          target: [taskRead.userId, taskRead.taskId],
+          set: { markedUnread: true },
+          setWhere: sql`not ${taskRead.markedUnread}`,
+        })
         .returning({ txid: TXID }),
     ),
 });
@@ -581,6 +677,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
     const read = yield* Effect.all(
       {
         pin: findPin({ userId, taskId: row.id }),
+        mark: findMark({ userId, taskId: row.id }),
         names: readAccountNames(namedAccountsOf([row], devices)),
         written: Effect.flatMap(readSectionWriters(row.id), (sectionWriters) =>
           Effect.map(agentLabelsOf(row, sectionWriters), (labels) => ({ sectionWriters, labels })),
@@ -591,7 +688,11 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       { concurrency: yield* readConcurrency },
     );
     const { sectionWriters, labels } = read.written;
-    const summary = summaryOf(row, Option.getOrNull(read.pin), read.names, devices);
+    const mark = Option.getOrElse(read.mark, () => ({
+      readThrough: row.createdAt,
+      markedUnread: false,
+    }));
+    const summary = summaryOf(row, Option.getOrNull(read.pin), mark, read.names, devices);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
       label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
@@ -694,6 +795,7 @@ function runsOnOf(
 function summaryOf(
   row: TaskSummaryRow,
   pin: ReaderPin | null,
+  mark: ReaderMark,
   names: ReadonlyMap<string, string>,
   devices: ReadonlyMap<string, Device>,
 ): TaskSummary {
@@ -713,6 +815,8 @@ function summaryOf(
     ...originOf(row),
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
+    readThrough: mark.readThrough.getTime(),
+    markedUnread: mark.markedUnread,
     ...(row.completedAt === null ? undefined : { completedAt: row.completedAt.getTime() }),
     status: row.status,
     priority: row.priority,
@@ -858,11 +962,13 @@ const findTasks = SqlSchema.findAll({
           ...TASK_SUMMARY_COLUMNS,
           pinnedAt: taskPin.pinnedAt,
           pinPosition: taskPin.position,
+          ...READER_MARK_COLUMNS,
           blocked: taskBlockedFor(userId),
           madeByRun: taskMadeByRun(task.id),
         })
         .from(task)
         .leftJoin(taskPin, readersPin(userId))
+        .leftJoin(taskRead, readersMark(userId))
         .where(taskReachableBy(userId))
         .orderBy(desc(task.createdAt), desc(task.id)),
     ),
@@ -1348,6 +1454,7 @@ export function listTasks(userId: string): TaskStoreEffect<readonly TaskSummary[
       ...summaryOf(
         row,
         row.pinnedAt === null ? null : { pinnedAt: row.pinnedAt, pinPosition: row.pinPosition },
+        row,
         names,
         devices,
       ),
@@ -1539,6 +1646,23 @@ function columnChangesOf(
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
   };
+}
+
+/** The reader's own read mark of the plan set as asked (`READ_MARK`); every other member's stands as it was. */
+function markAsAsked(
+  userId: string,
+  taskId: string,
+  mark: ReadMark,
+  now: Date,
+): TaskStoreEffect<Option.Option<typeof TxidRowSchema.Type>> {
+  switch (mark) {
+    case READ_MARK.READ:
+      return markRead({ userId, taskId, now });
+    case READ_MARK.SEEN:
+      return markSeen({ userId, taskId, now });
+    case READ_MARK.UNREAD:
+      return markUnread({ userId, taskId });
+  }
 }
 
 /**
@@ -1738,13 +1862,13 @@ const broughtBackWithTask = Effect.fnUntraced(function* (taskId: string, complet
 
 /**
  * Changes the task, a new name with its document's heading, a repository or
- * none, pinned or not, its workspace, where it stands, and answers it as
+ * none, pinned or not, read or not, its workspace, where it stands, and answers it as
  * changed, or nothing where the account reaches no such task. The changes
  * arrive already read under the wire's rules, and a repository already
  * confirmed reachable; a move runs the caller's guard under the row's lock
  * on the repository the task will name once it lands. A change is
  * not a save: the document's `updatedAt` and the list's order stand. The pin
- * is the account's own and no other member's. A task no one is assigned to
+ * and the read mark are the account's own and no other member's. A task no one is assigned to
  * that the change moves into progress is assigned to the account, unless the
  * change names an assignee of its own. A change that moves the task to Done
  * or Canceled settles its open inbox items, and one that moves it off them
@@ -1811,6 +1935,10 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
           changes.pinned === undefined
             ? Option.none()
             : yield* pinAsAsked(userId, taskId, changes.pinned, changes.pinPosition, now);
+        const marked =
+          changes.readMark === undefined
+            ? Option.none()
+            : yield* markAsAsked(userId, taskId, changes.readMark, now);
         const moved =
           changes.organizationId !== undefined &&
           changes.organizationId !== locked.value.organizationId;
@@ -1859,7 +1987,8 @@ export function updateTaskCommitted<E = never, R = never, RA = never>(
                 // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
                 Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
               );
-        const txid = written ?? Option.getOrUndefined(pinned)?.txid;
+        const txid =
+          written ?? Option.getOrUndefined(pinned)?.txid ?? Option.getOrUndefined(marked)?.txid;
         // A task moved to Done archives its idle agents with it, and one moved off Done brings them back.
         // Note that this runs before its agents and items move, so the write locks each agent's
         // conversation before its row and agent rows before item rows, in the order an archive does.

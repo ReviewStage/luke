@@ -40,6 +40,7 @@ import {
   type PageOwner,
   type PagePlace,
 } from "@repo/features/page-wire";
+import { markedAs, readMarkOf } from "@repo/features/read-mark";
 import type {
   SlackBotChannel,
   SlackListedChannel,
@@ -75,6 +76,7 @@ import {
   type TasksFindAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -121,6 +123,7 @@ import {
   tasksFileParamsSchema,
   tasksFindParamsSchema,
   tasksLinkStandingParamsSchema,
+  tasksMarkReadParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPictureKeepParamsSchema,
@@ -1949,6 +1952,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       parentTaskId: task.parentTaskId ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
+      ...readMarkOf(task),
       completedAt: task.completedAt ?? null,
     };
   }
@@ -1975,6 +1979,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       assigneeName: task.assignee?.name ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
+      ...readMarkOf(task),
       completedAt: task.completedAt ?? null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
@@ -2394,6 +2399,50 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     queue: {
       name: GATEWAY_METHOD.TASKS_PIN,
       input: tasksPinParamsSchema,
+      queued: () => ({ changed: true }),
+    },
+  };
+
+  /**
+   * The reader's read mark of a task, drawn on its row at once and kept once
+   * the list carries the service's; the held plan reads no mark, so only the
+   * row takes the answer.
+   */
+  const markedRead: WriteDeclaration<
+    PlanRow,
+    FieldChange<PlanRow>,
+    TasksMarkReadParams,
+    { readonly changed: boolean }
+  > = {
+    kind: PLAN,
+    keys: ({ taskId }) => [taskId],
+    change:
+      ({ readMark }) =>
+      (row) =>
+        markedAs(readMark, row, kernel.now()),
+    send: ({ taskId, readMark }, { key }) =>
+      gate()
+        ? serial(
+            Effect.gen(function* () {
+              const answered = yield* served(client.mark(taskId, { readMark }, key));
+              if (!answered.ok) {
+                return untaken(answered.failure, {
+                  kept: { changed: true },
+                  refused: { changed: false },
+                });
+              }
+              const marked = answered.answer;
+              return {
+                answer: { changed: true },
+                txid: marked.txid,
+                taken: () => readMarkOf(marked.task),
+              };
+            }),
+          )
+        : Effect.succeed({ refused: { changed: false } }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_MARK_READ,
+      input: tasksMarkReadParamsSchema,
       queued: () => ({ changed: true }),
     },
   };
@@ -3213,6 +3262,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     ),
     [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
       readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
+    ),
+    [GATEWAY_METHOD.TASKS_MARK_READ]: declaredMethod(
+      dependencies.pool,
+      markedRead,
+      (params: WireRecord) =>
+        readParams(
+          tasksMarkReadParamsSchema,
+          params,
+          "marking a task read names it and how its mark moves",
+        ),
     ),
     // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(

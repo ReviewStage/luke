@@ -838,6 +838,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             : { repository: reached.repository, githubAccess: reached.githubAccess }),
           ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
           ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
+          ...(changes.readMark === undefined ? undefined : { readMark: changes.readMark }),
           ...(status === undefined ? undefined : { status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
           ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),

@@ -1599,7 +1599,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
     "Copy concise transcript⌥⌘C",
     "Copy full transcript⌥⇧⌘C",
     "Rename",
-    "Mark as readU",
+    "Mark as unreadU",
     "PinP",
     "Move to section",
     "Show terminal⌘J",

@@ -15,6 +15,7 @@ import {
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import { RUN_EVENT, RUN_TURN_ORIGIN, TURN_TRIGGER } from "@repo/features/turn-run";
 import { sessionKey } from "@repo/runtime/vocabulary";
 import {
@@ -66,6 +67,7 @@ import {
   listTasklessAgentRows,
   listWorkspaceAgentLines,
   listWorkspaceAgents,
+  markAgentReadCommitted,
   type NewAgent,
   nativeRouteOfReached,
   nativeRuntimesOfReached,
@@ -1354,6 +1356,35 @@ const pinnedOnes = (agentId: string) =>
   Database.use((db) =>
     db.select({ userId: agentPin.userId }).from(agentPin).where(eq(agentPin.agentId, agentId)),
   );
+
+/** The agent's read mark as the account's list reads it. */
+const markReadBy = (userId: string, agentId: string) =>
+  Effect.map(listTasklessAgentRows(userId, { includeArchived: true }), (agents) => {
+    const row = agents.find(({ id }) => id === agentId) ?? assert.fail("the agent is not listed");
+    return { readThrough: row.readThrough.getTime(), markedUnread: row.markedUnread };
+  });
+
+it.layer(getTestDB())("an agent's read mark", (it) => {
+  it.effect(
+    "a member's read mark of an agent with no plan is theirs alone, and a mark by hand stands until it is read",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, agentId } = yield* openSharedAgent;
+        const unmarked = yield* markReadBy(charles, agentId);
+        const readAt = yield* Clock.currentTimeMillis;
+
+        yield* markAgentReadCommitted(dean, agentId, READ_MARK.UNREAD);
+        assert.deepEqual(yield* markReadBy(dean, agentId), { ...unmarked, markedUnread: true });
+        yield* markAgentReadCommitted(dean, agentId, READ_MARK.READ);
+
+        assert.deepEqual(yield* markReadBy(dean, agentId), {
+          readThrough: readAt,
+          markedUnread: false,
+        });
+        assert.deepEqual(yield* markReadBy(charles, agentId), unmarked);
+      }),
+  );
+});
 
 it.layer(getTestDB())("an agent's pin", (it) => {
   it.effect("a member's pin of an agent with no plan reads pinned for them alone", () =>

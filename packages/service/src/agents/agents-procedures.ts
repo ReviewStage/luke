@@ -44,6 +44,7 @@ import {
   hasRepository,
   listAgentLines,
   listWorkspaceAgentLines,
+  markAgentReadCommitted,
   nativeRouteOfReached,
   nativeRuntimesOfReached,
   pinAgentCommitted,
@@ -504,6 +505,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * tab falls back to the model's name. `archived` archives the agent,
      * stopping a turn still running first as a Stop does, or brings it back.
      * `pinned` pins it for the asking member alone, or unpins it.
+     * `readMark` moves the asking member's own read mark of it.
      * `disabledServers` replaces the list of MCP servers switched off for
      * it, which its next turn reads as it starts. A model and effort, and the
      * standard context window where it is chosen, change what its next step
@@ -556,6 +558,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           yield* hostedStoreOrUnavailable(
             pinAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
+        );
+      }
+      if ("readMark" in body) {
+        return yield* committedAgent(
+          userId,
+          yield* hostedStoreOrUnavailable(markAgentReadCommitted(userId, agent.id, body.readMark)),
         );
       }
       if ("disabledServers" in body) {
