@@ -36,12 +36,7 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
-import {
-  DEVICE_AGENT_LINE_KIND,
-  DEVICE_CAPABILITY,
-  DEVICE_SETUP,
-  deviceAgentLaunchPayloadSchema,
-} from "@repo/features/device-agent-wire";
+import { DEVICE_CAPABILITY, DEVICE_SETUP } from "@repo/features/device-agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
