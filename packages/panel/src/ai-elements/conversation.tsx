@@ -142,6 +142,8 @@ export function Conversation({
   const readerAt = useRef(Number.NEGATIVE_INFINITY);
   // Whether the reader holds a press now, a scroll bar's thumb among them.
   const pressing = useRef(false);
+  // Whether the pointer stands over a frame in the log, a page drawn in its words, whose wheel the window never hears.
+  const overFrame = useRef(false);
   const toEnd = useCallback((element: HTMLDivElement) => {
     element.scrollTop = element.scrollHeight;
     lastTop.current = element.scrollTop;
@@ -154,6 +156,13 @@ export function Conversation({
     };
     const released = () => {
       pressing.current = false;
+    };
+    // Note that the window hears the pointer enter a frame and leave it, and nothing between.
+    const entered = (event: Event) => {
+      overFrame.current = event.target instanceof HTMLIFrameElement && inputOn(list.current, event);
+    };
+    const exited = (event: Event) => {
+      if (event.target instanceof HTMLIFrameElement) overFrame.current = false;
     };
     // Note that a press released over another window never reaches this one, so the window losing focus, or the page being hidden, ends it too.
     const left = (event: Event) => {
@@ -169,6 +178,8 @@ export function Conversation({
     for (const name of RELEASE_EVENTS) {
       window.addEventListener(name, released, { capture: true, passive: true });
     }
+    window.addEventListener("pointerover", entered, { capture: true, passive: true });
+    window.addEventListener("pointerout", exited, { capture: true, passive: true });
     window.addEventListener("blur", left);
     document.addEventListener("visibilitychange", hidden);
     return () => {
@@ -176,6 +187,8 @@ export function Conversation({
       for (const name of RELEASE_EVENTS) {
         window.removeEventListener(name, released, { capture: true });
       }
+      window.removeEventListener("pointerover", entered, { capture: true });
+      window.removeEventListener("pointerout", exited, { capture: true });
       window.removeEventListener("blur", left);
       document.removeEventListener("visibilitychange", hidden);
     };
@@ -295,7 +308,9 @@ export function Conversation({
   // among them, and the observer then takes it the rest of the way down.
   // Note too that a scroll up is the reader's only where their wheel,
   // touch, press, or key came just before it, a press of theirs is still
-  // held, as a scroll bar's drag is, or a script said it was about
+  // held, as a scroll bar's drag is, the pointer stands over a page drawn in
+  // the log, whose frame takes the wheel the window would otherwise hear and
+  // hands on only the scroll, or a script said it was about
   // to scroll the log for them (`askScroll`), as find, a reveal, or an
   // unread line does. Any other is the layout's, and leaves the log
   // following, taken back to its end: a box that grows pulls its scroll back
@@ -309,6 +324,7 @@ export function Conversation({
       const down = element.scrollTop >= lastTop.current;
       const asked =
         pressing.current ||
+        overFrame.current ||
         event.timeStamp - readerAt.current < READER_SCROLL_MS ||
         scrollAsked(element);
       if (following.current && !down && !asked && !followsNewest(element)) {
