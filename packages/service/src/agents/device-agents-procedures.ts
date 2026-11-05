@@ -114,6 +114,7 @@ import {
   deviceAgentRequestsFor,
   settledDeviceAgentLine,
 } from "./device-agent.js";
+import { removeAccountHost } from "./hosts-procedures.js";
 import { settleLostHostTurns } from "./lost-host-turns.js";
 
 export interface DeviceAgentsProcedureSeams {
@@ -280,6 +281,12 @@ export function deviceAgentsProcedures(seams: DeviceAgentsProcedureSeams) {
         );
       }
       return { deviceId: input.deviceId, deviceSecret: minted.secret };
+    }),
+    // Note that a host leaving is removed as Settings › Hosts' Remove removes it, and that it answers done where its host was already gone, since the box deletes its secret either way.
+    leave: deviceAgents.leave.effect(function* ({ context, input }) {
+      yield* ownDevice(context, input.deviceId);
+      yield* removeAccountHost(context.userId, input.deviceId);
+      return DONE;
     }),
     register: deviceAgents.register.effect(function* ({ context, input }) {
       yield* ownDevice(context, input.deviceId);

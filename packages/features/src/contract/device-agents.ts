@@ -4,15 +4,16 @@
  * A host joins first (`../host-wire.ts`), a box pairing with a code
  * (`startPairing`, then `pollPairing` until a member approves it) for its
  * device secret, or a member's own desktop enrolling its device on its
- * sign-in (`enrollOwn`), and calls every other procedure on that secret.
+ * sign-in (`enrollOwn`), and calls every other procedure on that secret,
+ * `leave` among them, which removes the host from its account.
  * Every procedure names the Mac's device id, in the query of a held read
  * and in the body of every other call. The outputs are the wire schemas
  * flipped, so oRPC's output check encodes the handler's value into the
  * bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   DEVICE_AGENT_BOUNDS,
@@ -62,6 +63,11 @@ export const deviceAgentsContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL_OWN }))
     .input(exactInput(ownDeviceEnrollRequestSchema))
     .output(EffectSchema.flip(hostEnrollAnswerSchema)),
+  leave: hostedProcedure
+    .meta(bodyCap(SMALL_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LEAVE }))
+    .input(exactInput(deviceAgentDeviceRequestSchema))
+    .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
   register: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES }))

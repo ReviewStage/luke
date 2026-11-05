@@ -10,12 +10,13 @@
  * Every procedure is the account's own, on its bearer or its browser's
  * session (`accountMiddleware`), so the Hosts list works in a browser and on
  * a phone as in the desktop. A host removed is refused at once on its
- * secret (`auth/device-secret.ts`), and its agents' running turns are
- * settled lost with it. Each host is listed with whether its daemon is
- * below the floor, where its setup stands, where its update to a newer
- * release stands, whether its program has called in since it joined, and,
- * for a Mac, the user it runs as, and every answer
- * names the install script on the service's own origin, which the
+ * secret (`auth/device-secret.ts`), its box cleans itself up as it hears
+ * so, and its agents' running turns are settled lost with it; a host may
+ * leave on its own secret the same way (`removeAccountHost`). Each host is
+ * listed with whether its daemon is below the floor, where its setup
+ * stands, where its update to a newer release stands, whether its program
+ * has called in since it joined, and, for a Mac, the user it runs as, and
+ * every answer names the install script on the service's own origin, which the
  * install and upgrade commands name (`@repo/features/host-wire`).
  *
  * A box's pairing is read, approved, or denied by its user code, whatever
@@ -97,6 +98,27 @@ const endedHostAgents = (userId: string, deviceId: string) =>
     ),
   );
 
+/**
+ * Removes the account's host of the id given, as Settings › Hosts' Remove
+ * and the host's own leave (`device-agents-procedures.ts`) both do: stamped
+ * removed, so its secret is refused at once and its box cleans itself up as
+ * it hears so, its agents' running turns settled lost, and the change
+ * counted. Answers the transaction it removed in, or none where no host of
+ * that id stood.
+ */
+export const removeAccountHost = (userId: string, id: string) =>
+  Effect.gen(function* () {
+    const removed = yield* hostedStoreOrUnavailable(removeHost(userId, id));
+    if (removed === undefined) return undefined;
+    yield* endedHostAgents(userId, id);
+    yield* recordServerEvent(
+      SERVER_EVENT.HOST_PAIRING_CHANGE,
+      { userId },
+      { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
+    );
+    return removed;
+  });
+
 /** A remove answered with the transaction it removed in, or refused as not found where none was removed. */
 const removedOrNotFound = (txid: string | undefined) =>
   txid === undefined ? Effect.fail(HOSTED_REFUSAL.NOT_FOUND) : Effect.succeed({ ...DONE, txid });
@@ -157,16 +179,7 @@ export function hostsProcedures(seams: HostsProcedureSeams) {
       };
     }),
     remove: hosts.remove.effect(function* ({ context, input }) {
-      const removed = yield* hostedStoreOrUnavailable(removeHost(context.userId, input.id));
-      if (removed !== undefined) {
-        yield* endedHostAgents(context.userId, input.id);
-        yield* recordServerEvent(
-          SERVER_EVENT.HOST_PAIRING_CHANGE,
-          { userId: context.userId },
-          { action: SERVER_HOST_PAIRING_ACTION.REMOVE },
-        );
-      }
-      return yield* removedOrNotFound(removed);
+      return yield* removedOrNotFound(yield* removeAccountHost(context.userId, input.id));
     }),
     readPairing: hosts.readPairing.effect(function* ({ context, input }) {
       const code = yield* codeOf(input.code);

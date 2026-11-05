@@ -579,7 +579,7 @@ describe("the host's install script", () => {
     { os: "Darwin", stops: true },
     { os: "Darwin", stops: false },
   ])(
-    "the account install's uninstall, run through ~/.local/bin/vespin-host with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
+    "the account install's uninstall, run through ~/.local/bin/vespin-host with no sudo on $os, stops its service through the account's own manager, warns of unpushed work, leaves Vespin, and removes the folders of the agents its daemon made, its state, its releases and its link, in that order, leaving another install's agents, the clones and a Linux account's lingering, said, unless its service will not stop (stops: $stops)",
     ({ os, stops }) => {
       const fakes = folder();
       const home = folder();
@@ -599,6 +599,15 @@ describe("the host's install script", () => {
       writeFileSync(join(release, "bin/vespin-host"), readFileSync(UNINSTALL_SCRIPT), {
         mode: 0o755,
       });
+      // Note that the release's daemon says what it was asked, and its leave answers that the service took it.
+      mkdirSync(join(release, "node/bin"), { recursive: true });
+      writeFileSync(
+        join(release, "node/bin/node"),
+        `#!/bin/sh\nshift\nprintf 'vespin-host %s\\n' "$*" >>"${asked}"\n`,
+        {
+          mode: 0o755,
+        },
+      );
       symlinkSync(release, join(releases, "current"));
       const link = join(home, ".local/bin/vespin-host");
       mkdirSync(join(home, ".local/bin"), { recursive: true });
@@ -635,6 +644,11 @@ describe("the host's install script", () => {
             : [`bootout gui/${uid}/dev.vespin.host.standalone`],
         ),
       );
+      // Note that the host leaves Vespin only once its service stopped, so a refused uninstall leaves it standing on both sides.
+      expect(commands.includes("vespin-host leave")).toBe(stops);
+      expect(
+        answer.stdout.includes("Vespin host is removed from this account and from Vespin."),
+      ).toBe(stops);
       expect(answer.stdout.split("\n").filter((line) => line.startsWith("Removed "))).toEqual(
         stops
           ? [
