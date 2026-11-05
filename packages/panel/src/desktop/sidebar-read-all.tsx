@@ -67,5 +67,13 @@ export function ReadAllMenu({
     disabled: !ready || unread.length === 0,
     onSelect: () => onMarkAll(unread),
   };
-  return <ActionMenu label={label} menu={menu} groups={groups(markAll, ready)} onClose={onClose} />;
+  return (
+    <ActionMenu
+      label={label}
+      menu={menu}
+      groups={groups(markAll, ready)}
+      onClose={onClose}
+      replayUnmasked
+    />
+  );
 }

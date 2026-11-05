@@ -1,5 +1,6 @@
 import type { Workspace } from "@repo/features/workspace-wire";
 import { cn, HoverCard, HoverCardHead, OneLine, Tooltip } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { ReactNode } from "react";
 import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 
@@ -112,14 +113,17 @@ export function WorkspaceRef({
   card?: ReactNode;
 }): React.JSX.Element {
   const nameClass = cn("workspace-ref-name", NAME_OF_SIZE[size]);
-  const named =
-    name === undefined ? (
-      <OneLine className={nameClass} words={workspace.name}>
-        {workspace.name}
-      </OneLine>
-    ) : (
-      <OneLine className={nameClass}>{name}</OneLine>
-    );
+  const named = (
+    <ReplayMask>
+      {name === undefined ? (
+        <OneLine className={nameClass} words={workspace.name}>
+          {workspace.name}
+        </OneLine>
+      ) : (
+        <OneLine className={nameClass}>{name}</OneLine>
+      )}
+    </ReplayMask>
+  );
   // Note that the head fills its row, so its chevron stands at the row's end.
   const ref = (
     <span
@@ -131,7 +135,9 @@ export function WorkspaceRef({
       )}
       data-size={size}
     >
-      <WorkspaceTile workspace={workspace} size={TILE_OF_SIZE[size]} />
+      <ReplayMask>
+        <WorkspaceTile workspace={workspace} size={TILE_OF_SIZE[size]} />
+      </ReplayMask>
       {line === undefined ? (
         named
       ) : (

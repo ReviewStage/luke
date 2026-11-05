@@ -53,6 +53,7 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { ListIcon } from "@repo/ui/icons";
+import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -682,6 +683,7 @@ function browserEntries(
       detail: tab.owner.name,
       terms: [tab.title, tab.owner.name],
       section: ADD_SECTION.BROWSER,
+      replayMasked: true,
     },
     card: hungCard({
       kind: TAB_KIND.BROWSER,
@@ -709,6 +711,7 @@ function browserEntries(
       icon: owner.icon,
       end: agentEndMark(agent, true),
       card: agentRowCard(agent, owner.name, cards),
+      replayMasked: true,
     })),
     value: undefined,
     onPick: browsers.onAgent,
@@ -719,7 +722,11 @@ function browserEntries(
 
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
 function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRow {
-  return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }) };
+  return {
+    id: tab,
+    ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }),
+    replayMasked: tab === SIDE_PANEL_TAB.PLAN && plan !== undefined,
+  };
 }
 
 /**
@@ -791,6 +798,7 @@ export function panelEntries(input: {
         detail: label,
         terms: [look.label, label],
         section: ADD_SECTION.PULL_REQUESTS,
+        replayMasked: true,
       },
       card,
       onPick: () => panel.onChoose({ changes: agentId }),
@@ -801,6 +809,7 @@ export function panelEntries(input: {
       id: page.id,
       ...tabLook({ kind: TAB_KIND.PAGE, title: page.title }),
       section: ADD_SECTION.PAGES,
+      replayMasked: true,
     },
     card:
       cards === undefined
@@ -825,6 +834,7 @@ export function panelEntries(input: {
       detail: <TerminalStanding agent={agent} />,
       command: showsOnChord ? APP_COMMAND.SHOW_TERMINAL : undefined,
       section: ADD_SECTION.TERMINAL,
+      replayMasked: true,
     },
     // Note that the row hangs its Terminal tab's card: its agent's, saying under a rule whose sandbox its shells run in.
     endMark: agentEndMark(agent, true),
@@ -1011,6 +1021,7 @@ function stripTabs(input: {
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab, thread: input.thread }),
+      labelReplayUnmasked: true,
       card: hungCard({ kind: TAB_KIND.PANEL, tab }),
     }),
     close: () => panel.onClose(tab),
@@ -1073,7 +1084,11 @@ function stripTabs(input: {
     });
     return {
       tab,
-      look: look(tab, { ...changesLook(tab, own), card: changesCard }),
+      look: look(tab, {
+        ...changesLook(tab, own),
+        labelReplayUnmasked: pullRequest === undefined,
+        card: changesCard,
+      }),
       close: () => panel.onClose(tab),
     };
   });
@@ -1117,6 +1132,7 @@ function stripTabs(input: {
         look: look(tab, {
           icon: drawn.owner.icon,
           label: cloudBrowserTitleOf(drawn),
+          labelReplayUnmasked: !("tab" in drawn),
           card: hungCard({
             kind: TAB_KIND.BROWSER,
             owner: drawn.owner,
@@ -1458,67 +1474,77 @@ export function ActivityList({
         {strip.length === 0 ? (
           <div className="mb-control-gap px-row-inset">
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              Nothing open beside Overview
+              <ReplayUnmask>Nothing open beside Overview</ReplayUnmask>
             </Text>
           </div>
         ) : (
           // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
-          <List label="Activity" density={LIST_DENSITY.DENSE}>
-            {strip.map((entry) => (
-              // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
-              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
-                <ListRow
-                  leading={entry.look.icon}
-                  title={entry.look.label}
-                  meta={
-                    entry.look.detailTone === undefined ? (
-                      entry.look.detail
-                    ) : (
-                      <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
-                        {entry.look.detail}
-                      </span>
-                    )
-                  }
-                  unread={entry.look.unread}
-                  hint={
-                    entry.look.card === undefined
-                      ? undefined
-                      : { Hint: RowHint, label: entry.look.label }
-                  }
-                  actions={
-                    <Tooltip label={`Close ${entry.look.label}`}>
-                      <IconButton
-                        icon={<CloseIcon />}
-                        label={`Close ${entry.look.label}`}
-                        onClick={entry.close}
-                      />
-                    </Tooltip>
-                  }
-                  onPress={() => {
-                    onListed(false);
-                    entry.look.onSelect();
-                  }}
-                />
-              </RowHintOptions>
-            ))}
-          </List>
+          // A row's name and what follows it show as its tab's do (`labelReplayUnmasked`), masked for a tab named for a person's thing.
+          <ReplayUnmask>
+            <List label="Activity" density={LIST_DENSITY.DENSE}>
+              {strip.map((entry) => (
+                // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
+                <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
+                  <ListRow
+                    leading={entry.look.icon}
+                    title={entry.look.label}
+                    titleReplayMasked={entry.look.labelReplayUnmasked !== true}
+                    meta={
+                      entry.look.detail === undefined ? undefined : (
+                        <ReplayWords masked={entry.look.labelReplayUnmasked !== true}>
+                          {entry.look.detailTone === undefined ? (
+                            entry.look.detail
+                          ) : (
+                            <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
+                              {entry.look.detail}
+                            </span>
+                          )}
+                        </ReplayWords>
+                      )
+                    }
+                    unread={entry.look.unread}
+                    hint={
+                      entry.look.card === undefined
+                        ? undefined
+                        : { Hint: RowHint, label: entry.look.label }
+                    }
+                    actions={
+                      <Tooltip label={`Close ${entry.look.label}`}>
+                        <IconButton
+                          icon={<CloseIcon />}
+                          label={`Close ${entry.look.label}`}
+                          onClick={entry.close}
+                        />
+                      </Tooltip>
+                    }
+                    onPress={() => {
+                      onListed(false);
+                      entry.look.onSelect();
+                    }}
+                  />
+                </RowHintOptions>
+              ))}
+            </List>
+          </ReplayUnmask>
         )}
         {/* Note that the offers stand in one block, so the column's gap between sections never stands between a section's label and its rows. */}
         {more.length === 0 ? null : (
           <div className="side-panel-activity-more flex flex-col">
-            <div className="pb-ui-4 px-row-inset">
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                Open more
-              </Text>
-            </div>
-            <MenuRowList
-              label="Open a tab"
-              rows={more.map(entryRow)}
-              onPick={(id) => {
-                onListed(false);
-                more.find((entry) => entry.row.id === id)?.onPick();
-              }}
-            />
+            <ReplayUnmask>
+              <div className="pb-ui-4 px-row-inset">
+                <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+                  Open more
+                </Text>
+              </div>
+              <MenuRowList
+                label="Open a tab"
+                rows={more.map(entryRow)}
+                onPick={(id) => {
+                  onListed(false);
+                  more.find((entry) => entry.row.id === id)?.onPick();
+                }}
+              />
+            </ReplayUnmask>
           </div>
         )}
       </div>
@@ -1583,6 +1609,7 @@ function ToggleOffers({
       noMatch={entries.length === 0 ? "Nothing to open here" : "No tabs match"}
       align={POPOVER_ALIGN.END}
       bounds={POPOVER_BOUNDS.WINDOW}
+      replayUnmasked
       onPick={(id) => {
         const entry = entries.find((each) => each.row.id === id);
         close();
@@ -2732,7 +2759,7 @@ export function SidePanel({
                 />
               </p>
               <Button onClick={() => taskOfTab.onShowPanelTab(besideTask.id, tab)}>
-                {BESIDE_WORDS.OPEN_TASK}
+                <ReplayUnmask>{BESIDE_WORDS.OPEN_TASK}</ReplayUnmask>
               </Button>
             </TabNotice>
           )}
@@ -2921,6 +2948,7 @@ function PanelPhoneHead({
         <PlaceMore
           thing={PANEL_THING}
           shown
+          replayUnmasked={listing || shown === undefined}
           groups={(opener) => {
             const tabActions =
               listing || shown === undefined
@@ -2931,7 +2959,7 @@ function PanelPhoneHead({
                       group.map((item) =>
                         "items" in item || "panel" in item
                           ? item
-                          : { ...item, detail: item.detail ?? shown.label },
+                          : { ...item, detail: item.detail ?? shown.label, replayMasked: true },
                       ),
                     );
             return [
@@ -2943,6 +2971,7 @@ function PanelPhoneHead({
                       {
                         ...commandAction(PANEL_COMMAND.CLOSE_TAB, onCloseShown, true),
                         detail: shown?.label ?? title,
+                        replayMasked: true,
                       },
                     ]),
               ],

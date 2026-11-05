@@ -22,6 +22,8 @@ export function automationDeleteQuestion(name: string | undefined): DialogQuesti
     verb: "Delete automation",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    titleReplayMasked: name !== undefined,
   };
 }
 

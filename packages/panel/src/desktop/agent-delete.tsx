@@ -41,6 +41,8 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
     verb: "Permanently delete agent",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    bodyReplayMasked: true,
   };
 }
 

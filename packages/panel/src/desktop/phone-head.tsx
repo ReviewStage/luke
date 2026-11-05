@@ -176,6 +176,7 @@ export function PlaceMore({
   shown,
   groups,
   ends,
+  replayUnmasked,
 }: {
   /** What the place is, which names its ⋯ and its menu: "Inbox" makes "Inbox actions". */
   thing: string;
@@ -184,6 +185,8 @@ export function PlaceMore({
   groups: (opener: HTMLElement) => readonly (readonly MenuEntry[])[];
   /** What the menu draws beyond its items, read as it is drawn: a task's header's names the task and says who created it on its Plan view. */
   ends?: (() => MenuEnds | undefined) | undefined;
+  /** Whether its items' words are the app's own, which a screen recording shows as they read, but for an item that is `replayMasked` (`ActionMenu`'s). */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const drawn = menu.drawn === undefined ? undefined : ends?.();
@@ -198,6 +201,7 @@ export function PlaceMore({
           footer={drawn?.footer}
           groups={groups(menu.drawn.opener)}
           onClose={menu.close}
+          replayUnmasked={replayUnmasked}
         />
       )}
     </>

@@ -11,6 +11,7 @@ import {
   STATUS_TONE,
   useRovingKeys,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
 import { useRef, useState } from "react";
@@ -92,11 +93,20 @@ const ITEMS_NOT_READ = "Some inbox items could not be read.";
 /** What the page says where the task list could not be read, as the sidebar says it. */
 const TASKS_NOT_READ = "Your tasks could not be read.";
 
-/** The greeting: the account's first name where it has one, welcomed back unless the account is new. */
-function greeting(name: string | undefined, fresh: boolean): string {
+/** The greeting: the account's first name where it has one, welcomed back unless the account is new; a screen recording shows the welcome and masks the name. */
+function greeting(name: string | undefined, fresh: boolean): React.JSX.Element {
   const first = name?.trim().split(/\s+/u)[0];
   const words = fresh ? "Welcome" : "Welcome back";
-  return first === undefined || first === "" ? words : `${words}, ${first}`;
+  return (
+    <ReplayUnmask>
+      {words}
+      {first === undefined || first === "" ? null : (
+        <>
+          , <ReplayMask>{first}</ReplayMask>
+        </>
+      )}
+    </ReplayUnmask>
+  );
 }
 
 /** The listed workspace's tasks with the latest activity, their own saves and their agents' alike. */
@@ -161,19 +171,21 @@ function HomeInbox({
       {waiting.length === 0 ? (
         <NoteLine look={NOTE_LINE_LOOK.INSET}>{NEEDS_YOU.NONE}</NoteLine>
       ) : (
-        <List label={TAB_WORDS.INBOX} joinsWalk>
-          {waiting.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-              models={tasks.agents.models}
-              readerId={tasks.me}
-              onChoose={open}
-            />
-          ))}
-        </List>
+        <ReplayMask>
+          <List label={TAB_WORDS.INBOX} joinsWalk>
+            {waiting.map((listed) => (
+              <InboxItemRow
+                key={listed.item.id}
+                listed={listed}
+                chosen={false}
+                {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
+                models={tasks.agents.models}
+                readerId={tasks.me}
+                onChoose={open}
+              />
+            ))}
+          </List>
+        </ReplayMask>
       )}
     </PersonSectionFrame>
   );
@@ -206,7 +218,9 @@ function HomeRecent({
         </div>
       ) : null}
       {recent.length === 0 ? null : (
-        <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
+        <ReplayMask>
+          <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
+        </ReplayMask>
       )}
     </PersonSectionFrame>
   );
@@ -271,13 +285,16 @@ export function DesktopHome({
       <HomeComposer tasks={tasks} takesFocus={takesFocus} />
       {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
       <div className="home-rows contents" {...roving}>
-        <Arrival reading={arriving} label={READING_TASKS}>
-          {/* The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members. */}
-          <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-            <HomeInbox tasks={tasks} read={read} waiting={waiting} />
-            <HomeRecent tasks={tasks} room={room} staged={staged} />
-          </MemberDirectory>
-        </Arrival>
+        {/* Note that the sections stand in one mark, so a section still follows the last (`person-frame.tsx`), and their names, counts, and notes show in a screen recording while each masks its rows. */}
+        <ReplayUnmask>
+          <Arrival reading={arriving} label={READING_TASKS}>
+            {/* The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members. */}
+            <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+              <HomeInbox tasks={tasks} read={read} waiting={waiting} />
+              <HomeRecent tasks={tasks} room={room} staged={staged} />
+            </MemberDirectory>
+          </Arrival>
+        </ReplayUnmask>
       </div>
     </DetailPage>
   );

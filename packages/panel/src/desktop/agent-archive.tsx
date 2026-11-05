@@ -20,6 +20,7 @@ import {
   Tooltip,
   useConfirmDialog,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -114,6 +115,8 @@ function archiveQuestion(name: string): DialogQuestion {
     verb: "Stop and archive agent",
     running: "Stopping and archiving",
     loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+    replayUnmasked: true,
+    titleReplayMasked: true,
   };
 }
 
@@ -234,12 +237,12 @@ function ArchivedAgentRow({
               <AgentGlyph agent={agent} />
             </span>
           }
-          title={subject.name}
+          title={<ReplayMask>{subject.name}</ReplayMask>}
           meta={agentEndMark(agent, false)}
           muted
           hint={{ Hint: RowHint, label: subject.name }}
           onPress={() => onOpen(agent.id)}
-          menu={rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+          menu={rowMenu(ARCHIVED_THING, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
@@ -280,25 +283,27 @@ export function ArchivedAgents({
   if (archived.length === 0) return null;
   return (
     <div className="task-summary-archived mt-list-gap">
-      <GroupHeader
-        heading={GROUP_HEADING.NONE}
-        glyph={<ArchiveIcon />}
-        label={ARCHIVED_LABEL}
-        fold={{ open: unfolded, onOpenChange: setUnfolded }}
-        count={foldedCount(!unfolded, archived.length, ARCHIVED_NOUN)}
-      >
-        <List label="Archived agents" density={LIST_DENSITY.DENSE}>
-          {archived.map((agent) => (
-            <ArchivedAgentRow
-              key={agent.id}
-              agent={agent}
-              agents={agents}
-              shown={shown}
-              onOpen={onOpen}
-            />
-          ))}
-        </List>
-      </GroupHeader>
+      <ReplayUnmask>
+        <GroupHeader
+          heading={GROUP_HEADING.NONE}
+          glyph={<ArchiveIcon />}
+          label={ARCHIVED_LABEL}
+          fold={{ open: unfolded, onOpenChange: setUnfolded }}
+          count={foldedCount(!unfolded, archived.length, ARCHIVED_NOUN)}
+        >
+          <List label="Archived agents" density={LIST_DENSITY.DENSE}>
+            {archived.map((agent) => (
+              <ArchivedAgentRow
+                key={agent.id}
+                agent={agent}
+                agents={agents}
+                shown={shown}
+                onOpen={onOpen}
+              />
+            ))}
+          </List>
+        </GroupHeader>
+      </ReplayUnmask>
     </div>
   );
 }

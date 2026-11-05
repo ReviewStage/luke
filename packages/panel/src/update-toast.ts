@@ -42,7 +42,12 @@ export function useUpdatedToast(update: UpdateSnapshot | undefined): void {
     toast({
       words: `Updated to ${version}`,
       tone: STATUS_TONE.COMPLETE,
-      action: { label: "What's new", onPress: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG) },
+      replayUnmasked: true,
+      action: {
+        label: "What's new",
+        onPress: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+        replayUnmasked: true,
+      },
     });
   }, [toast, press, version]);
 }

@@ -18,6 +18,7 @@ import {
   TABS_GROUND,
   VisuallyHidden,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useRef } from "react";
@@ -348,14 +349,14 @@ function agentTabs(input: {
       : [
           {
             tab: startingTab,
-            look: look(
-              startingTab,
-              tabLook({
+            look: look(startingTab, {
+              ...tabLook({
                 kind: TAB_KIND.AGENT,
                 name: undefined,
                 agent: { model: pending?.model ?? "", status: AGENT_STATUS.STARTING },
               }),
-            ),
+              labelReplayUnmasked: true,
+            }),
             close: undefined,
           },
         ];
@@ -373,6 +374,7 @@ function agentTabs(input: {
               { draft },
               {
                 ...tabLook({ kind: TAB_KIND.DRAFT }),
+                labelReplayUnmasked: true,
                 endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
               },
             ),
@@ -406,6 +408,7 @@ export function agentEntries(
         id: agent.id,
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         section: AGENTS_SECTION,
+        replayMasked: true,
       },
       endMark: agentEndMark(agent, true),
       // Note that a caller handing what its tabs hold gets the card its tab hangs; ⌘K and the summary hang theirs themselves.
@@ -661,7 +664,9 @@ export function MainTabStrip({
           takes it out of reach, and as its glyph alone where the bar is
           short of room (desktop.css's `plan-toolbar`). */}
       {agents.listFailed && agents.agents === undefined ? (
-        <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        <ReplayUnmask>
+          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        </ReplayUnmask>
       ) : null}
       <AddTabButton
         label="Open a tab"
