@@ -389,12 +389,16 @@ const listCommand = Command.make(
         });
       }
       const { hosted } = yield* session;
-      const listed: { agents: readonly AgentSummary[]; nextOffset?: number } = Option.isSome(task)
-        ? yield* askService(hosted.agents.listOfTask, { id: yield* resolveTaskId(task.value) })
-        : yield* askService(hosted.agents.listOfWorkspace, {
-            workspaceId: (yield* resolveWorkspace).workspace.id,
-            ...(Option.isSome(offset) ? { offset: String(offset.value) } : undefined),
-          });
+      const workspace = Option.isSome(task) ? undefined : (yield* resolveWorkspace).workspace;
+      const listed: { agents: readonly AgentSummary[]; nextOffset?: number } =
+        workspace === undefined
+          ? yield* askService(hosted.agents.listOfTask, {
+              id: yield* resolveTaskId(Option.getOrThrow(task)),
+            })
+          : yield* askService(hosted.agents.listOfWorkspace, {
+              workspaceId: workspace.id,
+              ...(Option.isSome(offset) ? { offset: String(offset.value) } : undefined),
+            });
       const { agents } = listed;
       // A task's list, and a service before paging, name no next page.
       const nextOffset = listed.nextOffset ?? null;
@@ -404,7 +408,11 @@ const listCommand = Command.make(
           ...(agents.length === 0 ? ["No agents."] : agentLines(agents)),
           ...(nextOffset === null
             ? []
-            : ["", `More agents stand: vespin agent list --offset ${nextOffset}`]),
+            : [
+                "",
+                // The next page names its workspace, so it pages the same list whatever the default.
+                `More agents stand: vespin agent list -w ${workspace?.slug ?? workspace?.id} --offset ${nextOffset}`,
+              ]),
         ],
         ids: agents.map((agent) => agent.id),
       });
