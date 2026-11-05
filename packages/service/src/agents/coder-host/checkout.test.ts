@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import {
   type Agent,
   createAgent,
@@ -21,6 +22,7 @@ import {
 } from "@repo/features/automation-wire";
 import { CHECKOUT_IDENTITY_VARIABLE } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
+import { COMMIT_AUTHOR } from "@repo/settings";
 import { Effect, Option } from "effect";
 import { LINK_OUTCOME } from "../../github/github-installations.js";
 import {
@@ -39,9 +41,10 @@ import {
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
-  agentCoAuthor,
+  agentAuthorship,
   agentDeepenPlan,
   agentRepositoryRead,
+  COMMIT_BY,
   cloneAgentRepository,
   deepenCheckoutWith,
 } from "./checkout.js";
@@ -80,8 +83,17 @@ const BOT_IDENTITY = {
   email: `${GITHUB_FIXTURE_BOT.id}+${GITHUB_FIXTURE_BOT.login}@users.noreply.github.com`,
 } as const;
 
+/** The trailer crediting the App's bot as co-author. */
+const BOT_TRAILER = `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`;
+
 /** The developer's own GitHub account, as `GET /user` answers on their token. */
 const DEVELOPER = { id: 7_001, login: "ada", name: "Ada Lovelace" } as const;
+
+/** The developer's account as their commits name it. */
+const DEVELOPER_IDENTITY = {
+  name: DEVELOPER.name,
+  email: `${DEVELOPER.id}+${DEVELOPER.login}@users.noreply.github.com`,
+} as const;
 
 /** The token the developer's GitHub sign-in left on their row (`standingGithubRow`). */
 const DEVELOPER_TOKEN = "ghu_standing";
@@ -364,7 +376,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
           Effect.provide(github.layer),
         );
-        const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
+        const authorship = yield* agentAuthorship(target, agent).pipe(Effect.provide(github.layer));
 
         assert.deepEqual(standing, APP_CREDENTIAL);
         assert.deepEqual(sandbox.identities, [
@@ -379,8 +391,56 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        assert.equal(coAuthor, `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`);
+        assert.deepEqual(authorship, { by: COMMIT_BY.DEVELOPER, coAuthor: BOT_TRAILER });
         assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.DEVELOPER);
+      }),
+  );
+
+  it.effect(
+    "a developer who chose the App's bot with themselves credited has the bot author and the trailer name their account, the row saying they chose it, and one who chose themselves alone authors with no trailer",
+    () =>
+      Effect.gen(function* () {
+        const appInstallation = installationOf(14);
+        const byApp = yield* openAgent(appInstallation);
+        yield* writeAccountPreferences(byApp.target.userId, {
+          commitAuthor: COMMIT_AUTHOR.APP_WITH_DEVELOPER,
+        });
+        const soloInstallation = installationOf(15);
+        const solo = yield* openAgent(soloInstallation);
+        yield* writeAccountPreferences(solo.target.userId, {
+          commitAuthor: COMMIT_AUTHOR.DEVELOPER,
+        });
+        const github = githubReaching(
+          [appInstallation, soloInstallation],
+          undefined,
+          {},
+          developerReach(true),
+        );
+
+        const read = (opened: typeof byApp) =>
+          Effect.gen(function* () {
+            const sandbox = sandboxDouble(() => undefined);
+            yield* checkOutAndDeepen(opened.target, opened.agent, sandbox);
+            return {
+              identities: sandbox.identities,
+              authorship: yield* agentAuthorship(opened.target, opened.agent),
+              author: yield* authorOf(opened.target.userId, opened.agent),
+            };
+          }).pipe(Effect.provide(github.layer));
+
+        assert.deepEqual(yield* read(byApp), {
+          identities: [BOT_IDENTITY],
+          authorship: {
+            by: COMMIT_BY.APP,
+            coAuthor: `Co-authored-by: ${DEVELOPER_IDENTITY.name} <${DEVELOPER_IDENTITY.email}>`,
+          },
+          author: AGENT_AUTHOR.APP_CHOSEN,
+        });
+        assert.deepEqual(yield* read(solo), {
+          identities: [DEVELOPER_IDENTITY],
+          authorship: { by: COMMIT_BY.DEVELOPER, coAuthor: undefined },
+          author: AGENT_AUTHOR.DEVELOPER,
+        });
       }),
   );
 
@@ -402,9 +462,11 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const { agent, target } of [automated, google]) {
           const sandbox = sandboxDouble(() => undefined);
           yield* checkOutAndDeepen(target, agent, sandbox).pipe(Effect.provide(github.layer));
-          const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
+          const authorship = yield* agentAuthorship(target, agent).pipe(
+            Effect.provide(github.layer),
+          );
           assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
-          assert.equal(coAuthor, undefined);
+          assert.deepEqual(authorship, { by: COMMIT_BY.APP, coAuthor: undefined });
         }
 
         assert.deepEqual(
@@ -434,7 +496,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
           Effect.provide(github.layer),
         );
-        const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
+        const authorship = yield* agentAuthorship(target, agent).pipe(Effect.provide(github.layer));
 
         // The member's own token, on the repository's own paths, as theirs.
         const basic = `Basic ${Buffer.from(`${GITHUB_FIXTURE_MEMBER.LOGIN}:${GITHUB_FIXTURE_MEMBER.TOKEN}`).toString("base64")}`;
@@ -455,7 +517,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
             email: `${MEMBER.id}+${MEMBER.login}@users.noreply.github.com`,
           },
         ]);
-        assert.equal(coAuthor, `Co-authored-by: ${BOT_IDENTITY.name} <${BOT_IDENTITY.email}>`);
+        assert.deepEqual(authorship, { by: COMMIT_BY.DEVELOPER, coAuthor: BOT_TRAILER });
         assert.equal(yield* authorOf(target.userId, agent), AGENT_AUTHOR.TOKEN);
         for (const run of sandbox.runs) {
           assert.equal(JSON.stringify(run).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);

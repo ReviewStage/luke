@@ -281,7 +281,8 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
      * where the account's links open, `agentEnter`, what Enter does in an
-     * agent's box while it works, `setupFinished`, whether the account
+     * agent's box while it works, `commitAuthor`, who authors an agent's
+     * commits, `setupFinished`, whether the account
      * finished setup, `agent`, a choice the catalog
      * accepts, moved only to a model the account pays for, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
@@ -294,6 +295,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         body.preferences === undefined &&
         body.linkOpen === undefined &&
         body.agentEnter === undefined &&
+        body.commitAuthor === undefined &&
         body.setupFinished === undefined &&
         body.agent === undefined &&
         body.chaptersModel === undefined &&
@@ -317,6 +319,11 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         const agentEnter = ownPreferenceFromWire("agentEnter", body.agentEnter);
         if (agentEnter === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
         write.agentEnter = agentEnter;
+      }
+      if (body.commitAuthor !== undefined) {
+        const commitAuthor = ownPreferenceFromWire("commitAuthor", body.commitAuthor);
+        if (commitAuthor === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        write.commitAuthor = commitAuthor;
       }
       if (body.setupFinished !== undefined) {
         const setupFinished = ownPreferenceFromWire("setupFinished", body.setupFinished);

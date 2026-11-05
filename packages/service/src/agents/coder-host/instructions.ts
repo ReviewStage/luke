@@ -22,6 +22,7 @@ import { RECORDING_CURSOR_FILE } from "../browser/recording-cursor.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { MESSAGE_AGENT_TOOL } from "./agent-message.js";
 import { CODER } from "./bounds.js";
+import { COMMIT_BY, type CommitAuthorship } from "./checkout.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
@@ -474,11 +475,17 @@ Name a skill as \`/name\`, which ${PRODUCT_NAME} draws as the skill's chip.
 Write a name ${PRODUCT_NAME} shows as a label in sentence case, with no period at its end: a task's name, a page's title, a thread's title, a section's name, and an ask's options.`;
 }
 
-/** Whose the agent's commits are: the developer's, ending on the trailer naming our bot as co-author, or the App's bot's where no trailer is handed. */
-function authorshipRule(coAuthor: string | undefined): string {
+/** Whose the agent's commits are, the developer's or the App's bot's, and the trailer naming the other as co-author where one is handed; the bot's with none where nothing is. */
+function authorshipRule(authorship: CommitAuthorship | undefined): string {
+  const coAuthor = authorship?.coAuthor;
+  if (authorship?.by === COMMIT_BY.DEVELOPER) {
+    return coAuthor === undefined
+      ? `Your commits are the developer's: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, add a \`Co-authored-by\` trailer, or rewrite who a commit is by. The service opens your pull request as the developer too.`
+      : `Your commits are the developer's, with ${PRODUCT_NAME} as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The service opens your pull request as the developer too.`;
+  }
   return coAuthor === undefined
     ? `Your commits are the ${PRODUCT_NAME} GitHub App's: the checkout's git identity is already set to its bot, so never change \`user.name\` or \`user.email\`, pass \`--author\`, add a \`Co-authored-by\` trailer, or rewrite who a commit is by.`
-    : `Your commits are the developer's, with ${PRODUCT_NAME} as co-author: the checkout's git identity is already set to the developer's own GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`. The service opens your pull request as the developer too.`;
+    : `Your commits are the ${PRODUCT_NAME} GitHub App's, with the developer as co-author: the checkout's git identity is already set to its bot, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by, and end every commit message with a blank line and then this trailer, exactly as written: \`${coAuthor}\`.`;
 }
 
 /** What the instructions say of the branch the checkout stands at. */
@@ -644,7 +651,7 @@ function buildWords(
   brief: AgentBrief,
   ciReadable: boolean,
   ownTask: OwnTask | null,
-  coAuthor: string | undefined,
+  authorship: CommitAuthorship | undefined,
   startBranch: string | null,
   memberToken: boolean,
   machine: CoderMachine,
@@ -654,7 +661,7 @@ function buildWords(
   const checks = memberToken ? tools.checks.rest : tools.checks.readable;
   return {
     branch: `Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, ${branch.cut}${PULL_REQUEST_BRANCH_WORDS}`,
-    authorship: authorshipRule(coAuthor),
+    authorship: authorshipRule(authorship),
     change: `Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.`,
     check:
       "Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.",
@@ -984,7 +991,7 @@ export function coderInstructions(
   brief: AgentBrief,
   ciReadable: boolean,
   ownTask: OwnTask | null,
-  coAuthor: string | undefined = undefined,
+  authorship: CommitAuthorship | undefined = undefined,
   startBranch: string | null = null,
   memberToken = false,
   harness: CoderHarness = CODER_HARNESS.CLAUDE_CODE,
@@ -1010,7 +1017,7 @@ export function coderInstructions(
           brief,
           ciReadable,
           ownTask,
-          coAuthor,
+          authorship,
           startBranch,
           memberToken,
           machine,
@@ -1080,8 +1087,8 @@ export interface OwnTask {
 export interface AgentInstructionsContext {
   /** Whether its token reads the repository's CI. */
   readonly ciReadable: boolean;
-  /** The co-author trailer where it writes as its developer. */
-  readonly coAuthor: string | undefined;
+  /** Whose its commits are, and the trailer naming the other as co-author where one is. */
+  readonly authorship: CommitAuthorship | undefined;
   /** The workspace its links are written under. */
   readonly workspace: string;
   /** The number its task goes by in that workspace, which the task's link names it by; none where it is not known, and the link names the task's id. */
@@ -1123,7 +1130,7 @@ export function agentCoderInstructions(agent: Agent, context: AgentInstructionsC
     agentBriefOf(agent),
     context.ciReadable,
     ownTask,
-    context.coAuthor,
+    context.authorship,
     agent.startBranch,
     agent.githubAccess === GITHUB_ACCESS.TOKEN,
     context.harness,

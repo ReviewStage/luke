@@ -16,6 +16,7 @@ import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
 import { AgentsPage } from "./agents-page.js";
 import { AppearanceSection } from "./appearance-page.js";
+import { CommitsSection } from "./commits-section.js";
 import { ExperimentalPage } from "./experimental-page.js";
 import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
@@ -101,6 +102,7 @@ export function SettingsPanel({
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
             {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
+            {panelView ? <CommitsSection view={panelView} writes={writes} /> : null}
             {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>

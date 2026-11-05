@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { LINK_OPEN } from "@repo/features/link-open";
 import { test } from "vitest";
 import { AGENT_ENTER } from "./agent-enter.js";
+import { COMMIT_AUTHOR } from "./commit-author.js";
 import {
   type AccountPreferences,
   accountPreferencesParts,
@@ -79,6 +80,7 @@ test("the snapshot's preferences part carries only the keys v0.18.0 reads, whate
   const everything = {
     linkOpen: LINK_OPEN.MAC_APP,
     agentEnter: AGENT_ENTER.QUEUE,
+    commitAuthor: COMMIT_AUTHOR.APP,
     setupFinished: true,
   } satisfies Required<AccountPreferences>;
   const shared = Object.keys(accountPreferencesParts(everything).preferences);
