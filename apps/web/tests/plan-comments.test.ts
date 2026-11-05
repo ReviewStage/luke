@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
 import { writePage } from "@repo/database/models/plan-pages";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
@@ -57,6 +58,7 @@ import {
 } from "@repo/service/testing/integration-connect";
 import { scriptedHarnessLayer } from "@repo/service/testing/native-harness-fake";
 import { keepAwakeDetached } from "@repo/service/testing/session-sandboxes-fake";
+import { EXPERIMENT } from "@repo/settings";
 import { unparsedWire } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { sql } from "drizzle-orm";
@@ -93,11 +95,13 @@ interface Answered {
   readonly body: string;
 }
 
+/** An account with Plans on, whose agents are handed a plan's comment threads only then. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
+    yield* writeAccountPreferences(id, { experiments: { [EXPERIMENT.PLANS]: true } });
     return id;
   });
 
