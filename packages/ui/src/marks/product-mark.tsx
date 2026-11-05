@@ -4,9 +4,9 @@ import React from "react";
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
-// Note that the disc spans 18 of a line glyph's 24 units, because a filled
-// disc reads larger than the outlined circle it stands beside at the same size.
-const GLYPH_VIEW_BOX = "-16.667 -16.667 133.333 133.333";
+// Note that the disc spans 20 of a line glyph's 24 units, the span Lucide's
+// circles draw within, so it stands the size of the glyphs beside it.
+const GLYPH_VIEW_BOX = "-10 -10 120 120";
 
 interface ProductMarkProps {
   /** Draws the mark in the muted text color, where it stands behind what is said over it. */
