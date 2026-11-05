@@ -15,7 +15,7 @@ import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
 import { failureShown, unreadShown } from "../failure-report.js";
@@ -443,6 +443,8 @@ interface AnswerBoxProps {
   keywords: readonly string[];
   /** The thread whose agent's words the box stands Reply over, quoting them in. */
   replyScope: RefObject<HTMLElement | null>;
+  /** Hears the door a quote is laid into the box through while the box takes one, and none once it does not, for the pages the thread draws (`shown-page.tsx`). */
+  onQuoteDoor?: ((door: ((words: string) => void) | undefined) => void) | undefined;
   /** Brings the item's agent back from the archive, offered after a send it refused for being archived. */
   onUnarchiveAgent: () => Promise<ActionResult>;
   /** The new thread the checkbox under the card starts instead of a reply; none where the page offers none. */
@@ -476,6 +478,7 @@ function AnswerCard({
   skills,
   keywords,
   replyScope,
+  onQuoteDoor,
   onUnarchiveAgent,
   newThread,
   statuses,
@@ -648,6 +651,12 @@ function AnswerCard({
   };
   // Note that Reply stands only while the editor stands and takes a quote, and no nod or start is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
+  // The thread's pages lay their quotes in through the same door, while the box takes one.
+  useEffect(() => {
+    if (onQuoteDoor === undefined || !quotes) return undefined;
+    onQuoteDoor((words) => editor.current?.insertQuote(words));
+    return () => onQuoteDoor(undefined);
+  }, [onQuoteDoor, quotes]);
   return (
     <div ref={box} className={COMPOSER_ROOM_CLASS} {...files.drop.target}>
       <AnswerForm

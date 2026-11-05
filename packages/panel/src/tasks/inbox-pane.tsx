@@ -64,7 +64,16 @@ import {
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isWireString } from "@repo/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -144,7 +153,7 @@ import {
 import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import type { InboxSnoozer } from "./inbox-snooze.js";
 import { InboxStamp } from "./inbox-stamp.js";
-import { REPLY_SCOPE } from "./reply-to-selection.js";
+import { REPLY_SCOPE, ReplyDoorProvider } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -1570,6 +1579,15 @@ export function InboxPane({
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
+  // The box's door a quote is laid in through, which the pages the thread draws offer Reply through; held in a record, since a function handed to a state's setter is read as an update.
+  const [quoteDoor, setQuoteDoor] = useState<{ readonly lay: (words: string) => void } | undefined>(
+    undefined,
+  );
+  const onQuoteDoor = useCallback(
+    (lay: ((words: string) => void) | undefined) =>
+      setQuoteDoor(lay === undefined ? undefined : { lay }),
+    [],
+  );
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);
@@ -1676,6 +1694,7 @@ export function InboxPane({
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}
+          onQuoteDoor={onQuoteDoor}
           onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
           newThread={newThread === undefined ? undefined : answerNewThread(newThread, item, by)}
         />
@@ -1775,55 +1794,57 @@ export function InboxPane({
             {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
             <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
-              <Stack
-                as={LAYOUT_ELEMENT.OL}
-                gap={GAP.NONE}
-                className={INBOX_THREAD}
-                aria-label="Messages"
-              >
-                <ThreadEventsAt
-                  itemId={item.id}
-                  events={events}
-                  after={-1}
-                  by={by}
-                  now={now}
-                  images={images}
-                />
-                {thread.map((message, at) => (
-                  <Fragment key={message.id}>
-                    {/* A close's note is drawn under the close's own line. */}
-                    {notes.has(message.id) ? null : (
-                      <ThreadMessage
+              <ReplyDoorProvider value={quoteDoor?.lay}>
+                <Stack
+                  as={LAYOUT_ELEMENT.OL}
+                  gap={GAP.NONE}
+                  className={INBOX_THREAD}
+                  aria-label="Messages"
+                >
+                  <ThreadEventsAt
+                    itemId={item.id}
+                    events={events}
+                    after={-1}
+                    by={by}
+                    now={now}
+                    images={images}
+                  />
+                  {thread.map((message, at) => (
+                    <Fragment key={message.id}>
+                      {/* A close's note is drawn under the close's own line. */}
+                      {notes.has(message.id) ? null : (
+                        <ThreadMessage
+                          itemId={item.id}
+                          title={cardTitle(item.title)}
+                          threadAddressedTo={inboxAddressedTo(item)}
+                          message={message}
+                          thread={thread}
+                          by={by}
+                          now={now}
+                          images={images}
+                          waitingOn={waitingOn}
+                        />
+                      )}
+                      {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
+                      {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
+                        <EarlierMessages by={by} />
+                      ) : null}
+                      <ThreadEventsAt
                         itemId={item.id}
-                        title={cardTitle(item.title)}
-                        threadAddressedTo={inboxAddressedTo(item)}
-                        message={message}
-                        thread={thread}
+                        events={events}
+                        after={at}
                         by={by}
                         now={now}
                         images={images}
-                        waitingOn={waitingOn}
                       />
-                    )}
-                    {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
-                    {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
-                      <EarlierMessages by={by} />
-                    ) : null}
-                    <ThreadEventsAt
-                      itemId={item.id}
-                      events={events}
-                      after={at}
-                      by={by}
-                      now={now}
-                      images={images}
-                    />
-                  </Fragment>
-                ))}
-                {pending.map((reply) => (
-                  <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
-                ))}
-                {draftReply}
-              </Stack>
+                    </Fragment>
+                  ))}
+                  {pending.map((reply) => (
+                    <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
+                  ))}
+                  {draftReply}
+                </Stack>
+              </ReplyDoorProvider>
             </ItemWords>
             {control.failed ? (
               <ErrorState
