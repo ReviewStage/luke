@@ -189,7 +189,7 @@ test("a thread's answer is copied led by what the member did, without the header
       "## Plan",
       "Build invitations.",
       "## Developer",
-      "Thread answer",
+      "Answered Ship it?",
       "Approved.",
     ].join("\n\n") + "\n",
   );

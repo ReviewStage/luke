@@ -129,19 +129,19 @@ const MESSAGES: readonly AgentTranscriptMessage[] = [
   }),
   // A line GitHub's webhook told carries the avatar GitHub named for who caused it, an App's logo among them.
   {
-    ...line("checks-bot", "Every check finished on `c0ffee`.\n\nNone failed.", {
-      name: "github-actions[bot]",
+    ...line("app-review", "@review-app[bot] reviewed your pull request #12.", {
+      name: "review-app[bot]",
       kind: AGENT_SENDER.GITHUB,
     }),
     metadata: {
       channel: "github",
-      event: "checks_completed",
+      event: "review",
       repository: "acme/relay",
       number: 12,
-      url: "https://github.com/acme/relay/commit/c0ffee/checks",
-      by: "github-actions[bot]",
+      url: "https://github.com/acme/relay/pull/12#pullrequestreview-1",
+      by: "review-app[bot]",
       by_avatar: "https://avatars.githubusercontent.com/in/15368?v=4",
-      failing: false,
+      verdict: "commented",
     },
   },
   line("left", "Keep the banner.", { userId: "user-ana", name: "Ana Ruiz", kind: MEMBER }),
@@ -272,9 +272,9 @@ test("each member sees a teammate's face and name under the teammate's messages 
     ],
     ["review-bot", ACTOR_KIND.GITHUB, "devin-ai-integration"],
     [
-      "checks-bot",
+      "app-review",
       ACTOR_KIND.GITHUB,
-      "github-actions",
+      "review-app",
       "https://avatars.githubusercontent.com/in/15368?v=4&s=32",
     ],
     // A member the workspace no longer lists has left it, and keeps their name.

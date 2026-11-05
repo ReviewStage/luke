@@ -1581,11 +1581,11 @@ export function AgentMessage({
     const received = sender !== undefined;
     const threadHead =
       comment !== undefined ? (
-        <CommentLineHead line={comment} fit={SUBJECT_FIT.OWN} />
+        <CommentLineHead line={comment} received={received} fit={SUBJECT_FIT.OWN} />
       ) : slack !== undefined ? (
         <SlackLineHead line={slack} received={received} />
       ) : thread === undefined ? null : (
-        <ThreadLineHead line={thread} words={words} fit={SUBJECT_FIT.OWN} />
+        <ThreadLineHead line={thread} words={words} received={received} fit={SUBJECT_FIT.OWN} />
       );
     // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
     const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
