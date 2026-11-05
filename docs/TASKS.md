@@ -704,11 +704,13 @@ a device that takes no agent now dimmed and saying why. It stands only
 where Continue in new agent could run: on an agent at rest, not archived,
 that the open task's tab or the agent's own page lists, on a task whose mode
 offers it a continue. A pick is that continue at the place picked: the
-source stops, a new agent named `<title> (continued)` starts there on its
-transcript, and its tab opens. A cloud agent's work comes along whole, what
-it had not committed included, on a branch of its own; from a device only
-what it pushed comes along, which each place says, and its folder stays on
-that device. A move that is refused says why in a toast.
+source stops, a new agent starts there on its transcript, named
+`<title> (continued)` where the source has a title, and its tab opens. A
+cloud agent's work comes along on a branch of its own, what it had not
+committed included but files named the way credentials are kept; from a
+device only what it pushed comes along, which each place says, and its
+folder stays on that device. An agent on a device the service did not name
+is offered the cloud alone. A move that is refused says why in a toast.
 
 ## Copy
 

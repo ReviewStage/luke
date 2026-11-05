@@ -977,6 +977,11 @@ export function useAgents(input: {
         ? held.key
         : mintKey();
     continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments, runsOn });
+    // Note that only this press's own key is let go, because another press of the agent, to another
+    // place or with other words, may have replaced it while this one was out.
+    const forgetPress = () => {
+      if (continues.current.get(sourceId)?.key === key) continues.current.delete(sourceId);
+    };
     const answer = await askStart(startsOn, {
       idempotencyKey: key,
       from: { agentId: sourceId },
@@ -986,9 +991,7 @@ export function useAgents(input: {
     });
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
-      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
-        continues.current.delete(sourceId);
-      }
+      if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) forgetPress();
       const refused = continueFailureNote(answer, taskId ?? null);
       const shown = {
         surface: FAILURE_SURFACE.AGENT_START,
@@ -1003,7 +1006,7 @@ export function useAgents(input: {
       }
       return refused;
     }
-    continues.current.delete(sourceId);
+    forgetPress();
     landed(startsOn, answer.agent);
     return undefined;
   };

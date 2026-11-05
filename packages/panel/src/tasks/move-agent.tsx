@@ -28,7 +28,8 @@ import type { AgentsControl } from "./use-agents.js";
  * and its folder stays on that device. Move to lists Cloud, then each device
  * the member registered, by what every list of machines calls it, its glyph
  * wearing its standing's dot (`runs-on.tsx`), less the place the agent runs
- * now; a device that takes no agent now is listed dimmed, saying why. It
+ * now, or the cloud alone for an agent on a device the service did not name;
+ * a device that takes no agent now is listed dimmed, saying why. It
  * stands only while Bring your own host is on, and only where a Continue is
  * offered: where a Start from the agent could run (`continueAgent`), under
  * nothing archived, on an agent not archived and at rest, of a task whose
@@ -81,7 +82,11 @@ export function useMoveToEntry(
         },
       ]
     : [];
-  const elsewhere = devices.filter((device) => !local || device.deviceId !== agent.mac?.deviceId);
+  // Note that a local agent whose device the service did not name is offered the cloud alone, because
+  // any of the devices listed may be the one it runs on.
+  const here = local ? agent.mac?.deviceId : undefined;
+  const elsewhere =
+    local && here === undefined ? NO_DEVICES : devices.filter((each) => each.deviceId !== here);
   const items = [
     ...cloud,
     ...elsewhere.map((device): MenuAction => {
