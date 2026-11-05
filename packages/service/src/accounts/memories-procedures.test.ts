@@ -2,13 +2,21 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
+import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { user } from "@repo/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
-import { type MemoriesAnswer, memoriesAnswerSchema } from "@repo/features/memory-wire";
+import {
+  MEMORY_SAVED,
+  type MemoriesAnswer,
+  memoriesAnswerSchema,
+  memorySaveAnswerSchema,
+  memorySearchAnswerSchema,
+} from "@repo/features/memory-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Duration, Effect, Layer, Option, Result } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { runRecall, runRemember } from "../agents/memory-tools.js";
@@ -25,15 +33,18 @@ import { memoriesProcedures } from "./memories-procedures.js";
  * the member whose words it holds; a member forgets their own memories, and
  * owners and admins any, while a member's forget of a teammate's is refused;
  * a deleted member's memory stays the workspace's, named by nobody; a
- * forgotten memory leaves the list and is never recalled again; an account
- * outside the workspace reads and forgets nothing; and the bearer names the
- * account and nothing else does.
+ * forgotten memory leaves the list and is never recalled again; a member's
+ * own client keeps a memory in their words and searches them, only with
+ * Memory on, never words like a credential; an account outside the
+ * workspace reads, forgets, keeps, and searches nothing; and the bearer
+ * names the account and nothing else does.
  *
  * Synthetic accounts, workspaces, bearers, and words throughout.
  */
 
 const ORIGIN = "https://app.test";
 const MEMORIES_PATH = "/api/account/memories";
+const SEARCH_PATH = "/api/account/memories/search";
 
 /** What the procedures counted, across the file; a test reads its own account's. */
 const ANALYTICS = recordingProductAnalytics();
@@ -52,7 +63,7 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** A workspace's owner and one more member, an account outside it, each behind a bearer. */
+/** A workspace's owner and one more member, an account outside it, each behind a bearer and with Memory on. */
 const openTeam = Effect.gen(function* () {
   const db = yield* Database;
   const [owner, teammate, outsider] = [
@@ -70,6 +81,9 @@ const openTeam = Effect.gen(function* () {
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
   yield* openWorkspace(outsider);
+  for (const id of [owner, teammate, outsider]) {
+    yield* writeAccountPreferences(id, { experiments: { [EXPERIMENT.MEMORY]: true } });
+  }
   const bearers = new Map([owner, teammate, outsider].map((id) => [`Bearer ${id}`, id]));
   const procedures = memoriesProcedures({
     resolveUserId: (incoming) =>
@@ -99,10 +113,19 @@ const answer = (procedures: ReturnType<typeof memoriesProcedures>, request: Requ
     return { status: response.status, body } satisfies Answer;
   });
 
-function request(path: string, userId: string | undefined, method: string = HTTP_METHOD.GET) {
+function request(
+  path: string,
+  userId: string | undefined,
+  method: string = HTTP_METHOD.GET,
+  body?: object,
+) {
   return new Request(new URL(path, ORIGIN), {
     method,
-    headers: userId === undefined ? {} : { authorization: `Bearer ${userId}` },
+    headers: {
+      ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+      ...(body === undefined ? undefined : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? undefined : { body: JSON.stringify(body) }),
   });
 }
 
@@ -115,6 +138,28 @@ const forget = (userId: string | undefined, workspaceId: string, id: string) =>
     userId,
     HTTP_METHOD.DELETE,
   );
+
+const save = (userId: string, body: object) =>
+  request(MEMORIES_PATH, userId, HTTP_METHOD.POST, body);
+
+const search = (userId: string, workspaceId: string, query?: string) =>
+  request(
+    `${SEARCH_PATH}?workspaceId=${encodeURIComponent(workspaceId)}${
+      query === undefined ? "" : `&query=${encodeURIComponent(query)}`
+    }`,
+    userId,
+  );
+
+/** An answer read as the wire's schema reads it, failing the test where it is not the wire's. */
+function wireOf<S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  answered: Answer,
+): S["Type"] {
+  assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
+  const read = readEither(schema)(unparsedWire(answered.body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+}
 
 /** The answer as the wire reads it, failing the test where it is not the wire's. */
 function memoriesOf(answered: Answer): MemoriesAnswer {
@@ -229,7 +274,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
   );
 
   it.effect(
-    "an account outside the workspace reads and forgets none of its memories, answered as a workspace that names nothing",
+    "an account outside the workspace reads, forgets, searches, and keeps none of its memories, answered as a workspace that names nothing",
     () =>
       Effect.gen(function* () {
         const { owner, outsider, workspaceId, ask, keep } = yield* openTeam;
@@ -240,6 +285,8 @@ it.layer(getTestDB())("the memories procedures", (it) => {
 
         assert.deepEqual(yield* ask(readMemories(outsider, workspaceId)), notFound);
         assert.deepEqual(yield* ask(forget(outsider, workspaceId, kept.id)), notFound);
+        assert.deepEqual(yield* ask(search(outsider, workspaceId, "deployments")), notFound);
+        assert.deepEqual(yield* ask(save(outsider, { workspaceId, text: TESTS_RUN })), notFound);
         assert.deepEqual(yield* ask(readMemories(owner, randomUUID())), notFound);
 
         assert.deepEqual(wordsOf(yield* ask(readMemories(owner, workspaceId))), [DEPLOYS]);
@@ -270,6 +317,85 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         );
 
         assert.deepEqual(wordsOf(yield* ask(readMemories(owner, workspaceId))), [DEPLOYS]);
+      }),
+  );
+
+  it.effect(
+    "a member keeps a memory in their own words, the same words again stay kept, a correction rewrites the memory it replaces, and a search finds the workspace's memories best first with how many it holds",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, workspaceId, ask, keep } = yield* openTeam;
+        yield* keep(owner, TESTS_RUN);
+
+        const kept = wireOf(
+          memorySaveAnswerSchema,
+          yield* ask(save(teammate, { workspaceId, text: ` ${DEPLOYS} ` })),
+        );
+        const again = wireOf(
+          memorySaveAnswerSchema,
+          yield* ask(save(teammate, { workspaceId, text: DEPLOYS })),
+        );
+        const corrected = wireOf(
+          memorySaveAnswerSchema,
+          yield* ask(
+            save(teammate, {
+              workspaceId,
+              text: "Deployments go out from main through Vercel.",
+              replaces: kept.memory.id,
+            }),
+          ),
+        );
+        const found = wireOf(
+          memorySearchAnswerSchema,
+          yield* ask(search(owner, workspaceId, "deployments vercel")),
+        );
+
+        assert.deepEqual(
+          [kept.outcome, kept.memory.text, kept.memory.keptBy?.name, kept.memory.forgettable],
+          [MEMORY_SAVED.KEPT, DEPLOYS, "Tom Teammate", true],
+        );
+        assert.deepEqual(
+          [again.outcome, again.memory.id],
+          [MEMORY_SAVED.ALREADY_KEPT, kept.memory.id],
+        );
+        assert.deepEqual(
+          [corrected.outcome, corrected.memory.id],
+          [MEMORY_SAVED.CORRECTED, kept.memory.id],
+        );
+        assert.deepEqual(
+          found.memories.map((memory) => [memory.text, memory.forgettable]),
+          [["Deployments go out from main through Vercel.", true]],
+        );
+        assert.equal(found.total, 2);
+      }),
+  );
+
+  it.effect(
+    "words that look like a credential are never kept, a correction of a memory gone keeps nothing, and a member with Memory off neither keeps nor searches",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId, ask } = yield* openTeam;
+
+        const credential = yield* ask(
+          save(owner, {
+            workspaceId,
+            text: `The deploy key is ghp_${"x".repeat(36)}.`,
+          }),
+        );
+        const gone = yield* ask(
+          save(owner, { workspaceId, text: DEPLOYS, replaces: randomUUID() }),
+        );
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.MEMORY]: false } });
+        const off = refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.MEMORY_OFF);
+
+        assert.deepEqual(
+          credential,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.MEMORY_CREDENTIAL),
+        );
+        assert.deepEqual(gone, refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND));
+        assert.deepEqual(yield* ask(save(owner, { workspaceId, text: DEPLOYS })), off);
+        assert.deepEqual(yield* ask(search(owner, workspaceId)), off);
+        assert.deepEqual(wordsOf(yield* ask(readMemories(owner, workspaceId))), []);
       }),
   );
 });

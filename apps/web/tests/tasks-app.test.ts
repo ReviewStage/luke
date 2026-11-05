@@ -424,7 +424,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a start keeps its brief, one at its bound with every character escaped among them, and one past its bound is refused",
+    "a start keeps its brief, which its open answers, one at its bound with every character escaped among them, and one past its bound is refused",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -452,7 +452,13 @@ it.layer(getTestDB())("the plan routes", (it) => {
           }),
         );
 
+        const opened = yield* ask(request(ONE_TASK(startedId(briefed)), owner));
+
         assert.equal(yield* briefOf(briefed), "Let any member invite a teammate.");
+        assert.equal(
+          readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).brief,
+          "Let any member invite a teammate.",
+        );
         assert.equal(yield* briefOf(atBound), widest);
         assert.deepEqual(
           overlong,

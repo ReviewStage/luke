@@ -35,10 +35,13 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
    * The memories our agents kept in a workspace the account is a member
-   * of, named in the query: read them (GET), or forget one by its id (DELETE).
-   * `memory-wire.ts` declares both.
+   * of, named in the query: read them (GET), or forget one by its id
+   * (DELETE); and one kept in the member's own words, the workspace named in
+   * the body (POST). `memory-wire.ts` declares all three.
    */
   ACCOUNT_MEMORIES: "/api/account/memories",
+  /** The workspace's memories a few words find, best first (GET); `memory-wire.ts` declares it. */
+  ACCOUNT_MEMORIES_SEARCH: "/api/account/memories/search",
   /**
    * The outside MCP clients the account allowed: read them (GET), or revoke
    * one by its client id in the query (DELETE). `mcp-client-wire.ts`

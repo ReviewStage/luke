@@ -73,6 +73,7 @@ import {
   checkTreeRepository,
   deleteTaskCommitted,
   listTasks,
+  readTask,
   readTaskHeader,
   readTaskPlan,
   type StoredTask,
@@ -692,9 +693,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const opened = yield* hostedStoreOrUnavailable(readTaskPlan(context.userId, taskId));
+      const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { plan: opened.value };
+      const { task, brief } = opened.value;
+      return { plan: task, ...(brief === undefined ? undefined : { brief }) };
     }),
 
     /**

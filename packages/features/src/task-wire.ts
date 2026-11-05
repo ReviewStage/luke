@@ -213,8 +213,9 @@ export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, the servers switched off, where it runs, and
- * the repositories it works in beside the task's, held to the same
+ * a prompt and its files, the servers switched off, where it runs, the
+ * repositories it works in beside the task's, the branch its checkout is
+ * cloned at, and its title, held to the same
  * words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
  * desktop's own Start params name it by: the `task` an agent Start's body
@@ -230,6 +231,8 @@ const taskAgentStartSchema = EffectSchema.Struct({
   disabledServers: agentStartRequestFields.disabledServers,
   runsOn: agentStartRequestFields.runsOn,
   alsoRepositories: agentStartRequestFields.alsoRepositories,
+  branch: agentStartRequestFields.branch,
+  title: agentStartRequestFields.title,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -981,10 +984,16 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
  */
 export const taskTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
 
-/** A started, opened, or changed task (POST, GET, PATCH), with its document as saved, and the transaction a write committed in. */
+/**
+ * A started, opened, or changed task (POST, GET, PATCH), with its document
+ * as saved, and the transaction a write committed in. An open also answers
+ * the brief the developer started the task with, where they gave one, as
+ * the member MCP server's `read_task` does; a write answers none.
+ */
 export const taskAnswerSchema = EffectSchema.Struct({
   plan: taskSchema,
   txid: EffectSchema.optionalKey(taskTxidSchema),
+  brief: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /**

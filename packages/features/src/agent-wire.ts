@@ -712,6 +712,13 @@ export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositor
  * only beside a repository of its own, in the cloud, through the same
  * installation of the GitHub App, and only for a member with the Several
  * repositories experiment on; none for an agent in one repository or none.
+ * A Start's `branch` names the branch its agent's checkout is cloned at,
+ * which must already be on GitHub, as the member MCP server's `start_agent`
+ * takes it: refused as not found where the repository has no such branch,
+ * and refused beside `from`, since an agent started from another is cloned
+ * at that agent's branch. Its `title` is the agent's from the start, which no
+ * generated title covers; one from another agent takes it in place of
+ * `<title> (continued)`.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -727,6 +734,8 @@ export const agentStartRequestFields = {
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(agentRunsOnRequestSchema),
   alsoRepositories: EffectSchema.optionalKey(agentAlsoRepositoriesSchema),
+  branch: EffectSchema.optionalKey(startBranchSchema),
+  title: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_TITLE_CHARS)),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -761,13 +770,22 @@ export const startBrief = EffectSchema.makeFilter(
   },
 );
 
+/** A Start's branch only afresh: one from another agent is cloned at that agent's branch. */
+const startBranchAfresh = EffectSchema.makeFilter(
+  ({ from, branch }: { readonly from?: AgentStartFrom; readonly branch?: string }) =>
+    from === undefined || branch === undefined,
+);
+
 /** The Start request as a caller holds it, before it is put on the wire. */
-const agentStartRequestValueSchema = EffectSchema.Struct(agentStartRequestFields).check(startBrief);
+const agentStartRequestValueSchema = EffectSchema.Struct(agentStartRequestFields).check(
+  startBrief,
+  startBranchAfresh,
+);
 
 /** The Start request on the wire, where the prompt travels as `task`, because a released desktop sends that key. */
 export const agentStartRequestSchema = EffectSchema.Struct(agentStartRequestFields)
   .pipe(wireKeys({ prompt: "task" }))
-  .check(startBrief);
+  .check(startBrief, startBranchAfresh);
 
 export type AgentStartRequest = typeof agentStartRequestSchema.Type;
 
@@ -896,11 +914,14 @@ export type AgentRenameRequest = typeof agentRenameRequestSchema.Type;
  * turn running stops that turn first, as a Stop would, and the answer is
  * the agent as it then stands. One still starting, or with a message
  * awaiting its turn, has no turn to stop yet and is refused as not ready,
- * to be tried again. An archived agent takes no message.
+ * to be tried again. An archived agent takes no message. An archive may say
+ * why, in a short sentence its archived banner shows, as the member MCP
+ * server's `update_agent` does; bringing one back says nothing.
  */
 export const agentArchiveRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.Boolean,
-});
+  reason: EffectSchema.optionalKey(trimmedText(AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS)),
+}).check(EffectSchema.makeFilter(({ archived, reason }) => archived || reason === undefined));
 
 export type AgentArchiveRequest = typeof agentArchiveRequestSchema.Type;
 
@@ -1317,8 +1338,9 @@ export type AgentOrigin = typeof agentOriginSchema.Type;
  * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
- * repository it works in, null for one with none. An agent on a plan reads
- * so too, by the same id.
+ * repository it works in, null for one with none, and the branch its
+ * checkout stood on as its last turn ended, as the member MCP server's
+ * `read_agent` answers it. An agent on a plan reads so too, by the same id.
  */
 const agentPageSchema = EffectSchema.Struct({
   ...agentSummarySchema.fields,
@@ -1327,6 +1349,8 @@ const agentPageSchema = EffectSchema.Struct({
   origin: EffectSchema.optionalKey(agentOriginSchema),
   workspaceId: EffectSchema.String,
   repository: EffectSchema.NullOr(EffectSchema.String),
+  /** The branch checked out in its sandbox as its last turn ended, pushed or not; absent before a turn ends, where the checkout stood detached, and from a service before it. */
+  branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type AgentPage = typeof agentPageSchema.Type;

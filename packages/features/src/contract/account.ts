@@ -3,7 +3,9 @@
  *
  * Its deletion, its preferences snapshot, its access, its own provider
  * keys, its workspace's memories, and its ChatGPT credentials, each on the path
- * and method it has always answered on. A key is
+ * and method it has always answered on; a memory kept in the member's words
+ * and a search of them, the member MCP server's `save_memory` and
+ * `search_memory` for a member's own client, beside the memories' read. A key is
  * removed by the provider and the kind its query names, since a `DELETE`
  * carries no body. A JSON body is read whole, a key it does not name
  * refused (`exactInput`), but for the preferences write, whose parts the
@@ -13,8 +15,8 @@
  * the handler's value into the bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
 
-import { HTTP_METHOD } from "@repo/wire";
 import { openapi } from "@orpc/openapi";
+import { HTTP_METHOD } from "@repo/wire";
 import { Schema as EffectSchema } from "effect";
 import {
   accountAccessAnswerSchema,
@@ -22,7 +24,15 @@ import {
   accountPreferencesAnswerSchema,
   accountPreferencesWriteSchema,
 } from "../account-wire.js";
-import { MEMORY_QUERY, memoriesAnswerSchema, memoryIdSchema } from "../memory-wire.js";
+import {
+  MEMORY_QUERY,
+  memoriesAnswerSchema,
+  memoryIdSchema,
+  memorySaveAnswerSchema,
+  memorySaveRequestSchema,
+  memorySearchAnswerSchema,
+  memorySearchQuerySchema,
+} from "../memory-wire.js";
 import {
   chatGptCredentialsSaveRequestSchema,
   chatGptHostAnswerSchema,
@@ -39,6 +49,9 @@ import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
 /** A key's save is a provider and a key bounded at 512 characters, so a body past this is not one. */
 const PROVIDER_KEY_BODY_BYTES = 2_048;
+
+/** A memory's save is a workspace id, a statement of at most 400 characters at JSON's widest escape, and an id, so a body past this is not one. */
+const MEMORY_SAVE_BODY_BYTES = 4_096;
 
 /** A ChatGPT sign-in's save is three tokens of at most 16 KiB each and a few ids, so a body past this is not one. */
 const CHATGPT_CREDENTIALS_BODY_BYTES = 64 * 1_024;
@@ -109,6 +122,20 @@ export const accountContract = {
       }),
     )
     .output(EffectSchema.flip(memoriesAnswerSchema)),
+  saveMemory: hostedProcedure
+    .meta(bodyCap(MEMORY_SAVE_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES }))
+    .input(exactInput(memorySaveRequestSchema))
+    .output(EffectSchema.flip(memorySaveAnswerSchema)),
+  searchMemories: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_MEMORIES_SEARCH }))
+    .input(
+      EffectSchema.Struct({
+        [MEMORY_QUERY.WORKSPACE_ID]: workspaceIdSchema,
+        [MEMORY_QUERY.QUERY]: memorySearchQuerySchema,
+      }),
+    )
+    .output(EffectSchema.flip(memorySearchAnswerSchema)),
   chatGptHost: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST }))
     .output(EffectSchema.flip(chatGptHostAnswerSchema)),

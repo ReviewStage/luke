@@ -32,8 +32,10 @@
  * procedure runs (`../agents/agent-pull-request-procedures.ts`), on the
  * member's own GitHub sign-in as the tab does, never the App's.
  *
- * To add a tool, declare it with `memberMcpTool` and list it in
- * `MEMBER_MCP_TOOLS`; its golden is settled by `app.test.ts`.
+ * To add a tool, name it in `MEMBER_MCP_TOOL`, declare it with
+ * `memberMcpTool`, and list it in `MEMBER_MCP_TOOLS`; its golden is settled
+ * by `app.test.ts`, and `coverage.ts` refuses to build until it names the
+ * hosted procedures that do what the tool does.
  */
 
 import { randomUUID } from "node:crypto";
@@ -231,7 +233,8 @@ export type MemberMcpToolInput = Schema.Top & Schema.ConstraintDecoder<unknown>;
 export type MemberMcpToolResult = object;
 
 export interface MemberMcpTool<Input extends MemberMcpToolInput = MemberMcpToolInput> {
-  readonly name: string;
+  /** The name a model calls it by, one of `MEMBER_MCP_TOOL`'s, so every tool has its row in `coverage.ts`. */
+  readonly name: MemberMcpToolName;
   /** What the agent is told of the tool, written for one acting for the member. */
   readonly description: string;
   readonly input: Input;
@@ -280,6 +283,8 @@ export const MEMBER_MCP_TOOL = {
   RUN_AUTOMATION: AGENT_TOOL.RUN_AUTOMATION,
   DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
 } as const;
+
+export type MemberMcpToolName = (typeof MEMBER_MCP_TOOL)[keyof typeof MEMBER_MCP_TOOL];
 
 /** A read's annotations: it changes nothing of the member's. */
 const READ_ONLY: ToolAnnotations = { readOnlyHint: true };

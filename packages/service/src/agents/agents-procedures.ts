@@ -62,6 +62,7 @@ import { isWorkspaceMember, readAccountNames } from "@repo/database/models/works
 import { storeWriter } from "@repo/database/models/writer";
 import { runtimeChoiceRefusal } from "@repo/features/agent-runtime-models";
 import {
+  AGENT_ARCHIVER,
   AGENT_BOUNDS,
   AGENT_LIST_ARCHIVED,
   type AgentPullRequest,
@@ -534,8 +535,13 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           // An archived agent works on unseen, so a turn still running is stopped before the stamp.
           yield* stoppedForGood(writer, userId, agent);
         }
+        const why = body.reason === undefined ? undefined : { reason: body.reason };
         const archived = yield* hostedStoreOrUnavailable(
-          archiveAgentCommitted(userId, agent.id, body.archived),
+          archiveAgentCommitted(userId, agent.id, body.archived, {
+            by: AGENT_ARCHIVER.MEMBER,
+            userId,
+            ...why,
+          }),
         );
         // The sandbox is stopped, not deleted, once the archive stands, so an unarchive resumes it from its snapshot.
         if (body.archived && Option.isSome(archived)) {

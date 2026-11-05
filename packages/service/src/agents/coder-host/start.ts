@@ -1674,6 +1674,8 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     call: request.call,
     runsOn: request.runsOn,
     alsoRepositories: request.alsoRepositories,
+    branch: request.branch,
+    title: request.title,
     summaryModel,
     reached,
     landed,
