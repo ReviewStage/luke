@@ -10,6 +10,7 @@ import {
   useMenu,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, creatorActor, memberActor } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -93,7 +94,15 @@ function assignedToChoices(
     meWithoutId: true,
     meFirst: true,
   });
-  return [...people, ...memberReadNotice(reader)];
+  // Note that a member is keyed by their id and Me and Anyone are not, so only a member's name is masked.
+  return [
+    ...people.map((item) =>
+      item.key === undefined
+        ? item
+        : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
+    ),
+    ...memberReadNotice(reader),
+  ];
 }
 
 /** The menu's choices: how the list groups, and, where the workspace is shared, whose tasks it holds. */
@@ -169,6 +178,7 @@ export function TaskViewOptions({
         <ActionMenu
           label={VIEW_OPTIONS}
           menu={menu.drawn}
+          replayUnmasked
           groups={viewEntries(control, shared, reader)}
           onClose={menu.close}
         />

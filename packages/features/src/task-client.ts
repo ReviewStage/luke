@@ -151,6 +151,8 @@ export type TaskCallResult<Answer, Failure> =
       readonly failure: Failure;
       /** Why the device the call named would not take the task's agents, where that is why and the service said. */
       readonly localAgentRefusal?: LocalAgentRefusal;
+      /** How a call sent under an idempotency key went untaken, where it traveled as one (`keyed-write.ts`). */
+      readonly untaken?: WriteUntaken;
       /** The facts of what failed beneath a call no refusal named (`failure-facts.ts`), which a window reports and never draws. */
       readonly cause?: FailureFacts;
     };
@@ -180,8 +182,8 @@ const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as 
 /** A comment call refused because the plan is not the account's to read or write. */
 const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
-/** What a task's pin change names: pinned or not, and where the pin stands. */
-export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition">;
+/** What a task's mark names: pinned or not and where the pin stands, or the reader's read mark. */
+export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "readMark">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
@@ -243,10 +245,25 @@ function writtenOf(changed: { readonly plan: Task; readonly txid?: string }): Ta
 }
 
 /**
- * A procedure's answer as a result: its refusal where it is one the caller
+ * A procedure's failure as a result: its refusal where it is one the caller
  * names, unanswered for everything else, with the failure beneath it, which
  * the window reports and never draws.
  */
+function hostedRefusal<Failure extends string>(
+  failed: HostedFailure,
+  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
+) {
+  const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
+  if (failed._tag !== "HostedRefused" || failure === undefined) {
+    return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
+  }
+  const localAgentRefusal = failed.data?.localAgentRefusal;
+  return localAgentRefusal === undefined
+    ? ({ ok: false, failure } as const)
+    : ({ ok: false, failure, localAgentRefusal } as const);
+}
+
+/** A procedure's answer as a result, as `hostedRefusal` reads a failure. */
 function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
@@ -257,16 +274,7 @@ function hostedResult<Answer, Failure extends string>(
 > {
   return Effect.match(asked, {
     onSuccess: succeeded,
-    onFailure: (failed) => {
-      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
-      if (failed._tag !== "HostedRefused" || failure === undefined) {
-        return { ...UNANSWERED, cause: hostedFailureFacts(failed) };
-      }
-      const localAgentRefusal = failed.data?.localAgentRefusal;
-      return localAgentRefusal === undefined
-        ? ({ ok: false, failure } as const)
-        : ({ ok: false, failure, localAgentRefusal } as const);
-    },
+    onFailure: (failed) => hostedRefusal(failed, named),
   });
 }
 
@@ -1006,7 +1014,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Pins or unpins one task, under the idempotency key given where one is,
+   * Pins or unpins one task, or moves the reader's read mark on it, under the idempotency key given where one is,
    * answering it as changed with its document, or how it went untaken; a
    * change that names neither never travels.
    */
@@ -1107,24 +1115,28 @@ export class HostedTaskClient {
   /**
    * Starts a task with an empty plan, on the repository the
    * request names where it names one, and the agent it names on it where it
-   * names one; a request the service would refuse by shape is refused here
-   * without traveling at all, and a repository the service refused is
-   * answered as the refusal it was. An agent the service refused beside the
-   * task it made is answered with the task, as a refused Start reads.
+   * names one, under the idempotency key given where one is; a request the
+   * service would refuse by shape is refused here without traveling at all,
+   * and a repository the service refused is answered as the refusal it was,
+   * with how it went untaken where it traveled. An agent the service refused
+   * beside the task it made is answered with the task, as a refused Start
+   * reads.
    */
   create(
     request: TaskCreateRequest,
+    key?: string,
   ): Effect.Effect<TaskCallResult<TaskStarted, StartCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
     const deadline = admitted.agent === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.START;
-    return hostedResult(
-      Effect.map(askHosted(this.#hosted.plans.create, admitted, deadline), (started) =>
-        taskStartedOf(started.body),
-      ),
-      START_REFUSALS,
-    );
+    return Effect.match(askHosted(this.#hosted.plans.create, admitted, deadline, key), {
+      onSuccess: (started) => succeeded(taskStartedOf(started.body)),
+      onFailure: (failed) => ({
+        ...hostedRefusal(failed, START_REFUSALS),
+        untaken: writeUntakenOf(hostedFailureFacts(failed)),
+      }),
+    });
   }
 }
 

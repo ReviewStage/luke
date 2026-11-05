@@ -40,6 +40,12 @@ export type AccountSnapshot =
        */
       pictureUrl?: string;
       provider: AccountProvider;
+      /**
+       * True while a maintainer is signed in as the account from the web
+       * (Better Auth's `session.impersonatedBy`), which the web panel draws
+       * its Viewing as banner by; absent everywhere else, the Mac always.
+       */
+      impersonated?: true;
     };
 
 /** The signed-in account's own id, or none while nobody is signed in or the identity stored names none. */
@@ -61,6 +67,7 @@ export const accountSnapshotSchema = Schema.Union([
     name: Schema.optionalKey(Schema.String),
     pictureUrl: Schema.optionalKey(Schema.String),
     provider: Schema.Literals(Object.values(ACCOUNT_PROVIDER)),
+    impersonated: Schema.optionalKey(Schema.Literal(true)),
   }),
 ]);
 

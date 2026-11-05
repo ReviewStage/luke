@@ -104,6 +104,8 @@ export const LIST_WORDS = {
   COLLAPSE_TO_CHANGES: "Collapse to changes",
   /** A file that only moved, drawn as its lines. */
   SHOW_FILE: "Show file",
+  /** A file whose patch was too large to send, drawn from its texts on both sides. */
+  LOAD_DIFF: "Load diff",
   VIEWED: "Viewed",
   MARK_VIEWED: "Mark as viewed",
   UNMARK_VIEWED: "Mark as not viewed",

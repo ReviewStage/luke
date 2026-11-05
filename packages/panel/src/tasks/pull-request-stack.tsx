@@ -6,6 +6,7 @@ import {
 import { LINK_PLACE, type LinkPlace } from "@repo/features/link-grammar";
 import { ACT_KIND } from "@repo/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, Tooltip, useMenu } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { pullRequestLabelOf } from "@repo/ui/tab-strip-model";
 import { LayersIcon } from "lucide-react";
 import { useAct } from "../act.js";
@@ -91,6 +92,7 @@ export function PullRequestStack({
     const current = entry.number === number;
     return {
       label: pullRequestLabelOf(entry),
+      replayMasked: true,
       icon: <PullRequestMark pullRequest={markOf(entry)} />,
       detail: entryDetail(entry, current),
       ...(current ? { checked: true, disabled: true } : undefined),
@@ -114,8 +116,9 @@ export function PullRequestStack({
       </Tooltip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label="Pull requests in the stack"
-          heading={`${stack.length} pull requests`}
+          heading={<ReplayUnmask>{`${stack.length} pull requests`}</ReplayUnmask>}
           menu={menu.drawn}
           groups={[actions]}
           onClose={menu.close}

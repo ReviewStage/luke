@@ -81,10 +81,13 @@ export function SettingsPage({
   actions,
   lead,
   look = TOOLBAR_LOOK.WINDOW,
+  titleReplayUnmasked = false,
   children,
 }: {
   /** The page's name, its `h1`. */
   title: ReactNode;
+  /** Whether a title in words is the app's own, which a screen recording shows as it reads on a phone's bar (`Toolbar`'s `titleReplayUnmasked`); a page named for a workspace stays masked. */
+  titleReplayUnmasked?: boolean | undefined;
   /** One quiet line under the title that holds for the whole page: where its settings are kept. */
   description?: ReactNode;
   /** What acts on the whole page, at the end of the title's line, or on a phone at the end of the bar. */
@@ -112,6 +115,7 @@ export function SettingsPage({
               start: TOOLBAR_INSET.COLUMN,
               end: TOOLBAR_INSET.COLUMN,
               title,
+              titleReplayUnmasked,
               actions,
             }
           : { pickUp: { name: named.name, shown: named.away } })}

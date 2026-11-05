@@ -1,35 +1,36 @@
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import type { TaskSummary } from "@repo/features/task-wire";
 import {
+  Arrival,
   DetailPage,
   ErrorState,
   List,
   NOTE_LINE_LOOK,
   NoteLine,
   PAGE_FRAME,
-  Skeleton,
   STATUS_TONE,
   useRovingKeys,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { TASK_ORDER, taskTime } from "@repo/ui/task-list-model";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useInboxRowDrafts } from "../composer-drafts.js";
 import { unreadShown } from "../failure-report.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SetupSections } from "../onboarding/setup-sections.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
+import { InboxItemRow, inboxRowDraft } from "../tasks/inbox-list.js";
 import { type InboxListed, NEEDS_YOU, needsYou } from "../tasks/inbox-model.js";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useWaitingItems } from "../tasks/use-waiting-items.js";
+import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items.js";
 import { letGoOfFocus, useHomeNewTask, welcomed } from "./desktop-welcome.js";
-import { PersonSectionFrame, SectionSkeleton } from "./person-frame.js";
-import { RecentTasks, RecentTasksSkeleton } from "./recent-tasks.js";
+import { PersonSectionFrame } from "./person-frame.js";
+import { RecentTasks } from "./recent-tasks.js";
 
 /**
  * desktop-home.tsx -- Home: the page the window rests on with no task open, opening on New task's composer under a greeting and saying what waits on the developer and the tasks worked on latest.
@@ -62,9 +63,12 @@ import { RecentTasks, RecentTasksSkeleton } from "./recent-tasks.js";
  * The rows of both sections are one Tab stop that ↑ and ↓ walk from the
  * first Inbox item to the last recent task (`useRovingKeys`), and Return
  * opens the row reached, so a launch is a key or two from a task. Until the
- * task list is read the page stands in its own shape: the composer, which
- * hangs on no list, and blocks where the greeting and the sections will
- * stand. A read refused says so under Recent, with Retry.
+ * task list is read the page draws what it already knows, the greeting and
+ * the composer, which hang on no list, and nothing where the sections will
+ * stand, unless the read has stood a while, when one quiet line says it is
+ * reading; the sections fade in as they land (`Arrival`), together where the
+ * page opened on a list still being read. A read refused says so under
+ * Recent, with Retry.
  */
 
 /**
@@ -80,8 +84,8 @@ const RECENT_COUNT = {
 /** What Recent is called, as its heading and its list. */
 const RECENT = "Recent";
 
-/** How wide the greeting's block stands, as wide as "Welcome back" and a first name in the title's type. */
-const SKELETON_GREETING = "9em";
+/** What the page says once the task list's read has stood a while. */
+const READING_TASKS = "Reading your tasks…";
 
 /** What the page says where an Inbox read did not answer, as the Inbox says it. */
 const ITEMS_NOT_READ = "Some inbox items could not be read.";
@@ -89,11 +93,20 @@ const ITEMS_NOT_READ = "Some inbox items could not be read.";
 /** What the page says where the task list could not be read, as the sidebar says it. */
 const TASKS_NOT_READ = "Your tasks could not be read.";
 
-/** The greeting: the account's first name where it has one, welcomed back unless the account is new. */
-function greeting(name: string | undefined, fresh: boolean): string {
+/** The greeting: the account's first name where it has one, welcomed back unless the account is new; a screen recording shows the welcome and masks the name. */
+function greeting(name: string | undefined, fresh: boolean): React.JSX.Element {
   const first = name?.trim().split(/\s+/u)[0];
   const words = fresh ? "Welcome" : "Welcome back";
-  return first === undefined || first === "" ? words : `${words}, ${first}`;
+  return (
+    <ReplayUnmask>
+      {words}
+      {first === undefined || first === "" ? null : (
+        <>
+          , <ReplayMask>{first}</ReplayMask>
+        </>
+      )}
+    </ReplayUnmask>
+  );
 }
 
 /** The listed workspace's tasks with the latest activity, their own saves and their agents' alike. */
@@ -103,9 +116,20 @@ function recentTasks(tasks: readonly TaskSummary[], room: ShellRoom): TaskSummar
     .slice(0, RECENT_COUNT[room]);
 }
 
-/** The greeting while the task list is read: a block where it will stand. */
-function GreetingSkeleton(): React.JSX.Element {
-  return <Skeleton width={SKELETON_GREETING} />;
+/**
+ * Whether Home's sections are still arriving: while the task list is read,
+ * and, where the page opened on a list still being read, until the Inbox's
+ * first read answers too, so both sections land together rather than the
+ * Inbox landing over Recent. Note that a later read of a holder newly listed
+ * leaves what stands in place, because only the first read holds the page.
+ */
+function useArriving(tasks: TasksControl, read: WaitingItems, waiting: number): boolean {
+  const reading = !tasks.listRead && !tasks.listFailed;
+  const [opened] = useState(reading);
+  const [heard, setHeard] = useState(false);
+  const inboxOut = opened && !heard && waiting === 0 && read.reading && !tasks.listFailed;
+  if (tasks.listRead && !inboxOut && !heard) setHeard(true);
+  return reading || inboxOut;
 }
 
 /**
@@ -113,10 +137,16 @@ function GreetingSkeleton(): React.JSX.Element {
  * as the Dock's badge counts them, or what stands in their place while they
  * are read, failed, or none. A press on a row opens the Inbox on its item.
  */
-function HomeInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
-  const read = useWaitingItems(tasks);
+function HomeInbox({
+  tasks,
+  read,
+  waiting,
+}: {
+  tasks: TasksControl;
+  read: WaitingItems;
+  waiting: readonly InboxListed[];
+}): React.JSX.Element | null {
   const drafts = useInboxRowDrafts();
-  const waiting = read.items.filter((listed) => needsYou(listed, tasks.me));
   const open = (listed: InboxListed) => tasks.inboxView.onOpenItem(choiceOf(listed));
   // Note that a refused list read says nothing here, because what waits hangs on the list, which Recent says could not be read.
   if (waiting.length === 0 && tasks.listFailed) return null;
@@ -129,13 +159,8 @@ function HomeInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element | null
       </div>
     );
   }
-  if (waiting.length === 0 && read.reading) {
-    return (
-      <SectionSkeleton>
-        <InboxListSkeleton />
-      </SectionSkeleton>
-    );
-  }
+  // Note that a read still out draws nothing, because the Inbox lands as it is read, over Recent.
+  if (waiting.length === 0 && read.reading) return null;
   return (
     <PersonSectionFrame
       label={TAB_WORDS.INBOX}
@@ -146,19 +171,21 @@ function HomeInbox({ tasks }: { tasks: TasksControl }): React.JSX.Element | null
       {waiting.length === 0 ? (
         <NoteLine look={NOTE_LINE_LOOK.INSET}>{NEEDS_YOU.NONE}</NoteLine>
       ) : (
-        <List label={TAB_WORDS.INBOX} joinsWalk>
-          {waiting.map((listed) => (
-            <InboxItemRow
-              key={listed.item.id}
-              listed={listed}
-              chosen={false}
-              {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-              models={tasks.agents.models}
-              readerId={tasks.me}
-              onChoose={open}
-            />
-          ))}
-        </List>
+        <ReplayMask>
+          <List label={TAB_WORDS.INBOX} joinsWalk>
+            {waiting.map((listed) => (
+              <InboxItemRow
+                key={listed.item.id}
+                listed={listed}
+                chosen={false}
+                {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
+                models={tasks.agents.models}
+                readerId={tasks.me}
+                onChoose={open}
+              />
+            ))}
+          </List>
+        </ReplayMask>
       )}
     </PersonSectionFrame>
   );
@@ -175,7 +202,7 @@ function HomeRecent({
   staged: boolean;
 }): React.JSX.Element | null {
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
-  const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
+  const unread = useUnreadTasks({ staged });
   const recent = recentTasks(tasks.listed.tasks, room);
   if (recent.length === 0 && !tasks.listFailed) return null;
   return (
@@ -191,7 +218,9 @@ function HomeRecent({
         </div>
       ) : null}
       {recent.length === 0 ? null : (
-        <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
+        <ReplayMask>
+          <RecentTasks tasks={tasks} label={RECENT} listed={recent} unread={unread} joinsWalk />
+        </ReplayMask>
       )}
     </PersonSectionFrame>
   );
@@ -226,18 +255,6 @@ function HomeComposer({
   );
 }
 
-/** The sections while the task list is first read, in the shape of the page an account with tasks lands on. */
-function HomeSectionsSkeleton(): React.JSX.Element {
-  return (
-    <>
-      <SectionSkeleton>
-        <InboxListSkeleton />
-      </SectionSkeleton>
-      <RecentTasksSkeleton label="Reading your tasks…" />
-    </>
-  );
-}
-
 /** Home, in the task's place while no task is open, with a new account's Finish setting up over its composer. */
 export function DesktopHome({
   tasks,
@@ -257,26 +274,27 @@ export function DesktopHome({
   const roving = useRovingKeys<HTMLDivElement>();
   // Note that on a phone the words leave the caret alone, because a field typed in puts the places bar away (`mobile-bar.tsx`).
   const takesFocus = room !== SHELL_ROOM.NARROW;
-  const reading = !tasks.listRead && !tasks.listFailed;
+  const read = useWaitingItems(tasks);
+  const waiting = read.items.filter((listed) => needsYou(listed, tasks.me));
+  const arriving = useArriving(tasks, read, waiting.length);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.PAGE}
-      title={reading ? <GreetingSkeleton /> : greeting(accountName, welcomed(tasks))}
-    >
+    // Note that the greeting welcomes the reader back while the list is read, because an account is new but once.
+    <DetailPage frame={PAGE_FRAME.PAGE} title={greeting(accountName, welcomed(tasks))}>
       {/* A new account is asked here for what setup left undone, above the box that starts its first task. */}
       {welcomed(tasks) ? <SetupSections tasks={tasks} /> : null}
       <HomeComposer tasks={tasks} takesFocus={takesFocus} />
       {/* Note that the box lays nothing out: it only hears the arrows its rows walk by. */}
       <div className="home-rows contents" {...roving}>
-        {reading ? (
-          <HomeSectionsSkeleton />
-        ) : (
-          // The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members.
-          <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-            <HomeInbox tasks={tasks} />
-            <HomeRecent tasks={tasks} room={room} staged={staged} />
-          </MemberDirectory>
-        )}
+        {/* Note that the sections stand in one mark, so a section still follows the last (`person-frame.tsx`), and their names, counts, and notes show in a screen recording while each masks its rows. */}
+        <ReplayUnmask>
+          <Arrival reading={arriving} label={READING_TASKS}>
+            {/* The Inbox's rows name who started each agent, and Recent's who is on each task, read against the listed workspace's members. */}
+            <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+              <HomeInbox tasks={tasks} read={read} waiting={waiting} />
+              <HomeRecent tasks={tasks} room={room} staged={staged} />
+            </MemberDirectory>
+          </Arrival>
+        </ReplayUnmask>
       </div>
     </DetailPage>
   );

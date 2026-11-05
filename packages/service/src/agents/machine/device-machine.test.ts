@@ -38,9 +38,12 @@ import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
   DEVICE_LAUNCH_STEP,
+  DEVICE_LAUNCH_UNSTARTED,
   type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
   deviceAgentLaunchPayloadSchema,
 } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { TURN_FAILURE } from "@repo/features/turn-run";
 import { TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
@@ -63,7 +66,12 @@ import {
   cloneAgentRepository,
   deepenCheckoutWith,
 } from "../coder-host/checkout.js";
-import { agentFailureOf, hostLostOf, launchStoppedOf } from "../coder-host/status.js";
+import {
+  agentFailureOf,
+  hostLostOf,
+  launchStoppedOf,
+  launchUnstartedOf,
+} from "../coder-host/status.js";
 import {
   claimedDeviceAgentLine,
   deviceAgentLinesFor,
@@ -252,6 +260,25 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         }),
     );
 
+    it.effect(
+      "a launch of an agent on its starter's own token to a host from before it works in one on its own GitHub sign-in is refused, queuing nothing",
+      () =>
+        Effect.gen(function* () {
+          // Note that an installation of its own is linked, since another test linked the first.
+          const installation = { ...RELAY_INSTALLATION, id: RELAY_INSTALLATION.id + 1 };
+          const opened = yield* openLocalAgent({
+            installation,
+            githubAccess: GITHUB_ACCESS.TOKEN,
+          });
+          const github = githubReaching([installation]);
+          const refused = yield* Effect.flip(launched(opened).pipe(Effect.provide(github.layer)));
+
+          assert.ok(refused instanceof LaunchRefused);
+          assert.equal(refused.reason, "host predates its own github sign-in");
+          assert.deepEqual(yield* deviceAgentLinesWaiting(opened.userId, opened.deviceId), []);
+        }),
+    );
+
     it.effect("a read waits for its Mac's answer, and is unavailable while the Mac is away", () =>
       Effect.gen(function* () {
         const { userId, deviceId, session } = yield* openLocalAgent();
@@ -428,7 +455,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
      * queued by its harness's first event, which a runner that never started
      * never posts.
      */
-    const unstartedTurn = (step?: DeviceLaunchStep) =>
+    const unstartedTurn = (step?: DeviceLaunchStep, unstarted?: DeviceLaunchUnstarted) =>
       Effect.gen(function* () {
         const opened = yield* openLocalAgent();
         const { userId, deviceId, agent } = opened;
@@ -437,7 +464,7 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
         if (step !== undefined) {
           yield* stepDeviceAgentLaunch(userId, deviceId, launch.handle.command, step);
         }
-        yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1);
+        yield* settledDeviceAgentLine(userId, deviceId, launch.handle.command, 1, unstarted);
         const turn = (yield* latestTurnsOfReached([agent.conversationId])).get(
           agent.conversationId,
         );
@@ -464,6 +491,18 @@ it.layer(Layer.mergeAll(getTestDB(), Layer.succeed(HostedEnvironment, ENVIRONMEN
 
           assert.equal(turn?.status, TURN_STATUS.FAILED);
           assert.equal(launchStoppedOf(turn), DEVICE_LAUNCH_STEP.FETCHING);
+          assert.equal(agentFailureOf(turn), AGENT_FAILURE.OTHER);
+        }),
+    );
+
+    it.effect(
+      "a launch its Mac settled unstarted for a reason it said, before its step report landed, fails the agent's turn naming that reason at the first step",
+      () =>
+        Effect.gen(function* () {
+          const { turn } = yield* unstartedTurn(undefined, DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN);
+
+          assert.equal(launchStoppedOf(turn), DEVICE_LAUNCH_STEP.PREPARING);
+          assert.equal(launchUnstartedOf(turn), DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN);
           assert.equal(agentFailureOf(turn), AGENT_FAILURE.OTHER);
         }),
     );

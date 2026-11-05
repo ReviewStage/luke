@@ -49,6 +49,7 @@ import {
 import {
   DEVICE_PLATFORM,
   type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
   type DevicePlatform,
 } from "@repo/features/device-agent-wire";
 import {
@@ -120,7 +121,7 @@ import {
   type WireValue,
 } from "@repo/wire";
 import { sentLineId } from "@repo/wire/host-ids";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { devicePlatformOf } from "../device-platform.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
@@ -400,10 +401,11 @@ export interface EndLineParts {
   readonly failure?: AgentFailure | undefined;
 }
 
-/** Where a launch its host settled unstarted stopped, as the page said, and the harness the agent runs, as its summary says. */
+/** Where a launch its host settled unstarted stopped, and why where its host said, as the page said, and the harness the agent runs, as its summary says. */
 export interface LaunchStopped {
   readonly step: DeviceLaunchStep;
   readonly runtime?: NativeAgentRuntime | undefined;
+  readonly unstarted?: DeviceLaunchUnstarted | undefined;
 }
 
 /**
@@ -435,7 +437,11 @@ export function endLineParts(
       if (hostLost !== undefined)
         return { words: hostLostWords(hostLost.host), failed: true, failure };
       if (launchStopped !== undefined) {
-        const words = launchStoppedWords(launchStopped.step, launchStopped.runtime);
+        const words = launchStoppedWords(
+          launchStopped.step,
+          launchStopped.runtime,
+          launchStopped.unstarted,
+        );
         return { words, failed: true, failure };
       }
       const words =
@@ -508,6 +514,12 @@ export const REPOSITORY_UNREACHED_NOTE = `${PRODUCT_NAME} cannot reach this task
 /** What a message no answer came back for says, which may have reached the agent all the same. */
 const NOT_HEARD_BACK = "No answer came back.";
 
+/** What a message no answer came back for says while the app does not reach the service, in place of `NOT_HEARD_BACK`: in the composer, whose Retry stands again once the app does (`RetryOffered`), and alone where only the words are drawn, as an Inbox answer's are. */
+export const UNHEARD_OFFLINE = {
+  BESIDE_RETRY: "You're offline.",
+  ALONE: "You're offline. Try again once you're back online.",
+} as const;
+
 /** What a plan's reached limit says where no reset is known; with one, `limitResetsWords`. */
 const LIMIT_REACHED_WORDS = "Usage limit reached";
 
@@ -537,8 +549,8 @@ const START_RETIRED = "This agent has ended. Start a new one.";
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
 const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
-/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only a new task in the cloud or the host added again goes on from here. */
-const HOST_REMOVED = "This host was removed. Start a new task in the cloud or add it again.";
+/** What a message to an agent whose host its starter removed says, and a Start that would run there, wherever it is drawn: only a new agent in the cloud or the host added again goes on from here. */
+const HOST_REMOVED = "This host was removed. Start a new agent in the cloud or add it again.";
 
 /** What a message that did not reach the agent says of itself, which a surface without Retry follows with Try again. */
 const MESSAGE_NOT_SENT = "The message could not be sent.";
@@ -733,7 +745,7 @@ export interface RefusedCall {
   readonly refusedDevice?: RefusedDevice | undefined;
 }
 
-/** The device a task runs its agents on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
+/** The device a Start would run its agent on, as a refusal names it: its name, its platform where the service said, and its owner where it is another member's and the service said. */
 export interface RefusingDevice {
   readonly name: string;
   readonly platform?: DevicePlatform | undefined;
@@ -743,8 +755,8 @@ export interface RefusingDevice {
 /** What a device refusing a Start is called where its name is not known. */
 const UNNAMED_DEVICE = "Your device";
 
-/** The way out every device refusal ends on, since the cloud takes any agent. Note that a task's runs-on is fixed once it is set, so the way out is a new task, never a change to this one. */
-const RUN_IN_CLOUD = "or start a new task in the cloud";
+/** The way out every device refusal ends on, since the cloud takes any agent: the same start with Runs on on Cloud. */
+const RUN_IN_CLOUD = "or start it in the cloud";
 
 /** How a device that went quiet is brought back, by its platform: a Mac woken and logged in on, since its host runs in its user's login session, or a Linux server's own `vespin-host` checked. */
 const DEVICE_WAKE = {
@@ -760,7 +772,7 @@ const SETUP_RETRY = {
 } as const satisfies Record<DevicePlatform, string>;
 
 /**
- * Why the device a task runs its agents on would not take a Start, as New
+ * Why the device a Start would run its agent on would not take it, as New
  * task and an agent's Start alike say it, naming the device where the
  * panel knows it and ending on the way out, the cloud. A refusal the
  * service named no reason for says the device would not take it.
@@ -784,6 +796,8 @@ export function localAgentRefusalWords(
     // Note that no way out is offered, because the cloud is the owner's to set and a teammate can change nothing here.
     case LOCAL_AGENT_REFUSAL.NOT_OWNER:
       return `This task runs on ${device?.name ?? "another member's device"}. Only ${device?.owner ?? "its owner"} can start agents on it.`;
+    case LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN:
+      return `${name} runs an older vespin-host, which can't work in a repository reached on your own GitHub token. Update its host, ${RUN_IN_CLOUD}.`;
     case undefined:
       return `${name} couldn't take this agent. Try again, ${RUN_IN_CLOUD}.`;
   }
@@ -1174,6 +1188,23 @@ export function messageFailureNote(
     settingsFailure(refused, ACTION.MESSAGE) ??
     callFailure(planRefusalWords(refused, payer) ?? messageNoteWords(refused.failure))
   );
+}
+
+/**
+ * A composer's note as it reads while the app does not reach the service:
+ * one for a message no answer came back for says the developer is offline,
+ * its words still in the box, and its Retry stands again once the app
+ * reaches the service; any other note, or any note while connected, as it is.
+ */
+export function noteWhileOffline<Note extends Failure & { readonly cause?: unknown }>(
+  note: Note | undefined,
+  connected: boolean,
+): Note | undefined {
+  if (connected || note === undefined) return note;
+  const { cause } = note;
+  const unheard =
+    Predicate.hasProperty(cause, "failure") && cause.failure === AGENT_CALL_FAILURE.UNANSWERED;
+  return unheard ? { ...note, text: UNHEARD_OFFLINE.BESIDE_RETRY } : note;
 }
 
 /** What a message that did not reach the agent says beside the composer's Retry, which says to try again for it. */

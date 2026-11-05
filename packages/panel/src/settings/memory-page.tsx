@@ -56,6 +56,7 @@ import { ACTOR_KIND, type Actor, actorName, personActor } from "@repo/ui/actor-m
 import { GLYPH, ListFilterIcon } from "@repo/ui/icons";
 import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useCallback, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -273,6 +274,8 @@ function MemoryRow({
         danger: true,
         disabled: !memory.forgettable || locked,
         detail: memory.forgettable ? undefined : forgetterOf(memory, actor),
+        // Note that the detail names who may forget it, which masks the item's words with it.
+        replayMasked: !memory.forgettable,
         onSelect: onForget,
       },
     ],
@@ -310,9 +313,14 @@ function MemoryRow({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={chosen === undefined ? "Memory actions" : countWords(chosen.count, TERM.MEMORY)}
-          heading={chosen === undefined ? undefined : countWords(chosen.count, TERM.MEMORY)}
+          heading={
+            chosen === undefined ? undefined : (
+              <ReplayUnmask>{countWords(chosen.count, TERM.MEMORY)}</ReplayUnmask>
+            )
+          }
           menu={menu.drawn}
           groups={chosen === undefined ? own : selectionMenu(chosen.acts)}
+          replayUnmasked
           onClose={menu.close}
         />
       )}
@@ -326,6 +334,8 @@ interface Keeper {
   readonly label: string;
   readonly face: ReactNode;
   readonly count: number;
+  /** Whether the label is a member's name rather than Me or the former members' words, kept masked in a screen recording. */
+  readonly named: boolean;
 }
 
 /** The keepers of `listed`, the reader first as Me, then each by name, everyone who left last. */
@@ -342,7 +352,7 @@ function keepersOf(listed: readonly ShownMemory[]): readonly Keeper[] {
     const you = actor.kind === ACTOR_KIND.PERSON && actor.you;
     const label = former ? FORMER_WORDS : you ? PEOPLE_FILTER_WORDS.ME : actorName(actor);
     const face = former ? <GLYPH.PEOPLE /> : <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />;
-    byKey.set(key, { key, label, face, count: 1 });
+    byKey.set(key, { key, label, face, count: 1, named: !former && !you });
   }
   const rank = (keeper: Keeper) =>
     keeper.label === PEOPLE_FILTER_WORDS.ME ? 0 : keeper.key === FORMER_KEY ? 2 : 1;
@@ -371,6 +381,7 @@ function KeptByFilter({
   const menu = useMenu(true);
   const people: MenuAction[] = keepers.map((keeper) => ({
     label: keeper.label,
+    replayMasked: keeper.named,
     icon: <>{keeper.face}</>,
     detail: `${String(keeper.count)} kept`,
     checked: kept.has(keeper.key),
@@ -389,6 +400,7 @@ function KeptByFilter({
           label={FILTER}
           menu={menu.drawn}
           groups={[[{ label: KEPT_BY, icon: <GLYPH.PERSON />, items: people }]]}
+          replayUnmasked
           onClose={menu.close}
         />
       )}
@@ -473,9 +485,10 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   return {
     title: one ? "Forget this memory?" : `Forget ${countWords(asked.length, TERM.MEMORY)}?`,
     body: `${body}${kept}`,
-    verb: MEMORY_ACT.FORGET,
+    verb: `${MEMORY_ACT.FORGET} ${one ? TERM.MEMORY.one : TERM.MEMORY.many}`,
     running: "Forgetting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
   };
 }
 
@@ -493,6 +506,7 @@ function NothingShown({
         icon={<SearchIcon />}
         title={PAGE_LINE.NO_MATCH}
         action={{ label: PAGE_LINE.CLEAR, onClick: onClear }}
+        replayUnmasked
       />
     );
   }

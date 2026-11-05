@@ -331,6 +331,12 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   `announce(ANNOUNCE.POLITE | ANNOUNCE.ALERT, words)` and the one `Announcer`.
   The blocks that stand in the page keep their roles here: `ErrorState`,
   `FailureNote`, `EmptyState`, `NoteLine`, the toast stack and the announcer.
+- **A placeholder ends on its last word.** A placeholder that asks for
+  something, an instruction or a search prompt, never ends in "…" ("Search
+  workspaces", "Assign to"); one that shows a value's shape with its rest
+  elided keeps it (`ghp_…`). `anti-slop/no-placeholder-ellipsis` refuses a
+  `placeholder` attribute or property whose literal ends in "…" or "..." after
+  a letter, digit, or space.
 - **Lists and menus are stepped by `useRovingKeys` and `List`.** Outside this
   package a key read off an event and matched to `ArrowUp`, `ArrowDown`,
   `ArrowLeft`, `ArrowRight`, `Home` or `End` is refused

@@ -42,6 +42,7 @@ import {
   useConfirmDialog,
   useSecond,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
@@ -231,7 +232,10 @@ function HostRow({
               },
             ]
       }
-      row={{ label, description: <StandingLine host={host} book={book} /> }}
+      row={{
+        label: <ReplayMask>{label}</ReplayMask>,
+        description: <StandingLine host={host} book={book} />,
+      }}
     />
   );
 }
@@ -258,9 +262,11 @@ function RemoveHostDialog({
       question={{
         title: `Remove ${asked?.label ?? ""}?`,
         body: REMOVED,
-        verb: "Remove",
+        verb: "Remove host",
         running: "Removing",
         loss: CONFIRM_LOSS.IRREVERSIBLE,
+        replayUnmasked: true,
+        titleReplayMasked: true,
       }}
     >
       <CodeCard
@@ -304,10 +310,11 @@ function AddHostsDialog({
       open
       title={WORDS.ADD}
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
       onDismiss={onClose}
       actions={
         <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-          {WORDS.CLOSE}
+          <ReplayUnmask>{WORDS.CLOSE}</ReplayUnmask>
         </Button>
       }
     >
@@ -330,7 +337,7 @@ function AddHostsDialog({
           joined.map(({ host, label }) => (
             <SettingsRow
               key={host.id}
-              label={label}
+              label={<ReplayMask>{label}</ReplayMask>}
               description={DEVICE_PLATFORM_NAME[host.platform ?? DEVICE_PLATFORM.LINUX]}
             />
           ))

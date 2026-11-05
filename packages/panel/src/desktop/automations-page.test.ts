@@ -1313,7 +1313,7 @@ test("a deletion asks first, then goes back to the list without the automation",
   act(() => menuItem("Delete").click());
   await settle();
   assert.deepEqual(deletes, []);
-  act(() => dialogButton("Delete").click());
+  act(() => dialogButton("Delete automation").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
@@ -1338,7 +1338,7 @@ test("a row's Delete asks first, and once confirmed the row leaves the list and 
     new RegExp(`Delete ${SWEEP.name}\\?`, "u"),
   );
 
-  act(() => dialogButton("Delete").click());
+  act(() => dialogButton("Delete automation").click());
   await settle();
 
   assert.deepEqual(deletes, [SWEEP.id]);
@@ -2218,9 +2218,12 @@ function agentRows(): {
       option.querySelector(".ui-combobox-option-glyph svg, .ui-combobox-option-glyph img") !== null,
     name: option.querySelector(".ui-combobox-option-label")?.textContent ?? null,
     detail: option.querySelector(".ui-combobox-option-detail")?.textContent ?? null,
-    ends: [...(option.querySelector(".ui-combobox-option-hint")?.children ?? [])].map((mark) =>
-      mark.getAttribute("aria-label"),
-    ),
+    // Note that the hint's marks stand inside the replay mark its menu draws them under, so a mark is a child of that mark, or of the hint where none stands.
+    ends: [...(option.querySelector(".ui-combobox-option-hint")?.children ?? [])]
+      .flatMap((mark) =>
+        mark.matches("[data-replay-mask], [data-replay-unmask]") ? [...mark.children] : [mark],
+      )
+      .map((mark) => mark.getAttribute("aria-label")),
   }));
 }
 

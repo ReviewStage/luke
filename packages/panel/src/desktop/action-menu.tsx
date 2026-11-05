@@ -71,13 +71,14 @@ function sharedEntry(entry: MenuEntry): SharedMenuEntry {
   return command === undefined ? { ...submenu, items } : { ...submenu, items, ...keyedBy(command) };
 }
 
-/** A row's menu (`ListRow`'s `menu`) of the window's items, each item's chord at its end; `thing` is what the row is, which names its ⋯ and the menu, and `shown` whether the surface the row stands on is, which the menu does not outlive. */
+/** A row's menu (`ListRow`'s `menu`) of the window's items, each item's chord at its end; `thing` is what the row is, which names its ⋯ and the menu, `shown` whether the surface the row stands on is, which the menu does not outlive, and `replayUnmasked` whether its items' words are the app's own, which a screen recording shows as they read. */
 export function rowMenu(
   thing: string,
   groups: readonly (readonly MenuEntry[])[],
   shown?: boolean,
+  replayUnmasked?: boolean,
 ): ListRowMenu {
-  return { thing, groups: groups.map((group) => group.map(sharedEntry)), shown };
+  return { thing, groups: groups.map((group) => group.map(sharedEntry)), shown, replayUnmasked };
 }
 
 /** The window's menu, drawn by the shared one with each item's chord at its end. */
@@ -92,6 +93,8 @@ export function ActionMenu({
   groups: readonly (readonly MenuEntry[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
+  /** Whether its items' words are the app's own, which a screen recording shows as they read, but for an item that is `replayMasked` (`Menu`'s `replayUnmasked`). */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   return <Menu {...props} groups={groups.map((group) => group.map(sharedEntry))} />;
 }

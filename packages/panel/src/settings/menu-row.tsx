@@ -15,6 +15,7 @@ import {
 import type { ShownError } from "@repo/ui/reported-failure";
 import { type KeyboardEvent, type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { replayMaskedError } from "./marks.js";
 
 /**
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.
@@ -169,7 +170,7 @@ export function MenuRow({
             label={row.label}
             adornment={row.adornment}
             description={row.description}
-            error={row.error}
+            error={replayMaskedError(row.error)}
             landed={row.landed}
             below={row.below === undefined || row.below === null ? undefined : () => row.below}
           >
@@ -196,6 +197,8 @@ export function MenuRow({
           label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups}
+          // Note that a row's acts are the app's own words, and an act that names a person's thing is the caller's to mark `replayMasked`.
+          replayUnmasked
           {...(heading === undefined ? undefined : { heading })}
           onClose={menu.close}
         />

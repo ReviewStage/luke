@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { ServiceReach } from "@repo/features";
 import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@repo/features/live-wire";
-import { Clock, Duration, Effect, Exit, Fiber, Random, Schema, Stream } from "effect";
+import {
+  Clock,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Random,
+  Schema,
+  Stream,
+  SubscriptionRef,
+} from "effect";
 import { TestClock } from "effect/testing";
 import {
   confirmWrite,
@@ -209,6 +220,40 @@ it.effect(
       );
       assert.deepEqual(gapsOf(asks).slice(0, 5), [500, 1_000, 2_000, 2_500, 2_500]);
     }),
+);
+
+it.effect(
+  "a poll waiting out its backoff is asked again the moment the service answers again",
+  () =>
+    Effect.gen(function* () {
+      const reach = yield* SubscriptionRef.make({ reachable: false, answeredAt: 0 });
+      let asks = 0;
+      const following = yield* Effect.forkChild(
+        liveRows<Part>(
+          {
+            poll: () =>
+              Effect.sync(() => {
+                asks += 1;
+                return { failure: "unavailable" };
+              }),
+          },
+          polledRead([], "1"),
+        ).pipe(Stream.runDrain, Effect.provideService(ServiceReach, reach)),
+      );
+      yield* settled;
+      assert.equal(asks, 1, "the first poll failed and waits");
+
+      yield* SubscriptionRef.set(reach, { reachable: true, answeredAt: 1 });
+      yield* settled;
+      assert.equal(asks, 2, "asked again with no time passing");
+      yield* Fiber.interrupt(following);
+    }).pipe(
+      // Every wait drawn near its bound, so it is far from over as the service answers.
+      Effect.provideService(Random.Random, {
+        nextIntUnsafe: () => 0,
+        nextDoubleUnsafe: () => 0.99,
+      }),
+    ),
 );
 
 it.effect(

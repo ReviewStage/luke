@@ -12,7 +12,14 @@ import {
   agentVisibleTo,
   taskReachableBy,
 } from "@repo/database/models/workspace-store";
-import { agentPin, conversations, device, taskPin } from "@repo/database/schemas";
+import {
+  agentPin,
+  agentRead,
+  conversations,
+  device,
+  taskPin,
+  taskRead,
+} from "@repo/database/schemas";
 import { agentTable } from "@repo/database/schemas/agent";
 import { user } from "@repo/database/schemas/auth";
 import { automationRun } from "@repo/database/schemas/automation";
@@ -21,6 +28,7 @@ import { taskBlock } from "@repo/database/schemas/task-block";
 import { TOPIC } from "@repo/database/sync/notification";
 import {
   agentPinSync,
+  agentReadSync,
   agentSync,
   automationRunSync,
   conversationsSync,
@@ -28,6 +36,7 @@ import {
   messagesSync,
   taskBlockSync,
   taskPinSync,
+  taskReadSync,
   taskSync,
   turnsSync,
   userSync,
@@ -51,7 +60,7 @@ import type { SyncMoved } from "../sync/live-query.js";
  * held read (`tasks-app.ts`'s collection, through `listTasks`,
  * `withTaskAgents`, and `listTasklessAgents`), with every archived plan
  * and agent among them, as the desktop asks for them: the plans with the
- * reader's own pin and the owner's name, and the agents with their newest
+ * reader's own pin and read mark and the owner's name, and the agents with their newest
  * turn, the pilot that started each where one did, when the newest line
  * of the developer's awaiting its turn was written and whether that turn's session ended, when the newest turn to end
  * ended, what each last published, the harness its conversation runs on, the
@@ -65,8 +74,8 @@ import type { SyncMoved } from "../sync/live-query.js";
  *
  * A reader past a sync id is read the same statements narrowed to the rows
  * what moved could move (`taskListDeltaStatements`): a plan whose own row,
- * pin, or block moved, that a moved plan blocks, or that names a moved
- * member, and an agent whose own row or pin moved, whose turn or
+ * pin, read mark, or block moved, that a moved plan blocks, or that names a
+ * moved member, and an agent whose own row, pin, or read mark moved, whose turn or
  * conversation moved, whose plan moved, that names a moved member or Mac,
  * or that a moved pilot or run started. Each keeps its rule of who reads it,
  * so a key another workspace's write moved reads no row.
@@ -120,9 +129,11 @@ function tasksStatement(userId: string, narrowed: SQL = sql`true`) {
           mode: task.mode,
           blocked: taskBlockedFor(userId),
           madeByRun: taskMadeByRun(task.id),
+          markedUnread: sql<boolean>`coalesce(${taskRead.markedUnread}, false)`,
         },
         {
           pinnedAt: taskPin.pinnedAt,
+          readThrough: sql`coalesce(${taskRead.readThrough}, ${task.readThrough}, ${task.createdAt})`,
           completedAt: task.completedAt,
           createdAt: task.createdAt,
           updatedAt: task.updatedAt,
@@ -131,6 +142,7 @@ function tasksStatement(userId: string, narrowed: SQL = sql`true`) {
     )
     .from(task)
     .leftJoin(taskPin, and(eq(taskPin.taskId, task.id), eq(taskPin.userId, userId)))
+    .leftJoin(taskRead, and(eq(taskRead.taskId, task.id), eq(taskRead.userId, userId)))
     .leftJoin(user, eq(user.id, task.userId))
     .leftJoin(assignee, eq(assignee.id, task.assigneeId))
     .where(and(taskReachableBy(userId), narrowed));
@@ -198,10 +210,12 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
           cancelRequested: isNotNull(latest.cancelRequestedAt),
           turnSessionEnded: sessionEndedOf(latest),
           pilot: sql<boolean>`${agentTable.kind} = ${AGENT_KIND.PILOT}`,
+          markedUnread: sql<boolean>`coalesce(${agentRead.markedUnread}, false)`,
         },
         {
           archivedAt: agentTable.archivedAt,
           pinnedAt: agentPin.pinnedAt,
+          readThrough: sql`coalesce(${agentRead.readThrough}, ${agentTable.readThrough}, ${agentTable.createdAt})`,
           createdAt: agentTable.createdAt,
           cancelRequestedAt: latest.cancelRequestedAt,
           queuedAt: latest.queuedAt,
@@ -214,6 +228,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
     )
     .from(agentTable)
     .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
+    .leftJoin(agentRead, and(eq(agentRead.agentId, agentTable.id), eq(agentRead.userId, userId)))
     .leftJoin(starter, eq(starter.id, agentTable.userId))
     .leftJoin(
       starterPilot,
@@ -233,7 +248,7 @@ function agentsStatement(userId: string, narrowed: SQL = sql`true`) {
     );
 }
 
-/** The plans what moved could move: their own rows, the reader's pins, a block either way, a plan a moved plan blocks, and a plan naming a moved member. */
+/** The plans what moved could move: their own rows, the reader's pins and read marks, a block either way, a plan a moved plan blocks, and a plan naming a moved member. */
 function movedPlans(moved: SyncMoved): SQL {
   const plans = moved.keys(taskSync, task.id);
   const members = moved.keys(userSync, user.id);
@@ -246,6 +261,7 @@ function movedPlans(moved: SyncMoved): SQL {
       liveKeysIn(task.id, [
         ...plans,
         ...moved.keys(taskPinSync, taskPin.taskId),
+        ...moved.keys(taskReadSync, taskRead.taskId),
         ...moved.keys(taskBlockSync, taskBlock.blockedTaskId),
       ]),
       sql`${task.id} in ${blockedByMoved}`,
@@ -256,7 +272,7 @@ function movedPlans(moved: SyncMoved): SQL {
 }
 
 /**
- * The agents what moved could move: their own rows and the reader's pins,
+ * The agents what moved could move: their own rows and the reader's pins and read marks,
  * those whose turn or conversation moved, those of a moved plan, those
  * naming a moved member or Mac, and those a moved pilot or run started.
  */
@@ -268,6 +284,7 @@ function movedAgents(moved: SyncMoved): SQL {
       liveKeysIn(agentTable.id, [
         ...agents,
         ...moved.keys(agentPinSync, agentPin.agentId),
+        ...moved.keys(agentReadSync, agentRead.agentId),
         ...moved.topics(turnsSync, TOPIC.AGENT),
       ]),
       liveKeysIn(agentTable.conversationId, [

@@ -1,7 +1,7 @@
 import type { AgentMachineKind, ContextWindow } from "@repo/features/agent-wire";
 import type { ChaptersModelId } from "@repo/features/chapters-model-choice";
 import type { LinkOpen } from "@repo/features/link-open";
-import type { AgentEnter, ExperimentChoices } from "@repo/settings";
+import type { AgentEnter, CommitAuthor, ExperimentChoices } from "@repo/settings";
 import { boolean, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
@@ -31,6 +31,14 @@ export const accountPreference = pgTable("account_preference", {
    * the snapshot of its own, as the link choice is, for the same reason.
    */
   agentEnter: text("agent_enter").$type<AgentEnter>(),
+  /**
+   * Who authors an agent's commits and opens its pull request, and whether
+   * the other is credited as co-author (`@repo/settings`'s
+   * `COMMIT_AUTHOR`); null until the account chooses, which reads as the
+   * developer with our bot as co-author. A part of the snapshot of its own,
+   * as the link choice is, for the same reason.
+   */
+  commitAuthor: text("commit_author").$type<CommitAuthor>(),
   /**
    * Whether the account finished its setup after sign-in, so setup stands
    * once for the account rather than once on each device; null until it

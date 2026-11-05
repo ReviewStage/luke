@@ -147,12 +147,13 @@ function ResetPageButton({
           if (taken.kept) return;
           toast({
             words: UNDO_REFUSED_NOTE,
+            replayUnmasked: true,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
             failure: { surface: FAILURE_SURFACE.SETTINGS_RESET, cause: taken.cause },
           });
         });
-      toast(undoToast(RESET_NOTES[asked], undo));
+      toast({ ...undoToast(RESET_NOTES[asked], undo), replayUnmasked: true });
       return result;
     });
   };

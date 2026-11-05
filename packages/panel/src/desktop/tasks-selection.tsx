@@ -134,6 +134,7 @@ function selectionActs(
         label: section.title,
         key: section.id,
         icon: sectionGlyph(section.icon) ?? <GLYPH.SECTION />,
+        replayMasked: true,
         onSelect: move(section.id),
       })),
       newSectionAction(
@@ -147,10 +148,17 @@ function selectionActs(
       label: status.label,
       ...(status.icon === undefined ? {} : { icon: status.icon }),
       menu: [status.items],
+      replayUnmasked: true,
     },
     ...(workspaceId === undefined
       ? []
-      : [{ ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION), menu: sectionMenu(workspaceId) }]),
+      : [
+          {
+            ...commandHead(PANEL_COMMAND.MOVE_TO_SECTION),
+            menu: sectionMenu(workspaceId),
+            replayUnmasked: true,
+          },
+        ]),
     { ...commandHead(PANEL_COMMAND.DELETE_TASK), danger: true, onAct: doors.askDelete },
   ];
 }
@@ -166,9 +174,10 @@ function deleteChosenQuestion(count: number): DialogQuestion {
   return {
     title: `Permanently delete ${named}?`,
     body: `${one ? "The task and its board and transcript" : `The ${named} and their boards and transcripts`} will be deleted. ${IRREVERSIBLE_WORDS}`,
-    verb: "Permanently delete",
+    verb: `Permanently delete ${one ? TERM.TASK.one : TERM.TASK.many}`,
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
   };
 }
 
@@ -274,6 +283,7 @@ export function chosenRowMenu(thing: string, chosen: ChosenTasks, shown: boolean
     thing,
     groups: selectionMenu(chosen.acts()),
     heading: countWords(chosen.count, TERM.TASK),
+    replayUnmasked: true,
     shown,
   };
 }

@@ -2,6 +2,7 @@ import { readFailedWords, TERM, VERB } from "@repo/features/words";
 import type { WorkspaceMember } from "@repo/features/workspace-wire";
 import { MENU_DETAIL } from "@repo/ui";
 import { memberActor, type PersonActor } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { UserIcon, UsersIcon } from "lucide-react";
 import { ACTOR_SIZE, ActorMark, PersonCard } from "./actor-ref.js";
 import type { MenuAction } from "./desktop/action-menu.js";
@@ -165,10 +166,11 @@ export function peopleFilterActions({
         // Note that a person is keyed by their id, because two members may share a name.
         key: row.member.userId,
         label: row.label,
-        icon: row.icon,
+        icon: <ReplayMask>{row.icon}</ReplayMask>,
         detail: row.detail,
         detailPlace: MENU_DETAIL.BESIDE,
         card: row.card,
+        replayMasked: true,
         checked: chosen.kind === PEOPLE_FILTER.PERSON && chosen.userId === row.member.userId,
         onSelect: () =>
           onChoose({ kind: PEOPLE_FILTER.PERSON, userId: row.member.userId, name: row.label }),

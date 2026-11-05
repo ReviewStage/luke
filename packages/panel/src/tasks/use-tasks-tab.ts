@@ -558,12 +558,27 @@ interface NewTaskCardKept {
 }
 
 /**
+ * New task's agent start under way: the line its agent opens on, and the
+ * model it was started with, which the page draws while it waits. It names
+ * no task, since the task stands Untitled until its agent names it.
+ */
+export interface StartingTask {
+  readonly line: SentLine;
+  /** The model the card's chip picked; none where the start takes the default. */
+  readonly choice: ModelChoice | undefined;
+}
+
+/**
  * What a start comes from beyond its name, repository, and workspace: where
- * its agents run, and the agent New task's composer starts on its words in
+ * its agent runs, and the agent New task's composer starts on its words in
  * the task's own start (`handed`).
  */
 export interface NewTaskStart {
-  /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
+  /**
+   * Where the card's Runs on chose: the cloud, or one of the member's
+   * devices. A task holds no place, so it is where the handed agent runs,
+   * and, with none handed, the member's last pick.
+   */
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
@@ -580,12 +595,11 @@ export interface NewTaskStart {
 export interface TasksControl {
   page: TasksPage;
   /**
-   * The line New task's agent start under way opens its agent on, which the
-   * window draws on a task's page in its shape until the start answers
-   * (`StartingAgentTab`); none otherwise, or once the developer went to
-   * another task or page meanwhile.
+   * New task's agent start under way, which the window draws on a task's
+   * page in its shape until the start answers (`StartingAgentTab`); none
+   * otherwise, or once the developer went to another task or page meanwhile.
    */
-  starting: SentLine | undefined;
+  starting: StartingTask | undefined;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's tasks stand in for one. */
@@ -1327,9 +1341,9 @@ export function useTasksTab(input: {
   >(undefined);
   // How many times New task was pressed while Home stood, whose own composer takes the caret on each.
   const [homeNewTasks, setHomeNewTasks] = useState(0);
-  // New task's agent start under way: the line its agent opens on, and the navigation it was pressed at.
+  // New task's agent start under way: what its page draws, and the navigation it was pressed at.
   const [startingTask, setStartingTask] = useState<
-    { readonly line: SentLine; readonly navigation: number } | undefined
+    (StartingTask & { readonly navigation: number }) | undefined
   >(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<TasksControl["repositoryMenu"]>(undefined);
   const [relationMenu, setRelationMenu] = useState<TasksControl["relationMenu"]>(undefined);
@@ -1518,7 +1532,6 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
-    device: openDocument?.id === viewed.activeTaskId ? openDocument?.runsOn?.device : undefined,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each named, archived, and pinned as main draws it.
@@ -2021,6 +2034,7 @@ export function useTasksTab(input: {
         return true;
       }
       toast({
+        replayUnmasked: true,
         words: MARK_FAILED_NOTES[mark],
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2040,6 +2054,7 @@ export function useTasksTab(input: {
     askKept(act(ACT_KIND.TASKS_PIN_REPOSITORY, { repository, pinned })).then((changed) => {
       if (changed.kept) return;
       toast({
+        replayUnmasked: true,
         words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2098,6 +2113,7 @@ export function useTasksTab(input: {
       }
       if (asked === AGENT_PIN_ASKED.UNASKED) return;
       toast({
+        replayUnmasked: true,
         words: pinned ? AGENT_PIN_FAILED_NOTES.PIN : AGENT_PIN_FAILED_NOTES.UNPIN,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2177,6 +2193,7 @@ export function useTasksTab(input: {
       if (asked.every((answer) => answer.kept)) return;
       putBack?.();
       toast({
+        replayUnmasked: true,
         words: PIN_MOVE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2196,6 +2213,7 @@ export function useTasksTab(input: {
     askKept(act(ACT_KIND.TASKS_WRITE_SECTION, { writes: [first, ...rest] })).then((changed) => {
       if (changed.kept) return;
       toast({
+        replayUnmasked: true,
         words: SECTION_WRITE_FAILED_NOTE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,
@@ -2254,6 +2272,7 @@ export function useTasksTab(input: {
     sendStatuses(asked).then(({ landed, refused, cause }) => {
       if (landed.length === 0) {
         toast({
+          replayUnmasked: true,
           words: settleFailedNote(status, refused),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2265,8 +2284,8 @@ export function useTasksTab(input: {
       const undo = pressed.keep(words, (taskId) => landed.includes(taskId));
       toast(
         undo === undefined
-          ? { words, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
-          : undoToast(words, undo),
+          ? { replayUnmasked: true, words, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE }
+          : { ...undoToast(words, undo), replayUnmasked: true },
       );
     });
   };
@@ -2297,7 +2316,8 @@ export function useTasksTab(input: {
    * GitHub connected, so a read finding none installed says GitHub removed
    * or suspended it. A workspace not yet read is taken as managed, so the
    * chip still points somewhere, and its recent repositories are left to the
-   * service's read to judge.
+   * service's read to judge; and whether the tasks are still being read, so
+   * the chip asks for no pick before its default could be known.
    */
   const repositoriesIn = useCallback(
     (workspaceId: string | undefined): RepositoryChooser => {
@@ -2317,6 +2337,7 @@ export function useTasksTab(input: {
             );
       return {
         recent: recentRepositories(offered),
+        reading: tasks.listStatus !== TASKS_READ.READY && tasks.listStatus !== TASKS_READ.FAILED,
         openGitHub,
         pictures: fixture === undefined,
         scope: workspaceId,
@@ -2325,7 +2346,7 @@ export function useTasksTab(input: {
         ...(workspace?.github == null ? undefined : { connected: true }),
       };
     },
-    [viewed.workspaces, tasks.tasks, fixture, openGitHub],
+    [viewed.workspaces, tasks.tasks, tasks.listStatus, fixture, openGitHub],
   );
   // The open task's chip, or New task's, made again only as what it lists from moves.
   const repositories = useMemo(
@@ -2417,6 +2438,7 @@ export function useTasksTab(input: {
           return;
         }
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2429,11 +2451,12 @@ export function useTasksTab(input: {
   // the service keeps it, a toast offers Undo, which adds the same block again.
   const removeTaskBlock = (taskId: string, relation: TaskBlockRelation, otherId: string) => {
     setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.REMOVE, relation, taskId: otherId }, () =>
-      toast(
-        undoToast(BLOCK_REMOVED_NOTE, () =>
+      toast({
+        ...undoToast(BLOCK_REMOVED_NOTE, () =>
           setTaskBlock(taskId, { change: TASK_BLOCK_CHANGE.ADD, relation, taskId: otherId }),
         ),
-      ),
+        replayUnmasked: true,
+      }),
     );
   };
 
@@ -2450,6 +2473,7 @@ export function useTasksTab(input: {
           return;
         }
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2468,7 +2492,10 @@ export function useTasksTab(input: {
         : undefined);
     if (parentTaskId === undefined) return;
     setTaskParent(taskId, null, () =>
-      toast(undoToast(PARENT_REMOVED_NOTE, () => setTaskParent(taskId, parentTaskId))),
+      toast({
+        ...undoToast(PARENT_REMOVED_NOTE, () => setTaskParent(taskId, parentTaskId)),
+        replayUnmasked: true,
+      }),
     );
   };
 
@@ -2481,6 +2508,7 @@ export function useTasksTab(input: {
       .then((answer) => {
         if (!("failure" in answer)) return;
         toast({
+          replayUnmasked: true,
           words: relationRefusedNote(answer.failure),
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -2513,6 +2541,7 @@ export function useTasksTab(input: {
         }
         if (told?.quiet !== true) {
           toast({
+            replayUnmasked: true,
             words: MOVE_REFUSED_NOTE,
             tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
@@ -2652,7 +2681,7 @@ export function useTasksTab(input: {
     // Staying, an agent's start puts the card away at once and opens nothing.
     if (handed !== undefined && stays) setNewTaskAsk(undefined);
     else if (line !== undefined) {
-      setStartingTask({ line, navigation: pressedAt });
+      setStartingTask({ line, choice: handed?.choice, navigation: pressedAt });
       setNewTaskAsk(undefined);
       setStandIn(undefined);
       setHistoryFor(undefined);
@@ -2694,13 +2723,22 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+      ...(from.runsOn === undefined || from.handed !== undefined
+        ? undefined
+        : { runsOn: from.runsOn }),
       ...(from.mode === undefined ? undefined : { mode: from.mode }),
       ...(from.relations === undefined || from.relations.length === 0
         ? undefined
         : { relations: from.relations }),
       planning: false,
-      ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
+      ...(from.handed === undefined
+        ? undefined
+        : {
+            agent: {
+              ...agentRequest(from.handed),
+              ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+            },
+          }),
       ...(stays ? { quiet: true } : undefined),
     }).then(
       (answer) => {
@@ -2752,9 +2790,14 @@ export function useTasksTab(input: {
   selectNow.current = guard(openUnpinned);
   const sayStarted = (planId: string, agentRan: boolean) =>
     toast({
+      replayUnmasked: true,
       words: agentRan ? TASK_STARTED_NOTE : TASK_STARTED_AGENT_REFUSED_NOTE,
       tone: agentRan ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION,
-      action: { label: OPEN_STARTED_TASK, onPress: () => selectNow.current(planId) },
+      action: {
+        label: OPEN_STARTED_TASK,
+        replayUnmasked: true,
+        onPress: () => selectNow.current(planId),
+      },
     });
 
   // A task started with an agent opens on the agent's tab, as a landed
@@ -3562,7 +3605,7 @@ export function useTasksTab(input: {
     startingTask.navigation === navigations.current &&
     standIn === undefined &&
     historyFor === undefined
-      ? startingTask.line
+      ? startingTask
       : undefined;
 
   return useSteadyDoors({

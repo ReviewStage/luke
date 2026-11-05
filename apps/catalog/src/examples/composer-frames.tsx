@@ -44,7 +44,7 @@ function Box({
     >
       <div className="catalog-composer">
         <Stack gap={GAP.CONTROL}>
-          <Text tone={TEXT_TONE.MUTED}>Ask {PRODUCT_NAME} to change something…</Text>
+          <Text tone={TEXT_TONE.MUTED}>Ask {PRODUCT_NAME} to change something</Text>
           <Inline justify={JUSTIFY.BETWEEN}>
             <IconButton label="Attach files" icon={<PlusIcon />} onClick={ignore} />
             <IconButton

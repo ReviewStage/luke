@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
-import { EXPERIMENT } from "@repo/settings";
+import { APP_SETTING_ID, EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@repo/settings/settings-views";
 import { experimentsOn, settingsView } from "@repo/settings/testing";
@@ -117,7 +117,7 @@ test("Integrations finds the Workspace page's group as Workspace connections, un
   );
 });
 
-test("searching GitHub while signed in finds Integrations' GitHub row and Profile's, and a personal access token finds Profile's alone", () => {
+test("searching GitHub while signed in finds Integrations' GitHub row and Profile's token and commit author rows, and a personal access token finds Profile's alone", () => {
   const entries = settingsSearchEntries({
     settings: settingsView(),
     accountDrawn: true,
@@ -133,7 +133,7 @@ test("searching GitHub while signed in finds Integrations' GitHub row and Profil
   );
   assert.deepEqual(
     groups.find((group) => group.page === SETTINGS_VIEW.ACCOUNT)?.items.map((entry) => entry.id),
-    [SETTINGS_SEARCH_ROW.GITHUB_ACCESS],
+    [SETTINGS_SEARCH_ROW.GITHUB_ACCESS, APP_SETTING_ID.COMMIT_AUTHOR],
   );
   assert.deepEqual(
     (searchSettings(entries, "personal access token")?.groups ?? []).map((group) =>
@@ -287,10 +287,10 @@ test("renaming needs a workspace the reader manages that is not their own first"
   );
 });
 
-test("model finds the default model and the Chapters model, each under a label no other page's row wears", () => {
+test("model finds the default model under a label no other page's row wears", () => {
   assert.deepEqual(
     labelsFound("model").filter((label) => label.toLowerCase().includes("model")),
-    ["Default model", "Chapters model"],
+    ["Default model"],
   );
 });
 

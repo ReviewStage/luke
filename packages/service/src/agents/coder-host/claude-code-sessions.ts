@@ -62,17 +62,6 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-/** The hosts a command the agent runs may reach through Claude Code's command sandbox: GitHub and the package registries. */
-const ALLOWED_DOMAINS = [
-  "github.com",
-  "*.github.com",
-  "*.githubusercontent.com",
-  "registry.npmjs.org",
-  "*.npmjs.org",
-  "pypi.org",
-  "files.pythonhosted.org",
-] as const;
-
 /** Anthropic's API: the one host the CLI sends its credential to, in either mode (CLI 2.1.304, as its requests were recorded). */
 const ANTHROPIC_API = "api.anthropic.com";
 
@@ -284,7 +273,8 @@ function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _t
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
         integrations: yield* options.integrations(agent),
-        allowedDomains: [...ALLOWED_DOMAINS],
+        // Note that a host's older runner, bundled before Claude Code's command sandbox was removed, refuses a config without domains.
+        allowedDomains: [],
         installedSkills: layout.installedSkills,
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,

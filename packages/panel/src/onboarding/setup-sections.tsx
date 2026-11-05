@@ -1,5 +1,6 @@
 import { LIVE_READ } from "@repo/features/live-wire";
 import { SETTINGS_SECTION_FRAME, SettingsSection, TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useEffect, useState } from "react";
 import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -56,27 +57,30 @@ export function SetupSections({ tasks }: { tasks: TasksControl }): React.JSX.Ele
 
   if (missing === undefined || workspaceId === undefined) return null;
   if (!missing.agent && !missing.github) return null;
+  // Note that its words show in a screen recording, because they are the app's own, but for a person's, which each part masks.
   return (
-    <section
-      className="mb-page-section-gap flex flex-col gap-page-section-gap"
-      aria-label="Finish setting up"
-    >
-      {missing.agent ? (
-        <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect an agent">
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            Run agents on your ChatGPT or Claude plan, or an API key.
-          </Text>
-          <AgentConnectSection onConnected={IGNORE_CONNECTED} />
-        </SettingsSection>
-      ) : null}
-      {missing.github ? (
-        <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect GitHub">
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {GITHUB_OPTIONAL}
-          </Text>
-          <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={IGNORE_REACHED} />
-        </SettingsSection>
-      ) : null}
-    </section>
+    <ReplayUnmask>
+      <section
+        className="mb-page-section-gap flex flex-col gap-page-section-gap"
+        aria-label="Finish setting up"
+      >
+        {missing.agent ? (
+          <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect an agent">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              Run agents on your ChatGPT or Claude plan, or an API key.
+            </Text>
+            <AgentConnectSection onConnected={IGNORE_CONNECTED} />
+          </SettingsSection>
+        ) : null}
+        {missing.github ? (
+          <SettingsSection frame={SETTINGS_SECTION_FRAME.NONE} title="Connect GitHub">
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {GITHUB_OPTIONAL}
+            </Text>
+            <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={IGNORE_REACHED} />
+          </SettingsSection>
+        ) : null}
+      </section>
+    </ReplayUnmask>
   );
 }

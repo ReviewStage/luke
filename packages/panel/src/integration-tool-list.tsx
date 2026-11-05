@@ -35,7 +35,8 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
-import { cloneElement, createContext, useContext } from "react";
+import { ReplayMask, ReplayWords } from "@repo/ui/session-replay-marks";
+import { cloneElement, createContext, type ReactNode, useContext } from "react";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
 
@@ -118,6 +119,47 @@ function hintTone(hint: ToolHint): StatusTone {
   return hint === TOOL_HINT.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL;
 }
 
+/**
+ * A tool's own words, its name, what it does, and its parameters', as its
+ * server wrote them: shown in a screen recording where the owner says the
+ * server is a catalog integration's, masked otherwise, since a server a
+ * member set up may name their company's own things.
+ */
+function ToolWords({
+  shown,
+  children,
+}: {
+  shown: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <ReplayWords unmasked={shown} masked={!shown}>
+      {children}
+    </ReplayWords>
+  );
+}
+
+/** A hint's words, the integration's name among them masked in a screen recording where it carries the account's label. */
+function HintWords({
+  words,
+  server,
+  masked,
+}: {
+  words: string;
+  server: string;
+  masked: boolean;
+}): React.JSX.Element {
+  const at = words.indexOf(server);
+  if (!masked || at < 0) return <>{words}</>;
+  return (
+    <>
+      {words.slice(0, at)}
+      <ReplayMask>{server}</ReplayMask>
+      {words.slice(at + server.length)}
+    </>
+  );
+}
+
 /** Whether a tool's name stands beside its title, which it does only where the title is not the name. */
 function namedApart(tool: IntegrationTool): boolean {
   return toolTitle(tool) !== tool.name;
@@ -125,6 +167,7 @@ function namedApart(tool: IntegrationTool): boolean {
 
 export function IntegrationToolList({
   server,
+  toolWordsShown = false,
   tools,
   tokens,
   current,
@@ -137,6 +180,8 @@ export function IntegrationToolList({
 }: {
   /** The integration's name, which the badges' titles and the list's name say. */
   server: string;
+  /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
+  toolWordsShown?: boolean;
   /** The tools, in the order they are drawn. */
   tools: readonly IntegrationTool[];
   /** The words a search asks for, marked where they landed. */
@@ -178,14 +223,18 @@ export function IntegrationToolList({
                     }
                     words={toolTitle(tool)}
                   >
-                    <Highlighted text={toolTitle(tool)} tokens={tokens} />
+                    <ToolWords shown={toolWordsShown}>
+                      <Highlighted text={toolTitle(tool)} tokens={tokens} />
+                    </ToolWords>
                   </OneLine>
                   {namedApart(tool) ? (
                     <OneLine
                       className="integration-tool-id min-w-0 flex-[0_100_auto] font-mono text-caption-inline font-ui-regular text-muted-foreground"
                       words={tool.name}
                     >
-                      <Highlighted text={tool.name} tokens={tokens} />
+                      <ToolWords shown={toolWordsShown}>
+                        <Highlighted text={tool.name} tokens={tokens} />
+                      </ToolWords>
                     </OneLine>
                   ) : null}
                   <ToolBadge tool={tool} />
@@ -193,7 +242,9 @@ export function IntegrationToolList({
               }
               description={
                 tool.description === "" ? undefined : (
-                  <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+                  <ToolWords shown={toolWordsShown}>
+                    <Highlighted text={toolSummary(tool.description)} tokens={tokens} />
+                  </ToolWords>
                 )
               }
               current={isCurrent ? LIST_ROW_CURRENT.ITEM : undefined}
@@ -216,7 +267,13 @@ export function IntegrationToolList({
 }
 
 /** A tool's parameters, those a call must give first. */
-function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
+function Parameters({
+  tool,
+  shown,
+}: {
+  tool: IntegrationTool;
+  shown: boolean;
+}): React.JSX.Element | null {
   // A tool whose input schema its server's answer could not say is drawn with no parameters at all, rather than as taking none.
   if (tool.parameters === undefined) return null;
   return (
@@ -240,10 +297,10 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
             >
               <dt className="integration-tool-parameter-head flex min-w-0 flex-wrap items-baseline gap-x-item-gap">
                 <span className="integration-tool-parameter-name select-text font-mono text-caption-inline text-foreground wrap-anywhere">
-                  {parameter.name}
+                  <ToolWords shown={shown}>{parameter.name}</ToolWords>
                 </span>
                 <span className="integration-tool-parameter-type font-mono text-caption-inline text-muted-foreground">
-                  {parameter.type}
+                  <ToolWords shown={shown}>{parameter.type}</ToolWords>
                 </span>
                 {parameter.required ? (
                   <span className="integration-tool-parameter-required ml-auto text-caption-inline font-ui-semibold text-attention">
@@ -256,12 +313,18 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
               parameter.default === undefined ? null : (
                 <dd className="integration-tool-parameter-body m-0 flex select-text flex-col gap-tight-gap text-caption text-muted-foreground">
                   {parameter.description !== undefined ? (
-                    <MarkdownMessage
-                      words={parameter.description}
-                      className="integration-tool-parameter-description [&_code]:text-foreground"
-                    />
+                    <ToolWords shown={shown}>
+                      <MarkdownMessage
+                        words={parameter.description}
+                        className="integration-tool-parameter-description [&_code]:text-foreground"
+                      />
+                    </ToolWords>
                   ) : null}
-                  <ParameterValues values={parameter.values} fallback={parameter.default} />
+                  <ParameterValues
+                    values={parameter.values}
+                    fallback={parameter.default}
+                    shown={shown}
+                  />
                 </dd>
               )}
             </div>
@@ -276,9 +339,11 @@ function Parameters({ tool }: { tool: IntegrationTool }): React.JSX.Element | nu
 function ParameterValues({
   values = [],
   fallback,
+  shown,
 }: {
   values?: readonly string[] | undefined;
   fallback: string | undefined;
+  shown: boolean;
 }): React.JSX.Element | null {
   if (values.length === 0 && fallback === undefined) return null;
   return (
@@ -289,14 +354,14 @@ function ParameterValues({
           className={PARAMETER_VALUE}
           data-default={value === fallback ? "true" : undefined}
         >
-          {value}
+          <ToolWords shown={shown}>{value}</ToolWords>
         </code>
       ))}
       {fallback !== undefined && !values.includes(fallback) ? (
         <span>
           {"default "}
           <code className={PARAMETER_VALUE} data-default="true">
-            {fallback}
+            <ToolWords shown={shown}>{fallback}</ToolWords>
           </code>
         </span>
       ) : null}
@@ -306,6 +371,8 @@ function ParameterValues({
 
 export function IntegrationToolDetail({
   server,
+  serverReplayMasked = true,
+  toolWordsShown = false,
   tool,
   tokens,
   backPlace,
@@ -316,6 +383,10 @@ export function IntegrationToolDetail({
 }: {
   /** The integration's name, which the hints and the badge's title say. */
   server: string;
+  /** Whether that name carries an account's label, a person's words, kept masked in a screen recording; a catalog integration's bare name shows. */
+  serverReplayMasked?: boolean;
+  /** Whether its tools' names and words are a catalog integration's, which a screen recording shows as they read; a server a member set up keeps them masked. */
+  toolWordsShown?: boolean;
   tool: IntegrationTool;
   /** The words a search asks for, marked where they landed in what it does. */
   tokens: readonly string[];
@@ -352,7 +423,7 @@ export function IntegrationToolDetail({
           }
           words={title}
         >
-          {title}
+          <ToolWords shown={toolWordsShown}>{title}</ToolWords>
         </OneLine>
         {namedApart(tool) ? (
           <OneLine
@@ -360,7 +431,7 @@ export function IntegrationToolDetail({
             className="integration-tool-detail-name min-w-0 flex-[0_100_auto] select-text font-mono text-caption-inline text-muted-foreground"
             words={tool.name}
           >
-            {tool.name}
+            <ToolWords shown={toolWordsShown}>{tool.name}</ToolWords>
           </OneLine>
         ) : null}
       </header>
@@ -377,7 +448,13 @@ export function IntegrationToolDetail({
             >
               {hints.map((hint) => (
                 <li key={hint}>
-                  <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
+                  <Badge tone={hintTone(hint)}>
+                    <HintWords
+                      words={toolHintWords(hint, server)}
+                      server={server}
+                      masked={serverReplayMasked}
+                    />
+                  </Badge>
                 </li>
               ))}
             </Inline>
@@ -387,13 +464,15 @@ export function IntegrationToolDetail({
               No description.
             </Text>
           ) : (
-            <MarkdownMessage
-              words={tool.description}
-              className="integration-tool-description-whole cursor-text select-text text-caption-inline leading-tool-description text-muted-foreground"
-              found={tokens}
-            />
+            <ToolWords shown={toolWordsShown}>
+              <MarkdownMessage
+                words={tool.description}
+                className="integration-tool-description-whole cursor-text select-text text-caption-inline leading-tool-description text-muted-foreground"
+                found={tokens}
+              />
+            </ToolWords>
           )}
-          <Parameters tool={tool} />
+          <Parameters tool={tool} shown={toolWordsShown} />
         </div>
       </ScrollArea>
     </Fill>

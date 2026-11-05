@@ -6,9 +6,10 @@
  * here, by its status, as the screens tell it apart, and an answer that came
  * through a redirect is something in front of the service answering, such as
  * a preview's deployment protection. The page keeps an account's page and a
- * typed search in its address bar. Until a sign-in has been pressed on
- * this page once, every read is held at the gate, whatever cookie the
- * browser holds (`SIGN_IN_CHOSEN`).
+ * typed search in its address bar. It alone signs a maintainer in as a
+ * member, through Better Auth's admin plugin (`../auth-client.ts`). Until a
+ * sign-in has been pressed on this page once, every read is held at the
+ * gate, whatever cookie the browser holds (`SIGN_IN_CHOSEN`).
  */
 
 import type {
@@ -17,6 +18,7 @@ import type {
   AdminReliability,
   AdminUserDetail,
   AdminUserList,
+  AdminWorkspaceDetail,
   AdminWorkspaceList,
 } from "@repo/features/admin-answer-wire";
 import type { AdminCost } from "@repo/features/admin-cost-wire";
@@ -38,7 +40,13 @@ import {
   type AdminReads,
 } from "@repo/panel/admin/admin-doors";
 import { SIGN_IN_CHOSEN } from "@repo/panel/admin/prefs";
-import { accountHref, searchFromLocation, searchHref } from "@repo/panel/admin/routing";
+import {
+  accountHref,
+  searchFromLocation,
+  searchHref,
+  workspaceHref,
+} from "@repo/panel/admin/routing";
+import { impersonate } from "../auth-client";
 import { ForbiddenCard, SignInCard } from "./chrome/gate-cards";
 
 /** The word the screens tell a refusal apart by, from the status it was answered under. */
@@ -79,6 +87,8 @@ const WEB_ADMIN_READS: AdminReads = {
   day: (query, signal) => asked<AdminDayDetail>(() => browserClient.admin.day(query, { signal })),
   workspaces: (query, signal) =>
     asked<AdminWorkspaceList>(() => browserClient.admin.workspaces(query, { signal })),
+  workspace: (query, signal) =>
+    asked<AdminWorkspaceDetail>(() => browserClient.admin.workspace(query, { signal })),
   // A refusal of the star did not land, whatever it was.
   favorite: (id, favorite, signal) => {
     const input = { query: { [ADMIN_USER_ID_PARAM]: id } };
@@ -101,6 +111,7 @@ const WEB_ADMIN_DOORS: AdminDoors = {
   // the search in place, so the back button walks views rather than keystrokes.
   address: {
     accountHref,
+    workspaceHref,
     search: searchFromLocation,
     keepSearch: (query) => window.history.replaceState(null, "", searchHref(query)),
     onSearchMoved: (listener) => {
@@ -108,6 +119,8 @@ const WEB_ADMIN_DOORS: AdminDoors = {
       return () => window.removeEventListener("popstate", listener);
     },
   },
+  // The page's cookie session is the one kind a maintainer may sign in as a member from.
+  impersonate,
 };
 
 /** The page's doors, handed to every admin screen under it. */

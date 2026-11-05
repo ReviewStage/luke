@@ -18,6 +18,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { agentRow, taskRowName } from "@repo/ui/task-list-model";
 import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
@@ -31,6 +32,7 @@ import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { type AgentsControl, readAgentById } from "../tasks/use-agents.js";
+import { agentReadsUnread } from "../tasks/use-task-looks.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuEntry, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
@@ -53,8 +55,8 @@ import { SIDEBAR_ROW_REPOSITORY, SIDEBAR_ROW_TIME } from "./task-card.js";
  * in place of all of that while the row is hovered or reached from the
  * keyboard (`RowMarks`), as on a task's row, and rested on, the row hangs the
  * agent's card beside it, as its tab does on a task (`agent-ref.tsx`). A
- * press opens the agent's own page, and it reads in semibold while it ended
- * unseen, as its tab does, or while it is marked unread by hand. Its actions are the agent's one menu
+ * press opens the agent's own page, and it reads in semibold while it moved
+ * after the reader's mark (`use-task-looks.ts`), or while it is marked unread by hand. Its actions are the agent's one menu
  * (`agent-actions.tsx`'s `agentMenuGroups`), opened alike by
  * the row's ⋯, a right-click, a long press, and the menu key, a finger's
  * row drawing neither its ⋯ nor Pin and Archive, as a task's: Copy link; Rename, which turns
@@ -112,7 +114,6 @@ export function SidebarAgent({
   agent,
   agents,
   current,
-  unread,
   now,
   at,
   repository,
@@ -129,8 +130,6 @@ export function SidebarAgent({
   agents: AgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
-  /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
-  unread: boolean;
   /** The time the row's time is counted back from. */
   now: number;
   /** The time the row shows, which the list's order chooses. */
@@ -165,7 +164,9 @@ export function SidebarAgent({
   const coarse = useCoarsePointer();
   const { act } = useAct();
   const reads = useAgentReadMarks();
-  const isUnread = unread || reads.markedUnread(agent.id);
+  // Note that the row reads the account's mark rather than main's unseen dot, so every Mac and browser draws it alike,
+  // and the agent on screen only by a mark by hand, since what it does lands before the reader's eyes.
+  const isUnread = agent.markedUnread === true || (!current && agentReadsUnread(agent));
   // The agent's own actions, as its tab and its page offer them, read again by its own id before an archive.
   const actions = useAgentActions(
     agent,
@@ -232,7 +233,7 @@ export function SidebarAgent({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <span className="sidebar-agent-glyph inline-flex [--state-glyph-size:var(--spacing-ui-16)]">
-              {tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}
+              <ReplayMask>{tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon}</ReplayMask>
             </span>
           }
           title={
@@ -249,7 +250,9 @@ export function SidebarAgent({
               />
             ) : (
               <>
-                <OneLine words={name}>{name}</OneLine>
+                <OneLine words={name}>
+                  <ReplayMask>{name}</ReplayMask>
+                </OneLine>
                 {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
               </>
             )
@@ -259,7 +262,9 @@ export function SidebarAgent({
             editing ? null : (
               <span className={SIDEBAR_ROW_TIME}>
                 {repository === undefined ? null : (
-                  <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
+                  <span className={SIDEBAR_ROW_REPOSITORY}>
+                    <ReplayMask>{repository}</ReplayMask>
+                  </span>
                 )}
                 {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
                 {agent.source?.kind === AGENT_SOURCE.SLACK ? (
@@ -284,7 +289,7 @@ export function SidebarAgent({
           unread={isUnread}
           hint={editing ? undefined : { Hint: RowHint, label: name }}
           onPress={editing ? undefined : onOpen}
-          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown)}
+          menu={editing ? undefined : rowMenu("Agent", withRowMoves(groups, place), shown, true)}
           more={!coarse}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={editing || coarse ? null : <RowMarks marks={marks} />}

@@ -12,7 +12,9 @@
  * whose launch is no longer named is stopped as a stop line stops it, its
  * process group killed, and neither a launch claimed after the beat was
  * sent nor one still starting is touched; and a runner's GitHub token is renewed by its age on the wall
- * clock. A host updating itself (`daemon/host-update.ts`) runs on the
+ * clock. An agent on its starter's own token is handed no token and launches
+ * on the box's own sign-in, checked first, or is settled unstarted for that
+ * reason where it does not reach its repository. A host updating itself (`daemon/host-update.ts`) runs on the
  * machine's own file system and processes in a releases folder of its own,
  * its release's tarball answered in place of GitHub, and switches only
  * once the device is idle. Synthetic ids and tokens throughout.
@@ -29,6 +31,8 @@ import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
   DEVICE_AGENT_LINE_KIND,
   DEVICE_ARCH,
+  DEVICE_GITHUB_ACCESS,
+  DEVICE_LAUNCH_UNSTARTED,
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DeviceAgentLine,
@@ -41,6 +45,7 @@ import { temporaryDirectoryScoped } from "@repo/runtime/testing";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Clock, ConfigProvider, Deferred, Duration, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
 import { composeLocalAgents, type LocalAgentsUpdate } from "./compose-local-agents.js";
 import { hostUpdate } from "./daemon/host-update.js";
@@ -69,6 +74,10 @@ const RUNNER = "/opt/vespin-host/node/bin/node";
 const GH_HOSTS = `${LAYOUT.folder}/home/.config/gh/hosts.yml`;
 const CLIS = fakeClis();
 const IDENTITY = { name: "Ada Lovelace", email: "7001+ada@users.noreply.github.com" };
+/** The script that checks the box's own GitHub sign-in reaches a repository, as the test's platform hands it. */
+const REACH_CHECK = "reach-check";
+/** The host user's SSH agent, a synthetic socket. */
+const SSH_AGENT = "/private/tmp/com.apple.launchd.fixture/Listeners";
 
 const LAUNCH: DeviceAgentClaimedLine = {
   line: {
@@ -85,6 +94,15 @@ const LAUNCH: DeviceAgentClaimedLine = {
     },
   },
   secrets: { env: SECRET_ENV, stdin: "{}\n" },
+};
+
+/** The launch of an agent whose repository is reached on its starter's own token. */
+const OWN_SIGN_IN_LAUNCH: DeviceAgentClaimedLine = {
+  ...LAUNCH,
+  line: {
+    ...LAUNCH.line,
+    payload: { ...LAUNCH.line.payload, githubAccess: DEVICE_GITHUB_ACCESS.TOKEN },
+  },
 };
 
 /** The clock nudged until the condition holds, as the follower's fibers run up to their next wait. */
@@ -123,15 +141,34 @@ const followingDevice = (
     readonly update?: LocalAgentsUpdate;
     /** How long making a folder in the agent's own takes, as a files line's write makes one, none where none is named. */
     readonly writingTakes?: Duration.Input;
+    /** The box's own GitHub sign-in does not reach the repository, as a box signed in to nothing does. */
+    readonly signInUnreached?: boolean;
   } = {},
 ) =>
   Effect.gen(function* () {
+    /** Each link made, by its path, to what it leads to. */
+    const links = new Map<string, string>();
     const disk = memoryFileSystem({
       exists: () => Effect.succeed(false),
       makeDirectory: (path) =>
         options.writingTakes !== undefined && path.startsWith(LAYOUT.folder)
           ? Effect.sleep(options.writingTakes)
           : Effect.void,
+      symlink: (target, path) => Effect.sync(() => void links.set(path, target)),
+      readLink: (path) =>
+        Effect.suspend(() => {
+          const target = links.get(path);
+          return target === undefined
+            ? Effect.fail(
+                systemError({
+                  _tag: "InvalidData",
+                  module: "FileSystem",
+                  method: "readLink",
+                  pathOrDescriptor: path,
+                }),
+              )
+            : Effect.succeed(target);
+        }),
     });
     const { files } = disk;
     let minted = 0;
@@ -149,6 +186,8 @@ const followingDevice = (
     const spawner = scriptedSpawner((program, args) => {
       if (program === "/bin/bash" && args[0] === "-l")
         return { stdout: "/usr/bin:/bin", exitCode: 0 };
+      if (program === "/bin/bash" && args[1] === REACH_CHECK)
+        return { exitCode: options.signInUnreached === true ? 128 : 0 };
       if (program === "/bin/bash" && args[1] === "exit 0")
         return {
           exitCode: options.worktreeFails === true ? 1 : 0,
@@ -164,7 +203,7 @@ const followingDevice = (
     /** What each beat said of the host's update, none where it named none. */
     const said: (DeviceAgentUpdate | undefined)[] = [];
     const reported: string[] = [];
-    const settled: { id: string; exitCode?: number }[] = [];
+    const settled: { id: string; exitCode?: number; unstarted?: string }[] = [];
     /**
      * The service as the test steers it: the launches it holds the device
      * to, which a claim adds and a settle it takes removes; how many settles
@@ -210,7 +249,7 @@ const followingDevice = (
             }),
         ),
       lineStep: () => Effect.succeed(true),
-      settleLine: (_deviceId: string, id: string, exitCode?: number) =>
+      settleLine: (_deviceId: string, id: string, exitCode?: number, unstarted?: string) =>
         Effect.andThen(
           Effect.sleep(service.settleTakes),
           Effect.sync(() => {
@@ -223,6 +262,7 @@ const followingDevice = (
             settled.push({
               id,
               ...(exitCode === undefined ? undefined : { exitCode }),
+              ...(unstarted === undefined ? undefined : { unstarted }),
             });
             return true;
           }),
@@ -241,7 +281,10 @@ const followingDevice = (
       NodePath.layer,
       disk.layer,
       fakeHttpClientLayer(() => Promise.reject(new Error("this test fetches no tool"))),
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash" })),
+      Layer.succeed(
+        Environment,
+        ConfigProvider.fromEnvRecord({ HOME, SHELL: "/bin/bash", SSH_AUTH_SOCK: SSH_AGENT }),
+      ),
       Layer.succeed(Reporter, { report: (line) => reported.push(line) }),
       Layer.succeed(LocalAgentPlatform, {
         launch: ({ node, env }) => ({ command: node, args: [], env }),
@@ -255,6 +298,7 @@ const followingDevice = (
         deviceArch: DEVICE_ARCH.ARM64,
         deviceCapabilities: [],
         worktreeScript: () => "exit 0",
+        repositoryReachedScript: () => REACH_CHECK,
       }),
     );
     const clock = options.clock ?? (yield* Clock.Clock);
@@ -278,6 +322,7 @@ const followingDevice = (
       settled,
       service,
       files,
+      links,
       reported,
     };
   });
@@ -308,6 +353,7 @@ it.effect(
         assert.equal(runner?.env?.APP_RUNNER_TOKEN, SECRET_ENV.APP_RUNNER_TOKEN);
         // Note that gh prefers a token in its environment to its config, so one there would never be renewed.
         assert.equal(runner?.env?.GH_TOKEN, undefined, "the runner's gh reads its config alone");
+        assert.equal(runner?.env?.SSH_AUTH_SOCK, undefined, "the box's SSH agent is not handed on");
         // Note that the identity the launch carries is set in the agent's repository, as a cloud checkout sets it, beside gh's helper, before its runner starts.
         const identity = spawned.findIndex((each) =>
           each.args.some((arg) => arg.includes(CHECKOUT_IDENTITY_SCRIPT)),
@@ -325,6 +371,60 @@ it.effect(
         yield* until(() => runner?.ended === "exited");
         // Note that a turn's end lets go of the token, which no turn reads any more.
         yield* until(() => !files.has(GH_HOSTS));
+      }),
+    ),
+);
+
+it.effect(
+  "an agent on its starter's own token launches on the box's own GitHub sign-in, checked first as the agent: no token asked or renewed, no gh helper set, its home reading the box user's Git and gh, and their SSH agent handed on",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, asked, files, links } = yield* followingDevice(() => Effect.void, {
+          claim: () => Effect.succeed(OWN_SIGN_IN_LAUNCH),
+          runsUntilSignaled: true,
+        });
+        yield* until(() => spawned.some((each) => each.program === RUNNER));
+
+        const check = spawned.findIndex((each) => each.args[1] === REACH_CHECK);
+        assert.equal(spawned[check]?.env?.HOME, `${LAYOUT.folder}/home`);
+        assert.equal(spawned[check]?.env?.SSH_AUTH_SOCK, SSH_AGENT);
+        assert.ok(check < spawned.findIndex((each) => each.args[1] === "exit 0"));
+        assert.equal(links.get(`${LAYOUT.folder}/home/.config/gh`), `${HOME}/.config/gh`);
+        assert.ok(
+          files
+            .get(`${LAYOUT.folder}/home/.config/git/config`)
+            ?.includes(`path = "${HOME}/.gitconfig"`),
+        );
+        const identity = spawned.find((each) =>
+          each.args.some((arg) => arg.includes(CHECKOUT_IDENTITY_SCRIPT)),
+        );
+        assert.equal(identity?.env?.APP_GIT_CREDENTIAL_HELPER, undefined);
+        assert.ok(!identity?.args.some((arg) => arg.includes("credential.")));
+        const runner = spawned.find((each) => each.program === RUNNER);
+        assert.equal(runner?.env?.SSH_AUTH_SOCK, SSH_AGENT);
+        yield* TestClock.adjust(Duration.hours(2));
+        assert.deepEqual(asked, [], "no GitHub token is asked of the service, nor renewed");
+      }),
+    ),
+);
+
+it.effect(
+  "an agent on its starter's own token whose box's sign-in cannot reach its repository is settled as not started for that reason, its repository never made and no runner started",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { spawned, settled, asked } = yield* followingDevice(() => Effect.void, {
+          claim: () => Effect.succeed(OWN_SIGN_IN_LAUNCH),
+          signInUnreached: true,
+        });
+        yield* until(() => settled.length > 0);
+
+        assert.deepEqual(settled, [
+          { id: LINE_ID, exitCode: 1, unstarted: DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN },
+        ]);
+        assert.ok(!spawned.some((each) => each.args[1] === "exit 0" || each.program === RUNNER));
+        assert.deepEqual(asked, []);
       }),
     ),
 );

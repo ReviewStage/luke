@@ -36,7 +36,14 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  fakeActPortAnswering,
+  fakeActs,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -520,13 +527,11 @@ test("the window is called by what stands in it: the plan on screen in its own w
 
 test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
   const unreadOnOpen = (inboxOpen: boolean) => {
-    window.localStorage.setItem("app.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
-    window.localStorage.setItem("app.planLooksSeeded", "1");
     const page = mount(
       inboxOpen,
       {
         page: TASKS_PAGE.DOCUMENT,
-        tasks: [DOCUMENT_TASK],
+        tasks: [{ ...DOCUMENT_TASK, readThrough: DOCUMENT_TASK.updatedAt - 1 }],
         activeTaskId: DOCUMENT_TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
         sidePanel: {
@@ -545,7 +550,6 @@ test("a plan opened with its Inbox tab shown rather than its plan is read at onc
     assert.ok(row, "the plan's row stands in the sidebar");
     const unread = String(row.textContent?.includes("(unread)") === true);
     act(() => root?.unmount());
-    window.localStorage.clear();
     return unread;
   };
 
@@ -563,16 +567,11 @@ const NOTES_TASK: Task = {
 };
 
 /**
- * The shell with the sidebar unfolded on `listed`, each looked at up to
- * the instant `looks` gives it, redrawn over whichever plan `open` names
+ * The shell with the sidebar unfolded on `listed`, each carrying the read
+ * mark the account keeps of it, redrawn over whichever plan `open` names
  * next and the home page for none, the same shell throughout.
  */
-function mountListing(
-  listed: readonly Task[],
-  looks: Readonly<Record<string, number>>,
-): (open: Task | undefined) => void {
-  window.localStorage.setItem("app.taskLooks", JSON.stringify(looks));
-  window.localStorage.setItem("app.taskLooksSeeded", "1");
+function mountListing(listed: readonly Task[]): (open: Task | undefined) => void {
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -626,42 +625,32 @@ function rowReadMark(name: string, choose = false): string | undefined {
   return item === undefined ? undefined : words(item);
 }
 
-test("Mark as unread on the task being looked at draws its row unread through a save landing as it stays, and until it is opened again", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
-    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_TASK.id]: NOTES_TASK.updatedAt,
+test("a task's row reads unread by the mark its row carries, the one open only where marked by hand, and its menu asks the service to mark it read or unread", async () => {
+  const marks: string[] = [];
+  fakeActs({
+    act: (request: AnyAct) => {
+      if (request.kind !== TASKS_ACT_KIND.TASKS_MARK_READ)
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
+      marks.push(`${request.payload.readMark}:${request.payload.taskId}`);
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: true });
+    },
   });
-  draw(DOCUMENT_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "false");
-  assert.equal(rowReadMark(DOCUMENT_NAME, true), "Mark as unread");
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw({ ...DOCUMENT_TASK, updatedAt: DOCUMENT_TASK.updatedAt + 1 });
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw(NOTES_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "true");
-
-  draw(DOCUMENT_TASK);
-  assert.equal(rowUnread(DOCUMENT_NAME), "false");
-});
-
-test("a task's menu offers Mark as read while its row is unread, which draws it read, and Mark as unread after", () => {
-  const draw = mountListing([DOCUMENT_TASK, NOTES_TASK], {
-    [DOCUMENT_TASK.id]: DOCUMENT_TASK.updatedAt,
-    [NOTES_TASK.id]: NOTES_TASK.updatedAt - 1,
-  });
+  const read = { ...DOCUMENT_TASK, readThrough: DOCUMENT_TASK.updatedAt };
+  const changed = { ...NOTES_TASK, readThrough: NOTES_TASK.updatedAt - 1 };
+  const draw = mountListing([read, changed]);
   draw(undefined);
   assert.equal(rowUnread(NOTES_TASK.name), "true");
   assert.equal(rowReadMark(DOCUMENT_NAME), "Mark as unread");
 
-  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as read");
-  assert.equal(rowUnread(NOTES_TASK.name), "false");
-  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as unread");
+  rowReadMark(NOTES_TASK.name, true);
+  rowReadMark(DOCUMENT_NAME, true);
+  await settle();
+  assert.deepEqual(marks, [`read:${NOTES_TASK.id}`, `unread:${DOCUMENT_TASK.id}`]);
 
-  assert.equal(rowReadMark(NOTES_TASK.name, true), "Mark as unread");
-  assert.equal(rowUnread(NOTES_TASK.name), "true");
-  assert.equal(rowReadMark(NOTES_TASK.name), "Mark as read");
+  draw(changed);
+  assert.equal(rowUnread(NOTES_TASK.name), "false", "the one open reads its changes as they land");
+  draw({ ...changed, markedUnread: true });
+  assert.equal(rowUnread(NOTES_TASK.name), "true", "a mark by hand reads unread even while open");
 });
 
 /** Lets every promise settled so far run its continuations. */
@@ -1316,6 +1305,29 @@ test("with the sidebar folded, the Mac offline says so in the title bar beside N
   const online = mount(false);
   await settle();
   assert.equal(titleBarOffline(online), null);
+});
+
+/** What a strip right under a phone's header says, if one stands there. */
+function stripUnderPhoneHead(page: HTMLElement): string | undefined {
+  const under = page.querySelector('header.ui-toolbar[data-look="phone"]')?.nextElementSibling;
+  return under?.classList.contains("ui-banner") === true ? (under.textContent ?? "") : undefined;
+}
+
+test("on a phone, the service not answering says so in a strip under the page's header, and nothing does once it answers", async () => {
+  const inboxView = { ...tasksControl().inboxView, open: true };
+  handState({}, { network: { online: true, reachable: false } });
+  const unreached = await mountNarrow({ inboxView });
+  assert.equal(stripUnderPhoneHead(unreached), "The service isn't answering.");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState({}, { network: { online: true, reachable: true } });
+  const answering = await mountNarrow({ inboxView });
+  assert.ok(
+    answering.querySelector('header.ui-toolbar[data-look="phone"]'),
+    "a phone's header stands",
+  );
+  assert.equal(stripUnderPhoneHead(answering), undefined);
 });
 
 test("the sign-in, which needs the network, says over it when the Mac is offline", async () => {

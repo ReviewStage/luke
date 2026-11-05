@@ -4,18 +4,20 @@
  * Check one is that the plan works from inside the sandbox: a turn that
  * edits, runs a background command, waits with `ScheduleWakeup`, pushes, is
  * stopped, and resumes in a relaunched CLI after the sandbox stopped and
- * resumed, billed to the plan. Check two is that the token stays with the
- * CLI: neither a Terminal's shell nor a command the agent runs can read it
- * or call Anthropic with it, no file holds it, and Vespin can still launch as
- * root through the Sandbox API's sudo.
+ * resumed, billed to the plan. Check two is that the token stays at the
+ * sandbox's firewall: Claude Code runs on a placeholder the firewall swaps
+ * for it, which is refused anywhere else, no command the agent runs and no
+ * file holds the token, a Terminal's shell reads neither it nor the
+ * placeholder, and Vespin can still launch as root through the Sandbox
+ * API's sudo. Claude Code runs no command sandbox, so a command the agent
+ * runs reads the placeholder, which is what the design accepts.
  *
  * The sandbox's default user holds the full capability set without sudo
  * (P16's finding), so a Terminal's shell as it is today reads another
  * user's environment whatever sudoers says. The gating Terminal conditions
  * are therefore read from a shell with every capability dropped, the remedy
- * P03 would carry; the shell as it is today, the agent's own uid outside
- * the command sandbox, and bubblewrap's start with and without
- * capabilities are reported beside them as findings that gate nothing.
+ * P03 would carry; the shell as it is today is reported beside them as a
+ * finding that gates nothing.
  */
 
 import type { WireValue } from "@repo/wire";
@@ -33,7 +35,7 @@ import {
 
 export const CHECK = {
   PLAN: "the plan works from inside the sandbox",
-  TOKEN: "the token stays with the CLI",
+  TOKEN: "the token stays at the firewall",
 } as const;
 type Check = (typeof CHECK)[keyof typeof CHECK];
 
@@ -67,11 +69,8 @@ export interface ProbeObservations {
   readonly terminalAsToday: LeakReport | undefined;
   /** The same shell with every capability dropped (`DROP_CAPABILITIES`). */
   readonly terminalCapsDropped: LeakReport | undefined;
-  /** The agent's own uid outside the command sandbox, capabilities dropped, while the CLI ran. */
-  readonly agentUid: LeakReport | undefined;
-  /** Whether bubblewrap started in a Terminal's shell as it is today (capabilities kept), and as the agent user with every capability dropped (`started` or `refused`). */
-  readonly bubblewrapCapsKept: string | undefined;
-  readonly bubblewrapCapsDropped: string | undefined;
+  /** What Anthropic answered the placeholder with from outside the sandbox, the probe's own machine. */
+  readonly placeholderOutside: string | undefined;
   /** How many files outside `/proc` hold a token-shaped string, as root sees the disk. */
   readonly rootFilesWithTokenShape: number | undefined;
 }
@@ -88,9 +87,6 @@ export interface Condition {
 /** The effective capability set of a process that holds none. */
 const NO_CAPABILITIES = "0000000000000000";
 
-/** An HTTP status that is not a success, including none at all (`000`), which is a call refused before it left. */
-const NOT_CALLABLE = /^(000|4\d\d)$/;
-
 /** A status that says Anthropic answered and refused for want of a credential. */
 const UNAUTHENTICATED = /^(401|403)$/;
 
@@ -104,7 +100,7 @@ function finding(check: Check, name: string, pass: boolean, detail: string): Con
   return { check, name, pass, detail, gating: false };
 }
 
-/** Whether a shell's report shows it can reach neither the token, the session, nor root's secrets. */
+/** Whether a shell's report shows it can reach neither the token, the CLI's environment and the placeholder in it, the session, nor root's secrets. */
 function shellIsPrivate(report: LeakReport | undefined): boolean {
   return (
     report !== undefined &&
@@ -161,10 +157,10 @@ function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     condition(
       CHECK.PLAN,
-      "the session started with its command sandbox on",
+      "the session started",
       init !== undefined,
       init === undefined
-        ? "no init message: the CLI did not start (failIfUnavailable refuses a missing sandbox)"
+        ? "no init message: the CLI did not start"
         : `claude ${init.claude_code_version}, session started`,
     ),
     condition(
@@ -238,7 +234,7 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     condition(
       CHECK.TOKEN,
-      "a Terminal's shell, capabilities dropped, cannot read the token, the session, or /etc/shadow",
+      "a Terminal's shell, capabilities dropped, cannot read the token, the CLI's environment, the session, or /etc/shadow",
       shellIsPrivate(terminal),
       describe(terminal),
     ),
@@ -250,19 +246,25 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     condition(
       CHECK.TOKEN,
-      "a command the agent runs cannot read the token",
+      "Claude Code runs on a placeholder, not the token",
+      agent?.env_token === true && !agent.env_token_shaped,
+      describe(agent),
+    ),
+    condition(
+      CHECK.TOKEN,
+      "a command the agent runs finds no token",
       agent !== undefined &&
         !agent.sudo &&
-        !agent.env_token &&
-        agent.proc_environ_with_token === 0 &&
+        !agent.env_token_shaped &&
+        agent.proc_environ_token_shaped === 0 &&
         agent.files_with_token_shape === 0,
       describe(agent),
     ),
     condition(
       CHECK.TOKEN,
-      "a command the agent runs cannot call Anthropic",
-      agent !== undefined && NOT_CALLABLE.test(agent.anthropic_http),
-      `Anthropic answered ${agent?.anthropic_http ?? "nothing"}`,
+      "Anthropic refuses the placeholder outside the sandbox",
+      seen.placeholderOutside !== undefined && UNAUTHENTICATED.test(seen.placeholderOutside),
+      `Anthropic answered ${seen.placeholderOutside ?? "nothing"}`,
     ),
     condition(
       CHECK.TOKEN,
@@ -278,27 +280,9 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     finding(
       CHECK.TOKEN,
-      "a Terminal's shell as it is today, capabilities kept, cannot read the token",
+      "a Terminal's shell as it is today, capabilities kept, cannot read the token or the CLI's environment",
       shellIsPrivate(seen.terminalAsToday),
       describe(seen.terminalAsToday),
-    ),
-    finding(
-      CHECK.TOKEN,
-      "the agent's own uid, outside the command sandbox, cannot read the CLI's environment",
-      seen.agentUid !== undefined && seen.agentUid.proc_environ_with_token === 0,
-      describe(seen.agentUid),
-    ),
-    finding(
-      CHECK.TOKEN,
-      "bubblewrap starts in a Terminal's shell as it is today, capabilities kept",
-      seen.bubblewrapCapsKept === "started",
-      seen.bubblewrapCapsKept ?? "not tried",
-    ),
-    finding(
-      CHECK.TOKEN,
-      "bubblewrap starts as the agent user with every capability dropped",
-      seen.bubblewrapCapsDropped === "started",
-      seen.bubblewrapCapsDropped ?? "not tried",
     ),
   ];
 }

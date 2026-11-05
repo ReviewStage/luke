@@ -1,11 +1,17 @@
-import { AGENT_MACHINE, DEVICE_STANDING, type DeviceStanding } from "@repo/features/agent-wire";
+import {
+  AGENT_MACHINE,
+  type AgentRunsOnRequest,
+  type AgentSummary,
+  DEVICE_STANDING,
+  type DeviceStanding,
+} from "@repo/features/agent-wire";
 import {
   DEVICE_PLATFORM,
   DEVICE_SETUP,
   type DevicePlatform,
 } from "@repo/features/device-agent-wire";
 import type { MacOffer } from "@repo/features/models-wire";
-import type { TaskRunsOn, TaskRunsOnRequest } from "@repo/features/task-wire";
+import type { TaskRunsOnRequest } from "@repo/features/task-wire";
 import {
   CHIP_LOOK,
   CHIP_WIDTH,
@@ -22,6 +28,7 @@ import {
   useSecond,
 } from "@repo/ui";
 import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
+import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
@@ -31,12 +38,14 @@ import { Picker } from "../settings/picker-row.js";
 import { keptKey, useKept } from "../use-kept.js";
 
 /**
- * runs-on.tsx -- where a task's coding agents run: the cloud, or one of the member's own devices, chosen in New task's chip and shown read-only on the task.
+ * runs-on.tsx -- where a coding agent runs: the cloud, or one of the member's own devices, chosen in a start's chip and shown read-only on each agent's row.
  *
- * Where agents run is the task's (`task-wire.ts`'s `runsOn`), it decides
- * where every agent started on it runs, and it is set when the task is
- * created and never changed. New task's chip, a toolbar chip ending in its
- * chevron as the model chip beside it is, drops a menu: Cloud first, then
+ * Each agent runs where its Start put it, for its life (`agent-wire.ts`'s
+ * `agentStartRequestFields`). New task's chip names it for the task and its
+ * first agent, and while the Bring your own host experiment is on a draft
+ * agent's box wears the same chip (`draft-agent-tab.tsx`), a fork's and a
+ * continue's among them (`useStartRunsOn`). The chip, a toolbar chip ending
+ * in its chevron as the model chip beside it is, drops a menu: Cloud first, then
  * each device the member registered, as the models answer lists them, by what
  * every list of machines calls it (`machine-name.ts`), This Mac among them,
  * under the glyph of its platform, a Mac or a Linux server, each saying
@@ -60,7 +69,7 @@ import { keptKey, useKept } from "../use-kept.js";
  * where the member has no device, or while the Bring your own host
  * experiment is off, which lists no device (`new-task-composer.tsx`). On
  * the task, each agent's row in its plan's head says Cloud, or the device
- * it runs on, named the same way, or that the device was removed
+ * that agent runs on, named the same way, or that the device was removed
  * (`plan-agents.tsx`).
  */
 
@@ -149,11 +158,11 @@ function offerUnready(
   }
 }
 
-/** A device's row past its name: its platform's glyph wearing one dot, its words on hover and to a reader, for every device alike; one that takes no agent is dimmed and unpicked too, its dot saying why. */
-function offerMarks(
+/** A device as a list of places draws it: its platform's glyph wearing one dot, its words on hover and to a reader, and why it takes no agent now, none where it does. */
+export function deviceMark(
   device: MacOffer,
   book: PresenceBook,
-): Pick<MenuRow, "icon" | "disabled" | "why"> {
+): { readonly icon: React.JSX.Element; readonly unready: string | undefined } {
   const unready = offerUnready(device, book);
   const standing = offerStanding(device, book);
   const tone = unready?.tone ?? STANDING_TONE[standing];
@@ -163,9 +172,16 @@ function offerMarks(
       <DeviceGlyph device={device} />
     </StatusGlyph>
   );
-  return unready === undefined
-    ? { icon }
-    : { icon, disabled: unready.words, why: MENU_ROW_WHY.MARK };
+  return { icon, unready: unready?.words };
+}
+
+/** A device's row past its name, for every device alike (`deviceMark`); one that takes no agent is dimmed and unpicked too, its dot saying why. */
+function offerMarks(
+  device: MacOffer,
+  book: PresenceBook,
+): Pick<MenuRow, "icon" | "disabled" | "why"> {
+  const { icon, unready } = deviceMark(device, book);
+  return unready === undefined ? { icon } : { icon, disabled: unready, why: MENU_ROW_WHY.MARK };
 }
 
 /** Cloud, then each device by what the list calls it, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */
@@ -205,6 +221,76 @@ export function useNewTaskRunsOn(
     picked,
     (deviceId: string | undefined) => keep(deviceId ?? CLOUD_ROW),
     kept !== CLOUD_ROW,
+  ];
+}
+
+/** Where an agent runs, by the id its Runs on row is picked by: Cloud's, or its device's; none for one on a device the service no longer names. */
+function placeRow(agent: Pick<AgentSummary, "machine" | "mac">): string | undefined {
+  return agent.machine === AGENT_MACHINE.DEVICE ? agent.mac?.deviceId : CLOUD_ROW;
+}
+
+/** A Start's place by its Runs on row's id: the cloud, or the device it names. */
+function rowRequest(row: string): AgentRunsOnRequest {
+  return row === CLOUD_ROW ? RUNS_ON_CLOUD : { machine: AGENT_MACHINE.DEVICE, deviceId: row };
+}
+
+/** What a draft's Runs on starts on before a pick: where its source runs, else the member's newest agent on the task. */
+interface StartPlaceSeed {
+  /** The agent a fork or a continue starts from, whose place it keeps unless picked otherwise. */
+  readonly source: Pick<AgentSummary, "machine" | "mac"> | undefined;
+  /** The task's agents, archived ones among them, of which the member's newest decides. */
+  readonly agents: readonly Pick<AgentSummary, "machine" | "mac" | "createdAt" | "startedBy">[];
+  /** The signed-in member, whose agents alone decide, since a device is one member's. */
+  readonly me: string | undefined;
+}
+
+/**
+ * A draft agent's Runs on: the place `picked` names, else the one the
+ * service gives a Start naming none (`machineOfStart`) as far as the window
+ * can tell it, where the source runs for a fork or a continue, else where
+ * the member's newest agent on the task runs, else the member's last pick
+ * kept in this window, which a pick here keeps too, else Cloud. Answers the
+ * device it shows, none for the cloud, and the setter, which hands `onPick` the place picked. Note that the last pick is
+ * this window's, while the service keeps the account's (`runs-on-pick.ts`),
+ * so a pick made in another window, or a task's own place where no pick was
+ * ever made, can run an untouched draft elsewhere than its chip says; a
+ * Start sends a place only once one is picked, so the service still decides
+ * the rest. A default device the member's list does not name, a teammate's
+ * a fork's source runs on, or one before the list is read, is named as the
+ * agent it came from names it, rather than said to be Cloud.
+ */
+export function useStartRunsOn(
+  devices: readonly MacOffer[],
+  picked: AgentRunsOnRequest | undefined,
+  seed: StartPlaceSeed,
+  onPick: (runsOn: AgentRunsOnRequest) => void,
+): readonly [MacOffer | undefined, (deviceId: string | undefined) => void] {
+  const [kept, keep] = useKept(KEPT.PICK, CLOUD_ROW);
+  const newest = seed.agents
+    .filter((agent) => seed.me !== undefined && agent.startedBy?.userId === seed.me)
+    .reduce<(typeof seed.agents)[number] | undefined>(
+      (was, agent) => (was === undefined || agent.createdAt > was.createdAt ? agent : was),
+      undefined,
+    );
+  const seeded = seed.source ?? newest;
+  const row =
+    picked === undefined
+      ? ((seeded === undefined ? undefined : placeRow(seeded)) ?? kept)
+      : picked.machine === AGENT_MACHINE.DEVICE
+        ? picked.deviceId
+        : CLOUD_ROW;
+  // Note that the agent names its device by its name alone, so it stands as an offer of no model, its standing unread.
+  const unlisted =
+    picked === undefined && seeded?.mac?.deviceId !== undefined && seeded.mac.deviceId === row
+      ? { deviceId: row, name: seeded.mac.name, providers: [] }
+      : undefined;
+  return [
+    devices.find((each) => each.deviceId === row) ?? unlisted,
+    (deviceId: string | undefined) => {
+      const chosen = deviceId ?? CLOUD_ROW;
+      keep(chosen);
+      onPick(rowRequest(chosen));
+    },
   ];
 }
 
@@ -268,28 +354,41 @@ export function NewTaskRunsOnChip({
 }
 
 /**
- * Where a task's agents run, as each agent's row says it: the cloud's glyph
- * and Cloud, or the device's glyph by its platform and what every list of
- * machines calls it, or that the device was removed. Note that it is the
- * task's, shared by every agent on it, and words alone, since it is set
- * when the task is created.
+ * Where an agent runs, as its row says it: the cloud's glyph and Cloud, or
+ * the device's glyph by its platform, where the member's devices list it,
+ * and what every list of machines calls it, or that the device was removed.
+ * Note that it is the agent's own, read off its summary, since each agent
+ * is placed as it starts.
  */
-export function RunsOnPlace({ runsOn }: { runsOn: TaskRunsOn | undefined }): React.JSX.Element {
-  const device = runsOn?.device;
+export function RunsOnPlace({
+  agent,
+  devices,
+}: {
+  agent: Pick<AgentSummary, "machine" | "mac">;
+  /** The member's devices, which give a device's platform; a teammate's device is drawn as a Mac. */
+  devices: readonly MacOffer[] | undefined;
+}): React.JSX.Element {
   const thisMac = useThisMac();
-  // Note that the task names its device alone, so This Mac is told by its device and no name is twinned.
-  const words =
-    runsOn === undefined
-      ? RUNS_ON_WORDS.CLOUD
-      : device === undefined
-        ? RUNS_ON_WORDS.REMOVED
-        : machineName({ deviceId: runsOn.deviceId, name: device.name }, [], thisMac);
+  const { mac } = agent;
+  const cloud = agent.machine !== AGENT_MACHINE.DEVICE;
+  // Note that the agent names its device alone, so This Mac is told by its device and no name is twinned.
+  const words = cloud
+    ? RUNS_ON_WORDS.CLOUD
+    : mac === undefined
+      ? RUNS_ON_WORDS.REMOVED
+      : machineName({ deviceId: mac.deviceId, name: mac.name }, [], thisMac);
+  const device = devices?.find(
+    (each) => mac?.deviceId !== undefined && each.deviceId === mac.deviceId,
+  );
   return (
     <Inline gap={GAP.ICON} wrap={false}>
       <GlyphSlot size={ICON_SIZE.SMALL}>
-        {runsOn === undefined ? <GLYPH.CLOUD /> : <DeviceGlyph device={runsOn.device} />}
+        {cloud ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
       </GlyphSlot>
-      <span>{words}</span>
+      {/* Note that a device is named as its owner named it, so only Cloud and a removed device show. */}
+      <span>
+        <ReplayWords unmasked={device === undefined}>{words}</ReplayWords>
+      </span>
     </Inline>
   );
 }

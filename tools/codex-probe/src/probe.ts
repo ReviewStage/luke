@@ -5,7 +5,10 @@
  * reads `.vercel/project.json` and the CLI's sign-in), prepares it with the
  * same `prepareImage` every Vespin agent's snapshot is made with, installs the
  * pinned Codex root-owned and creates `agent`, and deletes the sandbox at the
- * end whatever happened. It gathers `Observations` for `checks.ts` to judge
+ * end whatever happened. The access token stands at the sandbox's firewall
+ * alone, swapped for a random placeholder Codex is handed in its place, as a
+ * Vespin agent's launch has it, so a bump of the pin proves again that Codex
+ * runs on a placeholder. It gathers `Observations` for `checks.ts` to judge
  * and returns them with the recording; it prints only progress lines.
  */
 
@@ -89,11 +92,38 @@ export function readGithubRepository(value: string | undefined): string | undefi
   return value;
 }
 
-/** The firewall policy that sets a GitHub token on GitHub's hosts, as Vespin's agents have it today. */
-function githubPolicy(token: string): NetworkPolicy {
-  const authorization = `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
+/** OpenAI's API, where the sandbox's firewall sets the access token in the placeholder's place. */
+const OPENAI_API_HOST = "api.openai.com";
+
+/** How many random bytes a placeholder carries, as the service mints one (`sandbox-firewall.ts`). */
+const PLACEHOLDER_BYTES = 32;
+
+/**
+ * The firewall policy the run's sandbox stands behind: every host open, the
+ * access token as Codex's bearer on OpenAI's API, set only on a request that
+ * carries the placeholder there, as the service's swap does
+ * (`placeholderSwap`), and a GitHub token on GitHub's hosts where one is
+ * given, as Vespin's agents have it today.
+ */
+function networkPolicy(
+  placeholder: string,
+  accessToken: string,
+  githubToken: string | undefined,
+): NetworkPolicy {
+  const swap = [
+    {
+      match: {
+        headers: [{ key: { exact: "authorization" }, value: { exact: `Bearer ${placeholder}` } }],
+      },
+      transform: [{ headers: { authorization: `Bearer ${accessToken}` } }],
+    },
+  ];
+  if (githubToken === undefined) return { allow: { "*": [], [OPENAI_API_HOST]: swap } };
+  const authorization = `Basic ${Buffer.from(`x-access-token:${githubToken}`).toString("base64")}`;
   const rule = [{ transform: [{ headers: { authorization } }] }];
-  return { allow: { "*": [], "github.com": rule, "api.github.com": rule } };
+  return {
+    allow: { "*": [], [OPENAI_API_HOST]: swap, "github.com": rule, "api.github.com": rule },
+  };
 }
 
 /** A command run to its end in the sandbox, its output read. */
@@ -152,14 +182,14 @@ function eveSessionOver(sandbox: Sandbox): EveSession {
   return session as EveSession;
 }
 
-/** The app-server started as `agent` with the token in its environment alone. */
+/** The app-server started as `agent` with the placeholder in its environment alone. */
 async function startAppServer(
   sandbox: Sandbox,
-  accessToken: string,
+  placeholder: string,
   phase: string,
   recorded: RecordedMessage[],
 ): Promise<AppServerSession> {
-  const spec = launchSpec({ accessToken });
+  const spec = launchSpec({ bearer: placeholder });
   const command = await sandbox.runCommand({
     cmd: spec.cmd,
     args: [...spec.args],
@@ -236,7 +266,11 @@ async function firstSession(
 ): Promise<{ threadId: string; steerTurnId: string | undefined }> {
   const model = await chooseModel(session, options.model);
   options.say(`Thread on model ${model ?? "(provider default)"}.`);
-  const base = { cwd: PROBE_FILES.REPOSITORY, approvalPolicy: "never", sandbox: "workspace-write" };
+  const base = {
+    cwd: PROBE_FILES.REPOSITORY,
+    approvalPolicy: "never",
+    sandbox: "danger-full-access",
+  };
   const started = await session.request(
     METHOD.THREAD_START,
     model === undefined ? base : { ...base, model },
@@ -377,6 +411,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
   let apiSudoAfterDrop: boolean | undefined;
   let writablePaths: readonly string[] | undefined;
   options.say("Opening a Vercel Sandbox from the linked project.");
+  const placeholder = randomBytes(PLACEHOLDER_BYTES).toString("base64url");
   const sandbox = await Sandbox.create({
     runtime: "node24",
     persistent: true,
@@ -384,8 +419,11 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
     timeout: PROBE_BOUNDS.SANDBOX_TIMEOUT_MS,
     resources: { vcpus: PROBE_BOUNDS.VCPUS },
     tags: { purpose: "agent-codex-probe" },
-    networkPolicy:
-      options.githubToken === undefined ? "allow-all" : githubPolicy(options.githubToken),
+    networkPolicy: networkPolicy(
+      placeholder,
+      options.credentials.tokens.accessToken,
+      options.githubToken,
+    ),
   });
   try {
     const { defaultUser } = await prepare(sandbox, options);
@@ -394,12 +432,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
       .filter((line) => line.startsWith("WRITABLE "))
       .map((line) => line.slice("WRITABLE ".length));
     let threadId: string | undefined;
-    const first = await startAppServer(
-      sandbox,
-      options.credentials.tokens.accessToken,
-      "first",
-      recorded,
-    );
+    const first = await startAppServer(sandbox, placeholder, "first", recorded);
     try {
       ({ threadId, steerTurnId } = await firstSession(first, options, markers));
     } catch (cause) {
@@ -428,14 +461,16 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
     await sandbox.stop();
     const resumed = await Sandbox.get({ name: sandbox.name, resume: true });
     const token = (credentials.at(-1) ?? options.credentials).tokens.accessToken;
-    const second = await startAppServer(resumed, token, "resumed", recorded);
+    // The refreshed token takes the old one's place at the firewall, as the service's renewal sets it, behind the same placeholder.
+    await resumed.updateNetworkPolicy(networkPolicy(placeholder, token, options.githubToken));
+    const second = await startAppServer(resumed, placeholder, "resumed", recorded);
     try {
       if (threadId !== undefined) {
         const back = await second.request(METHOD.THREAD_RESUME, {
           threadId,
           cwd: PROBE_FILES.REPOSITORY,
           approvalPolicy: "never",
-          sandbox: "workspace-write",
+          sandbox: "danger-full-access",
         });
         const thread =
           back.result !== undefined && isRecord(back.result) ? back.result.thread : undefined;
@@ -449,7 +484,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
         });
         await second.until(turnCompleted);
       }
-      options.say("Scanning for the token from every seat while Codex holds it.");
+      options.say("Scanning for the token from every seat while Codex holds its placeholder.");
       terminal = await scanFrom(resumed, [], []);
       terminalNoCaps = await scanFrom(resumed, DROP_CAPS, []);
       disk = await scanFrom(
@@ -479,6 +514,7 @@ export async function runProbe(options: ProbeOptions): Promise<ProbeRun> {
       ...markers,
       ciSeconds: options.ciSeconds,
       tokenSha256: credentials.map((one) => sha256Hex(one.tokens.accessToken)),
+      placeholderSha256: sha256Hex(placeholder),
       messages: recorded,
       steerTurnId,
       probeFile,

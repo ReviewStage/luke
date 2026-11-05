@@ -9,7 +9,7 @@ import type { AccountToken, CallCredential } from "@repo/features";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@repo/features/analytics";
 import { SIGN_IN_FAILURE, type SignInFailure } from "@repo/features/words";
 import { carried, GATEWAY_EVENT, GATEWAY_METHOD, invalid, RefusedRefusal } from "@repo/gateway";
-import { Effect, FiberSet, type Scope, Stream } from "effect";
+import { Effect, FiberSet, Result, type Scope, Stream } from "effect";
 import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
 import type { AppAccessSlice, SessionReplayState } from "./app-state.js";
@@ -23,6 +23,7 @@ import type { HostMethodTable } from "./gateway-door.js";
 const SIGN_IN_REFUSED = "the sign-in did not finish";
 const SIGN_OUT_REFUSED = "the sign-out did not finish";
 const DELETE_REFUSED = "the account was not deleted";
+const SUPPORT_ACCESS_REFUSED = "support access was not changed";
 
 /**
  * What the account reaches in the other concerns. The capability gate is the
@@ -118,11 +119,13 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
    * account publishes it again, so another account, or nobody, is never told
    * an admin's answer.
    */
+  const accessClient = new AccountAccessClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    credential: session.credential,
+    sessionCredential: session.sessionCredential,
+  });
   const access = accountAccessHolder({
-    client: new AccountAccessClient({
-      serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      credential: session.credential,
-    }),
+    client: accessClient,
     accountKey: () => {
       const account = session.snapshot();
       return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
@@ -338,6 +341,20 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
         // supposed to stand recording down.
         yield* Effect.forkDetach(emitSessionReplay);
         return { account: carried(snapshot) };
+      }),
+    // Note that the access is read again before the answer, so a window that
+    // drew the grant from it finds the new one there once the press settles.
+    [GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS]: (params) =>
+      Effect.gen(function* () {
+        const grant = params.grant;
+        if (typeof grant !== "boolean") return yield* invalid("grant is true or false");
+        const written = yield* Effect.result(accessClient.writeSupportAccess(grant));
+        if (Result.isFailure(written)) {
+          report(`${SUPPORT_ACCESS_REFUSED}: ${written.failure._tag}`);
+          return yield* new RefusedRefusal({ message: SUPPORT_ACCESS_REFUSED });
+        }
+        yield* access.refresh;
+        return { supportAccessUntil: written.success.supportAccessUntil };
       }),
   };
 

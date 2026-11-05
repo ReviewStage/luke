@@ -22,6 +22,7 @@ import {
 } from "@repo/ui";
 import { CONFIRM_STAGE } from "@repo/ui/confirm-state";
 import { GLYPH, MessageSquarePlusIcon } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
@@ -76,6 +77,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   verb: "Discard review",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** What the review may say, in the order GitHub's own review box offers it. */
@@ -151,16 +153,19 @@ function ReviewPanel({
       open={open}
       id={id}
       title={REVIEW_WORDS.TITLE}
+      replayUnmasked
       closeLabel={REVIEW_WORDS.CLOSE}
       initialFocus={field}
       onDismiss={onClose}
       onLeave={onLeave}
     >
       <p className="m-0 -mt-ui-8 text-muted-foreground">
-        {REVIEW_WORDS.LEAD}
-        {pending == null || pending.comments === 0
-          ? null
-          : ` ${REVIEW_WORDS.pending(pending.comments)}`}
+        <ReplayUnmask>
+          {REVIEW_WORDS.LEAD}
+          {pending == null || pending.comments === 0
+            ? null
+            : ` ${REVIEW_WORDS.pending(pending.comments)}`}
+        </ReplayUnmask>
       </p>
       {pendingList}
       <CommentEditor
@@ -175,38 +180,42 @@ function ReviewPanel({
           if (!sending) draft.submit();
         }}
       />
-      <ChoiceList<ReviewEvent>
-        legend={REVIEW_WORDS.EVENTS}
-        options={EVENT_OPTIONS}
-        value={[draft.event]}
-        disabled={sending}
-        onChange={([event]) => {
-          if (event !== undefined) draft.setEvent(event);
-        }}
-      />
+      <ReplayUnmask>
+        <ChoiceList<ReviewEvent>
+          legend={REVIEW_WORDS.EVENTS}
+          options={EVENT_OPTIONS}
+          value={[draft.event]}
+          disabled={sending}
+          onChange={([event]) => {
+            if (event !== undefined) draft.setEvent(event);
+          }}
+        />
+      </ReplayUnmask>
       <PullRequestWriteNote writes={writes} className="pull-request-review-note" />
-      <div className={ACTS_AT_END_CLASS}>
-        {pending == null ? null : (
+      <ReplayUnmask>
+        <div className={ACTS_AT_END_CLASS}>
+          {pending == null ? null : (
+            <Button
+              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              icon={<GLYPH.DELETE />}
+              disabled={sending}
+              onClick={onDiscard}
+            >
+              {REVIEW_WORDS.DISCARD}
+            </Button>
+          )}
+          <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
           <Button
-            variant={BUTTON_VARIANT.DANGER_OUTLINE}
-            icon={<GLYPH.DELETE />}
-            disabled={sending}
-            onClick={onDiscard}
+            variant={BUTTON_VARIANT.PRIMARY}
+            disabled={overCommentBound(draft.body)}
+            busy={sending}
+            busyLabel={REVIEW_WORDS.SUBMITTING}
+            onClick={draft.submit}
           >
-            {REVIEW_WORDS.DISCARD}
+            {REVIEW_WORDS.SUBMIT}
           </Button>
-        )}
-        <Button onClick={onClose}>{REVIEW_WORDS.CANCEL}</Button>
-        <Button
-          variant={BUTTON_VARIANT.PRIMARY}
-          disabled={overCommentBound(draft.body)}
-          busy={sending}
-          busyLabel={REVIEW_WORDS.SUBMITTING}
-          onClick={draft.submit}
-        >
-          {REVIEW_WORDS.SUBMIT}
-        </Button>
-      </div>
+        </div>
+      </ReplayUnmask>
     </PopoverPanel>
   );
 }

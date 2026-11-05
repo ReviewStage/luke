@@ -4,9 +4,8 @@
  * Today's image is `PREPARE_SCRIPT` (`agent-runtime/sandbox-image.ts`), run
  * as the sandbox's default user exactly as our template's build runs it
  * (`native-sandbox-template.ts`). On top of it the
- * probe installs what P03 would: bubblewrap and socat for Claude Code's
- * command sandbox, the pinned Agent SDK with its `claude` binary in a
- * root-owned directory, and the `agent` user with a private home. The
+ * probe installs what P03 would: the pinned Agent SDK with its `claude`
+ * binary in a root-owned directory, and the `agent` user with a private home. The
  * checkout stays the default user's, shared with `agent` through the default
  * user's group, so a Terminal and the agent work on the same files. The
  * default user keeps its sudo, as the image does: the Sandbox API's `sudo`
@@ -35,8 +34,6 @@ export const INSTALL_CLAUDE_CODE = [
   "set -euo pipefail",
   'DEFAULT_USER="$1"',
   'DEFAULT_GROUP="$(id -gn "$DEFAULT_USER")"',
-  "if command -v dnf >/dev/null 2>&1; then dnf install -y bubblewrap socat; else apt-get install -y --no-install-recommends bubblewrap socat; fi",
-  'echo "bubblewrap $(bwrap --version)"',
   `install -d -m 755 ${ROOT}`,
   `npm install --prefix ${ROOT} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${PINS.AGENT_SDK}`,
   `chmod -R go-w ${ROOT}`,
@@ -58,14 +55,6 @@ export const SHARE_CHECKOUT = [
   `chmod -R g+rwX ${CHECKOUT}`,
   `find ${CHECKOUT} -type d -exec chmod g+s {} +`,
 ].join("\n");
-
-/**
- * Whether bubblewrap starts a namespaced command, as the agent user, with
- * the capabilities the user would otherwise inherit and with every one
- * dropped; root runs it through the launch's own drop (`AS_AGENT`).
- */
-export const BUBBLEWRAP_STARTS =
-  "if bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all --die-with-parent true; then echo started; else echo refused; fi";
 
 /** The session's files wherever the CLI keeps them, by the session id as the first argument; run as root. */
 export const FIND_SESSION_FILES =

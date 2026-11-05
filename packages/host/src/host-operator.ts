@@ -1,5 +1,6 @@
 import type { AccountProvider, AccountSnapshot, SignInAnswer } from "@repo/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@repo/features";
+import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
 import {
   ADMIN_UNANSWERED,
   type AdminFavoriteParams,
@@ -36,6 +37,7 @@ import {
   type AgentInboxStartParams,
   type AgentListAnswer,
   type AgentListParams,
+  type AgentMarkReadParams,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -137,23 +139,18 @@ import {
   type InstalledSkillIdParams,
   type InstalledSkillInstallParams,
   type InstalledSkillInstallView,
-  type InstalledSkillPreviewFileParams,
-  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
   type InstalledSkillShareParams,
   type InstalledSkillToggleParams,
-  type InstalledSkillUpdateCheckView,
   type InstalledSkillUpdatedView,
   type InstalledSkillUpdateParams,
   type InstalledSkillView,
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
-  installedSkillPreviewFileViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
-  installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
   installedSkillViewSchema,
 } from "@repo/features/installed-skill-view";
@@ -210,6 +207,7 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksLinkStandingParams,
+  type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -437,14 +435,18 @@ export interface HostOperator {
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
+  /** The member's grant of support access granted for seven days, or revoked: when it then runs out, or null. */
+  supportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
   /** The Tasks tab shows: the host reads the task list and the active document now and follows both until it is paused. */
   tasksRefresh(): Effect.Effect<void>;
-  /** The Mac woke, unlocked, or found its network again: the host follows the task list again from a fresh seal. */
+  /** The Mac woke or unlocked: the host follows the task list again from a fresh seal. */
   tasksResync(): Effect.Effect<void>;
+  /** The app reaches the service again: the host asks every read a window holds again, and follows the task list again from a fresh seal. */
+  tasksRegained(): Effect.Effect<void>;
   /** A window said the changes made offline the service refused: the host clears their count for every window. */
   tasksOfflineRefusedClear(): Effect.Effect<void>;
   /** The account's workspaces read again, where the host's last read is a minute old. */
@@ -463,6 +465,8 @@ export interface HostOperator {
   tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
   /** One task pinned or unpinned; answers whether the service changed it. */
   tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
+  /** The reader's own read mark of one task moved; answers whether the service took it. */
+  tasksMarkRead(params: TasksMarkReadParams): Effect.Effect<boolean>;
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
@@ -770,6 +774,8 @@ export interface HostOperator {
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
   agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
+  /** The reader's own read mark of one agent moved; the agent as it then stands, or why it is unchanged. */
+  agentMarkRead(params: AgentMarkReadParams): Effect.Effect<AgentAgentAnswer>;
   /** One agent read whole as its own page, on a task or with none; or why there is no answer. */
   agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
   /** One agent's origin held followed for the windows from now until let go, and a while after among those let go lately; what it holds is heard through `onAgentOriginsChanged`. */
@@ -834,20 +840,12 @@ export interface HostOperator {
   installedSkillsPreview(
     params: InstalledSkillPreviewParams,
   ): Effect.Effect<InstalledSkillPreviewView>;
-  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
-  installedSkillsPreviewFile(
-    params: InstalledSkillPreviewFileParams,
-  ): Effect.Effect<InstalledSkillPreviewFileView>;
   /** The skills a paste makes, installed all or none; or why none were. */
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
   ): Effect.Effect<InstalledSkillInstallView>;
   /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
   installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
-  /** Whether a GitHub skill's folder moved at its ref; or why that is unknown. */
-  installedSkillsCheckUpdate(
-    params: InstalledSkillUpdateParams,
-  ): Effect.Effect<InstalledSkillUpdateCheckView>;
   /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
   installedSkillsUpdate(
     params: InstalledSkillUpdateParams,
@@ -1329,6 +1327,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
     deleteAccount: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
+    supportAccess: (grant) =>
+      Effect.flatMap(client.call(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, { grant }), (answer) => {
+        const until = record(answer)?.supportAccessUntil;
+        return until === null || isWireNumber(until)
+          ? Effect.succeed({ supportAccessUntil: until })
+          : unanswered(GATEWAY_METHOD.ACCOUNT_SUPPORT_ACCESS, answer);
+      }),
     recordEvent: (name, properties) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
@@ -1340,6 +1345,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     tasksRefresh: () => fire(client.call(GATEWAY_METHOD.TASKS_REFRESH)),
     tasksResync: () => fire(client.call(GATEWAY_METHOD.TASKS_RESYNC)),
+    tasksRegained: () => fire(client.call(GATEWAY_METHOD.TASKS_REGAINED)),
     tasksOfflineRefusedClear: () => fire(client.call(GATEWAY_METHOD.TASKS_OFFLINE_REFUSED_CLEAR)),
     workspacesRefresh: () => fire(client.call(GATEWAY_METHOD.WORKSPACES_REFRESH)),
     tasksOpen: (taskId) =>
@@ -1369,6 +1375,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           taskId: params.taskId,
           pinned: params.pinned,
           ...(params.position === undefined ? undefined : { position: params.position }),
+        }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    tasksMarkRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_MARK_READ, {
+          taskId: params.taskId,
+          readMark: params.readMark,
         }),
         (answer) => record(answer)?.changed === true,
       ),
@@ -2110,6 +2124,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),
+    agentMarkRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_MARK_READ, {
+          agentId: params.agentId,
+          readMark: params.readMark,
+        }),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
+      ),
     agentPage: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.AGENTS_PAGE, { agentId: params.agentId }),
@@ -2243,11 +2265,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
         answerOf(installedSkillPreviewViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
-    installedSkillsPreviewFile: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, params),
-        answerOf(installedSkillPreviewFileViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
     installedSkillsInstall: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
@@ -2257,11 +2274,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
         answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsCheckUpdate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, params),
-        answerOf(installedSkillUpdateCheckViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsUpdate: (params) =>
       Effect.map(
@@ -2437,6 +2449,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           itemId: params.itemId,
           revision: params.revision,
           clientKey: params.clientKey,
+          ...(params.text === undefined ? undefined : { text: params.text }),
+          ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
         }),
         answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
       ),
@@ -2589,6 +2603,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             ? {
                 admin: payload.admin,
                 ...(payload.pending === true ? { pending: true } : undefined),
+                ...(isWireNumber(payload.supportAccessUntil)
+                  ? { supportAccessUntil: payload.supportAccessUntil }
+                  : undefined),
               }
             : undefined,
         listener,

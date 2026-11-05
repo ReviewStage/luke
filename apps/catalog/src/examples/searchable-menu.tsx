@@ -42,6 +42,9 @@ import { CatalogSection } from "../section";
  * notes said in the list's place while the rows are read and once a read
  * failed, with Retry. Each closes on Escape, a pick, a second press of its
  * button, and focus leaving it, and hands the focus back to its button.
+ * Then a short list of what a pick may do, no field over it, whose choice
+ * turns it into a search headed by that choice, led by the folded way
+ * back, as Task relation asks for the relation before the task.
  * Then a menu embedded in a layer floated under words (`RectFloat`), as
  * the date picker's time zones are, which places it and sets its width.
  * Last, the model menu as it rises on a phone: its button marks the
@@ -206,6 +209,83 @@ function Failed(): React.JSX.Element {
             }
       }
     />
+  );
+}
+
+/** What the headed menu's first list offers, each the head its search then wears. */
+const ACTIONS: readonly MenuRow[] = [
+  { id: "Add to pinned", label: "Add to pinned…" },
+  { id: "Move to archive", label: "Move to archive…" },
+];
+
+/**
+ * A button opening what a pick may do, too short to search; a choice turns
+ * the menu into a search of repositories headed by it, whose way back, and
+ * Escape, return to the choices.
+ */
+function Headed(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const drawn = useDisclosure(open);
+  const [action, setAction] = useState<string | undefined>(undefined);
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = () => {
+    setOpen(false);
+    setAction(undefined);
+    trigger.current?.focus();
+  };
+  const leave = (left: EventTarget | null) => {
+    if (!(left instanceof Node && root.current?.contains(left))) close();
+  };
+  const back = () => setAction(undefined);
+  return (
+    <div className="catalog-anchor" ref={root}>
+      <Button
+        ref={trigger}
+        variant={BUTTON_VARIANT.OUTLINE}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        Repository action
+      </Button>
+      {drawn.mounted &&
+        (action === undefined ? (
+          <SearchableMenu
+            key="actions"
+            leaving={drawn.leaving}
+            ref={drawn.ref}
+            id={menuId}
+            label="Repository action"
+            rows={ACTIONS}
+            value={undefined}
+            noMatch="No actions"
+            align={POPOVER_ALIGN.START}
+            onPick={setAction}
+            onClose={close}
+            onLeave={leave}
+          />
+        ) : (
+          <SearchableMenu
+            key={action}
+            leaving={drawn.leaving}
+            ref={drawn.ref}
+            id={menuId}
+            label={action}
+            head={{ words: action, back: { label: "Repository action", onBack: back } }}
+            placeholder="Find a repository"
+            rows={REPOSITORIES}
+            value={undefined}
+            noMatch="No repositories match"
+            align={POPOVER_ALIGN.START}
+            onPick={close}
+            onClose={back}
+            onLeave={leave}
+          />
+        ))}
+    </div>
   );
 }
 
@@ -401,6 +481,11 @@ function SearchableMenuExample(): React.JSX.Element {
             />
             <Failed />
           </Inline>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="searchable-menu-headed" title="Chosen first, then headed">
+        <div className="catalog-popover-stage">
+          <Headed />
         </div>
       </CatalogSection>
       <CatalogSection id="searchable-menu-embedded" title="Embedded in a floated layer">

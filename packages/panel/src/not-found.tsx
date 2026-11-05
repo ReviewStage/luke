@@ -1,8 +1,9 @@
 import { EmptyState, type EmptyStateAction } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { SearchXIcon } from "lucide-react";
 
 /**
- * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox thread that is not there for whoever opened it, and the admin dashboard's for an account.
+ * not-found.tsx -- the window's one answer to a place it cannot show: a task, an agent, an automation, or an Inbox thread that is not there for whoever opened it, and the admin dashboard's for an account or a workspace.
  *
  * A link to anything in the app may reach someone the thing is not shared
  * with, and the service answers them as it answers a thing that does not
@@ -22,6 +23,7 @@ export const NOT_FOUND_THING = {
   AUTOMATION: "automation",
   PERSON: "profile",
   ACCOUNT: "account",
+  WORKSPACE: "workspace",
 } as const;
 
 type NotFoundThing = (typeof NOT_FOUND_THING)[keyof typeof NOT_FOUND_THING];
@@ -38,8 +40,8 @@ export function NotFound({
   action?: EmptyStateAction | undefined;
 }): React.JSX.Element {
   return (
-    <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action}>
-      {`This ${thing} doesn't exist, or you don't have access to it.`}
+    <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action} replayUnmasked>
+      <ReplayUnmask>{`This ${thing} doesn't exist, or you don't have access to it.`}</ReplayUnmask>
     </EmptyState>
   );
 }

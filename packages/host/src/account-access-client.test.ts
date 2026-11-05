@@ -49,6 +49,7 @@ function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   return new AccountAccessClient({
     serviceBaseUrl: "https://vespin.dev",
     credential: fixedBearer("token-1"),
+    sessionCredential: fixedBearer("session-1"),
     httpClient: fakeHttpClientLayer(fetchLike),
   });
 }
@@ -73,6 +74,39 @@ it.effect("asks the service for the signed-in account's access under its bearer"
     assert.equal(request?.url, "https://vespin.dev/api/account/access");
     assert.equal(request?.init?.method, "GET");
     assert.equal(new Headers(request?.init?.headers).get("authorization"), "Bearer token-1");
+  }),
+);
+
+it.effect("a read that carries a grant of support access holds it beside the admin flag", () =>
+  Effect.gen(function* () {
+    const { client } = service([
+      json({
+        admin: false,
+        supportAccessUntil: 1_800_000_000_000,
+      }),
+    ]);
+    assert.deepEqual(yield* client.readAccess(), {
+      admin: false,
+      supportAccessUntil: 1_800_000_000_000,
+    });
+  }),
+);
+
+it.effect("grants and revokes support access under the account's session, not its bearer", () =>
+  Effect.gen(function* () {
+    const { requests, client } = service([
+      json({ supportAccessUntil: 1_800_000_000_000 }),
+      json({ supportAccessUntil: null }),
+    ]);
+    assert.deepEqual(yield* client.writeSupportAccess(true), {
+      supportAccessUntil: 1_800_000_000_000,
+    });
+    assert.deepEqual(yield* client.writeSupportAccess(false), { supportAccessUntil: null });
+    const [granted, revoked] = requests;
+    assert.equal(granted?.url, "https://vespin.dev/api/account/support-access");
+    assert.equal(granted?.init?.method, "POST");
+    assert.equal(revoked?.init?.method, "DELETE");
+    assert.equal(new Headers(granted?.init?.headers).get("authorization"), "Bearer session-1");
   }),
 );
 

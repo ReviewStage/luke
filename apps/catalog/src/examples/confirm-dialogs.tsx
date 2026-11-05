@@ -78,7 +78,7 @@ function RefusedOnce(): React.JSX.Element {
       question={{
         title: "Delete the OpenAI key?",
         body: `${PRODUCT_NAME} stops using it at once. Agents that are running finish on it.`,
-        verb: "Delete",
+        verb: "Delete key",
         running: "Deleting",
         loss: CONFIRM_LOSS.IRREVERSIBLE,
       }}
@@ -216,7 +216,7 @@ function ConfirmDialogs(): React.JSX.Element {
           question={{
             title: "Remove Ada Lovelace from the workspace?",
             body: "Ada loses access to its tasks at once, and can be invited again later.",
-            verb: "Remove",
+            verb: "Remove member",
             running: "Removing",
             loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           }}
@@ -227,7 +227,7 @@ function ConfirmDialogs(): React.JSX.Element {
             title:
               "Delete “Quarterly planning for the platform team’s migration to the new build system”?",
             body: "The task, its plan, and every agent’s transcript under it go for good. Anyone in the workspace who opened it sees it gone the next time they look, and links to it from other tasks, from Linear issues, and from pull requests stop resolving.",
-            verb: "Delete",
+            verb: "Delete task",
             running: "Deleting",
             loss: CONFIRM_LOSS.IRREVERSIBLE,
           }}

@@ -33,7 +33,13 @@ import {
   type NativeAgentRuntime,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
-import { DEVICE_LAUNCH_STEPS, type DeviceLaunchStep } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_LAUNCH_STEP,
+  DEVICE_LAUNCH_STEPS,
+  DEVICE_LAUNCH_UNSTARTED,
+  type DeviceLaunchStep,
+  type DeviceLaunchUnstarted,
+} from "@repo/features/device-agent-wire";
 import { TURN_FAILURE, TURN_STATUS } from "../../core.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -183,6 +189,13 @@ export function hostAwayDetail(hostName: string): string {
 const LAUNCH_STOPPED_DETAIL = "the agent's host settled its launch unstarted at the step ";
 
 /**
+ * What follows the step in that detail where the host said why the launch
+ * never started (`DEVICE_LAUNCH_UNSTARTED`): these words, then the reason as
+ * the wire spells it.
+ */
+const LAUNCH_UNSTARTED_DETAIL = ", because of ";
+
+/**
  * The host's refusal sentences, a provider's words for a prompt past the
  * window, and the words of a run its host lost or a launch it settled
  * unstarted, a failed turn's detail may carry, by the word the wire says for
@@ -237,22 +250,55 @@ export function hostLostOf(
   return host.length > 0 ? { host } : undefined;
 }
 
-/** What the turn of a launch its host settled unstarted records, by the step the line last held; nothing where it held none this build knows, which leaves a runner gone's words. */
-export function launchStoppedDetail(step: string | null): string | undefined {
-  const known = DEVICE_LAUNCH_STEPS.find((each) => each === step);
-  return known === undefined ? undefined : `${LAUNCH_STOPPED_DETAIL}${known}`;
+/**
+ * What the turn of a launch its host settled unstarted records, by the step
+ * the line last held and the reason its host said, where it said one;
+ * nothing where it held no step this build knows and said no reason, which
+ * leaves a runner gone's words. Note that a reason with no step is recorded
+ * at the first step, because the host reports each step apart from its
+ * settle, so the step may land after it, and every reason is one the host
+ * finds while it prepares.
+ */
+export function launchStoppedDetail(
+  step: string | null,
+  unstarted?: DeviceLaunchUnstarted,
+): string | undefined {
+  const known =
+    DEVICE_LAUNCH_STEPS.find((each) => each === step) ??
+    (unstarted === undefined ? undefined : DEVICE_LAUNCH_STEP.PREPARING);
+  if (known === undefined) return undefined;
+  const why = unstarted === undefined ? "" : `${LAUNCH_UNSTARTED_DETAIL}${unstarted}`;
+  return `${LAUNCH_STOPPED_DETAIL}${known}${why}`;
+}
+
+/** The step and the reason a failed turn's detail records for a launch its host settled unstarted (`launchStoppedDetail`); nothing for any other turn. */
+function launchStoppedParts(
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): { readonly step: string; readonly unstarted: string | undefined } | undefined {
+  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
+  if (turn.failure !== TURN_FAILURE.MODEL) return undefined;
+  const detail = turn.failureDetail ?? "";
+  if (!detail.startsWith(LAUNCH_STOPPED_DETAIL)) return undefined;
+  const [step = "", unstarted] = detail
+    .slice(LAUNCH_STOPPED_DETAIL.length)
+    .split(LAUNCH_UNSTARTED_DETAIL);
+  return { step, unstarted };
 }
 
 /** The step a launch its host settled unstarted stopped at, as its failed turn records it; nothing for any other turn. */
 export function launchStoppedOf(
   turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
 ): DeviceLaunchStep | undefined {
-  if (turn?.status !== TURN_STATUS.FAILED) return undefined;
-  if (turn.failure !== TURN_FAILURE.MODEL) return undefined;
-  const detail = turn.failureDetail ?? "";
-  if (!detail.startsWith(LAUNCH_STOPPED_DETAIL)) return undefined;
-  const step = detail.slice(LAUNCH_STOPPED_DETAIL.length);
-  return DEVICE_LAUNCH_STEPS.find((each) => each === step);
+  const parts = launchStoppedParts(turn);
+  return DEVICE_LAUNCH_STEPS.find((each) => each === parts?.step);
+}
+
+/** Why a launch its host settled unstarted never started, as its failed turn records the reason its host said; nothing for any other turn, and for one whose host said none this build knows. */
+export function launchUnstartedOf(
+  turn: Pick<AgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): DeviceLaunchUnstarted | undefined {
+  const parts = launchStoppedParts(turn);
+  return Object.values(DEVICE_LAUNCH_UNSTARTED).find((each) => each === parts?.unstarted);
 }
 
 /** Why an agent read as failed failed, as the wire's word: its newest turn's failure, or a session that never started where no turn stands; nothing for a turn that did not fail. */

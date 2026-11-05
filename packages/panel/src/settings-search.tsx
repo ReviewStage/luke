@@ -61,6 +61,7 @@ import { integrationLines } from "@repo/ui/integration-search";
 import { land } from "@repo/ui/landed";
 import { searchHit } from "@repo/ui/search-score";
 import { type MatchRange, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
@@ -94,6 +95,9 @@ import { experimentPages, settingsPageShown } from "./settings/settings-rows.js"
  * fixed — a query narrows what is offered and never widens what can be done.
  */
 
+/** The word a Leave result opens with, before the workspace's name. */
+const LEAVE_WORD = "Leave";
+
 /** How the search field is found by the seek that lands Command-F's caret in it. */
 const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
@@ -107,6 +111,8 @@ export interface SettingsSearchEntry {
   id: string;
   /** The row's own name, which is what the result draws. */
   label: string;
+  /** Where a person's words, a workspace's name, start in that name, kept masked from there on in a screen recording though the results show the app's own. */
+  replayMaskedFrom?: number;
   /** The page the row is drawn on, which is where the result leads. */
   page: SettingsView;
   /** Every line the query is read against: the label, and words about it. */
@@ -309,18 +315,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
-    // The chapters model, which is the account's on the service: drawn once an account is signed in.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
-          label: "Chapters model",
-          page: SETTINGS_VIEW.AGENTS,
-          haystack: [
-            "Chapters model",
-            "pull request chapters generate claude haiku sonnet opus review",
-          ],
-        }
-      : undefined,
     // The harnesses' rows, each holding the account's plan and API key for it on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
@@ -375,7 +369,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
     input.workspace !== undefined && input.workspace.role !== WORKSPACE_ROLE.OWNER
       ? {
           id: SETTINGS_SECTION.LEAVE,
-          label: `Leave ${input.workspace.name}`,
+          label: `${LEAVE_WORD} ${input.workspace.name}`,
+          replayMaskedFrom: LEAVE_WORD.length + 1,
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [`Leave ${input.workspace.name}`, "leave quit exit workspace"],
         }
@@ -720,6 +715,31 @@ export function SettingsSearchField({
   );
 }
 
+/** The marks of `ranges` that fall in `from`..`to`, counted from `from`. */
+function rangesWithin(ranges: readonly MatchRange[], from: number, to: number): MatchRange[] {
+  return ranges
+    .filter((range) => range.end > from && range.start < to)
+    .map((range) => ({
+      start: Math.max(range.start, from) - from,
+      end: Math.min(range.end, to) - from,
+    }));
+}
+
+/** A result's name, its matches marked, and a person's words in it masked in a screen recording. */
+function ResultLabel({ entry }: { entry: SettingsSearchResult }): React.JSX.Element {
+  const from = entry.replayMaskedFrom;
+  if (from === undefined) return <Highlighted text={entry.label} ranges={entry.marks} />;
+  const end = entry.label.length;
+  return (
+    <>
+      <Highlighted text={entry.label.slice(0, from)} ranges={rangesWithin(entry.marks, 0, from)} />
+      <ReplayMask>
+        <Highlighted text={entry.label.slice(from)} ranges={rangesWithin(entry.marks, from, end)} />
+      </ReplayMask>
+    </>
+  );
+}
+
 /**
  * What a query left, in the sidebar where the list of pages was: each page
  * that holds a match names itself as a heading, the way the sidebar's other
@@ -758,7 +778,7 @@ export function SettingsSearchResults({
                     roving
                     onClick={() => onOpen(entry)}
                   >
-                    <Highlighted text={entry.label} ranges={entry.marks} />
+                    <ResultLabel entry={entry} />
                   </NavItem>
                 </li>
               ))}

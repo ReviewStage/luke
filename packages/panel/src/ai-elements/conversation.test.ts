@@ -214,6 +214,40 @@ test.each([
   assert.deepEqual(layout.writes, [], "the reader's place stands");
 });
 
+/** Draws a frame, a page, in `box`, standing in for whether the window draws it while it stays in the document. */
+function drawnFrame(box: HTMLElement): HTMLIFrameElement {
+  const frame = box.appendChild(document.createElement("iframe"));
+  Object.defineProperty(frame, "checkVisibility", { value: () => frame.isConnected });
+  return frame;
+}
+
+test("a reader's wheel over a page drawn in the log, which its frame takes, takes the log off its newest line", () => {
+  const { root, box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  const page = drawnFrame(box);
+  act(() => {
+    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+  });
+  lateScroll(box, 150, 2000);
+  layout.writes.splice(0);
+  layout.height = 400;
+  draw(root, ["one", "two", "three"]);
+  assert.deepEqual(layout.writes, [], "the reader's place stands");
+});
+
+test("a layout's scroll up after the page under the pointer is taken away keeps the log on its newest line", () => {
+  const { box, layout } = mount(["one", "two"]);
+  scroll(box, 200);
+  const page = drawnFrame(box);
+  act(() => {
+    page.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+  });
+  page.remove();
+  layout.writes.splice(0);
+  lateScroll(box, 0, 2000);
+  assert.deepEqual(layout.writes, [0, 300], "the log is taken back to its end");
+});
+
 test.each([
   {
     how: "a press elsewhere, on a rail's row",

@@ -10,8 +10,6 @@ import {
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
   SearchableMenu,
-  SKELETON_SHAPE,
-  Skeleton,
   STATUS_TONE,
   type StatusTone,
   Tooltip,
@@ -388,12 +386,15 @@ function ToolbarTabActions({
   groups,
   ends,
   slot,
+  replayUnmasked,
 }: {
   label: string;
   groups: TabActionGroups;
   /** What the menu draws beyond its items: the task's document menu names the task and says who created it. */
   ends: MenuEnds | undefined;
   slot: HTMLElement;
+  /** Whether its items' words are the app's own (`ActionMenu`'s): so while the tab's body hands up none of its own, whose words this module cannot vouch for. */
+  replayUnmasked: boolean;
 }): React.JSX.Element {
   const menu = useMenu(true);
   const named = moreLabel(label);
@@ -408,6 +409,7 @@ function ToolbarTabActions({
           footer={ends?.footer}
           groups={tabActionItems(groups, menu.drawn.opener)}
           onClose={menu.close}
+          replayUnmasked={replayUnmasked}
         />
       )}
     </>,
@@ -446,6 +448,8 @@ export interface TabLook {
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
+  /** Whether the label is the app's own word, a fixed kind's (Inbox, New agent, Pull request), which a screen recording shows as it reads, and the detail with it; a tab named for a task, an agent, a file, or a page leaves this off (`Tab`'s). */
+  labelReplayUnmasked?: boolean | undefined;
   /** Words after the label, dimmed (`Tab`'s). */
   detail?: string | undefined;
   /** The detail's status tone (`Tab`'s): attention for the Inbox's count. */
@@ -502,7 +506,13 @@ export function DoorsTab({
         ends={doors.document}
       />
       {look.selected && content.length > 0 && slot !== undefined && slot !== null ? (
-        <ToolbarTabActions label={look.label} groups={content} ends={doors.document} slot={slot} />
+        <ToolbarTabActions
+          label={look.label}
+          groups={content}
+          ends={doors.document}
+          slot={slot}
+          replayUnmasked={doors.handed === undefined}
+        />
       ) : null}
     </>
   );
@@ -523,19 +533,6 @@ export interface AddEntry {
 /** An entry as a menu draws its row: its end mark and its card drawn where `MenuRow` draws them, so a "+" menu, ⌘K and the summary say the same of a row. */
 export function entryRow({ row, endMark, card }: AddEntry): MenuRow {
   return { ...row, end: endMark ?? row.end, card: card ?? row.card };
-}
-
-/** How wide the block standing in a tab is while its strip is read: a typical tab's width. */
-const TAB_SKELETON_WIDTH = "120px";
-
-/** The block standing in a tab while its strip is read, at a typical tab's width. */
-export function TabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />;
-}
-
-/** The block standing in the "+" while its strip is read: an icon press's square, as tall as it is wide. */
-export function AddTabSkeleton(): React.JSX.Element {
-  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--ui-control-height)" />;
 }
 
 /**
@@ -633,6 +630,7 @@ export function AddTabButton({
           noMatch={noMatch}
           align={POPOVER_ALIGN.START}
           bounds={POPOVER_BOUNDS.WINDOW}
+          replayUnmasked
           onPick={pick}
           onClose={close}
           onLeave={(left) => {
@@ -660,6 +658,7 @@ export function useTranscriptCopier(): TranscriptCopier {
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: { surface: FAILURE_SURFACE.TRANSCRIPT_COPY, cause },
+      replayUnmasked: true,
     });
   return (read) => (copy) => {
     read().then((transcript) => {

@@ -61,9 +61,19 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isWireString } from "@repo/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ACTOR_SIZE,
   ActorLine,
@@ -78,6 +88,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { useAutomation } from "../automation-directory.js";
+import { useConnected } from "../connection.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PhoneHead, phoneFindGroups } from "../desktop/phone-head.js";
 import { unreadShown } from "../failure-report.js";
@@ -143,7 +154,7 @@ import {
 import { type InboxPager, InboxPagerControls } from "./inbox-pager.js";
 import type { InboxSnoozer } from "./inbox-snooze.js";
 import { InboxStamp } from "./inbox-stamp.js";
-import { REPLY_SCOPE } from "./reply-to-selection.js";
+import { REPLY_SCOPE, ReplyDoorProvider } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -618,8 +629,8 @@ const THREAD_EVENT = {
 
 /**
  * A line of what happened to the thread, drawn among its messages: a member
- * resolving it without an answer, by whom where that close still stands;
- * the agent withdrawing an ask, and why; or the agent replacing one, by the
+ * resolving it without an answer, by whom where that is known, and the note
+ * the close carried, where it carried one; the agent withdrawing an ask, and why; or the agent replacing one, by the
  * post that replaced it where the thread read carries it. Each says when,
  * where that is known, and is keyed by what it is about: the ask's message,
  * or the item for its standing close.
@@ -628,6 +639,7 @@ type ThreadEventLine = { readonly key: string } & (
   | {
       readonly kind: typeof THREAD_EVENT.RESOLVED;
       readonly closer: InboxItem["closedBy"];
+      readonly note: InboxMessage | undefined;
       readonly at: number | undefined;
     }
   | {
@@ -655,6 +667,27 @@ function standsAfter(
   return Math.max(
     from,
     thread.findLastIndex((message) => message.createdAt <= at),
+  );
+}
+
+/**
+ * The note a member's close carried, which the service writes as their
+ * message in the close's own write, so stamped with the close's very time:
+ * a member's message written then that answers nothing, by the closer where
+ * the close names one; none where the close carried no note.
+ */
+function closeNote(
+  thread: readonly InboxMessage[],
+  at: number | undefined,
+  closer: InboxItem["closedBy"],
+): InboxMessage | undefined {
+  if (at === undefined) return undefined;
+  return thread.find(
+    (message) =>
+      message.author === INBOX_MESSAGE_AUTHOR.MEMBER &&
+      message.answers === undefined &&
+      message.createdAt === at &&
+      (closer === undefined || message.member?.userId === closer.userId),
   );
 }
 
@@ -722,10 +755,13 @@ function askEvent(
     return { after, line };
   }
   if (withdrawnByStandingClose(item, thread, index)) return undefined;
+  // Note that a close no longer standing names no closer, but the note it carried was written by them.
+  const note = closeNote(thread, ask.withdrawnAt, undefined);
   const line = {
     key,
     kind: THREAD_EVENT.RESOLVED,
-    closer: undefined,
+    closer: note?.member,
+    note,
     at: ask.withdrawnAt,
   } as const;
   return { after, line };
@@ -753,9 +789,27 @@ function threadEvents(item: InboxItem, thread: readonly InboxMessage[]): ThreadE
       settled === undefined
         ? thread.length - 1
         : thread.findLastIndex((message) => message.createdAt <= settled);
-    add(after, { key: item.id, kind: THREAD_EVENT.RESOLVED, closer: item.closedBy, at: settled });
+    const note = closeNote(thread, settled, item.closedBy);
+    add(after, {
+      key: item.id,
+      kind: THREAD_EVENT.RESOLVED,
+      closer: item.closedBy,
+      note,
+      at: settled,
+    });
   }
   return events;
+}
+
+/** The messages a close's line draws as its note, which the thread draws there rather than as messages of their own. */
+function closeNotes(events: ThreadEventsAfter): ReadonlySet<string> {
+  const notes = new Set<string>();
+  for (const lines of events.values()) {
+    for (const line of lines) {
+      if (line.kind === THREAD_EVENT.RESOLVED && line.note !== undefined) notes.add(line.note.id);
+    }
+  }
+  return notes;
 }
 
 /** What a member resolving the item says after their name. */
@@ -764,17 +818,22 @@ const RESOLVED_IT = "resolved this without an answer";
 /**
  * A line of what happened to the thread, drawn as a plan comment's
  * "resolved this" is: whoever did it, their face on the gutter's line, their
- * name, what they did, and when; a withdrawal's why under it, in the muted
+ * name, what they did, and when; a close's note under it, as a member's
+ * message draws its words and files, and a withdrawal's why, in the muted
  * ink. The member's is the closer where known, and the agent's its tile.
  */
 function ThreadEvent({
+  itemId,
   line,
   by,
   now,
+  images,
 }: {
+  itemId: string;
   line: ThreadEventLine;
   by: ItemAgent;
   now: number;
+  images: InboxImageReads;
 }): React.JSX.Element {
   const closer = usePerson(line.kind === THREAD_EVENT.RESOLVED ? line.closer : undefined);
   if (line.kind === THREAD_EVENT.RESOLVED) {
@@ -786,7 +845,12 @@ function ThreadEvent({
         said={RESOLVED_IT}
         at={line.at}
         now={now}
-      />
+        messageId={line.note?.id}
+      >
+        {line.note === undefined ? undefined : (
+          <MessageWords itemId={itemId} message={line.note} images={images} />
+        )}
+      </InboxComment>
     );
   }
   const agent = { author: commentAuthor(by.subject.tile), nameRef: <AgentName by={by} /> };
@@ -814,22 +878,26 @@ function ThreadEvent({
 
 /** The lines of what happened to the thread that follow the message at `after`, each in its place (`threadEvents`). */
 function ThreadEventsAt({
+  itemId,
   events,
   after,
   by,
   now,
+  images,
 }: {
+  itemId: string;
   events: ThreadEventsAfter;
   after: number;
   by: ItemAgent;
   now: number;
+  images: InboxImageReads;
 }): React.JSX.Element | null {
   const lines = events.get(after);
   if (lines === undefined) return null;
   return (
     <>
       {lines.map((line) => (
-        <ThreadEvent key={line.key} line={line} by={by} now={now} />
+        <ThreadEvent key={line.key} itemId={itemId} line={line} by={by} now={now} images={images} />
       ))}
     </>
   );
@@ -1054,6 +1122,7 @@ function phoneItemGroups(
             {
               label: OPEN_TASK,
               detail: holder.task.name,
+              replayMasked: true,
               icon: tabLook({
                 kind: TAB_KIND.PLAN,
                 name: holder.task.name,
@@ -1067,6 +1136,7 @@ function phoneItemGroups(
             {
               label: OPEN_AUTOMATION,
               detail: holderName(holder),
+              replayMasked: true,
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
@@ -1075,6 +1145,7 @@ function phoneItemGroups(
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
+    replayMasked: true,
     icon: <BotIcon />,
     onSelect: by.onOpen,
     ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
@@ -1139,6 +1210,7 @@ function InboxItemMenu({
       <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
           heading={heading}
@@ -1505,9 +1577,19 @@ export function InboxPane({
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
 }): React.JSX.Element {
+  const connected = useConnected();
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
+  // The box's door a quote is laid in through, which the pages the thread draws offer Reply through; held in a record, since a function handed to a state's setter is read as an update.
+  const [quoteDoor, setQuoteDoor] = useState<{ readonly lay: (words: string) => void } | undefined>(
+    undefined,
+  );
+  const onQuoteDoor = useCallback(
+    (lay: ((words: string) => void) | undefined) =>
+      setQuoteDoor(lay === undefined ? undefined : { lay }),
+    [],
+  );
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);
@@ -1543,6 +1625,7 @@ export function InboxPane({
   const thread = item.thread ?? NO_MESSAGES;
   const pending = pendingRepliesOn(control.pendingReplies, item);
   const events = useMemo(() => threadEvents(item, thread), [item, thread]);
+  const notes = useMemo(() => closeNotes(events), [events]);
   useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
@@ -1613,6 +1696,7 @@ export function InboxPane({
           skills={agents.readSkills}
           keywords={answerKeywords(holder, item)}
           replyScope={board}
+          onQuoteDoor={onQuoteDoor}
           onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
           newThread={newThread === undefined ? undefined : answerNewThread(newThread, item, by)}
         />
@@ -1654,7 +1738,9 @@ export function InboxPane({
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
-                pager?.count === undefined ? undefined : `${pager.count.at} of ${pager.count.total}`
+                pager?.count === undefined ? undefined : (
+                  <ReplayUnmask>{`${pager.count.at} of ${pager.count.total}`}</ReplayUnmask>
+                )
               }
             />
           }
@@ -1666,7 +1752,9 @@ export function InboxPane({
           wrapHeading
           lead={
             onBack === undefined ? undefined : (
-              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+              <ReplayUnmask>
+                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+              </ReplayUnmask>
             )
           }
           title={
@@ -1683,7 +1771,9 @@ export function InboxPane({
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
               {pager === undefined ||
               (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-                <InboxPagerControls pager={pager} />
+                <ReplayUnmask>
+                  <InboxPagerControls pager={pager} />
+                </ReplayUnmask>
               )}
               <InboxItemMenu
                 key={item.id}
@@ -1706,40 +1796,60 @@ export function InboxPane({
             {/* The item's words are drawn as documents: its own pictures read through the Inbox, and a link alone on its line as its card. */}
             <ItemWords itemId={item.id} workspaceId={workspaceId} images={images} code={doors.code}>
               <Subject item={item} heading={setHeading} first={phoneHead} />
-              <Stack
-                as={LAYOUT_ELEMENT.OL}
-                gap={GAP.NONE}
-                className={INBOX_THREAD}
-                aria-label="Messages"
-              >
-                <ThreadEventsAt events={events} after={-1} by={by} now={now} />
-                {thread.map((message, at) => (
-                  <Fragment key={message.id}>
-                    <ThreadMessage
-                      itemId={item.id}
-                      title={cardTitle(item.title)}
-                      threadAddressedTo={inboxAddressedTo(item)}
-                      message={message}
-                      thread={thread}
-                      by={by}
-                      now={now}
-                      images={images}
-                      waitingOn={waitingOn}
-                    />
-                    {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
-                    {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
-                      <EarlierMessages by={by} />
-                    ) : null}
-                    <ThreadEventsAt events={events} after={at} by={by} now={now} />
-                  </Fragment>
-                ))}
-                {pending.map((reply) => (
-                  <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
-                ))}
-                {draftReply}
-              </Stack>
+              <ReplyDoorProvider value={quoteDoor?.lay}>
+                <Stack
+                  as={LAYOUT_ELEMENT.OL}
+                  gap={GAP.NONE}
+                  className={INBOX_THREAD}
+                  aria-label="Messages"
+                >
+                  <ThreadEventsAt
+                    itemId={item.id}
+                    events={events}
+                    after={-1}
+                    by={by}
+                    now={now}
+                    images={images}
+                  />
+                  {thread.map((message, at) => (
+                    <Fragment key={message.id}>
+                      {/* A close's note is drawn under the close's own line. */}
+                      {notes.has(message.id) ? null : (
+                        <ThreadMessage
+                          itemId={item.id}
+                          title={cardTitle(item.title)}
+                          threadAddressedTo={inboxAddressedTo(item)}
+                          message={message}
+                          thread={thread}
+                          by={by}
+                          now={now}
+                          images={images}
+                          waitingOn={waitingOn}
+                        />
+                      )}
+                      {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
+                      {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
+                        <EarlierMessages by={by} />
+                      ) : null}
+                      <ThreadEventsAt
+                        itemId={item.id}
+                        events={events}
+                        after={at}
+                        by={by}
+                        now={now}
+                        images={images}
+                      />
+                    </Fragment>
+                  ))}
+                  {pending.map((reply) => (
+                    <PendingReply key={reply.key} readerId={readerId} reply={reply} now={now} />
+                  ))}
+                  {draftReply}
+                </Stack>
+              </ReplyDoorProvider>
             </ItemWords>
-            {control.failed ? (
+            {/* Note that the thread above keeps its words with no line under it while the app is offline, since the Offline mark says why. */}
+            {control.failed && connected ? (
               <ErrorState
                 failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
                 onRetry={control.onRetry}

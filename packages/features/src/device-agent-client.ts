@@ -11,6 +11,7 @@ import type {
   DeviceArch,
   DeviceCapability,
   DeviceLaunchStep,
+  DeviceLaunchUnstarted,
   DeviceMachine,
   DevicePlatform,
   DeviceSetup,
@@ -398,16 +399,18 @@ export class HostedDeviceAgentClient {
     );
   }
 
-  /** One line settled, a launch line with its runner's exit code where it exited with one; whether the service took it. */
+  /** One line settled, a launch line with its runner's exit code where it exited with one, and why it never started where the host knows; whether the service took it. */
   settleLine(
     deviceId: string,
     id: string,
     exitCode?: number,
+    unstarted?: DeviceLaunchUnstarted,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.deviceAgents.settleLine, {
       deviceId,
       id,
       ...(exitCode === undefined ? {} : { exitCode }),
+      ...(unstarted === undefined ? {} : { unstarted }),
     }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),

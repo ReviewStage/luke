@@ -173,9 +173,9 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [
-        ...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child"),
-      ].map((name) => name.textContent),
+      [...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child")].map(
+        (name) => name.textContent,
+      ),
     ]),
   );
 }
@@ -207,6 +207,25 @@ test("Home greets the reader by first name over New task's composer, the items w
     opened.items.map((chosen) => chosen.itemId),
     [RETRY_429.id],
   );
+});
+
+test("while the task list is read, Home greets the reader over the composer, asks for no repository, and says it is reading in place of its sections", async () => {
+  const base = tasksControl();
+  const newTask = {
+    ...base.newTask,
+    repositoriesIn: (scope: string | undefined) => ({
+      ...base.newTask.repositoriesIn(scope),
+      reading: true,
+    }),
+  };
+  const { page } = mount({ listRead: false, newTask });
+  await settle();
+
+  assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
+  assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
+  assert.doesNotMatch(page.textContent ?? "", /Choose a repository/u);
+  assert.equal(page.querySelector('[role="status"]')?.textContent, "Reading your tasks…");
+  assert.deepEqual(sections(page), {});
 });
 
 test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async () => {

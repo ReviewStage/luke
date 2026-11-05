@@ -37,6 +37,7 @@ import {
   messageFailureWords,
   messageWords,
   modelLabel,
+  noteWhileOffline,
   offeredModels,
   offersContinue,
   openingLineOf,
@@ -57,6 +58,7 @@ import {
   unreadSentLines,
   workingLineWords,
 } from "./agent-model.js";
+import { inboxNoteReading } from "./inbox-model.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
@@ -683,7 +685,7 @@ test("a Start refused for a missing credential says in one sentence which harnes
 
 test("a message to an agent whose device is away says it is offline, in the words a Start on it gets, under the composer and in the Inbox alike", () => {
   const away =
-    "Your device is offline, so this agent can't start there. Wake it and log in on it, or start a new task in the cloud.";
+    "Your device is offline, so this agent can't start there. Wake it and log in on it, or start it in the cloud.";
 
   assert.deepEqual(
     [
@@ -707,6 +709,24 @@ test("a message Vespin heard nothing back on says to try again in the Inbox, whi
       messageFailureNote({ failure: AGENT_CALL_FAILURE.UNANSWERED }, null).text,
     ],
     ["No answer came back. Try again.", "No answer came back."],
+  );
+});
+
+test("a message Vespin heard nothing back on while the app does not reach the service says the developer is offline, in the composer and the Inbox, and any other note keeps its words", () => {
+  const unheard = { failure: AGENT_CALL_FAILURE.UNANSWERED };
+  const tooLong = { failure: AGENT_CALL_FAILURE.MESSAGE_TOO_LONG };
+  const inboxNote = { words: messageFailureWords(unheard.failure), failure: unheard.failure };
+  assert.deepEqual(
+    [
+      noteWhileOffline({ ...messageFailureNote(unheard, null), cause: unheard }, false)?.text,
+      inboxNoteReading(inboxNote, undefined, false).words,
+      noteWhileOffline({ ...messageFailureNote(tooLong, null), cause: tooLong }, false)?.text,
+    ],
+    [
+      "You're offline.",
+      "You're offline. Try again once you're back online.",
+      "That message is too long.",
+    ],
   );
 });
 

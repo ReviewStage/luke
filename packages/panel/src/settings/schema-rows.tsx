@@ -1,4 +1,5 @@
 import {
+  type AppSettingField,
   isAppSettingId,
   type SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE,
   SETTING_SECTION,
@@ -21,7 +22,7 @@ type SettingOption = NonNullable<
 /**
  * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
  * where the schema gives the set a search field and reads whole where it
- * does not. A set whose values have faces is a `PictureChoiceRow`, never this.
+ * does not, each option wearing the faces its section hands it, where it hands some.
  */
 function SchemaChoiceRow({
   id,
@@ -31,6 +32,7 @@ function SchemaChoiceRow({
   value,
   options,
   search,
+  faces,
   onChange,
 }: {
   id: string;
@@ -39,6 +41,8 @@ function SchemaChoiceRow({
   changed: boolean;
   value: string;
   options: readonly SettingOption[];
+  /** What an option's token shows beside its words, where it shows anything. */
+  faces: ((token: string) => React.ReactNode) | undefined;
   /** The searchable menu's empty field words, for a set long enough to search. */
   search: string | undefined;
   onChange: (token: string) => Promise<ActionResult>;
@@ -46,10 +50,15 @@ function SchemaChoiceRow({
   return (
     <SelectRow
       label={label}
+      labelReplayUnmasked
       detail={detail}
       changed={changed}
       value={value}
-      options={options}
+      options={
+        faces === undefined
+          ? options
+          : options.map((option) => ({ ...option, faces: faces(option.value) }))
+      }
       // A token the set does not hold, or the one already stored, is not written, so a stale menu or a repeat pick writes nothing.
       parse={(token) =>
         token !== value && options.some((option) => option.value === token) ? token : undefined
@@ -66,18 +75,23 @@ function SchemaChoiceRow({
  * nothing else: which page and section a setting stands in, where in that
  * section, whether it is drawn right now, what its control offers, and the
  * line drawn under its label are the entry's own answers. A page component that decided any of it for itself would
- * be a second record of the same fact, and the two would drift.
+ * be a second record of the same fact, and the two would drift. What the
+ * section may add is a choice's faces, read at run time from what the
+ * schema cannot know, such as the account's own picture.
  */
 export function SchemaSettingRows({
   page,
   section = SETTING_SECTION.MAIN,
   view,
   writes,
+  faces,
 }: {
   page: (typeof SCHEMA_SETTINGS_PAGE)[keyof typeof SCHEMA_SETTINGS_PAGE];
   section?: SettingSection;
   view: SettingsRowsInput;
   writes: SettingsWrites;
+  /** What each of a choice's options shows beside its words, by the setting it stores and its token; none where its options are words alone. */
+  faces?: ((field: AppSettingField, token: string) => React.ReactNode) | undefined;
 }): React.JSX.Element {
   const rows = settingRowsForPage(page, section, view).flatMap((row) => {
     const { field, entry, changed, control } = row;
@@ -87,6 +101,7 @@ export function SchemaSettingRows({
           key={entry.id}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           label={entry.label}
+          labelReplayUnmasked
           detail={entry.detail}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}
@@ -105,6 +120,7 @@ export function SchemaSettingRows({
         value={control.value}
         options={control.options}
         search={control.search}
+        faces={faces === undefined ? undefined : (token) => faces(field, token)}
         onChange={(token) => writes.setting(field, settingFromOption(field, token, view))}
       />,
     ];

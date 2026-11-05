@@ -9,7 +9,7 @@ import {
 import { readEither, verbatimJsonSchema, wireKeys } from "@repo/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
-import { DEVICE_LAUNCH_STEP } from "./device-agent-wire.js";
+import { DEVICE_LAUNCH_STEP, DEVICE_LAUNCH_UNSTARTED } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
@@ -17,6 +17,7 @@ import {
   PULL_REQUEST_WRITE_BOUNDS,
   REACTION,
 } from "./pull-request-write-wire.js";
+import { readMarkSchema } from "./read-mark.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
@@ -157,6 +158,8 @@ export const AGENT_AUTHOR = {
   APP_UNREAD: "app-unread",
   /** The developer who started the agent, through their own GitHub personal access token, where no installation reaches the repository. */
   TOKEN: "token",
+  /** The App: the developer chose our bot to author their agents' commits (`@repo/settings`'s `COMMIT_AUTHOR`). */
+  APP_CHOSEN: "app-chosen",
 } as const;
 
 export type AgentAuthor = (typeof AGENT_AUTHOR)[keyof typeof AGENT_AUTHOR];
@@ -269,6 +272,8 @@ export const LOCAL_AGENT_REFUSAL = {
   SETUP_FAILED: "setup-failed",
   /** The device is another member's, and only its owner starts agents on it; the refusal carries the device and its owner (`refusedDeviceSchema`) where the service named them. */
   NOT_OWNER: "not-owner",
+  /** The repository is reached on the starter's own GitHub token, and the device's host is a build from before it runs such an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+  GITHUB_SIGN_IN: "github-sign-in",
 } as const;
 
 export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_AGENT_REFUSAL];
@@ -603,6 +608,22 @@ const agentStartFromSchema = EffectSchema.Struct({
 export type AgentStartFrom = typeof agentStartFromSchema.Type;
 
 /**
+ * Where a Start's agent runs, as a request names it: the cloud, or one of
+ * the starting member's own devices (a Mac's desktop app or a host) by its
+ * id, which the service checks is theirs, registered, and not away before
+ * it makes the agent there.
+ */
+export const agentRunsOnRequestSchema = EffectSchema.Union([
+  EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),
+  EffectSchema.Struct({
+    machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
+    deviceId: wireUuidSchema,
+  }),
+]);
+
+export type AgentRunsOnRequest = typeof agentRunsOnRequestSchema.Type;
+
+/**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
  * them; both or neither, since a choice is one thing, and the context
@@ -622,9 +643,13 @@ export type AgentStartFrom = typeof agentStartFromSchema.Type;
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
  * draft's composer: it runs where the account's routing chooses, as any
- * Start does, eve or the provider's own harness alike. A Start names no
- * machine: the agent runs where its source runs, else where its task runs
- * (`task-wire.ts`'s `runsOn`), else in the cloud.
+ * Start does, eve or the provider's own harness alike. A Start's `runsOn`
+ * names where its agent runs, from another agent too, which is how an agent
+ * moves; one that names none runs where its source runs, for a continue or
+ * a fork, else where the starting member's newest agent on the task runs,
+ * else where the member last named (`account_preference.runs_on_*`), else
+ * in the cloud; a task holds no place of its own. An automation's run reads
+ * neither of its owner's own and runs in the cloud.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -638,6 +663,7 @@ export const agentStartRequestFields = {
   note: EffectSchema.optionalKey(messageWordsSchema),
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
+  runsOn: EffectSchema.optionalKey(agentRunsOnRequestSchema),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -833,6 +859,15 @@ export const agentPinRequestSchema = EffectSchema.Struct({
 );
 
 export type AgentPinRequest = typeof agentPinRequestSchema.Type;
+
+/**
+ * Moving the asking member's own read mark of an agent with no task (PATCH),
+ * as `read-mark.ts` says each mark moves it; every other member's stands.
+ * The answer is the agent as it then stands.
+ */
+export const agentReadRequestSchema = EffectSchema.Struct({ readMark: readMarkSchema });
+
+export type AgentReadRequest = typeof agentReadRequestSchema.Type;
 
 /**
  * Switching the agent's MCP servers (PATCH): the whole list of those off,
@@ -1317,6 +1352,10 @@ export const tasklessAgentSchema = EffectSchema.Struct({
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** Epoch milliseconds the reader read the agent through (`read-mark.ts`), the service's instant; absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  /** Whether the reader marked the agent unread and has not opened it since; absent from a service before read marks were kept. */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
   pullRequest: EffectSchema.optionalKey(
     EffectSchema.Struct({
@@ -1448,10 +1487,11 @@ const reviewCommentSchema = EffectSchema.Struct({
  * reviewers and where each stands, and its reviews that said something
  * ride beside the files, each absent from a service before them, and who
  * the agent writes as absent too for an agent whose first session never
- * settled it. The commits a changed image is read at ride beside them too (`headSha`, the pull request's head, and
+ * settled it. The commits a changed file is read whole at ride beside them too (`headSha`, the pull request's head, and
  * `baseSha`, where its head and base branch part, which GitHub's diff is
  * counted from), each absent where it could not be read, and `baseSha`
- * absent where no image the files change stood before them.
+ * absent where no image, and no text file whose patch was too large to
+ * send, stood before them.
  */
 export const agentChangesAnswerSchema = EffectSchema.Struct({
   pullRequest: EffectSchema.NullOr(
@@ -2461,6 +2501,16 @@ export const agentMessagesAnswerSchema = EffectSchema.Struct({
    * service older than it.
    */
   launch: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(AGENT_LAUNCH))),
+  /**
+   * Why the launch its host settled unstarted never started, where the host
+   * said a reason beyond the step (`DEVICE_LAUNCH_UNSTARTED`), beside the
+   * step in `launch`, which a build from before the field words alone.
+   * Absent wherever `launch` names no failed launch, and for one whose host
+   * said no reason.
+   */
+  launchUnstarted: EffectSchema.optionalKey(
+    EffectSchema.Literals(Object.values(DEVICE_LAUNCH_UNSTARTED)),
+  ),
   /**
    * The delegations the agent's newest turn still waits on, each by the
    * call that started it with when its worker began, so a running

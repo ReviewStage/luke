@@ -85,7 +85,7 @@ import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
-import { answerFailedChunk, PRELOAD_ERROR, staleBuildTab } from "./stale-build";
+import { failedChunkAnswer, PRELOAD_ERROR, staleBuildTab } from "./stale-build";
 import { addressHere } from "./web-address";
 import { developmentFixtureProfile } from "./web-fixture";
 import { onTabShownChanged, webNoticeDoors } from "./web-notices";
@@ -427,7 +427,8 @@ const composedWeb = (
       yield* linkNetworkWatch({
         state,
         isOnline: () => navigator.onLine,
-        regained: operator.host.tasksResync(),
+        regained: operator.host.tasksRegained(),
+        report,
       });
       // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
       yield* linkSessionReload({ state, reload: () => location.reload() });
@@ -521,15 +522,15 @@ export function composeWeb(
       ).pipe(Layer.provideMerge(hostStandingLayer)),
     ),
   );
-  // A tab left open across a deploy moves onto the build now live once a chunk of its own fails to load.
+  // A tab left open across a deploy asks to move onto the build now live once a chunk of its own fails to load.
   const staleBuild = Layer.effectDiscard(
     Effect.forkScoped(
-      Effect.suspend(() => {
-        const stale = staleBuildTab(tab);
-        return Stream.runForEach(Stream.fromEventListener(window, PRELOAD_ERROR), () =>
-          answerFailedChunk(stale),
-        );
-      }),
+      Effect.suspend(() =>
+        Stream.runForEach(
+          Stream.fromEventListener(window, PRELOAD_ERROR),
+          failedChunkAnswer(staleBuildTab(tab)),
+        ),
+      ),
     ),
   );
   return Layer.merge(launched, staleBuild).pipe(

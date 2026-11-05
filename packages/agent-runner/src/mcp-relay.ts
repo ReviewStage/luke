@@ -5,8 +5,8 @@
  * argv, headers and all (0.3.304's `ProcessTransport`), and every process in
  * the sandbox can read another's `/proc/<pid>/cmdline`. A loopback proxy
  * would keep the bearer out of argv but answer anything that reaches
- * 127.0.0.1, a teammate's Terminal included, which runs outside the command
- * sandbox. So the server is an SDK one (`type: "sdk"`): the CLI speaks MCP to
+ * 127.0.0.1, any command the agent runs and a teammate's Terminal included.
+ * So the server is an SDK one (`type: "sdk"`): the CLI speaks MCP to
  * the runner over the control channel on its own stdin and stdout, which no
  * other process holds, and the runner relays each message to the service's MCP URL
  * with the bearer from its own environment. Nothing listens on a port.

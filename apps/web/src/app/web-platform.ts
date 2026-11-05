@@ -17,6 +17,7 @@ import { hostedPageFramePath } from "@repo/features/page-frame";
 import { isGitHubAddress, isMailAddress, isWebAddress } from "@repo/host/acts";
 import type { AppPlatform } from "@repo/panel/app-platform";
 import { COMMAND_KEY, type CommandKey } from "@repo/settings/shortcuts";
+import { stopImpersonating } from "../auth-client";
 import { browserLinkPlatform } from "../link-platform";
 import { PANEL_ASSET_BASE } from "./web-address";
 import { openBrowserLiveOverWebSocket } from "./web-browser-live";
@@ -148,8 +149,10 @@ export function browserCommandKey(browser: SystemNaming = navigator): CommandKey
  * by the tab's ways out (`page-leave.ts`); session replay is the desktop's
  * own masked recording (`web-session-replay.ts`); a cloud Browser tab's
  * live view is a socket the page opens itself (`web-browser-live.ts`); and the way to the Mac
- * app is offered only on the `linkPlatform` that can open it, a Mac; and a
- * chord's Command is pressed with the browser's own `commandKey`, Ctrl off a Mac.
+ * app is offered only on the `linkPlatform` that can open it, a Mac; a
+ * chord's Command is pressed with the browser's own `commandKey`, Ctrl off a
+ * Mac; and a maintainer's sign-in as the member ends through Better Auth's
+ * admin plugin (`auth-client.ts`).
  */
 export function webPlatform(
   shell: Pick<AppPlatform, "recordSurfaceEvent" | "unsavedWork" | "unsavedPlanWords">,
@@ -172,6 +175,8 @@ export function webPlatform(
     adminDashboard: () => ({ href: new URL(ADMIN_PAGE_PATH, location.origin).href }),
     applySessionReplay: lazySessionReplay(),
     openBrowserLive: openBrowserLiveOverWebSocket,
+    // Only a tab's cookie session can be a maintainer's sign-in as the member.
+    stopImpersonating,
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),
   };
   // A tab with no page leave to tell (a test's) holds nothing back.

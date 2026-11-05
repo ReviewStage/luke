@@ -17,9 +17,10 @@
  * environment and first lines sealed together under the deployment's key
  * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
  * which clears the row's copy. `writeLine`, `writeFiles`, and `kill` queue a
- * message, files, or stop line; a runner whose launch line its Mac settled
- * has ended, and a write to it answers `NOT_FOUND_STATUS`, so a message
- * relaunches it. `runnerExit` reads the exit code the Mac settled the
+ * message, files, or stop line, files in as many lines as their size takes
+ * (`DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES`); a runner whose launch line
+ * its Mac settled has ended, and a write to it answers `NOT_FOUND_STATUS`,
+ * so a message relaunches it. `runnerExit` reads the exit code the Mac settled the
  * launch line with.
  *
  * Note that every line of one agent is queued under its runner lease, which
@@ -81,6 +82,8 @@ import {
   DEVICE_AGENT_BOUNDS,
   DEVICE_AGENT_LINE_KIND,
   DEVICE_AGENT_REQUEST_KIND,
+  DEVICE_CAPABILITY,
+  DEVICE_GITHUB_ACCESS,
   type DeviceAgentAnswer,
   type DeviceAgentLaunchPayload,
   type DeviceAgentObject,
@@ -90,6 +93,7 @@ import {
   deviceAgentLayoutIn,
   deviceAgentsFolder,
 } from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import {
   Brand,
   Clock,
@@ -186,6 +190,28 @@ function deviceTopics(userId: string): readonly SyncTopic[] {
   return [[TOPIC.ACCOUNT, userId]];
 }
 
+/**
+ * The files given split into files lines, in their order, each holding at
+ * most `DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES` of paths and bytes; a file
+ * is never split, so one larger goes in a line alone.
+ */
+function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFile[])[] {
+  const lines: SandboxFile[][] = [];
+  let bytes = 0;
+  for (const file of files) {
+    const size = Buffer.byteLength(file.path) + file.contents.byteLength;
+    const line = lines.at(-1);
+    if (line === undefined || bytes + size > DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES) {
+      lines.push([file]);
+      bytes = size;
+    } else {
+      line.push(file);
+      bytes += size;
+    }
+  }
+  return lines;
+}
+
 /** A line's payload as the row holds it: a JSON object. */
 function objectOf(value: object): DeviceAgentObject {
   // SAFETY: every payload is a struct's encoded form, a JSON object of string keys.
@@ -245,7 +271,6 @@ function deviceMachineOver(
         sharedFiles: folders.temp,
         claudeExecutable: device.value.claudeExecutable,
         codexExecutable: device.value.codexExecutable ?? undefined,
-        writableRoots: [folders.folder],
         // Note that the Mac's follower writes its lines to the stdin of the runner its release bundled.
         linesRead: false,
       };
@@ -341,6 +366,16 @@ function deviceMachineOver(
       },
     );
 
+  /** Whether the agent's Mac registered that it launches an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+  const signsInOwnGithub = (pin: DeviceAgentPin) =>
+    pin.deviceId === null
+      ? Effect.succeed(false)
+      : Effect.map(stored(deviceLayout(pin.userId, pin.deviceId)), (standing) =>
+          Option.exists(standing, (device) =>
+            device.capabilities.includes(DEVICE_CAPABILITY.GITHUB_SIGN_IN),
+          ),
+        );
+
   /** The deployment's key ring, which a launch's secrets are sealed under; refused where it has none. */
   const keyRing = Effect.gen(function* () {
     const keys = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
@@ -357,7 +392,8 @@ function deviceMachineOver(
     layout: (agent) => layoutOf(agent.userId, agent.id, agent.deviceId),
 
     // The worktree is the device's to make of its shared clone as it takes the launch line, on the
-    // agent's own GitHub token, so the open asks the device nothing and leaves nothing to finish.
+    // agent's own GitHub token, or the device's own GitHub sign-in for an agent on its starter's
+    // token, so the open asks the device nothing and leaves nothing to finish.
     open: (ask, use) =>
       Effect.gen(function* () {
         const [layout, beside] = yield* Effect.all(
@@ -436,23 +472,30 @@ function deviceMachineOver(
     discard: () => Effect.void,
 
     // Note that files go to an away Mac no more than the message naming them does, so a message
-    // refused while it is away leaves nothing behind for it to write when it is back.
+    // refused while it is away leaves nothing behind for it to write when it is back. They go in
+    // as many lines as their size takes, because the Mac's claim of one answers 4.5 MB at most;
+    // each is queued in turn, so a line queued after them, as a launch, is delivered after them all.
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
         Effect.andThen(
           refuseAway(pin),
-          queued(pin, {
-            kind: DEVICE_AGENT_LINE_KIND.FILES,
-            payload: objectOf(
-              encodeFilesPayload({
-                files: files.map((file) => ({
-                  path: file.path,
-                  mode: file.mode,
-                  contents: file.contents,
-                })),
+          Effect.forEach(
+            filesLines(files),
+            (line) =>
+              queued(pin, {
+                kind: DEVICE_AGENT_LINE_KIND.FILES,
+                payload: objectOf(
+                  encodeFilesPayload({
+                    files: line.map((file) => ({
+                      path: file.path,
+                      mode: file.mode,
+                      contents: file.contents,
+                    })),
+                  }),
+                ),
               }),
-            ),
-          }),
+            { discard: true },
+          ),
         ),
       ),
 
@@ -479,6 +522,13 @@ function deviceMachineOver(
           { concurrency: "unbounded" },
         );
         if (Option.isNone(agent)) return yield* new LaunchRefused({ reason: "no agent" });
+        const onOwnSignIn =
+          hasRepository(agent.value) && agent.value.githubAccess === GITHUB_ACCESS.TOKEN;
+        // Note that an agent on its starter's own token whose host is a build from before it, as one whose host went back to an older release since its Start, is refused here too, since that host would ask for a token the service never hands a device.
+        if (onOwnSignIn && !(yield* signsInOwnGithub(pin))) {
+          yield* Effect.ignore(launch.abandon(ready));
+          return yield* new LaunchRefused({ reason: "host predates its own github sign-in" });
+        }
         const id = randomUUID();
         const handle: RunnerHandle = { ...place, command: id };
         yield* Effect.gen(function* () {
@@ -497,6 +547,7 @@ function deviceMachineOver(
             firstSequence: mark.firstSequence,
             ...(mark.fingerprint === undefined ? {} : { fingerprint: mark.fingerprint }),
             ...(commitsBy === undefined ? {} : { identity: commitsBy }),
+            ...(onOwnSignIn ? { githubAccess: DEVICE_GITHUB_ACCESS.TOKEN } : {}),
           };
           yield* queued(pin, {
             id,

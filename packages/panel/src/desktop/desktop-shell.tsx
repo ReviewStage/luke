@@ -27,6 +27,7 @@ import {
   Tooltip,
   useDrawerSwipe,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Activity, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
@@ -108,13 +109,15 @@ const AUTOMATIONS_ROUTE = lazyRoute(() =>
 function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
-    <CollectionPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Tasks"
-      toolbar={<Toolbar title="Tasks" />}
-      state={COLLECTION_STATE.LOADING}
-      loadingLabel="Reading tasks"
-    />
+    <ReplayUnmask>
+      <CollectionPage
+        frame={PAGE_FRAME.TOOLBAR}
+        label="Tasks"
+        toolbar={<Toolbar title="Tasks" titleReplayUnmasked />}
+        state={COLLECTION_STATE.LOADING}
+        loadingLabel="Reading tasks"
+      />
+    </ReplayUnmask>
   );
 }
 
@@ -209,14 +212,22 @@ function VersionHistoryLoading({
   return (
     <div className={`desktop-version-history ${PLACE_SPLIT}`}>
       <nav className={`version-log ${PLACE_LIST}`} aria-label="Versions" hidden={hidden.list}>
-        {narrow ? (
-          <PhoneHead place="version-log" start={exit} title="Version history" end={null} />
-        ) : (
-          <>
-            <div className="desktop-drag-strip" />
-            {exit}
-          </>
-        )}
+        <ReplayUnmask>
+          {narrow ? (
+            <PhoneHead
+              place="version-log"
+              start={exit}
+              title="Version history"
+              titleReplayUnmasked
+              end={null}
+            />
+          ) : (
+            <>
+              <div className="desktop-drag-strip" />
+              {exit}
+            </>
+          )}
+        </ReplayUnmask>
       </nav>
       <section className={`version-page ${PLACE_PAGE}`} aria-label="Version" hidden={hidden.item}>
         {narrow ? (
@@ -321,23 +332,26 @@ function SettingsLoading({
         aria-label="Settings pages"
         hidden={hidden.list}
       >
-        {narrow ? (
-          <PhoneHead
-            place="settings-pages"
-            start={
-              <BackButton
-                label="Back"
-                place={place}
-                command={APP_COMMAND.EXIT_SETTINGS}
-                onBack={onExit}
-              />
-            }
-            title="Settings"
-            end={null}
-          />
-        ) : (
-          <div className="desktop-drag-strip" />
-        )}
+        <ReplayUnmask>
+          {narrow ? (
+            <PhoneHead
+              place="settings-pages"
+              start={
+                <BackButton
+                  label="Back"
+                  place={place}
+                  command={APP_COMMAND.EXIT_SETTINGS}
+                  onBack={onExit}
+                />
+              }
+              title="Settings"
+              titleReplayUnmasked
+              end={null}
+            />
+          ) : (
+            <div className="desktop-drag-strip" />
+          )}
+        </ReplayUnmask>
       </nav>
       <section className={`settings-page ${PLACE_PAGE}`} aria-label="Settings" hidden={hidden.item}>
         {/* Note that the page draws its own bar, the window's drag handle, as Settings' page does once drawn. */}
@@ -765,13 +779,13 @@ export function DesktopShell({
       : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen,
-  // and what its agents did with it, which its row in the list names.
+  // from the mark and the agents' activity its row in the list carries.
   const looks = useTaskLooks(
     shownTask,
     tasks.me,
     shownTask === undefined
       ? undefined
-      : tasks.tasks.find((row) => row.id === shownTask.id)?.agents,
+      : (tasks.tasks.find((row) => row.id === shownTask.id) ?? shownTask),
   );
   // An agent with no plan is looked at as its page is on screen, as the plan is.
   const { agentId: pageAgentId } = tasks.agentView;
@@ -834,18 +848,22 @@ export function DesktopShell({
       <ScrollArea>
         <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
           <div className="desktop-drag-strip" />
-          <SignInGate
-            account={account}
-            {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
-            {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
-            {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
-            {...(macAppLink === undefined ? undefined : { macAppLink })}
-            onBegin={gates.onBeginSignIn}
-            onCancel={gates.onCancelSignIn}
-          />
+          <ReplayUnmask>
+            <SignInGate
+              account={account}
+              {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
+              {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
+              {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
+              {...(macAppLink === undefined ? undefined : { macAppLink })}
+              onBegin={gates.onBeginSignIn}
+              onCancel={gates.onCancelSignIn}
+            />
+          </ReplayUnmask>
           {/* Signing in needs the network, so the gate says when there is none. */}
           <div className="title-bar-controls">
-            <OfflineMark />
+            <ReplayUnmask>
+              <OfflineMark />
+            </ReplayUnmask>
           </div>
         </div>
       </ScrollArea>
@@ -1039,15 +1057,18 @@ export function DesktopShell({
               </PageFind>
             ) : unknownWorkspace ? (
               // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
-              <NotFound
-                thing={NOT_FOUND_THING.WORKSPACE}
-                bar={
-                  room === SHELL_ROOM.NARROW
-                    ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
-                    : {}
-                }
-                action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
-              />
+              <ReplayUnmask>
+                <NotFound
+                  replayUnmasked
+                  thing={NOT_FOUND_THING.WORKSPACE}
+                  bar={
+                    room === SHELL_ROOM.NARROW
+                      ? phoneBar({ place: UNKNOWN_WORKSPACE_PHONE_PLACE, start: null, end: null })
+                      : {}
+                  }
+                  action={{ label: GO_HOME, onClick: tasks.unknownWorkspace.onClose }}
+                />
+              </ReplayUnmask>
             ) : (
               <DesktopTasks
                 tasks={tasks}
@@ -1099,7 +1120,11 @@ export function DesktopShell({
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
           <SidebarToggle sidebar={sidebar} />
           {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
-          {sidebar.collapsed ? <OfflineMark /> : null}
+          {sidebar.collapsed ? (
+            <ReplayUnmask>
+              <OfflineMark />
+            </ReplayUnmask>
+          ) : null}
         </PanePin>
       )}
       {/* A phone's page offers the panel from its ⋯, and the panel, open, heads itself with its way out. */}

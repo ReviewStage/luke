@@ -15,9 +15,10 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { CONFIRM_STAGE, confirmAsked } from "@repo/ui/confirm-state";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { strandedTaskHome, workspaceReaches } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { sharedWords } from "./workspace-ref.js";
@@ -81,27 +82,74 @@ function rowLine(
   return `${github} · cannot reach ${repository}`;
 }
 
+/** A workspace's name inside a line the dialog says, kept masked in a screen recording. */
+function named(workspace: Workspace): ReactNode {
+  return <ReplayMask>{workspace.name}</ReplayMask>;
+}
+
 /**
  * Who in the task's workspace loses it: nobody where the reader is alone,
  * else its members who are not in the workspace chosen too. Note that they
  * are not counted, because the window knows how many each workspace holds
  * but not who is in both, and one in both keeps the task.
  */
-function lossLine(from: Workspace | undefined, to: Workspace): string {
-  const losing = "lose access to it, its calls, and its agents.";
-  if (from === undefined) return `Members of its workspace who are not in ${to.name} ${losing}`;
-  if (from.memberCount !== undefined && from.memberCount <= 1) {
-    return `Nobody loses access: only you are in ${from.name}.`;
+function lossLine(from: Workspace | undefined, to: Workspace): ReactNode {
+  const losing = " lose access to it, its calls, and its agents.";
+  if (from === undefined) {
+    return (
+      <>
+        {"Members of its workspace who are not in "}
+        {named(to)}
+        {losing}
+      </>
+    );
   }
-  return `Members of ${from.name} who are not in ${to.name} ${losing}`;
+  if (from.memberCount !== undefined && from.memberCount <= 1) {
+    return (
+      <>
+        {"Nobody loses access: only you are in "}
+        {named(from)}.
+      </>
+    );
+  }
+  return (
+    <>
+      {"Members of "}
+      {named(from)}
+      {" who are not in "}
+      {named(to)}
+      {losing}
+    </>
+  );
 }
 
 /** Who in the workspace chosen gains it: its members counted, or named as its members where they are not. */
-function gainLine(to: Workspace): string {
-  const { memberCount, name } = to;
-  if (memberCount === undefined) return `Members of ${name} can read and edit it.`;
-  if (memberCount <= 1) return `Only you can read and edit it in ${name}.`;
-  return `${countWords(memberCount, TERM.MEMBER)} in ${name} can read and edit it.`;
+function gainLine(to: Workspace): ReactNode {
+  const { memberCount } = to;
+  if (memberCount === undefined) {
+    return (
+      <>
+        {"Members of "}
+        {named(to)}
+        {" can read and edit it."}
+      </>
+    );
+  }
+  if (memberCount <= 1) {
+    return (
+      <>
+        {"Only you can read and edit it in "}
+        {named(to)}.
+      </>
+    );
+  }
+  return (
+    <>
+      {`${countWords(memberCount, TERM.MEMBER)} in `}
+      {named(to)}
+      {" can read and edit it."}
+    </>
+  );
 }
 
 /** The workspaces as a radio group: a tile, a name, and a line each, the chosen one checked and the keyboard's one stop. */
@@ -128,8 +176,13 @@ function WorkspaceChoices({
     value: workspace.id,
     label: workspace.name,
     detail: rowLine(workspace, repository, personalId),
-    mark: <WorkspaceTile workspace={workspace} size={TILE_SIZE.ROW} />,
+    mark: (
+      <ReplayMask>
+        <WorkspaceTile workspace={workspace} size={TILE_SIZE.ROW} />
+      </ReplayMask>
+    ),
     disabled: !reaches(workspace, repository),
+    replayMasked: true,
   }));
   return (
     <ScrollArea size={SCROLL_SIZE.CONTENT}>
@@ -201,25 +254,32 @@ function MoveTaskCard({
       }
     >
       <div className="move-dialog flex min-h-0 flex-col gap-block-gap">
-        <WorkspaceChoices
-          workspaces={workspaces}
-          personalId={personalId}
-          repository={task.repository}
-          chosen={chosen}
-          disabled={moving}
-          first={first}
-          onChoose={onChoose}
-        />
-        {chosen === undefined ? null : (
-          <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-ui-24 text-body-foreground text-caption">
-            <li>{lossLine(from, chosen)}</li>
-            <li>{gainLine(chosen)}</li>
-            <li>{`Its agents keep running, now in ${chosen.name}.`}</li>
-          </ul>
-        )}
-        {rejection !== undefined && !moving ? (
-          <ErrorState failure={rejection.failure}>{rejection.words}</ErrorState>
-        ) : null}
+        <ReplayUnmask>
+          <WorkspaceChoices
+            workspaces={workspaces}
+            personalId={personalId}
+            repository={task.repository}
+            chosen={chosen}
+            disabled={moving}
+            first={first}
+            onChoose={onChoose}
+          />
+          {chosen === undefined ? null : (
+            <ul className="move-effects m-0 grid gap-tight-gap rounded-control bg-muted p-card-inset-snug pl-ui-24 text-body-foreground text-caption">
+              <li>{lossLine(from, chosen)}</li>
+              <li>{gainLine(chosen)}</li>
+              <li>
+                {"Its agents keep running, now in "}
+                {named(chosen)}.
+              </li>
+            </ul>
+          )}
+          {rejection !== undefined && !moving ? (
+            <ErrorState failure={rejection.failure}>
+              <ReplayMask>{rejection.words}</ReplayMask>
+            </ErrorState>
+          ) : null}
+        </ReplayUnmask>
       </div>
     </Dialog>
   );

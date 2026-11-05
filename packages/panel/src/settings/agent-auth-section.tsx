@@ -548,10 +548,12 @@ function CredentialQuestion({
   confirm: DialogConfirm;
   question: DialogQuestion;
 }): React.JSX.Element {
+  // Note that every question here is worded from fixed tables, so a screen recording shows it as it reads.
+  const shown = { ...question, replayUnmasked: true };
   return inDialog ? (
-    <FootQuestion confirm={confirm} question={question} />
+    <FootQuestion confirm={confirm} question={shown} />
   ) : (
-    <ConfirmDialog open confirm={confirm} question={question} />
+    <ConfirmDialog open confirm={confirm} question={shown} />
   );
 }
 
@@ -753,7 +755,7 @@ function HeldLine({
 const CLAUDE_DISCONNECT: DialogQuestion = {
   title: "Disconnect your Claude plan?",
   body: `Claude agents stop running on your Claude plan, and ${PRODUCT_NAME} deletes its token.`,
-  verb: WORDS.DISCONNECT,
+  verb: "Disconnect Claude plan",
   running: WORDS.DISCONNECTING,
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
@@ -761,7 +763,7 @@ const CLAUDE_DISCONNECT: DialogQuestion = {
 const CHATGPT_DISCONNECT: DialogQuestion = {
   title: "Disconnect your ChatGPT plan?",
   body: `Codex agents stop running on your ChatGPT plan, and ${PRODUCT_NAME} signs out of ChatGPT.`,
-  verb: WORDS.DISCONNECT,
+  verb: "Disconnect ChatGPT plan",
   running: WORDS.DISCONNECTING,
   loss: CONFIRM_LOSS.IRREVERSIBLE,
 };
@@ -1542,6 +1544,7 @@ function AgentAuthDialog({
       open={open}
       title={HARNESS[provider].name}
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
       initialFocus={firstField}
       onDismiss={onClose}
       onExited={onExited}

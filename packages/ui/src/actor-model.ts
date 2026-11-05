@@ -81,7 +81,11 @@ export interface PersonActor {
 
 export type Actor =
   | PersonActor
-  | { readonly kind: typeof ACTOR_KIND.APP }
+  | {
+      readonly kind: typeof ACTOR_KIND.APP;
+      /** Whether it is drawn as GitHub shows the App's bot, where a place shows how a commit reads there; the window's own square where absent. */
+      readonly onGitHub?: boolean;
+    }
   | {
       readonly kind: typeof ACTOR_KIND.AGENT;
       /** The agent's id, which tells two agents of one name apart; absent where an older service named none. */

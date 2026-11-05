@@ -730,40 +730,46 @@ export function pullRequestCommitMessages(
 /** Two commits compared, as far as where they part. */
 const CompareSchema = Schema.Struct({ merge_base_commit: Schema.Struct({ sha: Schema.String }) });
 
-/** The commits a pull request's changed images are read at: its head, and where it parts from its base branch, each where it was read. */
-export interface ImageCommits {
+/** The commits a pull request's changed files are read whole at: its head, and where it parts from its base branch, each where it was read. */
+export interface ReadCommits {
   readonly headSha?: string;
   readonly baseSha?: string;
 }
 
-/** Whether a changed file is an image whose before stands at the base: one changed in place, moved, or removed. */
-function imageWithBefore(file: AgentChangedFile): boolean {
+/**
+ * Whether a changed file is read whole at the base: one that stood before
+ * the pull request, changed in place, moved, or removed, and is an image,
+ * drawn as its pictures, or text whose patch was too large to send, drawn
+ * from its texts on both sides once asked.
+ */
+function readAtBase(file: AgentChangedFile): boolean {
+  if (file.status === CHANGED_FILE_STATUS.ADDED) return false;
   return (
-    file.status !== CHANGED_FILE_STATUS.ADDED &&
-    imageTypeOfPath(file.previousPath ?? file.path) !== undefined
+    imageTypeOfPath(file.previousPath ?? file.path) !== undefined ||
+    file.omitted === PATCH_OMITTED.TOO_LARGE
   );
 }
 
 /**
- * The commits the files' changed images are read at: the pull request's
- * head, and, only where an image stood before them, where its head and its
- * base branch part, the merge base GitHub counts the files' changes from,
- * read off one compare of the two asking for a single commit and file,
- * since GitHub pages the rest. Note that the base branch's head is never
- * answered in the merge base's place, because a base branch that changed
- * the same image since would draw a before the pull request never had; a
- * compare that does not land answers no merge base, and the window draws
- * the after alone.
+ * The commits the files are read whole at: the pull request's head, and,
+ * only where a file is read at the base (`readAtBase`), where its head and
+ * its base branch part, the merge base GitHub counts the files' changes
+ * from, read off one compare of the two asking for a single commit and
+ * file, since GitHub pages the rest. Note that the base branch's head is
+ * never answered in the merge base's place, because a base branch that
+ * changed the same file since would draw a before the pull request never
+ * had; a compare that does not land answers no merge base, and the window
+ * draws the after alone.
  */
-export const imageCommits = /* @__PURE__ */ Effect.fn("web/imageCommits")(function* (
+export const readCommits = /* @__PURE__ */ Effect.fn("web/readCommits")(function* (
   token: Redacted.Redacted,
   fullName: string,
   pullRequest: Option.Option<Pick<GitHubPullRequest, "headSha" | "baseSha">>,
   files: readonly AgentChangedFile[],
-): Effect.fn.Return<ImageCommits, never, HttpClient.HttpClient> {
+): Effect.fn.Return<ReadCommits, never, HttpClient.HttpClient> {
   if (Option.isNone(pullRequest)) return {};
   const { headSha, baseSha } = pullRequest.value;
-  if (baseSha === undefined || !files.some(imageWithBefore)) return { headSha };
+  if (baseSha === undefined || !files.some(readAtBase)) return { headSha };
   const request = githubRead(
     `${repositoryPath(fullName)}/compare/${segment(baseSha)}...${segment(headSha)}`,
     token,

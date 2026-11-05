@@ -105,6 +105,7 @@ import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elemen
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
+import { useConnected } from "../connection.js";
 import { copyThroughShell, useCopyToast } from "../copy-feedback.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { useFindOpen } from "../find-in-tab.js";
@@ -183,7 +184,12 @@ import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
-import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import {
+  AgentTabSkeleton,
+  type ComposerModel,
+  ComposerSkeleton,
+  TranscriptSkeleton,
+} from "./agent-tab-skeleton.js";
 import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
@@ -211,7 +217,7 @@ import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
-import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
+import { REPLY_SCOPE, ReplyDoorProvider, ReplyToSelection } from "./reply-to-selection.js";
 import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { ShownPage } from "./shown-page.js";
@@ -1576,11 +1582,11 @@ export function AgentMessage({
     const received = sender !== undefined;
     const threadHead =
       comment !== undefined ? (
-        <CommentLineHead line={comment} fit={SUBJECT_FIT.OWN} />
+        <CommentLineHead line={comment} received={received} fit={SUBJECT_FIT.OWN} />
       ) : slack !== undefined ? (
         <SlackLineHead line={slack} received={received} />
       ) : thread === undefined ? null : (
-        <ThreadLineHead line={thread} words={words} fit={SUBJECT_FIT.OWN} />
+        <ThreadLineHead line={thread} words={words} received={received} fit={SUBJECT_FIT.OWN} />
       );
     // A wakeup is the agent's own line, headed by what it did, as a thread's line is.
     const subject = isWakeupLine(message) ? <WakeupHead delay={wakeupDelay} /> : threadHead;
@@ -2320,6 +2326,7 @@ function AgentTranscriptView({
   /** The row under the end line, or at the transcript's end where it has none: the agents that continued it, where an archive took the box (`continue-agent.tsx`). */
   endTrail?: ReactNode;
 }): React.JSX.Element {
+  const connected = useConnected();
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
   const unsent = useUnsentLines();
@@ -2516,7 +2523,8 @@ function AgentTranscriptView({
                     {endTrail}
                   </div>
                 )}
-                {failed ? (
+                {/* Note that the messages held keep standing with no line under them while the app is offline, since the Offline mark says why. */}
+                {failed && connected ? (
                   <ErrorState
                     failure={failureShown({
                       surface: FAILURE_SURFACE.AGENT_TRANSCRIPT_READ,
@@ -2792,6 +2800,14 @@ function AgentTabView({
   const { members, former } = useMemberDirectory();
   // The door the box hands Reply, which lays a quote in at its caret.
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
+  const replyThroughBox = useCallback((words: string) => replyDoor.current?.(words), []);
+  // Note that Reply stands only while the box takes a change, as a file's + does.
+  const replies =
+    pilotNote === undefined &&
+    onUnarchive === undefined &&
+    continuedNote === undefined &&
+    composer.closed === undefined &&
+    !composer.sending;
   const macOwner = useKept(macOwnerOf(agent.startedBy, members, readerId, former), sameFields);
   const disabledServers = servers.disabled;
   const mentioned = useMemo(
@@ -2831,82 +2847,88 @@ function AgentTabView({
             <MentionedServers value={mentioned}>
               <UndeliveredLines value={marks}>
                 <RewindProvider value={rewind}>
-                  <AgentTranscriptView
-                    messages={lines}
-                    brief={agent.brief}
-                    briefSender={starter === undefined ? undefined : starterActor}
-                    origin={origin}
-                    readerId={readerId}
-                    agentId={agent.id}
-                    taskId={agent.planId ?? undefined}
-                    replay={replay}
-                    delegation={{
-                      models,
-                      own: { model: agent.model, effort: agent.effort },
-                      starts:
-                        delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                      onOpen: openSubagent,
-                      onOpenTarget: openTarget,
-                      cards,
-                      standings: transcript.subagents,
-                    }}
-                    reading={transcript.reading || holding}
-                    holding={holding}
-                    failed={transcript.failed}
-                    failedWith={transcript.failedWith}
-                    // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
-                    working={working || composer.rewinding}
-                    pageRuns={pageRuns}
-                    rewindOut={composer.rewindOut}
-                    sessionStarting={agent.status === AGENT_STATUS.STARTING}
-                    starting={
-                      transcript.launch === undefined
-                        ? undefined
-                        : {
-                            launch: transcript.launch,
-                            host: agent.mac?.name,
-                            runtime: agent.runtime,
-                          }
-                    }
-                    // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
-                    startedAt={
-                      !counts
-                        ? undefined
-                        : composer.rewinding
-                          ? composer.rewoundAt
-                          : (agentWorkingSince(lines) ?? startedAt)
-                    }
-                    ended={
-                      // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
-                      transcript.pages === 0 ||
-                      transcript.pageStatus === undefined ||
-                      agentStillWriting(transcript.pageStatus) ||
-                      lineGoing
-                        ? undefined
-                        : endLineParts(
-                            agent.status,
-                            transcript.failure,
-                            starter,
-                            continuable,
-                            transcript.hostLost,
-                            transcript.launchStopped === undefined
-                              ? undefined
-                              : { step: transcript.launchStopped, runtime: agent.runtime },
-                          )
-                    }
-                    endReason={endLineReason(transcript.failure, starter)}
-                    keyProvider={keyProvider}
-                    onOpenApiKeys={
-                      onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
-                    }
-                    endPress={endPress}
-                    endTrail={endTrail}
-                    onRetry={transcript.onRetry}
-                    onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
-                    olderFailed={transcript.olderFailed}
-                    overComposer
-                    bringIn={bringIn}
-                  />
+                  <ReplyDoorProvider value={replies ? replyThroughBox : undefined}>
+                    <AgentTranscriptView
+                      messages={lines}
+                      brief={agent.brief}
+                      briefSender={starter === undefined ? undefined : starterActor}
+                      origin={origin}
+                      readerId={readerId}
+                      agentId={agent.id}
+                      taskId={agent.planId ?? undefined}
+                      replay={replay}
+                      delegation={{
+                        models,
+                        own: { model: agent.model, effort: agent.effort },
+                        starts:
+                          delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                        onOpen: openSubagent,
+                        onOpenTarget: openTarget,
+                        cards,
+                        standings: transcript.subagents,
+                      }}
+                      reading={transcript.reading || holding}
+                      holding={holding}
+                      failed={transcript.failed}
+                      failedWith={transcript.failedWith}
+                      // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
+                      working={working || composer.rewinding}
+                      pageRuns={pageRuns}
+                      rewindOut={composer.rewindOut}
+                      sessionStarting={agent.status === AGENT_STATUS.STARTING}
+                      starting={
+                        transcript.launch === undefined
+                          ? undefined
+                          : {
+                              launch: transcript.launch,
+                              host: agent.mac?.name,
+                              runtime: agent.runtime,
+                            }
+                      }
+                      // Note that the line counts from the lines themselves, from the press of the line that opened the turn, and while a rewind goes from its press, never from the task list's run, which a line sent does not wake.
+                      startedAt={
+                        !counts
+                          ? undefined
+                          : composer.rewinding
+                            ? composer.rewoundAt
+                            : (agentWorkingSince(lines) ?? startedAt)
+                      }
+                      ended={
+                        // Note that the end line waits for a page that has itself ended, so a stopped agent's tab never draws it over nothing, nor a failure's words before the page that carries its reason, and gives way to a line on its way, which the working line stands for.
+                        transcript.pages === 0 ||
+                        transcript.pageStatus === undefined ||
+                        agentStillWriting(transcript.pageStatus) ||
+                        lineGoing
+                          ? undefined
+                          : endLineParts(
+                              agent.status,
+                              transcript.failure,
+                              starter,
+                              continuable,
+                              transcript.hostLost,
+                              transcript.launchStopped === undefined
+                                ? undefined
+                                : {
+                                    step: transcript.launchStopped,
+                                    runtime: agent.runtime,
+                                    unstarted: transcript.launchUnstarted,
+                                  },
+                            )
+                      }
+                      endReason={endLineReason(transcript.failure, starter)}
+                      keyProvider={keyProvider}
+                      onOpenApiKeys={
+                        onOpenApiKeys === undefined ? undefined : () => onOpenApiKeys(keyProvider)
+                      }
+                      endPress={endPress}
+                      endTrail={endTrail}
+                      onRetry={transcript.onRetry}
+                      onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                      olderFailed={transcript.olderFailed}
+                      overComposer
+                      bringIn={bringIn}
+                    />
+                  </ReplyDoorProvider>
                 </RewindProvider>
               </UndeliveredLines>
             </MentionedServers>
@@ -2989,14 +3011,7 @@ function AgentTabView({
           />
         )}
       </AgentTabFoot>
-      {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
-      {pilotNote !== undefined ||
-      onUnarchive !== undefined ||
-      continuedNote !== undefined ||
-      composer.closed !== undefined ||
-      composer.sending ? null : (
-        <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
-      )}
+      {replies ? <ReplyToSelection scope={tab} onReply={replyThroughBox} /> : null}
     </AgentTabFrame>
   );
 }
@@ -3041,9 +3056,17 @@ const NO_RETRY = () => undefined;
  * started on some, as the agent's own transcript will draw them, and its
  * working line saying it is starting, over the composer's card, which the
  * agent's own tab takes the place of once the start answers, its first line
- * drawn in the same place. One started on no words is briefed on the plan.
+ * drawn in the same place, and its model's chip where the start named the
+ * model. One started on no words is briefed on the plan.
  */
-export function StartingAgentTab({ line }: { line?: SentLine | undefined }): React.JSX.Element {
+export function StartingAgentTab({
+  line,
+  model,
+}: {
+  line?: SentLine | undefined;
+  /** The model the start named, which the composer's chip draws; none where the start takes the default. */
+  model?: ComposerModel | undefined;
+}): React.JSX.Element {
   const messages = useMemo(() => (line === undefined ? [] : agentLines([], [line])), [line]);
   return (
     <AgentTabFrame>
@@ -3060,7 +3083,7 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
         overComposer
       />
       <AgentTabFoot>
-        <ComposerSkeleton />
+        <ComposerSkeleton model={model} />
       </AgentTabFoot>
     </AgentTabFrame>
   );
@@ -3175,6 +3198,7 @@ function AgentTabBody({
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
     gone: () =>
       toast({
+        replayUnmasked: true,
         words: MESSAGE_GONE,
         tone: STATUS_TONE.DANGER,
         hold: TOAST_HOLD.FAILED,

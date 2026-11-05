@@ -9,7 +9,7 @@ import {
   agentMessageWords,
   applyMessagesPage,
 } from "@repo/features/agent-wire";
-import { THREAD_LINE_LEAD, threadLineWords } from "@repo/features/inbox-wire";
+import { threadLineTitle, threadLineWords } from "@repo/features/inbox-wire";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -45,6 +45,7 @@ import {
   commentLineSubject,
   SLACK_LINE_LEAD,
   SLACK_LINE_SUBJECT,
+  THREAD_LINE_DID,
 } from "./line-cards.js";
 import {
   leftOutLine,
@@ -300,10 +301,14 @@ function developerTurn(message: AgentTranscriptMessage): CopiedTurn {
   return { speaker: SPEAKER.DEVELOPER, blocks };
 }
 
+/** What a thread line's copy names where its words carry no title. */
+const THREAD_WORDS = "the thread";
+
 /**
  * A line steered into the agent as its row draws it from its metadata,
  * rather than as the prompt the agent read: a thread's led by what the
- * member did, without the header naming the item; a comment's by what it
+ * member did and the thread's title, as its head reads, without the header
+ * naming the item to the agent; a comment's by what it
  * is on and its member's words; a Slack message's by Slack and its member's
  * words alone; GitHub's as its card
  * (`githubLineWords`), without the instructions and the fence. Nothing for
@@ -314,13 +319,15 @@ function sentLineWords(message: AgentTranscriptMessage): string | undefined {
   if (github !== undefined) return githubLineWords(github, messageWords(message));
   const comment = commentLineOf(message);
   if (comment !== undefined) {
-    return `${COMMENT_LINE_LEAD} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
+    return `${COMMENT_LINE_LEAD.OWN} ${commentLineSubject(comment)}\n\n${commentLineWords(comment)}`;
   }
   const slack = slackLineOf(message);
   if (slack !== undefined) return `${SLACK_LINE_LEAD.OWN} ${SLACK_LINE_SUBJECT}\n\n${slack.words}`;
   const thread = threadLineOf(message);
   if (thread === undefined) return undefined;
-  return [THREAD_LINE_LEAD[thread.event], threadLineWords(messageWords(message), thread.event)]
+  const words = messageWords(message);
+  const title = threadLineTitle(words, thread.event) ?? THREAD_WORDS;
+  return [`${THREAD_LINE_DID[thread.event].OWN} ${title}`, threadLineWords(words, thread.event)]
     .filter((part) => part !== "")
     .join("\n\n");
 }

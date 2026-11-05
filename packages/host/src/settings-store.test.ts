@@ -16,6 +16,7 @@ import {
   type AppSettingValue,
   accountPreferencesFromParts,
   accountPreferencesParts,
+  COMMIT_AUTHOR,
   EXPERIMENT,
   type ExperimentChoices,
   MAC_COMMAND_MODE,
@@ -189,6 +190,8 @@ const SAMPLE_VALUE = {
   macCommands: MAC_COMMAND_MODE.NEVER,
   // Steer is the default, so Queue is the choice that has to survive a reopen.
   agentEnter: AGENT_ENTER.QUEUE,
+  // You with our bot as co-author is the default, so the bot alone is the choice that has to survive a reopen.
+  commitAuthor: COMMIT_AUTHOR.APP,
   // Not yet is the default, so finished is the state that has to survive a reopen.
   setupFinished: true,
   // Each diff setting away from its default, the look a review tool's reader picked.

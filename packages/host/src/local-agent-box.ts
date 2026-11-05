@@ -1,5 +1,5 @@
 import { DEVICE_PLATFORM, type DevicePlatform } from "@repo/features/device-agent-wire";
-import { Effect } from "effect";
+import { Effect, Exit } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import type { LocalAgentCommand } from "./effect/seams.js";
@@ -31,6 +31,20 @@ import type { LocalAgentCommand } from "./effect/seams.js";
  * its config and a running agent would keep the first token past its
  * hour. A git run before the repository stands, as the repository's
  * script runs, names the same config and helper in its environment.
+ *
+ * An agent whose repository is reached on its starter's own token, which
+ * never leaves the service for a device, is handed no token at all: it
+ * reaches GitHub as whoever is signed in on the box
+ * (`agentOwnSignInWritten`). Its home's Git settings include the box
+ * user's own (`~/.gitconfig` and `~/.config/git/config`), so its `git`
+ * reads their credential helper and their URL rewrites, and its gh config
+ * folder is a link to the box user's own, so its `gh`, and gh's helper
+ * where their Git names it, read their sign-in. SSH reads the box user's
+ * `~/.ssh` whatever the agent's home is, and their agent where the host
+ * hands its socket on. So such an agent holds the box user's whole GitHub
+ * sign-in, every repository it reaches and not one alone, as anything they
+ * run themselves does. Who its commits are by is set in its repository's own
+ * config, which Git reads over the box user's.
  */
 
 /** The folders under the agent's own its home and caches are kept in. */
@@ -56,6 +70,9 @@ const PNPM_FILE = { RC: "rc", CONFIG: "config.yaml" } as const;
 
 /** npm's settings in a home. */
 const NPMRC = ".npmrc";
+
+/** Where under a home Git reads its global settings beside `.gitconfig` (`$XDG_CONFIG_HOME/git/config`, where that names none), which the box writes for an agent on the box's own sign-in, leaving `.gitconfig` the agent's own. */
+const GIT_FILE = { GLOBAL: ".gitconfig", XDG: ".config/git/config" } as const;
 
 /** gh's files in its config folder: its sign-ins, and its own settings, whose version keeps gh from migrating the sign-ins (`cli/cli`'s `internal/config/migration`). */
 const GH_FILE = { HOSTS: "hosts.yml", CONFIG: "config.yml" } as const;
@@ -196,6 +213,10 @@ export const agentGithubWritten = (
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const config = agentFolders(folder).gh;
+    // Note that a link left by a launch on the box's own sign-in is taken away first, never written through, so a token never lands in the box user's own gh config.
+    if (Exit.isSuccess(yield* Effect.exit(fileSystem.readLink(config)))) {
+      yield* fileSystem.remove(config);
+    }
     yield* fileSystem.makeDirectory(config, { recursive: true, mode: 0o700 });
     const quoted = JSON.stringify(token);
     yield* replaced(
@@ -215,11 +236,64 @@ export const agentGithubWritten = (
     if (!(yield* fileSystem.exists(settings))) yield* replaced(settings, GH_CONFIG);
   });
 
-/** The agent's GitHub token let go of once no turn of its runs, its settings kept. */
+/**
+ * The agent's GitHub token let go of once no turn of its runs, its settings
+ * kept. Note that an agent on the box's own sign-in has nothing to let go
+ * of, because its gh config folder is a link to the box user's own
+ * (`agentOwnSignInWritten`), whose sign-in nothing here ever removes.
+ */
 export const agentGithubForgotten = (folder: string) =>
-  Effect.flatMap(FileSystem.FileSystem, (fileSystem) =>
-    fileSystem.remove([agentFolders(folder).gh, GH_FILE.HOSTS].join("/"), { force: true }),
-  ).pipe(Effect.ignore);
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const config = agentFolders(folder).gh;
+    if (Exit.isSuccess(yield* Effect.exit(fileSystem.readLink(config)))) return;
+    yield* fileSystem.remove([config, GH_FILE.HOSTS].join("/"), { force: true });
+  }).pipe(Effect.ignore);
+
+/** A path quoted as a Git config value, which reads backslash escapes inside double quotes. */
+function gitQuoted(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+/**
+ * The agent, whose repository is reached on its starter's own token, set to
+ * reach GitHub on the box's own sign-in, in its home made before
+ * (`agentFoldersMade`): its home's Git settings include the box user's own
+ * from the box's home given, rewritten whole on every launch, with an empty
+ * `.gitconfig` where it has none, so the agent's own `git config --global`
+ * lands there rather than in what the next launch rewrites; and its gh
+ * config folder a link to the box user's own, in place of anything a host
+ * wrote there. A missing include is skipped by Git, and a link to a folder
+ * not there yet reads as gh signed in to nothing.
+ */
+export const agentOwnSignInWritten = (
+  folder: string,
+  boxHome: string,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const folders = agentFolders(folder);
+    const xdg = [folders.home, GIT_FILE.XDG].join("/");
+    yield* fileSystem.makeDirectory(parentOf(xdg), { recursive: true, mode: 0o700 });
+    yield* replaced(
+      xdg,
+      [
+        "[include]",
+        `\tpath = ${gitQuoted([boxHome, GIT_FILE.GLOBAL].join("/"))}`,
+        `\tpath = ${gitQuoted([boxHome, GIT_FILE.XDG].join("/"))}`,
+        "",
+      ].join("\n"),
+    );
+    const own = [folders.home, GIT_FILE.GLOBAL].join("/");
+    if (!(yield* fileSystem.exists(own))) yield* replaced(own, "");
+    const target = [boxHome, HOME_FOLDER.GH].join("/");
+    const linked = yield* Effect.exit(fileSystem.readLink(folders.gh));
+    if (Exit.isSuccess(linked) && linked.value === target) return;
+    // Note that a link is taken away without following it, so only the host's own copy of gh's settings, or a link to elsewhere, is removed.
+    yield* fileSystem.remove(folders.gh, { recursive: true, force: true });
+    yield* fileSystem.makeDirectory(parentOf(folders.gh), { recursive: true, mode: 0o700 });
+    yield* fileSystem.symlink(target, folders.gh);
+  });
 
 /** The helper git asks for the agent's token: the `gh` given, reading its config. */
 function helperOf(gh: string): string {

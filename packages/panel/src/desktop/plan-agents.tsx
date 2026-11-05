@@ -1,5 +1,4 @@
 import type { AgentPullRequest } from "@repo/features/agent-wire";
-import type { TaskRunsOn } from "@repo/features/task-wire";
 import {
   GROUP_HEADING,
   GroupHeader,
@@ -10,6 +9,7 @@ import {
   RowHintOptions,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import { agentStillWriting } from "../tasks/agent-model.js";
 import { agentSubject } from "../tasks/agent-ref.js";
@@ -33,8 +33,8 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * the head takes, a `GroupHeader` over a dense `List`. Each row is the
  * task's agent as its "+" row and the summary draw it (`agentEntries`): its
  * tab's glyph, which gives way to the working mark while it works, its
- * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, which is
- * the task's and so every row's alike, the failed mark at its end once its
+ * tab's name, where it runs (`runs-on.tsx`), Cloud or the device, each
+ * agent's own, the failed mark at its end once its
  * turn failed, and the card its tab hangs. Its pull request, where it opened
  * one, stands after it as a chip of GitHub's mark in GitHub's color for
  * where it stands and its number (`pull-request-chip.tsx`), hanging the
@@ -91,7 +91,6 @@ function PlanAgentRow({
   agents,
   held,
   tab,
-  runsOn,
   onOpenPullRequest,
 }: {
   entry: AddEntry;
@@ -99,7 +98,6 @@ function PlanAgentRow({
   agents: AgentsControl;
   held: HeldTranscripts;
   tab: MainTabsControl["tab"];
-  runsOn: TaskRunsOn | undefined;
   onOpenPullRequest: () => void;
 }): React.JSX.Element {
   const { row, endMark, card } = entry;
@@ -114,34 +112,39 @@ function PlanAgentRow({
       <ListRow
         motionKey={row.id}
         leading={<span className={SUMMARY_GLYPH}>{row.icon}</span>}
-        title={row.label}
+        title={<ReplayMask>{row.label}</ReplayMask>}
         hint={card === undefined ? undefined : { Hint: RowHint, label: row.label }}
         meta={
-          <>
-            <RunsOnPlace runsOn={runsOn} />
+          <ReplayMask>
+            {entry.agent === undefined ? null : (
+              <RunsOnPlace agent={entry.agent} devices={agents.macs} />
+            )}
             {endMark}
-          </>
+          </ReplayMask>
         }
         actions={
           pullRequest === undefined ? undefined : (
-            <PullRequestChip
-              pullRequest={pullRequest}
-              card={
-                <PullRequestCard
-                  pullRequest={pullRequest}
-                  lines={pullRequest}
-                  files={pullRequest.changedFiles}
-                  opener={people?.author ?? openerOf(pullRequest)}
-                  agent={{
-                    subject: agentSubject(agents, agentId, held, chosen),
-                    models: agents.models,
-                    onOpen: entry.onPick,
-                  }}
-                  reviewers={people?.reviewers}
-                />
-              }
-              onOpen={onOpenPullRequest}
-            />
+            <ReplayMask>
+              <PullRequestChip
+                pullRequest={pullRequest}
+                card={
+                  <PullRequestCard
+                    pullRequest={pullRequest}
+                    place={{ taskId: entry.agent?.planId ?? null }}
+                    lines={pullRequest}
+                    files={pullRequest.changedFiles}
+                    opener={people?.author ?? openerOf(pullRequest)}
+                    agent={{
+                      subject: agentSubject(agents, agentId, held, chosen),
+                      models: agents.models,
+                      onOpen: entry.onPick,
+                    }}
+                    reviewers={people?.reviewers}
+                  />
+                }
+                onOpen={onOpenPullRequest}
+              />
+            </ReplayMask>
           )
         }
         onPress={entry.onPick}
@@ -160,7 +163,6 @@ export function PlanAgents({
   agents,
   held,
   tab,
-  runsOn,
   folded,
   onOpenAgent,
   onOpenPullRequest,
@@ -171,8 +173,6 @@ export function PlanAgents({
   held: HeldTranscripts;
   /** The column's chosen tab, whose agent's card follows its run. */
   tab: MainTabsControl["tab"];
-  /** Where the task's agents run, which every row says. */
-  runsOn: TaskRunsOn | undefined;
   /** Whether the group starts folded. */
   folded: boolean;
   onOpenAgent: (agentId: string) => void;
@@ -201,55 +201,57 @@ export function PlanAgents({
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
       {grouped ? (
-        <GroupHeader
-          heading={GROUP_HEADING.NONE}
-          label={AGENTS_LIST}
-          // Note that a phone's group over no agent, standing for New agent, counts none.
-          count={
-            entries.length === 0
-              ? undefined
-              : {
-                  value: entries.length,
-                  noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
-                }
-          }
-          fold={{ defaultOpen: !folded }}
-        >
-          {entries.length + starts.length === 0 ? null : (
-            <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
-              {listedOrder(entries).map((entry) => (
-                <PlanAgentRow
-                  key={entry.row.id}
-                  entry={entry}
-                  pullRequest={agents.pullRequests.get(entry.row.id)}
-                  agents={agents}
-                  held={held}
-                  tab={tab}
-                  runsOn={runsOn}
-                  onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
-                />
-              ))}
-              {starts.map((start) => (
-                <ListRow
-                  key={start.label}
-                  leading={start.icon ?? <GLYPH.ADD />}
-                  title={start.label}
-                  description={start.detail}
-                  disabled={start.disabled}
-                  chevron
-                  onPress={start.onSelect}
-                />
-              ))}
-            </List>
-          )}
-          {phone?.archived}
-        </GroupHeader>
+        <ReplayUnmask>
+          <GroupHeader
+            heading={GROUP_HEADING.NONE}
+            label={AGENTS_LIST}
+            // Note that a phone's group over no agent, standing for New agent, counts none.
+            count={
+              entries.length === 0
+                ? undefined
+                : {
+                    value: entries.length,
+                    noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
+                  }
+            }
+            fold={{ defaultOpen: !folded }}
+          >
+            {entries.length + starts.length === 0 ? null : (
+              <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
+                {listedOrder(entries).map((entry) => (
+                  <PlanAgentRow
+                    key={entry.row.id}
+                    entry={entry}
+                    pullRequest={agents.pullRequests.get(entry.row.id)}
+                    agents={agents}
+                    held={held}
+                    tab={tab}
+                    onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
+                  />
+                ))}
+                {starts.map((start) => (
+                  <ListRow
+                    key={start.label}
+                    leading={start.icon ?? <GLYPH.ADD />}
+                    title={start.label}
+                    description={start.detail}
+                    descriptionReplayMasked
+                    disabled={start.disabled}
+                    chevron
+                    onPress={start.onSelect}
+                  />
+                ))}
+              </List>
+            )}
+            {phone?.archived}
+          </GroupHeader>
+        </ReplayUnmask>
       ) : null}
       {waiting === undefined ? null : (
         <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>
           <ListRow
             leading={<GLYPH.INBOX />}
-            title={threadsWaitingWords(waiting.waiting)}
+            title={<ReplayUnmask>{threadsWaitingWords(waiting.waiting)}</ReplayUnmask>}
             chevron
             onPress={waiting.onOpenInbox}
           />

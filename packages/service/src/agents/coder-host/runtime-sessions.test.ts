@@ -23,10 +23,10 @@ import {
   claimRuntimeSession,
   recordedRuntimeSession,
 } from "@repo/database/models/recorded-session";
+import { keepRunsOnPick, readRunsOnPick } from "@repo/database/models/runs-on-pick";
 import { createTask } from "@repo/database/models/task-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { messages } from "@repo/database/schemas/storage";
-import { task as taskTable } from "@repo/database/schemas/task";
 import { MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { DEVICE_LAYOUT, getTestDB, joinWorkspace, openWorkspace } from "@repo/database/testing";
 import {
@@ -36,7 +36,13 @@ import {
   LOCAL_AGENT_REFUSAL,
 } from "@repo/features/agent-wire";
 import { AUTOMATION_FIRING } from "@repo/features/automation-wire";
-import { DEVICE_SETUP } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_AGENT_LINE_KIND,
+  DEVICE_CAPABILITY,
+  DEVICE_SETUP,
+  deviceAgentLaunchPayloadSchema,
+} from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -1177,7 +1183,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start on a task that runs on one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by a plan in Vespin; Codex on a device with none checked, or the device gone or away, is refused by name and leaves no agent",
+      "a Start naming one of its starter's devices runs only with that device there lately, pinned to it on the model's harness, paid for by a plan in Vespin; Codex on a device with none checked, a repository reached on the starter's own token on a host from before it works in one on its own GitHub sign-in, or the device gone or away, is refused by name and leaves no agent",
       () =>
         Effect.gen(function* () {
           const cases = [
@@ -1199,14 +1205,14 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               runs: ["codex", AGENT_PAYER.CHATGPT_SUBSCRIPTION],
             },
             {
-              name: "the task's device gone",
+              name: "the device gone",
               mac: false,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: LOCAL_AGENT_REFUSAL.MAC_AWAY,
             },
             {
-              name: "the task's device registered, but away",
+              name: "the device registered, but away",
               mac: true,
               away: true,
               chatGpt: "none",
@@ -1221,12 +1227,30 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               refused: LOCAL_AGENT_REFUSAL.CODEX,
             },
             {
-              name: "the task's device there, but still getting ready",
+              name: "the device there, but still getting ready",
               mac: true,
               setup: DEVICE_SETUP.PREPARING,
               chatGpt: "none",
               model: "anthropic/claude-opus-5.5",
               refused: LOCAL_AGENT_REFUSAL.PREPARING,
+            },
+            {
+              name: "a repository reached on the starter's own token, on a host that works in one on its own GitHub sign-in",
+              mac: true,
+              ownToken: true,
+              signsIn: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: undefined,
+              runs: ["claude_code", AGENT_PAYER.CLAUDE_SUBSCRIPTION],
+            },
+            {
+              name: "a repository reached on the starter's own token, on a host from before it works in one on its own GitHub sign-in",
+              mac: true,
+              ownToken: true,
+              chatGpt: "none",
+              model: "anthropic/claude-opus-5.5",
+              refused: LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN,
             },
           ] as const;
           for (const each of cases) {
@@ -1239,22 +1263,32 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 ...DEVICE_LAYOUT,
                 ...("codex" in each ? { codexExecutable: CODEX_EXECUTABLE } : undefined),
                 ...("setup" in each ? { setup: each.setup } : undefined),
+                ...("signsIn" in each
+                  ? { capabilities: [DEVICE_CAPABILITY.GITHUB_SIGN_IN] }
+                  : undefined),
               });
             }
-            // A device whose row is gone leaves the task naming none.
             const task = yield* createTask(owner, {
               organizationId: workspaceId,
               name: "Invitations",
               repository: `${RELAY.owner}/${RELAY.name}`,
-              runsOn: {
-                machine: AGENT_MACHINE.DEVICE,
-                deviceId: each.mac ? deviceId : null,
-              },
             });
             if ("away" in each)
               yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
             const { native } = runtimes();
-            const ask = { ...startOn(task.id, each.model) };
+            // Note that a repository reached on the starter's own token is handed as the task's own start reached it, so no GitHub read decides its access.
+            const ask = {
+              ...startOn(task.id, each.model),
+              runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
+              ...("ownToken" in each
+                ? {
+                    reached: {
+                      repository: `${RELAY.owner}/${RELAY.name}`,
+                      access: GITHUB_ACCESS.TOKEN,
+                    },
+                  }
+                : undefined),
+            };
             const started = yield* Effect.result(
               startAgent(routedSessions(owner), owner, ask).pipe(
                 Effect.provide(
@@ -1333,7 +1367,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a Start runs where the agent it is started from runs, else where its task runs, else in the cloud; a teammate's Start on a task that runs on another member's device is refused by name with the device and its owner, and a continue from the owner's agent there is refused, never sent to the cloud; a device away is refused likewise",
+      "a Start runs where the agent it is started from runs, and a teammate's continue from the owner's agent on the owner's device is refused, never sent to the cloud; a device away is refused by name",
       () =>
         Effect.gen(function* () {
           const { owner, workspaceId } = yield* openStarter(true);
@@ -1342,12 +1376,11 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const teammate = yield* openGithubUser();
           yield* joinWorkspace(workspaceId, teammate);
           yield* saveApiKey(teammate, PROVIDER_KEY_PROVIDER.ANTHROPIC);
-          const onDevice = { machine: AGENT_MACHINE.DEVICE, deviceId };
+          const onDevice = { machine: AGENT_MACHINE.DEVICE, deviceId } as const;
           const task = yield* createTask(owner, {
             organizationId: workspaceId,
             name: "Invitations",
             repository: `${RELAY.owner}/${RELAY.name}`,
-            runsOn: onDevice,
           });
           const { native } = runtimes();
           const layers = Layer.mergeAll(
@@ -1368,32 +1401,17 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               Option.map(agent, (each) => [each.machine, each.deviceId ?? null]),
             );
 
-          // The task decides: its owner's agent runs on the owner's device.
-          const ownedAsk = startOn(task.id, "anthropic/claude-opus-5.5");
+          // Its owner's agent runs on the owner's device it names.
+          const ownedAsk = { ...startOn(task.id, "anthropic/claude-opus-5.5"), runsOn: onDevice };
           const owned = yield* start(owner, ownedAsk);
           assert.ok(Result.isSuccess(owned));
           assert.deepEqual(
             yield* whereRuns(owned.success, owner),
             Option.some([AGENT_MACHINE.DEVICE, deviceId]),
           );
-          // A teammate's Start on it is refused by name, the device and its owner beside, and no agent is made.
-          const NOT_THEIRS = localAgentRefused(LOCAL_AGENT_REFUSAL.NOT_OWNER, {
-            name: "Studio",
-            owner: "Test User",
-          });
-          const theirAsk = startOn(task.id, "anthropic/claude-opus-5.5");
-          const theirs = yield* start(teammate, theirAsk);
-          assert.ok(Result.isFailure(theirs));
-          assert.deepEqual(theirs.failure, NOT_THEIRS);
-          assert.ok(Option.isNone(yield* readAgentByKey(teammate, theirAsk.idempotencyKey)));
 
-          // A continue runs where its source runs, though the task now runs in the cloud.
-          // Where a task runs is never changed through the service, so the row is written as an old build once did.
-          const db = yield* Database;
-          yield* db
-            .update(taskTable)
-            .set({ machine: AGENT_MACHINE.VERCEL, deviceId: null })
-            .where(eq(taskTable.id, task.id));
+          // A continue runs where its source runs, though its starter's pick is the cloud now.
+          yield* keepRunsOnPick(owner, { machine: AGENT_MACHINE.VERCEL });
           const continued = yield* start(owner, {
             taskId: task.id,
             prompt: undefined,
@@ -1429,9 +1447,8 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           );
 
           // A device away is refused by name, and no agent is made.
-          yield* db.update(taskTable).set(onDevice).where(eq(taskTable.id, task.id));
           yield* TestClock.adjust(Duration.sum(THIS_MAC.FRESH, Duration.seconds(1)));
-          const away = startOn(task.id, "anthropic/claude-opus-5.5");
+          const away = { ...startOn(task.id, "anthropic/claude-opus-5.5"), runsOn: onDevice };
           const refused = yield* start(owner, away);
           assert.ok(Result.isFailure(refused));
           assert.deepEqual(refused.failure, localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY));
@@ -1460,6 +1477,110 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(Result.isFailure(removed));
           assert.deepEqual(removed.failure, HOSTED_REFUSAL.DEVICE_REMOVED);
           assert.ok(Option.isNone(yield* readAgentByKey(owner, fromRemoved.idempotencyKey)));
+        }),
+    );
+
+    it.effect(
+      "a Start naming where it runs runs there, from another agent too, and keeps it as its starter's last pick; one naming none runs where its starter's newest agent on the task runs, never a teammate's, else where its starter last named, else in the cloud; a device named that is a teammate's or never registered is refused and leaves no agent",
+      () =>
+        Effect.gen(function* () {
+          const { owner, workspaceId } = yield* openStarter(true);
+          const studio = randomUUID();
+          yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
+          const teammate = yield* openGithubUser();
+          yield* joinWorkspace(workspaceId, teammate);
+          yield* saveApiKey(teammate, PROVIDER_KEY_PROVIDER.ANTHROPIC);
+          const den = randomUUID();
+          yield* registerDevice(teammate, { id: den, name: "Den", ...DEVICE_LAYOUT });
+          const onStudio = { machine: AGENT_MACHINE.DEVICE, deviceId: studio } as const;
+          const inCloud = { machine: AGENT_MACHINE.VERCEL } as const;
+          const taskIn = () =>
+            createTask(owner, {
+              organizationId: workspaceId,
+              name: "Invitations",
+              repository: `${RELAY.owner}/${RELAY.name}`,
+            });
+          const { native } = runtimes();
+          const layers = Layer.mergeAll(
+            githubReaching(INSTALLATIONS).layer,
+            CATALOG,
+            environment(),
+            native,
+          );
+          const start = (userId: string, ask: Parameters<typeof startAgent>[2]) =>
+            Effect.result(
+              startAgent(routedSessions(userId), userId, ask).pipe(Effect.provide(layers)),
+            );
+          const runsAt = (userId: string, ask: Parameters<typeof startAgent>[2]) =>
+            Effect.gen(function* () {
+              const started = yield* start(userId, ask);
+              assert.ok(Result.isSuccess(started), JSON.stringify(started));
+              const { machine, deviceId } = started.success.agent;
+              return [machine, deviceId ?? null];
+            });
+          const model = "anthropic/claude-opus-5.5";
+          const task = yield* taskIn();
+
+          // Named, it runs there, and the place is kept as the pick.
+          const named = { ...startOn(task.id, model), runsOn: onStudio };
+          assert.deepEqual(yield* runsAt(owner, named), [AGENT_MACHINE.DEVICE, studio]);
+          assert.deepEqual(yield* readRunsOnPick(owner), Option.some(onStudio));
+          // A teammate's Start naming none is not decided by the owner's agent: with no pick of their own, it runs in the cloud.
+          assert.deepEqual(yield* runsAt(teammate, startOn(task.id, model)), [
+            AGENT_MACHINE.VERCEL,
+            null,
+          ]);
+          // The owner's runs where the owner's newest agent there runs, not the teammate's newer one.
+          assert.deepEqual(yield* runsAt(owner, startOn(task.id, model)), [
+            AGENT_MACHINE.DEVICE,
+            studio,
+          ]);
+          // An automation's run runs in the cloud over the owner's pick, and is no agent of the owner's
+          // there: on a task where only it stands, the pick decides.
+          const other = yield* taskIn();
+          const automated = {
+            ...startOn(other.id, model),
+            automationOrigin: {
+              name: "Nightly checks",
+              firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+              prompt: "Fix the flaky test.",
+            },
+          };
+          assert.deepEqual(yield* runsAt(owner, automated), [AGENT_MACHINE.VERCEL, null]);
+          assert.deepEqual(yield* runsAt(owner, startOn(other.id, model)), [
+            AGENT_MACHINE.DEVICE,
+            studio,
+          ]);
+          // A continue naming the cloud moves its source's work there, and the pick follows.
+          const moved = {
+            taskId: task.id,
+            prompt: undefined,
+            idempotencyKey: randomUUID(),
+            choice: undefined,
+            from: {
+              agentId: Option.getOrThrow(yield* readAgentByKey(owner, named.idempotencyKey)).id,
+            },
+            runsOn: inCloud,
+          };
+          assert.deepEqual(yield* runsAt(owner, moved), [AGENT_MACHINE.VERCEL, null]);
+          assert.deepEqual(yield* readRunsOnPick(owner), Option.some(inCloud));
+
+          // A teammate's device named is refused with its name and owner, an unknown one as away; neither makes an agent or a pick.
+          for (const [deviceId, refusal] of [
+            [
+              den,
+              localAgentRefused(LOCAL_AGENT_REFUSAL.NOT_OWNER, { name: "Den", owner: "Test User" }),
+            ],
+            [randomUUID(), localAgentRefused(LOCAL_AGENT_REFUSAL.MAC_AWAY)],
+          ] as const) {
+            const ask = {
+              ...startOn(task.id, model),
+              runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId },
+            };
+            assert.deepEqual(yield* start(owner, ask), Result.fail(refusal));
+            assert.ok(Option.isNone(yield* readAgentByKey(owner, ask.idempotencyKey)));
+          }
+          assert.deepEqual(yield* readRunsOnPick(owner), Option.some(inCloud));
         }),
     );
 

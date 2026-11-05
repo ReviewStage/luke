@@ -18,10 +18,13 @@
  * the account stood. Note that nothing a person typed has a field to travel
  * in.
  *
- * Each report answers the details a person may copy from what showed the
- * failure (`shownFailureDetails`): the same facts, with the time, the app's
- * version, and the Sentry event id and trace the reporter answered, so what
- * they paste to an agent finds the very line and issue that were sent.
+ * Each report of an unexpected failure answers the details a person may
+ * copy from what showed it (`shownFailureDetails`): the same facts, with the
+ * time, the app's version, and the Sentry event id and trace the reporter
+ * answered, so what they send with a report of the problem finds the very
+ * line and issue that were sent. A refusal answers none, so it offers no
+ * copy: its own words already say what happened, and nothing went wrong to
+ * report.
  *
  * A failure drawn in place (`@repo/ui`'s `ErrorState`, `FailureNote`,
  * `ErrorLine` and the rows and dialogs that draw one) is handed as
@@ -270,6 +273,18 @@ export function refusedShown(
   return { words, failure };
 }
 
+/**
+ * Whether `failure` is one the window's connection already says: a failure
+ * nothing named a refusal, shown while the app does not reach the service
+ * (`networkConnected`). The Offline mark says why once, so a surface that
+ * would only interrupt to say it again, a toast, says nothing.
+ */
+export function failureOfConnection(failure: ShownFailure): boolean {
+  if (kindOf(failure) === FAILURE_KIND.REFUSED) return false;
+  const state = appStateNow();
+  return state !== undefined && !networkConnected(state.network);
+}
+
 /** Installs what this window reports its shown failures through, and answers what takes it back. */
 export function installShownFailureReporter(installed: ShownFailureReporter): () => void {
   reporter = installed;
@@ -290,8 +305,8 @@ function sent(report: ShownFailureReport): ShownFailureSent | undefined {
 
 /**
  * Hands one failure just shown at `at` to the window's reporter, with the
- * app's state now, and answers the details a person may copy of it. A
- * window with no reporter, such as the site's admin page, which installs no
+ * app's state now, and answers the details a person may copy of it, where it
+ * was unexpected; a refusal answers none. A window with no reporter, such as the site's admin page, which installs no
  * clipboard either, reports nothing and answers no details, so nothing there
  * offers a copy that could only fail. Note that a report or a reading that throws is
  * let go with a line on the console, answering no details, because whoever
@@ -310,12 +325,12 @@ export function reportShownFailure(failure: ShownFailure, at: number): string | 
       act: failure.act,
       state: {
         online: state?.network.online ?? true,
-        connected: state === undefined || networkConnected(state.network),
         account: state?.account.status ?? ACCOUNT_UNREAD,
         live: failure.live,
       },
     };
-    return shownFailureDetails(report, { at, version: state?.run.appVersion, sent: sent(report) });
+    const told = { at, version: state?.run.appVersion, sent: sent(report) };
+    return report.kind === FAILURE_KIND.UNEXPECTED ? shownFailureDetails(report, told) : undefined;
   } catch (error) {
     console.error("A failure shown could not be reported.", error);
     return undefined;

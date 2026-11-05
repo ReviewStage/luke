@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import { cssCustomProperties } from "../../css.js";
 import { type SearchSubject, searchHit } from "../../search-score.js";
 import { searchTokens } from "../../search-tokens.js";
+import { REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import {
   AnchoredPopover,
   POPOVER_BOUNDS,
@@ -13,7 +14,9 @@ import {
   roomAround,
 } from "../anchored-popover/anchored-popover.js";
 import { clipsAround } from "../anchored-popover/clip-room.js";
+import { BackButton, NO_BACK_KEY } from "../back-button/back-button.js";
 import {
+  COMBOBOX_LEAD,
   type ComboboxGroup,
   ComboboxList,
   type ComboboxOption,
@@ -22,7 +25,8 @@ import {
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { LIST_DENSITY, List, ListRow } from "../list-row/list-row.js";
 import { MENU_ITEM_MARK, MenuItem } from "../menu/menu.js";
-import { inNarrowRoom, MenuSheetFrame } from "../menu/menu-sheet.js";
+import { MenuReplayUnmasked } from "../menu/menu-replay.js";
+import { inNarrowRoom, MenuSheetFrame, type SheetBack } from "../menu/menu-sheet.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { useSubmenuAim } from "../menu/submenu-aim.js";
 import { SEARCH_FIELD_LOOK, SearchField } from "../search-field/search-field.js";
@@ -88,7 +92,10 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip/hint.js";
  * and state. An owner that already hangs a layer of its own, a picker
  * floated by a box in the words (`RectFloat`) say, asks for it embedded
  * (`SEARCHABLE_MENU_LAYER.EMBEDDED`) instead: drawn with no layer, inside
- * the owner's, which says where it stands and how wide. Its owner holds it
+ * the owner's, which says where it stands and how wide. An owner whose pick
+ * acts at once may head it with what a pick does ("Add a sub-task"), led by
+ * the folded way back to the menu it was chosen from where there is one, as
+ * a sheet's head draws a submenu's (`MenuHead`). Its owner holds it
  * drawn through its exit (`useDisclosure`), handing it `leaving`, which
  * leaves it inert and fading, focus already handed back.
  *
@@ -148,6 +155,8 @@ export interface MenuRow {
   label: string;
   /** A mark drawn ahead of the label: a provider's logo, the GitHub mark, a lock. */
   icon?: React.ReactNode;
+  /** Faces drawn ahead of the label in place of a mark, in a column a pair of faces wide so the rows' names line up: a commit's author and co-author. */
+  faces?: React.ReactNode;
   /** Words a search matches beside the label, such as a model's provider. */
   terms?: readonly string[];
   /** Muted words after the label: the effort a model runs at, an owner, "(Fast)", where an agent stands. */
@@ -168,6 +177,8 @@ export interface MenuRow {
   card?: React.ReactNode;
   /** Marks at the row's end, after its shortcut, as ⌘K's rows end: a teammate's face, a failed agent's mark. */
   end?: React.ReactNode;
+  /** Whether its words name a person's thing, a repository's or a workspace's name, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`) or a list under `ReplayUnmask`. */
+  replayMasked?: boolean | undefined;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -205,6 +216,14 @@ export interface FootRow {
   toggle?: { on: boolean; onToggle: () => void };
   /** The row cannot be pressed, and says why on hover. */
   disabled?: string | undefined;
+}
+
+/** What a pick does, said over the field, and the way back to the menu it was chosen from where there is one. */
+export interface MenuHead {
+  /** What a pick does, as a sentence's start: "Add a sub-task". */
+  words: string;
+  /** The way back to the menu this one was chosen from. */
+  back?: SheetBack | undefined;
 }
 
 /** The menu's last line, pressed by nothing: who pays for the agent, and the link that manages it where its provider asks for one. */
@@ -281,6 +300,13 @@ const LAST_LINE_BODY =
 
 /** The link at the last line's end, never broken across lines. */
 const LAST_LINE_END = "ui-searchable-menu-last-line-end flex-none whitespace-nowrap";
+
+/**
+ * The head over the field, its words inset as a row's are, or after the way
+ * back, folded to its glyph as a sheet's is, its words a reader's alone.
+ */
+const HEAD =
+  "ui-searchable-menu-head flex min-h-control flex-none items-center gap-icon-gap border-b border-border px-row-inset has-[.ui-folding-button]:pl-menu-inset [--ui-fold:folded]";
 
 /** A section's heading over rows drawn in place, inset as a row's words are. */
 const HEADING = "ui-searchable-menu-heading px-row-inset pt-ui-8 pb-ui-4";
@@ -426,16 +452,22 @@ function optionGroups(
   rows: readonly MenuRow[],
   value: string | undefined,
   query: string,
+  unmasked: boolean,
 ): ComboboxGroup[] {
   return sectionsOf(rows).map((section) => ({
     label: section.heading,
+    replayUnmasked: unmasked,
     options: section.rows.map(({ row }) => ({
       id: row.id,
-      label: markedLabel(row, query),
+      label: rowWords(row, unmasked, markedLabel(row, query)),
       words: row.label,
-      icon: row.icon,
-      detail: row.detail,
-      hint: rowHint(row),
+      ...(row.faces === undefined
+        ? { icon: row.icon }
+        : { lead: row.faces, leadWidth: COMBOBOX_LEAD.FACES }),
+      detail: rowWords(row, unmasked, row.detail),
+      detailWords: typeof row.detail === "string" ? row.detail : undefined,
+      hint: rowWords(row, unmasked, rowHint(row)),
+      replayMasked: row.replayMasked,
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
@@ -444,17 +476,53 @@ function optionGroups(
   }));
 }
 
+/** A row's words, marked for a screen recording as its menu and the row ask. */
+function rowWords(row: MenuRow, unmasked: boolean, words: React.ReactNode): React.ReactNode {
+  // Note that words neither mark touches stay as handed, so a plain title is still measured as plain words.
+  if (words === undefined || words === null || (!unmasked && row.replayMasked !== true)) {
+    return words;
+  }
+  return (
+    <ReplayWords unmasked={unmasked} masked={row.replayMasked}>
+      {words}
+    </ReplayWords>
+  );
+}
+
 /** A submenu's rows as its list's options, the chosen one checked. */
-function submenuOptions(open: Submenu): ComboboxOption[] {
+function submenuOptions(open: Submenu, unmasked: boolean): ComboboxOption[] {
   return open.rows.map((row) => ({
     id: row.id,
-    label: row.label,
+    label: rowWords(row, unmasked, row.label),
     icon: row.icon,
-    detail: row.detail,
-    hint: rowHint(row),
+    detail: rowWords(row, unmasked, row.detail),
+    detailWords: typeof row.detail === "string" ? row.detail : undefined,
+    hint: rowWords(row, unmasked, rowHint(row)),
+    replayMasked: row.replayMasked,
     card: row.card,
     current: row.id === open.value,
   }));
+}
+
+/** The head over the field: the folded way back where there is one, then what a pick does. */
+function Head({ head, unmasked }: { head: MenuHead; unmasked: boolean }): React.JSX.Element {
+  return (
+    <div className={HEAD}>
+      {head.back === undefined ? null : (
+        <BackButton
+          label={head.back.label}
+          place={head.back.label}
+          command={NO_BACK_KEY}
+          keepFocus
+          tabbable={false}
+          onBack={head.back.onBack}
+        />
+      )}
+      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
+        <ReplayWords unmasked={unmasked}>{head.words}</ReplayWords>
+      </Text>
+    </div>
+  );
 }
 
 /** One muted line pressed by nothing, under a submenu's rows. */
@@ -492,12 +560,15 @@ function LastLine({ line }: { line: MenuLastLine }): React.JSX.Element {
 function PlacedRow({
   row,
   title,
+  titleMasked,
   description,
   disabled,
   onPress,
 }: {
   row: MenuRow;
   title: string;
+  /** Whether the title names a person's thing: the row's own, or, for a submenu's choice, the row it opens from. */
+  titleMasked: boolean | undefined;
   description: React.ReactNode;
   disabled: boolean;
   onPress: () => void;
@@ -505,9 +576,9 @@ function PlacedRow({
   return (
     <RowHintOptions card={row.card}>
       <ListRow
-        leading={row.icon}
-        title={title}
-        description={description}
+        leading={row.faces ?? row.icon}
+        title={titleMasked === true ? <ReplayWords masked>{title}</ReplayWords> : title}
+        description={rowWords(row, false, description)}
         meta={rowHint(row)}
         hint={row.card === undefined ? undefined : { Hint: RowHint, label: title }}
         disabled={disabled}
@@ -524,6 +595,7 @@ function submenuRows(row: MenuRow, submenu: Submenu): React.JSX.Element[] {
       key={choice.id}
       row={choice}
       title={row.label}
+      titleMasked={row.replayMasked}
       description={choice.label}
       disabled={row.disabled !== undefined}
       onPress={() => submenu.onPick(choice.id)}
@@ -570,6 +642,7 @@ export function MenuRowList({
                         key={row.id}
                         row={row}
                         title={row.label}
+                        titleMasked={row.replayMasked}
                         description={row.detail}
                         disabled={row.disabled !== undefined}
                         onPress={() => onPick(row.id)}
@@ -609,15 +682,25 @@ export function SearchableMenu(
     onLeave: (left: EventTarget | null) => void;
     /** Pinned under the list, always on screen, reached by the arrows past the last match. */
     foot?: readonly FootRow[] | undefined;
+    /** What a pick does, said over the field, led by the way back to the menu it was chosen from where there is one. */
+    head?: MenuHead | undefined;
     /** One muted line under its own hairline, after the pinned rows: who pays for the agent. */
     lastLine?: MenuLastLine | undefined;
     /** The menu is on its way out: drawn fading, and taking nothing. */
     leaving?: boolean | undefined;
     /** Hands the menu's element to the hold its owner draws it through its exit with. */
     ref?: ((element: HTMLElement | null) => void) | undefined;
+    /**
+     * Whether its own words are the app's, which a screen recording shows as
+     * they read: its rows, their sections' headings, its submenus and their
+     * notes, and its pinned rows, but for a row that is `replayMasked`; its
+     * note and last line are its owner's to mark (`@repo/ui/session-replay-marks`).
+     */
+    replayUnmasked?: boolean | undefined;
   } & SearchableMenuPlace,
 ): React.JSX.Element {
   const { rows, value, onPick } = props;
+  const unmasked = props.replayUnmasked === true;
   const leaving = props.leaving === true;
   // Note that the room is read as the menu opens, so one standing open never turns into the other as the window is resized.
   const sheeted = () => props.layer !== SEARCHABLE_MENU_LAYER.EMBEDDED && inNarrowRoom();
@@ -913,13 +996,15 @@ export function SearchableMenu(
         ref={sheet ? list : undefined}
         id={submenuId}
         label={shown.label}
-        groups={[{ options: submenuOptions(shown) }]}
+        groups={[{ options: submenuOptions(shown, unmasked) }]}
         active={subAt}
         onActiveChange={(moved) => setSubmenu({ moved })}
         onChoose={(_index, option) => pickIn(shown, option.id)}
         steer={sheet ? keys : undefined}
       />
-      {shown.note === undefined ? null : <FootNote words={shown.note} />}
+      {shown.note === undefined ? null : (
+        <FootNote words={<ReplayWords unmasked={unmasked}>{shown.note}</ReplayWords>} />
+      )}
     </>
   );
 
@@ -964,7 +1049,7 @@ export function SearchableMenu(
       ref={list}
       id={listId}
       label={props.label}
-      groups={optionGroups(matches, value, answered ? "" : query)}
+      groups={optionGroups(matches, value, answered ? "" : query, unmasked)}
       active={at}
       onActiveChange={(index) => aim(() => hoverRow(index))}
       onChoose={(index) => {
@@ -988,7 +1073,10 @@ export function SearchableMenu(
               label: row.label,
               ...(row.icon === undefined ? undefined : { icon: row.icon }),
               tag: row.tag,
-              hint: row.detail,
+              hint:
+                row.detail === undefined ? undefined : (
+                  <ReplayWords unmasked={unmasked}>{row.detail}</ReplayWords>
+                ),
               onSelect: () => pressFoot(row, index),
               disabled: row.disabled !== undefined,
               checked: row.toggle?.on,
@@ -1024,7 +1112,7 @@ export function SearchableMenu(
   ) : null;
   const footRows = (
     <>
-      {pinnedRows}
+      <MenuReplayUnmasked.Provider value={unmasked}>{pinnedRows}</MenuReplayUnmasked.Provider>
       {props.lastLine === undefined ? null : <LastLine line={props.lastLine} />}
     </>
   );
@@ -1039,9 +1127,10 @@ export function SearchableMenu(
         open={!leaving}
         initialFocus={list}
         hold={ownerRef}
-        name={open?.label ?? props.label}
+        name={open?.label ?? props.head?.words ?? props.label}
         detail={open === undefined ? undefined : props.label}
-        back={open === undefined ? undefined : { label: props.label, onBack: closeSubmenu }}
+        replayUnmasked={unmasked}
+        back={open === undefined ? props.head?.back : { label: props.label, onBack: closeSubmenu }}
         field={open === undefined ? searchField : undefined}
         onAway={props.onClose}
         onKeyDown={onKey}
@@ -1066,10 +1155,12 @@ export function SearchableMenu(
       inset={MENU_SURFACE_INSET.NONE}
       role="dialog"
       aria-label={props.label}
+      {...REPLAY_MASKED}
       leaving={leaving}
       onKeyDown={onKey}
       onBlur={(event) => props.onLeave(event.relatedTarget)}
     >
+      {props.head === undefined ? null : <Head head={props.head} unmasked={unmasked} />}
       {searchField}
       {rowList}
       {open === undefined || footAt >= 0 || rowBox === undefined ? null : (

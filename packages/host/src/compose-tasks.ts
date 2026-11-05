@@ -22,6 +22,7 @@ import {
   browserTabsPlaceId,
   browserTabsPlaceKind,
 } from "@repo/features/agent-browser-tab-wire";
+import { WRITE_UNTAKEN } from "@repo/features/keyed-write";
 import { issueAddressOf, pullRequestAddressOf } from "@repo/features/link-grammar";
 import {
   browserTabsOfLiveRows,
@@ -40,11 +41,13 @@ import {
   type PageOwner,
   type PagePlace,
 } from "@repo/features/page-wire";
+import { markedAs, readMarkOf } from "@repo/features/read-mark";
 import type {
   SlackBotChannel,
   SlackListedChannel,
   WorkspaceSlackBot,
 } from "@repo/features/slack-bot-wire";
+import { taskListLiveRowsSchema } from "@repo/features/task-list-live";
 import {
   type PlanRevisionsAnswer,
   startRelationsOf,
@@ -57,6 +60,7 @@ import {
   type TaskCreateRelationKind,
   type TaskRelationKind,
   type TaskSkillsAnswer,
+  taskCreateRequestSchema,
   UNTITLED_TASK_NAME,
 } from "@repo/features/task-wire";
 import {
@@ -75,6 +79,7 @@ import {
   type TasksFindAnswer,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -121,6 +126,7 @@ import {
   tasksFileParamsSchema,
   tasksFindParamsSchema,
   tasksLinkStandingParamsSchema,
+  tasksMarkReadParamsSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPictureKeepParamsSchema,
@@ -452,6 +458,21 @@ interface StartOpened {
   readonly drawn: boolean;
   readonly before: string | undefined;
 }
+
+/** Whether a start may wait for the service: one that draws its row. */
+function startMayWait(start: Start): boolean {
+  return start.row !== undefined;
+}
+
+/** A start as it waits for the service, which only one that may wait keeps as, since a write that does not keep never waits (`WriteDeclaration.queue`). */
+const startKeptSchema = Schema.Struct({
+  request: Schema.Struct({ ...taskCreateRequestSchema.fields, id: Schema.String }),
+  quiet: Schema.Boolean,
+  row: Schema.UndefinedOr(taskListLiveRowsSchema.fields.plans.value),
+}).check(Schema.makeFilter(startMayWait));
+
+/** Where a start sent from the waiting writes opened its task: as it was asked, before any ask of the screen standing now, its plan laid as held. */
+const OPENED_EARLIER: StartOpened = { asked: -1, drawn: true, before: undefined };
 
 /** The service's side of the tasks, and the workspaces they live in, as this concern asks it. */
 export type TasksClient = Pick<
@@ -1229,8 +1250,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * The row writes waiting for the service sent again, one round at a time,
    * as each answer of the list lands: its first after a launch, after a
-   * failed read started again, and after the network came back
-   * (`TASKS_RESYNC`), each of which says the service answers again.
+   * failed read started again, and after a wake or the connection coming
+   * back (`TASKS_RESYNC`, `TASKS_REGAINED`), each of which says the service
+   * answers again.
    */
   const resending = yield* FiberHandle.make<void>();
   const resendQueued = Effect.suspend(() =>
@@ -1282,6 +1304,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         listWait = wait;
       },
     });
+  });
+
+  /** A list already followed sealed and followed again now, the time stamped so a wake's further events within `RESYNC_SETTLE` seal it no more. */
+  const resealList = Effect.gen(function* () {
+    if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return;
+    resyncedAt = yield* Clock.currentTimeMillis;
+    write({ live: HOST_LIVE.CATCHING_UP });
+    yield* FiberHandle.run(listFollow, followList);
   });
 
   /** The one follow of the account's workspaces, from the account gate opening, at a launch or a sign-in, until a sign-out. */
@@ -1949,6 +1979,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       parentTaskId: task.parentTaskId ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
+      ...readMarkOf(task),
       completedAt: task.completedAt ?? null,
     };
   }
@@ -1975,6 +2006,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       assigneeName: task.assignee?.name ?? null,
       pinnedAt: task.pinnedAt ?? null,
       pinPosition: task.pinPosition ?? null,
+      ...readMarkOf(task),
       completedAt: task.completedAt ?? null,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
@@ -2399,6 +2431,50 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   };
 
   /**
+   * The reader's read mark of a task, drawn on its row at once and kept once
+   * the list carries the service's; the held plan reads no mark, so only the
+   * row takes the answer.
+   */
+  const markedRead: WriteDeclaration<
+    PlanRow,
+    FieldChange<PlanRow>,
+    TasksMarkReadParams,
+    { readonly changed: boolean }
+  > = {
+    kind: PLAN,
+    keys: ({ taskId }) => [taskId],
+    change:
+      ({ readMark }) =>
+      (row) =>
+        markedAs(readMark, row, kernel.now()),
+    send: ({ taskId, readMark }, { key }) =>
+      gate()
+        ? serial(
+            Effect.gen(function* () {
+              const answered = yield* served(client.mark(taskId, { readMark }, key));
+              if (!answered.ok) {
+                return untaken(answered.failure, {
+                  kept: { changed: true },
+                  refused: { changed: false },
+                });
+              }
+              const marked = answered.answer;
+              return {
+                answer: { changed: true },
+                txid: marked.txid,
+                taken: () => readMarkOf(marked.task),
+              };
+            }),
+          )
+        : Effect.succeed({ refused: { changed: false } }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_MARK_READ,
+      input: tasksMarkReadParamsSchema,
+      queued: () => ({ changed: true }),
+    },
+  };
+
+  /**
    * A task started, its row drawn the moment it is asked under the id the
    * host minted for it, which the list adopts while it stands, and taken
    * back where the service refused it; a start that is not quiet opens its
@@ -2406,30 +2482,52 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * agent a start asks for waits on the service, as remote work does. Where
    * the list hands no wait, or the service answers a start sent again with
    * no transaction, the row as the service answered it is taken in the
-   * list's place.
+   * list's place. One that draws its row waits where the service did not
+   * answer it, its row drawn and its task open, and is sent again with the
+   * other writes waiting; sent so, it opens nothing, and its answer reaches
+   * its task only where the task stands open. One that names an agent holds
+   * its window's call until it is sent, since the window draws its agent
+   * from the answer, and is sent under that agent's own key alone, which
+   * the service answers a start sent again with its agent by.
    */
   const started: WriteDeclaration<PlanRow, FieldChange<PlanRow>, Start, WireValue> = {
     kind: PLAN,
     keys: ({ request, row }) => (row === undefined ? [] : [request.id]),
     // Note that a start that draws no row names no key, so its change is never drawn.
     change: ({ row }) => (row === undefined ? () => ({}) : { made: row }),
-    send: (start) =>
+    send: (start, { key, waited }) =>
       gate()
         ? Effect.gen(function* () {
-            const opened = start.quiet ? undefined : yield* startOpened(start.request.id);
+            const { id } = start.request;
+            const opened = start.quiet
+              ? undefined
+              : waited
+                ? OPENED_EARLIER
+                : yield* startOpened(id);
             return yield* serial(
               Effect.gen(function* () {
-                const created = yield* served(client.create(start.request));
+                const created = yield* served(
+                  client.create(start.request, start.request.agent === undefined ? key : undefined),
+                );
                 if (!created.ok) {
                   const { failure, localAgentRefusal, cause } = created;
-                  if (opened !== undefined) yield* startedBack(opened, start.request.id);
-                  return {
+                  const went = created.untaken ?? WRITE_UNTAKEN.REFUSED;
+                  const waits =
+                    went === WRITE_UNTAKEN.UNANSWERED && key !== undefined && startMayWait(start);
+                  // Note that a start the service took already was made by an earlier send, so its record is followed again where it stands open, as a made start's is; one that waits keeps its task open, and any other is taken back.
+                  if (went === WRITE_UNTAKEN.ALREADY_WRITTEN) {
+                    if (opened?.drawn === true && view.activeTaskId === id) {
+                      yield* documents.retry(id);
+                    }
+                  } else if (opened !== undefined && !waits) yield* startedBack(opened, id);
+                  return untaken<FieldChange<PlanRow>, WireValue>(went, {
+                    kept: carried<TasksStartAnswer>({ planId: id }),
                     refused: carried<TasksStartAnswer>({
                       failure,
                       ...(localAgentRefusal === undefined ? undefined : { localAgentRefusal }),
                       ...(cause === undefined ? undefined : { cause }),
                     }),
-                  };
+                  });
                 }
                 const { task, agent, txid } = created.answer;
                 if (opened !== undefined) yield* startedAs(opened, task);
@@ -2448,6 +2546,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         : Effect.succeed({
             refused: carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED }),
           }),
+    queue: {
+      name: GATEWAY_METHOD.TASKS_START,
+      input: startKeptSchema,
+      queued: ({ request }) => carried<TasksStartAnswer>({ planId: request.id }),
+      holds: ({ request }) => request.agent !== undefined,
+    },
   };
 
   /**
@@ -2636,14 +2740,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // is sealed again now, once for a wake's several events.
     [GATEWAY_METHOD.TASKS_RESYNC]: () =>
       Effect.gen(function* () {
-        if (!gate() || Option.isNone(yield* FiberHandle.get(listFollow))) return {};
         const at = yield* Clock.currentTimeMillis;
         if (resyncedAt !== undefined && at - resyncedAt < Duration.toMillis(RESYNC_SETTLE)) {
           return {};
         }
-        resyncedAt = at;
-        write({ live: HOST_LIVE.CATCHING_UP });
-        yield* FiberHandle.run(listFollow, followList);
+        yield* resealList;
+        return {};
+      }),
+    // The connection came back, which no settle folds away, since a read a
+    // wake started just before may have hung on the network that was not
+    // yet there. Every read a window holds is asked again as a window
+    // coming forward asks it (`window-focus.ts`), and the live follows
+    // waiting out a backoff ask as the service answered (`live-follow.ts`).
+    [GATEWAY_METHOD.TASKS_REGAINED]: () =>
+      Effect.gen(function* () {
+        yield* dependencies.focus.raise;
+        yield* resealList;
         return {};
       }),
     // A window said the changes made offline the service refused, so the count it said is cleared for every window.
@@ -3213,6 +3325,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     ),
     [GATEWAY_METHOD.TASKS_PIN]: declaredMethod(dependencies.pool, pinned, (params: WireRecord) =>
       readParams(tasksPinParamsSchema, params, "pinning a task names it and whether it is pinned"),
+    ),
+    [GATEWAY_METHOD.TASKS_MARK_READ]: declaredMethod(
+      dependencies.pool,
+      markedRead,
+      (params: WireRecord) =>
+        readParams(
+          tasksMarkReadParamsSchema,
+          params,
+          "marking a task read names it and how its mark moves",
+        ),
     ),
     // A pin or a drag reads the instant it is asked at, which what it draws is stamped with.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: declaredMethod(
@@ -3985,6 +4107,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     }),
     listed,
     queueable: [
+      anyWrite(started),
       anyWrite(renamed),
       anyWrite(stood),
       anyWrite(pinned),

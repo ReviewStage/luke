@@ -3,7 +3,8 @@
  * attention tone, a card over a document in either tone, and a quiet row in
  * its place's frame; then each in a narrow column, where the presses drop
  * beneath the words; and a strip whose words its column cuts short, fading
- * out at their end.
+ * out at their end; and the strip a maintainer signed in as a member reads,
+ * for a member with a name and one without.
  */
 
 import {
@@ -21,6 +22,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  ViewingAsBanner,
 } from "@repo/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -99,6 +101,18 @@ function Banners(): React.JSX.Element {
             cannot push to.
           </Banner>
         </div>
+      </CatalogSection>
+      <CatalogSection id="banner-viewing-as" title="Viewing as a member">
+        <Stack gap={GAP.FIELD}>
+          <ViewingAsBanner
+            member={{ name: "Ada Lovelace", email: "ada@example.com" }}
+            onStop={() => Promise.resolve("The sign-in could not be stopped.")}
+          />
+          <ViewingAsBanner
+            member={{ email: "ada@example.com" }}
+            onStop={() => Promise.resolve(undefined)}
+          />
+        </Stack>
       </CatalogSection>
     </>
   );

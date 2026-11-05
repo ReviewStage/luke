@@ -8,6 +8,7 @@ import {
   type InlineEditEnd,
   usePressAway,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Fragment, type RefObject, useMemo, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
 import type { QuickAddInto, TasksControl } from "../tasks/use-tasks-tab.js";
@@ -218,8 +219,16 @@ export function QuickAddLines({
                   onEnd={quick.end}
                 />
               ),
-              status: <StatusChip {...chip} />,
-              priority: <PriorityChip {...chip} />,
+              status: (
+                <ReplayUnmask>
+                  <StatusChip {...chip} />
+                </ReplayUnmask>
+              ),
+              priority: (
+                <ReplayUnmask>
+                  <PriorityChip {...chip} />
+                </ReplayUnmask>
+              ),
               assignee: <AssigneeChip {...chip} />,
             },
           })}

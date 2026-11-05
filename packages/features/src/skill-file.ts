@@ -38,8 +38,8 @@ export interface SkillFile {
   readonly body: string;
 }
 
-/** The frontmatter's fences: `---` on the first line and again on a line of its own. */
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
+/** The frontmatter's fences: `---` on the first line and again on a line of its own, its text between them. */
+export const SKILL_FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
 
 /** A top-level key and the rest of its line. */
 // Note that one blank opens the value and `scalarOf` trims the rest, so no two quantifiers compete for the same blanks.
@@ -103,7 +103,7 @@ function scalarOf(rest: string, continuation: readonly string[]): string {
 /** A `SKILL.md` read for its frontmatter's top-level keys and its body; nothing where it opens with no frontmatter. */
 export function readSkillFile(text: string): SkillFile | undefined {
   const unmarked = text.replace(/^\uFEFF/u, "");
-  const fenced = FRONTMATTER.exec(unmarked);
+  const fenced = SKILL_FRONTMATTER.exec(unmarked);
   if (fenced === null) return undefined;
   const lines = (fenced[1] ?? "").split(/\r?\n/u);
   const keys = new Map<string, string>();

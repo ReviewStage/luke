@@ -10,7 +10,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { TestClock } from "effect/testing";
-import { githubRateGate } from "./github-rate-gate.js";
+import { GitHubBackground, githubRateGate } from "./github-rate-gate.js";
 
 /**
  * The gate over a GitHub that answers whatever the case scripts next, read
@@ -199,6 +199,33 @@ it.layer(getTestDB())("the GitHub rate gate", (it) => {
       );
       assert.deepEqual(seen, [1, 2]);
     }),
+  );
+
+  it.effect(
+    "a member's read is sent while background work under the same identity is still out",
+    () =>
+      Effect.gen(function* () {
+        const arrivals: Array<readonly [string, number]> = [];
+        const answered = Promise.withResolvers<void>();
+        const first = Promise.withResolvers<void>();
+        const seen = yield* Effect.gen(function* () {
+          const background = yield* Effect.forkChild(
+            pullRequestAsked.pipe(Effect.provideService(GitHubBackground, true)),
+          );
+          yield* Effect.promise(() => first.promise);
+          yield* pullRequestAsked.pipe(Effect.forkChild);
+          // Note that the member's read is given every chance to reach GitHub while the background one is out.
+          for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+          const whileBackgroundOut = arrivals.length;
+          answered.resolve();
+          yield* Fiber.join(background);
+          return whileBackgroundOut;
+        }).pipe(
+          Effect.provide(timedGitHub(arrivals, () => first.resolve(), answered.promise)),
+          holdingNothing,
+        );
+        assert.equal(seen, 2);
+      }),
   );
 
   it.effect("writes under one identity start a second apart, and reads are not spaced", () =>

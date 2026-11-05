@@ -236,12 +236,15 @@ function GlyphSquare({
   glyph,
   size,
   tiled,
+  branded = false,
   src,
 }: {
   name: string;
   glyph: ReactNode;
   size: ActorSize;
   tiled: boolean;
+  /** Whether the product's mark stands on its GitHub avatar's tile rather than the window's own. */
+  branded?: boolean;
   src?: string | undefined;
 }): React.JSX.Element {
   return (
@@ -252,6 +255,7 @@ function GlyphSquare({
       shape={AVATAR_SHAPE.SQUARE}
       size={AVATAR_OF_SIZE[size]}
       tiled={tiled}
+      branded={branded}
       decorative
     />
   );
@@ -291,6 +295,7 @@ function Face({
           glyph={<ProductMark small />}
           size={size}
           tiled={tiled}
+          branded={actor.onGitHub === true}
         />
       );
     case ACTOR_KIND.AGENT:

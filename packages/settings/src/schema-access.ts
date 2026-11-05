@@ -60,6 +60,7 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
 export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,
+  APP_SETTING_SCHEMA.commitAuthor.field,
   APP_SETTING_SCHEMA.setupFinished.field,
 ] as const satisfies readonly AppSettingField[];
 
@@ -82,10 +83,11 @@ const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFER
 
 const SHARED_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(SHARED_PREFERENCE_FIELDS);
 
-/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, what Enter does in an agent's box while it works, and whether the account finished setup. */
+/** The preferences each riding a part of the snapshot of its own, named as the preference is: where the account's app links open, what Enter does in an agent's box while it works, who authors an agent's commits, and whether the account finished setup. */
 const OWN_PART_FIELDS = [
   APP_SETTING_SCHEMA.linkOpen.field,
   APP_SETTING_SCHEMA.agentEnter.field,
+  APP_SETTING_SCHEMA.commitAuthor.field,
   APP_SETTING_SCHEMA.setupFinished.field,
 ] as const satisfies readonly AccountPreferenceField[];
 

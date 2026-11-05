@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@repo/database/core/query";
+import { readAccountPreferences } from "@repo/database/models/account-store";
 import {
   type Agent,
   settleAgentAuthor,
@@ -9,6 +10,12 @@ import { AGENT_AUTHOR, type AgentAuthor } from "@repo/features/agent-wire";
 import type { CheckoutIdentity } from "@repo/features/checkout-identity";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { automationRun } from "@repo/features/model-label";
+import {
+  appAuthors,
+  COMMIT_AUTHOR_DEFAULT,
+  type CommitAuthor,
+  coAuthorCredited,
+} from "@repo/settings";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -70,17 +77,23 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * kept on its row (`AGENT_AUTHOR`), so the instructions that session
  * runs under and the checkout agree for the agent's life. An agent a
  * developer started by hand writes as that developer where
- * they signed in with GitHub and their own account may push to the
- * repository: its commits are authored as their GitHub account, at the
+ * they signed in with GitHub, their own account may push to the
+ * repository, and their Commit author choice (`@repo/settings`'s
+ * `COMMIT_AUTHOR`) has them author: its commits are authored as their GitHub account, at the
  * noreply address GitHub links to it, each ending on a trailer that names
- * the App's bot as co-author, which is how Claude Code names itself beside
+ * the App's bot as co-author where the choice credits it, which is how Claude Code names itself beside
  * the person it worked for, and its pull request is opened as them by the
  * service (`pull-request.ts`). An agent an automation started writes as the
  * App's bot, since no developer's hand started it, and so does one whose
- * developer has no GitHub sign-in or may not push, the row saying why. An
+ * developer chose the bot, has no GitHub sign-in, or may not push, the row
+ * saying why; where the developer chose the bot with themselves credited,
+ * the trailer names their GitHub account. An
  * agent on its starter's own token writes as the account the token belongs
- * to, read on it, with the same trailer, and its pull request is opened on
- * that token alone. The
+ * to, read on it, with the bot's trailer where the choice credits it, since
+ * the App does not reach its repository, and its pull request is opened on
+ * that token alone. Whether a trailer is written is read from the choice
+ * as each session starts, so a change takes from the agent's next session,
+ * while who authors stays as it was settled. The
  * identity is set here, as the checkout opens, and never by the model,
  * whose instructions say so; a device's checkout is the Mac's to make, so
  * its launch line carries the same identity, read the same way
@@ -120,13 +133,20 @@ function identityOf(user: GitHubUser): CheckoutIdentity {
   return { name: user.name ?? user.login, email: noreplyAddress(user) };
 }
 
+/** The starter's Commit author choice, as their preferences hold it; the default where they never chose. */
+const commitAuthorOf = (userId: string) =>
+  Effect.map(
+    readAccountPreferences(userId),
+    (row) => row?.preferences.commitAuthor ?? COMMIT_AUTHOR_DEFAULT,
+  );
+
 /**
  * Who the agent writes as, read now: the App's bot for an agent an
  * automation started; its starter's own token for an agent on it; the
- * developer where their GitHub sign-in may push to the repository; the
- * App's bot otherwise, with why. A GitHub that would not answer is the
- * App's bot too, since an agent's start does not wait on it, and only the
- * store's failure is the caller's.
+ * App's bot where the starter chose it; the developer where their GitHub
+ * sign-in may push to the repository; the App's bot otherwise, with why. A
+ * GitHub that would not answer is the App's bot too, since an agent's start
+ * does not wait on it, and only the store's failure is the caller's.
  */
 const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
@@ -134,6 +154,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
 ): Effect.fn.Return<AgentAuthor, StoreFailure, CheckoutServices> {
   if (automationRun(agent) !== undefined) return AGENT_AUTHOR.APP_AUTOMATION;
   if (agent.githubAccess === GITHUB_ACCESS.TOKEN) return AGENT_AUTHOR.TOKEN;
+  if (appAuthors(yield* commitAuthorOf(target.userId))) return AGENT_AUTHOR.APP_CHOSEN;
   const app = yield* GitHubApp;
   return yield* app.userPusher(target.userId, agent.repository).pipe(
     Effect.map((pusher) =>
@@ -167,41 +188,87 @@ const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
   return Option.getOrElse(settled, () => read);
 });
 
+/** Who an agent's commits are by, as its instructions tell it. */
+export const COMMIT_BY = {
+  DEVELOPER: "developer",
+  APP: "app",
+} as const;
+
+export type CommitBy = (typeof COMMIT_BY)[keyof typeof COMMIT_BY];
+
+/** Whose the agent's commits are, and the trailer naming the other as co-author, where the starter's choice credits one. */
+export interface CommitAuthorship {
+  readonly by: CommitBy;
+  readonly coAuthor: string | undefined;
+}
+
+/** A trailer crediting an account as a commit's co-author. */
+function coAuthorTrailer(identity: CheckoutIdentity): string {
+  return `Co-authored-by: ${identity.name} <${identity.email}>`;
+}
+
 /**
- * The trailer naming the App's bot as co-author of the agent's commits,
- * where the agent writes as its developer, through their sign-in or their
- * own token, which the bot is read on. Told to the session as it starts, so
- * a read that fails is logged and answers none, which words the
- * instructions as the App's and leaves the commits without the trailer
- * rather than failing the start.
+ * The trailer the agent's commits end on, for the author settled and the
+ * starter's choice read now: the App's bot where the agent writes as its
+ * developer, through their sign-in or their own token, which the bot is read
+ * on; the developer's GitHub account where they chose the bot to author;
+ * none where the choice credits no one, and none for an agent the bot
+ * writes for any other reason.
  */
-export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(function* (
+const coAuthorOf = /* @__PURE__ */ Effect.fn("web/agentCoAuthorOf")(function* (
   target: ConversationTarget,
   agent: WithRepository<Agent>,
-): Effect.fn.Return<string | undefined, never, CheckoutServices> {
+  author: AgentAuthor,
+  choice: CommitAuthor,
+) {
+  if (!coAuthorCredited(choice)) return undefined;
   const app = yield* GitHubApp;
-  return yield* Effect.gen(function* () {
-    const author = yield* agentAuthor(target, agent);
-    if (author !== AGENT_AUTHOR.DEVELOPER && author !== AGENT_AUTHOR.TOKEN) {
-      return undefined;
-    }
-    // Note that an agent on its starter's own token reads the bot on that token, which stands where their sign-in may not.
-    const token =
-      author === AGENT_AUTHOR.TOKEN
-        ? (yield* agentRepositoryToken(target, agent)).token
-        : yield* app.userToken(target.userId);
-    const bot = yield* app.appBot(token);
-    return `Co-authored-by: ${bot.login} <${noreplyAddress(bot)}>`;
-  }).pipe(
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(
-          `The co-author of conversation ${target.conversationId}'s commits was not read: ${failure._tag}`,
-        ),
-        undefined,
-      ),
-    ),
+  if (author === AGENT_AUTHOR.APP_CHOSEN) {
+    const token = yield* app.userToken(target.userId);
+    return coAuthorTrailer(identityOf(yield* app.tokenUser(token)));
+  }
+  if (author !== AGENT_AUTHOR.DEVELOPER && author !== AGENT_AUTHOR.TOKEN) return undefined;
+  // Note that an agent on its starter's own token reads the bot on that token, which stands where their sign-in may not.
+  const token =
+    author === AGENT_AUTHOR.TOKEN
+      ? (yield* agentRepositoryToken(target, agent)).token
+      : yield* app.userToken(target.userId);
+  const bot = yield* app.appBot(token);
+  return coAuthorTrailer({ name: bot.login, email: noreplyAddress(bot) });
+});
+
+/**
+ * Whose the agent's commits are and the trailer they end on, told to the
+ * session as it starts: the developer's where it writes as them, through
+ * their sign-in or their own token, and the App's bot's otherwise. A read
+ * that fails is logged rather than failing the start: an author unread
+ * answers the bot's, as the checkout falls back to it, and a trailer
+ * unread answers none.
+ */
+export const agentAuthorship = /* @__PURE__ */ Effect.fn("web/agentAuthorship")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<Agent>,
+): Effect.fn.Return<CommitAuthorship, never, CheckoutServices> {
+  const unread = (what: string) => (failure: { readonly _tag: string }) =>
+    Effect.logWarning(
+      `The ${what} of conversation ${target.conversationId}'s commits was not read: ${failure._tag}`,
+    );
+  const author = yield* agentAuthor(target, agent).pipe(
+    Effect.tapError(unread("author")),
+    Effect.option,
   );
+  if (Option.isNone(author)) return { by: COMMIT_BY.APP, coAuthor: undefined };
+  const by =
+    author.value === AGENT_AUTHOR.DEVELOPER || author.value === AGENT_AUTHOR.TOKEN
+      ? COMMIT_BY.DEVELOPER
+      : COMMIT_BY.APP;
+  const coAuthor = yield* Effect.flatMap(commitAuthorOf(target.userId), (choice) =>
+    coAuthorOf(target, agent, author.value, choice),
+  ).pipe(
+    Effect.tapError(unread("co-author")),
+    Effect.orElseSucceed(() => undefined),
+  );
+  return { by, coAuthor };
 });
 
 /**

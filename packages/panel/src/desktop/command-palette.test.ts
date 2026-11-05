@@ -220,7 +220,7 @@ function markRows(): string[] {
   );
 }
 
-test("⌘K marks the task on screen unread and then read, and offers no mark for a task Settings or the Inbox covers", () => {
+test("⌘K marks the task on screen unread, and offers no mark for a task Settings or the Inbox covers", () => {
   const draw = paletteOverTask();
   draw(undefined);
   assert.deepEqual(markRows(), []);
@@ -228,12 +228,18 @@ test("⌘K marks the task on screen unread and then read, and offers no mark for
     assert.ok(runAppCommand(APP_COMMAND.COMMAND_PALETTE), "⌘K closes");
   });
 
+  const marks: string[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_MARK_READ]: ({ taskId, readMark }) => {
+      marks.push(`${readMark}:${taskId}`);
+      return Promise.resolve(true);
+    },
+  });
   draw(DOCUMENT_TASK);
   assert.deepEqual(markRows(), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(markRows(), ["Mark as read"]);
-  press("Mark as read");
-  assert.deepEqual(markRows(), ["Mark as unread"]);
+  // Note that the plan on screen is looked at as it opens, so the mark by hand is the newest asked.
+  assert.equal(marks.at(-1), `unread:${DOCUMENT_TASK.id}`);
 });
 
 /** Whether the palette stands where a reader meets it: its card drawn, and hidden by nothing around it. */
@@ -1219,7 +1225,7 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
-    row?.querySelector(".ui-combobox-option-glyph")?.innerHTML,
+    row?.querySelector(".ui-combobox-option-glyph svg")?.outerHTML,
     renderToStaticMarkup(fileLook(path).icon),
     "the row wears the file's type icon",
   );
@@ -2149,6 +2155,66 @@ test("under All, a query nothing else matches says the repository's files are st
   assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
 });
 
+test("Files says a failed read with a Retry that reads the repository's files again", async () => {
+  const answers: Array<(listed: TasksTreeAnswer) => void> = [];
+  const failures: Array<(cause: Error) => void> = [];
+  const tasks = tasksControl({
+    activeTaskId: "plan-1",
+    tasks: [
+      {
+        id: "plan-1",
+        workspaceId: "workspace-personal",
+        name: "Teammate invitations",
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+  });
+  handState({}, { [LIVE_READ.AUTOMATIONS]: { [ACME.id]: { rows: [] } } });
+  fakeActPort({});
+  handMembers(() => ({ rows: { members: [] } }));
+  openPalette(
+    { ...tasks, workspace: ACME },
+    () =>
+      new Promise((resolve, reject) => {
+        answers.push(resolve);
+        failures.push(reject);
+      }),
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.TASKS,
+    AtomRegistry.make(),
+  );
+  await settle();
+  chooseFilter("Files");
+  await settle();
+  await act(async () => failures[0]?.(new Error("the host went away")));
+  await settle();
+  assert.match(emptyLine() ?? "", /The files could not be read\./u);
+
+  const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "Retry is offered");
+  act(() => retry.click());
+  await settle();
+  assert.equal(emptyLine(), "Reading the repository's files");
+  await act(async () =>
+    answers[1]?.({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: "src/relay.ts", kind: TASK_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  await settle();
+  assert.deepEqual(rows(), ["relay.ts · src"]);
+});
+
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
   const member = {
     userId: "user-charles",
@@ -2317,7 +2383,7 @@ test("on a one-off agent's page, ⌘K offers Pin agent, or Unpin agent once it i
   assert.deepEqual(asked, ["agent-9:true", "agent-9:false"]);
 });
 
-test("on a one-off agent's page, ⌘K marks the agent unread and then read, and offers no mark while no agent's page stands", () => {
+test("on a one-off agent's page, ⌘K marks the agent unread, and offers no mark while no agent's page stands", () => {
   const agent = {
     id: "agent-8",
     planId: null,
@@ -2332,11 +2398,11 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
     repository: "acme/relay",
     activityAt: 2,
   };
-  const seen: string[] = [];
+  const marks: string[] = [];
   fakeActPort({
-    [ACT_KIND.AGENTS_SEEN]: ({ agentId }) => {
-      seen.push(agentId);
-      return Promise.resolve(undefined);
+    [ACT_KIND.AGENTS_MARK_READ]: ({ agentId, readMark }) => {
+      marks.push(`${readMark}:${agentId}`);
+      return Promise.resolve({ failure: AGENT_CALL_FAILURE.UNANSWERED });
     },
   });
   const draw = (agentId: string | undefined) => {
@@ -2359,10 +2425,7 @@ test("on a one-off agent's page, ⌘K marks the agent unread and then read, and 
   assert.deepEqual(draw(undefined), []);
   assert.deepEqual(draw(agent.id), ["Mark as unread"]);
   press("Mark as unread");
-  assert.deepEqual(draw(agent.id), ["Mark as read"]);
-  press("Mark as read");
-  assert.deepEqual(draw(agent.id), ["Mark as unread"]);
-  assert.deepEqual(seen, [agent.id]);
+  assert.deepEqual(marks, [`unread:${agent.id}`]);
 });
 
 /** The task on screen, listed in the sidebar beside the palette, its pin landing where the row menu's would. */

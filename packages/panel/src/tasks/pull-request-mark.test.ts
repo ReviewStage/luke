@@ -68,6 +68,7 @@ function places(drawn: AgentPullRequest): ReadonlyMap<string, ReactElement> {
       "pull request card",
       createElement(PullRequestCard, {
         pullRequest: drawn,
+        place: { taskId: null },
         lines: drawn,
         files: drawn.changedFiles,
         agent: {

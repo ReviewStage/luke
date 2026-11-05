@@ -18,8 +18,8 @@
  * agent stands in, its task or, with none, its workspace and repository,
  * and answers alike. The calls into an agent
  * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
- * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
- * MCP servers switched off, or a model and effort, and answers the agent as
+ * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, a
+ * read mark, the MCP servers switched off, or a model and effort, and answers the agent as
  * it then stands. A delete (`DELETE /api/agents/{id}`) takes the agent for
  * good by the task delete's own steps, for any member who reaches it.
  *
@@ -44,6 +44,7 @@ import {
   hasRepository,
   listAgentLines,
   listWorkspaceAgentLines,
+  markAgentReadCommitted,
   nativeRouteOfReached,
   nativeRuntimesOfReached,
   pinAgentCommitted,
@@ -80,10 +81,10 @@ import {
 } from "../events/server-events.js";
 import { changesPeople, namedReviewOptions } from "../github/github-people.js";
 import {
-  imageCommits,
   pullRequestByNumber,
   pullRequestFiles,
   pullRequestReviewOptions,
+  readCommits,
 } from "../github/pull-requests.js";
 import {
   HOSTED_REFUSAL,
@@ -289,7 +290,7 @@ function agentStandsStopped(agent: Agent) {
 
 /**
  * A pull request's changes: its files, who it names (`github-people.ts`),
- * and the commits its changed images are read at (`imageCommits`), read
+ * and the commits its changed files are read whole at (`readCommits`), read
  * from GitHub afresh on the token minted for its repository, with who its
  * subject says it writes as. Shared with the reads of a pull request by
  * its repository (`github/repository-pull-request-procedures.ts`).
@@ -300,7 +301,7 @@ export const pullRequestChangesRead = (
   pullRequest: AgentPullRequest,
 ) =>
   Effect.gen(function* () {
-    // Note that the pull request itself is read beside its files for its head and base, which its changed images are read at; a read that does not land names neither.
+    // Note that the pull request itself is read beside its files for its head and base, which its changed files are read whole at; a read that does not land names neither.
     const [files, people, whole] = yield* Effect.all(
       [
         pullRequestFiles(token, subject.repository, pullRequest),
@@ -312,7 +313,7 @@ export const pullRequestChangesRead = (
       ],
       { concurrency: "unbounded" },
     );
-    const commits = yield* imageCommits(token, subject.repository, whole, files.files);
+    const commits = yield* readCommits(token, subject.repository, whole, files.files);
     return {
       url: pullRequest.url,
       ...commits,
@@ -502,6 +503,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * tab falls back to the model's name. `archived` archives the agent,
      * stopping a turn still running first as a Stop does, or brings it back.
      * `pinned` pins it for the asking member alone, or unpins it.
+     * `readMark` moves the asking member's own read mark of it.
      * `disabledServers` replaces the list of MCP servers switched off for
      * it, which its next turn reads as it starts. A model and effort, and the
      * standard context window where it is chosen, change what its next step
@@ -554,6 +556,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           yield* hostedStoreOrUnavailable(
             pinAgentCommitted(userId, agent.id, body.pinned, body.position),
           ),
+        );
+      }
+      if ("readMark" in body) {
+        return yield* committedAgent(
+          userId,
+          yield* hostedStoreOrUnavailable(markAgentReadCommitted(userId, agent.id, body.readMark)),
         );
       }
       if ("disabledServers" in body) {
@@ -646,8 +654,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /**
      * The agent's changes: the files of the pull request its kept published
      * answer names, or the one of its repository the query numbers, who it
-     * names (`github-people.ts`), and the commits its changed images are read
-     * at (`imageCommits`), read from GitHub afresh on a token minted for the
+     * names (`github-people.ts`), and the commits its changed files are read
+     * whole at (`readCommits`), read from GitHub afresh on a token minted for the
      * agent's repository on its task's workspace installation, with who its
      * row says it writes as; none where it names no pull request yet.
      */

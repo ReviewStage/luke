@@ -9,6 +9,7 @@ import {
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { FoldChevronIcon } from "../../face/glyphs.js";
+import { ReplayMask } from "../../session-replay-marks.js";
 import { LIST_COLUMN, TASK_PROPERTY } from "../../tasks-page-model.js";
 import { BUTTON_SIZE } from "../button/button.js";
 import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, CARD_SHADOW, Card } from "../card/card.js";
@@ -510,7 +511,10 @@ export function TaskRow({
       }}
     >
       <span id={nameId} className={`${PRESS} ${unread ? NAME_WEIGHT.UNREAD : NAME_WEIGHT.REST}`}>
-        <OneLine>{name}</OneLine>
+        {/* A task's name is always a person's words, so a screen recording masks it whatever stands round the row. */}
+        <OneLine words={name}>
+          <ReplayMask>{name}</ReplayMask>
+        </OneLine>
         {beside === undefined ? null : <span className={BESIDE}>{beside}</span>}
         {said}
       </span>
@@ -646,7 +650,9 @@ export function TaskRowDraft({
     >
       <NameCell>
         {note === undefined ? (
-          <span className={`${PRESS} ${NAME_WEIGHT.REST}`}>{name}</span>
+          <span className={`${PRESS} ${NAME_WEIGHT.REST}`}>
+            <ReplayMask>{name}</ReplayMask>
+          </span>
         ) : (
           <span className={NOTE}>{note}</span>
         )}

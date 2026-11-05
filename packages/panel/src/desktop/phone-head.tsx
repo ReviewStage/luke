@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { ActionMenu, type MenuAction, type MenuEnds, type MenuEntry } from "./action-menu.js";
+import { OfflineStrip } from "./offline-mark.js";
 import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
@@ -36,6 +37,10 @@ import type { TaskHeadBack } from "./task-pane-switcher.js";
  * or its Filter, is kept whole rather than folded into the ⋯: the ⋯ offers
  * it as one item, which closes the ⋯ and opens that menu where the ⋯ stood
  * (`MenuAsk`), so a menu of submenus is never a submenu itself.
+ *
+ * Under the row stands what the Offline mark says while the window is
+ * behind (`OfflineStrip`), because a phone keeps the sidebar's foot, where
+ * the mark stands, in a drawer out of sight.
  */
 
 /** An ask, from a phone's ⋯, to open a menu of the page's own under it: the ⋯ it hangs from, and the ask's turn, so the same ask twice opens it twice. */
@@ -82,6 +87,8 @@ export interface PhoneHeadSlots {
   start: React.ReactNode;
   /** What is on screen, centered, or what stands in its place, such as a search's field; none where the page's own header names it, the row then picking that name up (`pickUp`). */
   title?: React.ReactNode;
+  /** Whether a title in words is the app's own, which a screen recording shows as it reads (`Toolbar`'s `titleReplayUnmasked`); masked where none is named. */
+  titleReplayUnmasked?: boolean | undefined;
   /** A document's name, centered once its header has scrolled away; read only where there is no `title`. */
   pickUp?: ToolbarPickUp | undefined;
   /** What names the page's state, after the title on its baseline (an experiment's mark). */
@@ -91,7 +98,15 @@ export interface PhoneHeadSlots {
 }
 
 /** The bar a phone's row is, as `Toolbar` takes it, for a state that draws its own bar (`NotFound`). */
-export function phoneBar({ place, start, title, pickUp, tag, end }: PhoneHeadSlots): ToolbarProps {
+export function phoneBar({
+  place,
+  start,
+  title,
+  titleReplayUnmasked,
+  pickUp,
+  tag,
+  end,
+}: PhoneHeadSlots): ToolbarProps {
   return {
     look: TOOLBAR_LOOK.PHONE,
     place,
@@ -101,15 +116,21 @@ export function phoneBar({ place, start, title, pickUp, tag, end }: PhoneHeadSlo
     end: TOOLBAR_INSET.COLUMN,
     lead: start,
     title,
+    titleReplayUnmasked,
     pickUp,
     tag,
     actions: end,
   };
 }
 
-/** The row; see the module's head. */
+/** The row, and under it what the Offline mark says while the window is behind; see the module's head. */
 export function PhoneHead(slots: PhoneHeadSlots): React.JSX.Element {
-  return <Toolbar {...phoneBar(slots)} />;
+  return (
+    <>
+      <Toolbar {...phoneBar(slots)} />
+      <OfflineStrip />
+    </>
+  );
 }
 
 /**
@@ -176,6 +197,7 @@ export function PlaceMore({
   shown,
   groups,
   ends,
+  replayUnmasked,
 }: {
   /** What the place is, which names its ⋯ and its menu: "Inbox" makes "Inbox actions". */
   thing: string;
@@ -184,6 +206,8 @@ export function PlaceMore({
   groups: (opener: HTMLElement) => readonly (readonly MenuEntry[])[];
   /** What the menu draws beyond its items, read as it is drawn: a task's header's names the task and says who created it on its Plan view. */
   ends?: (() => MenuEnds | undefined) | undefined;
+  /** Whether its items' words are the app's own, which a screen recording shows as they read, but for an item that is `replayMasked` (`ActionMenu`'s). */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const drawn = menu.drawn === undefined ? undefined : ends?.();
@@ -198,6 +222,7 @@ export function PlaceMore({
           footer={drawn?.footer}
           groups={groups(menu.drawn.opener)}
           onClose={menu.close}
+          replayUnmasked={replayUnmasked}
         />
       )}
     </>

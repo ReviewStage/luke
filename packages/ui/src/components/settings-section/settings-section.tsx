@@ -313,15 +313,35 @@ function SectionFrame({
   );
 }
 
+/** A section's title, and the control at its end where it has one. */
+function SectionHead({
+  action,
+  children,
+}: {
+  action: ReactNode;
+  children: ReactNode;
+}): React.JSX.Element {
+  if (action === undefined || action === null || action === false) return <>{children}</>;
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-ui-8">
+      {children}
+      {action}
+    </div>
+  );
+}
+
 /** A card of `children`, one row or line each, under `title` when there is one. */
 export function SettingsSection({
   title,
+  action,
   anchor,
   frame = SETTINGS_SECTION_FRAME.CARD,
   children,
 }: {
   /** The group's name, or nothing when the page's title already names it. */
   title?: ReactNode;
+  /** One control at the head's end, beside the title, acting on the whole group (Members' Invite). */
+  action?: ReactNode;
   /** The id a Settings link or a search result lands on, worn by the whole section. */
   anchor?: string | undefined;
   /** The card around the children, none for one control that draws its own frame, or the rows bare in a surface that frames them. */
@@ -335,16 +355,18 @@ export function SettingsSection({
     <SectionFrame
       head={
         headed ? (
-          <Text
-            variant={
-              frame === SETTINGS_SECTION_FRAME.ROWS ? TEXT_VARIANT.GROUP : TEXT_VARIANT.SECTION
-            }
-            tone={TEXT_TONE.MUTED}
-            as={TEXT_ELEMENT.H2}
-            id={headingId}
-          >
-            {title}
-          </Text>
+          <SectionHead action={action}>
+            <Text
+              variant={
+                frame === SETTINGS_SECTION_FRAME.ROWS ? TEXT_VARIANT.GROUP : TEXT_VARIANT.SECTION
+              }
+              tone={TEXT_TONE.MUTED}
+              as={TEXT_ELEMENT.H2}
+              id={headingId}
+            >
+              {title}
+            </Text>
+          </SectionHead>
         ) : undefined
       }
       labelledBy={headed ? headingId : undefined}

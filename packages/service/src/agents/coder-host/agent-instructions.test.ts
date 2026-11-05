@@ -43,7 +43,7 @@ function agentHanded(handed: Pick<Agent, "planSnapshot" | "prompt">): Agent {
 
 const CONTEXT = {
   ciReadable: false,
-  coAuthor: undefined,
+  authorship: undefined,
   workspace: "acme",
   memoryOn: false,
 } as const;

@@ -21,6 +21,7 @@ import {
   type AgentInboxReadStateView,
   type AgentInboxSnoozeParams,
   type AgentListAnswer,
+  type AgentMarkReadParams,
   type AgentMessagesAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
@@ -28,6 +29,7 @@ import {
   type AgentPullRequestWriteAnswerView,
   type AgentRenameParams,
   type AgentServersParams,
+  type AgentStartParams,
   type AgentTranscriptOlderAnswer,
   agentArchiveParamsSchema,
   agentChooseParamsSchema,
@@ -44,6 +46,7 @@ import {
   agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
+  agentMarkReadParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
   agentPageParamsSchema,
@@ -100,7 +103,7 @@ import {
   closedNow,
   type InboxReader,
 } from "@repo/features/inbox-writes";
-import { writeUntakenOf } from "@repo/features/keyed-write";
+import { WRITE_UNTAKEN, writeUntakenOf } from "@repo/features/keyed-write";
 import { LIVE_READ, type LiveRead } from "@repo/features/live-wire";
 import { MODEL_CATALOG_TTL, type ModelsAnswer } from "@repo/features/models-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -111,6 +114,7 @@ import {
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
 } from "@repo/features/pull-request-chapters-view";
+import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import {
@@ -306,6 +310,7 @@ export type AgentClient = Pick<
   | "changeQueue"
   | "archive"
   | "pin"
+  | "markRead"
   | "stop"
   | "rewind"
   | "delete"
@@ -998,6 +1003,50 @@ function composed(
     ({ agentId, ...request }, key) => asked(client.pin(agentId, request, key)),
     { name: GATEWAY_METHOD.AGENTS_PIN, input: agentPinParamsSchema },
   );
+  /** The reader's read mark, drawn on the agent's row at once, and kept once the list carries the service's. */
+  const markedRead = agentWrite<AgentMarkReadParams>(
+    ({ readMark }) =>
+      (row) =>
+        markedAs(readMark, row, kernel.now()),
+    ({ agentId, ...request }, key) => asked(client.markRead(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_MARK_READ, input: agentMarkReadParamsSchema },
+  );
+  /**
+   * A Start, on a task or from another agent, which draws no row, since
+   * only the service names its agent, which the list then carries. Where
+   * the service did not answer, it waits as the row writes waiting do and
+   * holds its window's call until it is sent, so the window draws the Start
+   * as under way until its agent or its refusal comes. Note that the press's
+   * own key in its request keeps one sent again to one agent, which the
+   * service answers with, so it carries no key of the pool's.
+   */
+  const started: WriteDeclaration<
+    AgentRow,
+    FieldChange<AgentRow>,
+    AgentStartParams,
+    AgentAgentAnswer
+  > = {
+    kind: AGENT,
+    keys: () => [],
+    change: () => () => ({}),
+    send: ({ taskId, ...request }) =>
+      Effect.map(
+        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
+        asked(taskId === undefined ? client.startFrom(request) : client.start(taskId, request)),
+        (answered) => {
+          if ("agent" in answered) return { answer: answered, txid: answered.txid };
+          return writeUntakenOf(answered.cause) === WRITE_UNTAKEN.UNANSWERED
+            ? { refused: answered, unanswered: true as const }
+            : { refused: answered };
+        },
+      ),
+    queue: {
+      name: GATEWAY_METHOD.AGENTS_START,
+      input: agentStartParamsSchema,
+      queued: () => ({ failure: AGENT_CALL_FAILURE.UNANSWERED }),
+      holds: () => true,
+    },
+  };
 
   /** The member signed in now, whom a write drawn before the service answers names. */
   const reader = () => dependencies.reader?.();
@@ -1383,15 +1432,12 @@ function composed(
       }),
     [GATEWAY_METHOD.AGENTS_START]: (params) =>
       Effect.gen(function* () {
-        const { taskId, ...request } = yield* readParams(
+        const start = yield* readParams(
           agentStartParamsSchema,
           params,
           "starting an agent names a task or an agent to start from, and the press's own key",
         );
-        // A Start from another agent that names no task goes where that agent is, its task or its workspace.
-        const answer = yield* asked(
-          taskId === undefined ? client.startFrom(request) : client.start(taskId, request),
-        );
+        const answer = yield* dependencies.pool.write(started, start);
         // Note that a Start answers once the task list carries its agent, because the window draws
         // a task's agents from the list alone, so the tab it opens finds its agent there.
         if ("txid" in answer) yield* listed(answer.txid);
@@ -1517,6 +1563,16 @@ function composed(
         params,
         "pinning an agent names the agent and whether it is pinned",
       ),
+    ),
+    [GATEWAY_METHOD.AGENTS_MARK_READ]: declaredMethod(
+      dependencies.pool,
+      markedRead,
+      (params: WireRecord) =>
+        readParams(
+          agentMarkReadParamsSchema,
+          params,
+          "marking an agent read names the agent and how its mark moves",
+        ),
     ),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {
@@ -1699,7 +1755,7 @@ function composed(
         readParams(
           chaptersModelWriteParamsSchema,
           params,
-          "the chapters model names one of the models Settings offers",
+          "the chapters model names one of the models Generate offers",
         ),
     ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.
@@ -1855,7 +1911,7 @@ function composed(
         readParams(
           agentInboxCloseParamsSchema,
           params,
-          "closing an inbox item names the item, the revision it closes, and the close's key",
+          "closing an inbox item names the item, the revision it closes, the close's key, and the note it may carry",
         ),
     ),
     [GATEWAY_METHOD.AGENTS_INBOX_MESSAGE]: declaredMethod(
@@ -1989,6 +2045,7 @@ function composed(
     reset,
     keysAnswered,
     queueable: [
+      anyWrite(started),
       anyWrite(renamed),
       anyWrite(pinned),
       anyWrite(nodded),

@@ -4,6 +4,7 @@ import {
   AGENT_MACHINE,
   AGENT_STATUS,
   agentPullRequestSchema,
+  agentRunsOnRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
@@ -16,6 +17,7 @@ import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { type ReadMark, readMarkSchema } from "./read-mark.js";
 import { chosenIdSchema, countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
@@ -196,27 +198,22 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Where a task's coding agents run, as a request names it: the cloud, or one
- * of the asking member's own devices (a Mac's desktop app or a host) by its
- * id, which the service checks is theirs, beat lately, and runs some model
- * before it keeps it. It decides where every agent started on the task runs
- * (`startAgent`'s resolver), and is set when the task is created.
+ * Where a task's coding agents run, as a released desktop still names it on
+ * a task's create or change, in a Start's own shape
+ * (`agentRunsOnRequestSchema`). A task holds no place, each agent its own,
+ * so the service reads it only for those builds: a create runs the agent it
+ * starts there and keeps it as the starter's last pick, and a change ignores
+ * it.
  */
-const taskRunsOnRequestSchema = EffectSchema.Union([
-  EffectSchema.Struct({ machine: EffectSchema.Literal(AGENT_MACHINE.VERCEL) }),
-  EffectSchema.Struct({
-    machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
-    deviceId: wireUuidSchema,
-  }),
-]);
+const taskRunsOnRequestSchema = agentRunsOnRequestSchema;
 
 export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, and the servers switched off, held to the same
- * words-or-files rule, but never `from` or a note, since a new task has no
+ * a prompt and its files, the servers switched off, and where it runs,
+ * held to the same words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
  * desktop's own Start params name it by: the `task` an agent Start's body
  * spells it as is a released desktop's, which never sends this.
@@ -229,6 +226,7 @@ const taskAgentStartSchema = EffectSchema.Struct({
   prompt: agentStartRequestFields.prompt,
   attachments: agentStartRequestFields.attachments,
   disabledServers: agentStartRequestFields.disabledServers,
+  runsOn: agentStartRequestFields.runsOn,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -327,14 +325,16 @@ function relationsEachOnce(request: {
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
  * unless `status` and `priority` say otherwise, and assigned to no one
- * unless `assigneeId` names a member of its workspace. Its agents run in the
- * cloud unless `runsOn` names one of the starter's devices, kept on the task
- * before the agent the start asks for starts, so that agent runs there too.
+ * unless `assigneeId` names a member of its workspace. A task holds no place
+ * to run: the agent the start asks for runs where its own `runsOn` names,
+ * else where the start's `runsOn` names, which only a released desktop sends
+ * and which is kept as the starter's last pick where no agent is asked for,
+ * else where any Start naming none runs (`agent-wire.ts`'s
+ * `agentStartRequestFields`).
  * A `parentTaskId` makes it the child of a task the starter reaches in the
- * same workspace, to any depth: the child takes its parent's repository and
- * where its agents run, so a start naming another repository is refused
- * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), as one naming another place
- * to run is (`HOSTED_API_ERROR.RUNS_ON_LOCKED`), and a parent the starter
+ * same workspace, to any depth: the child takes its parent's repository, so
+ * a start naming another repository is refused
+ * (`HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED`), and a parent the starter
  * cannot reach is not found. `relations` start the task related to others
  * the starter reaches in the same workspace, written in the start's own
  * transaction, so the task and every relation land together or not at all,
@@ -407,6 +407,7 @@ function updateNamesAChange(update: {
   repository?: string | null;
   pinned?: boolean;
   pinPosition?: string;
+  readMark?: ReadMark;
   archived?: boolean;
   workspaceId?: string;
   status?: TaskStatus;
@@ -425,23 +426,24 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
 /**
  * Changing a task (PATCH): its name, its repository, whether it is pinned,
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
- * which comes only with `pinned: true` and pins a plan not yet pinned,
+ * which comes only with `pinned: true` and pins a plan not yet pinned, the
+ * asking member's own read mark (`read-mark.ts`),
  * whether it is archived, the workspace it moves to, where it stands, how
  * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
  * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
  * the task's repository, and lets its assignee go where they are no member there.
- * Where its agents run (`runsOn`) is set when the task is created and never
- * changed: the field is still read so a build that sends it decodes, a value
- * equal to the one the task holds changes nothing, and any other is refused
- * (`HOSTED_API_ERROR.RUNS_ON_LOCKED`).
+ * A task holds no place to run, so `runsOn`, which a released desktop still
+ * sends, is read so that build's change decodes, and changes nothing.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
   pinPosition: EffectSchema.optionalKey(pinPositionSchema),
+  /** What the change makes of the asking member's own read mark (`read-mark.ts`). */
+  readMark: EffectSchema.optionalKey(readMarkSchema),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   status: EffectSchema.optionalKey(taskStatusSchema),
@@ -617,15 +619,16 @@ const taskOriginSchema = EffectSchema.Struct({
 export type TaskOrigin = typeof taskOriginSchema.Type;
 
 /**
- * Where a task's agents run, said only of a task that runs them on a
- * device: which one by its id, whose it is, since only that member's agents
- * run on it and a teammate's run in the cloud, and the name it registered
- * with, what kind of device it is, its platform, which its glyph follows
- * and which a service older than it leaves out, and the epoch milliseconds it last beat,
- * which a window does not judge by, since its own clock may differ from the service's: it reads the beats
- * from `hosts.presence` (`deviceStanding`). The device and
- * its owner are absent once the device's row is gone, where a start on the
- * task is refused until it is changed.
+ * Where a task's newest agent runs, kept for released desktops, which draw a
+ * task's agent rows and Runs on chip from it; a task holds no place of its
+ * own. Said only where that agent runs on a device: which one by its id,
+ * whose it is, since only that member's agents run on it, and the name it
+ * registered with, what kind of device it is, its platform, which its glyph
+ * follows and which a service older than it leaves out, and the epoch
+ * milliseconds it last beat, which a window does not judge by, since its own
+ * clock may differ from the service's: it reads the beats from
+ * `hosts.presence` (`deviceStanding`). The device and its owner are absent
+ * once the device's row is gone.
  */
 const taskRunsOnSchema = EffectSchema.Struct({
   machine: EffectSchema.Literal(AGENT_MACHINE.DEVICE),
@@ -666,6 +669,10 @@ const taskSummaryFields = {
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** Epoch milliseconds the reader read the task through (`read-mark.ts`), the service's instant; absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  /** Whether the reader marked the task unread and has not opened it since; absent from a service before read marks were kept. */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * The account that started the task, its owner, which alone may move it to
    * another workspace; absent from a service before it was sent.
@@ -701,7 +708,11 @@ const taskSummaryFields = {
    * be assigned.
    */
   assignee: EffectSchema.optionalKey(memberRefSchema),
-  /** Where the task's agents run: absent for the cloud, and from a service before tasks said. */
+  /**
+   * Where the task's newest agent runs (`taskRunsOnSchema`), kept for
+   * released desktops alone: absent for the cloud, for a task with no agent,
+   * and from a service before tasks said.
+   */
   runsOn: EffectSchema.optionalKey(taskRunsOnSchema),
   /** The task this one is a child of; absent for a task at the top, and from a service before child tasks. */
   parentTaskId: EffectSchema.optionalKey(wireUuidSchema),

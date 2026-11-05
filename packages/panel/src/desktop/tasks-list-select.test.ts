@@ -486,9 +486,9 @@ test("the bar's Permanently delete asks first, naming how many, and deletes only
   assert.match(question?.textContent ?? "", /Permanently delete 2 tasks\?/u);
   assert.deepEqual(deleted, [], "nothing goes before the answer");
   const confirm = [...(question?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-    (button) => button.textContent === "Permanently delete",
+    (button) => button.textContent === "Permanently delete tasks",
   );
-  assert.ok(confirm, "the question offers Permanently delete");
+  assert.ok(confirm, "the question offers Permanently delete tasks");
   act(() => confirm.click());
   await settle();
 
@@ -502,15 +502,15 @@ test("a delete the service refuses for some tasks keeps only those asked of and 
   commandClick(page, "ACME-42");
   refusing.add("t-42");
   const question = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
-  const press = () => {
+  const press = (verb: string) => {
     const button = [...(question()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
-      (each) => each.textContent === "Permanently delete",
+      (each) => each.textContent === verb,
     );
-    act(() => (button ?? assert.fail("the question offers Permanently delete")).click());
+    act(() => (button ?? assert.fail(`the question offers ${verb}`)).click());
   };
 
   act(() => barButton(page, "Permanently delete").click());
-  press();
+  press("Permanently delete tasks");
   await settle();
   assert.match(question()?.textContent ?? "", /Permanently delete 1 task\?/u);
   assert.match(
@@ -520,7 +520,7 @@ test("a delete the service refuses for some tasks keeps only those asked of and 
   );
 
   refusing.clear();
-  press();
+  press("Permanently delete task");
   await settle();
   assert.deepEqual(deleted.slice(2), ["t-42"]);
   assert.equal(page.querySelector('[role="toolbar"]'), null, "the selection is let go");

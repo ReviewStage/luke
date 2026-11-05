@@ -184,7 +184,12 @@ export function useInboxSnoozing({
           const named = pickedInstant(picked, Date.now());
           if (named.kind === PICKED.AT) onSnooze(item, named.at);
           if (named.kind === PICKED.PAST)
-            toast({ words: WORDS.PAST, tone: STATUS_TONE.ATTENTION, hold: TOAST_HOLD.FAILED });
+            toast({
+              replayUnmasked: true,
+              words: WORDS.PAST,
+              tone: STATUS_TONE.ATTENTION,
+              hold: TOAST_HOLD.FAILED,
+            });
         },
       });
     },
@@ -212,6 +217,7 @@ export function useInboxSnoozing({
     <>
       {menu.drawn === undefined || groups.length === 0 ? null : (
         <ActionMenu
+          replayUnmasked
           label={WORDS.SNOOZE_UNTIL}
           menu={menu.drawn}
           groups={groups}

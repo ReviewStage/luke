@@ -2,6 +2,8 @@ import { Duration } from "effect";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
+import { type MarkProvider, PROVIDER_MARK_SIZE, ProviderMark } from "../../marks/provider-mark.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -14,7 +16,9 @@ import { useToastSwipe } from "./toast-swipe.js";
  * tone picks: a check for what was done, an alert for what was refused, the
  * Inbox's tray for an ask, and the spinner's ring for work still under way;
  * or by a `glyph` of its own, in its tone's ink, where what it says has a
- * glyph that names it better, as the speaker names the Mac's sound.
+ * glyph that names it better, as the speaker names the Mac's sound; or by
+ * a provider's `mark`, in the brand's own ink rather than the tone's, where
+ * what it says is about one of the account's connections.
  * A working toast turns into what came of the work in place, its tone,
  * words, and actions changed on the same card: the glyph it led with fades
  * out under the one it now leads with, which grows in on the spring, and its
@@ -61,6 +65,9 @@ export const TOAST_HOLD = {
   UNDO: Duration.seconds(5),
   FAILED: Duration.seconds(6),
 } as const;
+
+/** The ink a provider's mark stands in: the words' own, since a brand mark is no tone's glyph. */
+const MARK_INK = "text-foreground";
 
 /** A second, in milliseconds: the notch a countdown drains by under reduced motion. */
 const SECOND_MS = 1000;
@@ -134,8 +141,10 @@ function useToneTurn(tone: ToastTone): { now: ToastTone; was: ToastTone | undefi
 export function Toast({
   tone,
   glyph,
+  mark,
   words,
   detail,
+  replayUnmasked = false,
   leaving = false,
   actions,
   countdown,
@@ -145,9 +154,13 @@ export function Toast({
   tone: ToastTone;
   /** The glyph it leads with in place of its tone's, where what it says has one of its own. */
   glyph?: (() => React.JSX.Element) | undefined;
+  /** The provider whose mark it leads with in place of its tone's glyph, where what it says is about that provider's connection. */
+  mark?: MarkProvider | undefined;
   words: string;
   /** A second line under the words. */
   detail?: string | undefined;
+  /** Whether its words and detail are the app's own, which a screen recording shows as they read; a toast that quotes a person's words, a name, or a refusal's words leaves them masked. */
+  replayUnmasked?: boolean | undefined;
   /** Whether it is on its way out. */
   leaving?: boolean;
   /** Its action and dismiss, as `ToastActions` draws them; a toast with none is never pointed at. */
@@ -205,24 +218,32 @@ export function Toast({
         {glyphs.map((shown) => (
           <span
             key={shown}
-            className={`col-start-1 row-start-1 flex ${GLYPH_INK[shown]}`}
+            className={`col-start-1 row-start-1 flex ${mark !== undefined && shown === turn.now ? MARK_INK : GLYPH_INK[shown]}`}
             data-tone={shown}
             data-turn={shown === turn.now ? GLYPH_TURN.NOW : GLYPH_TURN.WAS}
           >
-            {Lead !== undefined && shown === turn.now ? <Lead /> : <ToneGlyph tone={shown} />}
+            {shown !== turn.now ? (
+              <ToneGlyph tone={shown} />
+            ) : mark !== undefined ? (
+              <ProviderMark provider={mark} size={PROVIDER_MARK_SIZE.SLOT} />
+            ) : Lead !== undefined ? (
+              <Lead />
+            ) : (
+              <ToneGlyph tone={shown} />
+            )}
           </span>
         ))}
       </span>
       <span className={TOAST_TEXT} key={words}>
         <span className="ui-toast-words line-clamp-2 wrap-anywhere">
           <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
-            {words}
+            <ReplayWords unmasked={replayUnmasked}>{words}</ReplayWords>
           </Text>
         </span>
         {detail === undefined ? null : (
           <span className="ui-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {detail}
+              <ReplayWords unmasked={replayUnmasked}>{detail}</ReplayWords>
             </Text>
           </span>
         )}

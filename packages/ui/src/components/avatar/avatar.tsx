@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { identityHue, identityLetter } from "../../actor-model.js";
 import { UserIcon } from "../../face/glyphs.js";
+import { ReplayMask } from "../../session-replay-marks.js";
 import {
   Avatar as ShadcnAvatar,
   AvatarFallback as ShadcnAvatarFallback,
@@ -24,6 +25,10 @@ import {
  * letter, its `glyph`: the glyph alone on the ground beneath it, in the ink
  * around it, or on a quiet tile where it is `tiled`, as a facepile whose
  * faces overlap draws it so the face beneath never shows through.
+ *
+ * The product's own square may stand as GitHub shows its App's bot instead
+ * (`branded`): its glyph in copper on the brand's night tile, the same in
+ * either theme, as the avatar the brand cuts for GitHub is drawn.
  *
  * Nobody, where a place says who is on something and no one is, stands as
  * an empty seat in a dashed outline of the same box (`UnassignedAvatar`),
@@ -143,6 +148,7 @@ interface Look {
   readonly shape: AvatarShape;
   readonly glyph: boolean;
   readonly tiled: boolean;
+  readonly branded: boolean;
   readonly edged: boolean;
   readonly blank: boolean;
   readonly hue: number | undefined;
@@ -158,13 +164,15 @@ function typeClass({ size, shape }: Look): string {
 }
 
 /**
- * A disc's ground and ink: a letter's identity hue; an app's glyph tiled on
+ * A disc's ground and ink: a letter's identity hue; the product's glyph on
+ * its own avatar's tile, as GitHub shows its App's bot; an app's glyph tiled on
  * the quiet fill laid over the ground, so it is opaque and a face it
  * overlaps never shows through; an app's glyph bare, in the ink around it;
  * a blank tile's nothing until its picture has loaded; or the quiet fill.
  */
-function groundClass({ glyph, tiled, blank, hue }: Look): string {
+function groundClass({ glyph, tiled, branded, blank, hue }: Look): string {
   if (hue !== undefined) return `${HUE_CLASS[hue] ?? ""} text-on-identity`;
+  if (glyph && branded) return "bg-avatar-tile text-avatar-ink";
   if (glyph && tiled)
     return "bg-ground bg-[linear-gradient(var(--color-secondary),var(--color-secondary))] text-inherit";
   if (glyph) return "bg-transparent text-inherit";
@@ -196,6 +204,8 @@ interface AvatarProps {
   glyph?: ReactNode;
   /** Whether the glyph stands on a quiet tile rather than bare. */
   tiled?: boolean;
+  /** Whether the glyph, the product's mark, stands on the product's own avatar tile in its copper, as GitHub shows the App's bot. */
+  branded?: boolean;
   /** Whether the name already stands beside the disc, so a reader hears it once. */
   decorative?: boolean;
   /** Whether a tile wears a hairline edge, so a picture drawn on white does not bleed into the ground around it. */
@@ -214,7 +224,8 @@ export const UNASSIGNED_WORDS = "Unassigned";
 /** What stands on the disc while no picture is shown: the caller's glyph, the letter, or the figure where there is no letter. */
 function standIn(glyph: ReactNode, letter: string): ReactNode {
   if (glyph !== undefined) return <span className={GLYPH_BOX}>{glyph}</span>;
-  if (letter !== "") return letter;
+  // Note that the letter is always a person's or a workspace's name, so a screen recording masks it whatever stands round the disc.
+  if (letter !== "") return <ReplayMask>{letter}</ReplayMask>;
   return (
     <span className={GLYPH_BOX}>
       <UserIcon />
@@ -241,6 +252,7 @@ function AvatarDisc({
   shape = AVATAR_SHAPE.CIRCLE,
   glyph,
   tiled = false,
+  branded = false,
   decorative = false,
   edged = false,
   blank = false,
@@ -262,7 +274,7 @@ function AvatarDisc({
     () => false,
   );
   const hue = lettered ? identityHue(id) : undefined;
-  const look = { size, shape, glyph: glyph !== undefined, tiled, edged, blank, hue };
+  const look = { size, shape, glyph: glyph !== undefined, tiled, branded, edged, blank, hue };
   return (
     <ShadcnAvatar
       className={discClass(look)}
@@ -272,6 +284,7 @@ function AvatarDisc({
       data-edged={edged ? "true" : undefined}
       data-blank={blank ? "true" : undefined}
       data-tiled={glyph !== undefined && tiled ? "true" : undefined}
+      data-branded={glyph !== undefined && branded ? "true" : undefined}
       data-hue={hue}
       {...named}
     >

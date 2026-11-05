@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LineSplitter, launchSpec, readServerLine } from "./app-server.js";
 
 describe("launchSpec", () => {
-  const spec = launchSpec({ accessToken: "access-secret" });
+  const spec = launchSpec({ bearer: "access-secret" });
 
   it("carries the token in the process environment alone, never in argv", () => {
     expect(spec.env.ACCESS_TOKEN).toBe("access-secret");

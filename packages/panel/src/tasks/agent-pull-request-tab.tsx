@@ -1121,7 +1121,13 @@ function ThreadMenu({
     <span className="pull-request-thread-menu ml-auto flex">
       <MoreButton thing={THREAD_REVEAL_WORDS.THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
+        <ActionMenu
+          replayUnmasked
+          label={label}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
       )}
     </span>
   );
@@ -1152,6 +1158,7 @@ function GitHubEntryMenu({ thing, url }: { thing: EntryThing; url: string }): Re
       <MoreButton thing={thing} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups}
@@ -2521,6 +2528,7 @@ function ConversationFilterMenu({
       </Chip>
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={PULL_REQUEST_WORDS.FILTERS}
           menu={menu.drawn}
           groups={[items]}
@@ -2753,6 +2761,7 @@ function useThreadJumps(input: {
   useEffect(() => {
     if (!gone) return;
     toast({
+      replayUnmasked: true,
       words: THREAD_REVEAL_WORDS.GONE,
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
@@ -2788,6 +2797,7 @@ function useThreadJumps(input: {
           onGone: (ask) => {
             if (jump.ask !== ask || target.id === undefined) return;
             toast({
+              replayUnmasked: true,
               words: THREAD_REVEAL_WORDS.FILE_GONE,
               tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,

@@ -1026,16 +1026,17 @@ export function subjectOf(page: HTMLElement): string[] {
   return [...subject.children].map((child) => child.textContent ?? "");
 }
 
-/** Every close the Inbox sends, answered as the service takes it: the item closed by the reader. */
-export function takenCloses(): { itemId: string; revision: number }[] {
-  const sent: { itemId: string; revision: number }[] = [];
+/** Every close the Inbox sends, with the note's words where it carries one, answered as the service takes it: the item closed by the reader. */
+export function takenCloses(): { itemId: string; revision: number; text?: string }[] {
+  const sent: { itemId: string; revision: number; text?: string }[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.AGENTS_INBOX_CLOSE) return previous(request);
-      sent.push({ itemId: request.payload.itemId, revision: request.payload.revision });
+      const { itemId, revision, text } = request.payload;
+      sent.push({ itemId, revision, ...(text === undefined ? undefined : { text }) });
       const asked = [...world.inboxes.values()]
         .flat()
         .find((each) => each.id === request.payload.itemId);
@@ -1052,16 +1053,16 @@ export function takenCloses(): { itemId: string; revision: number }[] {
   return sent;
 }
 
-/** The question Resolve asks, answered Resolve. */
+/** The question Resolve asks, answered by its act, Resolve item or Resolve items. */
 export async function confirmClose(): Promise<void> {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ??
     assert.fail("Resolve asks first");
   assert.strictEqual(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
-  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Resolve",
+  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+    /^Resolve items?$/u.test(button.textContent ?? ""),
   );
-  await act(async () => (resolve ?? assert.fail("the question offers Resolve")).click());
+  await act(async () => (resolve ?? assert.fail("the question offers Resolve item")).click());
   await settle();
 }
 

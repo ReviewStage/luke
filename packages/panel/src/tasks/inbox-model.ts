@@ -47,6 +47,7 @@ import { markdownTree } from "@repo/ui/markdown-words";
 import { matchesTokens } from "@repo/ui/search-tokens";
 import { isWireString } from "@repo/wire";
 import type { CountNoun } from "../desktop/sidebar-fold.js";
+import { UNHEARD_OFFLINE } from "./agent-model.js";
 import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import {
@@ -101,7 +102,7 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going beside it as a plain reply. */
+  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going with the close as its note. */
   readonly resolving?: true | undefined;
 }
 
@@ -127,16 +128,19 @@ const AGENT_ARCHIVED_NOTE = "This agent is archived.";
  * Note that the service refuses a send to an agent archived on its own as
  * one that names nothing, so a refusal naming no agent says the agent is
  * archived, with Unarchive after it, where the list reads it archived, and
- * that the agent no longer exists only where it does not.
+ * that the agent no longer exists only where it does not. A send no answer
+ * came back for says the developer is offline while the app does not reach
+ * the service, since the Offline mark says why.
  */
 export function inboxNoteReading(
   note: InboxNote,
   agent: AgentSummary | undefined,
+  connected: boolean,
 ): InboxNoteReading {
   const archived = note.failure === AGENT_CALL_FAILURE.NOT_FOUND && agent?.archivedAt !== undefined;
-  return archived
-    ? { words: AGENT_ARCHIVED_NOTE, unarchive: true }
-    : { words: note.words, unarchive: false };
+  if (archived) return { words: AGENT_ARCHIVED_NOTE, unarchive: true };
+  const offline = !connected && note.failure === AGENT_CALL_FAILURE.UNANSWERED;
+  return { words: offline ? UNHEARD_OFFLINE.ALONE : note.words, unarchive: false };
 }
 
 /** One file a message on the thread carried, as an item read names it. */

@@ -22,8 +22,6 @@ import { RECORDING_CURSOR_FILE, RECORDING_CURSOR_SOURCE } from "../browser/recor
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX, SUDO_LINE } from "../terminal/tmux.js";
 
-/** The Playwright the image carries, pinned so a rebuilt snapshot holds the same browser. */
-
 /**
  * GitHub's own `gh stack` extension (github/gh-stack), pinned to a release
  * and to the SHA-256 GitHub publishes for its Linux x86-64 binary, the
@@ -73,15 +71,6 @@ const INSTALL_GTK =
  * configuration, where it and every install here read it.
  */
 const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; fi >/dev/null; fi`;
-
-/**
- * Installs bubblewrap and socat, which Claude Code's command sandbox runs
- * each command under on Linux, `$SUDO` as `STAGE_HEAD` set it.
- */
-const INSTALL_BUBBLEWRAP = [
-  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y bubblewrap socat; else $SUDO apt-get install -y --no-install-recommends bubblewrap socat; fi",
-  "bwrap --version",
-];
 
 /**
  * The Claude Agent SDK and the `claude` binary it carries, as the runner
@@ -208,7 +197,6 @@ const CHECK_CAPABILITY_DROP = [
  */
 const STAGE_HEAD = ["set -e", SUDO_LINE];
 
-/** A stage as the one command it runs as. */
 function stage(lines: readonly string[]): string {
   return [...STAGE_HEAD, ...lines].join("\n");
 }
@@ -231,22 +219,18 @@ const SYSTEM_STAGE = stage([
   "pnpm --version && python3 --version",
   // tmux holds each Terminal tab's shell, so it outlives any connection to it (`terminal/tmux.ts`).
   ...PREPARE_TMUX,
-  // Playwright and its Chromium, so a coding agent opens what it built and screenshots it; the
-  // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
-  // Note that we install the full browser beside the headless shell `playwright screenshot` runs,
-  // though it costs about 400 MB in every snapshot, because the agent's own browser
-  // (`../browser/sandbox-browser.ts`) runs it headful under Xvfb, where a site sees an ordinary
-  // Chrome rather than a headless one that a sign-in would refuse.
-  // Note that both are root's, the browsers inside the package, where every user reaches them
-  // (`PLAYWRIGHT_PIN`), since the default user's home, where they once went, is closed to the
-  // cloud's `agent`; the last line fails the image where npm put them elsewhere.
+  // Playwright and its Chromium, so a coding agent screenshots what it built. Note that we install
+  // the full browser beside the headless shell, though it costs about 400 MB in every snapshot,
+  // because the agent's own browser (`../browser/sandbox-browser.ts`) runs it headful under Xvfb,
+  // where a sign-in sees an ordinary Chrome rather than a headless one it would refuse.
+  // Both are root's, the browsers inside the package (`PLAYWRIGHT_PIN`), since the default user's
+  // home is closed to the cloud's `agent`; the last line fails the image where npm put them elsewhere.
   `$SUDO env HOME=/root npm install --global --prefix ${PLAYWRIGHT_PIN.PREFIX} --no-audit --no-fund playwright@${PLAYWRIGHT_PIN.VERSION}`,
   `$SUDO env HOME=/root PLAYWRIGHT_BROWSERS_PATH=${SANDBOX_TOOL_ENV.PLAYWRIGHT_BROWSERS_PATH} ${PLAYWRIGHT_PIN.PREFIX}/bin/playwright install --with-deps chromium`,
   `$SUDO chmod -R a+rX ${PLAYWRIGHT_PIN.BROWSERS}`,
   `ls -d ${PLAYWRIGHT_PIN.BROWSERS}/chromium-* >/dev/null || { echo 'Playwright put no Chromium in ${PLAYWRIGHT_PIN.BROWSERS}' >&2; exit 1; }`,
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
-  ...INSTALL_BUBBLEWRAP,
   ...CREATE_AGENT_USER,
   ...MAKE_RUNNER_DIRECTORY,
   ...KEEP_SUDO_ENVIRONMENT,
@@ -273,7 +257,6 @@ export const PREPARE_STAGES: readonly string[] = [
 /** Every stage as one script, which the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from. */
 export const PREPARE_SCRIPT = PREPARE_STAGES.join("\n");
 
-/** One stage run, failing the preparation where it fails. */
 async function runStage(sandbox: SandboxSession, command: string): Promise<void> {
   const prepared = await sandbox.run({ command });
   if (prepared.exitCode !== 0) {

@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MainTabContent } from "../desktop/main-tabs.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { openingLineOf } from "./agent-model.js";
@@ -30,6 +32,9 @@ const NO_CARDS: TranscriptCards = {
   worker: () => undefined,
   agent: () => undefined,
 };
+
+// The first line is a reply drawn at once, so the parser lands first, as the panel lands it before a transcript opens.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => installScrollIntoView());
 

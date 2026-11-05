@@ -2,13 +2,22 @@
  * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
  *
  * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard. It draws by it and authorizes nothing: the
+ * offer the admin dashboard, and until when its grant of support access
+ * stands, which Settings draws. The grant is written here too, under the
+ * account's own session, which the service's support-access resource
+ * takes rather than the account's bearer. It draws by it and authorizes nothing: the
  * dashboard's own gate decides every admin read on the service. A read that
  * fails, or an answer that is not the shape the wire declares, is read as
- * nothing opened, so a doubt never offers it.
+ * nothing opened, so a doubt never offers either.
  */
 import type { CallCredential } from "@repo/features";
-import { askHosted, type HostedClient, hostedClient } from "@repo/features/hosted-link";
+import type { SupportAccessAnswerWire } from "@repo/features/account-wire";
+import {
+  askHosted,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "@repo/features/hosted-link";
 import { Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -17,6 +26,8 @@ import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";
 interface AccountAccessClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
   credential: CallCredential;
+  /** What authorizes a write of the grant of support access: the account's own session. */
+  sessionCredential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
@@ -26,6 +37,7 @@ interface AccountAccessClientOptions {
 /** Reads the signed-in account's access through the same account call every hosted client makes. */
 export class AccountAccessClient {
   readonly #hosted: HostedClient;
+  readonly #inSession: HostedClient;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
 
   constructor(options: AccountAccessClientOptions) {
@@ -33,17 +45,36 @@ export class AccountAccessClient {
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
     });
+    this.#inSession = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential: options.sessionCredential,
+    });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
   /** What the signed-in account may open; nothing for any failure. */
   readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
-      Effect.map((answer): AppAccessSlice => ({ admin: answer.admin })),
+      Effect.map(
+        (answer): AppAccessSlice => ({
+          admin: answer.admin,
+          ...(typeof answer.supportAccessUntil === "number"
+            ? { supportAccessUntil: answer.supportAccessUntil }
+            : undefined),
+        }),
+      ),
       // A read that failed is settled as no admin, not left pending, so nothing waits on it.
       Effect.orElseSucceed((): AppAccessSlice => ({ admin: false })),
       Effect.provide(this.#client),
     );
+  }
+
+  /** Grants support access for seven days, or revokes it: the grant as it then stands. */
+  writeSupportAccess(grant: boolean): Effect.Effect<SupportAccessAnswerWire, HostedFailure> {
+    const write = grant
+      ? this.#inSession.supportAccess.grant
+      : this.#inSession.supportAccess.revoke;
+    return askHosted(write, undefined).pipe(Effect.provide(this.#client));
   }
 }
 

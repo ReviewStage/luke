@@ -49,7 +49,6 @@ import {
   workedRepository,
 } from "./agent-tools.js";
 import { calledId } from "./called-id.js";
-import { agentMadeRunsOn } from "./coder-host/agent-runtime-choice.js";
 import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import { taskBlockReadings } from "./task-block-changes.js";
 import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
@@ -74,13 +73,11 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * repository named, the one the caller works in where none is, or none,
  * confirmed through the workspace's installation as a task's repository is,
  * with the developer's brief and a plan to start from where they are given,
- * and no agent on it; `start_agent` starts one on it by its id. It runs where the member last ran a task, the device New
- * task last named or the cloud (`agentMadeRunsOn`), even an assignee's
- * other than the member, and is refused by name where that device was
- * removed since, never sent to the cloud instead. Given a parent task of
+ * and no agent on it; `start_agent` starts one on it by its id, and a task
+ * holds no place to run, each agent its own. Given a parent task of
  * the caller's workspace that the member reaches, it is made that task's
- * child, to any depth, and takes the parent's repository and machine
- * rather than its own, refused where the call names another repository
+ * child, to any depth, and takes the parent's repository rather than its
+ * own, refused where the call names another repository
  * (`tasks/task-parent.ts`). Given a relation instead, it is made a sub-task
  * of the other task, as with a parent, its parent, taking its repository,
  * or blocked by or blocking it, the relation written in the make's own
@@ -185,10 +182,6 @@ export const CREATE_TASK_REFUSAL = {
   NOT_MEMBER:
     "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
     `the mention link ${AGENT_TOOL.LIST_TASKS} hands you, or leave it out for no one.`,
-  PICK_REMOVED:
-    "Not made: the device the member last chose to run tasks on has been removed, so there is " +
-    "nowhere they asked this task to run; ask them to start a task from New task, choosing where " +
-    "it runs, and try again.",
   NO_PARENT: `Not made: no task of your workspace has that id to be its parent; ${AGENT_TOOL.LIST_TASKS} names them.`,
   PARENT_REPOSITORY:
     "Not made: a child task always works in its parent's repository; leave repository out to " +
@@ -254,8 +247,7 @@ const CREATE_TASK_INPUT = Schema.Struct({
     describeWire(
       wireUuidSchema,
       `The task to make it a child of, by the id ${AGENT_TOOL.LIST_TASKS} answered: a part of ` +
-        "that task's work, which works in its repository and runs on its machine. Left out, it " +
-        "stands at the top.",
+        "that task's work, which works in its repository. Left out, it stands at the top.",
     ),
   ),
   relation: Schema.optionalKey(
@@ -301,7 +293,7 @@ export const CREATE_TASK_TOOL = {
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status, a priority, and an assignee where the developer said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
-    "its parent's repository and on its machine, so leave repository out for one. Give it a " +
+    "its parent's repository, so leave repository out for one. Give it a " +
     "relation instead to make it blocked by, blocking, a sub-task of, or the parent of another " +
     "task of your workspace in the same call. Answers " +
     "`accepted` with the task's id, key, name, status, priority, assignee, repository, and " +
@@ -451,15 +443,6 @@ export function runCreateTask(
             : repositoryAsked;
       const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
-      // A child runs where its parent runs; any other task where the member last ran one, and a device since removed makes none.
-      const runsOn =
-        parent === undefined
-          ? yield* agentMadeRunsOn(userId).pipe(
-              Effect.map((asked) => ({ asked })),
-              Effect.catchTag("RunsOnPickRemoved", () => Effect.succeed(undefined)),
-            )
-          : { asked: parent.runsOn };
-      if (runsOn === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.PICK_REMOVED);
       // A child takes its parent's assignee where the call names none; a null names no one.
       const assignedId = assignee === undefined ? (parent?.assigneeId ?? undefined) : assigneeId;
       const text = planTextOf(plan ?? "");
@@ -478,7 +461,6 @@ export function runCreateTask(
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
               ...(assignedId === undefined ? undefined : { assigneeId: assignedId }),
-              ...(runsOn.asked === undefined ? undefined : { runsOn: runsOn.asked }),
               ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
               ...(mode === undefined ? undefined : { mode }),
               ...originOf(call),

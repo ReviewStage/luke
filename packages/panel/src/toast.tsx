@@ -21,14 +21,18 @@
  *
  * A toast saying a failure carries the failure, which is reported as it is
  * shown (`failure-report.ts`), so no failure the panel says in a toast goes
- * unreported. It offers the details of that report to copy, by the window's
- * copy button after its action, named "Copy details", which answers on
- * itself and leaves the toast and any action on it standing, so a person can
- * paste them to an agent to find the failure in Sentry and the logs. Its
+ * unreported. One saying an unexpected failure offers the details of that
+ * report to copy, by the window's copy button after its action, named "Copy
+ * details", which answers on itself and leaves the toast and any action on
+ * it standing, so a person can send them with a report of the problem. Its
  * glyph alone stands there, so the failure's words keep their room, and a
  * failure toast with nothing else to press takes the pointer for it, and so
- * pauses its hold under it, drains its bar, and may be dismissed. A window
- * with nothing to report through offers no copy (`reportShownFailure`).
+ * pauses its hold under it, drains its bar, and may be dismissed. A refusal,
+ * whose words already say what happened, and a window with nothing to report
+ * through offer no copy (`reportShownFailure`). A failure that is not a
+ * refusal, shown while the app does not reach the service, is reported and
+ * not shown at all, unless it carries an action, because the Offline mark
+ * already says why (`failureOfConnection`).
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one
@@ -61,6 +65,7 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { MOTION_DURATION_MS } from "@repo/brand";
 import {
+  type MarkProvider,
   STATUS_TONE,
   TOAST_HOLD,
   Toast,
@@ -75,7 +80,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { appPlatform } from "./app-platform.js";
-import { reportShownFailure, type ShownFailure } from "./failure-report.js";
+import { failureOfConnection, reportShownFailure, type ShownFailure } from "./failure-report.js";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
 
 /** The tones said in the polite region: all but a refusal, which is an alert. */
@@ -102,6 +107,8 @@ interface ToastAction {
   readonly label: string;
   readonly href?: string | undefined;
   readonly onPress: () => void;
+  /** Whether its label is the app's own word ("Undo", "Open"), which a screen recording shows as it reads. */
+  readonly replayUnmasked?: boolean | undefined;
 }
 
 /**
@@ -130,8 +137,14 @@ export type ToastNotice = {
   readonly words: string;
   /** The glyph it leads with in place of its tone's, where what it says has one of its own (`Toast`'s `glyph`). */
   readonly glyph?: () => React.JSX.Element;
+  /** The provider whose mark it leads with, where it is about one of the account's connections (`Toast`'s `mark`). */
+  readonly mark?: MarkProvider;
   readonly detail?: string;
   readonly subject?: string;
+  /** Whether its words and detail are the app's own, which a screen recording shows as they read; one that quotes a name, a person's words, or a refusal's words leaves this off. */
+  readonly replayUnmasked?: boolean | undefined;
+  /** What the developer sending it away, by its × or Escape, tells whoever showed it, so a question they set aside can be asked again. */
+  readonly onDismiss?: () => void;
 } & ToastSaying &
   (
     | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -391,12 +404,20 @@ function stepped(stack: ToastLine, step: ToastStep, now: number): ToastLine {
 /**
  * Reports the failure a notice says, where it says one, as it is shown at
  * `at` or a working toast turns into it, and answers the step with the
- * notice keeping the details of that report to copy.
+ * notice keeping the details of that report to copy. A failure the
+ * connection already says (`failureOfConnection`), on a notice with no
+ * action to lose, is reported and not shown: the step answers nothing, or
+ * withdraws the working toast it would have settled.
  */
-function reportSaid(step: ToastStep, at: number): ToastStep {
+function reportSaid(step: ToastStep, at: number): ToastStep | undefined {
   if (step.kind !== TOAST_STEP.SHOW && step.kind !== TOAST_STEP.SETTLE) return step;
   if (step.notice.tone !== STATUS_TONE.DANGER) return step;
   const details = reportShownFailure(step.notice.failure, at);
+  if (step.notice.action === undefined && failureOfConnection(step.notice.failure)) {
+    return step.kind === TOAST_STEP.SETTLE
+      ? { kind: TOAST_STEP.WITHDRAW, subject: step.subject }
+      : undefined;
+  }
   return { ...step, notice: { ...step.notice, details } };
 }
 
@@ -413,7 +434,8 @@ const toastLifeAtom = Atom.keepAlive(
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
       const said = yield* Effect.sync(() => reportSaid(step, at));
-      let stack = settle(stepped(get(toastStackAtom), said, at), at);
+      const before = get(toastStackAtom);
+      let stack = settle(said === undefined ? before : stepped(before, said, at), at);
       get.set(toastStackAtom, stack);
       // Note that the stack is carried here rather than read back, because
       // nothing else writes it while this runs, and each settle past a due
@@ -441,7 +463,7 @@ export function undoToast(words: string, undo: () => void): ToastNotice {
   return {
     words,
     tone: STATUS_TONE.COMPLETE,
-    action: { label: UNDO_LABEL, onPress: undo },
+    action: { label: UNDO_LABEL, onPress: undo, replayUnmasked: true },
     hold: TOAST_HOLD.UNDO,
   };
 }
@@ -537,7 +559,11 @@ function ToastCard({
   const { id, notice, leaving } = shown;
   const { action, details } = notice;
   const hold = holdOf(notice);
-  const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
+  const dismiss = () => {
+    step({ kind: TOAST_STEP.DISMISS, id });
+    // Note that a toast on its way out still draws its controls, so only the first dismissal is told.
+    if (!leaving) notice.onDismiss?.();
+  };
   const copy: ToastCopy | undefined =
     details === undefined
       ? undefined
@@ -547,8 +573,10 @@ function ToastCard({
     <Toast
       tone={notice.tone}
       glyph={notice.glyph}
+      mark={notice.mark}
       words={notice.words}
       detail={notice.detail}
+      replayUnmasked={notice.replayUnmasked}
       leaving={leaving}
       countdown={!acts || hold === undefined ? undefined : Duration.toMillis(hold)}
       actions={
@@ -560,6 +588,7 @@ function ToastCard({
             copy={copy}
             dismissLabel={DISMISS_LABEL}
             onDismiss={dismiss}
+            replayUnmasked={action?.replayUnmasked}
           />
         )
       }

@@ -1,5 +1,5 @@
 /**
- * session-replay.ts -- recording the shape of what the panel draws, and none of its words: the masking every shell records under, and the one controller that starts and stops it.
+ * session-replay.ts -- recording the shape of what the panel draws, and none of a person's words: the masking every shell records under, and the one controller that starts and stops it.
  *
  * This is not the counted-event stream and does not share its guarantee. A
  * counted event can only say what `packages/features/src/analytics/product-events.ts`
@@ -8,14 +8,17 @@
  * and a recording is the rendered panel. What keeps a session title, a
  * branch, an error line, a caption, or the account's own name out of it is
  * `SESSION_REPLAY_MASKING` below, not a declared list of events: every
- * text node and every input is masked, every attribute but the few the replay
+ * input is masked, every text node is masked but the app's own words a
+ * surface wraps in `@repo/ui`'s unmask mark with no nearer mask mark
+ * (`@repo/ui/session-replay-marks`), every attribute but the few the replay
  * lays out by is asterisked, and autocapture is off; and the stylesheets the
  * panel builds from a person's words are emptied before a recording leaves
  * (`withoutWithheldSheets`). What leaves is layout, pointer
- * positions, and asterisks of the right length. The surfaces that hold the
+ * positions, the app's own labels, headings, buttons, and menu words, and
+ * asterisks of the right length for every other word. The surfaces that hold the
  * most of a person's words also block their whole subtree with the library's
- * fixed `ph-no-capture` class as a second line, each named where it is drawn
- * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
+ * fixed `ph-no-capture` class as a second line, each named where it is
+ * drawn: the feedback dialog, whose screenshots are
  * pictures of the person's screen, a task's title and the editor its document
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its transcript, Work, Code, File, and page tabs,
@@ -27,8 +30,10 @@
  * block is their only line, and canvas recording is held off by name rather
  * than by the library's default.
  *
- * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
- * masking and those blocks are the whole of what decides it. Every shell that
+ * `PRIVACY.md` says, in a policy's plain terms, that a recording shows how
+ * the window is used and masks what a person types and anything sensitive
+ * before it leaves, and that has to stay true: the masking and those blocks
+ * are the whole of what decides it. Every shell that
  * records (the desktop's panel window, `apps/desktop/src/renderer/session-replay.ts`,
  * and the web app's tab, `apps/web/src/app/web-session-replay.ts`) records
  * through `sessionReplay` here, so the masking is stated once and no shell can
@@ -49,7 +54,7 @@
 
 import type { ProductPlatform } from "@repo/features/analytics";
 import type { SessionReplayBootstrap } from "@repo/gateway/window-session";
-import { opensWithheldSheet } from "@repo/ui/session-replay-marks";
+import { opensWithheldSheet, showsInReplay } from "@repo/ui/session-replay-marks";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@repo/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
 import type { BundleImporter } from "./bundle-loader.js";
@@ -245,11 +250,18 @@ function laysOut(name: string, value: string, element: Element | undefined): boo
 }
 
 /**
- * What keeps the words out of the recording: every text node masked (there is
- * no `maskAllText` for recordings, and the recorder drops an option it does
- * not know without a word, so the names are asserted against the installed
- * bundle), every input masked, every attribute but those the replay lays out
- * by (`LAYOUT`) asterisked, every comment in the markup left out, since the
+ * What keeps a person's words out of the recording: every text node masked
+ * (there is no `maskAllText` for recordings, and the recorder drops an option
+ * it does not know without a word, so the names are asserted against the
+ * installed bundle) but where the nearest of `@repo/ui`'s marks at or above
+ * it is the unmask mark, which leaves the app's own words as they read
+ * (`maskTextFn`, handed each text's own element in the first snapshot and in
+ * every later change, and reading the marks off the live page through
+ * `showsInReplay`, so the asterisking of attribute values below does not
+ * reach them); every other text is masked as the recorder masks it by
+ * itself, each character but a space an asterisk; every input masked,
+ * every attribute but those the replay lays out by (`LAYOUT`) asterisked,
+ * every comment in the markup left out, since the
  * recorder copies a comment's words as they stand and no masking reaches
  * one, autocapture off, since a click event carries the text of what was
  * clicked, and canvas recording off, since a canvas carries its words as
@@ -291,6 +303,8 @@ const SESSION_REPLAY_MASKING = {
     captureCanvas: { recordCanvas: false },
     maskAllInputs: true,
     maskTextSelector: "*",
+    maskTextFn: (text: string, element?: HTMLElement | null): string =>
+      showsInReplay(element) ? text : text.replace(/\S/g, "*"),
     maskAttributeFn: (name: string, value: string, element?: Element): string =>
       laysOut(name.toLowerCase(), value, element) ? value : "*".repeat(value.length),
     slimDOMOptions: { comment: true },

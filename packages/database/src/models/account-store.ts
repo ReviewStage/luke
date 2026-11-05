@@ -12,6 +12,8 @@ import {
   AGENT_ENTER_LIST,
   type AgentEnter,
   accountPreferencesFromStored,
+  COMMIT_AUTHOR_LIST,
+  type CommitAuthor,
   type Experiment,
   type ExperimentChoices,
   experimentChoicesFrom,
@@ -70,14 +72,15 @@ export interface AccountPreferencesWritten extends AccountPreferencesRow {
  * default model each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
- * `preferences` is the shared part; the link choice, Enter's choice, and
- * setup finished are parts of their own, which a build that predates them
+ * `preferences` is the shared part; the link choice, Enter's choice, the
+ * commit author, and setup finished are parts of their own, which a build that predates them
  * never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
   linkOpen?: LinkOpen;
   agentEnter?: AgentEnter;
+  commitAuthor?: CommitAuthor;
   setupFinished?: boolean;
   agent?: ModelChoice;
   chaptersModel?: ChaptersModelId;
@@ -148,6 +151,7 @@ export function deleteAccount(userId: string): Effect.Effect<void, StoreFailure,
 const PREFERENCE_COLUMNS = {
   linkOpen: accountPreference.linkOpen,
   agentEnter: accountPreference.agentEnter,
+  commitAuthor: accountPreference.commitAuthor,
   setupFinished: accountPreference.setupFinished,
   agentModel: accountPreference.agentModel,
   agentEffort: accountPreference.agentEffort,
@@ -160,6 +164,7 @@ const PREFERENCE_COLUMNS = {
 const PreferenceRowSchema = Schema.Struct({
   linkOpen: Schema.NullOr(Schema.String),
   agentEnter: Schema.NullOr(Schema.String),
+  commitAuthor: Schema.NullOr(Schema.String),
   setupFinished: Schema.NullOr(Schema.Boolean),
   agentModel: Schema.NullOr(Schema.String),
   agentEffort: Schema.NullOr(Schema.String),
@@ -182,6 +187,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
       accountPreferencesFromStored({
         ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
         ...(row.agentEnter ? { agentEnter: row.agentEnter } : undefined),
+        ...(row.commitAuthor ? { commitAuthor: row.commitAuthor } : undefined),
         ...(row.setupFinished === null ? undefined : { setupFinished: row.setupFinished }),
       }) ?? {},
     agent: storedAgentChoice(row),
@@ -256,26 +262,47 @@ export function accountExperimentOn(
   );
 }
 
-const findRole = SqlSchema.findOneOption({
+const findAccess = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ role: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({
+    role: Schema.NullOr(Schema.String),
+    supportAccessUntil: Schema.NullOr(InstantColumnSchema),
+  }),
   execute: (userId) =>
     Database.use((db) =>
-      db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1),
+      db
+        .select({ role: user.role, supportAccessUntil: user.supportAccessUntil })
+        .from(user)
+        .where(eq(user.id, userId))
+        .limit(1),
     ),
 });
 
+/** What the account's own `user` row says it may open, and who may open it as them. */
+export interface AccountAccessRow {
+  /** The role as Better Auth keeps it; what a role means is the service's (`admin-access.ts`). */
+  readonly role: string | undefined;
+  /** When the member's grant of support access runs out, as it was last written, whether or not that is past. */
+  readonly supportAccessUntil: Date | undefined;
+}
+
 /**
- * The role stored on the account's own `user` row, as Better Auth keeps it,
- * or nothing where the row holds none or there is no such account. Read for
- * the one account named and no other; what a role means is the service's
- * (`admin-access.ts`), so this answers the text as it stands.
+ * The role and the grant of support access stored on the account's own
+ * `user` row, as Better Auth keeps them, each nothing where the row holds
+ * none, and both nothing where there is no such account. Read for the one
+ * account named and no other.
  */
-export function readAccountRole(
+export function readAccountAccess(
   userId: string,
-): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
-  return Effect.map(findRole(userId), (row) =>
-    Option.match(row, { onNone: () => undefined, onSome: ({ role }) => role ?? undefined }),
+): Effect.Effect<AccountAccessRow, StoreFailure, DatabaseServices> {
+  return Effect.map(findAccess(userId), (row) =>
+    Option.match(row, {
+      onNone: () => ({ role: undefined, supportAccessUntil: undefined }),
+      onSome: ({ role, supportAccessUntil }) => ({
+        role: role ?? undefined,
+        supportAccessUntil: supportAccessUntil ?? undefined,
+      }),
+    }),
   );
 }
 
@@ -283,6 +310,7 @@ const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
   agentEnter: Schema.optionalKey(Schema.Literals(AGENT_ENTER_LIST)),
+  commitAuthor: Schema.optionalKey(Schema.Literals(COMMIT_AUTHOR_LIST)),
   setupFinished: Schema.optionalKey(Schema.Boolean),
   agent: Schema.optionalKey(
     Schema.Struct({
@@ -305,6 +333,7 @@ function writtenColumns(write: PreferenceWrite) {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
     ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
+    ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
     ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
     ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.updatedAt === undefined ? undefined : { updatedAt: write.updatedAt }),
@@ -366,6 +395,7 @@ export function writeAccountPreferences(
       ...(write.preferences === undefined ? undefined : { updatedAt }),
       ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
       ...(write.agentEnter === undefined ? undefined : { agentEnter: write.agentEnter }),
+      ...(write.commitAuthor === undefined ? undefined : { commitAuthor: write.commitAuthor }),
       ...(write.setupFinished === undefined ? undefined : { setupFinished: write.setupFinished }),
       ...(write.agent === undefined ? undefined : { agent: write.agent }),
       ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),

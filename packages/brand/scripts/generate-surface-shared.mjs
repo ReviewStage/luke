@@ -64,6 +64,10 @@ const MOTION_DELAY_MS = {
   // How long a confirmation that a write landed (an autosave's Saved)
   // stands before it fades.
   CONFIRM: 1200,
+  // How long a flash over a video answering a key (an arrow's jump, a
+  // speed change) stands before it fades: shorter than a confirmation,
+  // because keys pressed in a run each start it over.
+  FLASH: 800,
   // A beat to see whether a state settles before it is acted on: a hover
   // card standing after the pointer leaves it, a spinner's ring waiting to see
   // whether a read lands at once.
@@ -160,6 +164,7 @@ function uiMotionTokensCss() {
   --ui-hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
   --ui-late-delay: ${ms(MOTION_DELAY_MS.LATE)};
   --ui-confirm-delay: ${ms(MOTION_DELAY_MS.CONFIRM)};
+  --ui-flash-delay: ${ms(MOTION_DELAY_MS.FLASH)};
   --ui-settle-delay: ${ms(MOTION_DELAY_MS.SETTLE)};
 }
 `;

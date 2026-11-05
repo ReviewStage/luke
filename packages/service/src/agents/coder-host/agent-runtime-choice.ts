@@ -38,14 +38,12 @@
  */
 
 import type { DatabaseServices } from "@repo/database/core/query";
-import { type Device, devicesSeenSince } from "@repo/database/models/device-store";
+import { type Device, deviceLayout, devicesSeenSince } from "@repo/database/models/device-store";
 import { openProviderKey, parseKeyRing } from "@repo/database/models/provider-key-seal";
 import {
   listAccountProviderKeyRows,
   type ProviderKeyRow,
 } from "@repo/database/models/provider-key-store";
-import { readRunsOnPick } from "@repo/database/models/runs-on-pick";
-import type { TaskRunsOnWrite } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import {
   AGENT_MACHINE,
@@ -56,14 +54,19 @@ import {
   type LocalAgentRefusal,
   MAC_PRESENCE,
 } from "@repo/features/agent-wire";
-import { DEVICE_KIND, DEVICE_SETUP, type DeviceSetup } from "@repo/features/device-agent-wire";
+import {
+  DEVICE_CAPABILITY,
+  DEVICE_KIND,
+  DEVICE_SETUP,
+  type DeviceSetup,
+} from "@repo/features/device-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import { type MacOffer, MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@repo/features/provider-key-wire";
-import type { TaskRunsOnRequest } from "@repo/features/task-wire";
 import { Clock, Data, Duration, Effect, Option, type Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import type { StoreFailure } from "../../http/store-failure.js";
@@ -79,9 +82,6 @@ export class AgentCredentialMissing extends Data.TaggedError("AgentCredentialMis
 export class LocalAgentRefused extends Data.TaggedError("LocalAgentRefused")<{
   readonly reason: LocalAgentRefusal;
 }> {}
-
-/** A task an agent makes for the member, where the device the member last ran a task on has been removed since, so it has nowhere it was asked to run. */
-export class RunsOnPickRemoved extends Data.TaggedError("RunsOnPickRemoved") {}
 
 export const THIS_MAC = {
   /** How lately a Mac must have beaten for Start to offer it: one beat, and room for the next to arrive. */
@@ -333,7 +333,11 @@ export const freshOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Start asks: a sandbox where it asks for none, or the Mac it names, where
  * that Mac is one the account is offered and there now (`freshOffer`) and lists the
  * provider the runtime runs; refused by name otherwise: a Mac that is
- * another account's or is not there as away, and Codex on a Mac that runs none.
+ * another account's or is not there as away, Codex on a Mac that runs none,
+ * and a repository reached on the starter's own token (`githubAccess`) on a
+ * host from before it works in one on its own GitHub sign-in
+ * (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`), whose launch would ask for a token
+ * the service never hands a device.
  */
 export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -342,6 +346,7 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly deviceId?: string | undefined;
   },
   runtime: NativeRuntime,
+  githubAccess?: GitHubAccess | undefined,
 ): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
   if (asked.machine !== AGENT_MACHINE.DEVICE) return IN_A_SANDBOX;
   const offer = yield* freshOffer(userId, asked.deviceId);
@@ -355,65 +360,19 @@ export const agentMachineChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!offer.providers.includes(RUNTIME_PROVIDER[runtime])) {
     return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.CODEX });
   }
-  return { machine: AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
-});
-
-/**
- * Where a task of the account's runs its agents, as a request to set it
- * asks: the cloud, or one of the account's own devices that beat within
- * `THIS_MAC.FRESH` and runs some model's harness; refused by name
- * otherwise: a device that is another account's, was never registered, or
- * is away, as away. The device the task keeps is
- * checked again as each agent starts (`agentMachineChoice`), since it may
- * be away by then or not run that agent's model.
- */
-export const taskRunsOnChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  asked: TaskRunsOnRequest,
-): Effect.fn.Return<AgentMachineChoice, StoreFailure | LocalAgentRefused, DatabaseServices> {
-  if (asked.machine === AGENT_MACHINE.VERCEL) return IN_A_SANDBOX;
-  const offer = yield* freshOffer(userId, asked.deviceId);
-  if (offer === undefined) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.MAC_AWAY });
-  }
-  if (offer.setup !== undefined) {
-    return yield* new LocalAgentRefused({ reason: SETUP_REFUSAL[offer.setup] });
-  }
-  if (offer.providers.length === 0) {
-    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.NO_HARNESS });
+  if (githubAccess === GITHUB_ACCESS.TOKEN && !(yield* signsInOwnGithub(userId, offer.deviceId))) {
+    return yield* new LocalAgentRefused({ reason: LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN });
   }
   return { machine: AGENT_MACHINE.DEVICE, deviceId: offer.deviceId };
 });
 
-/**
- * Where a task an agent makes for the member runs (`create_task`): where
- * the member last ran a task, as New task kept it (`runs-on-pick.ts`), the
- * cloud where they never chose or last chose the cloud. A device kept is
- * taken only while it is still the member's and listed, and refused
- * (`RunsOnPickRemoved`) where it was removed since, rather than run in the
- * cloud. Note that, unlike a Start's choice, a device that is away is taken,
- * because making the task starts nothing, and a Start on it while it is
- * still away is refused by name (`agentMachineChoice`); and that with no
- * device left at all, none is offered, so the cloud is the only place there
- * is, New task draws no Runs on to pick it with, and a
- * pick kept from before stands unread.
- */
-export const agentMadeRunsOn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-): Effect.fn.Return<
-  TaskRunsOnWrite | undefined,
-  StoreFailure | RunsOnPickRemoved,
-  DatabaseServices
-> {
-  const pick = yield* readRunsOnPick(userId);
-  if (Option.isNone(pick) || pick.value.machine === AGENT_MACHINE.VERCEL) return undefined;
-  const kept = pick.value.deviceId;
-  const offers = yield* macOffers(userId);
-  if (offers.length === 0) return undefined;
-  const offered = offers.find((each) => each.deviceId === kept);
-  if (offered === undefined) return yield* new RunsOnPickRemoved();
-  return { machine: AGENT_MACHINE.DEVICE, deviceId: offered.deviceId };
-});
+/** Whether the account's device registered that it launches an agent on its own GitHub sign-in (`DEVICE_CAPABILITY.GITHUB_SIGN_IN`). */
+const signsInOwnGithub = (userId: string, deviceId: string) =>
+  Effect.map(deviceLayout(userId, deviceId), (standing) =>
+    Option.exists(standing, (device) =>
+      device.capabilities.includes(DEVICE_CAPABILITY.GITHUB_SIGN_IN),
+    ),
+  );
 
 /**
  * The provider whose credential an agent lacks to take a message, or none

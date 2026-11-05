@@ -37,6 +37,8 @@ export const BRAND_PALETTE = {
     WORKING: "#1666aa",
     COMPLETE: "#067040",
     MERGED: "#744caf",
+    AVATAR_TILE: "#171412",
+    AVATAR_INK: "#cf7b26",
   },
   DARK: {
     GROUND: "#0f0d0b",
@@ -69,5 +71,7 @@ export const BRAND_PALETTE = {
     WORKING: "#76bafe",
     COMPLETE: "#56d089",
     MERGED: "#c29fff",
+    AVATAR_TILE: "#171412",
+    AVATAR_INK: "#cf7b26",
   },
 } as const;

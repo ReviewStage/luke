@@ -1,4 +1,3 @@
-import { AGENT_MACHINE, type AgentMachineKind } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@repo/features/plan-template";
 import {
@@ -28,7 +27,6 @@ import {
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { agentTable, type StoredArchive } from "./agent.js";
 import { organization, user } from "./auth.js";
-import { device } from "./device.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
@@ -135,20 +133,6 @@ export const task = pgTable(
      */
     brief: text("brief"),
     /**
-     * Where the task's coding agents run (`AGENT_MACHINE`): a sandbox,
-     * every task from before the column among them, or the device
-     * `device_id` names. It decides where each agent started on the task
-     * afterwards runs, and an agent keeps where it started.
-     */
-    machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
-    /**
-     * The device a task that runs on one names, one of the member's who set
-     * it, whose agents alone run there; null for a task in the cloud, and
-     * once that device's row is gone, where a start on the task is refused
-     * until it is set again.
-     */
-    deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
-    /**
      * @deprecated A pin is its reader's own now, in `plan_pin`
      * (`plan-pin.ts`), and nothing writes or reads this. It was the
      * workspace's, so a pin one member made stood for every member. It stands
@@ -174,6 +158,16 @@ export const task = pgTable(
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),
+    /**
+     * The instant every member without a read mark of their own
+     * (`task-read.ts`) has read the task through: the instant read marks
+     * moved to the service, on a task that stood before it, so no task that
+     * stood then reads unread until it changes again; null on a task started
+     * since, which reads through its start. The migration that added it
+     * stamped the standing rows through the column's default, in the catalog
+     * rather than by a write of each row, and then dropped the default.
+     */
+    readThrough: timestamptz("read_through"),
   },
   (table) => [
     // The task list reads one account's tasks, newest started first.

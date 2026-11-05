@@ -5,7 +5,8 @@
  * checking (the default user's shell, that shell with its capabilities
  * dropped, a command Codex runs, root over the disk). It never prints a
  * value: for each process environment it can read it reports whether an
- * `ACCESS_TOKEN` variable is there, and for every JWT-shaped string it finds
+ * `ACCESS_TOKEN` variable is there and the SHA-256 of its value, which the
+ * probe compares with the placeholder's, and for every JWT-shaped string it finds
  * in a file or an environment it reports only the SHA-256 of that string and
  * where it was, which the probe compares with the hash of the token it holds.
  * Every script is installed root-owned, so no seat it checks can rewrite it.
@@ -60,8 +61,10 @@ if (walkProc) {
     let environ;
     try { environ = readFileSync("/proc/" + pid + "/environ", "latin1"); } catch { report.environsDenied++; continue; }
     report.environsReadable++;
-    if (environ.split("\0").some((entry) => entry.startsWith("${CHATGPT_PROVIDER.ENV_KEY}="))) {
-      report.processesWithAccessToken.push({ pid: Number(pid), comm: status(pid) });
+    const held = environ.split("\0").find((entry) => entry.startsWith("${CHATGPT_PROVIDER.ENV_KEY}="));
+    if (held !== undefined) {
+      const sha256 = createHash("sha256").update(held.slice("${CHATGPT_PROVIDER.ENV_KEY}=".length)).digest("hex");
+      report.processesWithAccessToken.push({ pid: Number(pid), comm: status(pid), sha256 });
     }
     note(environ, "proc:" + status(pid));
   }

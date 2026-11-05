@@ -24,8 +24,9 @@
  * answer's body alone, which no cache keeps.
  *
  * A device asks here too, for a GitHub token for one of its agents
- * (`@repo/features/host-wire`'s `hostGithubTokenRequestSchema`), since its
- * agents never reach a git login on the box: an enrolled machine on
+ * (`@repo/features/host-wire`'s `hostGithubTokenRequestSchema`), since an
+ * agent whose repository the App reaches never reaches a git login on the
+ * box: an enrolled machine on
  * its device secret, a Linux box and a Mac alike, read as a device caller
  * (`../../orpc/base.ts`'s `deviceCallerOf`) and held
  * to one rule (`deviceGithubToken`): the agent the member's own and pinned
@@ -35,7 +36,10 @@
  * repository, on the terms the cloud's checkout mints its sandbox's
  * (`coder-host/checkout.ts`'s `agentRepositoryToken`): good for an hour, cut
  * to that one repository. A member's own classic token, which does not
- * expire, never leaves for a device. The device signs the agent in with it
+ * expire, never leaves for a device: an agent whose repository only that
+ * token reaches asks nothing here, and runs on the box's own GitHub sign-in
+ * instead (`@repo/features/device-agent-wire`'s `DEVICE_GITHUB_ACCESS`), and
+ * an ask for one is refused. The device signs the agent in with it
  * and asks again well inside the hour; it is braked per agent with the
  * Codex token.
  */
@@ -212,7 +216,7 @@ const runnerTokenEndpoint = /* @__PURE__ */ Effect.fn("web/runnerTokenEndpoint")
   const bearer = presentedBearer(request);
   if (bearer === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
   const admitted = yield* hostedStoreOrUnavailable(admitRunnerBearer(bearer));
-  // Note that a runner's bearer is admitted first, so a runner reads as it always has, even one whose random bearer happens to begin like a device secret.
+  // Note that a runner's bearer is admitted first, so one whose random bearer happens to begin like a device secret still reads as a runner's.
   if (Option.isNone(admitted)) {
     return yield* deviceGithubToken(yield* deviceCallerOf(request), brake);
   }

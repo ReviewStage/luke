@@ -63,11 +63,10 @@ import {
   type LaunchOutcome,
   RunnerFailed,
   type RunnerSelf,
-  runsOnHost,
 } from "./launch.js";
 import { readLines } from "./lines.js";
 import { openMcpRelay } from "./mcp-relay.js";
-import { SANDBOX_TOOL_ENV, SHARED_FILES_DIRECTORY } from "./pins.js";
+import { SANDBOX_TOOL_ENV } from "./pins.js";
 import { ProcessTable } from "./processes.js";
 import {
   CLAUDE_CODE_TOOLS,
@@ -97,22 +96,6 @@ import { oneShotDueAt } from "./wakeups.js";
 
 /** The name our MCP server is registered under, so its tools reach the model as `mcp__workspace__<tool>` (`@repo/features/agent-tools`'s `WORKSPACE_MCP_SERVER`). */
 const MCP_SERVER = "workspace";
-
-/**
- * The variables no command the agent runs may see: the plan's token, every
- * other way the CLI could be handed one, and the runner's own bearer, or the
- * placeholder a sandbox's firewall swaps for it, which acts as the agent from
- * anywhere in the sandbox just the same. Denied
- * rather than masked, as P00 found, because no command the agent runs has a
- * reason to reach Anthropic or the service as the agent.
- */
-const DENIED_VARIABLES = [
-  RUNNER_ENV.CLAUDE_TOKEN,
-  RUNNER_ENV.BEARER,
-  RUNNER_ENV.API_KEY,
-  "ANTHROPIC_AUTH_TOKEN",
-  "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
-] as const;
 
 /**
  * The worker the agent hands a scoped job to (`CLAUDE_CODE_WORKER`): its
@@ -183,38 +166,14 @@ const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
 });
 
 /**
- * The command sandbox every command the agent runs is under in the cloud's
- * sandbox: bubblewrap, the network on, and the credentials denied. A local
- * agent on a host runs none (`RUNNER_PLACE.HOST`).
- */
-function commandSandbox(config: ClaudeCodeConfig): NonNullable<Options["sandbox"]> {
-  return {
-    enabled: true,
-    failIfUnavailable: true,
-    autoAllowBashIfSandboxed: true,
-    allowUnsandboxedCommands: false,
-    // Note that the sandbox's VM masks /proc/kcore and /proc/keys, so the
-    // kernel refuses bubblewrap a fresh /proc and every command failed; the
-    // host /proc is bound instead, where another process's environ, the
-    // CLI's and its token included, is still refused, as under Codex.
-    enableWeakerNestedSandbox: true,
-    // Note that the list is no strict allowlist, so under `bypassPermissions` a host past it is still reached.
-    network: { allowedDomains: [...config.allowedDomains] },
-    credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
-    // Note that a command writes only the checkout and the CLI's own temp folder otherwise, which
-    // we cannot read, so a screenshot saved anywhere but the checkout never reaches the developer.
-    filesystem: { allowWrite: [SHARED_FILES_DIRECTORY] },
-  };
-}
-
-/**
  * The documented options a launch runs `query()` with (the plan's P05), the
- * same wherever the runner runs but for the command sandbox: a local agent
- * on a host runs none (`RUNNER_PLACE.HOST`). Note that nothing else may follow the
- * place, because the CLI decides its permission mode from more than
- * `permissionMode`: 2.1.304 forces `default` under
- * `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, which a host launch once set and which
- * left every write, `gh`, and MCP tool waiting on an approval nobody gives.
+ * same wherever the runner runs: no command sandbox of the CLI's own, since
+ * the machine is the boundary, a host's box or the cloud's sandbox, whose
+ * firewall holds every credential and leaves only placeholders inside.
+ * Note that nothing may follow the place, because the CLI decides its
+ * permission mode from more than `permissionMode`: 2.1.304 forces `default`
+ * under `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`, which a host launch once set and
+ * which left every write, `gh`, and MCP tool waiting on an approval nobody gives.
  */
 function queryOptions(
   config: ClaudeCodeConfig,
@@ -237,13 +196,14 @@ function queryOptions(
     agents: { [CLAUDE_CODE_WORKER]: WORKER },
     // The CLI's environment is the runner's own and the image's tools'
     // (`SANDBOX_TOOL_ENV`), less the bearer, which only the runner uses; Node
-    // leaves an undefined one unset.
+    // leaves an undefined one unset. Every command the agent runs inherits it,
+    // the CLI's credential among it, which in the cloud's sandbox is a placeholder.
     env: { ...env, ...SANDBOX_TOOL_ENV, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so ours is an
     // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.
     mcpServers: { ...servers },
-    sandbox: runsOnHost(env) ? { enabled: false } : commandSandbox(config),
+    sandbox: { enabled: false },
     hooks: { Stop: [{ hooks: [onStop] }] },
   };
   if (config.effort !== undefined) options.effort = config.effort;
@@ -741,12 +701,16 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
   }
   const bearer = Redacted.make(bearerValue);
-  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.API_KEY, RUNNER_ENV.OPENAI_API_KEY].flatMap(
-    (name) => {
-      const value = input.env[name];
-      return value === undefined || value === "" ? [] : [Redacted.make(value)];
-    },
-  );
+  // Note that Codex's placeholder is scrubbed too, because its commands can read app-server's environment.
+  const tokens = [
+    RUNNER_ENV.CLAUDE_TOKEN,
+    RUNNER_ENV.API_KEY,
+    RUNNER_ENV.OPENAI_API_KEY,
+    RUNNER_ENV.CODEX_TOKEN,
+  ].flatMap((name) => {
+    const value = input.env[name];
+    return value === undefined || value === "" ? [] : [Redacted.make(value)];
+  });
   const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing

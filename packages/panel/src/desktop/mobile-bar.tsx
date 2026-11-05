@@ -1,4 +1,5 @@
 import { BarItem, EllipsisIcon, MENU_KEEPS_CLEAR } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
 import { InboxIcon, ListTodoIcon } from "lucide-react";
 import { adminSection } from "../admin/routing.js";
@@ -79,32 +80,34 @@ export function MobileBar({
       aria-label="Places"
       {...MENU_KEEPS_CLEAR}
     >
-      <BarItem
-        icon={<InboxIcon />}
-        current={inInbox}
-        count={groupCount(waiting, NEEDS_YOU.COUNT)}
-        inert={drawerOpen}
-        onPress={go(inboxView.onOpen)}
-      >
-        Inbox
-      </BarItem>
-      <BarItem
-        icon={<ListTodoIcon />}
-        current={inTasks}
-        inert={drawerOpen}
-        onPress={go(boardView.onOpen)}
-      >
-        Tasks
-      </BarItem>
-      <BarItem
-        icon={<EllipsisIcon />}
-        current={false}
-        expanded={sidebar.overlay === SIDEBAR_OVERLAY.OPEN}
-        onPointerDown={onPressMore}
-        onPress={go(sidebar.onToggle)}
-      >
-        More
-      </BarItem>
+      <ReplayUnmask>
+        <BarItem
+          icon={<InboxIcon />}
+          current={inInbox}
+          count={groupCount(waiting, NEEDS_YOU.COUNT)}
+          inert={drawerOpen}
+          onPress={go(inboxView.onOpen)}
+        >
+          Inbox
+        </BarItem>
+        <BarItem
+          icon={<ListTodoIcon />}
+          current={inTasks}
+          inert={drawerOpen}
+          onPress={go(boardView.onOpen)}
+        >
+          Tasks
+        </BarItem>
+        <BarItem
+          icon={<EllipsisIcon />}
+          current={false}
+          expanded={sidebar.overlay === SIDEBAR_OVERLAY.OPEN}
+          onPointerDown={onPressMore}
+          onPress={go(sidebar.onToggle)}
+        >
+          More
+        </BarItem>
+      </ReplayUnmask>
     </nav>
   );
 }

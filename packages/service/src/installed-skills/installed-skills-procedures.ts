@@ -1,5 +1,5 @@
 /**
- * installed-skills-procedures.ts -- the skills members install into the app: list the ones a workspace offers the account, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check one for an update or update it, share a personal one with a workspace, and remove it.
+ * installed-skills-procedures.ts -- the skills members install into the app: list the ones a workspace offers the account, read one, preview a paste, install from it, turn one on or off, update one, share a personal one with a workspace, and remove it.
  *
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.
@@ -19,9 +19,7 @@
  * installation that reads it. Every skill an install makes is written in
  * one transaction, so a name already taken among several installs none.
  * An update reads a GitHub skill's folder at the commit its ref stands at
- * now and replaces its files; the check before it compares the folder's
- * tree at that commit with the one pinned, so a busy repository whose
- * skill did not move offers no update. A share moves the account's own
+ * now and replaces its files. A share moves the account's own
  * personal skill into a workspace it is a member of, never its personal
  * one, on the same rule as an install's scope. Each write answers the
  * transaction it committed in, which a desktop holding the skills live
@@ -56,7 +54,6 @@ import {
   INSTALLED_SKILL_SOURCE,
   type InstalledSkillScope,
 } from "@repo/features/installed-skill-wire";
-import { parseSkillPaste } from "@repo/features/skill-paste";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@repo/features/workspace-wire";
 import { Data, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
@@ -75,13 +72,8 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import {
-  madeFromPaste,
-  previewedSkillFile,
-  previewOfPaste,
-  revisionAtRef,
-} from "./skill-paste-install.js";
-import { folderTreeSha, pinnedCommit, reachSkillRepository } from "./skill-source.js";
+import { parseSkillPaste } from "./skill-paste.js";
+import { madeFromPaste, previewOfPaste, revisionAtRef } from "./skill-paste-install.js";
 
 export interface InstalledSkillsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -270,21 +262,11 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       return yield* previewOfPaste(userId, workspace.id, parseSkillPaste(input.text));
     }),
 
-    /** One previewed skill's `SKILL.md` at the commit the preview pinned, for a skill the preview carried none of. */
-    previewFile: skills.previewFile.effect(function* ({ input, context: { userId } }) {
-      const workspace = yield* memberWorkspace(userId, input.workspaceId);
-      return yield* previewedSkillFile(userId, workspace.id, input);
-    }),
-
     /** The skills a paste makes, installed in the scope asked, all or none. */
     install: skills.install.effect(function* ({ input, context: { userId } }) {
       const workspace = yield* memberWorkspace(userId, input.workspaceId);
       yield* checkedScope(workspace, input.scope);
-      const made = yield* madeFromPaste(userId, workspace.id, parseSkillPaste(input.text), {
-        ...(input.skills === undefined ? undefined : { skills: input.skills }),
-        ...(input.name === undefined ? undefined : { name: input.name }),
-        ...(input.description === undefined ? undefined : { description: input.description }),
-      });
+      const made = yield* madeFromPaste(userId, workspace.id, parseSkillPaste(input.text), input);
       const owner =
         input.scope === INSTALLED_SKILL_SCOPE.PERSONAL
           ? { scope: INSTALLED_SKILL_SCOPE.PERSONAL }
@@ -329,32 +311,6 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       return { skill: summaryOf(written.value, true), txid: written.value.txid };
     }),
 
-    /** Whether a GitHub skill's folder moved at its ref since it was pinned; never for a pasted one. */
-    checkUpdate: skills.checkUpdate.effect(function* ({ input, context: { userId } }) {
-      const id = yield* pathUuid(input.id);
-      const workspace = yield* memberWorkspace(userId, input.workspaceId);
-      const skill = yield* visibleSkill(userId, workspace, id);
-      const { source } = skill;
-      if (source.type !== INSTALLED_SKILL_SOURCE.GITHUB) return { available: false };
-      const repository = yield* reachSkillRepository(
-        workspace.id,
-        source.owner,
-        source.repo,
-        userId,
-      );
-      const latest = yield* pinnedCommit(repository, source.ref);
-      if (latest.sha === source.sha) return { available: false, latestSha: latest.sha };
-      const [pinned, now] = yield* Effect.all(
-        [
-          folderTreeSha(repository, source.sha, source.path),
-          folderTreeSha(repository, latest.sha, source.path),
-        ],
-        { concurrency: 2 },
-      );
-      // A folder gone at the ref offers nothing to update to.
-      return { available: now !== undefined && now !== pinned, latestSha: latest.sha };
-    }),
-
     /** A GitHub skill's files read again at its ref and put in place of its own. */
     update: skills.update.effect(function* ({ input: { params, body }, context: { userId } }) {
       const id = yield* pathUuid(params.id);
@@ -366,13 +322,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       if (source.type !== INSTALLED_SKILL_SOURCE.GITHUB) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
       }
-      const repository = yield* reachSkillRepository(
-        workspace.id,
-        source.owner,
-        source.repo,
-        userId,
-      );
-      const revision = yield* revisionAtRef(repository, skill.name, source);
+      const revision = yield* revisionAtRef(userId, workspace.id, skill.name, source);
       const written = yield* storeWrite(updateInstalledSkill(userId, id, revision), skill.name);
       if (Option.isNone(written)) return yield* refusedWrite(userId, id);
       yield* skillChanged(userId, SERVER_SKILL_ACTION.UPDATE);

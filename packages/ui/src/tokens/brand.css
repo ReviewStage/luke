@@ -35,6 +35,8 @@
   --ui-color-working: light-dark(#1666aa, #76bafe);
   --ui-color-complete: light-dark(#067040, #56d089);
   --ui-color-merged: light-dark(#744caf, #c29fff);
+  --ui-color-avatar-tile: #171412;
+  --ui-color-avatar-ink: #cf7b26;
 }
 
 [data-ui-profile="web"],
@@ -69,6 +71,8 @@
   --ui-color-working: #1666aa;
   --ui-color-complete: #067040;
   --ui-color-merged: #744caf;
+  --ui-color-avatar-tile: #171412;
+  --ui-color-avatar-ink: #cf7b26;
 }
 
 [data-ui-profile="web"][data-ui-theme="dark"] {
@@ -102,6 +106,8 @@
   --ui-color-working: #76bafe;
   --ui-color-complete: #56d089;
   --ui-color-merged: #c29fff;
+  --ui-color-avatar-tile: #171412;
+  --ui-color-avatar-ink: #cf7b26;
 }
 
 /* The accent over a ground no theme chooses, someone else's page, where the

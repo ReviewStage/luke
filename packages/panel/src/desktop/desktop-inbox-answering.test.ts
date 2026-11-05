@@ -194,7 +194,7 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
   );
 });
 
-test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send, reading Send & resolve, sends the words as a plain reply, the picks left behind, and then resolves the item", async () => {
+test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send, reading Send & resolve, sends the words with the close as its note, in one send", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const closes = takenCloses();
@@ -231,12 +231,14 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
   await act(async () => answerSend(pane).click());
   await settle();
 
-  assert.deepEqual(
-    sent.map(({ text, answers }) => [text, answers]),
-    [["Hold off until the backfill lands", undefined]],
-    "the words go as a plain reply, never as an answer",
-  );
-  assert.deepEqual(closes, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
+  assert.deepEqual(sent, [], "no reply goes beside the close");
+  assert.deepEqual(closes, [
+    {
+      itemId: THRESHOLD.id,
+      revision: THRESHOLD.revision,
+      text: "Hold off until the backfill lands",
+    },
+  ]);
 });
 
 test("a staged resolve outlasts a reload of the window while its ask stands, and lapses once the agent changes the item", async () => {
@@ -272,7 +274,7 @@ test("a staged resolve outlasts a reload of the window while its ask stands, and
   );
 });
 
-test("a resolve the service did not take once its reply went stands staged again, so it can be sent again or undone", async () => {
+test("a resolve the service did not take stands staged again with its words back in the box, so it can be sent again or undone", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const bridge = appBridge();
@@ -287,7 +289,6 @@ test("a resolve the service did not take once its reply went stands staged again
           })
         : previous(request),
   });
-  const sent = heldMessages(writtenOn(THRESHOLD, "c1b2c3d4-0000-4000-8000-000000000095"));
   const pane = itemPane(page);
   act(() =>
     (
@@ -301,8 +302,12 @@ test("a resolve the service did not take once its reply went stands staged again
   await act(async () => answerSend(pane).click());
   await settle();
 
-  assert.equal(sent.length, 1, "the reply went");
-  assert.equal(sendWords(pane), "Resolve", "the resolve stands staged again");
+  assert.equal(sendWords(pane), "Send & resolve", "the resolve stands staged again");
+  assert.equal(
+    composerEditor(pane).textContent,
+    "Hold off until the backfill lands",
+    "its words are back in the box",
+  );
 });
 
 test("an open item's row offers Resolve without answering last in its menu, asking first; a settled item's row offers none", async () => {
@@ -1594,6 +1599,47 @@ test("a replaced or withdrawn ask draws no card: its controls as it offered them
       ["closed", "resolved this without an answer"],
     ],
     "an earlier close of the question keeps its line where a later close of a notice stands",
+  );
+
+  act(() => world.root?.unmount());
+  world.root = undefined;
+  const noted = await mountThread(
+    threadItem(
+      [
+        askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnAt: 2_000 }),
+        threadMessage(
+          "e1b2c3d4-0000-4000-8000-000000000090",
+          { member: READER },
+          "Settled it in standup.",
+          2_000,
+        ),
+        threadMessage("e1b2c3d4-0000-4000-8000-000000000091", "agent", "Deploy finished.", 3_000),
+        threadMessage(
+          "e1b2c3d4-0000-4000-8000-000000000092",
+          { member: TEAMMATE },
+          "Nothing left to do.",
+          4_000,
+        ),
+      ],
+      { status: INBOX_STATUS.CLOSED, closedBy: TEAMMATE, settledAt: 4_000 },
+    ),
+  );
+  assert.deepEqual(threadLines(noted), [
+    ["message", null],
+    ["closed", "resolved this without an answer"],
+    ["message", null],
+    ["closed", "resolved this without an answer"],
+  ]);
+  assert.deepEqual(
+    [...noted.querySelectorAll("[data-inbox-comment='closed']")].map((line) => [
+      wordsOf(line.querySelector(".ui-comment-name")),
+      wordsOf(line.querySelector("[data-inbox-message-text]")),
+    ]),
+    [
+      ["You resolved this without an answer", "Settled it in standup."],
+      ["Charles Pan resolved this without an answer", "Nothing left to do."],
+    ],
+    "a close's note stands under the line saying who resolved it, never as a message of its own, and names the closer of a close no longer standing",
   );
 
   act(() => world.root?.unmount());

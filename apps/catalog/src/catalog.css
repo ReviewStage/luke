@@ -82,7 +82,12 @@ body {
 /* A brand whose one-color mark is published in named inks wears them by
    the ground, as each app sets them for its own (`marks/provider-mark.tsx`). */
 [data-ui-theme="dark"]
-:is(.integration-mark-executor, .integration-mark-notion, .integration-mark-sentry) {
+:is(
+  .integration-mark-executor,
+  .integration-mark-notion,
+  .integration-mark-resend,
+  .integration-mark-sentry
+) {
   color: #fff;
 }
 
@@ -94,7 +99,8 @@ body {
   color: #34d59a;
 }
 
-[data-ui-theme="light"] :is(.integration-mark-executor, .integration-mark-notion) {
+[data-ui-theme="light"]
+  :is(.integration-mark-executor, .integration-mark-notion, .integration-mark-resend) {
   color: #000;
 }
 

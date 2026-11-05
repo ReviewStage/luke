@@ -3,6 +3,7 @@
  */
 
 import assert from "node:assert/strict";
+import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@repo/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
@@ -337,5 +338,29 @@ it.effect(
         "agent-runner: RunnerFailed: APP_RUNNER_TOKEN is not set (was [redacted]) bearer was [redacted]",
       );
       assert.equal(yield* silent.api.commandStderrTail(SESSION, silent.command.id), undefined);
+    }),
+);
+
+it.effect(
+  "a file whose path is longer than a ustar name holds is written under its whole path",
+  () =>
+    Effect.gen(function* () {
+      let sent: Uint8Array | undefined;
+      const api = yield* apiOver(async (_url, init) => {
+        sent = new Uint8Array(await new Response(init.body).arrayBuffer());
+        return Response.json({});
+      });
+      const path = `/opt/agent/${"a-folder-of-one-skill/".repeat(8)}scripts/a-file-name-past-the-hundred-bytes.sh`;
+
+      yield* api.writeFiles(SESSION, [{ path, contents: new Uint8Array([1]), mode: 0o644 }]);
+
+      assert.ok(sent !== undefined);
+      const tar = gunzipSync(sent);
+      // A pax extended header (type `x`) ahead of the file's own, its one record `<length> path=<path>\n`.
+      assert.equal(String.fromCharCode(tar[156] ?? 0), "x");
+      const record = tar.subarray(512, 512 + Number.parseInt(tar.subarray(124, 136).toString(), 8));
+      const text = record.toString("utf8");
+      assert.equal(text, `${Buffer.byteLength(text)} path=${path.slice(1)}\n`);
+      assert.equal(String.fromCharCode(tar[1024 + 156] ?? 0), "0");
     }),
 );

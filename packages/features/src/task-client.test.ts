@@ -222,6 +222,7 @@ it.effect("a start the service never answers carries what failed beneath it, by 
         errorName: "TypeError",
         traceId,
       },
+      untaken: WRITE_UNTAKEN.UNANSWERED,
     });
   }),
 );
@@ -263,7 +264,7 @@ it.effect(
 );
 
 it.effect(
-  "a rename sent under its key carries it, and answers a server error as unanswered and a key taken already as written",
+  "a rename or a start sent under its key carries it, and answers a server error as unanswered and a key taken already as written",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -272,6 +273,7 @@ it.effect(
           status: 409,
           answer: () => ({ error: HOSTED_API_ERROR.ALREADY_WRITTEN }),
         },
+        "POST /api/plans": { status: 503, answer: () => ({}) },
       });
 
       const unanswered = yield* Effect.provide(
@@ -282,12 +284,24 @@ it.effect(
         client().rename(OTHER_TASK, { name: "Invitation expiry" }, "key-2"),
         api.layer,
       );
+      const started = yield* Effect.provide(
+        client().create({ id: TASK_ID, name: "Invitation expiry" }, "key-3"),
+        api.layer,
+      );
 
       assert.deepEqual(unanswered, { ok: false, failure: WRITE_UNTAKEN.UNANSWERED });
       assert.deepEqual(written, { ok: false, failure: WRITE_UNTAKEN.ALREADY_WRITTEN });
+      // Note that the trace is the call's own, so only the start's own answer names it.
+      const traceId = started.ok ? undefined : started.cause?.traceId;
+      assert.deepEqual(started, {
+        ok: false,
+        failure: TASK_CALL_FAILURE.UNANSWERED,
+        untaken: WRITE_UNTAKEN.UNANSWERED,
+        cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, status: 503, traceId },
+      });
       assert.deepEqual(
         api.requests().map((request) => request.headers.get(IDEMPOTENCY_KEY.HEADER)),
-        ["key-1", "key-2"],
+        ["key-1", "key-2", "key-3"],
       );
     }),
 );

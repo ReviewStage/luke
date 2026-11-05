@@ -10,13 +10,14 @@
  * kind by its own name.
  */
 
-/** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, and the account deleted. */
+/** The account's asks: a sign-in begun, begun again, or canceled, a sign-out, the account deleted, and its grant of support access. */
 export const ACCOUNT_ACT_KIND = {
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
+  ACCOUNT_SUPPORT_ACCESS: "account.supportAccess",
 } as const;
 
 /**
@@ -181,6 +182,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_REWIND: "agents.rewind",
   AGENTS_ARCHIVE: "agents.archive",
   AGENTS_PIN: "agents.pin",
+  /** The reader's own read mark of an agent with no task moved, kept on the account (`read-mark.ts`). */
+  AGENTS_MARK_READ: "agents.markRead",
   AGENTS_DELETE: "agents.delete",
   /**
    * Which agent's tab the panel shows, or none: what an agent's end leaves no
@@ -289,10 +292,9 @@ export const CHAPTERS_ACT_KIND = {
 
 /**
  * Settings' Skills: the skills the account sees in a workspace held for the
- * window while it holds the stream open, a pasted `skills add` command or
- * skill text previewed, one of its skills' `SKILL.md` read, and installed
- * for the account or its workspace, and one toggled, checked for an
- * update, updated, shared, or removed. The hold's stream carries nothing:
+ * window while it holds the stream open, a pasted GitHub source or skill
+ * text previewed and installed for the account or its workspace, and one
+ * toggled, updated, shared, or removed. The hold's stream carries nothing:
  * what it holds reaches the panel on app state (`LIVE_READ.INSTALLED_SKILLS`),
  * and each write is drawn there as it is asked or answered.
  */
@@ -302,10 +304,8 @@ export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_RETRY: "installedSkills.retry",
   INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
-  INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
-  INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
   INSTALLED_SKILLS_SHARE: "installedSkills.share",
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
@@ -388,6 +388,8 @@ export const TASKS_ACT_KIND = {
   TASKS_DELETE: "tasks.delete",
   TASKS_RENAME: "tasks.rename",
   TASKS_PIN: "tasks.pin",
+  /** The reader's own read mark of a task moved, kept on the account (`read-mark.ts`); answers whether the service took it. */
+  TASKS_MARK_READ: "tasks.markRead",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
@@ -763,6 +765,7 @@ export const PORT_ACT_USE = {
   ACCOUNT_CANCEL_SIGN_IN: ACT_USE.WRITE,
   ACCOUNT_SIGN_OUT: ACT_USE.WRITE,
   ACCOUNT_DELETE: ACT_USE.WRITE,
+  ACCOUNT_SUPPORT_ACCESS: ACT_USE.WRITE,
 
   PROVIDER_KEYS_FOLLOW: ACT_USE.READ,
   PROVIDER_KEYS_RETRY: ACT_USE.READ,
@@ -809,6 +812,7 @@ export const PORT_ACT_USE = {
   AGENTS_REWIND: ACT_USE.WRITE,
   AGENTS_ARCHIVE: ACT_USE.WRITE,
   AGENTS_PIN: ACT_USE.WRITE,
+  AGENTS_MARK_READ: ACT_USE.WRITE,
   AGENTS_DELETE: ACT_USE.WRITE,
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
@@ -857,10 +861,8 @@ export const PORT_ACT_USE = {
   INSTALLED_SKILLS_RETRY: ACT_USE.READ,
   INSTALLED_SKILLS_READ: ACT_USE.FETCH,
   INSTALLED_SKILLS_PREVIEW: ACT_USE.FETCH,
-  INSTALLED_SKILLS_PREVIEW_FILE: ACT_USE.FETCH,
   INSTALLED_SKILLS_INSTALL: ACT_USE.WRITE,
   INSTALLED_SKILLS_SET_ENABLED: ACT_USE.WRITE,
-  INSTALLED_SKILLS_CHECK_UPDATE: ACT_USE.FETCH,
   INSTALLED_SKILLS_UPDATE: ACT_USE.WRITE,
   INSTALLED_SKILLS_SHARE: ACT_USE.WRITE,
   INSTALLED_SKILLS_REMOVE: ACT_USE.WRITE,
@@ -893,6 +895,7 @@ export const PORT_ACT_USE = {
   TASKS_DELETE: ACT_USE.WRITE,
   TASKS_RENAME: ACT_USE.WRITE,
   TASKS_PIN: ACT_USE.WRITE,
+  TASKS_MARK_READ: ACT_USE.WRITE,
   TASKS_PIN_REPOSITORY: ACT_USE.WRITE,
   TASKS_WRITE_SECTION: ACT_USE.WRITE,
   TASKS_REPOSITORIES_FOLLOW: ACT_USE.READ,

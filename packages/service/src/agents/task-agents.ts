@@ -280,6 +280,8 @@ export function listTasklessAgents(
         }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
         ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
+        readThrough: agent.readThrough.getTime(),
+        markedUnread: agent.markedUnread,
         ...pullRequestOf(published.get(agent.id)),
       };
     });

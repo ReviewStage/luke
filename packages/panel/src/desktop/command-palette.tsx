@@ -129,6 +129,7 @@ import {
   searchHit,
 } from "@repo/ui/search-score";
 import { type MatchRange, matchesTokens, matchRanges, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { inTaskOrder } from "@repo/ui/tab-strip-model";
 import {
   agentRow,
@@ -276,6 +277,7 @@ const FILES_READ = {
   READING: "reading",
   LISTED: "listed",
   MISSED: "missed",
+  FAILED: "failed",
 } as const;
 
 /**
@@ -288,12 +290,13 @@ type FilesHeld = { taskId: string; repository: string } & FilesRead;
 type FilesRead =
   | { read: typeof FILES_READ.READING }
   | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
-  | { read: typeof FILES_READ.MISSED; notice: string };
+  | { read: typeof FILES_READ.MISSED; notice: string }
+  | { read: typeof FILES_READ.FAILED };
 
 /** What the Files filter says while no plan with a repository stands open, as under an agent's page. */
 const NO_REPOSITORY_LINE = "Open a task with a repository to search its files.";
 
-/** What the Files filter says where the read did not land. */
+/** What the Files filter says where the read did not land, beside its Retry. */
 const FILES_MISSED_LINE = "The files could not be read.";
 
 /** What the Files filter says while the repository is read. */
@@ -328,7 +331,7 @@ const PALETTE_NOTICE = {
 type PaletteNotice =
   | {
       readonly kind: typeof PALETTE_NOTICE.SAID | typeof PALETTE_NOTICE.READING;
-      readonly line: string;
+      readonly line: ReactNode;
     }
   | {
       readonly kind: typeof PALETTE_NOTICE.FAILED;
@@ -425,6 +428,8 @@ interface PaletteRow {
   label: string;
   /** Muted words after the name: a task's repository, an agent's task, a setting's page. */
   detail?: string | undefined;
+  /** Whether its detail is the app's own words, a setting's page, shown in a screen recording; every other row's detail names a person's thing, a repository, a task, or a link's subject, and stays masked. */
+  detailShown?: boolean | undefined;
   /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
   /** The mark at the row's end: a failed agent's, or a task's face of who is on it (`assigneeFace`) and its row's mark (`TaskRowStatus`). */
@@ -444,6 +449,8 @@ interface PaletteRow {
   /** Whether letters typed in order find the row, as a file's path or a command's name. */
   loose?: boolean | undefined;
   onChoose: () => void;
+  /** Whether its words name a person's thing, a task, an agent, a member, an automation, an Inbox item, or a file, kept masked in a screen recording where the palette shows its own. */
+  replayMasked?: boolean | undefined;
 }
 
 /** What a row's search reads: its name, its short words, its task's key, its keywords, and whether its letters in order find it. */
@@ -577,21 +584,25 @@ function filesOf(answer: TasksTreeAnswer): FilesRead {
       truncated: answer.folder.truncated,
     };
   }
-  if ("failure" in answer) return { read: FILES_READ.MISSED, notice: FILES_MISSED_LINE };
+  if ("failure" in answer) return { read: FILES_READ.FAILED };
   return { read: FILES_READ.MISSED, notice: refusalLine(answer.refusal, answer.branch) };
 }
 
-/** What the Files filter says in place of rows: why there are none to search yet, or nothing. */
+/** What the Files filter says in place of rows: why there are none to search yet, a failed read with its Retry, or nothing. */
 function filesNotice(
   repositoryOpen: boolean,
   held: FilesHeld | undefined,
+  onRetry: () => void,
 ): PaletteNotice | undefined {
   if (!repositoryOpen) return { kind: PALETTE_NOTICE.SAID, line: NO_REPOSITORY_LINE };
   if (held === undefined || held.read === FILES_READ.READING) {
     return { kind: PALETTE_NOTICE.READING, line: READING_LINE };
   }
+  if (held.read === FILES_READ.FAILED) {
+    return { kind: PALETTE_NOTICE.FAILED, line: FILES_MISSED_LINE, onRetry };
+  }
   return held.read === FILES_READ.MISSED
-    ? { kind: PALETTE_NOTICE.SAID, line: held.notice }
+    ? { kind: PALETTE_NOTICE.SAID, line: <ReplayMask>{held.notice}</ReplayMask> }
     : undefined;
 }
 
@@ -668,6 +679,7 @@ function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
 function fileRow(path: string, open: (path: string) => void): PaletteRow {
   return {
     ...fileLook(path),
+    replayMasked: true,
     loose: true,
     card: <FileCard path={path} />,
     onChoose: () => open(path),
@@ -808,6 +820,7 @@ function taskRows(
       const worn = assigneeFace(task, readerOf(task));
       const detail = taskDetail(task, repositories);
       return {
+        replayMasked: true,
         icon: tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }).icon,
         detail:
           madeBy === null
@@ -838,6 +851,7 @@ function taskRows(
         agent.repository === null ? null : repositoryLabel(agent.repository, repositories);
       const said = [repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
       return {
+        replayMasked: true,
         icon: tabLook({ kind: TAB_KIND.AGENT, name, agent }).icon,
         detail: said.length === 0 ? undefined : said.join(" · "),
         endMark: agentEndMark(agent, archived),
@@ -967,6 +981,7 @@ function agentRows(
     const detail = typeof row.detail === "string" ? row.detail : undefined;
     const named = [heading, taskName].filter((word) => word !== undefined);
     return {
+      replayMasked: true,
       icon: row.icon,
       label: row.label,
       detail:
@@ -1009,6 +1024,7 @@ function archivedAgentRows(
     });
     return {
       ...look,
+      replayMasked: true,
       detail: [ARCHIVED_WORD, taskName].filter((word) => word !== undefined).join(" · "),
       endMark: agentEndMark(agent, true),
       card: (
@@ -1034,6 +1050,7 @@ function peopleRows(
   open: (userId: string) => void,
 ): readonly PaletteRow[] {
   return memberRows(members, readerId).map((row) => ({
+    replayMasked: true,
     icon: row.icon,
     label: row.label,
     detail: row.detail,
@@ -1052,6 +1069,7 @@ function automationRows(
   return automations.map((automation) => {
     const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
     return {
+      replayMasked: true,
       icon: <GLYPH.AUTOMATION />,
       label: automation.name,
       // Note that its task's name, which finds it too, is said after what fires it, so a row it found says why.
@@ -1117,6 +1135,7 @@ function inboxRow(
     const name = holderName(holder);
     const snippet = snippetOf(words.keywords ?? [], [item.title, words.label, name], seams.tokens);
     return {
+      replayMasked: true,
       icon: (
         <ItemMark
           holder={holder}
@@ -1625,6 +1644,7 @@ function settingRows(
     icon: <GearIcon />,
     label: entry.label,
     detail: resultPageWord(entry.page),
+    detailShown: true,
     terms: [entry.label],
     keywords: entry.haystack,
     onChoose: () => land(entry.page, entry.id),
@@ -1680,7 +1700,7 @@ function paletteItem(
       : [row.detail, found].filter((words) => words !== undefined).join(" · ");
   const words =
     detail === undefined && row.workspace === undefined ? undefined : (
-      <>
+      <ReplayWords masked={row.detailShown !== true}>
         {row.workspace === undefined ? null : (
           <WorkspaceRef
             workspace={row.workspace}
@@ -1696,7 +1716,7 @@ function paletteItem(
         {detail === undefined ? null : (
           <Highlighted text={detail} ranges={markedIn(detail, subject, hit, tokens)} />
         )}
-      </>
+      </ReplayWords>
     );
   // Note that a task's key stands first at the row's end, as the Tasks list's row sets it, and never leads: a lead on the keyed rows alone pushes their glyph and name right of every row without one.
   // Spoken, since a palette row is an option, which carries no
@@ -1722,10 +1742,12 @@ function paletteItem(
   return {
     id,
     label: <Highlighted text={row.label} ranges={hit?.label ?? []} />,
-    icon: row.icon,
+    // Note that a person's face draws their initial as words, so a masked row's glyph is masked with it.
+    icon: row.replayMasked === true ? <ReplayMask>{row.icon}</ReplayMask> : row.icon,
     detail: words,
     hint: end,
     card: row.card,
+    replayMasked: row.replayMasked,
     // Note that the palette ranks its own rows, so these words only name the row's card.
     words: row.label,
     onSelect: row.onChoose,
@@ -1769,15 +1791,17 @@ function PaletteFilters({
   }, [filter]);
   return (
     <div ref={band}>
-      <ChoiceBar
-        label="Filter"
-        items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
-        value={filter}
-        onChange={onFilter}
-        look={CHOICE_BAR_LOOK.FILL}
-        size={CHOICE_BAR_SIZE.COMPACT}
-        focus={CHOICE_BAR_FOCUS.NONE}
-      />
+      <ReplayUnmask>
+        <ChoiceBar
+          label="Filter"
+          items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
+          value={filter}
+          onChange={onFilter}
+          look={CHOICE_BAR_LOOK.FILL}
+          size={CHOICE_BAR_SIZE.COMPACT}
+          focus={CHOICE_BAR_FOCUS.NONE}
+        />
+      </ReplayUnmask>
     </div>
   );
 }
@@ -1792,14 +1816,16 @@ function PaletteFooter({ typed, runs }: { typed: boolean; runs: boolean }): Reac
     <>
       {hints.map((hint) => (
         <span key={hint.label} aria-hidden="true">
-          {hint.chords.map((chord, index) => (
-            <Fragment key={chord.key.accelerator}>
-              {/* Note that bare keys read as one glyph pair, ←→, while chords with a modifier, ⌘[ / ⌘] or Ctrl [ / Ctrl ], need a slash between them, or they run into each other. */}
-              {index > 0 && chord.bare !== true ? " / " : null}
-              <Shortcut chord={chord} />
-            </Fragment>
-          ))}{" "}
-          {hint.label}
+          <ReplayUnmask>
+            {hint.chords.map((chord, index) => (
+              <Fragment key={chord.key.accelerator}>
+                {/* Note that bare keys read as one glyph pair, ←→, while chords with a modifier, ⌘[ / ⌘] or Ctrl [ / Ctrl ], need a slash between them, or they run into each other. */}
+                {index > 0 && chord.bare !== true ? " / " : null}
+                <Shortcut chord={chord} />
+              </Fragment>
+            ))}{" "}
+            {hint.label}
+          </ReplayUnmask>
         </span>
       ))}
     </>
@@ -1855,6 +1881,7 @@ const PaletteDialog = memo(function PaletteDialog({
     <CommandDialog
       {...dialog}
       label="Command palette"
+      replayUnmasked
       // Note that the palette stays drawn, hidden, while shut, so ⌘K only shows it, since its props stand still until it opens.
       keepMounted
       groups={groups}
@@ -2123,9 +2150,14 @@ export function CommandPalette({
     };
     readFiles(taskId).then(
       (answer) => keep(filesOf(answer)),
-      () => keep({ read: FILES_READ.MISSED, notice: FILES_MISSED_LINE }),
+      () => keep({ read: FILES_READ.FAILED }),
     );
   }, [filesAsked, taskId, repository, held, readFiles]);
+  // Note that a Retry drops the failed read, so the effect above reads the files again.
+  const retryFiles = () => {
+    filesAsk.current += 1;
+    setFiles(undefined);
+  };
 
   const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
   const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? sought : undefined;
@@ -2243,7 +2275,7 @@ export function CommandPalette({
     [PALETTE_FILTER.AUTOMATIONS]: () =>
       automationsAsked ? automationsNotice(tasks, automations) : undefined,
     [PALETTE_FILTER.FILES]: () =>
-      fileQuery === undefined ? undefined : filesNotice(filesOpen, held),
+      fileQuery === undefined ? undefined : filesNotice(filesOpen, held, retryFiles),
     [PALETTE_FILTER.COMMANDS]: () => undefined,
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
@@ -2264,9 +2296,11 @@ export function CommandPalette({
   // A kind's notice after its rows, or, under Files, that the listing searched was cut short.
   const noteOf = (section: PaletteSection): ReactNode =>
     section.notice !== undefined ? (
-      <NoticeLine notice={section.notice} />
+      <ReplayUnmask>
+        <NoticeLine notice={section.notice} />
+      </ReplayUnmask>
     ) : cut && section.kind === PALETTE_FILTER.FILES ? (
-      TRUNCATED_LINE
+      <ReplayUnmask>{TRUNCATED_LINE}</ReplayUnmask>
     ) : undefined;
   // Every kind's rows ranked for the words sought, each group's items placed after the last.
   const rank = (): readonly CommandGroup[] => {

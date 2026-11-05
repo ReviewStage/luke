@@ -64,15 +64,15 @@
  * every model, which leaves the service's catalog, which offers an
  * Ultrafast version only where OpenAI prices one, the one gate on it.
  *
- * Sandbox. Every command Codex runs is under its own sandbox in
- * `workspace-write` with approval `never` (https://learn.chatgpt.com/docs/sandboxing),
- * set as the thread starts and again as the `sandboxPolicy` of each
- * `turn/start`, as app-server documents: the checkout writable, its Git
- * directory, and the folders the machine grants, with the network on. On a
- * host (`runsOnHost`) Codex runs no sandbox of its own,
- * `danger-full-access`, since an agent there has full access to the box it
- * runs on; its commands still inherit no bearer or key
- * (`shell_environment_policy`).
+ * Sandbox. Codex runs no sandbox of its own, `danger-full-access` with
+ * approval `never` (https://learn.chatgpt.com/docs/sandboxing), set as the
+ * thread starts and again as the `sandboxPolicy` of each `turn/start`, as
+ * app-server documents, so a thread started under another mode runs under
+ * this one from its next turn. The machine is the boundary: a host's box, to
+ * which an agent there has full access, or the cloud's sandbox, whose
+ * firewall holds every credential and leaves only placeholders inside. Its
+ * commands still inherit no bearer or key (`shell_environment_policy`),
+ * since none is theirs to use, a placeholder or not.
  */
 
 import { randomUUID } from "node:crypto";
@@ -414,57 +414,23 @@ function providerOverrides(auth: CodexAuth): (readonly [string, string])[] {
   ];
 }
 
-/**
- * Every folder the agent's commands may write beside the checkout, which
- * `workspace-write` keeps writable itself: the checkout's Git directory and
- * the folders its machine grants. Each is absolute, as app-server's
- * `writableRoots` are.
- */
-function writableRoots(config: CodexConfig): string[] {
-  return [join(config.cwd, ".git"), ...(config.writableRoots ?? [])];
-}
+/** The sandbox every turn runs under, as `turn/start`'s documented `sandboxPolicy`: none of Codex's own. */
+const SANDBOX_POLICY = { type: "dangerFullAccess" } as const satisfies SandboxPolicy;
 
-/**
- * The sandbox every turn runs under, as `turn/start`'s documented
- * `sandboxPolicy`: on a host, none; elsewhere workspace-write over the
- * writable roots (`writableRoots`), the network on, and the temp folders
- * writable as Codex keeps them.
- */
-function sandboxPolicy(config: CodexConfig, env: LaunchContext<CodexConfig>["env"]): SandboxPolicy {
-  if (runsOnHost(env)) return { type: "dangerFullAccess" };
-  return {
-    type: "workspaceWrite",
-    writableRoots: writableRoots(config),
-    networkAccess: true,
-    excludeTmpdirEnvVar: false,
-    excludeSlashTmp: false,
-  };
-}
-
-/** The sandbox mode a thread is started and resumed under, as the policy given names it. */
-function sandboxModeOf(sandbox: SandboxPolicy): "danger-full-access" | "workspace-write" {
-  return sandbox.type === "dangerFullAccess" ? "danger-full-access" : "workspace-write";
-}
+/** The sandbox mode a thread is started and resumed under, as app-server's config names `SANDBOX_POLICY`. */
+const SANDBOX_MODE = "danger-full-access";
 
 /**
  * App-server's argv: our provider and its credential where the launch
  * runs on one of ours (`providerOverrides`), our MCP
  * server and each integration's beside it with the bearer read from the environment and their tools approved up
  * front (under `approval_policy = "never"` Codex 0.163.0 otherwise fails
- * every MCP call, as P16 found) and given as long as the service runs a call, the sandbox with network on and its
- * writable roots (`sandboxPolicy`), and commands inheriting the core variables
+ * every MCP call, as P16 found) and given as long as the service runs a call, no
+ * sandbox (`SANDBOX_MODE`), and commands inheriting the core variables
  * without the bearer or the key, and handed the image's tools' own
  * (`SANDBOX_TOOL_ENV`). Nothing in argv is secret.
- *
- * Note that workspace-write keeps `.git` read-only under every writable root
- * (openai/codex#15505), and with `never` nothing escalates, so without its
- * own writable root an agent could not commit. Granting the Git directory
- * itself keeps the sandbox on: commands still never see the token, and
- * app-server's own git calls run with hooks and fsmonitor disabled. A host
- * runs no sandbox (`sandboxPolicy`), so its worktree's Git directory, in the
- * box's shared clone, needs no root of its own.
  */
-function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPolicy): string[] {
+function appServerArgs(config: CodexConfig, auth: CodexAuth): string[] {
   const mcp = `mcp_servers.${MCP_SERVER}`;
   // Each integration the agent is handed is a server of its own on the same bearer, its tools approved and bounded as ours are.
   const integrations = (config.integrations ?? [])
@@ -491,16 +457,7 @@ function appServerArgs(config: CodexConfig, auth: CodexAuth, sandbox: SandboxPol
     [`${mcp}.tool_timeout_sec`, MCP_TOOL_TIMEOUT_SECONDS.toFixed(1)],
     ...integrations,
     ["approval_policy", toml("never")],
-    ["sandbox_mode", toml(sandboxModeOf(sandbox))],
-    ...(sandbox.type === "workspaceWrite"
-      ? ([
-          ["sandbox_workspace_write.network_access", "true"],
-          [
-            "sandbox_workspace_write.writable_roots",
-            `[${sandbox.writableRoots.map(toml).join(", ")}]`,
-          ],
-        ] as const)
-      : []),
+    ["sandbox_mode", toml(SANDBOX_MODE)],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
     ["shell_environment_policy.exclude", `[${excluded.map(toml).join(", ")}]`],
@@ -563,8 +520,6 @@ interface CodexLaunch {
   readonly accepted: Set<string>;
   /** The credential app-server runs on. */
   readonly auth: CodexAuth;
-  /** The sandbox every turn runs under (`sandboxPolicy`). */
-  readonly sandbox: SandboxPolicy;
   model: string;
   effort: CodexEffort | undefined;
   /** The service tier the next turn names (`turnTierOf`); null for the standard one. */
@@ -633,7 +588,7 @@ function listenerFor(seen: ThreadSeen): AppServerListener {
  * otherwise. Answers the server, its scope, and the thread's id.
  */
 const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
-  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth" | "sandbox">,
+  launch: Pick<CodexLaunch, "context" | "signals" | "model" | "auth">,
   threadId: string | undefined,
 ) {
   const { config, env } = launch.context;
@@ -644,7 +599,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const server = yield* spawnAppServer(
     {
       executable: config.executable,
-      args: appServerArgs(config, launch.auth, launch.sandbox),
+      args: appServerArgs(config, launch.auth),
       cwd: config.cwd,
       // Note that Claude Code's credentials, were they set, are no business of Codex's.
       env: {
@@ -669,7 +624,7 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       cwd: config.cwd,
       model: launch.model,
       approvalPolicy: "never",
-      sandbox: sandboxModeOf(launch.sandbox),
+      sandbox: SANDBOX_MODE,
       developerInstructions: config.developerInstructions,
     } satisfies ThreadStartParams;
     const answer =
@@ -770,7 +725,7 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       model: launch.model,
       effort: launch.effort ?? null,
       approvalPolicy: "never",
-      sandboxPolicy: launch.sandbox,
+      sandboxPolicy: SANDBOX_POLICY,
       // Note that a null tier is the standard one, which a fast or Ultrafast version turned off goes back to.
       serviceTier: turnTierOf(launch),
     }),
@@ -987,14 +942,13 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
   if (auth === undefined) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
-  const sandbox = sandboxPolicy(config, context.env);
   const signals = yield* Queue.unbounded<Signal>();
   yield* sink.undelivered.pipe(
     Effect.andThen(Queue.offer(signals, { kind: SIGNAL.UNDELIVERED })),
     Effect.forkScoped,
   );
   const opened = yield* openAppServer(
-    { context, signals, model: config.model, auth, sandbox },
+    { context, signals, model: config.model, auth },
     config.threadId,
   ).pipe(Effect.result);
   if (opened._tag === "Failure") {
@@ -1016,7 +970,6 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     waiting: [],
     accepted: new Set(),
     auth,
-    sandbox,
     model: config.model,
     effort: config.effort,
     tier: serviceTierOf(config.fast, config.ultrafast),

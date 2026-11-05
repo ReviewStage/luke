@@ -49,6 +49,8 @@ export interface ListRowMenu {
   readonly footer?: ReactNode;
   /** Whether the surface the row stands on is shown; its menu closes once it is not, and stands while it is where unsaid. */
   readonly shown?: boolean | undefined;
+  /** Whether its items' words are the app's own, which a screen recording shows as they read (`Menu`'s `replayUnmasked`). */
+  readonly replayUnmasked?: boolean | undefined;
   /** The asks from elsewhere to open the menu, as a key pressed on the row, each count opening it under the row, on the submenu named where one is. */
   readonly openRequest?: RowMenuRequest | undefined;
 }
@@ -139,6 +141,7 @@ export function useRowMenu(
         groups={live.groups}
         openOn={openOn}
         onClose={state.close}
+        replayUnmasked={live.replayUnmasked}
       />
     ) : null;
   return {

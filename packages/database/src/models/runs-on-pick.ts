@@ -1,10 +1,12 @@
 /**
- * runs-on-pick.ts -- where an account last chose to run a task, kept so a task an agent makes for it starts there too.
+ * runs-on-pick.ts -- where an account last chose to run an agent, kept as the fallback for a start naming no place.
  *
- * New task's Runs on, and a quick add's, are the window's, but a task an
- * agent makes for the member (`create_task`) is made where no window
- * stands, so the service keeps the last place a start named on the
- * account's preference row: the cloud, or one of its devices by id. Note
+ * A start may name where its agent runs, but one that names none is made
+ * where no window chose, so the service keeps the last place a start named
+ * on the account's preference row, read where nothing nearer decides: a
+ * start's source or the account's newest agent on the task comes first. A
+ * task holds no place of its own. It holds the cloud, or one of the
+ * account's devices by id. Note
  * that it is written alone, never through the preferences snapshot, and
  * moves no `updated_at`, because that instant tells a Mac the preferences
  * part was written and a pick is no part of it.
@@ -80,14 +82,14 @@ function pickOf(row: typeof PickRowSchema.Type): Option.Option<TaskRunsOnRequest
   return Option.none();
 }
 
-/** Where the account last chose to run a task; none where no start has named one. */
+/** Where the account last chose to run an agent; none where no start has named one. */
 export function readRunsOnPick(
   userId: string,
 ): Effect.Effect<Option.Option<TaskRunsOnRequest>, StoreFailure, DatabaseServices> {
   return Effect.map(findPick(userId), Option.flatMap(pickOf));
 }
 
-/** Keeps where the account chose to run a task as its last pick, over what stood. */
+/** Keeps where the account chose to run an agent as its last pick, over what stood. */
 export function keepRunsOnPick(
   userId: string,
   pick: TaskRunsOnRequest,

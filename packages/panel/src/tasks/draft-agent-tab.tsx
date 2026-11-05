@@ -1,16 +1,21 @@
 import { AGENT_STATUS, hasWordsOrFiles } from "@repo/features/agent-wire";
+import type { MacOffer } from "@repo/features/models-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { useSecond } from "@repo/ui";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { AgentComposer } from "./agent-composer.js";
-import { agentName } from "./agent-model.js";
+import { useExperiment } from "../use-app-state.js";
+import { AgentComposer, COMPOSER_DOCK_CLASS } from "./agent-composer.js";
+import { agentName, unrunnableChoice } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
+import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
+import { NewTaskRunsOnChip, useStartRunsOn } from "./runs-on.js";
 import type { AgentComposerControl, ComposerNote } from "./use-agent-composer.js";
 import type { AgentDraft, AgentsControl } from "./use-agents.js";
 import { WorkingLine } from "./working-time.js";
@@ -54,6 +59,16 @@ import { WorkingLine } from "./working-time.js";
  * not land leaves the line for the note and Retry under the box, the words
  * kept.
  *
+ * While the Bring your own host experiment is on, the box wears New task's
+ * Runs on chip after its "+" (`runs-on.tsx`), listing Cloud and the
+ * member's devices, read as the tab opens where no read has listed them.
+ * It starts on where a Start naming no place would run (`useStartRunsOn`):
+ * a fork's or a continue's source's place, else the member's newest agent
+ * on the task's, else their last pick; a send names a place only once one
+ * is picked here, held by the draft as its other chips are, and the service
+ * decides otherwise. While the experiment is off no chip stands and no send
+ * names a place.
+ *
  * A draft New task handed over (`use-agents.ts`'s `onHandDraft`)
  * is a task whose agent the service refused as New task started them
  * both: it holds the words and files New task's box held, the model picked
@@ -67,6 +82,9 @@ import { WorkingLine } from "./working-time.js";
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve(false);
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
+
+/** The devices Runs on offers before a read lists any: none, so it offers Cloud alone. */
+const NO_DEVICES: readonly MacOffer[] = [];
 
 /** What a fork's working line names its source as where the task does not list it. */
 const UNLISTED_SOURCE = "the agent";
@@ -120,18 +138,42 @@ export function DraftAgentTab({
         );
   // A fork runs on its source's model and effort until the developer picks another.
   const choice = draft.choice ?? (source === undefined ? fallback : forkChoice(source));
+  // Note that a model nothing of the account's pays for holds Send, with the press that connects one, rather than being refused once sent.
+  const unpaid =
+    control.models === undefined || choice === undefined
+      ? undefined
+      : unrunnableChoice(control.models, choice);
+  // Runs on stands only while Bring your own host is on, and reads the member's devices where no read has listed them.
+  const placesOn = useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST);
+  useEffect(() => {
+    if (placesOn && latest.current.macs === undefined) latest.current.readModels();
+  }, [placesOn]);
+  const devices = (placesOn ? control.macs : undefined) ?? NO_DEVICES;
+  const [device, choosePlace] = useStartRunsOn(
+    devices,
+    draft.runsOn,
+    {
+      source,
+      agents: [...(control.agents ?? []), ...(control.archived ?? [])],
+      me: control.me,
+    },
+    (runsOn) => control.onDraftChange({ runsOn }),
+  );
   const send = () => {
     const prompt = draft.prompt.trim();
-    if (sending || (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments))) return;
+    if (sending || unpaid !== undefined) return;
+    if (fork === undefined && !hasWordsOrFiles(prompt, draft.attachments)) return;
     setSending(true);
     setNote(undefined);
     if (draft.refused !== undefined) latest.current.onDraftChange({ refused: undefined });
     if (fork !== undefined) setSentAt(Date.now());
     const { id, choice, attachments, disabledServers } = draft;
+    // Note that a place picked while the experiment was on is not sent once it is off.
+    const runsOn = placesOn ? draft.runsOn : undefined;
     const started =
       fork === undefined
-        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers)
-        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers);
+        ? latest.current.startPrompt(id, prompt, choice, attachments, disabledServers, runsOn)
+        : latest.current.startFork(id, fork, prompt, choice, attachments, disabledServers, runsOn);
     started.then((failed) => {
       setSending(false);
       setSentAt(undefined);
@@ -175,10 +217,16 @@ export function DraftAgentTab({
         {fork === undefined ? null : (
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
+        {unpaid === undefined || control.models === undefined ? null : (
+          <div className={COMPOSER_DOCK_CLASS}>
+            <ConnectAgentBanner models={control.models} unpaid={unpaid} />
+          </div>
+        )}
         <AgentComposer
           status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
+          sendable={unpaid === undefined}
           model={
             choice === undefined
               ? undefined
@@ -203,6 +251,19 @@ export function DraftAgentTab({
           followsUp={false}
           keywords={control.keywords}
           skills={control.readSkills}
+          tools={
+            placesOn
+              ? (narrow) => (
+                  <NewTaskRunsOnChip
+                    devices={devices}
+                    device={device}
+                    disabled={sending}
+                    narrow={narrow}
+                    onChoose={choosePlace}
+                  />
+                )
+              : undefined
+          }
         />
       </AgentTabFoot>
     </AgentTabFrame>

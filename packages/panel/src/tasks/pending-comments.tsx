@@ -69,6 +69,7 @@ const DELETE_QUESTION: DialogQuestion = {
   verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** A pending comment as the comment of a thread it is drawn as: keyed by its own id. */

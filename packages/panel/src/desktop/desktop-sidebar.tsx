@@ -73,6 +73,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
@@ -113,6 +114,7 @@ import { repositoryPageUrl, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
+import { useConnected } from "../connection.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { unreadShown } from "../failure-report.js";
@@ -149,7 +151,7 @@ import { IDLE_TIMEOUT_MS, useWhenIdle } from "../use-when-idle.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { runningRuns } from "./automation-runs-tab.js";
 import { useFailedRunsMark } from "./failed-runs.js";
-import { withoutFinishedRunTasks, withoutFinishedRuns } from "./finished-runs.js";
+import { withoutFinishedRuns, withoutFinishedRunTasks } from "./finished-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
@@ -293,6 +295,7 @@ function historyGroups(
       key: step.at,
       label: step.title?.label ?? UNNAMED_STEP,
       detail: step.title?.detail,
+      replayMasked: true,
       onSelect: () => onGoTo(step.at),
     };
     if (page !== undefined && sameHistoryPage(step.page, page)) groups.at(-1)?.push(item);
@@ -361,6 +364,7 @@ function HistoryButton({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${label} history`}
+          replayUnmasked
           menu={menu.drawn}
           groups={historyGroups(steps, onGoTo)}
           onClose={menu.close}
@@ -508,7 +512,6 @@ function TaskRows({
             agent={row.agent}
             agents={context.tasks.agents}
             current={context.currentRow(row)}
-            unread={context.unseenAgent(row.agent.id)}
             now={context.now}
             at={taskRowTime(row)}
             repository={repository?.(row)}
@@ -901,7 +904,6 @@ function PinnedRows({
                 agent={agent}
                 agents={context.tasks.agents}
                 current={context.currentRow(agentRow(agent))}
-                unread={context.unseenAgent(agent.id)}
                 now={context.now}
                 at={agent.activityAt}
                 nest={nest}
@@ -1145,14 +1147,16 @@ function RepositorySection({
           repository === null ? (
             <NoRepositoryGlyph />
           ) : (
-            <RepositoryPicture
-              repository={repository}
-              pictures={context.tasks.repositories.pictures}
-              size={AVATAR_SIZE.GLYPH}
-            />
+            <ReplayMask>
+              <RepositoryPicture
+                repository={repository}
+                pictures={context.tasks.repositories.pictures}
+                size={AVATAR_SIZE.GLYPH}
+              />
+            </ReplayMask>
           )
         }
-        label={named}
+        label={repository === null ? named : <ReplayMask>{named}</ReplayMask>}
         fold={sidebarFold(folded, () => folds.toggle(repository))}
         count={foldedCount(folded, group.rows.length, TASK_NOUN)}
         mark={
@@ -1193,6 +1197,7 @@ function RepositorySection({
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${named} actions`}
+          replayUnmasked
           menu={menu.drawn}
           groups={actionGroups}
           onClose={menu.close}
@@ -1782,6 +1787,7 @@ function SidebarColumn({
   onPressWithin,
   room = SHELL_ROOM.WIDE,
 }: DesktopSidebarProps): React.JSX.Element {
+  const connected = useConnected();
   const onTasks = tab === PANEL_TAB.TASKS;
   // Whether a row of the column is lifted into a drag, while which an empty Pinned stands to take it.
   const [carrying, setCarrying] = useState(false);
@@ -1882,10 +1888,7 @@ function SidebarColumn({
     control: taskView,
     shared,
   });
-  const unread = useUnreadTasks(tasks.tasks, {
-    listRead: tasks.listRead,
-    staged: sidebar.staged,
-  });
+  const unread = useUnreadTasks({ staged: sidebar.staged });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
@@ -2134,11 +2137,13 @@ function SidebarColumn({
   const repositoryOf = (row: TaskRow) => {
     const repository = taskRowRepository(row);
     return (
-      <RepositoryName
-        repository={repository}
-        label={repository === null ? undefined : repositoryLabel(repository, named)}
-        pictures={tasks.repositories.pictures}
-      />
+      <ReplayMask>
+        <RepositoryName
+          repository={repository}
+          label={repository === null ? undefined : repositoryLabel(repository, named)}
+          pictures={tasks.repositories.pictures}
+        />
+      </ReplayMask>
     );
   };
   // The rows as the list draws them: the pinned, then each group not folded
@@ -2243,202 +2248,213 @@ function SidebarColumn({
       {/* One scroller for the pages' rows and both sections, so neither the
           rows nor the pinned tasks hold the column above the rest: on an
           iPad's or a short window's column they left the tasks a strip. */}
-      <Fill className="sidebar-section -m-ring-reach">
-        <ScrollArea fade={SCROLL_FADE.BOTH}>
-          <ListMotion root={body}>
-            <ChosenTasksContext.Provider value={selection.chosenOf}>
-              <SelectionRegion
-                id={selection.regionId}
-                selection={{ selected: selection.selected, onChange: selection.onChange }}
-              >
-                <div
-                  {...roving}
-                  ref={bodyRef}
-                  className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach [&_.sidebar-group+.sidebar-group]:mt-section-gap"
-                  {...motionRows()}
+      <ReplayUnmask>
+        <Fill className="sidebar-section -m-ring-reach">
+          <ScrollArea fade={SCROLL_FADE.BOTH}>
+            <ListMotion root={body}>
+              <ChosenTasksContext.Provider value={selection.chosenOf}>
+                <SelectionRegion
+                  id={selection.regionId}
+                  selection={{ selected: selection.selected, onChange: selection.onChange }}
                 >
-                  {places}
-                  {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
-                  <LeavingGroups
-                    groups={
-                      tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && carrying))
-                        ? PINNED_LISTED
-                        : NOTHING_LISTED
-                    }
-                    keyOf={(key) => key}
-                    group={(key) => (
-                      <PinnedSection
-                        key={key}
-                        rows={pinnedSection}
-                        adopted={pinnedAdopted}
-                        folds={folds}
-                        shown={pinnedShown}
-                        context={context}
-                        onOpenTab={chosen(openPinnedTab)}
-                        onDropOut={sectionsShown ? dropPinned : undefined}
-                        carried={carrying}
-                      />
-                    )}
-                  />
-                  <SidebarSections
-                    sections={homedSections}
-                    workspaceId={sectionsShown ? tasks.workspace?.id : undefined}
-                    context={{
-                      tasks,
-                      dialogs: sectionDialogs,
-                      edits: sectionEdits,
-                      current: currentRow,
-                      unread,
-                      inSight: overlay.inSight,
-                      folded: folds.sectionFolded,
-                      onToggle: folds.toggleSection,
-                      opened: folds.taskOpened,
-                      row: (held, nest) => {
-                        const { row } = held;
-                        return row.kind === TASK_ROW.TASK ? (
-                          <SidebarTask
-                            key={row.task.id}
-                            tasks={tasks}
-                            task={row.task}
-                            current={context.marked(row.task.id, undefined)}
-                            open={current(row.task.id)}
-                            unread={unread(row.task)}
-                            now={now}
-                            faces={context.faces}
-                            depth={held.depth}
-                            nest={nest}
-                            fold={childTasksFold(held, folds.toggleTask)}
-                            childCount={context.childCount(row.task.id)}
-                            onOpen={() => context.onOpen(row.task.id)}
-                          />
-                        ) : (
-                          <SidebarAgent
-                            key={row.agent.id}
-                            agent={row.agent}
-                            agents={tasks.agents}
-                            current={currentRow(row)}
-                            unread={context.unseenAgent(row.agent.id)}
-                            now={now}
-                            at={taskRowTime(row)}
-                            face={context.faces.creator && context.faces.assignee}
-                            nest={nest}
-                            shown={tasks.shown && overlay.inSight}
-                            onOpen={() => context.onOpenAgent(row.agent.id)}
-                            onPin={pinOf(tasks, row.agent)}
-                            section={context.sectionEntry(row.agent)}
-                            onDeleted={context.onDeletedAgent(row.agent.id)}
-                          />
-                        );
-                      },
-                      onDropRow: dropRow,
-                      onOpenBoard: chosen(openBoard),
-                      onCarried: setCarrying,
-                    }}
-                  />
-                  <nav
-                    className="sidebar-group"
-                    aria-label={tasksHead}
-                    data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
+                  <div
+                    {...roving}
+                    ref={bodyRef}
+                    className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach [&_.sidebar-group+.sidebar-group]:mt-section-gap"
                     {...motionRows()}
                   >
-                    {tasks.signedIn ? (
-                      <GroupHeader
-                        heading={GROUP_HEADING.NONE}
-                        label={tasksHead}
-                        menuOpen={tasksHeadMenu.open !== undefined}
-                        contextMenu={
-                          tasksHeadMenuOffered
-                            ? tasksHeadMenu.contextMenu(newSectionButton)
-                            : undefined
-                        }
-                        actions={
-                          <>
-                            {tasksHeadGroups.length === 0 ? null : (
-                              <Tooltip label={NEW_SECTION}>
-                                <IconButton
-                                  ref={newSectionButton}
-                                  icon={<FolderPlusIcon />}
-                                  label={NEW_SECTION}
-                                  size={BUTTON_SIZE.COMPACT}
-                                  onClick={askNewSection}
-                                />
-                              </Tooltip>
-                            )}
-                            <TaskViewOptions
-                              shown={tasks.shown && overlay.inSight}
-                              control={taskView}
-                              shared={shared}
-                              filtered={shared && assignedTo.kind !== mine.kind}
-                            />
-                          </>
-                        }
-                      />
-                    ) : null}
-                    {tasksHeadMenu.drawn === undefined ? null : (
-                      <ActionMenu
-                        label="Tasks actions"
-                        menu={tasksHeadMenu.drawn}
-                        groups={tasksHeadGroups}
-                        onClose={tasksHeadMenu.close}
-                      />
-                    )}
-                    {assignedTo.kind !== ASSIGNED_TO.ANYONE &&
-                    rows.length === 0 &&
-                    shownSections.every((drawn) => drawn.rows.length === 0) &&
-                    !unlisted &&
-                    tasks.listRead &&
-                    !tasks.listFailed ? (
-                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>
-                        {NONE_MATCH}{" "}
-                        <Button onClick={() => taskView.onAssignedTo({ kind: ASSIGNED_TO.ANYONE })}>
-                          Show all
-                        </Button>
-                      </NoteLine>
-                    ) : null}
-                    {tasks.listFailed ? (
-                      <ErrorState
-                        failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
-                        onRetry={tasks.onRetryList}
-                        placement={ERROR_STATE_PLACEMENT.ROWS}
-                      >
-                        Your tasks could not be read.
-                      </ErrorState>
-                    ) : null}
-                    {/* The list is empty before its first read lands, so that it
-              holds none says nothing until the service has answered. */}
-                    {tasks.signedIn && unlisted && !tasks.listRead && !tasks.listFailed ? (
-                      <ListSkeleton />
-                    ) : null}
-                    {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
-                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
-                    ) : null}
-                    {tasks.signedIn ? null : (
-                      <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
-                    )}
-                    <TaskGroups
-                      sections={homedTasks}
-                      repositoryOf={repositoryOf}
-                      folds={folds}
-                      onNewTaskIn={chosen(newTaskIn)}
-                      context={context}
+                    {places}
+                    {/* Pinned stands once something is pinned, or, while the account keeps sections, as the place a carried row drops in, and leaves after its exit once neither holds. */}
+                    <LeavingGroups
+                      groups={
+                        tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && carrying))
+                          ? PINNED_LISTED
+                          : NOTHING_LISTED
+                      }
+                      keyOf={(key) => key}
+                      group={(key) => (
+                        <PinnedSection
+                          key={key}
+                          rows={pinnedSection}
+                          adopted={pinnedAdopted}
+                          folds={folds}
+                          shown={pinnedShown}
+                          context={context}
+                          onOpenTab={chosen(openPinnedTab)}
+                          onDropOut={sectionsShown ? dropPinned : undefined}
+                          carried={carrying}
+                        />
+                      )}
                     />
-                    <HiddenStatusesLine hidden={hidden} onOpen={chosen(openBoard)} />
-                  </nav>
-                </div>
-              </SelectionRegion>
-            </ChosenTasksContext.Provider>
-          </ListMotion>
-        </ScrollArea>
-      </Fill>
+                    <SidebarSections
+                      sections={homedSections}
+                      workspaceId={sectionsShown ? tasks.workspace?.id : undefined}
+                      context={{
+                        tasks,
+                        dialogs: sectionDialogs,
+                        edits: sectionEdits,
+                        current: currentRow,
+                        unread,
+                        inSight: overlay.inSight,
+                        folded: folds.sectionFolded,
+                        onToggle: folds.toggleSection,
+                        opened: folds.taskOpened,
+                        row: (held, nest) => {
+                          const { row } = held;
+                          return row.kind === TASK_ROW.TASK ? (
+                            <SidebarTask
+                              key={row.task.id}
+                              tasks={tasks}
+                              task={row.task}
+                              current={context.marked(row.task.id, undefined)}
+                              open={current(row.task.id)}
+                              unread={unread(row.task)}
+                              now={now}
+                              faces={context.faces}
+                              depth={held.depth}
+                              nest={nest}
+                              fold={childTasksFold(held, folds.toggleTask)}
+                              childCount={context.childCount(row.task.id)}
+                              onOpen={() => context.onOpen(row.task.id)}
+                            />
+                          ) : (
+                            <SidebarAgent
+                              key={row.agent.id}
+                              agent={row.agent}
+                              agents={tasks.agents}
+                              current={currentRow(row)}
+                              now={now}
+                              at={taskRowTime(row)}
+                              face={context.faces.creator && context.faces.assignee}
+                              nest={nest}
+                              shown={tasks.shown && overlay.inSight}
+                              onOpen={() => context.onOpenAgent(row.agent.id)}
+                              onPin={pinOf(tasks, row.agent)}
+                              section={context.sectionEntry(row.agent)}
+                              onDeleted={context.onDeletedAgent(row.agent.id)}
+                            />
+                          );
+                        },
+                        onDropRow: dropRow,
+                        onOpenBoard: chosen(openBoard),
+                        onCarried: setCarrying,
+                      }}
+                    />
+                    <nav
+                      className="sidebar-group"
+                      aria-label={tasksHead}
+                      data-row-drop={sectionsShown ? TASKS_DROP_ZONE : undefined}
+                      {...motionRows()}
+                    >
+                      {tasks.signedIn ? (
+                        <GroupHeader
+                          heading={GROUP_HEADING.NONE}
+                          label={
+                            assignedTo.kind === ASSIGNED_TO.MEMBER ? (
+                              <ReplayMask>{tasksHead}</ReplayMask>
+                            ) : (
+                              tasksHead
+                            )
+                          }
+                          menuOpen={tasksHeadMenu.open !== undefined}
+                          contextMenu={
+                            tasksHeadMenuOffered
+                              ? tasksHeadMenu.contextMenu(newSectionButton)
+                              : undefined
+                          }
+                          actions={
+                            <>
+                              {tasksHeadGroups.length === 0 ? null : (
+                                <Tooltip label={NEW_SECTION}>
+                                  <IconButton
+                                    ref={newSectionButton}
+                                    icon={<FolderPlusIcon />}
+                                    label={NEW_SECTION}
+                                    size={BUTTON_SIZE.COMPACT}
+                                    onClick={askNewSection}
+                                  />
+                                </Tooltip>
+                              )}
+                              <TaskViewOptions
+                                shown={tasks.shown && overlay.inSight}
+                                control={taskView}
+                                shared={shared}
+                                filtered={shared && assignedTo.kind !== mine.kind}
+                              />
+                            </>
+                          }
+                        />
+                      ) : null}
+                      {tasksHeadMenu.drawn === undefined ? null : (
+                        <ActionMenu
+                          label="Tasks actions"
+                          replayUnmasked
+                          menu={tasksHeadMenu.drawn}
+                          groups={tasksHeadGroups}
+                          onClose={tasksHeadMenu.close}
+                        />
+                      )}
+                      {assignedTo.kind !== ASSIGNED_TO.ANYONE &&
+                      rows.length === 0 &&
+                      shownSections.every((drawn) => drawn.rows.length === 0) &&
+                      !unlisted &&
+                      tasks.listRead &&
+                      !tasks.listFailed ? (
+                        <NoteLine look={NOTE_LINE_LOOK.ROWS}>
+                          {NONE_MATCH}{" "}
+                          <Button
+                            onClick={() => taskView.onAssignedTo({ kind: ASSIGNED_TO.ANYONE })}
+                          >
+                            Show all
+                          </Button>
+                        </NoteLine>
+                      ) : null}
+                      {/* Note that rows the list still holds stand with no line over them while the app is offline, since the Offline mark says why; a list with none still says it. */}
+                      {tasks.listFailed && (connected || unlisted) ? (
+                        <ErrorState
+                          failure={unreadShown(FAILURE_SURFACE.TASKS_READ)}
+                          onRetry={tasks.onRetryList}
+                          placement={ERROR_STATE_PLACEMENT.ROWS}
+                        >
+                          Your tasks could not be read.
+                        </ErrorState>
+                      ) : null}
+                      {/* The list is empty before its first read lands, so that it
+              holds none says nothing until the service has answered. */}
+                      {tasks.signedIn && unlisted && !tasks.listRead && !tasks.listFailed ? (
+                        <ListSkeleton />
+                      ) : null}
+                      {tasks.signedIn && unlisted && tasks.listRead && !tasks.listFailed ? (
+                        <NoteLine look={NOTE_LINE_LOOK.ROWS}>No tasks yet.</NoteLine>
+                      ) : null}
+                      {tasks.signedIn ? null : (
+                        <NoteLine look={NOTE_LINE_LOOK.ROWS}>Sign in to start a task.</NoteLine>
+                      )}
+                      <TaskGroups
+                        sections={homedTasks}
+                        repositoryOf={repositoryOf}
+                        folds={folds}
+                        onNewTaskIn={chosen(newTaskIn)}
+                        context={context}
+                      />
+                      <HiddenStatusesLine hidden={hidden} onOpen={chosen(openBoard)} />
+                    </nav>
+                  </div>
+                </SelectionRegion>
+              </ChosenTasksContext.Provider>
+            </ListMotion>
+          </ScrollArea>
+        </Fill>
 
-      <SidebarFoot
-        account={account}
-        updates={updates}
-        shown={overlay.inSight}
-        settingsOpen={tab === PANEL_TAB.SETTINGS}
-        onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
-        onSignOut={onSignOut}
-      />
+        <SidebarFoot
+          account={account}
+          updates={updates}
+          shown={overlay.inSight}
+          settingsOpen={tab === PANEL_TAB.SETTINGS}
+          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+          onSignOut={onSignOut}
+        />
+      </ReplayUnmask>
       {sectionDialogs.dialog}
       {selection.dialog}
       {/* Last, so the drag strip above the app's head does not take the edge's top from it. */}

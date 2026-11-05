@@ -278,6 +278,7 @@ function TokenOwnerRow({
     .filter((repository) => repository.removable)
     .map((repository) => ({
       label: `${WORDS.REMOVE} ${nameOf(repository)}`,
+      replayMasked: true,
       icon: <GLYPH.DELETE />,
       danger: true,
       onSelect: () => {
@@ -299,7 +300,7 @@ function TokenOwnerRow({
         question={{
           title: `Remove ${asked?.fullName ?? ""}?`,
           body: "Agents in this workspace stop reaching it until someone adds it again.",
-          verb: WORDS.REMOVE,
+          verb: "Remove repository",
           running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

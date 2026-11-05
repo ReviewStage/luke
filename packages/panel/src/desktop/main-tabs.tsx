@@ -18,6 +18,7 @@ import {
   TABS_GROUND,
   VisuallyHidden,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useRef } from "react";
@@ -52,7 +53,6 @@ import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
   AddTabButton,
-  AddTabSkeleton,
   type DocumentMenu,
   DoorsTab,
   type HeldTranscripts,
@@ -60,7 +60,6 @@ import {
   type TabDoors,
   type TabLook,
   type TabPin,
-  TabSkeleton,
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
@@ -350,14 +349,14 @@ function agentTabs(input: {
       : [
           {
             tab: startingTab,
-            look: look(
-              startingTab,
-              tabLook({
+            look: look(startingTab, {
+              ...tabLook({
                 kind: TAB_KIND.AGENT,
                 name: undefined,
                 agent: { model: pending?.model ?? "", status: AGENT_STATUS.STARTING },
               }),
-            ),
+              labelReplayUnmasked: true,
+            }),
             close: undefined,
           },
         ];
@@ -375,6 +374,7 @@ function agentTabs(input: {
               { draft },
               {
                 ...tabLook({ kind: TAB_KIND.DRAFT }),
+                labelReplayUnmasked: true,
                 endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
               },
             ),
@@ -408,6 +408,7 @@ export function agentEntries(
         id: agent.id,
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         section: AGENTS_SECTION,
+        replayMasked: true,
       },
       endMark: agentEndMark(agent, true),
       // Note that a caller handing what its tabs hold gets the card its tab hangs; ⌘K and the summary hang theirs themselves.
@@ -516,21 +517,6 @@ export function phoneAgentStarts(main: MainTabsControl, agents: AgentsControl): 
 /** The row the column's tabs stand in, which is its toolbar's title: the strip, what follows it, and the "+" last. */
 function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <div className="main-tabs flex items-center gap-list-gap">{children}</div>;
-}
-
-/**
- * The column's strip while the task is read: one tab's block where the
- * first tab will stand and the "+"'s after it, in the strip's own row, so
- * the row holds still, and a narrow room wraps it under the toolbar's
- * actions, as the strip that replaces it is.
- */
-export function MainTabStripSkeleton(): React.JSX.Element {
-  return (
-    <MainTabsRow>
-      <TabSkeleton />
-      <AddTabSkeleton />
-    </MainTabsRow>
-  );
 }
 
 /**
@@ -676,12 +662,10 @@ export function MainTabStrip({
           takes it out of reach, and as its glyph alone where the bar is
           short of room (desktop.css's `plan-toolbar`). */}
       {agents.listFailed && agents.agents === undefined ? (
-        <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        <ReplayUnmask>
+          <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
+        </ReplayUnmask>
       ) : null}
-      {/* While the agents are read, one tab-shaped block stands where their
-          tabs will, as it stood while the task was read, so the row holds
-          still until they land. */}
-      {agents.agents === undefined && !agents.listFailed ? <TabSkeleton /> : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"

@@ -21,6 +21,7 @@ import {
   agentPullRequestAnswerSchema,
   agentQueueAnswerSchema,
   agentQueueChangeSchema,
+  agentReadRequestSchema,
   agentRenameRequestSchema,
   agentReviewOptionsAnswerSchema,
   agentServersRequestSchema,
@@ -139,7 +140,7 @@ export const AGENT_CALL_FAILURE = {
   AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
   /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
   OPENAI_KEY_MISSING: "openai-key-missing",
-  /** The task runs its agents on a device that would not take this one, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
+  /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
 } as const;
 
@@ -483,6 +484,14 @@ export const agentPinParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentPinParams = typeof agentPinParamsSchema.Type;
+
+/** The reader's own read mark of one agent moved (`read-mark.ts`), as the window asks it: the agent and how. */
+export const agentMarkReadParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...agentReadRequestSchema.fields,
+});
+
+export type AgentMarkReadParams = typeof agentMarkReadParamsSchema.Type;
 
 /** One agent, as the window names it to stop or to delete. */
 export const agentStopParamsSchema = EffectSchema.Struct({

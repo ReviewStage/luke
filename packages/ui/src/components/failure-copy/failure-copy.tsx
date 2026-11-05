@@ -2,8 +2,8 @@
  * failure-copy.tsx -- a failure's Copy details: says the failure was shown as it first stands, which reports it, and offers the details that answers through the window's one Copy, its glyph alone, named "Copy details".
  *
  * Every component that says a failure of the app's in place draws this
- * beside its words, so a person can paste what failed to an agent and ask
- * why, as a failure toast offers it. It is the copy glyph alone, after the
+ * beside its words, so a person can send what failed with a report of the
+ * problem, as a failure toast offers it. It is the copy glyph alone, after the
  * failure's own presses, so the words keep their room; it answers on
  * itself, as every copy button does, and leaves the failure standing.
  *
@@ -11,9 +11,10 @@
  * it goes, never on every render: the failure's `shown` answers the same
  * details for as long as the app holds it to be the same failure, and
  * reports only the first time, which is the app's to keep
- * (`../../reported-failure.ts`). A failure whose details could not be read,
- * as where the app has nothing to report through and no clipboard to copy
- * to, offers nothing, rather than a copy that could only fail. Words that
+ * (`../../reported-failure.ts`). A failure the app answers no details for
+ * offers nothing: a refusal, whose words already say what happened, and one
+ * whose details could not be read, as where the app has nothing to report
+ * through and no clipboard to copy to, rather than a copy that could only fail. Words that
  * are no failure of the app's (`UNREPORTED`) offer nothing to copy, and draw
  * nothing.
  */

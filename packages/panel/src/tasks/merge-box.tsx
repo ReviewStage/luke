@@ -384,6 +384,7 @@ function MethodPress({
       </SplitButton>
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={BOX_WORDS.CHOOSE_METHOD}
           menu={menu.drawn}
           groups={[methodItems(methods, method, busy, onChoose)]}
@@ -401,6 +402,7 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+  replayUnmasked: true,
 };
 
 /**

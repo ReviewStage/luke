@@ -34,6 +34,7 @@ import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { pageFrameUrl } from "@repo/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@repo/features/page-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import type { Task } from "@repo/features/task-wire";
 import { TASK_SKILL_SOURCE } from "@repo/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
@@ -1590,22 +1591,28 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   act(() => pin.click());
   assert.deepEqual(pins, [{ agentId: AGENT_ID, pinned: true }]);
 
-  const mark = pageMenuItem(page, "Mark as unreadU");
-  act(() => mark.click());
-  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  assert.deepEqual(offered(), [], "the menu closed on the pin");
   act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
   assert.deepEqual(offered(), [
     "Copy link",
     "Copy concise transcript⌥⌘C",
     "Copy full transcript⌥⇧⌘C",
     "Rename",
-    "Mark as readU",
+    "Mark as unreadU",
     "PinP",
     "Move to section",
     "Show terminal⌘J",
     "Archive",
     "Permanently delete⌘⌫",
   ]);
+
+  act(() => pageMenuItem(page, "Mark as unreadU").click());
+  assert.deepEqual(offered(), [], "the menu closed on the mark");
+  await settle();
+  assert.deepEqual(
+    told.filter((asked) => asked.kind === ACT_KIND.AGENTS_MARK_READ).map((asked) => asked.payload),
+    [{ agentId: AGENT_ID, readMark: READ_MARK.UNREAD }],
+  );
 });
 
 /** What a side panel is asked to show. */
@@ -1969,7 +1976,7 @@ test("Permanently delete on the page's ⋯ asks first, naming the agent, and onc
   );
   assert.deepEqual(deletes, []);
 
-  await act(async () => dialogAnswer("Permanently delete").click());
+  await act(async () => dialogAnswer("Permanently delete agent").click());
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);
@@ -1986,7 +1993,7 @@ test("a delete the service refused for an agent still starting says why in the d
 
   const remove = pageMenuItem(page, "Permanently delete⌘⌫");
   act(() => remove.click());
-  await act(async () => dialogAnswer("Permanently delete").click());
+  await act(async () => dialogAnswer("Permanently delete agent").click());
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);

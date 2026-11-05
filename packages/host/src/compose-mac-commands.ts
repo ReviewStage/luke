@@ -36,7 +36,7 @@ import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { decodedLiveRows, LIVE_RESTART } from "./live-follow.js";
+import { decodedLiveRows, LIVE_RESTART, waitOrRegained } from "./live-follow.js";
 import {
   MAC_COMMAND_DECISION,
   type MacCommandAsk,
@@ -436,14 +436,14 @@ export function composeMacCommands(
         );
         const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
         return Effect.raceFirst(following, presence(running, userId)).pipe(
-          Effect.catch(() => Effect.sleep(LIVE_RESTART)),
+          Effect.catch(() => waitOrRegained(LIVE_RESTART)),
         );
       });
 
     /**
      * One turn of the loop: the commands followed until the gate shuts, the
-     * read asked again after a pause where the service did not answer it or
-     * signed the session out; with the gate shut, every command still
+     * read asked again after a pause, or as soon as the service answers
+     * again, where it did not answer it or signed the session out; with the gate shut, every command still
      * running stopped (its process group killed as its scope closes) and a
      * rest. Every turn begins by letting go of the asks of any account but
      * the one signed in, since a follow ends as the account changes.
@@ -459,7 +459,7 @@ export function composeMacCommands(
         const userId = dependencies.accountId();
         if (userId === undefined) return yield* Effect.sleep(IDLE);
         const sealed = yield* seal(userId, false);
-        if ("failure" in sealed) return yield* Effect.sleep(LIVE_RESTART);
+        if ("failure" in sealed) return yield* waitOrRegained(LIVE_RESTART);
         yield* followed(running, userId, sealed);
       });
 

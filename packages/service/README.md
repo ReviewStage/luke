@@ -168,6 +168,28 @@ only its `Co-authored-by` line (`agentCoAuthor` in
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
+An agent on a member's own machine (a host) reaches GitHub without the
+sandbox's firewall. Where the App reaches its repository, its host asks
+`POST /api/agents/runner-token` on its device secret for an installation
+token, which lasts an hour and is cut to that one repository
+(`src/agents/native-events/runner-token-app.ts`). That endpoint never answers
+a member's own token, which may never expire and reaches every repository the
+member can reach. So an agent whose repository only that token reaches
+(`githubAccess` is `token`) gets no token from the service. Its launch line
+says so (`deviceAgentLaunchPayloadSchema`'s `githubAccess`), and its host runs
+it on the machine's own GitHub sign-in: the machine user's `gh` login, Git
+credential helper and settings, and SSH keys and agent. **Such an agent acts as
+whoever is signed in on that machine, with everything that sign-in reaches, not
+one repository.** Before the repository is made, the host checks that the
+sign-in reaches it. Where it doesn't, the host settles the launch unstarted
+with the reason `github-sign-in` (`DEVICE_LAUNCH_UNSTARTED`), which the
+transcript words as signing in with `gh auth login` or setting up SSH. Only a
+host that registered `DEVICE_CAPABILITY.GITHUB_SIGN_IN`, which a Mac's host
+alone does, is started on (refused
+as `LOCAL_AGENT_REFUSAL.GITHUB_SIGN_IN` by `agentMachineChoice`) or launched
+(`device-machine.ts`'s `launchRunner`) such an agent, since an older host would
+ask for a token the service refuses.
+
 `GET /api/github/repositories` (`src/github/github-procedures.ts`, on the
 hosted oRPC router) is that
 listing under the account bearer, answered as
@@ -668,7 +690,7 @@ GitHub (`https://api.githubcopilot.com/mcp/x/all`, every toolset), Gmail
 (`https://mcp.granola.ai/mcp`), Linear (`https://mcp.linear.app/mcp`), Mercury
 (`https://mcp.mercury.com/mcp`), Neon (`https://mcp.neon.tech/mcp`), Notion
 (`https://mcp.notion.com/mcp`), PostHog (`https://mcp.posthog.com/mcp?mode=tools`, each tool by its own
-name rather than its default single `exec`),
+name rather than its default single `exec`), Resend (`https://mcp.resend.com/mcp`),
 Sentry (`https://mcp.sentry.dev/mcp`), Slack (`https://mcp.slack.com/mcp`),
 Stripe (`https://mcp.stripe.com`), Supabase (`https://mcp.supabase.com/mcp`),
 Vercel (`https://mcp.vercel.com`), and Y Combinator's Bookface (`https://api.ycombinator.com/v1/mcp`). What a
@@ -900,6 +922,7 @@ vercel connect create granola --name granola                   # Granola
 vercel connect create mcp.mercury.com --name vespin-mercury    # Mercury, whose clients' names may not begin with "Mercury"
 # Neon: an OAuth connector over a client registered by hand, below
 vercel connect create posthog --name posthog                   # PostHog
+vercel connect create mcp.resend.com --name vespin-resend      # Resend; asks for its scope below
 vercel connect create supabase --name supabase                 # Supabase
 vercel connect create vercel --target mcp --name vercel        # Vercel, through Connect's own Vercel MCP target
 vercel connect create api.ycombinator.com/v1/mcp --name ycombinator   # Y Combinator's Bookface
@@ -922,7 +945,10 @@ Supabase's granular scopes are better asked for in full than left to a
 default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`:
+`data.userAuthorization.scopes`. Resend's resource publishes none, and its
+authorization server (`https://api.resend.com`) publishes `full_access`
+beside the narrower `emails:send`, so its connector asks for `full_access`
+alone:
 
 ```
 vercel connect list                                        # the connector's scl_ id
@@ -1096,7 +1122,7 @@ again straight through connects.
 Then set the provider's variable (`EXECUTOR_CONNECTOR_UID`, `GMAIL_CONNECTOR_UID`,
 `GOOGLE_CALENDAR_CONNECTOR_UID`, `GOOGLE_DRIVE_CONNECTOR_UID`, `GRANOLA_CONNECTOR_UID`,
 `LINEAR_CONNECTOR_UID`, `MERCURY_CONNECTOR_UID`, `NEON_CONNECTOR_UID`,
-`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
+`NOTION_CONNECTOR_UID`, `POSTHOG_CONNECTOR_UID`, `RESEND_CONNECTOR_UID`, `SENTRY_CONNECTOR_UID`,
 `SLACK_CONNECTOR_UID`, `STRIPE_CONNECTOR_UID`, `SUPABASE_CONNECTOR_UID`,
 `VERCEL_CONNECTOR_UID`, `YCOMBINATOR_CONNECTOR_UID`) to that UID in the `vespin` project for
 production, preview, and development. The web is that project's one service
@@ -1194,7 +1220,7 @@ that workspace's people sign in with. Each provider has an optional
 allowlist variable beside its connector's (`<PROVIDER>_ALLOWED_ACCOUNTS`:
 `EXECUTOR_ALLOWED_ACCOUNTS`, `GRANOLA_ALLOWED_ACCOUNTS`, `LINEAR_ALLOWED_ACCOUNTS`,
 `MERCURY_ALLOWED_ACCOUNTS`, `NEON_ALLOWED_ACCOUNTS`,
-`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`,
+`NOTION_ALLOWED_ACCOUNTS`, `POSTHOG_ALLOWED_ACCOUNTS`, `RESEND_ALLOWED_ACCOUNTS`,
 `SENTRY_ALLOWED_ACCOUNTS`, `SLACK_ALLOWED_ACCOUNTS`,
 `STRIPE_ALLOWED_ACCOUNTS`, `SUPABASE_ALLOWED_ACCOUNTS`,
 `VERCEL_ALLOWED_ACCOUNTS`, `YCOMBINATOR_ALLOWED_ACCOUNTS`): comma-separated entries, each `@domain.com` for
@@ -1348,10 +1374,20 @@ it on for agents, otherwise the account's own API key for the model's
 provider, and a Start with neither is refused; an agent recorded with the
 older Mac sign-in payer launches on the account's saved credential as one
 would. Each is opened from its sealed row under
-`PROVIDER_KEY_ENCRYPTION_KEYS` into the runner's environment alone, and a
-Codex agent on a ChatGPT plan asks the service for its token as it needs one
-(`src/agents/native-events/runner-token-app.ts`). The deployment holds no
-model key of its own. The calls beside an account's agents run on its own
+`PROVIDER_KEY_ENCRYPTION_KEYS`. In a sandbox it is set at the sandbox's
+firewall as a placeholder swap (`src/agents/sandbox-firewall.ts`), as the
+runner's bearer is, the runner's environment holding only the placeholder
+minted for the launch, and the sweep renews a ChatGPT plan's token there; on
+a host it is in the runner's environment, and a Codex agent on a ChatGPT plan
+asks the service for its token as it needs one
+(`src/agents/native-events/runner-token-app.ts`). Neither harness runs a
+command sandbox of its own, in a sandbox or on a host, so in a sandbox the
+firewall is what keeps a credential from the agent's commands: they can read
+the placeholders, each good only through that sandbox's firewall, and never
+the value it swaps in; on a host a Claude Code agent's commands can read its
+credential. Codex's commands inherit neither the bearer nor its credential's
+variable (`shell_environment_policy`). The deployment holds no model key of
+its own. The calls beside an account's agents run on its own
 key too, through `ownKeyOf` (`src/agents/coder-host/account-keys.ts`), the
 provider they prefer first and the other where it saved only that, and never
 on Vespin's: an agent's title on the provider's small model (Haiku, or
@@ -1378,10 +1414,15 @@ only where granted). The token is set at the firewall for the session's own
 minted again at each launch and each message to a running runner. Who the
 agent writes as is settled once, as its first session starts, and kept on its
 row (`coder-host/checkout.ts`, `AGENT_AUTHOR`): an agent a developer started
-writes as them where their GitHub sign-in may push to the repository, its
-commits authored as their GitHub account and ending on a `Co-authored-by`
-trailer naming the App's bot; an automation's agent, and one whose developer
-has no GitHub sign-in or may not push, writes as the App's bot. The agent
+writes as them where their GitHub sign-in may push to the repository and
+their Commit author choice (`@repo/settings`'s `COMMIT_AUTHOR`) has them
+author, its commits authored as their GitHub account and ending on a
+`Co-authored-by` trailer naming the App's bot where the choice credits it;
+an automation's agent, and one whose developer chose the bot, has no GitHub
+sign-in, or may not push, writes as the App's bot, its commits ending on a
+trailer naming the developer's GitHub account where they chose the bot with
+themselves credited. Whether a trailer is written is read as each session
+starts. The agent
 opens its pull request with `open_pull_request` (`coder-host/pull-request.ts`),
 which the service runs with the developer's own GitHub App token where the
 agent writes as them, in one `POST /repos/{owner}/{name}/pulls` on the
@@ -1775,6 +1816,33 @@ did not open discards the agent again (`discardAgent`) and answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 model a Start names runs that agent alone: only Settings' write
 (`PUT /api/account/preferences`) changes the account's default.
+
+Every Start, a fresh one, one from another agent (`POST /api/agents/{id}/agents`,
+a continue or a fork), the agent a task's start names, and `start_agent`,
+takes an optional `runsOn`, `{ machine: "vercel" }` for the cloud or
+`{ machine: "device", deviceId }` for one of the starter's own devices, and
+its agent runs there (`machineOfStart` in `src/agents/coder-host/start.ts`).
+One that names none runs where the agent it is started from runs, for a
+continue or a fork; else where the starter's newest agent on the task runs,
+never a teammate's, since a device is one member's; else where the starter
+last named a place (`account_preference.runs_on_*`,
+`packages/database/src/models/runs-on-pick.ts`); else in the cloud. A task
+holds no place of its own. An automation's run reads neither of its owner's
+own and runs in the cloud, since no member chose for it and a Mac its owner
+last picked may be asleep when it fires. A device, named or defaulted, must
+be the starter's, registered, not removed, and there lately, or the Start is
+refused by name and makes no agent; nothing falls back to the cloud on its
+own. A place a Start names is kept as the starter's last pick once its agent
+is made, which is what a later Start naming none runs at.
+
+Released desktops still send a `runsOn` on a task's create and change. On a
+create it runs the agent the create starts where that agent names none, and
+with no agent it is kept as the starter's last pick, where it is the cloud or
+one of their own devices; on a change it is read and changes nothing. A
+task's summary still answers `runsOn` for them, read from the task's newest
+agent, any member's, absent for the cloud or a task with none. The task's own
+`machine` and `device_id` columns are no longer read or written, and a later
+migration drops them.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, status, `brief` (`plan` or `task`, what it was handed first, so its

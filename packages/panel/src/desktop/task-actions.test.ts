@@ -249,7 +249,7 @@ function answer(words: string): HTMLButtonElement {
 /** Answers the question Permanently delete asked, and lets the delete it starts settle. */
 async function confirmDelete(): Promise<void> {
   assert.equal(asking(), true, "Permanently delete asks first");
-  const remove = answer("Permanently delete");
+  const remove = answer("Permanently delete task");
   await act(async () => remove.click());
 }
 test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
@@ -873,7 +873,7 @@ test("a row's Status, opened by a right-click or by S on the focused row, sets t
   assert.equal(doneButton(doneRow), null, "a done task's row offers no Mark done");
 });
 
-test("a sidebar row's Task relation searches the workspace's tasks beside the menu and relates the one picked from the row, never opening either task", async () => {
+test("a sidebar row's Task relation asks for the relation beside the menu, then searches the workspace's tasks and relates the one picked from the row, never opening either task", async () => {
   const parented: [string, string | null][] = [];
   const blocked: [string, TaskBlockRequest][] = [];
   const other: TaskSummary = {
@@ -901,18 +901,18 @@ test("a sidebar row's Task relation searches the workspace's tasks beside the me
   rightClick(row, 40, 60);
   choose("Task relation");
   await act(async () => undefined);
+  pick("Add sub-task");
   pick("Ship signup");
   rightClick(row, 40, 60);
   choose("Task relation");
   await act(async () => undefined);
-  pick("Relation");
-  pick("Blocked by");
+  pick("Mark as blocked by");
   pick("Ship signup");
 
   assert.deepEqual(
     parented,
     [[other.id, OTHER.id]],
-    "Sub-task, the kind it opens on, sets the parent of the task picked",
+    "Add sub-task sets the parent of the task picked to the row's",
   );
   assert.deepEqual(blocked, [
     [

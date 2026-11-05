@@ -3,6 +3,7 @@ import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { cn } from "../../cn.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { REPLAY_MASKED, ReplayWords } from "../../session-replay-marks.js";
 import {
   COMBOBOX_EMPTY,
   COMBOBOX_HEADING,
@@ -86,6 +87,20 @@ export const COMBOBOX_LIST_HEIGHT = {
 
 export type ComboboxListHeight = (typeof COMBOBOX_LIST_HEIGHT)[keyof typeof COMBOBOX_LIST_HEIGHT];
 
+/** How wide the column an option's lead stands in is: a task's key's, or a pair of overlapping faces', as a commit's author and co-author lead a choice of who authors it. */
+export const COMBOBOX_LEAD = {
+  KEY: "key",
+  FACES: "faces",
+} as const;
+
+export type ComboboxLead = (typeof COMBOBOX_LEAD)[keyof typeof COMBOBOX_LEAD];
+
+/** Each lead's column, at least as wide as the widest lead of its kind. */
+const LEAD_WIDTH: Record<ComboboxLead, string> = {
+  [COMBOBOX_LEAD.KEY]: "min-w-combobox-lead",
+  [COMBOBOX_LEAD.FACES]: "min-w-combobox-faces",
+};
+
 /** One option: what it is called, and what is drawn around its name. */
 export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
@@ -95,6 +110,8 @@ export interface ComboboxOption {
   readonly words?: string | undefined;
   /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
+  /** How wide the lead's column stands: a task's key's where none is said. */
+  readonly leadWidth?: ComboboxLead | undefined;
   /**
    * Its glyph; null keeps the glyph's room, empty, so an option with no
    * glyph of its own names itself at the edge the glyphed options beside it
@@ -103,6 +120,10 @@ export interface ComboboxOption {
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
+  /** Whether the option names a person's thing, kept masked in a screen recording whole, its glyph and lead with its words, whatever mark stands round its list. */
+  readonly replayMasked?: boolean | undefined;
+  /** The detail in plain words, where `detail` draws them as a tree (marked for a screen recording), so its hint still says it whole. */
+  readonly detailWords?: string | undefined;
   /** At the option's end: the chord that chooses it, or any short mark. */
   readonly hint?: ReactNode;
   /** Whether choosing it opens a further list rather than choosing it, which a chevron at its end says. */
@@ -124,6 +145,8 @@ export interface ComboboxOption {
 export interface ComboboxGroup {
   /** The heading drawn over the run, which names it to a reader too. */
   readonly label?: string | undefined;
+  /** Whether the heading is the app's own words, which a screen recording shows as they read. */
+  readonly replayUnmasked?: boolean | undefined;
   readonly options: readonly ComboboxOption[];
 }
 
@@ -158,11 +181,20 @@ export function ComboboxOptionItem({
       onClick={
         option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
       }
+      {...(option.replayMasked === true ? REPLAY_MASKED : undefined)}
       className={cn("ui-combobox-option", COMBOBOX_ITEM)}
       style={undefined}
     >
       {option.lead === undefined ? null : (
-        <span className={cn("ui-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
+        <span
+          className={cn(
+            "ui-combobox-option-lead",
+            COMBOBOX_ITEM_LEAD,
+            LEAD_WIDTH[option.leadWidth ?? COMBOBOX_LEAD.KEY],
+          )}
+        >
+          {option.lead}
+        </span>
       )}
       {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (
@@ -170,12 +202,15 @@ export function ComboboxOptionItem({
       )}
       {/* Note that the name and its detail fade where the row cuts them short, as every cut line of the app does, rather than ending in an ellipsis. */}
       <span className={cn("ui-combobox-option-label", COMBOBOX_ITEM_LABEL)}>
-        <OneLine>{option.label}</OneLine>
+        {/* A label drawn as a tree (marked for a recording, or a search's matches) is measured by its plain words, so its hint still says it whole. */}
+        <OneLine words={typeof option.label === "string" ? undefined : option.words}>
+          {option.label}
+        </OneLine>
       </span>
       {/* Note that the first of the detail, the hint, and the end to stand pushes the rest to the row's end. */}
       {option.detail === undefined ? null : (
         <span className={cn("ui-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
-          <OneLine>{option.detail}</OneLine>
+          <OneLine words={option.detailWords}>{option.detail}</OneLine>
         </span>
       )}
       {option.hint === undefined ? null : (
@@ -410,7 +445,7 @@ export function ComboboxList({
                 className={cn("ui-combobox-heading", COMBOBOX_HEADING)}
                 aria-hidden="true"
               >
-                {group.label}
+                <ReplayWords unmasked={group.replayUnmasked}>{group.label}</ReplayWords>
               </Text>
             ) : null}
             {rows}

@@ -38,6 +38,7 @@ import {
   tasksFindAnswerSchema,
   tasksFindParamsSchema,
   tasksLinkStandingParamsSchema,
+  tasksMarkReadParamsSchema,
   tasksMoveAnswerSchema,
   tasksMoveParamsSchema,
   tasksPageParamsSchema,
@@ -121,6 +122,9 @@ export const tasksActsContract = {
     .output(EffectSchema.Boolean),
   [TASKS_ACT_KIND.TASKS_PIN]: actProcedure("Could not pin that task on this system.")
     .input(exactInput(tasksPinParamsSchema))
+    .output(EffectSchema.Boolean),
+  [TASKS_ACT_KIND.TASKS_MARK_READ]: actProcedure("Could not mark that task on this system.")
+    .input(exactInput(tasksMarkReadParamsSchema))
     .output(EffectSchema.Boolean),
   [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: actProcedure(
     "Could not pin that repository on this system.",

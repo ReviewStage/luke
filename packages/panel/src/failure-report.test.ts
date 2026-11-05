@@ -100,7 +100,7 @@ test("a failure drawn in place is reported once as it stands, again for another,
     await act(async () => copy.click());
     assert.deepEqual(copied, [
       [
-        "Vespin showed an error. Find it in Sentry and the logs by these details:",
+        "Vespin error details. Include these when you report this problem:",
         "time: 2026-10-29T18:30:03.197Z",
         "failure.surface: tasks.read",
         "failure.kind: unexpected",
@@ -108,7 +108,6 @@ test("a failure drawn in place is reported once as it stands, again for another,
         "error.code: unread",
         "workspace.id: workspace-fixture",
         "app.online: true",
-        "app.connected: true",
         "app.account: unread",
         "sentry.event_id: event-fixture",
         "sentry.trace_id: trace-fixture",

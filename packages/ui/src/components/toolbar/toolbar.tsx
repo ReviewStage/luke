@@ -73,6 +73,7 @@
 
 import { type ReactNode, useRef } from "react";
 import { NotFoundIcon } from "../../icons/lucide-glyphs.js";
+import { ReplayMask, ReplayWords } from "../../session-replay-marks.js";
 import { type TitleSeat, useWrapWhenCut } from "../../use-wrap-when-cut.js";
 import { BREADCRUMBS_VARIANT, Breadcrumbs, type Crumb } from "../breadcrumbs/breadcrumbs.js";
 import { EmptyState, type EmptyStateAction } from "../empty-state/empty-state.js";
@@ -153,6 +154,8 @@ export interface ToolbarProps {
   readonly lead?: ReactNode;
   /** The page's name, drawn as its heading on one line; a node that is more than words stands as given. */
   readonly title?: ReactNode;
+  /** Whether a title in words is the app's own (Settings, Tasks, Inbox), which a screen recording shows as it reads; one that names a task or a workspace stays masked, as every place of a trail and a picked-up name do. */
+  readonly titleReplayUnmasked?: boolean | undefined;
   /** The places above the page, outermost first, which lead its heading as crumbs with the `title` last, or a document's `pickUp` name once it is shown; read only where the title is words or there is a `pickUp`. */
   readonly trail?: readonly ToolbarPlace[] | undefined;
   /** A document's name, shown in the title's place once its header has scrolled away; read only where there is no `title`. */
@@ -185,11 +188,18 @@ function said(node: ReactNode): boolean {
 }
 
 /** The page's name as the bar's heading: words on one line, fading where cut and read whole by the hint; anything else as given. */
-function ToolbarTitle({ title }: { title: ReactNode }): React.JSX.Element {
+function ToolbarTitle({
+  title,
+  unmasked,
+}: {
+  title: ReactNode;
+  /** Whether a title in words shows in a screen recording (`titleReplayUnmasked`). */
+  unmasked: boolean;
+}): React.JSX.Element {
   if (typeof title !== "string") return <>{title}</>;
   return (
-    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE}>
-      {title}
+    <OneLine as={ONE_LINE_ELEMENT.H1} hint={wholeWordsHint(title)} className={TITLE} words={title}>
+      <ReplayWords unmasked={unmasked}>{title}</ReplayWords>
     </OneLine>
   );
 }
@@ -247,6 +257,7 @@ function ToolbarPickedUp({ pickUp }: { pickUp: ToolbarPickUp }): React.JSX.Eleme
 export function Toolbar({
   lead,
   title,
+  titleReplayUnmasked = false,
   trail,
   pickUp,
   detail,
@@ -277,13 +288,19 @@ export function Toolbar({
       {said(lead) ? <div className={LEAD}>{lead}</div> : null}
       <div className="ui-toolbar-heading">
         {trail !== undefined && trail.length > 0 && typeof title === "string" && title !== "" ? (
-          <ToolbarTrail trail={trail} title={title} />
+          <ReplayMask>
+            <ToolbarTrail trail={trail} title={title} />
+          </ReplayMask>
         ) : trail !== undefined && trail.length > 0 && !said(title) && pickUp !== undefined ? (
-          <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
+          <ReplayMask>
+            <ToolbarTrail trail={trail} title={pickUp.name} shown={pickUp.shown} />
+          </ReplayMask>
         ) : said(title) ? (
-          <ToolbarTitle title={title} />
+          <ToolbarTitle title={title} unmasked={titleReplayUnmasked} />
         ) : pickUp !== undefined && pickUp.name !== "" ? (
-          <ToolbarPickedUp pickUp={pickUp} />
+          <ReplayMask>
+            <ToolbarPickedUp pickUp={pickUp} />
+          </ReplayMask>
         ) : null}
         {said(detail) ? <OneLine className={DETAIL}>{detail}</OneLine> : null}
         {said(tag) ? <span className={TAG}>{tag}</span> : null}
@@ -305,14 +322,22 @@ export function NotFound({
   thing,
   bar,
   action,
+  replayUnmasked = false,
 }: {
   thing: NotFoundThing;
   /** The bar the place stands under; left out only where the state stands under a bar already drawn. */
   bar?: ToolbarProps | undefined;
   action?: EmptyStateAction | undefined;
+  /** Whether its words, which name no thing, show in a screen recording (`EmptyState`'s `replayUnmasked`); its bar's title is the bar's own to mark. */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   const state = (
-    <EmptyState icon={<NotFoundIcon />} title={NOT_FOUND_TITLE} action={action}>
+    <EmptyState
+      icon={<NotFoundIcon />}
+      title={NOT_FOUND_TITLE}
+      action={action}
+      replayUnmasked={replayUnmasked}
+    >
       {`This ${thing} doesn't exist, or you don't have access to it.`}
     </EmptyState>
   );

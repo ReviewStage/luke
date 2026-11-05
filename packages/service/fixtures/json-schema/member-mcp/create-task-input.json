@@ -74,7 +74,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 36,
-      "description": "The task to make it a child of, by the id list_tasks answered: a part of that task's work, which works in its repository and runs on its machine. Left out, it stands at the top."
+      "description": "The task to make it a child of, by the id list_tasks answered: a part of that task's work, which works in its repository. Left out, it stands at the top."
     },
     "relation": {
       "type": "object",

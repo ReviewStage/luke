@@ -16,6 +16,7 @@ import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@repo/database/s
 import { DEVICE_LAYOUT, startTask } from "@repo/database/testing";
 import { AGENT_MACHINE, AGENT_PAYER } from "@repo/features/agent-wire";
 import { DEVICE_AGENT_LINE_KIND } from "@repo/features/device-agent-wire";
+import type { GitHubAccess } from "@repo/features/github-repositories-wire";
 import { PROVIDER_KEY_PROVIDER } from "@repo/features/provider-key-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "@repo/wire";
 import { eq } from "drizzle-orm";
@@ -40,6 +41,8 @@ export interface LocalAgentOptions {
   readonly runtime?: ConversationRuntime;
   /** Whether its starter saved an Anthropic API key, and the agent started to run on it, as Start chooses it then. */
   readonly onApiKey?: boolean;
+  /** How its repository is reached, as Start records it; the App's where none is named. */
+  readonly githubAccess?: GitHubAccess;
 }
 
 /**
@@ -79,6 +82,7 @@ export const openLocalAgent = (options: LocalAgentOptions = {}) =>
       deviceId,
       runtime: options.runtime ?? CONVERSATION_RUNTIME.CLAUDE_CODE,
       ...(options.onApiKey === true ? { payer: AGENT_PAYER.API_KEY } : undefined),
+      githubAccess: options.githubAccess,
     });
     const { agent } = Option.getOrThrow(started);
     const session = `cc-${randomUUID()}`;

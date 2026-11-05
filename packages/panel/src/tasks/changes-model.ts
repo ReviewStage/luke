@@ -40,7 +40,9 @@ import {
  * writes one, by the diff bundle (`../diff-view/`), and copied or saved the
  * same way, so `git apply` takes it as it is. A file with no patch is never
  * drawn as unchanged: it says it is binary, too large to show, or, with an
- * empty patch, that its contents did not change.
+ * empty patch, that its contents did not change. One too large to show
+ * offers its diff all the same, drawn from its texts read whole on both
+ * sides once asked (`tooLargeToDiff`).
  *
  * The view draws every file in one list, under a header of its own
  * (`listPatch` is the file's patch, or its header alone where it has no
@@ -114,6 +116,13 @@ export const EXPANSION_REFUSED_WORDS = {
   [EXPANSION_REFUSAL.CHANGED]:
     "Cannot load more of this file: it changed since these changes were read.",
   [EXPANSION_REFUSAL.UNAVAILABLE]: "Cannot load more of this file just now.",
+} as const satisfies Record<ExpansionRefusal, string>;
+
+/** What a file too large to diff says after its notice where its texts could not be read to draw its diff from. */
+export const DIFF_LOAD_REFUSED_WORDS = {
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Cannot load its diff: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.CHANGED]: "Cannot load its diff: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Cannot load its diff just now.",
 } as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
@@ -796,6 +805,16 @@ function movedOnly(file: AgentChangedFile): boolean {
 /** Whether a file can be drawn whole: one whose gaps open (`expandable`), or one that only moved, all of whose lines stand unchanged; never a secret one. */
 export function wholeable(file: AgentChangedFile): boolean {
   return expandable(file) || (movedOnly(file) && !isSecretFile(file.path));
+}
+
+/**
+ * Whether a file whose patch was too large to send can be drawn from its
+ * texts read whole on both sides, as GitHub's Load diff draws one: its text
+ * at the merge base, none where it was added, and at the head, none where
+ * it was removed; never a secret one, which is never read.
+ */
+export function tooLargeToDiff(file: AgentChangedFile): boolean {
+  return file.omitted === PATCH_OMITTED.TOO_LARGE && !isSecretFile(file.path);
 }
 
 /**

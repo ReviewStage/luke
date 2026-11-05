@@ -15,9 +15,10 @@ import { SERVER_HANDED } from "@repo/ui/agent-servers-model";
 import { UNREPORTED } from "@repo/ui/reported-failure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { PromptInput, submitPromptInput } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { useConnected } from "../connection.js";
 import { failureShown, unreadShown } from "../failure-report.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import { PANEL_SPAN } from "../panel-spans.js";
@@ -164,9 +165,6 @@ const RESOLVE = "Resolve";
 
 /** What Send reads, in words, while a resolve is staged and the box holds words or files to send beside it. */
 const SEND_AND_RESOLVE = "Send & resolve";
-
-/** A draft's picks let go, which a reply sent beside a staged resolve leaves behind, since a resolve answers nothing. */
-const UNPICKED = { choices: [], values: [], steps: undefined, press: undefined } as const;
 
 /** What the line asks for while a resolve is staged, its words going to the agent beside it. */
 const RESOLVE_PLACEHOLDER = "Tell the agent why (optional)";
@@ -446,6 +444,8 @@ interface AnswerBoxProps {
   keywords: readonly string[];
   /** The thread whose agent's words the box stands Reply over, quoting them in. */
   replyScope: RefObject<HTMLElement | null>;
+  /** Hears the door a quote is laid into the box through while the box takes one, and none once it does not, for the pages the thread draws (`shown-page.tsx`). */
+  onQuoteDoor?: ((door: ((words: string) => void) | undefined) => void) | undefined;
   /** Brings the item's agent back from the archive, offered after a send it refused for being archived. */
   onUnarchiveAgent: () => Promise<ActionResult>;
   /** The new thread the checkbox under the card starts instead of a reply; none where the page offers none. */
@@ -479,10 +479,12 @@ function AnswerCard({
   skills,
   keywords,
   replyScope,
+  onQuoteDoor,
   onUnarchiveAgent,
   newThread,
   statuses,
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
+  const connected = useConnected();
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   // Whether the refusal standing is the files handed to the box checked, which is the person's input and no failure of the app's.
@@ -493,16 +495,17 @@ function AnswerCard({
   // Note that the checkbox unticks once its thread is started, and while ticked a question's controls step aside, the question left waiting.
   const [asNew, setAsNew] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [closing, setClosing] = useState(false);
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const starts = newThread !== undefined && asNew;
-  // Note that a staged resolve goes with Send, the box's words and files beside it as a plain reply, or alone where it holds none.
+  // Note that a staged resolve goes with Send, the box's words and files beside it as its note, or alone where it holds none.
   const resolves = resolver !== undefined && !starts;
   const asks = controls !== undefined && !starts;
   // The draft as it stands now, which a start landing later reads rather than the one it was sent from.
   const standing = useRef(draft);
   standing.current = draft;
-  // Note that only a nod and a thread start hold the box; a reply leaves it at once and the next may follow.
-  const sending = control.sending.has(item.id) || starting;
+  // Note that only a nod, a thread start, and a resolve hold the box; a reply leaves it at once and the next may follow.
+  const sending = control.sending.has(item.id) || starting || closing;
   // Note that the answer waits while files are read, and files read while a message lands on the item land in its box all the same, as its words stand.
   const files = useAttachedFiles({
     holder: {
@@ -553,7 +556,7 @@ function AnswerCard({
   const { editor, room, module } = field;
   const { dictating } = field.pickers;
   const kept = control.notes.get(item.id);
-  const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent);
+  const noted = kept === undefined ? undefined : inboxNoteReading(kept, agent, connected);
   const note =
     noted?.words ??
     refusal ??
@@ -576,6 +579,7 @@ function AnswerCard({
     void onUnarchiveAgent().then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({
+          replayUnmasked: true,
           words: result.reason,
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
@@ -592,18 +596,28 @@ function AnswerCard({
     setCut(false);
     control.onMessage(item, draft);
   };
-  // Note that the reply goes first, its picks left behind, and the close once the reply is taken, so the agent reads why before it reads the close.
+  // Note that the box's words and files go with the close as its note, so the agent hears both in one message. The
+  // box lets go of them at once, as a reply does, since the item reads resolved the moment it is pressed; a close
+  // refused puts them back ahead of what was written meanwhile, the resolve still staged on the revision it was
+  // pressed on, so it can be sent again or undone, or lapses where the agent's change refused it.
   const resolve = (closer: InboxCloser) => {
     setRefusal(undefined);
     setCut(false);
+    const note = { text: draft.note, attachments: draft.attachments };
     if (emptyBox(draft)) {
       void closer(item);
       return;
     }
-    // Note that a close refused once the reply went stages the resolve again on what the box holds now, so it can be sent again or undone; one the agent's change refused lapses with the revision it was staged on.
-    control.onMessage(item, { ...draft, ...UNPICKED }, () => {
-      void closer(item).then((closed) => {
-        if (!closed.kept) control.onDraft(item, { ...standing.current, resolving: true });
+    setClosing(true);
+    control.onDraft(item, { ...draft, note: "", attachments: [] });
+    void closer(item, undefined, note).then((closed) => {
+      setClosing(false);
+      if (closed.kept) return;
+      const now = standing.current;
+      control.onDraft(item, {
+        ...now,
+        note: [note.text, now.note].filter((words) => words !== "").join("\n"),
+        attachments: [...note.attachments, ...now.attachments],
       });
     });
   };
@@ -639,6 +653,12 @@ function AnswerCard({
   };
   // Note that Reply stands only while the editor stands and takes a quote, and no nod or start is out, since a press lets the selection go.
   const quotes = !sending && !dictating && module !== undefined;
+  // The thread's pages lay their quotes in through the same door, while the box takes one.
+  useEffect(() => {
+    if (onQuoteDoor === undefined || !quotes) return undefined;
+    onQuoteDoor((words) => editor.current?.insertQuote(words));
+    return () => onQuoteDoor(undefined);
+  }, [onQuoteDoor, quotes]);
   return (
     <div ref={box} className={COMPOSER_ROOM_CLASS} {...files.drop.target}>
       <AnswerForm

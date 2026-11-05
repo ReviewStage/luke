@@ -5,6 +5,7 @@ import type { AccountInboxEntry } from "@repo/features/account-inbox-wire";
 import { agentDefaultOf } from "@repo/features/account-preferences-live";
 import {
   AGENT_CALL_FAILURE,
+  type AgentAgentAnswer,
   type AgentQueueAnswerView,
   type DevicePresenceAnswerView,
   type HostDoneAnswerView,
@@ -273,7 +274,11 @@ function fakeService() {
   const asked: string[] = [];
   let scope: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
   let cursor = AGENT_CURSOR_START;
-  let transcript: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined;
+  let transcript:
+    | typeof LIVE_ANSWERED
+    | { readonly failure: "not-found" }
+    | typeof OFFLINE
+    | undefined;
   let accountLive: typeof LIVE_ANSWERED | typeof LIVE_SIGNED_OUT | undefined;
   let itemsLive: typeof LIVE_ANSWERED | undefined;
   /** What the account's items' read keeps to answer by sync id, so a read past one is answered what moved since. */
@@ -306,6 +311,8 @@ function fakeService() {
   let newestPage: AgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
   let startTxid: string | undefined;
+  // Whether a Start goes unanswered, as one sent offline does.
+  let startsUnanswered = false;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
   /** The item as the agent changed it first, which a close is answered not taken with; none takes every close. */
@@ -389,8 +396,14 @@ function fakeService() {
         return { agents: [AGENT] };
       }),
     start: (taskId, request) =>
-      Effect.sync(() => {
+      Effect.sync((): AgentAgentAnswer => {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
+        if (startsUnanswered) {
+          return {
+            failure: AGENT_CALL_FAILURE.UNANSWERED,
+            cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
+          };
+        }
         const agent = { ...AGENT, status: AGENT_STATUS.STARTING };
         return startTxid === undefined ? { agent } : { agent, txid: startTxid };
       }),
@@ -502,6 +515,11 @@ function fakeService() {
     pin: (agentId, request) =>
       Effect.sync(() => {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
+        return { agent: AGENT };
+      }),
+    markRead: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`mark-read:${agentId}:${request.readMark}`);
         return { agent: AGENT };
       }),
     agent: (agentId) =>
@@ -778,7 +796,7 @@ function fakeService() {
     live,
     /** Whether the service answers a transcript's live read, or that the account reaches no such agent; none answers unanswered. */
     sealTranscript: (
-      next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | undefined,
+      next: typeof LIVE_ANSWERED | { readonly failure: "not-found" } | typeof OFFLINE | undefined,
     ) => {
       transcript = next;
     },
@@ -840,6 +858,10 @@ function fakeService() {
     startCommits: (txid: string | undefined) => {
       startTxid = txid;
     },
+    /** Whether each Start from now on goes unanswered, as one sent offline does. */
+    leaveStartsUnanswered: (unanswered: boolean) => {
+      startsUnanswered = unanswered;
+    },
     /** What each host's removal answers from now on, and what it waits on before it does. */
     answerRemoves: (answer: HostDoneAnswerView, gate: Effect.Effect<void> = Effect.void) => {
       removeAnswer = answer;
@@ -874,6 +896,11 @@ type TranscriptLive = PolledLive<(typeof TRANSCRIPT_PARTS)[number]>;
 
 /** That the service answers a live read, its rows polled from the test's script (`polledLive`). */
 const LIVE_ANSWERED = "answered";
+/** A live read whose call got no answer at all, as one sent offline ends. */
+const OFFLINE = {
+  failure: AGENT_CALL_FAILURE.UNANSWERED,
+  cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, fault: CALL_FAULT.NETWORK },
+} as const;
 
 /** What a call the closed account gate kept from the service answers: unanswered, saying the gate stood closed for want of an account. */
 const GATE_CLOSED_SIGNED_OUT = {
@@ -1061,6 +1088,7 @@ function subject(
         transcripts(transcript).map((each) => each.rows),
       asked: service.asked,
       startCommits: service.startCommits,
+      leaveStartsUnanswered: service.leaveStartsUnanswered,
       answerRemoves: service.answerRemoves,
       answerForgets: service.answerForgets,
       answerPresence: service.answerPresence,
@@ -2090,6 +2118,38 @@ it.effect(
         `messages-now:${AGENT_ID}:1:0`,
         `messages-now:${AGENT_ID}:2:0`,
       ]);
+    }),
+);
+
+it.effect(
+  "a live read that gets no answer is asked again past the bound, and the transcript reads on once the service answers",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, held, sealTranscript, live } = yield* subject();
+      const seals = () => asked.filter((ask) => ask === `transcript-live:${AGENT_ID}`).length;
+      sealTranscript(OFFLINE);
+      yield* call(GATEWAY_METHOD.AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* TestClock.adjust("2 minutes");
+      yield* settled;
+      assert.ok(seals() > 60, `read ${seals()} times`);
+      assert.deepEqual(
+        held().at(-1)?.failure,
+        OFFLINE,
+        "the read said it got no answer, never that it gave up",
+      );
+
+      // Note that the read never gave up, so its next ask, a second on, finds the service answering.
+      sealTranscript(LIVE_ANSWERED);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      transcriptRows(live, 2);
+      yield* settled;
+      assert.equal(held().at(-1)?.failure, undefined, "the failure is let go once it reads");
+      assert.ok(
+        asked.includes(`messages-now:${AGENT_ID}:1:0`),
+        "the page past the newest is read once the live read stands",
+      );
     }),
 );
 
@@ -3454,6 +3514,36 @@ it.effect(
         agent: { ...AGENT, status: AGENT_STATUS.STARTING },
         txid: "9104",
       });
+    }),
+);
+
+it.effect(
+  "a Start the service did not answer waits, its call held until it is sent again, and then answers its agent",
+  () =>
+    Effect.gen(function* () {
+      const pool = yield* entityPool({ mintKey: () => "start-key", replayRefused: Effect.void });
+      const { call, asked, leaveStartsUnanswered } = yield* subject({ pool });
+      leaveStartsUnanswered(true);
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+      );
+      yield* settled;
+      const meanwhile = starting.pollUnsafe();
+      const waiting = pool.queued().length;
+      leaveStartsUnanswered(false);
+      yield* pool.resend;
+
+      assert.equal(meanwhile, undefined, "no answer while it waits");
+      assert.equal(waiting, 1);
+      assert.deepEqual(yield* Fiber.join(starting), {
+        agent: { ...AGENT, status: AGENT_STATUS.STARTING },
+      });
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("start:")),
+        [`start:${TASK_ID}:press-1:default`, `start:${TASK_ID}:press-1:default`],
+      );
+      assert.deepEqual(pool.queued(), []);
     }),
 );
 

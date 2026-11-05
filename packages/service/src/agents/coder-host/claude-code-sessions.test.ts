@@ -610,7 +610,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           linesUrl: LINES_URL,
           mcpUrl: MCP_URL,
           integrations: [LINEAR_SERVER],
-          allowedDomains: config.allowedDomains,
+          allowedDomains: [],
           installedSkills: "/opt/agent/installed-skills",
           warm: true,
         });

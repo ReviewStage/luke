@@ -65,6 +65,7 @@ const CLEAN_SCAN: ScanReport = {
   environsReadable: 3,
   environsDenied: 20,
   processesWithAccessToken: [],
+  accessTokenSha256: [],
   jwtSha256: [],
 };
 
@@ -81,6 +82,7 @@ function observed(overrides: Partial<Observations> = {}): Observations {
     ciMarker: `${NONCE}-ci`,
     ciSeconds: 15,
     tokenSha256: [sha256Hex("the-access-token")],
+    placeholderSha256: sha256Hex("the-placeholder"),
     messages,
     steerTurnId: isRecord(steer) && isWireString(steer.turnId) ? steer.turnId : undefined,
     probeFile: `${NONCE}\n${NONCE}-steered\n`,
@@ -113,7 +115,6 @@ describe("judge over the hermetic recording", () => {
       CHECK.CI_WAIT,
       CHECK.CODEX_COMMAND,
       CHECK.MCP_SERVER,
-      CHECK.BWRAP,
     ]) {
       expect([id, results.get(id)]).toEqual([id, VERDICT.PASS]);
     }
@@ -174,6 +175,33 @@ describe("judge over the token's seats", () => {
     expect(passed(results)).toBe(false);
   });
 
+  it("passes a Codex command that reads app-server's placeholder, and fails one that reads any other value there", () => {
+    const holding = (value: string) => ({
+      ...CLEAN_SCAN,
+      processesWithAccessToken: [{ pid: 412, comm: "codex", sha256: sha256Hex(value) }],
+    });
+    const placeholder = holding("the-placeholder");
+    // An opaque token, which no JWT-shaped hash would catch.
+    const token = holding("an-opaque-access-token");
+    // The command's scan goes first, ahead of the recording's own, as the one the check reads.
+    const commandScanning = (scan: WireValue): Verdict | undefined => {
+      const item = {
+        type: "commandExecution",
+        aggregatedOutput: `APP_PROBE_SCAN ${JSON.stringify(scan)}\n`,
+      };
+      const completed: RecordedMessage = {
+        phase: "first",
+        direction: "server",
+        message: { method: "item/completed", params: { item } },
+      };
+      return verdicts(observed({ messages: [completed, ...observed().messages] })).get(
+        CHECK.CODEX_COMMAND,
+      );
+    };
+    expect(commandScanning(placeholder)).toBe(VERDICT.PASS);
+    expect(commandScanning(token)).toBe(VERDICT.FAIL);
+  });
+
   it("fails the disk when a file holds the token's hash, and passes on another JWT's", () => {
     const hit = {
       ...CLEAN_SCAN,
@@ -204,10 +232,12 @@ describe("judge over the token's seats", () => {
 
 describe("readScan", () => {
   it("reads the scanner's line out of a command's surrounding output", () => {
-    const line = `APP_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [{ pid: 7, comm: "codex" }] })}`;
+    const held = { pid: 7, comm: "codex", sha256: sha256Hex("the-placeholder") };
+    const line = `APP_PROBE_SCAN ${JSON.stringify({ ...CLEAN_SCAN, processesWithAccessToken: [held] })}`;
     expect(readScan(`noise\n${line}\nmore`)).toEqual({
       ...CLEAN_SCAN,
       processesWithAccessToken: ["7:codex"],
+      accessTokenSha256: [held.sha256],
     });
     expect(readScan("no report here")).toBeUndefined();
   });

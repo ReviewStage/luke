@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
   deleteAccount,
+  readAccountAccess,
   readAccountPreferences,
-  readAccountRole,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { user } from "@repo/database/schemas/auth";
@@ -13,8 +13,9 @@ import { getTestDB } from "@repo/database/testing";
 import { HTTP_METHOD, type WireBoundaryInput } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { USER_ROLE } from "../admin/admin-access.js";
 import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -30,7 +31,8 @@ import { accountProcedures } from "./account-procedures.js";
  * is one, any other account reads that it is not, and a caller no bearer
  * names is refused. The bearer names the account and nothing else does, so
  * a query naming another account changes nothing of the answer, and the
- * answer is never kept by a cache.
+ * answer is never kept by a cache. A member's grant of support access is
+ * answered while it stands.
  *
  * Synthetic accounts and bearers throughout.
  */
@@ -77,7 +79,7 @@ const openAccounts = () =>
       standingSessions: () => Effect.die(new Error("this suite deletes no account")),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
-      readRole: readAccountRole,
+      readAccess: readAccountAccess,
       accountFastOffer,
       writePreferences: writeAccountPreferences,
     });
@@ -126,10 +128,10 @@ function request(bearer: string | undefined, query = "") {
   });
 }
 
-const granted = (admin: boolean): Answer => ({
+const granted = (admin: boolean, supportAccessUntil: number | null = null): Answer => ({
   status: HOSTED_HTTP_STATUS.OK,
   cacheControl: "private, no-store",
-  body: { admin },
+  body: { admin, supportAccessUntil },
 });
 
 it.layer(getTestDB())("the account's access", (it) => {
@@ -157,6 +159,24 @@ it.layer(getTestDB())("the account's access", (it) => {
       yield* db.update(user).set({ role: null }).where(eq(user.id, member));
       assert.deepEqual(yield* ask(request(member)), granted(false));
     }),
+  );
+
+  it.effect(
+    "a member's grant of support access is answered while it stands, and not once it has run out",
+    () =>
+      Effect.gen(function* () {
+        const { member, ask } = yield* openAccounts();
+        const db = yield* Database;
+        const until = (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.days(7));
+        yield* db
+          .update(user)
+          .set({ supportAccessUntil: new Date(until) })
+          .where(eq(user.id, member));
+        assert.deepEqual(yield* ask(request(member)), granted(false, until));
+
+        yield* TestClock.adjust(Duration.days(8));
+        assert.deepEqual(yield* ask(request(member)), granted(false));
+      }),
   );
 
   it.effect("a caller no bearer names is refused, and learns nothing", () =>

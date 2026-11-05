@@ -42,6 +42,7 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksLinkStandingParams,
+  type TasksMarkReadParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
   type TasksPageAnswer,
@@ -89,6 +90,7 @@ export interface TasksProceduresDependencies {
     tasksDelete(taskId: string): Effect.Effect<boolean>;
     tasksRename(params: TasksRenameParams): Effect.Effect<boolean>;
     tasksPin(params: TasksPinParams): Effect.Effect<boolean>;
+    tasksMarkRead(params: TasksMarkReadParams): Effect.Effect<boolean>;
     tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
     tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
     tasksStart(request: TasksStartRequest): Effect.Effect<TasksStartAnswer>;
@@ -273,6 +275,14 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.tasksPin(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_MARK_READ]: actPort[TASKS_ACT_KIND.TASKS_MARK_READ].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksMarkRead(input);
     }),
     [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: actPort[TASKS_ACT_KIND.TASKS_PIN_REPOSITORY].effect(
       function* ({ input, context, errors }) {

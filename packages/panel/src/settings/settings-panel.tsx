@@ -10,11 +10,13 @@ import type {
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { ActionResult } from "@repo/wire";
 import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
 import { AgentsPage } from "./agents-page.js";
 import { AppearanceSection } from "./appearance-page.js";
+import { CommitsSection } from "./commits-section.js";
 import { ExperimentalPage } from "./experimental-page.js";
 import { HostsSection } from "./hosts-section.js";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page.js";
@@ -85,9 +87,11 @@ export function SettingsPanel({
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, account, capabilities });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  // The shared settings page frames these, spacing them as sections.
+  // The shared settings page frames these, spacing them as sections. Note
+  // that every page's words show in a screen recording, because they are
+  // the app's own, but for a person's, which each page masks where it draws them.
   return (
-    <>
+    <ReplayUnmask>
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
           <>
@@ -98,6 +102,9 @@ export function SettingsPanel({
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
             {panelView ? <AgentComposerSection view={panelView} writes={writes} /> : null}
+            {panelView ? (
+              <CommitsSection view={panelView} writes={writes} account={account} />
+            ) : null}
             {panelView ? <TasksSection view={panelView} writes={writes} /> : null}
             {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
@@ -185,6 +192,6 @@ export function SettingsPanel({
           capabilities={capabilities}
         />
       ) : null}
-    </>
+    </ReplayUnmask>
   );
 }

@@ -292,7 +292,11 @@ test("a pull request's card hung over its tab lists every reviewer, scrolling wi
   const tab = await draw(
     createElement(Tooltip, {
       label: "Changes: Expiry job",
-      card: createElement(PullRequestCard, { pullRequest: PULL_REQUEST, reviewers: many }),
+      card: createElement(PullRequestCard, {
+        pullRequest: PULL_REQUEST,
+        place: { taskId: null },
+        reviewers: many,
+      }),
       children: createElement(
         "button",
         { type: "button", "aria-describedby": undefined },

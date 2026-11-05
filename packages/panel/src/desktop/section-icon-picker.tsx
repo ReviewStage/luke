@@ -40,6 +40,7 @@ import {
   isSuggestedGlyph,
   recentIcons,
 } from "@repo/ui/section-icon-model";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Effect, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -672,76 +673,78 @@ function SectionIconPicker({
   const props: GridProps = { icon, color, onIcon: choose };
   return (
     <div className="section-icon-picker flex w-section-icon-picker flex-col">
-      <div className="section-icon-head flex flex-col gap-control-gap p-card-inset-snug pb-0">
-        <search onKeyDown={toGrid}>
-          <SearchField
-            ref={search}
-            label="Search icons and emoji"
-            placeholder="Search icons and emoji"
-            value={query}
-            onChange={setQuery}
-            onClear={() => setQuery("")}
-            onEnter={chooseFirst}
-            onShiftEnter={chooseFirst}
-          />
-        </search>
-        <div className="section-icon-bar flex items-center justify-between gap-control-gap">
-          <ChoiceBar<IconTab>
-            label="Icon kind"
-            items={[
-              { value: ICON_TAB.ICONS, label: "Icons" },
-              { value: ICON_TAB.EMOJI, label: "Emoji" },
-            ]}
-            value={tab}
-            onChange={setTab}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            panels={(each) => ({ tab: tabIds[each], panel: panelId })}
-          />
-          {icon === undefined ? null : (
-            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={() => onIcon(undefined)}>
-              Remove icon
-            </TextButton>
-          )}
-        </div>
-      </div>
-      <fieldset
-        className="section-icon-choices m-0 min-w-0 border-0 px-card-inset-snug pt-control-gap pb-0"
-        role="tabpanel"
-        id={panelId}
-        aria-labelledby={tabIds[tab]}
-        onKeyDown={stepGrid}
-        onPointerOver={(event) => setResting(restingLabel(event))}
-        onPointerLeave={() => setResting(undefined)}
-        onFocus={(event) => {
-          standTabStop(event);
-          setResting(restingLabel(event));
-        }}
-      >
-        <VisuallyHidden as="legend">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</VisuallyHidden>
-        <div className="section-icon-scroll flex h-section-icon-scroll flex-col">
-          <ScrollArea ref={grid}>
-            {searching ? (
-              <FoundPanel {...props} query={query} />
-            ) : tab === ICON_TAB.ICONS ? (
-              <GlyphPanel {...props} recent={recent} />
-            ) : (
-              <EmojiPanel {...props} />
+      <ReplayUnmask>
+        <div className="section-icon-head flex flex-col gap-control-gap p-card-inset-snug pb-0">
+          <search onKeyDown={toGrid}>
+            <SearchField
+              ref={search}
+              label="Search icons and emoji"
+              placeholder="Search icons and emoji"
+              value={query}
+              onChange={setQuery}
+              onClear={() => setQuery("")}
+              onEnter={chooseFirst}
+              onShiftEnter={chooseFirst}
+            />
+          </search>
+          <div className="section-icon-bar flex items-center justify-between gap-control-gap">
+            <ChoiceBar<IconTab>
+              label="Icon kind"
+              items={[
+                { value: ICON_TAB.ICONS, label: "Icons" },
+                { value: ICON_TAB.EMOJI, label: "Emoji" },
+              ]}
+              value={tab}
+              onChange={setTab}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              panels={(each) => ({ tab: tabIds[each], panel: panelId })}
+            />
+            {icon === undefined ? null : (
+              <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={() => onIcon(undefined)}>
+                Remove icon
+              </TextButton>
             )}
-          </ScrollArea>
+          </div>
         </div>
-      </fieldset>
-      <div className="section-icon-foot mt-tight-gap flex min-h-control items-center justify-between gap-control-gap border-t border-border px-card-inset-snug py-tight-gap">
-        <Text
-          as={TEXT_ELEMENT.P}
-          variant={TEXT_VARIANT.INHERIT}
-          truncate
-          className="section-icon-resting m-0 min-w-0 text-muted-foreground text-caption-inline"
-          aria-hidden="true"
+        <fieldset
+          className="section-icon-choices m-0 min-w-0 border-0 px-card-inset-snug pt-control-gap pb-0"
+          role="tabpanel"
+          id={panelId}
+          aria-labelledby={tabIds[tab]}
+          onKeyDown={stepGrid}
+          onPointerOver={(event) => setResting(restingLabel(event))}
+          onPointerLeave={() => setResting(undefined)}
+          onFocus={(event) => {
+            standTabStop(event);
+            setResting(restingLabel(event));
+          }}
         >
-          {resting ?? (icon === undefined ? "" : iconLabel(icon))}
-        </Text>
-        {glyphsShown ? <ColorChoices color={color} onColor={recolor} /> : null}
-      </div>
+          <VisuallyHidden as="legend">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</VisuallyHidden>
+          <div className="section-icon-scroll flex h-section-icon-scroll flex-col">
+            <ScrollArea ref={grid}>
+              {searching ? (
+                <FoundPanel {...props} query={query} />
+              ) : tab === ICON_TAB.ICONS ? (
+                <GlyphPanel {...props} recent={recent} />
+              ) : (
+                <EmojiPanel {...props} />
+              )}
+            </ScrollArea>
+          </div>
+        </fieldset>
+        <div className="section-icon-foot mt-tight-gap flex min-h-control items-center justify-between gap-control-gap border-t border-border px-card-inset-snug py-tight-gap">
+          <Text
+            as={TEXT_ELEMENT.P}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="section-icon-resting m-0 min-w-0 text-muted-foreground text-caption-inline"
+            aria-hidden="true"
+          >
+            {resting ?? (icon === undefined ? "" : iconLabel(icon))}
+          </Text>
+          {glyphsShown ? <ColorChoices color={color} onColor={recolor} /> : null}
+        </div>
+      </ReplayUnmask>
     </div>
   );
 }

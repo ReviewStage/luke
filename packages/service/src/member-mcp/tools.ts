@@ -682,7 +682,7 @@ const MEMBER_CREATE_TASK_TOOL = memberMcpTool({
     "start from where given, and no agent on it; the desktop shows it as one they made. Give " +
     "it a status, a priority, and an assignee where the member said them. Give it a " +
     "parentTaskId to make it a child task of another, to any depth: a child always works in " +
-    "its parent's repository and on its machine, so leave repository out for one. Give it a " +
+    "its parent's repository, so leave repository out for one. Give it a " +
     "relation instead to make it blocked by, blocking, a sub-task of, or the parent of another " +
     `task of the workspace in the same call. ${WORKSPACE_WORDS} Then start an agent on it ` +
     `with ${MEMBER_MCP_TOOL.START_AGENT}'s taskId. Each call makes a task of its own, so call ` +
@@ -846,6 +846,7 @@ const StartAgentInputSchema = Schema.Struct({
   branch: START_AGENT_TOOL.inputSchema.fields.branch,
   model: START_AGENT_TOOL.inputSchema.fields.model,
   effort: START_AGENT_TOOL.inputSchema.fields.effort,
+  runsOn: START_AGENT_TOOL.inputSchema.fields.runsOn,
   from: START_AGENT_TOOL.inputSchema.fields.from,
 });
 

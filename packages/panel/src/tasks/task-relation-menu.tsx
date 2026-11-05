@@ -11,6 +11,7 @@ import {
 import { taskKey } from "@repo/features/workspace-key";
 import {
   type FootRow,
+  type MenuHead,
   type MenuPanel,
   type MenuRow,
   POPOVER_ALIGN,
@@ -24,27 +25,36 @@ import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 
 /**
- * task-relation-menu.tsx -- the one menu that relates a task to another: the workspace's other tasks first, searched by name or key, and the kind of relation pinned under them, switched without starting over.
+ * task-relation-menu.tsx -- the one menu that relates a task to another: the relation first, as what it does ("Add sub-task…"), then the workspace's other tasks, searched by name or key, under a head saying what a pick does.
  *
  * A relation is one of four kinds (`TASK_RELATION_KIND`): the task is
  * blocked by the one picked, blocks it, takes it as a sub-task, or takes it
  * as its parent. The menu is named Task relation wherever it opens, as New
- * task's + names its own (`new-task-relation.tsx`). It opens on a kind its owner names, lists every other
- * task of the workspace by its status mark, name, and key, and pins
- * "Relation: Sub-task" under them, a submenu of the four kinds, each by its
- * icon, so a reader who opened it on the wrong one switches without losing
- * their search. A task that cannot take the kind stays listed, dimmed, with
+ * task's + names its own (`new-task-relation.tsx`). Note that it asks for
+ * the kind before the task, because a pick relates at once: a reader who
+ * chose "Mark as blocked by…" knows what pressing a task will do, where a
+ * search led by tasks read as one that opens them. Opened on no kind, it
+ * lists the kinds the door can send, each by its icon and what it does; a
+ * kind chosen turns it into that kind's search, headed by what a pick does
+ * and led by the way back to the kinds, which Escape takes too. Opened on a
+ * kind its owner names, as Add sub-task and ⌘K do, it is that search
+ * already, Escape closing it. The search lists every other task of the
+ * workspace by its status mark, name, and key, its field saying which way
+ * round the relation stands ("Find the task this waits on"). A task that
+ * cannot take the kind stays listed, dimmed, with
  * why at its end: already related that way, a loop the service would
  * refuse, or, for a sub-task or a parent, another repository, since a tree
- * works in one. New task is pinned above the kind and opens New task with
- * a relation to this task, read from the new task's side: on Sub-task as a
- * sub-task of this task, on Blocked by as one that blocks it. A pick is sent through the door: a block as the
+ * works in one. New task is pinned under them, named for the kind ("New
+ * blocking task"), and opens New task with a relation to this task, read
+ * from the new task's side: on Sub-task as a sub-task of this task, on
+ * Blocked by as one that blocks it. A pick is sent through the door: a block as the
  * blocks' change, a sub-task or a parent as a parent set, the service's
  * answer being what the head goes on drawing. A task's menu, wherever a
  * row or the Plan tab draws it, hangs it beside itself as its Task relation
- * panel (`taskRelationMenuPanel`), so a task is related from a list without
- * being opened; ⌘K opens it from the head (`TaskRelationAsked`), and a
- * group's + may draw it on a kind of its own.
+ * panel (`taskRelationMenuPanel`), opened on the kinds, so a task is related
+ * from a list without being opened; ⌘K opens it from the head on a kind
+ * (`TaskRelationAsked`), and a group's + draws it on a kind of its own or on
+ * the kinds.
  */
 
 /** What the menu is called wherever it opens, New task's + among them. */
@@ -80,6 +90,34 @@ export function TaskRelationIcon({ kind }: { kind: TaskRelationKind }): React.JS
   }
 }
 
+/** Each kind as what choosing it does, which the kinds list and the search's head say. */
+const KIND_VERBS = {
+  [TASK_RELATION_KIND.SUB_TASK]: { choose: "Add sub-task…", head: "Add sub-task" },
+  [TASK_RELATION_KIND.PARENT]: { choose: "Set parent…", head: "Set parent" },
+  [TASK_RELATION_KIND.BLOCKED_BY]: {
+    choose: "Mark as blocked by…",
+    head: "Mark as blocked by",
+  },
+  [TASK_RELATION_KIND.BLOCKS]: { choose: "Mark as blocking…", head: "Mark as blocking" },
+} as const satisfies Record<TaskRelationKind, { choose: string; head: string }>;
+
+/** Each kind's search field, saying which way round the task picked stands, and its New task, the one it makes. */
+const KIND_SEARCH = {
+  [TASK_RELATION_KIND.SUB_TASK]: {
+    find: "Find a task to add as a sub-task",
+    create: "New sub-task",
+  },
+  [TASK_RELATION_KIND.PARENT]: { find: "Find the parent task", create: "New parent task" },
+  [TASK_RELATION_KIND.BLOCKED_BY]: {
+    find: "Find the task this waits on",
+    create: "New blocking task",
+  },
+  [TASK_RELATION_KIND.BLOCKS]: {
+    find: "Find the task that waits on this",
+    create: "New blocked task",
+  },
+} as const satisfies Record<TaskRelationKind, { find: string; create: string }>;
+
 /** Why a task cannot take a kind, printed at its row's end. */
 const WHY = {
   [TASK_RELATION_KIND.BLOCKED_BY]: { already: "Already blocks this", loop: "Waits on this task" },
@@ -90,11 +128,8 @@ const WHY = {
 
 const OTHER_REPOSITORY = "Another repository";
 
-/** The pinned rows' ids, apart from every task's. */
-const FOOT_ID = {
-  NEW_TASK: "new-task",
-  KIND: "relation-kind",
-} as const;
+/** The pinned New task row's id, apart from every task's. */
+const NEW_TASK_ROW_ID = "new-task";
 
 /** Each kind as the new task New task makes stands to this one: the other side of the same relation. */
 const NEW_TASK_KIND = {
@@ -212,6 +247,7 @@ function relationRows(
       return {
         id: each.id,
         label: each.name,
+        replayMasked: true,
         ...(each.status === undefined ? {} : { icon: <TaskStatusMark status={each.status} /> }),
         ...(key === undefined ? {} : { detail: key, terms: [key] }),
         ...(disabled === undefined ? {} : { disabled }),
@@ -240,17 +276,28 @@ function relate(
   }
 }
 
-/** The kind of a picked submenu row; none for a row that names none. */
+/** The kind of a picked row of the kinds; none for a row that names none. */
 function kindOf(id: string): TaskRelationKind | undefined {
   return TASK_RELATION_ORDER.find((kind) => kind === id);
 }
 
+/** The kinds the door can send, each a row by its icon and what choosing it does. */
+function kindRows(door: TaskRelationDoor): readonly MenuRow[] {
+  return sentKinds(door).map((kind) => ({
+    id: kind,
+    label: KIND_VERBS[kind].choose,
+    icon: <TaskRelationIcon kind={kind} />,
+  }));
+}
+
 /**
- * The add menu, opened on `kind`: the tasks for the kind chosen now, and
- * pinned under them New task for that kind and the kind's submenu. A
- * pick of a task is sent and closes the menu (`onPicked`, else `onClose`);
- * a kind switched keeps the search. Its owner holds it open and hangs it
- * from a box of its own, or stands it in a menu's panel (`embedded`).
+ * The add menu: opened on no kind, the kinds the door can send, a pick of
+ * one turning it into that kind's search, led by the way back; opened on
+ * `kind`, that kind's search alone. The search lists the tasks for the
+ * kind, New task for it pinned under them. A pick of a task is sent and
+ * closes the menu (`onPicked`, else `onClose`). Its owner holds it open and
+ * hangs it from a box of its own, or stands it in a menu's panel
+ * (`embedded`).
  */
 export function TaskRelationMenu({
   id,
@@ -268,8 +315,8 @@ export function TaskRelationMenu({
   id: string;
   task: TaskRelationSubject;
   door: TaskRelationDoor;
-  /** The kind the menu opens on. */
-  kind: TaskRelationKind;
+  /** The kind the menu opens on; none opens it on the kinds. */
+  kind?: TaskRelationKind | undefined;
   align?: PopoverAlign | undefined;
   /** Whether it stands in a menu's panel, which places it, rather than hung from its owner's box. */
   embedded?: boolean | undefined;
@@ -281,47 +328,59 @@ export function TaskRelationMenu({
   onPicked?: (() => void) | undefined;
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const [kind, setKind] = useState(opened);
-  const kinds = sentKinds(door);
+  const [chosen, setChosen] = useState<TaskRelationKind | undefined>(undefined);
+  const kind = opened ?? chosen;
+  const place = embedded ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED } : { align };
+  if (kind === undefined) {
+    return (
+      <SearchableMenu
+        {...place}
+        // Keyed apart from the search, so each takes the focus afresh as it comes to stand.
+        replayUnmasked
+        key={TASK_RELATION_MENU}
+        id={id}
+        label={TASK_RELATION_MENU}
+        rows={kindRows(door)}
+        value={undefined}
+        noMatch={TASK_RELATION_MENU}
+        leaving={leaving}
+        ref={menuRef}
+        onPick={(picked) => setChosen(kindOf(picked))}
+        onClose={onClose}
+        onLeave={onLeave}
+      />
+    );
+  }
+  // Note that a search chosen from the kinds goes back to them, by its head or Escape, rather than closing.
+  const back = opened === undefined ? () => setChosen(undefined) : undefined;
+  const head: MenuHead = {
+    words: KIND_VERBS[kind].head,
+    ...(back === undefined ? {} : { back: { label: TASK_RELATION_MENU, onBack: back } }),
+  };
   const { onNewTask } = door;
-  const foot: FootRow[] = [
-    ...(onNewTask === undefined
+  const foot: FootRow[] =
+    onNewTask === undefined
       ? []
       : [
           {
-            id: FOOT_ID.NEW_TASK,
-            label: "New task",
+            id: NEW_TASK_ROW_ID,
+            label: KIND_SEARCH[kind].create,
             icon: <GLYPH.ADD />,
             onPress: () => {
               onPicked();
               onNewTask(NEW_TASK_KIND[kind]);
             },
           },
-        ]),
-    {
-      id: FOOT_ID.KIND,
-      label: "Relation",
-      icon: <TaskRelationIcon kind={kind} />,
-      detail: TASK_RELATION_WORDS[kind],
-      submenu: {
-        label: "Relation",
-        rows: kinds.map((each) => ({
-          id: each,
-          label: TASK_RELATION_WORDS[each],
-          icon: <TaskRelationIcon kind={each} />,
-        })),
-        value: kind,
-        onPick: (picked) => setKind(kindOf(picked) ?? kind),
-        stays: true,
-      },
-    },
-  ];
+        ];
   return (
     <SearchableMenu
-      {...(embedded ? { layer: SEARCHABLE_MENU_LAYER.EMBEDDED } : { align })}
+      replayUnmasked
+      {...place}
+      key={kind}
       id={id}
-      label={TASK_RELATION_MENU}
-      placeholder="Find a task"
+      label={KIND_VERBS[kind].head}
+      head={head}
+      placeholder={KIND_SEARCH[kind].find}
       rows={relationRows(task, door, kind)}
       value={undefined}
       noMatch="No tasks match"
@@ -332,7 +391,7 @@ export function TaskRelationMenu({
         onPicked();
         relate(task, door, kind, otherId);
       }}
-      onClose={onClose}
+      onClose={back ?? onClose}
       onLeave={onLeave}
     />
   );
@@ -340,9 +399,9 @@ export function TaskRelationMenu({
 
 /**
  * A task's menu's Task relation: the add menu hung beside the menu as its
- * panel, as New task's + hangs its own, opened on Sub-task with the kind
- * switched at its foot. A pick relates the task and closes the menu, and
- * Escape goes back to the menu. The door is read only while the panel is
+ * panel, as New task's + hangs its own, opened on the kinds. A pick relates
+ * the task and closes the menu, and Escape goes back, from a kind's search
+ * to the kinds and from the kinds to the menu. The door is read only while the panel is
  * drawn, so a list drawing a menu for every row works out none of it.
  */
 export function taskRelationMenuPanel(
@@ -358,7 +417,6 @@ export function taskRelationMenuPanel(
         id={id}
         task={task}
         door={door()}
-        kind={TASK_RELATION_KIND.SUB_TASK}
         embedded
         onClose={back}
         onPicked={close}

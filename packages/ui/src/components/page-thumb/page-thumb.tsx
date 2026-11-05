@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type Ref, useState } from "react";
 import { AspectRatio } from "../../shadcn/aspect-ratio.js";
 import { useBlobUrl } from "../video-player/video-player.js";
 
@@ -10,7 +10,8 @@ import { useBlobUrl } from "../video-player/video-player.js";
  * has landed. A page (`frame`) is laid out four times the thumb's width, a
  * desktop window's, and scaled down by as much, fading in once loaded; the
  * frame takes no pointer, no focus, and no part in what is read aloud, and is
- * left out of the screen recording. A picture (`image`) fills it, as a
+ * left out of the screen recording; its caller holds the frame (`frameRef`)
+ * to hear the page's messages and answer them. A picture (`image`) fills it, as a
  * video's first frame does (`video`), still, from a `blob:` address made of
  * its bytes as the player plays it (`../video-player/video-player.tsx`), and
  * a `glyph` stands in the middle where what it showed is gone. A thumb with
@@ -70,6 +71,7 @@ function VideoStill({ dataUrl }: { dataUrl: string }): React.JSX.Element | null 
 export function PageThumb({
   size = PAGE_THUMB_SIZE.CARD,
   frame,
+  frameRef,
   image,
   video,
   glyph,
@@ -77,6 +79,8 @@ export function PageThumb({
   size?: PageThumbSize;
   /** A page to draw small. */
   frame?: PageThumbFrame | undefined;
+  /** The page's frame itself, which the caller hears the page's messages from. */
+  frameRef?: Ref<HTMLIFrameElement> | undefined;
   /** A picture's address, to fill the thumb. */
   image?: string | undefined;
   /** A video's `data:` URL, whose first frame fills the thumb. */
@@ -112,6 +116,7 @@ export function PageThumb({
       {video === undefined ? null : <VideoStill dataUrl={video} />}
       {frame === undefined ? null : (
         <iframe
+          ref={frameRef}
           className="ui-page-thumb-frame pointer-events-none absolute top-0 left-0 h-[400%] w-[400%] origin-top-left scale-25 border-0 opacity-0 transition-opacity duration-(--ui-duration-hover) ease-motion-exit group-data-[loaded=true]/page-thumb:opacity-100"
           title={frame.title}
           src={frame.src}

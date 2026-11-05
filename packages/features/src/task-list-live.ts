@@ -27,6 +27,7 @@ import {
 } from "./agent-wire.js";
 import { integrationConnectionOf } from "./integration-wire.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
+import { readMarkOf } from "./read-mark.js";
 import { countedNumber } from "./service-wire.js";
 import {
   type ListedPullRequest,
@@ -90,6 +91,9 @@ const taskLiveRowSchema = EffectSchema.Struct({
   assigneeName: EffectSchema.NullOr(EffectSchema.String),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
+  /** The reader's read mark (`read-mark.ts`); absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /** Absent from a service before it kept when a task was finished. */
   completedAt: EffectSchema.optionalKey(EffectSchema.NullOr(countedNumber)),
   createdAt: countedNumber,
@@ -163,6 +167,9 @@ const agentLiveRowSchema = EffectSchema.Struct({
   source: EffectSchema.optionalKey(EffectSchema.NullOr(agentSourceSchema)),
   pinnedAt: EffectSchema.NullOr(countedNumber),
   pinPosition: EffectSchema.NullOr(EffectSchema.String),
+  /** The reader's read mark (`read-mark.ts`); absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   createdAt: countedNumber,
   turnId: EffectSchema.NullOr(EffectSchema.String),
   turnStatus: EffectSchema.NullOr(EffectSchema.String),
@@ -377,6 +384,7 @@ function taskSummaryOf(
     ...(row.pinnedAt === null || row.pinPosition === null
       ? undefined
       : { pinPosition: row.pinPosition }),
+    ...readMarkOf(row),
     ...(row.completedAt === undefined || row.completedAt === null
       ? undefined
       : { completedAt: row.completedAt }),
@@ -522,6 +530,7 @@ function tasklessAgentOf(row: AgentLiveRow, now: number, continued: Continuation
     ...(row.pinnedAt === null || row.pinPosition === null
       ? undefined
       : { pinPosition: row.pinPosition }),
+    ...readMarkOf(row),
     ...pullRequestOf(row.published),
   };
 }
