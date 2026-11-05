@@ -691,6 +691,7 @@ export const IN_CONTEXT_KEY = {
   VIEWER_ZOOM_OUT: "in-context-viewer-zoom-out",
   VIEWER_FIT: "in-context-viewer-fit",
   VIDEO_PLAY: "in-context-video-play",
+  VIDEO_PLAY_K: "in-context-video-play-k",
   VIDEO_JUMP_BACK: "in-context-video-jump-back",
   VIDEO_JUMP_AHEAD: "in-context-video-jump-ahead",
   VIDEO_FRAME_BACK: "in-context-video-frame-back",
@@ -726,7 +727,7 @@ export interface InContextShortcut {
  * `@repo/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
  * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
  * `zoom-image.tsx` in `@repo/ui`); a video player's keys while focus is in
- * it (`video-player.tsx` in `@repo/ui`), K playing and pausing as Space does; ⌘K over selected words for a link
+ * it (`video-player.tsx` in `@repo/ui`); ⌘K over selected words for a link
  * (`writing-format.ts`); and the `@` list's Tab and → (`mention-picker.tsx`).
  */
 export const IN_CONTEXT_SHORTCUTS = {
@@ -789,6 +790,11 @@ export const IN_CONTEXT_SHORTCUTS = {
   [IN_CONTEXT_KEY.VIDEO_PLAY]: {
     label: "Play or pause video",
     chord: { key: SHORTCUT_KEY.SPACE, plain: true },
+  },
+  // K plays and pauses as Space does, the video sites' other key for it, so it is a row of its own under the same name.
+  [IN_CONTEXT_KEY.VIDEO_PLAY_K]: {
+    label: "Play or pause video",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
   },
   [IN_CONTEXT_KEY.VIDEO_JUMP_BACK]: {
     label: "Jump video back 5 seconds",
@@ -967,6 +973,7 @@ export const APP_SHORTCUT_GROUPS = [
     title: "Video player",
     keys: [
       IN_CONTEXT_KEY.VIDEO_PLAY,
+      IN_CONTEXT_KEY.VIDEO_PLAY_K,
       IN_CONTEXT_KEY.VIDEO_JUMP_BACK,
       IN_CONTEXT_KEY.VIDEO_JUMP_AHEAD,
       IN_CONTEXT_KEY.VIDEO_FRAME_BACK,
