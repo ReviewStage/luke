@@ -309,18 +309,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Fast", "agent fast version speed quick model"],
         }
       : undefined,
-    // The chapters model, which is the account's on the service: drawn once an account is signed in.
-    input.accountDrawn
-      ? {
-          id: SETTINGS_SEARCH_ROW.CHAPTERS_MODEL,
-          label: "Chapters model",
-          page: SETTINGS_VIEW.AGENTS,
-          haystack: [
-            "Chapters model",
-            "pull request chapters generate claude haiku sonnet opus review",
-          ],
-        }
-      : undefined,
     // The harnesses' rows, each holding the account's plan and API key for it on the service: drawn once an account is signed in.
     input.accountDrawn
       ? {
