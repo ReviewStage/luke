@@ -138,23 +138,18 @@ import {
   type InstalledSkillIdParams,
   type InstalledSkillInstallParams,
   type InstalledSkillInstallView,
-  type InstalledSkillPreviewFileParams,
-  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
   type InstalledSkillShareParams,
   type InstalledSkillToggleParams,
-  type InstalledSkillUpdateCheckView,
   type InstalledSkillUpdatedView,
   type InstalledSkillUpdateParams,
   type InstalledSkillView,
   installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
-  installedSkillPreviewFileViewSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
-  installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
   installedSkillViewSchema,
 } from "@repo/features/installed-skill-view";
@@ -839,20 +834,12 @@ export interface HostOperator {
   installedSkillsPreview(
     params: InstalledSkillPreviewParams,
   ): Effect.Effect<InstalledSkillPreviewView>;
-  /** One previewed skill's `SKILL.md` at the commit the preview pinned, read by the service; or why it did not answer. */
-  installedSkillsPreviewFile(
-    params: InstalledSkillPreviewFileParams,
-  ): Effect.Effect<InstalledSkillPreviewFileView>;
   /** The skills a paste makes, installed all or none; or why none were. */
   installedSkillsInstall(
     params: InstalledSkillInstallParams,
   ): Effect.Effect<InstalledSkillInstallView>;
   /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
   installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
-  /** Whether a GitHub skill's folder moved at its ref; or why that is unknown. */
-  installedSkillsCheckUpdate(
-    params: InstalledSkillUpdateParams,
-  ): Effect.Effect<InstalledSkillUpdateCheckView>;
   /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
   installedSkillsUpdate(
     params: InstalledSkillUpdateParams,
@@ -2256,11 +2243,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
         answerOf(installedSkillPreviewViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
-    installedSkillsPreviewFile: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, params),
-        answerOf(installedSkillPreviewFileViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
     installedSkillsInstall: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
@@ -2270,11 +2252,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
         answerOf(installedSkillViewSchema, INSTALLED_SKILL_UNANSWERED),
-      ),
-    installedSkillsCheckUpdate: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, params),
-        answerOf(installedSkillUpdateCheckViewSchema, INSTALLED_SKILL_UNANSWERED),
       ),
     installedSkillsUpdate: (params) =>
       Effect.map(

@@ -4,15 +4,18 @@ import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { HostedInstalledSkillClient } from "./installed-skill-client.js";
-import { INSTALLED_SKILL_FILES_REFUSAL } from "./installed-skill-route-wire.js";
 import { INSTALLED_SKILL_CALL_FAILURE } from "./installed-skill-view.js";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "./installed-skill-wire.js";
+import {
+  INSTALLED_SKILL_REFUSAL,
+  INSTALLED_SKILL_SCOPE,
+  INSTALLED_SKILL_SOURCE,
+} from "./installed-skill-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
  * The window's installed skills calls against a scripted service: each
  * travels under the account's bearer to its own path, and a refusal is named
- * in the window's own words, a refused skill with its name and why.
+ * in the window's own words, a refused skill by why, with its name.
  * Synthetic ids and words.
  */
 
@@ -57,7 +60,6 @@ it.effect("each call goes to its own path under the account's bearer", () =>
       [`PATCH /api/installed-skills/${SKILL_ID}`]: {
         answer: () => ({ skill: { ...SUMMARY, enabled: false }, txid: "41" }),
       },
-      [`GET /api/installed-skills/${SKILL_ID}/update`]: { answer: () => ({ available: false }) },
       [`DELETE /api/installed-skills/${SKILL_ID}`]: { answer: () => ({ id: SKILL_ID }) },
       [`GET /api/installed-skills/${SKILL_ID}`]: { answer: () => CONTENT },
       [`POST /api/installed-skills/${SKILL_ID}/share`]: {
@@ -75,7 +77,6 @@ it.effect("each call goes to its own path under the account's bearer", () =>
       api.layer,
     );
     const toggled = yield* Effect.provide(ask.setEnabled(SKILL_ID, false), api.layer);
-    const checked = yield* Effect.provide(ask.checkUpdate(WORKSPACE_ID, SKILL_ID), api.layer);
     const removed = yield* Effect.provide(ask.remove(SKILL_ID), api.layer);
     const read = yield* Effect.provide(ask.read(SKILL_ID), api.layer);
     const shared = yield* Effect.provide(ask.share(WORKSPACE_ID, SKILL_ID), api.layer);
@@ -85,23 +86,21 @@ it.effect("each call goes to its own path under the account's bearer", () =>
       ok: true,
       answer: { skill: { ...SUMMARY, enabled: false }, txid: "41" },
     });
-    assert.deepEqual(checked, { ok: true, answer: { available: false } });
     assert.deepEqual(removed, { ok: true, answer: { id: SKILL_ID } });
     assert.deepEqual(read, { ok: true, answer: CONTENT });
     assert.deepEqual(shared, {
       ok: true,
       answer: { skill: { ...SUMMARY, scope: INSTALLED_SKILL_SCOPE.WORKSPACE } },
     });
-    const [, toggle, check, , , share] = api.requests();
+    const [, toggle, , , share] = api.requests();
     assert.deepEqual(JSON.parse(toggle?.body ?? "{}"), { enabled: false });
-    assert.equal(new URL(check?.url ?? "").searchParams.get("workspaceId"), WORKSPACE_ID);
     assert.deepEqual(JSON.parse(share?.body ?? "{}"), { workspaceId: WORKSPACE_ID });
     assert.deepEqual(new Set(api.credentials()), new Set(["token-1"]));
   }),
 );
 
 it.effect(
-  "a refused skill is named with why its files were refused, and a refusal no call names is unanswered",
+  "a refused skill is answered by why, with its name, and a refusal no call names is unanswered",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -109,16 +108,12 @@ it.effect(
           answer: () => ({
             error: HOSTED_API_ERROR.SKILL_FILES_REFUSED,
             skillName: "leaky",
-            skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
+            skillRefusal: INSTALLED_SKILL_REFUSAL.CREDENTIAL,
           }),
           status: HTTP_STATUS.CONFLICT,
         },
         "POST /api/installed-skills/preview": {
           answer: () => ({ error: HOSTED_API_ERROR.AGENT_RETIRED }),
-          status: HTTP_STATUS.CONFLICT,
-        },
-        [`POST /api/installed-skills/${SKILL_ID}/update`]: {
-          answer: () => ({ error: HOSTED_API_ERROR.BRANCH_NOT_FOUND }),
           status: HTTP_STATUS.CONFLICT,
         },
       });
@@ -133,15 +128,12 @@ it.effect(
         api.layer,
       );
       const unnamed = yield* Effect.provide(ask.preview(WORKSPACE_ID, "anything"), api.layer);
-      const moved = yield* Effect.provide(ask.update(WORKSPACE_ID, SKILL_ID), api.layer);
 
       assert.deepEqual(refused, {
         ok: false,
-        failure: INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED,
+        failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
         skillName: "leaky",
-        skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
       });
       assert.deepEqual(unnamed, { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
-      assert.deepEqual(moved, { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.REF_NOT_FOUND });
     }),
 );

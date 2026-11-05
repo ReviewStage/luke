@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { InstalledSkillLiveRow } from "@repo/features/installed-skill-live";
-import type { InstalledSkillSummary } from "@repo/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_FILES_REFUSAL } from "@repo/features/installed-skill-route-wire";
+import {
+  type InstalledSkillSummary,
+  UNSUPPORTED_PREVIEW,
+} from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import type { LIVE_SIGNED_OUT } from "@repo/features/live-wire";
-import { SKILL_PASTE_KIND } from "@repo/features/skill-paste";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -26,7 +27,7 @@ import { type PolledLive, polledLive } from "./testing/polled-live.js";
 /**
  * Settings › Skills' asks through the host as a window makes them, over a
  * scripted service: each answer reaches the window as its view, a refusal
- * with the skill it names and why its files were refused; behind a closed
+ * by why, with the skill it names; behind a closed
  * account gate or on a run that sends nothing the service is never asked;
  * and params of the wrong shape are refused before anything travels. A
  * workspace a window holds is laid on its app-state slice as its live read
@@ -119,9 +120,8 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
     install: options.refuseInstall
       ? {
           ok: false,
-          failure: INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED,
+          failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
           skillName: "release-notes",
-          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
         }
       : { ok: true, answer: { skills: [SKILL] } },
     toggle: { ok: true, answer: { skill: { ...SKILL, enabled: false } } },
@@ -155,20 +155,10 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
     preview: (workspaceId) =>
       Effect.sync(() => {
         asked.push(`preview:${workspaceId}`);
-        return { ok: true as const, answer: { kind: SKILL_PASTE_KIND.EMPTY } };
-      }),
-    previewFile: (params) =>
-      Effect.sync(() => {
-        asked.push(`previewFile:${params.path}`);
-        return { ok: true as const, answer: "# grilling" };
+        return { ok: true as const, answer: UNSUPPORTED_PREVIEW };
       }),
     install: (params) => writing(`install:${params.scope}`, () => replies.install),
     setEnabled: (skillId, enabled) => writing(`toggle:${skillId}:${enabled}`, () => replies.toggle),
-    checkUpdate: (_workspaceId, skillId) =>
-      Effect.sync(() => {
-        asked.push(`check:${skillId}`);
-        return { ok: true as const, answer: { available: true, latestSha: "abc" } };
-      }),
     update: (_workspaceId, skillId) =>
       Effect.sync(() => {
         asked.push(`update:${skillId}`);
@@ -256,13 +246,6 @@ it.effect("each ask reaches the service and answers the window its view", () =>
       { skill: { ...SKILL, enabled: false } },
     );
     assert.deepEqual(
-      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, {
-        workspaceId: WORKSPACE_ID,
-        skillId: SKILL_ID,
-      }),
-      { available: true, latestSha: "abc" },
-    );
-    assert.deepEqual(
       yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, {
         workspaceId: WORKSPACE_ID,
         skillId: SKILL_ID,
@@ -283,37 +266,24 @@ it.effect("each ask reaches the service and answers the window its view", () =>
     assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }), {
       id: SKILL_ID,
     });
-    assert.deepEqual(
-      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, {
-        workspaceId: WORKSPACE_ID,
-        owner: "acme",
-        repo: "agent-skills",
-        sha: "3f9c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5",
-        path: "skills/grilling",
-      }),
-      { markdown: "# grilling" },
-    );
     assert.deepEqual(asked, [
       `install:${INSTALLED_SKILL_SCOPE.WORKSPACE}`,
       `toggle:${SKILL_ID}:false`,
-      `check:${SKILL_ID}`,
       `update:${SKILL_ID}`,
       `read:${SKILL_ID}`,
       `share:${WORKSPACE_ID}:${SKILL_ID}`,
       `remove:${SKILL_ID}`,
-      "previewFile:skills/grilling",
     ]);
   }),
 );
 
-it.effect("a refused install names the skill and why its files were refused", () =>
+it.effect("a refused install says why, naming the skill", () =>
   Effect.gen(function* () {
     const { call } = yield* subject({ refuseInstall: true });
 
     assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, INSTALL), {
-      failure: INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED,
+      failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
       skillName: "release-notes",
-      skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
     });
   }),
 );
@@ -352,17 +322,6 @@ it.effect("params of the wrong shape are refused before anything travels", () =>
     );
 
     assert.equal(refused._tag, "InvalidParamsRefusal");
-    // A previewed skill is read at the commit the preview pinned, never at a branch's name.
-    const unpinned = yield* Effect.flip(
-      call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE, {
-        workspaceId: WORKSPACE_ID,
-        owner: "acme",
-        repo: "agent-skills",
-        sha: "main",
-        path: "skills/grilling",
-      }),
-    );
-    assert.equal(unpinned._tag, "InvalidParamsRefusal");
     assert.deepEqual(asked, []);
   }),
 );

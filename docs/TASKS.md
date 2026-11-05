@@ -404,17 +404,17 @@ account starts on Claude Opus 5.5 at high.
 Beside the skills a task's repository keeps in `.agents/skills` or
 `.claude/skills`, which an agent reads from GitHub as its session starts, a
 member installs skills into Vespin itself on the Skills page of Settings. Add
-skill is one paste box: an `npx skills add …` command (or `pnpx`, `pnpm dlx`,
-`bunx`, `yarn dlx`, or a bare `skills add`) naming a GitHub repository, a
-folder of one, `owner/repo@skill`, or a skills.sh link, with `--skill` picking
-which of its skills to install; or a skill's own text, frontmatter and all.
-Vespin never runs the command. The service reads the named folders from GitHub,
-on the workspace's GitHub App, the member's own token, or anonymously for a
-public repository, shows what it found before anything is installed, and pins
-the files to the commit it read; a later commit on the source is offered as
-Update available, never taken on its own. A pasted skill is held to the same
-rules as a repository's, and a file shaped like a credential is refused.
-Only GitHub sources are read for now.
+skill is one paste box: a GitHub repository as `owner/repo`, a link to it or
+to one of its folders, or an `npx skills add` line naming one, its `--skill`
+names ticked; or a skill's own text, frontmatter and all. Vespin never runs
+the command. The service reads the repository's archive, on the workspace's
+GitHub App, the member's own token, or anonymously for a public repository,
+lists every skill folder it holds to tick before anything is installed, and
+pins the files to the commit it read; a later commit on the source is never
+taken on its own. Pasted text installs under the name and description the
+member confirms, its frontmatter's to start with. A skill needs a valid name
+and a description, and a file shaped like a credential is refused. Only GitHub
+repositories are read.
 
 A skill is installed for one of two scopes. A personal skill is its
 installer's alone and follows them into every workspace they belong to. A

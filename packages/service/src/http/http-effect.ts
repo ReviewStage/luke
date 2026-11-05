@@ -1,5 +1,5 @@
 import type { LocalAgentRefusal, RefusedDevice } from "@repo/features/agent-wire";
-import type { InstalledSkillFilesRefusal } from "@repo/features/installed-skill-route-wire";
+import type { InstalledSkillRefusal } from "@repo/features/installed-skill-wire";
 import type { ModelProvider } from "@repo/features/models-wire";
 import type { RepositoryUnreached } from "@repo/features/repository-reach-wire";
 import { readEither } from "@repo/wire/effect";
@@ -87,7 +87,7 @@ export type HostedRefusal = {
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
   readonly skillName?: string;
-  readonly skillRefusal?: InstalledSkillFilesRefusal;
+  readonly skillRefusal?: InstalledSkillRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
   readonly refusedDevice?: RefusedDevice;
   readonly minimumVersion?: string;
@@ -240,11 +240,11 @@ export function credentialMissing(provider: ModelProvider): HostedRefusal {
   return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
 }
 
-/** A skill refused, by name where one was read, and why its files were where they were. */
+/** A skill refused, by name where one was read, and why where the store says. */
 export function installedSkillRefused(
   refusal: typeof HOSTED_REFUSAL.SKILL_NAME_TAKEN | typeof HOSTED_REFUSAL.SKILL_FILES_REFUSED,
   skillName: string | undefined,
-  skillRefusal?: InstalledSkillFilesRefusal,
+  skillRefusal?: InstalledSkillRefusal,
 ): HostedRefusal {
   return {
     ...refusal,

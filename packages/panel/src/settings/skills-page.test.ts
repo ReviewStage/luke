@@ -2,19 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
-  INSTALLED_SKILL_FILES_REFUSAL,
-  INSTALLED_SKILL_PROBLEM,
-  INSTALLED_SKILL_STANDING,
+  type InstalledSkillCandidate,
   type InstalledSkillPreview,
   type InstalledSkillSummary,
-  SKILL_AUDIT_RISK,
+  SKILL_PASTE_KIND,
+  UNSUPPORTED_PREVIEW,
 } from "@repo/features/installed-skill-route-wire";
 import { INSTALLED_SKILL_CALL_FAILURE } from "@repo/features/installed-skill-view";
 import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
-import { formatCount } from "@repo/features/number-format";
-import { parseSkillPaste, SKILL_PASTE_KIND } from "@repo/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -28,7 +24,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort, fakeAppBridge, quietHold } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
@@ -44,25 +39,23 @@ import { SkillsPage } from "./skills-page.js";
  * and drawn as the host lays them, the workspace's standing before the
  * account's own, each with its source and who installed it; a member who is
  * not an owner or admin sees a workspace skill's switch unavailable and
- * View alone in its ⋯; Update sends its act and offers no update after; View
- * reads the skill's text and files; Share asks in plain words, moves the
- * skill into the workspace, and says a taken name in the question; Remove
- * asks first; and an install lights its rows and says how to call one. In
- * the dialog, a command that names a skill is confirmed as its
- * card and Install names it; Browse them lists the rest keeping the tick,
- * a skill with problems never tickable; a skill it hands off to comes
- * along ticked, untickable, its SKILL.md read in place; what is installed
- * in the scope chosen is not counted; a name the repository lacks is said
- * and the list shown; only what would install scrolls; a refusal is said
- * in words; text folds to its size and asks when agents should use it;
- * and Everyone in the workspace is offered to every member, never in a
- * personal workspace. Synthetic names and ids.
+ * View alone in its ⋯; Update sends its act; View reads the skill's text
+ * and files; Share asks in plain words, moves the skill into the
+ * workspace, and says a taken name in the question; Remove asks first; and
+ * an install lights its rows. In the dialog, a GitHub source's skills are
+ * one list to tick, searched once it is long, the named one ticked, and
+ * Install sends the ticked ones with the commit previewed; a skill's text
+ * fills Name and Description from its frontmatter, Install waiting for a
+ * name by the rule and a description; a paste we do not install from says
+ * GitHub alone; a refusal is said in words; and Everyone in the workspace
+ * is offered to every member, never in a personal workspace. Synthetic
+ * names and ids.
  */
 
 const READER = "user-ada";
 const SHA = "3f9c2e1aa0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5";
 const COMMAND = "npx skills add vercel-labs/agent-skills --skill web-design-guidelines";
-const TEXT = "# PR style\n\nLead with the user-visible change.";
+const TEXT = "---\nname: pr-style\ndescription: How PRs read here.\n---\n\nLead with the change.";
 
 function skill(
   name: string,
@@ -101,98 +94,43 @@ const PR_STYLE = skill("pr-style", INSTALLED_SKILL_SCOPE.PERSONAL, {
   id: "22222222-2222-4222-8222-222222222222",
 });
 
-const SOURCE: InstalledSkillPreview = {
-  kind: SKILL_PASTE_KIND.SOURCE,
-  owner: "vercel-labs",
-  repo: "agent-skills",
-  ref: "main",
-  sha: SHA,
-  missing: [],
-  skills: [
-    {
-      name: "web-design-guidelines",
-      path: "skills/web",
-      fileCount: 4,
-      bytes: 22_000,
-      selected: true,
-      problems: [],
-    },
-    {
-      name: "react-best-practices",
-      path: "skills/react",
-      fileCount: 1,
-      bytes: 900,
-      selected: false,
-      problems: [],
-    },
-    {
-      name: "leaky",
-      path: "skills/leaky",
-      fileCount: 1,
-      bytes: 300,
-      selected: false,
-      problems: [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED],
-    },
-  ],
-};
-
-/** What the service previews of a skill's text: its name from its heading, and no description. */
-function textPreview(text: string): InstalledSkillPreview {
-  const paste = parseSkillPaste(text);
+function candidate(
+  name: string,
+  extra: Partial<InstalledSkillCandidate> = {},
+): InstalledSkillCandidate {
   return {
-    kind: SKILL_PASTE_KIND.TEXT,
-    ...(paste.kind === SKILL_PASTE_KIND.TEXT && paste.name !== undefined
-      ? { name: paste.name }
-      : {}),
-    bytes: new TextEncoder().encode(text).byteLength,
-    problems: [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING],
+    name,
+    path: `skills/${name}`,
+    bytes: 900,
+    selected: false,
+    fileCount: 1,
+    problems: [],
+    ...extra,
   };
 }
 
-/** mattpocock/skills with grill-me named: it hands off to grilling, ships scripts, and is rated. */
-const GRILL: Extract<InstalledSkillPreview, { kind: typeof SKILL_PASTE_KIND.SOURCE }> = {
-  kind: SKILL_PASTE_KIND.SOURCE,
-  owner: "mattpocock",
-  repo: "skills",
-  ref: "main",
-  sha: SHA,
-  missing: [],
-  skills: [
-    {
-      name: "grill-me",
-      description: "A relentless interview to sharpen a plan.",
-      path: "skills/grill-me",
-      fileCount: 2,
-      bytes: 410,
-      selected: true,
-      problems: [],
-      references: ["grilling"],
-      hasScripts: true,
-      markdown: "# Grill me\n\nHand off to `grilling`.",
-      audit: {
-        ath: { risk: SKILL_AUDIT_RISK.SAFE },
-        snyk: { risk: SKILL_AUDIT_RISK.HIGH },
-      },
-    },
-    {
-      name: "grilling",
-      description: "Runs the interview.",
-      path: "skills/grilling",
-      fileCount: 3,
-      bytes: 6000,
-      selected: false,
-      problems: [],
-    },
-    {
-      name: "tdd",
-      path: "skills/tdd",
-      fileCount: 1,
-      bytes: 900,
-      selected: false,
-      problems: [],
-    },
-  ],
-};
+/** A source's preview holding the skills given. */
+function sourceOf(skills: readonly InstalledSkillCandidate[]): InstalledSkillPreview {
+  return {
+    kind: SKILL_PASTE_KIND.SOURCE,
+    owner: "vercel-labs",
+    repo: "agent-skills",
+    ref: "main",
+    sha: SHA,
+    skills,
+    missing: [],
+  };
+}
+
+const SOURCE = sourceOf([
+  candidate("web-design-guidelines", {
+    description: "Review a UI against the guidelines.",
+    path: "skills/web",
+    bytes: 22_000,
+    selected: true,
+  }),
+  candidate("react-best-practices"),
+]);
 
 /** The skills the test's service holds, which its host lays on the document for every workspace held. */
 let stored: InstalledSkillSummary[] = [];
@@ -232,18 +170,28 @@ function laySkills(): void {
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Whether the next install is refused, for a credential in the named skill. */
 let refuseInstall = false;
-/** The names the next source preview says no folder holds. */
-let missingNames: string[] = [];
 /** Whether the workspace already holds a skill of the shared one's name. */
 let nameTaken = false;
 /** What the next source preview answers. */
 let sourcePreview: InstalledSkillPreview = SOURCE;
-/** How many of the next file reads go unanswered. */
-let unansweredFiles = 0;
 /** How many of the next previews the service never answers, which the port refuses. */
 let unreachedPreviews = 0;
 
 const roots: Root[] = [];
+
+/** What the service previews of a paste: a GitHub source's skills, a skill's text, or neither. */
+function previewOf(text: string): InstalledSkillPreview {
+  if (text.includes("\n")) {
+    return {
+      kind: SKILL_PASTE_KIND.TEXT,
+      name: "pr-style",
+      description: "How PRs read here.",
+      bytes: text.length,
+      problems: [],
+    };
+  }
+  return text.includes("gitlab") ? UNSUPPORTED_PREVIEW : sourcePreview;
+}
 
 beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
@@ -271,10 +219,8 @@ beforeEach(() => {
   });
   sent = [];
   refuseInstall = false;
-  missingNames = [];
   nameTaken = false;
   sourcePreview = SOURCE;
-  unansweredFiles = 0;
   unreachedPreviews = 0;
   fakeActPort({
     [ACT_KIND.INSTALLED_SKILLS_FOLLOW]: (payload) => {
@@ -283,10 +229,6 @@ beforeEach(() => {
       // Note that the host lays what it read once the hold is taken, never inside it.
       void Promise.resolve().then(laySkills);
       return quietHold();
-    },
-    [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, payload });
-      return Promise.resolve({ available: true, latestSha: "b".repeat(40) });
     },
     [ACT_KIND.INSTALLED_SKILLS_UPDATE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_UPDATE, payload });
@@ -329,30 +271,17 @@ beforeEach(() => {
         unreachedPreviews -= 1;
         return Promise.reject(new Error("offline"));
       }
-      return Promise.resolve(
-        /^(?:npx|https:)/u.test(payload.text)
-          ? { ...sourcePreview, missing: missingNames }
-          : textPreview(payload.text),
-      );
-    },
-    [ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE]: (payload) => {
-      sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE, payload });
-      if (unansweredFiles > 0) {
-        unansweredFiles -= 1;
-        return Promise.resolve({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
-      }
-      return Promise.resolve({ markdown: "# Grilling" });
+      return Promise.resolve(previewOf(payload.text));
     },
     [ACT_KIND.INSTALLED_SKILLS_INSTALL]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_INSTALL, payload });
       if (refuseInstall) {
         return Promise.resolve({
-          failure: INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED,
+          failure: INSTALLED_SKILL_CALL_FAILURE.CREDENTIAL,
           skillName: "web-design-guidelines",
-          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE,
         });
       }
-      const made = (payload.skills ?? ["web-design-guidelines"]).map((name, at) =>
+      const made = (payload.skills ?? [payload.name ?? "pr-style"]).map((name, at) =>
         skill(name, payload.scope, { id: `33333333-3333-4333-8333-33333333333${at}` }),
       );
       // The host draws an install's skills as it answers.
@@ -509,6 +438,9 @@ async function choose(name: string, words: string): Promise<void> {
   await settle();
 }
 
+/** The search over a long list of found skills. */
+const SEARCH = 'input[aria-label="Search skills"]';
+
 /** The dialog standing over the page. */
 const dialog = (role = "dialog") =>
   document.querySelector<HTMLElement>(`[role="${role}"]`) ?? assert.fail(`no ${role}`);
@@ -556,20 +488,6 @@ test("a skill's row leads with the book in the settings mark slot, and hangs the
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "/release-notes");
   assert.equal(card?.querySelector(".ui-hover-card-sub")?.textContent, "Workspace skill");
   assert.equal(card?.querySelector('.ui-hover-card-row[data-look="detail"]'), null);
-});
-
-test("a GitHub skill whose folder moved offers Update in its ⋯, which updates it and goes", async () => {
-  await mountPage();
-
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), [
-    { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
-  ]);
-  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Remove"]);
-  await choose("release-notes", "Update");
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
-    { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
-  ]);
-  assert.deepEqual(menuOf("release-notes"), ["Open", "Remove"]);
 });
 
 test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
@@ -663,32 +581,6 @@ test("Add skill opens with its box focused, not the card", async () => {
   assert.ok(document.activeElement === document.querySelector("textarea"), "the box has focus");
 });
 
-test("an install lights its own rows once", async () => {
-  await mountPage();
-
-  act(() => button("Add skill").click());
-  await paste(COMMAND);
-  act(() => button("Browse them").click());
-  act(() => checkboxOf("react-best-practices").click());
-  act(() => button("Install 2 skills").click());
-  await settle();
-
-  const lit = [...document.querySelectorAll(".ui-settings-row[data-landed]")].map(
-    (each) => each.querySelector(".ui-settings-row-label")?.textContent,
-  );
-  assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
-});
-
-test("a workspace skill a member may not change draws its switch unavailable and View alone in its ⋯, and asks no update", async () => {
-  stored = [{ ...RELEASE_NOTES, manageable: false }, PR_STYLE];
-  await mountPage(workspace({ role: WORKSPACE_ROLE.MEMBER }));
-
-  assert.equal(switchOf("release-notes").disabled, true);
-  assert.equal(switchOf("pr-style").disabled, false);
-  assert.deepEqual(menuOf("release-notes"), ["Open"]);
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE), []);
-});
-
 test("a personal workspace lists the account's own skills alone", async () => {
   stored = [PR_STYLE];
   await mountPage(workspace({ personal: true }));
@@ -699,20 +591,54 @@ test("a personal workspace lists the account's own skills alone", async () => {
   );
 });
 
-test("a command that names a skill is confirmed as its card, with no list, and Install names it and sends it", async () => {
+test("a GitHub skill offers Update in its ⋯, which sends its act", async () => {
+  await mountPage();
+
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Remove"]);
+  await choose("release-notes", "Update");
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
+    { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
+  ]);
+});
+
+test("an install lights its own rows once", async () => {
+  await mountPage();
+
+  act(() => button("Add skill").click());
+  await paste(COMMAND);
+  act(() => checkboxOf("react-best-practices").click());
+  act(() => button("Install 2 skills").click());
+  await settle();
+
+  const lit = [...document.querySelectorAll(".ui-settings-row[data-landed]")].map(
+    (each) => each.querySelector(".ui-settings-row-label")?.textContent,
+  );
+  assert.deepEqual(lit, ["react-best-practices", "web-design-guidelines"]);
+});
+
+test("a workspace skill a member may not change draws its switch unavailable and View alone in its ⋯", async () => {
+  stored = [{ ...RELEASE_NOTES, manageable: false }, PR_STYLE];
+  await mountPage(workspace({ role: WORKSPACE_ROLE.MEMBER }));
+
+  assert.equal(switchOf("release-notes").disabled, true);
+  assert.equal(switchOf("pr-style").disabled, false);
+  assert.deepEqual(menuOf("release-notes"), ["Open"]);
+});
+
+test("a GitHub source lists its skills to tick, the one the paste named ticked, and Install sends the ticked ones with the commit previewed", async () => {
   const installed = await mountDialog();
   await paste(COMMAND);
 
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
     { workspaceId: "workspace-stage", text: COMMAND },
   ]);
-  const text = document.body.textContent ?? "";
-  assert.match(text, /Add web-design-guidelines/u);
-  assert.match(text, /From vercel-labs\/agent-skills @ 3f9c2e1/u);
-  assert.match(text, /4 files · 22 kB · skills\/web/u);
-  assert.match(text, /2 other skills in this repository/u);
-  assert.equal(document.querySelector("textarea"), null);
-  assert.equal(document.querySelector('input[type="checkbox"]'), null);
+  assert.match(
+    document.body.textContent ?? "",
+    /web-design-guidelinesReview a UI against the guidelines\.skills\/web · 22 kB/u,
+  );
+  assert.equal(checkboxOf("web-design-guidelines").checked, true);
+  assert.equal(checkboxOf("react-best-practices").checked, false);
+  assert.equal(document.querySelector(SEARCH), null, "a short list has no search");
 
   act(() => primary().click());
   await settle();
@@ -722,6 +648,7 @@ test("a command that names a skill is confirmed as its card, with no list, and I
       workspaceId: "workspace-stage",
       scope: INSTALLED_SKILL_SCOPE.PERSONAL,
       skills: ["web-design-guidelines"],
+      sha: SHA,
     },
   ]);
   assert.deepEqual(
@@ -730,183 +657,39 @@ test("a command that names a skill is confirmed as its card, with no list, and I
   );
 });
 
-test("Browse them lists every skill by name keeping the tick, one with problems never tickable, and Change opens the box with the paste", async () => {
-  await mountDialog();
-  await paste(COMMAND);
-
-  act(() => button("Browse them").click());
-  assert.match(document.body.textContent ?? "", /Add skills from vercel-labs\/agent-skills/u);
-  const names = [...document.querySelectorAll('[aria-label="Skills found"] label')].map(
-    (each) => each.textContent?.split(/[A-Z]/u)[0],
-  );
-  assert.deepEqual(names, ["leaky", "react-best-practices", "web-design-guidelines"]);
-  assert.equal(checkboxOf("web-design-guidelines").checked, true);
-  assert.equal(checkboxOf("leaky").disabled, true);
-  assert.match(document.body.textContent ?? "", /Holds what looks like a credential/u);
-
-  act(() => checkboxOf("react-best-practices").click());
-  assert.equal(primary().textContent, "Install 2 skills");
-
-  act(() => button("Change").click());
-  assert.equal(document.querySelector("textarea")?.value, COMMAND);
-});
-
-test("a skill that hands off to another brings it along ticked, which can be unticked, with its scripts and ratings shown and its SKILL.md opened in place", async () => {
-  sourcePreview = GRILL;
-  await mountDialog();
-  await paste(COMMAND);
-
-  const text = document.body.textContent ?? "";
-  assert.match(text, /Also installing grilling/u);
-  assert.match(text, /grill-me hands off to it/u);
-  assert.match(text, /scripts/u);
-  assert.match(text, /Gen safe·Snyk high risk/u);
-  assert.equal(primary().textContent, "Install 2 skills");
-
-  act(() => checkboxOf("Also installing grilling").click());
-  assert.equal(primary().textContent, "Install grill-me");
-  act(() => checkboxOf("Also installing grilling").click());
-
-  const views = () =>
-    [...document.querySelectorAll("button")].filter((each) => each.textContent === "View SKILL.md");
-  act(() => views()[0]?.click());
-  assert.equal(
-    document.querySelector('[aria-label="grill-me\'s SKILL.md"]')?.textContent,
-    "# Grill me\n\nHand off to `grilling`.",
-  );
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE), []);
-
-  act(() => views()[0]?.click());
-  await settle();
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE), [
-    {
-      workspaceId: "workspace-stage",
-      owner: "mattpocock",
-      repo: "skills",
-      sha: SHA,
-      path: "skills/grilling",
-    },
+test("a long list is searched by name and description", async () => {
+  sourcePreview = sourceOf([
+    ...Array.from({ length: 8 }, (_, at) => candidate(`filler-${at}`)),
+    candidate("release", { description: "Write the changelog." }),
   ]);
-  assert.equal(
-    document.querySelector('[aria-label="grilling\'s SKILL.md"]')?.textContent,
-    "# Grilling",
-  );
+  await mountDialog();
+  await paste("acme/skills");
 
-  act(() => primary().click());
+  typeInto(
+    document.querySelector<HTMLInputElement>(SEARCH) ?? assert.fail("no search"),
+    "changelog",
+  );
   await settle();
-  assert.deepEqual(
-    (sentOf(ACT_KIND.INSTALLED_SKILLS_INSTALL)[0] as { skills: string[] } | undefined)?.skills,
-    ["grill-me", "grilling"],
+  const listed = [...document.querySelectorAll('input[type="checkbox"]')].map(
+    (each) => each.closest("label")?.textContent,
   );
+  assert.deepEqual(listed, ["releaseWrite the changelog.skills/release · 900 B"]);
 });
 
-test("a GitHub link to a skill's folder pasted alone is previewed as its repository, not read as text", async () => {
-  const link = "https://github.com/vercel-labs/agent-skills/tree/main/skills/web";
-  await mountDialog();
-  await paste(link);
-
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
-    { workspaceId: "workspace-stage", text: link },
-  ]);
-  assert.match(document.body.textContent ?? "", /Add web-design-guidelines/u);
-  assert.equal(primary().textContent, "Install web-design-guidelines");
-});
-
-test("a browsed skill's SKILL.md opens beside its box, and a read that failed is asked again", async () => {
-  sourcePreview = GRILL;
-  unansweredFiles = 1;
-  await mountDialog();
-  await paste(COMMAND);
-  act(() => button("Browse them").click());
-
-  const view = () =>
-    [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
-      (each) => each.textContent === "View SKILL.md" || each.textContent === "Hide SKILL.md",
-    )[2] ?? assert.fail("no View for tdd");
-  act(() => view().click());
-  await settle();
-  assert.match(document.body.textContent ?? "", /The service could not be reached/u);
-  act(() => view().click());
-  act(() => view().click());
-  await settle();
-  assert.equal(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE).length, 2);
-  assert.equal(document.querySelector('[aria-label="tdd\'s SKILL.md"]')?.textContent, "# Grilling");
-  assert.equal(checkboxOf("tdd").checked, false);
-});
-
-test("a skill already installed for the scope chosen is marked and not counted, and Everyone in the workspace counts it again", async () => {
-  sourcePreview = {
-    ...GRILL,
-    skills: GRILL.skills.map((each) =>
-      each.name === "grilling"
-        ? {
-            ...each,
-            installed: [
-              {
-                id: "33333333-3333-4333-8333-333333333333",
-                scope: INSTALLED_SKILL_SCOPE.PERSONAL,
-                standing: INSTALLED_SKILL_STANDING.CURRENT,
-              },
-            ],
-          }
-        : each,
-    ),
-  };
-  await mountDialog();
-  await paste(COMMAND);
-
-  assert.match(document.body.textContent ?? "", /Also installing grillingInstalled/u);
-  assert.equal(checkboxOf("Also installing grilling").disabled, true);
-  assert.equal(primary().textContent, "Install grill-me");
-  act(() => button("Everyone in Stage").click());
-  assert.equal(primary().textContent, "Install 2 skills");
-});
-
-test("a named skill the repository lacks is said plainly, and every skill it holds is listed to pick from", async () => {
-  missingNames = ["web-design-guide"];
-  await mountDialog();
-  await paste(COMMAND);
-
-  assert.match(
-    document.body.textContent ?? "",
-    /No skill named web-design-guide in vercel-labs\/agent-skills\. Pick from its 3 skills\./u,
-  );
-  assert.ok(checkboxOf("react-best-practices"));
-  assert.ok(document.querySelector('input[aria-label="Search skills"], input[type="search"]'));
-});
-
-test("a refused install says which skill and why in words, keeps the dialog, and marks that skill so it no longer installs", async () => {
-  refuseInstall = true;
-  await mountDialog();
-  mountAnnouncer();
-  await paste(COMMAND);
-
-  act(() => primary().click());
-  await settle();
-  assert.match(
-    document.body.textContent ?? "",
-    /web-design-guidelines has a file larger than 3 MB\./u,
-  );
-  assert.equal(
-    announcedAsAlert(),
-    "Has a file larger than 3 MB",
-    "the skill's mark is announced as an alert",
-  );
-  assert.match(document.body.textContent ?? "", /Has a file larger than 3 MB/u);
-  assert.equal(primary().textContent, "Install");
-  assert.equal(primary().disabled, true);
-});
-
-test("pasted text folds to its size, its name suggested and editable, and asks when agents should use it before Install", async () => {
+test("pasted text fills Name and Description from its frontmatter, both editable, and Install waits for a name by the rule and a description", async () => {
   await mountDialog();
   await paste(TEXT);
 
-  const text = document.body.textContent ?? "";
-  assert.match(text, /Pasted text · 46 B/u);
   assert.equal(fieldOf("Name").value, "pr-style");
-  assert.equal(primary().textContent, "Install pr-style");
+  assert.equal(fieldOf("When should agents use it?").value, "How PRs read here.");
+  typeInto(fieldOf("Name"), "PR Style");
   assert.equal(primary().disabled, true);
-  typeInto(fieldOf("When should agents use it?"), "How PRs read here.");
+  typeInto(fieldOf("Name"), "review-style");
+  typeInto(fieldOf("When should agents use it?"), " ");
+  assert.equal(primary().disabled, true);
+  typeInto(fieldOf("When should agents use it?"), "How reviews read here.");
+  assert.equal(primary().textContent, "Install review-style");
+
   act(() => primary().click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_INSTALL), [
@@ -914,86 +697,32 @@ test("pasted text folds to its size, its name suggested and editable, and asks w
       text: TEXT,
       workspaceId: "workspace-stage",
       scope: INSTALLED_SKILL_SCOPE.PERSONAL,
-      name: "pr-style",
-      description: "How PRs read here.",
+      name: "review-style",
+      description: "How reviews read here.",
     },
   ]);
 });
 
-test("the When-to-use box stops at the description cap and counts toward it", async () => {
+test("a paste that is no GitHub repository says GitHub alone, and Install stays off", async () => {
   await mountDialog();
-  await paste(TEXT);
+  await paste("https://gitlab.com/acme/skills");
 
-  const box = fieldOf("When should agents use it?");
-  assert.equal(
-    box instanceof HTMLTextAreaElement && box.maxLength,
-    TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
-  );
-  assert.equal(document.querySelector(".ui-length-counter"), null);
-  typeInto(box, "x".repeat(Math.ceil(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS * 0.9)));
-  await settle();
-  assert.match(
-    document.querySelector(".ui-length-counter")?.textContent ?? "",
-    new RegExp(`/${formatCount(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS)}$`, "u"),
-  );
-});
-
-test("a name with a bad shape is marked invalid and says why on the Name field alone", async () => {
-  await mountDialog();
-  await paste(TEXT);
-  typeInto(fieldOf("When should agents use it?"), "How PRs read here.");
-  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null, "a good name is not marked");
-
-  typeInto(fieldOf("Name"), "PR Style");
-  await settle();
-  const name = fieldOf("Name");
-  const error = name.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
-  assert.equal(name.getAttribute("aria-invalid"), "true");
-  assert.equal(error?.textContent, "Name must be lowercase words joined by hyphens");
-  assert.ok(
-    name
-      .getAttribute("aria-describedby")
-      ?.split(" ")
-      .includes(error?.id ?? "missing"),
-  );
-  assert.equal(fieldOf("When should agents use it?").getAttribute("aria-invalid"), null);
-  assert.equal(
-    document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length,
-    1,
-    "the problem is said once, on its field, not again under both",
-  );
+  assert.match(document.body.textContent ?? "", /Only GitHub repositories\./u);
   assert.equal(primary().disabled, true);
 });
 
-test("a When-to-use that runs past the cap is marked invalid and says so on its own field alone", async () => {
+test("a refused install says which skill and why in words, and keeps the dialog", async () => {
+  refuseInstall = true;
   await mountDialog();
-  await paste(TEXT);
+  await paste(COMMAND);
 
-  const box = fieldOf("When should agents use it?");
-  typeInto(box, "x".repeat(TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS + 1));
+  act(() => primary().click());
   await settle();
-  const error = box.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
-  assert.equal(box.getAttribute("aria-invalid"), "true");
-  assert.equal(
-    error?.textContent,
-    `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
+  assert.match(
+    document.body.textContent ?? "",
+    /web-design-guidelines holds what looks like a credential\. A skill must never carry one\./u,
   );
-  assert.ok(
-    box
-      .getAttribute("aria-describedby")
-      ?.split(" ")
-      .includes(error?.id ?? "missing"),
-  );
-  assert.equal(fieldOf("Name").getAttribute("aria-invalid"), null);
-  assert.equal(document.querySelectorAll('[data-slot="field-error"]:not(:empty)').length, 1);
-});
-
-test("a source on another host says only GitHub for now and asks the service nothing", async () => {
-  await mountDialog();
-  await paste("npx skills add https://gitlab.com/acme/skills");
-
-  assert.match(document.body.textContent ?? "", /Only GitHub sources\./u);
-  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), []);
+  assert.ok(document.querySelector('[role="dialog"]'), "the dialog stands");
 });
 
 test("Everyone in the workspace is offered to a member and installs there, and not in a personal workspace", async () => {
@@ -1010,18 +739,6 @@ test("Everyone in the workspace is offered to a member and installs there, and n
   for (const root of roots.splice(0)) act(() => root.unmount());
   await mountDialog(workspace({ personal: true }));
   assert.ok(!(document.body.textContent ?? "").includes("Everyone in Stage"));
-});
-
-test("a description typed for one paste is never sent with the next", async () => {
-  await mountDialog();
-  await paste(TEXT);
-  typeInto(fieldOf("When should agents use it?"), "How PRs read here.");
-
-  act(() => button("Edit").click());
-  await paste("# Review style\n\nAsk for tests.");
-  assert.equal(fieldOf("When should agents use it?").value, "");
-  assert.equal(fieldOf("Name").value, "review-style");
-  assert.equal(primary().disabled, true);
 });
 
 /** Presses Escape in the dialog's box, as a member does with the caret in it. */
@@ -1066,5 +783,5 @@ test("a preview the service never answers says it could not be read, and Retry a
     { workspaceId: "workspace-stage", text: COMMAND },
     { workspaceId: "workspace-stage", text: COMMAND },
   ]);
-  assert.match(document.body.textContent ?? "", /Add web-design-guidelines/u);
+  assert.equal(checkboxOf("web-design-guidelines").checked, true);
 });

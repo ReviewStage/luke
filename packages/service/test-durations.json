@@ -128,7 +128,6 @@
   "src/http/http-effect.test.ts": 19,
   "src/http/origin-guard.test.ts": 34,
   "src/installed-skills/installed-skills-procedures.test.ts": 3240,
-  "src/installed-skills/skill-audit.test.ts": 37,
   "src/integrations/connection-door.test.ts": 4159,
   "src/integrations/connection-tools.test.ts": 5,
   "src/integrations/integration-connect.test.ts": 43,
