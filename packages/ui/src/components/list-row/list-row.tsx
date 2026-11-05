@@ -158,10 +158,12 @@ export type { ListSelection } from "../selection/list-selection.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its first line, its
  * title's or its lead's where that stands over the title, the lines under
  * it running the row's whole width and its leading mark level with the
- * first; or, in a rail whose rows count what each holds
- * (`LIST_ROW_META.LAST`), at the end of its last line, the description's,
- * on that line's baseline, the title over both running the row's whole
- * width and its leading mark level with the title's first line. A row
+ * first, though a row with no line under its first keeps it at its
+ * middle, its marks and acts centered on the row as its title is; or, in a
+ * rail whose rows count what each holds (`LIST_ROW_META.LAST`), at the
+ * end of its last line, the description's, on that line's baseline, the
+ * title over both running the row's whole width and its leading mark level
+ * with the title's first line. A row
  * whose names run long may let its title run to a second line before it
  * is cut short (`LIST_ROW_TITLE_LINES.TWO`), ending then in an ellipsis
  * rather than a fade. A row's acts stand beside it, or, in a list
@@ -784,6 +786,15 @@ export function ListRow({
   // Note that a lead over the title takes the first line, the one the metadata ends.
   const above = leadAt === LIST_ROW_LEAD.ABOVE && lead !== undefined;
   const firstLine = above ? leadMark : heading;
+  // Note that a row of one line keeps its metadata at its middle, its first line, because a dense row centers its title in its height.
+  const metaPlace =
+    metaAt === LIST_ROW_META.TITLE &&
+    titleLines === LIST_ROW_TITLE_LINES.ONE &&
+    !said(description) &&
+    lead === undefined &&
+    !said(attachments)
+      ? LIST_ROW_META.MIDDLE
+      : metaAt;
   // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
   const namedBy =
     describedAs === undefined
@@ -812,7 +823,7 @@ export function ListRow({
             {attachments}
           </span>
         ) : null}
-        {metaAt === LIST_ROW_META.TITLE ? (
+        {metaPlace === LIST_ROW_META.TITLE ? (
           <span className="ui-list-row-head">
             {firstLine}
             {end}
@@ -834,9 +845,9 @@ export function ListRow({
             <ReplayWords masked={descriptionReplayMasked}>{description}</ReplayWords>
           </span>
         ) : null}
-        {metaAt === LIST_ROW_META.LAST ? end : null}
+        {metaPlace === LIST_ROW_META.LAST ? end : null}
       </span>
-      {metaAt === LIST_ROW_META.MIDDLE ? end : null}
+      {metaPlace === LIST_ROW_META.MIDDLE ? end : null}
     </>
   );
   const press = onPress ? (
@@ -947,7 +958,7 @@ export function ListRow({
         {...nestedItem(depth, nest)}
         ref={place === undefined ? (onPress ? undefined : ref) : itemRef}
         className={ROW_CLASS}
-        data-meta={metaAt === LIST_ROW_META.MIDDLE ? undefined : metaAt}
+        data-meta={metaPlace === LIST_ROW_META.MIDDLE ? undefined : metaPlace}
         data-lead={above ? LIST_ROW_LEAD.ABOVE : undefined}
         data-actions={actsOnHover ? LIST_ROW_ACTIONS.HOVER : undefined}
         data-current={current === undefined ? undefined : "true"}
