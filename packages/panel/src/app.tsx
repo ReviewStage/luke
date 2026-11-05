@@ -406,6 +406,22 @@ function AppWindow(): React.JSX.Element {
     leaveGuard,
     room,
   });
+  // An account leaving, signed out, deleted, or switched, takes the window's place with it, so the
+  // next account lands on Home rather than on the Settings page the last one left from. Note that
+  // the leave passes the guard, because the unsaved work it would ask about was the account's that left.
+  const placeOwner = useRef(accountKey);
+  const { pass: passLeave } = leaveGuard;
+  const { onGoHome } = tasks;
+  useEffect(() => {
+    const owner = placeOwner.current;
+    placeOwner.current = accountKey;
+    if (owner === undefined || owner === accountKey) return;
+    passLeave(() => {
+      setTab(PANEL_TAB.TASKS);
+      enterSettings();
+      onGoHome();
+    });
+  }, [accountKey, passLeave, setTab, enterSettings, onGoHome]);
   // Session replay starts once the renderer is idle, filed under the workspace the sidebar lists.
   useSessionReplay(run, useAppSlice(APP_SLICE.SESSION_REPLAY), tasks.workspace?.id);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.

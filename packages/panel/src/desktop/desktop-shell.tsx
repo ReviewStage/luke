@@ -854,7 +854,12 @@ export function DesktopShell({
             <SetupSteps
               tasks={tasks}
               accountId={signedInId}
-              onFinish={() => setFinishedHere(signedInId)}
+              onFinish={() => {
+                setFinishedHere(signedInId);
+                // Finishing setup lets the app in on Home, wherever the window stood before it.
+                onTabChange(PANEL_TAB.TASKS);
+                tasks.onGoHome();
+              }}
             />
           ) : null}
         </div>
