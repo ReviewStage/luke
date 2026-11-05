@@ -603,6 +603,21 @@
   transform: none;
 }
 
+/* The gap between the floating card and the window's left edge is the
+   card's own to the pointer, so a peek opened at the edge (desktop.css's
+   `.sidebar-peek-edge`, gone once it opens) hears the pointer leave it
+   there, as it did when the sidebar stood flush to the edge. */
+:where(:root):not([data-ui-room="narrow"])
+  .desktop-shell:is([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .desktop-sidebar::before {
+  position: absolute;
+  top: 0;
+  bottom: calc(-1 * var(--sheet-gap));
+  left: calc(-1 * var(--sheet-gap));
+  width: var(--sheet-gap);
+  content: "";
+}
+
 /* A narrow room's sidebar is a drawer: the same float, standing on the
    window's left edge over the work, as wide as a phone's drawer stands
    rather than the sidebar's dragged width, which a drawer has no edge to

@@ -278,6 +278,7 @@
   --ui-color-shadow: rgba(0, 0, 0, 0.5);
   --ui-color-shadow-deep: rgba(0, 0, 0, 0.6);
   --ui-color-float-solid: var(--ui-color-overlay);
+  --ui-color-float: color-mix(in srgb, var(--ui-color-float-solid) 80%, transparent);
   --ui-shadow-switch-thumb: none;
 
   /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
