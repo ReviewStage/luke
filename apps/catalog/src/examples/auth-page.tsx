@@ -211,7 +211,7 @@ function AuthPages(): React.JSX.Element {
                   at={3}
                   total={4}
                   onBack={IGNORE}
-                  next={{ label: "Continue", onPress: IGNORE, disabled: true }}
+                  onSkip={IGNORE}
                 />
               }
               exit={{ label: "Sign out", onPress: IGNORE }}

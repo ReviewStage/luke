@@ -54,8 +54,8 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * so a trip finished in the browser lands on its own.
  */
 
-/** What setup says over GitHub's cards, which setup requires: agents work in the account's repositories. */
-export const GITHUB_REQUIRED = "Agents work in your repositories and open pull requests.";
+/** What setup says over GitHub's cards, which setup lets be skipped: agents work in the account's repositories. */
+export const GITHUB_PURPOSE = "Agents work in your repositories and open pull requests.";
 
 /** What the done line says each route reaches its repositories through. */
 const ROUTE_WORDS = {

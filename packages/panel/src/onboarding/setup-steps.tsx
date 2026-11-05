@@ -23,7 +23,7 @@ import { AgentConnectSection } from "../settings/agent-auth-section.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 import { keptKey, useKept } from "../use-kept.js";
-import { GITHUB_REQUIRED, GitHubSetup } from "./setup-github.js";
+import { GITHUB_PURPOSE, GitHubSetup } from "./setup-github.js";
 import {
   SETUP_AUDIENCE,
   SETUP_STEP,
@@ -41,9 +41,9 @@ import { ToolRows } from "./setup-tools.js";
  * Each card is the sign-in's own, so setup reads as the sign-in going on,
  * and each offers a quiet Sign out, since setup stands with no sidebar.
  * An account invited into a team's workspace starts on Connect an agent
- * alone. An agent and GitHub are required: their steps go on only once
- * Claude or Codex is connected and the workspace reaches a repository. The
- * team's workspace may be skipped, and the tools need nothing done. Finish
+ * alone. An agent is required: its step goes on only once Claude or Codex
+ * is connected. The team's workspace and GitHub may be skipped, and the
+ * tools need nothing done. Finish
  * lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
  * stands once on every machine.
@@ -201,13 +201,14 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
   // A team's workspace made and then left for Just me is not the one GitHub is installed on.
   const workspaceId =
     (audience === SETUP_AUDIENCE.TEAM ? team : undefined) ?? tasks.newTask.workspaceId;
-  // Note that no step's foot offers Skip but the team's, which draws its own: an agent and GitHub go on only once done, and the rest need nothing done.
-  const foot = (done: boolean, label = "Continue") => (
+  // Note that a skippable step offers Skip until done and Continue after it; the team's draws its own foot.
+  const foot = (done: boolean, label = "Continue", skippable = false) => (
     <AuthStepFoot
       at={at + 1}
       total={steps.length}
       onBack={back}
-      next={{ label, onPress: forward, disabled: !done }}
+      onSkip={skippable && !done ? forward : undefined}
+      next={done || !skippable ? { label, onPress: forward, disabled: !done } : undefined}
     />
   );
   const exit = {
@@ -313,8 +314,8 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
         mark={<ProductMark />}
         exit={exit}
         title="Connect GitHub"
-        description={GITHUB_REQUIRED}
-        foot={foot(reached)}
+        description={GITHUB_PURPOSE}
+        foot={foot(reached, "Continue", true)}
       >
         {workspaceId === undefined ? null : (
           <GitHubSetup key={workspaceId} workspaceId={workspaceId} onReached={onReached} />
