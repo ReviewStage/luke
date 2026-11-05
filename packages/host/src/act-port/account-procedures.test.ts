@@ -79,7 +79,7 @@ function windowPort(
     accountSnapshot: () => Effect.succeed(Option.some(SIGNED_IN)),
     supportAccess: (grant) =>
       Effect.sync(() => happened.push(["supportAccess", grant])).pipe(
-        Effect.as({ supportAccessUntil: null }),
+        Effect.as({ supportAccessUntil: grant ? Date.UTC(2026, 10, 12) : null }),
       ),
   };
   port = testActPort(

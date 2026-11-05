@@ -63,7 +63,8 @@ export function ViewingAsBanner({
       }
     >
       Viewing as {who}
-      {refusal === undefined ? null : ` · ${refusal}`}
+      {/* A refusal is said as it arrives, since the press that asked stays where it was. */}
+      {refusal === undefined ? null : <span role="alert">{` · ${refusal}`}</span>}
     </Banner>
   );
 }
