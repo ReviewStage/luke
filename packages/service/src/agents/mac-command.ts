@@ -159,10 +159,9 @@ const readInput = readEither(RUN_ON_MAC_INPUT);
 export const RUN_ON_MAC_TOOL = {
   name: AGENT_TOOL.RUN_ON_MAC,
   description:
-    "Run one shell command on the Mac of the member your task is assigned to, or of the " +
-    "developer who started you where no one is assigned or you work on no task, in their login " +
-    "shell from their home folder, and read what it printed. Their Mac may ask them first, and " +
-    "they may decline, in which case the call answers `not-run`. It reaches whatever their account on the Mac reaches: their local checkouts and " +
+    "Run one shell command on the developer's own Mac, in their login shell from their home " +
+    "folder, and read what it printed. The developer's Mac may ask them first, and they may " +
+    "decline, in which case the call answers `not-run`. It reaches whatever the developer's account on the Mac reaches: their local checkouts and " +
     "uncommitted work, installed tools, running servers. Use it for what only the Mac has; " +
     "read the task's repository where you have it. Nothing reads stdin, so a command that asks " +
     `for input fails. It is killed after ${MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS} seconds ` +
