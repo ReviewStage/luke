@@ -1,9 +1,10 @@
 -- GitHub's deliveries find the agents on a branch or a pull request by the repository lowercased and the
 -- branch exactly, on the agent row and on its extra repositories' rows. The migrator runs every folder
--- inside one transaction, so CONCURRENTLY is unavailable here. agent_repository is days old and holds a
--- handful of rows. The agent index is partial, over the agents that opened a pull request alone, so its
--- build reads the table once and writes few entries, but it holds the agent's SHARE lock while it builds,
--- which blocks the writes every turn makes, so the lock is taken first as
+-- inside one transaction, so CONCURRENTLY is unavailable here. Measured on the luke project's default
+-- branch 2026-11-05 15:10 UTC: agent held 3,520 rows (3,005 with a branch) in an 8 MB heap of 1,029
+-- pages, and the scan and sort the agent index's build does over it read in 5 ms; agent_repository held
+-- none. So each build holds its table's SHARE lock for milliseconds and needs no online step before the
+-- deploy. Note that the agent row is written on every turn, so its lock is taken first as
 -- 20261105035140_task_agent_read takes its locks, after GitLab's with_lock_retries
 -- (https://docs.gitlab.com/development/migration_style_guide/#retry-mechanism-when-acquiring-database-locks):
 -- under a short lock_timeout of its own, letting it go and backing off holding none between attempts, so
