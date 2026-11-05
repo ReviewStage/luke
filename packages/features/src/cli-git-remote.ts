@@ -19,15 +19,20 @@ const GITHUB_HOSTS: ReadonlySet<string> = new Set(["github.com", "www.github.com
 /** An scp-like ssh remote: an optional user, the host, a colon, and the path, with no scheme. */
 const SCP_REMOTE = /^(?:[^@/:]+@)?([^/:]+):(.+)$/u;
 
+/** What separates a path's segments, trimmed from both of its ends. */
+const PATH_SEPARATOR = "/";
+
 /** The schemes a remote address may name. */
 const REMOTE_SCHEMES: ReadonlySet<string> = new Set(["ssh:", "https:", "http:", "git:"]);
 
 /** A path's `owner/name`, its `.git` and any separators around it dropped, where it is GitHub's shape. */
 function repositoryOfPath(path: string): string | undefined {
-  const named = path
-    .replace(/^\/+|\/+$/gu, "")
-    .replace(/\.git$/u, "")
-    .replace(/\/+$/u, "");
+  // Note that the separators are trimmed by walking in from each end rather than by a pattern, since a pattern anchored at the end backtracks over a long run of them.
+  let start = 0;
+  let end = path.length;
+  while (start < end && path[start] === PATH_SEPARATOR) start += 1;
+  while (end > start && path[end - 1] === PATH_SEPARATOR) end -= 1;
+  const named = path.slice(start, end).replace(/\.git$/u, "");
   return GITHUB_REPOSITORY_PATTERN.test(named) ? named : undefined;
 }
 
