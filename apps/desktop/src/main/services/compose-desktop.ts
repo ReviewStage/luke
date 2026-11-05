@@ -56,13 +56,18 @@ import { createWindowService, type WindowService } from "./window-service";
 
 /**
  * Every capability the desktop answers itself, but Install command-line tool
- * before this build names a release of the command (`CLI_RELEASE`): until
- * then the install script has none to install, so the row offers the npm
- * command alone, as a browser tab does.
+ * in a live run before this build names a release of the command
+ * (`CLI_RELEASE`): until then the install script has none to install, so the
+ * row offers the npm command alone, as a browser tab does. Note that a
+ * fixture run keeps it, because its settings fixture answers the install
+ * with a staged one rather than running the script.
  */
-const DESKTOP_CLIENT_CAPABILITIES = ALL_CLIENT_CAPABILITIES.filter(
-  (capability) => capability !== HOST_CAPABILITY.CLI_INSTALL || CLI_RELEASE !== undefined,
-);
+function desktopClientCapabilities(fixtureMode: boolean) {
+  return ALL_CLIENT_CAPABILITIES.filter(
+    (capability) =>
+      capability !== HOST_CAPABILITY.CLI_INSTALL || fixtureMode || CLI_RELEASE !== undefined,
+  );
+}
 
 /**
  * The composition, as the bridge registration reads it. The keychain and the
@@ -224,7 +229,7 @@ export function composeDesktop(
           config,
           updateEngine !== undefined,
           // The desktop answers every capability a client can, beside the concerns its host runs.
-          hostCapabilities(host.concerns, DESKTOP_CLIENT_CAPABILITIES),
+          hostCapabilities(host.concerns, desktopClientCapabilities(config.launch.fixtureMode)),
         ),
         services,
       );
