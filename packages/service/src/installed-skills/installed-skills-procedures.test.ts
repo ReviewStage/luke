@@ -21,7 +21,11 @@ import {
   installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
 } from "@repo/features/installed-skill-route-wire";
-import { INSTALLED_SKILL_SCOPE, INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
+import {
+  INSTALLED_SKILL_BOUNDS,
+  INSTALLED_SKILL_SCOPE,
+  INSTALLED_SKILL_SOURCE,
+} from "@repo/features/installed-skill-wire";
 import { SKILL_PASTE_KIND } from "@repo/features/skill-paste";
 import { unparsedWire, type WireBoundaryInput } from "@repo/wire";
 import { readEither } from "@repo/wire/effect";
@@ -1070,16 +1074,22 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
   );
 
   it.effect(
-    "a skill folder past a skill's bounds, or holding a credential in any file, previews its problem and installs nothing",
+    "a skill folder holding a file past its bound, or a credential in any file, previews its problem and installs nothing, while one of any size and count of files previews clean",
     () =>
       Effect.gen(function* () {
         const big = fakeRepository("acme", "big");
-        const many = Object.fromEntries(
-          Array.from({ length: 64 }, (_, index) => [`skills/many/notes/${index}.md`, "note"]),
+        // `wide` has 372 files, 2.36 MB together: many files, none large.
+        const wide = Object.fromEntries(
+          Array.from({ length: 371 }, (_, index) => [
+            `skills/wide/assets/${index}.txt`,
+            "x".repeat(6_360),
+          ]),
         );
         commitTo(big, "main", {
-          "skills/many/SKILL.md": skillFile("many", "Too many files."),
-          ...many,
+          "skills/wide/SKILL.md": skillFile("wide", "Many files."),
+          ...wide,
+          "skills/heavy/SKILL.md": skillFile("heavy", "One file too large."),
+          "skills/heavy/model.bin": "x".repeat(INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES + 1),
           "skills/leaky/SKILL.md": skillFile("leaky", "Ships a key."),
           "skills/leaky/env.sh": `export TOKEN=${FAKE_GITHUB_TOKEN}`,
         });
@@ -1100,8 +1110,9 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         assert.deepEqual(
           previewed.skills.map(({ name, problems }) => ({ name, problems })),
           [
+            { name: "heavy", problems: [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE] },
             { name: "leaky", problems: [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED] },
-            { name: "many", problems: [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES] },
+            { name: "wide", problems: [] },
           ],
         );
         const installing = (skill: string) =>
@@ -1114,10 +1125,10 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
               text: `npx skills add acme/big@${skill}`,
             }),
           );
-        assert.deepEqual((yield* installing("many")).body, {
+        assert.deepEqual((yield* installing("heavy")).body, {
           error: HOSTED_API_ERROR.SKILL_FILES_REFUSED,
-          skillName: "many",
-          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES,
+          skillName: "heavy",
+          skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE,
         });
         assert.deepEqual((yield* installing("leaky")).body, {
           error: HOSTED_API_ERROR.SKILL_FILES_REFUSED,
