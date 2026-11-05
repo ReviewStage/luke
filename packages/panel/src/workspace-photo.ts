@@ -3,10 +3,12 @@ import {
   WORKSPACE_PHOTO_TYPE,
   workspacePhotoOfDataUrl,
 } from "@repo/features/workspace-wire";
+import { type FilePicker, useFilePicker } from "@repo/ui";
+import { useState } from "react";
 import { encodeImage } from "./feedback-images.js";
 
 /**
- * workspace-photo.ts -- a picked file read into a workspace's photo, as Settings' Workspace page and setup's team step both set one.
+ * workspace-photo.ts -- a picked file read into a workspace's photo, as Settings' Workspace page, setup's team step, and New workspace all set one.
  */
 
 /** How many pixels a side a workspace's photo is drawn to before it is sent: well past the largest tile's 32, so it stays sharp on a Retina screen. */
@@ -45,4 +47,37 @@ export async function photoOfFile(file: File): Promise<PhotoRead> {
     return { refusal: PHOTO_REFUSAL.TOO_LARGE(file.name) };
   }
   return { photo };
+}
+
+/** A photo picked for a workspace not yet made: the photo read, the picker, and the press that lets it go. */
+export interface WorkspacePhotoPick {
+  readonly photo: string | undefined;
+  readonly picker: FilePicker;
+  readonly clear: () => void;
+}
+
+/**
+ * A photo picked ahead of the workspace it is for, as setup's team step and
+ * New workspace hold one until the workspace is made. `onRefusal` hears why
+ * a pick did not become the photo, and nothing once one did; a refused pick
+ * leaves the photo picked before it standing.
+ */
+export function useWorkspacePhotoPick(
+  onRefusal: (refusal: string | undefined) => void,
+): WorkspacePhotoPick {
+  const [photo, setPhoto] = useState<string | undefined>(undefined);
+  const picker = useFilePicker({
+    accept: PHOTO_ACCEPT,
+    onFiles: ([picked]) => {
+      if (picked === undefined) return;
+      photoOfFile(picked).then((read) => {
+        if ("refusal" in read) onRefusal(read.refusal);
+        else {
+          onRefusal(undefined);
+          setPhoto(read.photo);
+        }
+      });
+    },
+  });
+  return { photo, picker, clear: () => setPhoto(undefined) };
 }

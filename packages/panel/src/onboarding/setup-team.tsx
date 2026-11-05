@@ -2,24 +2,20 @@ import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { WORKSPACE_BOUNDS } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  AVATAR_SHAPE,
-  AVATAR_SIZE,
-  Avatar,
-  BUTTON_VARIANT,
-  Button,
+  type FilePicker,
   FormField,
   GAP,
+  PhotoPick,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextField,
-  useFilePicker,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useState } from "react";
 import { useAct } from "../act.js";
-import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
+import { useWorkspacePhotoPick } from "../workspace-photo.js";
 
 /**
  * setup-team.tsx -- setup's team step: the team's workspace named, its photo picked, and the team invited, made at once on Create in the step's foot.
@@ -42,7 +38,7 @@ export interface TeamFormState {
   readonly emails: string;
   readonly onEmails: (emails: string) => void;
   readonly photo: string | undefined;
-  readonly picker: ReturnType<typeof useFilePicker>;
+  readonly picker: FilePicker;
   /** Whether Create is out: the workspace, its photo, and its invitations going. */
   readonly busy: boolean;
   /** Why the workspace or its photo was refused, while one was. */
@@ -69,22 +65,9 @@ export function useTeamForm({
   const { act } = useAct();
   const [name, setName] = useState("");
   const [emails, setEmails] = useState("");
-  const [photo, setPhoto] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const picker = useFilePicker({
-    accept: PHOTO_ACCEPT,
-    onFiles: ([picked]) => {
-      if (picked === undefined) return;
-      photoOfFile(picked).then((read) => {
-        if ("refusal" in read) setRefusal(read.refusal);
-        else {
-          setRefusal(undefined);
-          setPhoto(read.photo);
-        }
-      });
-    },
-  });
+  const { photo, picker } = useWorkspacePhotoPick(setRefusal);
   const trimmed = name.trim();
   const create = async () => {
     if (trimmed === "" || busy) return;
@@ -132,26 +115,9 @@ export function useTeamForm({
 
 /** The team step's fields: the photo, the name, and who to invite, one field apart. */
 export function TeamForm({ form }: { form: TeamFormState }): React.JSX.Element {
-  const trimmed = form.name.trim();
   return (
     <Stack gap={GAP.FIELD}>
-      <div className="flex items-center gap-control-gap">
-        {trimmed === "" && form.photo === undefined ? null : (
-          <ReplayMask>
-            <Avatar
-              name={trimmed === "" ? "Team" : trimmed}
-              src={form.photo}
-              size={AVATAR_SIZE.CARD}
-              shape={AVATAR_SHAPE.SQUARE}
-              decorative
-            />
-          </ReplayMask>
-        )}
-        <Button variant={BUTTON_VARIANT.OUTLINE} onClick={form.picker.open}>
-          {form.photo === undefined ? "Add photo" : "Replace photo"}
-        </Button>
-        {form.picker.input}
-      </div>
+      <PhotoPick name={form.name} unnamed="Team" photo={form.photo} picker={form.picker} />
       <FormField label="Name">
         {(control) => (
           <TextField

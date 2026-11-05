@@ -2554,6 +2554,36 @@ test("a workspace made is asked for by its name and listed at once, and a refusa
   assert.equal(tab.control().workspace?.id, PLATFORM.id);
 });
 
+test("a workspace made with a photo has the photo set on it, and a photo refused leaves the workspace made and says why in a toast", async () => {
+  let refuse = false;
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    {
+      [ACT_KIND.WORKSPACE_CREATE]: () => Promise.resolve(PLATFORM),
+      [ACT_KIND.WORKSPACE_PHOTO_SET]: () =>
+        refuse ? Promise.reject(new Error("That photo is too large.")) : Promise.resolve(PLATFORM),
+    },
+  );
+
+  const made = await tab.control().onCreateWorkspace("Platform", "data:image/webp;base64,UklG");
+  await settle();
+  refuse = true;
+  const refused = await tab.control().onCreateWorkspace("Platform", "data:image/webp;base64,UklG");
+  await settle();
+
+  assert.deepEqual([made, refused], [undefined, undefined]);
+  assert.deepEqual(
+    tab.payloads
+      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_PHOTO_SET)
+      .map((asked) => asked.payload),
+    [
+      { workspaceId: PLATFORM.id, photo: "data:image/webp;base64,UklG" },
+      { workspaceId: PLATFORM.id, photo: "data:image/webp;base64,UklG" },
+    ],
+  );
+  assert.match(newestToastSays() ?? "", /That photo is too large\./u);
+});
+
 test("Workspace settings opens Settings on the listed workspace's page", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 

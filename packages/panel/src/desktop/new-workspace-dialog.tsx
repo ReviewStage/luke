@@ -6,26 +6,31 @@ import {
   DialogActions,
   type DialogConfirm,
   FormField,
+  PhotoPick,
   TextField,
   useConfirmDialog,
 } from "@repo/ui";
+import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useRef, useState } from "react";
 import { confirmFailure } from "../failure-report.js";
+import { useWorkspacePhotoPick } from "../workspace-photo.js";
 import { useFormDialog } from "./use-form-dialog.js";
 
 /**
- * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a labeled name, Cancel, and Create workspace.
+ * new-workspace-dialog.tsx -- the small prompt the switcher's New workspace opens: a photo, a labeled name, Cancel, and Create workspace.
  *
  * It is a dialog with a form in it, so it dims the window, keeps Tab inside,
  * hands focus back to whatever opened it, and says a refusal on the name
  * field, marked invalid, with the name left as typed for another try. The name is held to the service's
  * bound in the shared text field; Create workspace stands unavailable until
  * a name is typed, Enter creates, and Escape or a press on the dimmed window
- * cancels. Each opening starts from an empty name, so a canceled one is
- * never offered again, and the question goes with the sidebar folding away
- * or the account signing out.
+ * cancels. A photo may be picked above the name, as setup's team step picks
+ * one, and is set once the workspace is made; a pick that cannot be a photo
+ * says why under its button. Each opening starts from an empty name and no
+ * photo, so a canceled one is never offered again, and the question goes
+ * with the sidebar folding away or the account signing out.
  */
 
 /** Why a blank name was not sent, which the field says when Enter asks it. */
@@ -39,10 +44,12 @@ export interface NewWorkspaceAsk {
 
 /** New workspace's ask, opened by `ask()`, and the card that asks it, standing only while `surfaceOpen`. */
 export function useNewWorkspaceDialog(
-  onCreate: (name: string) => Promise<string | undefined>,
+  onCreate: (name: string, photo: string | undefined) => Promise<string | undefined>,
   surface: { signedIn: boolean; surfaceOpen: boolean },
 ): NewWorkspaceAsk {
   const [name, setName] = useState("");
+  const [photoRefusal, setPhotoRefusal] = useState<string | undefined>(undefined);
+  const photo = useWorkspacePhotoPick(setPhotoRefusal);
   const field = useRef<HTMLInputElement | null>(null);
   const confirm: DialogConfirm = useConfirmDialog(
     { subject: surface.signedIn, surfaceOpen: surface.surfaceOpen },
@@ -51,7 +58,7 @@ export function useNewWorkspaceDialog(
       if (trimmed === "") {
         return Promise.resolve({ status: ACTION_RESULT_STATUS.REJECTED, reason: NAME_ASKED });
       }
-      return onCreate(trimmed).then((refused) => {
+      return onCreate(trimmed, photo.photo).then((refused) => {
         if (refused !== undefined)
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: refused };
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
@@ -59,6 +66,11 @@ export function useNewWorkspaceDialog(
     },
     confirmFailure(FAILURE_SURFACE.WORKSPACE_CREATE),
   );
+  const forget = () => {
+    setName("");
+    setPhotoRefusal(undefined);
+    photo.clear();
+  };
   const blank = name.trim() === "";
   const form = useFormDialog(confirm, !blank);
   const dialog = (
@@ -70,8 +82,8 @@ export function useNewWorkspaceDialog(
       refused={form.refusal !== undefined}
       initialFocus={field}
       onDismiss={form.dismiss}
-      // Note that the name is let go once the card has faded, so the words stay while it goes.
-      onExited={() => setName("")}
+      // Note that the name and photo are let go once the card has faded, so they stay while it goes.
+      onExited={forget}
       actions={
         <DialogActions
           onCancel={form.dismiss}
@@ -84,6 +96,16 @@ export function useNewWorkspaceDialog(
         />
       }
     >
+      <PhotoPick
+        name={name}
+        unnamed="Workspace"
+        photo={photo.photo}
+        picker={photo.picker}
+        disabled={form.settling}
+        error={inputProblem(
+          photoRefusal === undefined ? undefined : <ReplayMask>{photoRefusal}</ReplayMask>,
+        )}
+      />
       <FormField
         label="Workspace name"
         error={
@@ -97,7 +119,6 @@ export function useNewWorkspaceDialog(
             ref={field}
             field={control}
             spellCheck={false}
-            placeholder="Northwind"
             maxLength={WORKSPACE_BOUNDS.MAX_NAME_CHARS}
             value={name}
             disabled={form.settling}
@@ -117,7 +138,7 @@ export function useNewWorkspaceDialog(
   );
   return {
     ask: () => {
-      setName("");
+      forget();
       confirm.ask();
     },
     dialog,

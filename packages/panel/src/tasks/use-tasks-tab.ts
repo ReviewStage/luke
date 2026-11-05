@@ -643,8 +643,12 @@ export interface TasksControl {
   onChooseWorkspace: (workspaceId: string) => void;
   /** Lists the account's own workspace, else the first other, once one is left, and turns to the home page. */
   onLeftWorkspace: (workspaceId: string) => void;
-  /** Creates a workspace of that name and lists it; answers why it was not created, or nothing once it was. */
-  onCreateWorkspace: (name: string) => Promise<string | undefined>;
+  /**
+   * Creates a workspace of that name and lists it, then sets its photo where
+   * one is given; answers why it was not created, or nothing once it was. A
+   * photo refused does not undo the workspace, and says why in a toast.
+   */
+  onCreateWorkspace: (name: string, photo?: string) => Promise<string | undefined>;
   /** Opens Settings on its Workspace page, showing the listed workspace. */
   onOpenWorkspaceSettings: () => void;
   /** Whether the account has GitHub connected, and its login; absent before the first read lands. */
@@ -2381,14 +2385,29 @@ export function useTasksTab(input: {
     );
   };
   // A fixture's workspaces are made, shared, and connected nowhere. A
-  // workspace made is listed at once, main's view holding it after; the
-  // invite and the connect open the browser, and a refusal of either says
-  // why in a toast, since the menu that asked has closed.
-  const createWorkspace = (name: string): Promise<string | undefined> => {
+  // workspace made is listed at once, main's view holding it after, and its
+  // photo set once it stands; the invite and the connect open the browser,
+  // and a refusal of the photo or either says why in a toast, since the
+  // menu or card that asked has closed.
+  const createWorkspace = (name: string, photo?: string): Promise<string | undefined> => {
     if (fixture !== undefined) return Promise.resolve(undefined);
     return act(ACT_KIND.WORKSPACE_CREATE, { name }).then(
-      (created) => {
+      async (created) => {
         switchWorkspace(created.id);
+        if (photo === undefined) return undefined;
+        await act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId: created.id, photo }).catch(
+          (refused: Error) =>
+            toast({
+              words: refused.message,
+              tone: STATUS_TONE.DANGER,
+              hold: TOAST_HOLD.FAILED,
+              failure: {
+                surface: FAILURE_SURFACE.WORKSPACE_WRITE,
+                act: ACT_KIND.WORKSPACE_PHOTO_SET,
+                cause: refused,
+              },
+            }),
+        );
         return undefined;
       },
       (refused: Error) => refused.message,

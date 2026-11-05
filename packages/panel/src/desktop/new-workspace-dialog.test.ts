@@ -3,13 +3,15 @@
 import assert from "node:assert/strict";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { stubCanvas, webpBytes } from "../testing/photo-canvas.js";
 import { type NewWorkspaceAsk, useNewWorkspaceDialog } from "./new-workspace-dialog.js";
 
 /**
  * new-workspace-dialog.test.ts -- New workspace is a form, not a confirm: a
- * dialog whose one field is labeled, whose Create workspace waits on a name,
- * and which Enter submits and Escape cancels.
+ * dialog whose name field is labeled, whose Create workspace waits on a name,
+ * which Enter submits and Escape cancels, and which hands a photo picked
+ * above the name to the workspace made.
  */
 
 let root: Root | undefined;
@@ -18,15 +20,18 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
-/** The prompt drawn over a window that creates into `created`, and the press that opens it. */
-function mounted(created: string[]): () => void {
+/** The prompt drawn over a window that creates into `created`, each photo into `photos`, and the press that opens it. */
+function mounted(created: string[], photos: (string | undefined)[] = []): () => void {
   let latest: NewWorkspaceAsk | undefined;
   function Prompt() {
     latest = useNewWorkspaceDialog(
-      (name) => {
+      (name, photo) => {
         created.push(name);
+        photos.push(photo);
         return Promise.resolve(undefined);
       },
       { signedIn: true, surfaceOpen: true },
@@ -43,7 +48,7 @@ function mounted(created: string[]): () => void {
 }
 
 const card = () => document.querySelector('[role="dialog"], [role="alertdialog"]');
-const field = () => card()?.querySelector<HTMLInputElement>("input");
+const field = () => card()?.querySelector<HTMLInputElement>('input:not([type="file"])');
 const label = () => card()?.querySelector("label");
 const create = () =>
   [...(card()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
@@ -113,7 +118,7 @@ test("Enter on a blank name marks the field invalid and says why on it, and typi
   await act(async () => {
     press(input, "Enter");
   });
-  const error = card()?.querySelector('[data-slot="field-error"]');
+  const error = input.closest('[data-slot="field"]')?.querySelector('[data-slot="field-error"]');
   assert.equal(input.getAttribute("aria-invalid"), "true", "the field is marked invalid");
   assert.equal(error?.textContent, "Name the workspace.");
   assert.ok(
@@ -127,4 +132,35 @@ test("Enter on a blank name marks the field invalid and says why on it, and typi
 
   type(input, "N");
   assert.equal(input.getAttribute("aria-invalid"), null, "typing clears the mark");
+});
+
+test("a photo picked above the name is handed on with it when the workspace is made", async () => {
+  const webp = webpBytes();
+  stubCanvas(300, 300, webp);
+  const created: string[] = [];
+  const photos: (string | undefined)[] = [];
+  mounted(created, photos)();
+  const picker = card()?.querySelector<HTMLInputElement>('input[type="file"]');
+  assert.ok(picker, "the photo's picker stands in the card");
+  Object.defineProperty(picker, "files", {
+    configurable: true,
+    value: [new File([new Uint8Array([1, 2, 3])], "paperstar.png", { type: "image/png" })],
+  });
+  act(() => {
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  // Note that the encoder's file read lands on a later turn, as jsdom answers it.
+  for (let turn = 0; turn < 4; turn += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+  }
+  const input = field();
+  assert.ok(input);
+  type(input, "Paperstar");
+  await act(async () => {
+    press(input, "Enter");
+  });
+  assert.deepEqual(created, ["Paperstar"]);
+  assert.deepEqual(photos, [`data:image/webp;base64,${btoa(String.fromCharCode(...webp))}`]);
 });
