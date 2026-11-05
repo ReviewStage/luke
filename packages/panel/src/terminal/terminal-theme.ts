@@ -153,7 +153,9 @@ export function terminalTheme(host: Element, dim: boolean): ITheme {
     Object.entries(THEME_TOKENS).flatMap(([color, token]) => {
       const value = colors.get(token);
       if (value === undefined) return [];
-      return [[color, dim && DIMMED_COLORS.has(color) ? dimmed(value, ground, DIM_KEEP) : value]];
+      return [
+        [color, dim && DIMMED_COLORS.has(color) ? dimmed(value, ground, DIM_KEEP) : value],
+      ];
     }),
   );
   const note = colors.get(NOTE_TOKEN);

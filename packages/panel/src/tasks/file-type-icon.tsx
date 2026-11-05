@@ -89,7 +89,11 @@ export function FileTypeIcon({
   const icon = loaded.value.fileIcon(name);
   return (
     <svg
-      className={cn("file-type-icon fill-current", TYPE_INK[icon.type] ?? UNCOLORED_INK, className)}
+      className={cn(
+        "file-type-icon fill-current",
+        TYPE_INK[icon.type] ?? UNCOLORED_INK,
+        className,
+      )}
       data-file-type={icon.type}
       viewBox="0 0 16 16"
       aria-hidden="true"
