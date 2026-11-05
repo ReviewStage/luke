@@ -69,6 +69,88 @@ Vespin is an inbox for all your coding agents. These are its notable changes,
 newest first. Each heading is a released version and the date its release was
 published.
 
+## 0.27.0 — 2026-11-05
+
+### Vespin on your phone
+
+On a phone, Vespin opens on its Inbox under a floating bar of Inbox, Tasks,
+and Search, with each screen's title and edges fitted to the phone.
+([#6909](https://github.com/ReviewStage/vespin/pull/6909),
+[#6939](https://github.com/ReviewStage/vespin/pull/6939))
+
+### Cloud or Mac, on every start
+
+Every new task and agent asks where it runs, in the cloud or on one of your
+Macs, and an agent already running can move to the cloud or a Mac from its
+menu. A start made while you are offline waits and goes out once Vespin
+reaches the service again.
+([#6879](https://github.com/ReviewStage/vespin/pull/6879),
+[#6885](https://github.com/ReviewStage/vespin/pull/6885),
+[#6886](https://github.com/ReviewStage/vespin/pull/6886),
+[#6828](https://github.com/ReviewStage/vespin/pull/6828))
+
+### Improvements
+
+- The Inbox gains a Needs me scope for the threads waiting on you ([#6797](https://github.com/ReviewStage/vespin/pull/6797))
+- Resolving an ask stages it in your draft, and the resolve and its note
+  reach the agent as one message
+  ([#6783](https://github.com/ReviewStage/vespin/pull/6783),
+  [#6851](https://github.com/ReviewStage/vespin/pull/6851))
+- Selecting words in an inline page offers Reply ([#6866](https://github.com/ReviewStage/vespin/pull/6866))
+- A page's comments open in the plan's list, in a side pane you can resize ([#6864](https://github.com/ReviewStage/vespin/pull/6864))
+- Every task opens on its plan and marks the agent waiting on you, and the
+  sidebar, ⌘K, and Recent resume a task on its agent
+  ([#6916](https://github.com/ReviewStage/vespin/pull/6916),
+  [#6924](https://github.com/ReviewStage/vespin/pull/6924))
+- You can start an agent on a task with no repository from anywhere ([#6842](https://github.com/ReviewStage/vespin/pull/6842))
+- Settings lets you choose who authors your agents' commits ([#6898](https://github.com/ReviewStage/vespin/pull/6898))
+- Settings › Vespin MCP has a page of its own, client first, and the consent
+  page reads as a connection page
+  ([#6833](https://github.com/ReviewStage/vespin/pull/6833),
+  [#6915](https://github.com/ReviewStage/vespin/pull/6915),
+  [#6919](https://github.com/ReviewStage/vespin/pull/6919))
+- Resend joins the integrations ([#6893](https://github.com/ReviewStage/vespin/pull/6893))
+- Invite teammates from a dialog off the Members heading ([#6860](https://github.com/ReviewStage/vespin/pull/6860))
+- Workspace settings show each GitHub account's repositories ([#6801](https://github.com/ReviewStage/vespin/pull/6801))
+- Vespin says offline once and keeps every surface quiet until the service
+  answers again, then restarts every read at once
+  ([#6836](https://github.com/ReviewStage/vespin/pull/6836),
+  [#6870](https://github.com/ReviewStage/vespin/pull/6870),
+  [#6834](https://github.com/ReviewStage/vespin/pull/6834))
+- Expired MCP sign-ins show as toasts, one per server ([#6906](https://github.com/ReviewStage/vespin/pull/6906))
+- A video steps a frame at a time and changes its speed ([#6827](https://github.com/ReviewStage/vespin/pull/6827))
+- Setup asks for an agent and GitHub, and lets you sign out ([#6947](https://github.com/ReviewStage/vespin/pull/6947))
+- Agents on a Mac run in git worktrees of a shared clone ([#6786](https://github.com/ReviewStage/vespin/pull/6786))
+- Slack threads link a Slack-started agent as soon as it starts, and a
+  thread's title DM shows its open ask
+  ([#6758](https://github.com/ReviewStage/vespin/pull/6758),
+  [#6825](https://github.com/ReviewStage/vespin/pull/6825),
+  [#6951](https://github.com/ReviewStage/vespin/pull/6951))
+- Send feedback stands beside the sidebar's settings gear ([#6772](https://github.com/ReviewStage/vespin/pull/6772))
+- The menu bar dims the items nothing in the window would run ([#6934](https://github.com/ReviewStage/vespin/pull/6934))
+
+### Fixes
+
+- Fixed a new account's personal workspace not being created at sign-up ([#6778](https://github.com/ReviewStage/vespin/pull/6778))
+- Fixed an archived agent staying archived when a member wrote on its thread ([#6923](https://github.com/ReviewStage/vespin/pull/6923))
+- Fixed New task defaulting to a repository the workspace cannot reach ([#6948](https://github.com/ReviewStage/vespin/pull/6948))
+- Fixed the old task's title staying on the plan after opening another ([#6799](https://github.com/ReviewStage/vespin/pull/6799))
+- Fixed a plan's task item with a nested list whose checkbox would not tick ([#6858](https://github.com/ReviewStage/vespin/pull/6858))
+- Fixed the context ring missing Claude Code's own compaction ([#6918](https://github.com/ReviewStage/vespin/pull/6918))
+- Fixed a submenu closing while the pointer moved slowly toward it ([#6794](https://github.com/ReviewStage/vespin/pull/6794))
+- Fixed a failed picture drawing as nothing, now a broken image with Retry ([#6823](https://github.com/ReviewStage/vespin/pull/6823))
+- Fixed a scroll up over an inline page being lost in the transcript ([#6843](https://github.com/ReviewStage/vespin/pull/6843))
+- Fixed a reply under an automation's Slack result missing the run's agent ([#6774](https://github.com/ReviewStage/vespin/pull/6774))
+
+### Misc
+
+- Updated cloud sandboxes to hold agents' credentials at the firewall
+  ([#6812](https://github.com/ReviewStage/vespin/pull/6812),
+  [#6816](https://github.com/ReviewStage/vespin/pull/6816),
+  [#6817](https://github.com/ReviewStage/vespin/pull/6817),
+  [#6818](https://github.com/ReviewStage/vespin/pull/6818))
+- Updated the desktop to accept host 0.9.0 alone ([#6795](https://github.com/ReviewStage/vespin/pull/6795))
+
 ## 0.26.0 — 2026-11-04
 
 ### Your agents can work Vespin
