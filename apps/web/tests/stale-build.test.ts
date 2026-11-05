@@ -10,18 +10,19 @@ import { failedChunkAnswer, type StaleBuildTab } from "../src/app/stale-build";
  * goes through the panel's own question while work stands.
  */
 
-/** A tab online or not, its reloads and asks counted. */
+/** A tab online or not, its reloads, asks, and each ask's dismissal kept. */
 function tabWith(options: { online?: boolean } = {}) {
   const leave = pageLeave(new EventTarget());
-  const seen = { reloads: 0, asks: [] as (() => void)[] };
+  const seen = { reloads: 0, asks: [] as (() => void)[], dismisses: [] as (() => void)[] };
   const tab: StaleBuildTab = {
     online: () => options.online ?? true,
     leave,
     reload: () => {
       seen.reloads += 1;
     },
-    askReload: (reload) => {
+    askReload: (reload, dismissed) => {
       seen.asks.push(reload);
+      seen.dismisses.push(dismissed);
     },
   };
   return { answer: failedChunkAnswer(tab), leave, seen };
@@ -82,4 +83,17 @@ it.effect(
       yield* tab.answer();
       expect(tab.seen.asks).toHaveLength(2);
     }),
+);
+
+it.effect("an ask dismissed leaves the next failure asked about again", () =>
+  Effect.gen(function* () {
+    const tab = tabWith();
+
+    yield* tab.answer();
+    tab.seen.dismisses[0]?.();
+    yield* tab.answer();
+
+    expect(tab.seen.asks).toHaveLength(2);
+    expect(tab.seen.reloads).toBe(0);
+  }),
 );

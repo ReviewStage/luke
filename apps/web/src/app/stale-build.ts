@@ -45,28 +45,32 @@ export interface StaleBuildTab {
   readonly leave: Pick<PageLeave, "leave">;
   /** The tab's reload. */
   readonly reload: () => void;
-  /** Asks before reloading, with what Reload does. */
-  readonly askReload: (reload: () => void) => void;
+  /** Asks before reloading, with what Reload does and what the ask sent away unanswered does. */
+  readonly askReload: (reload: () => void, dismissed: () => void) => void;
 }
 
 /**
  * What each chunk that failed to load does: asks to reload, unless the tab
- * is offline or already asking. Note that the ask is made once until its
- * Reload is pressed, so a burst of failures, a chunk and its stylesheet,
- * stands one toast, and a Reload the developer stayed from at the panel's or
- * the browser's question leaves the next failure asked about again.
+ * is offline or already asking. Note that the ask is made once until it is
+ * answered, so a burst of failures, a chunk and its stylesheet, stands one
+ * toast, while an ask dismissed, or a Reload the developer stayed from at
+ * the panel's or the browser's question, leaves the next failure asked
+ * about again, since a failed chunk's own Retry never mends it.
  */
 export function failedChunkAnswer(tab: StaleBuildTab): () => Effect.Effect<void> {
   let asking = false;
-  const reload = (): void => {
+  const answered = (): void => {
     asking = false;
+  };
+  const reload = (): void => {
+    answered();
     tab.leave.leave(tab.reload);
   };
   return () =>
     Effect.sync(() => {
       if (asking || !tab.online()) return;
       asking = true;
-      tab.askReload(reload);
+      tab.askReload(reload, answered);
     });
 }
 
@@ -76,12 +80,13 @@ export function staleBuildTab(leave: StaleBuildTab["leave"]): StaleBuildTab {
     online: () => navigator.onLine !== false,
     leave,
     reload: () => location.reload(),
-    askReload: (reload) =>
+    askReload: (reload, dismissed) =>
       showToast({
         words: PART_DID_NOT_LOAD,
         tone: STATUS_TONE.ATTENTION,
         action: { label: "Reload", onPress: reload },
         persists: true,
+        onDismiss: dismissed,
       }),
   };
 }

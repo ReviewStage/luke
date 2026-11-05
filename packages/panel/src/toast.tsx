@@ -132,6 +132,8 @@ export type ToastNotice = {
   readonly glyph?: () => React.JSX.Element;
   readonly detail?: string;
   readonly subject?: string;
+  /** What the developer sending it away, by its × or Escape, tells whoever showed it, so a question they set aside can be asked again. */
+  readonly onDismiss?: () => void;
 } & ToastSaying &
   (
     | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -537,7 +539,10 @@ function ToastCard({
   const { id, notice, leaving } = shown;
   const { action, details } = notice;
   const hold = holdOf(notice);
-  const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
+  const dismiss = () => {
+    step({ kind: TOAST_STEP.DISMISS, id });
+    notice.onDismiss?.();
+  };
   const copy: ToastCopy | undefined =
     details === undefined
       ? undefined
