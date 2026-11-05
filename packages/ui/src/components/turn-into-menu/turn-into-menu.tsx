@@ -63,6 +63,8 @@ export function TurnIntoMenu({
       label={TURN_INTO_LABEL}
       menu={menu}
       openOnChecked
+      // Its rows are the editor's own block names, never a person's words.
+      replayUnmasked
       groups={TURN_INTO_GROUPS.map((group) =>
         group.map((block) => blockAction(block, current, onTurn)),
       )}

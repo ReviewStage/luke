@@ -72,6 +72,8 @@ export interface PaneBarMenu {
   /** What the tab shows, as a sentence opens with it: "File" names the ⋯ and its menu "File actions". */
   readonly thing: string;
   readonly groups: readonly (readonly MenuEntry[])[];
+  /** Whether its items' words are the app's own, which a screen recording shows as they read (`Menu`'s `replayUnmasked`). */
+  readonly replayUnmasked?: boolean | undefined;
 }
 
 /** Whether a slot says anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -91,6 +93,7 @@ function BarMenu({ menu }: { menu: PaneBarMenu }): React.JSX.Element {
           menu={drop.drawn}
           groups={menu.groups}
           onClose={drop.close}
+          replayUnmasked={menu.replayUnmasked}
         />
       )}
     </>

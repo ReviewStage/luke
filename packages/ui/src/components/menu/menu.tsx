@@ -2,6 +2,7 @@ import type { BaseUIEvent } from "@base-ui/react/types";
 import {
   Fragment,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -15,6 +16,7 @@ import { isComposingKey } from "../../composing-key.js";
 import { cssCustomProperties } from "../../css.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import {
   DROPDOWN_MENU_ITEM,
   DROPDOWN_MENU_ITEM_LIT,
@@ -41,6 +43,7 @@ import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area
 import { SwitchMark } from "../switch/switch.js";
 import { hintedControlOf, Tooltip } from "../tooltip/hint.js";
 import { MENU_LINE, type MenuLine, menuCut } from "./menu-cut.js";
+import { MenuReplayUnmasked } from "./menu-replay.js";
 import { inNarrowRoom, MenuSheetFrame } from "./menu-sheet.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useSubmenuAim } from "./submenu-aim.js";
@@ -209,6 +212,8 @@ export interface MenuAction {
   stays?: boolean | undefined;
   /** The card hung beside the item while the pointer rests on it, as a person's in a people filter; none hangs nothing. */
   card?: React.ReactNode;
+  /** Whether its label and detail are a person's words, a repository's or a workspace's name, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
 }
 
 /**
@@ -229,6 +234,8 @@ export interface SteeredMenuItem {
 /** An item that opens a menu of its own beside it rather than acting. */
 export interface MenuSubmenu {
   label: string;
+  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
   items: readonly MenuAction[];
   /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
@@ -254,6 +261,8 @@ export interface MenuPanelDoors {
  */
 export interface MenuPanel {
   label: string;
+  /** Whether its label names a person's thing, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
   icon?: React.JSX.Element;
   /** Printed muted before its chevron: the shortcut that opens it, as the app draws it. */
   hint?: React.ReactNode;
@@ -719,6 +728,21 @@ function secondLine(action: MenuAction): boolean {
   return action.detail !== undefined && action.detailPlace !== MENU_DETAIL.BESIDE;
 }
 
+/** An item's words, marked for a screen recording as its menu and the item ask. */
+function ItemWords({
+  masked,
+  children,
+}: {
+  masked?: boolean | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <ReplayWords unmasked={useContext(MenuReplayUnmasked)} masked={masked}>
+      {children}
+    </ReplayWords>
+  );
+}
+
 /**
  * An item's glyph, words, and end, as every row draws them; one that keeps
  * no `column` draws no glyph slot where it has no glyph.
@@ -731,16 +755,23 @@ function ItemBody({
   column?: boolean;
 }): React.JSX.Element {
   const beside = action.detailPlace === MENU_DETAIL.BESIDE;
-  const glyph = column || action.icon !== undefined ? <MenuGlyph>{action.icon}</MenuGlyph> : null;
+  const glyph =
+    column || action.icon !== undefined ? (
+      <MenuGlyph masked={action.replayMasked}>{action.icon}</MenuGlyph>
+    ) : null;
   if (action.detail === undefined) {
     return (
       <>
         {glyph}
         {action.tag === undefined ? (
-          <OneLine className="ui-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
+          <OneLine className="ui-menu-item-label min-w-0 flex-1" words={action.label}>
+            <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
+          </OneLine>
         ) : (
           <span className="ui-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
-            <OneLine className="ui-menu-item-label min-w-0">{action.label}</OneLine>
+            <OneLine className="ui-menu-item-label min-w-0" words={action.label}>
+              <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
+            </OneLine>
             {action.tag}
           </span>
         )}
@@ -760,11 +791,15 @@ function ItemBody({
       >
         <OneLine
           className={cn("ui-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
+          words={action.label}
         >
-          {action.label}
+          <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
         </OneLine>
-        <OneLine className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
-          {action.detail}
+        <OneLine
+          className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}
+          words={action.detail}
+        >
+          <ItemWords masked={action.replayMasked}>{action.detail}</ItemWords>
         </OneLine>
       </span>
       <ItemEnd action={action} />
@@ -1141,7 +1176,9 @@ function Submenu({
         }}
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>
-        <OneLine className="ui-menu-item-label min-w-0 flex-1">{entry.label}</OneLine>
+        <OneLine className="ui-menu-item-label min-w-0 flex-1" words={entry.label}>
+          <ItemWords masked={entry.replayMasked}>{entry.label}</ItemWords>
+        </OneLine>
         {entry.hint === undefined ? null : <span className="ui-menu-item-hint">{entry.hint}</span>}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -1444,6 +1481,13 @@ interface MenuProps {
   openOn?: string | undefined;
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
+  /**
+   * Whether its items' labels and details are the app's own words, which a
+   * screen recording shows as they read, but for an item that is
+   * `replayMasked`; its subject, heading, footer, and panels are its
+   * caller's to mark (`@repo/ui/session-replay-marks`).
+   */
+  replayUnmasked?: boolean | undefined;
 }
 
 /**
@@ -2054,5 +2098,9 @@ function MenuSheet({
 export function Menu(props: MenuProps): React.JSX.Element {
   const { placement } = props.menu;
   const sheet = useMemo(() => inNarrowRoom(), [placement]);
-  return sheet ? <MenuSheet {...props} /> : <FloatingMenu {...props} />;
+  return (
+    <MenuReplayUnmasked.Provider value={props.replayUnmasked === true}>
+      {sheet ? <MenuSheet {...props} /> : <FloatingMenu {...props} />}
+    </MenuReplayUnmasked.Provider>
+  );
 }

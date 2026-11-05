@@ -1,5 +1,7 @@
-import type { Ref } from "react";
+import { type Ref, useContext } from "react";
+import { ReplayUnmask, ReplayWords } from "../../session-replay-marks.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
+import { DialogReplayUnmasked } from "./dialog-foot.js";
 
 /**
  * dialog-actions.tsx -- a dialog's foot, the one way its answers are drawn:
@@ -12,6 +14,9 @@ import { BUTTON_VARIANT, Button } from "../button/button.js";
  * the act names what it is doing; once it lands its check stands in the
  * act's words until it has been seen. A dialog that asks nothing, one that
  * shows a secret or a result, closes from its one Done in the accent.
+ * Cancel and Done are the foot's own words, so a screen recording shows
+ * them as they read (`ReplayUnmask`); the act's word is its owner's, shown
+ * where its card unmasks its own words (`Dialog`'s `replayUnmasked`).
  */
 
 /** How the act is drawn: red for an act that destroys, the accent for one that does not. */
@@ -69,10 +74,11 @@ export type DialogActionsProps =
 
 /** A dialog's answers at its foot: Cancel then the act, or Done alone. */
 export function DialogActions(props: DialogActionsProps): React.JSX.Element {
+  const unmasked = useContext(DialogReplayUnmasked);
   if (props.onDone !== undefined) {
     return (
       <Button variant={BUTTON_VARIANT.PRIMARY} onClick={props.onDone}>
-        {DONE}
+        <ReplayUnmask>{DONE}</ReplayUnmask>
       </Button>
     );
   }
@@ -86,7 +92,7 @@ export function DialogActions(props: DialogActionsProps): React.JSX.Element {
         disabled={settling}
         onClick={props.onCancel}
       >
-        {CANCEL}
+        <ReplayUnmask>{CANCEL}</ReplayUnmask>
       </Button>
       <Button
         ref={act.ref}
@@ -99,7 +105,7 @@ export function DialogActions(props: DialogActionsProps): React.JSX.Element {
         onDone={act.onShown}
         onClick={act.onPress}
       >
-        {act.verb}
+        <ReplayWords unmasked={unmasked}>{act.verb}</ReplayWords>
       </Button>
     </>
   );
