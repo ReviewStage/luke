@@ -109,13 +109,6 @@ function pageText(): string {
     .join(" ");
 }
 
-/** The words the page's copy fields hold, a command each. */
-function copyable(): readonly string[] {
-  return [...document.querySelectorAll<HTMLInputElement>("input[readonly]")].map(
-    (each) => each.value,
-  );
-}
-
 test("the desktop's Install says why it failed, then the version installed, and offers Reinstall", async () => {
   const answers = [
     {
@@ -144,8 +137,8 @@ test("a browser tab offers the npm install and the sign-in to copy, and no Insta
   fakeActPort({});
   await drawPage(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CLI_INSTALL));
 
-  assert.ok(copyable().includes("npm i -g vespin"), copyable().join("\n"));
-  assert.ok(copyable().includes("vespin login"), copyable().join("\n"));
+  assert.ok(pageText().includes("npm i -g vespin"), pageText());
+  assert.ok(pageText().includes("vespin login"), pageText());
   assert.equal(drawn("Install"), false, "a tab cannot run the install");
 });
 
@@ -159,11 +152,11 @@ test("Sign out everywhere revokes the command's grant and leaves the sign-in to 
   });
   await drawPage(DESKTOP_CAPABILITIES, [VESPIN_CLI]);
   assert.ok(pageText().includes(EMAIL), pageText());
-  assert.ok(!copyable().includes("vespin login"), "a signed-in command offers no sign-in");
+  assert.ok(!pageText().includes("vespin login"), "a signed-in command offers no sign-in");
 
   await press("Sign out everywhere");
   await press("Sign out everywhere", dialog());
   assert.deepEqual(revoked, [VESPIN_CLI.clientId]);
   assert.equal(drawn("Sign out everywhere"), false, "a signed-out command offers no sign-out");
-  assert.ok(copyable().includes("vespin login"), copyable().join("\n"));
+  assert.ok(pageText().includes("vespin login"), pageText());
 });

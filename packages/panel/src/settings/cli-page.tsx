@@ -14,6 +14,7 @@ import {
   BUTTON_VARIANT,
   Button,
   CONFIRM_LOSS,
+  COPY_FIELD_PROMPT,
   COPY_FIELD_WIDTH,
   ConfirmDialog,
   CopyField,
@@ -41,7 +42,7 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useBusyPress } from "./busy-press.js";
 
 /**
- * cli-page.tsx -- Settings › CLI: the `vespin` command's install, to copy and, in the desktop app, run here as VS Code installs `code`, and its sign-in, with Sign out everywhere once it holds one.
+ * cli-page.tsx -- Settings › CLI, the page named for our command: the `vespin` command's install, to copy and, in the desktop app, run here as VS Code installs `code`, and its sign-in, with Sign out everywhere once it holds one.
  *
  * Install's row holds `npm i -g vespin` in `@repo/ui`'s `CopyField`, as the
  * MCP page's Connect step holds its command; a browser tab shows that alone.
@@ -167,6 +168,7 @@ function InstallSection({ installs }: { installs: boolean }): React.JSX.Element 
             what="command"
             copy={copyThroughShell}
             width={COPY_FIELD_WIDTH.FULL}
+            prompt={COPY_FIELD_PROMPT.SHELL}
           />
         )}
       />
@@ -274,6 +276,7 @@ function SignInRow(): React.JSX.Element {
           what="command"
           copy={copyThroughShell}
           width={COPY_FIELD_WIDTH.FULL}
+          prompt={COPY_FIELD_PROMPT.SHELL}
         />
       )}
     />
