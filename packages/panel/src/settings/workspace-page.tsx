@@ -42,6 +42,7 @@ import {
   DIALOG_TONE,
   Dialog,
   DialogActions,
+  type DialogQuestion,
   ErrorState,
   FormField,
   GAP,
@@ -243,14 +244,35 @@ const ROLE_ACT = {
   MAKE_OWNER: "Make owner",
 } as const;
 
-/** What the handover says: its press, its dialogs' bodies, and its running verb. The old owner becomes an admin, one way. */
+/** What the handover says: its press, its question's body, and its running verb. The old owner becomes an admin, one way. */
 const TRANSFER_WORDS = {
   VERB: "Transfer ownership",
   RUNNING: "Transferring",
-  BODY: "The admin you choose becomes its owner, and you become an admin.",
-  ONE_BODY: (name: string) =>
-    `You become an admin. ${name} can then change anyone's role and remove anyone, you included.`,
+  BODY: "You become an admin. The new owner can change anyone's role and remove anyone, you included, and only they can give it back.",
 } as const;
+
+/**
+ * The one question either door to the handover asks, a member row's Make
+ * owner and the owner's Transfer ownership: its title names the new owner
+ * where the door already knows them, and the act waits on the workspace's
+ * name typed, since only the new owner can give it back.
+ */
+function transferAsk(
+  workspace: Workspace,
+  heir: string | undefined,
+): { gate: string; question: DialogQuestion } {
+  const to = heir === undefined ? "" : ` to ${heir}`;
+  return {
+    gate: workspace.name,
+    question: {
+      title: `Transfer ownership of ${workspace.name}${to}?`,
+      body: TRANSFER_WORDS.BODY,
+      verb: TRANSFER_WORDS.VERB,
+      running: TRANSFER_WORDS.RUNNING,
+      loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+    },
+  };
+}
 
 /** The outline face an invited address wears until it is a member, so its words stand in the members' column. */
 const INVITED_ACTOR = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED } as const;
@@ -578,17 +600,7 @@ function MemberRow({
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
       />
-      <ConfirmDialog
-        open
-        confirm={makeOwner}
-        question={{
-          title: `Make ${member.name} the owner of ${workspace.name}?`,
-          body: TRANSFER_WORDS.ONE_BODY(member.name),
-          verb: ROLE_ACT.MAKE_OWNER,
-          running: TRANSFER_WORDS.RUNNING,
-          loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-        }}
-      />
+      <ConfirmDialog open confirm={makeOwner} {...transferAsk(workspace, member.name)} />
     </Stack>
   );
 }
@@ -794,19 +806,9 @@ function OwnerLeave({
           )
         }
       </SettingsRow>
+      {/* Note that the new owner goes unnamed in the title, because the field below chooses them. */}
       {heir === undefined ? null : (
-        <ConfirmDialog
-          open
-          confirm={transfer}
-          gate={workspace.name}
-          question={{
-            title: `Transfer ownership of ${workspace.name}?`,
-            body: TRANSFER_WORDS.BODY,
-            verb: TRANSFER_WORDS.VERB,
-            running: TRANSFER_WORDS.RUNNING,
-            loss: CONFIRM_LOSS.AFFECTS_OTHERS,
-          }}
-        >
+        <ConfirmDialog open confirm={transfer} {...transferAsk(workspace, undefined)}>
           <FormField label="New owner">
             {(field) => (
               <HeirChip

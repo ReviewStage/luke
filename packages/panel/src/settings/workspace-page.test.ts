@@ -1298,7 +1298,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
 
-test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and Make owner asks first, then hands the workspace over", async () => {
+test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and Make owner asks Transfer ownership's question, then hands the workspace over once its name is typed", async () => {
   stored = [OWNER, ADMIN_OLA, MEMBER];
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
 
@@ -1311,10 +1311,14 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   await chooseAction(memberNamed(page, "Ola"), "Make owner");
   const askedFirst = roleSent().length === 0;
   const question = dialog().querySelector("h2")?.textContent;
-  await confirm("Make owner");
+  await confirm("Transfer ownership");
+  const refusedUntilNamed = roleSent();
+  typeGate(ACME.name);
+  await confirm("Transfer ownership");
 
   assert.equal(askedFirst, true);
-  assert.equal(question, "Make Ola the owner of acme?");
+  assert.equal(question, "Transfer ownership of acme to Ola?");
+  assert.deepEqual(refusedUntilNamed, [], "the act waits on the workspace's name");
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
