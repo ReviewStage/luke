@@ -783,6 +783,31 @@ test("a line's count stands centered on the first line its words stand on, thoug
   }
 });
 
+test("a fold's counts stand in the order of their lines, so the keyboard meets them top to bottom", () => {
+  // Note that the thread listed first stands on the lower line, and jsdom lays nothing out, so each mark is given its line's top.
+  const lower = threadOn(ID.GONE, "Admins can withdraw", "Who else?", { section: "Approach" });
+  const upper = threadOn(ID.OPEN, "**single-use link** that expires", "A setting?");
+  const at = new Map<string, number>([
+    [ID.GONE, 300],
+    [ID.OPEN, 100],
+  ]);
+  const rect = Object.getOwnPropertyDescriptor(Element.prototype, "getBoundingClientRect");
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    const thread = this.closest<HTMLElement>("mark.plan-comment-mark")?.dataset.threads;
+    return new DOMRect(0, (thread === undefined ? undefined : at.get(thread)) ?? 0, 0, 0);
+  };
+  try {
+    const { container } = drawn("page", [lower, upper]);
+    const counts = [...container.querySelectorAll<HTMLElement>(".comment-count")];
+    assert.deepEqual(
+      counts.map((count) => count.style.top),
+      ["100px", "300px"],
+    );
+  } finally {
+    if (rect !== undefined) Object.defineProperty(Element.prototype, "getBoundingClientRect", rect);
+  }
+});
+
 test("a link to a resolved thread lists it under Resolved, open, and scrolls the list to it", () => {
   const box = (top: number) => () => ({
     top,
