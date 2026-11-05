@@ -18,10 +18,13 @@
  * the account stood. Note that nothing a person typed has a field to travel
  * in.
  *
- * Each report answers the details a person may copy from what showed the
- * failure (`shownFailureDetails`): the same facts, with the time, the app's
- * version, and the Sentry event id and trace the reporter answered, so what
- * they paste to an agent finds the very line and issue that were sent.
+ * Each report of an unexpected failure answers the details a person may
+ * copy from what showed it (`shownFailureDetails`): the same facts, with the
+ * time, the app's version, and the Sentry event id and trace the reporter
+ * answered, so what they send with a report of the problem finds the very
+ * line and issue that were sent. A refusal answers none, so it offers no
+ * copy: its own words already say what happened, and nothing went wrong to
+ * report.
  *
  * A failure drawn in place (`@repo/ui`'s `ErrorState`, `FailureNote`,
  * `ErrorLine` and the rows and dialogs that draw one) is handed as
@@ -40,6 +43,7 @@
  * render, so a site hands the cause it holds, never one it builds.
  */
 
+import { ORPCError } from "@orpc/client";
 import { AGENT_CALL_FAILURE } from "@repo/features/agent-view";
 import {
   FAILURE_CONDITION,
@@ -58,7 +62,6 @@ import type { PictureUnread } from "@repo/ui/picture-cache";
 import type { ReportedFailure, ShownError } from "@repo/ui/reported-failure";
 import type { SettingRefusal } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { ORPCError } from "@orpc/client";
 import { Clock, Context, Predicate } from "effect";
 import type { ReactNode } from "react";
 import { appPlatform } from "./app-platform.js";
@@ -289,8 +292,8 @@ function sent(report: ShownFailureReport): ShownFailureSent | undefined {
 
 /**
  * Hands one failure just shown at `at` to the window's reporter, with the
- * app's state now, and answers the details a person may copy of it. A
- * window with no reporter, such as the site's admin page, which installs no
+ * app's state now, and answers the details a person may copy of it, where it
+ * was unexpected; a refusal answers none. A window with no reporter, such as the site's admin page, which installs no
  * clipboard either, reports nothing and answers no details, so nothing there
  * offers a copy that could only fail. Note that a report or a reading that throws is
  * let go with a line on the console, answering no details, because whoever
@@ -313,7 +316,8 @@ export function reportShownFailure(failure: ShownFailure, at: number): string | 
         live: failure.live,
       },
     };
-    return shownFailureDetails(report, { at, version: state?.run.appVersion, sent: sent(report) });
+    const told = { at, version: state?.run.appVersion, sent: sent(report) };
+    return report.kind === FAILURE_KIND.UNEXPECTED ? shownFailureDetails(report, told) : undefined;
   } catch (error) {
     console.error("A failure shown could not be reported.", error);
     return undefined;
