@@ -8,7 +8,12 @@ import {
   useDisclosureFold,
 } from "../disclosure/disclosure.js";
 import { OneLine } from "../one-line/one-line.js";
-import { SettingsRow, type SettingsRowControl, type SettingsRowIndent } from "./settings-row.js";
+import {
+  SettingsRow,
+  SettingsRowActSlot,
+  type SettingsRowControl,
+  type SettingsRowIndent,
+} from "./settings-row.js";
 
 /**
  * settings-row-fold.tsx -- a settings row that folds open what it owns under its words, a line each, as a GitHub account its repositories.
@@ -108,7 +113,9 @@ export function SettingsFoldRow({
 /**
  * A head row and the rows it owns under it, closed until its chevron is
  * pressed: `head` draws the row, handed the chevron (named `label`) to
- * stand last at its end, or nothing where there are no `rows` to fold.
+ * stand last at its end, or, where there are no `rows` to fold, the
+ * chevron's room alone, so the controls of every row in the card end in one
+ * column whether it folds or not.
  */
 export function SettingsRowsFold({
   label,
@@ -134,7 +141,9 @@ export function SettingsRowsFold({
             aria-expanded={open}
             onClick={() => setOpen(!open)}
           />
-        ) : undefined,
+        ) : (
+          <SettingsRowActSlot />
+        ),
       )}
       {folds && open ? rows : null}
     </>

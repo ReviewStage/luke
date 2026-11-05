@@ -1584,7 +1584,7 @@ const integrationRows = (page: HTMLElement) =>
   [...githubGroup(page).querySelectorAll<HTMLElement>(ROWS)].map(rowWords);
 
 /** The chevrons folding an integration's own rows under its row. */
-const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack bot settings" } as const;
+const FOLD = { GITHUB: "GitHub accounts", SLACK_BOT: "Slack settings" } as const;
 
 /** The words of every button a row draws, bar the chevron folding its rows. */
 const rowButtons = (row: HTMLElement) =>
@@ -1615,8 +1615,8 @@ const githubSent = () =>
       : [],
   );
 
-/** The words GitHub's row says to a member once an account is connected. */
-const MANAGED_ON_GITHUB = "Accounts and repositories are managed on GitHub.";
+/** The words GitHub's row says once an account is connected, as every integration's does. */
+const MANAGED_ON_GITHUB = "Connected";
 
 test("an owner or an admin of a connected workspace sees GitHub's row, led by its mark, with Add repository, one Manage on GitHub, and no menu, and every account connected under it", async () => {
   for (const role of [WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]) {
@@ -1638,10 +1638,10 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
       `a ${role}'s controls`,
     );
     assert.equal(document.querySelector('[role="menu"]'), null, "GitHub's row has no menu");
-    assert.deepEqual(integrationRows(page), [["GitHub", undefined]], "the accounts start folded");
+    assert.deepEqual(integrationRows(page), [["GitHub", "Connected"]], "the accounts start folded");
     unfold(page, FOLD.GITHUB);
     assert.deepEqual(integrationRows(page), [
-      ["GitHub", undefined],
+      ["GitHub", "Connected"],
       ["acme-org", "0 repositories"],
     ]);
     for (const name of ["acme-org"]) {
@@ -1766,7 +1766,7 @@ test("a service from before several connections names one GitHub account alone, 
   unfold(page, FOLD.GITHUB);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", undefined],
+    ["GitHub", "Connected"],
     ["acme-org", "0 repositories"],
   ]);
   assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Add repository", "Manage on GitHub"]);
@@ -1860,7 +1860,7 @@ test("the repositories members added on their tokens stand by owner after the Ap
   const group = githubGroup(page);
 
   assert.deepEqual(integrationRows(page), [
-    ["GitHub", undefined],
+    ["GitHub", "Connected"],
     ["acme-org", "0 repositories"],
     ["acme", "2 repositories"],
     ["octo-member", "1 repository"],
@@ -2476,13 +2476,10 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
   const row = rowNamed(githubGroup(page), "Sentry");
   const before = rowWords(row);
 
-  act(() => button(row, "Install for workspace").click());
+  act(() => button(row, "Connect").click());
   await settle();
 
-  assert.deepEqual(before, [
-    "Sentry",
-    "Not installed. Install to start automations from Sentry alerts.",
-  ]);
+  assert.deepEqual(before, ["Sentry", "Not connected."]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
 });
@@ -2508,10 +2505,7 @@ test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, 
       { workspaceId: ACME.id, installationId: "installation-1" },
     ],
   ]);
-  assert.deepEqual(after, [
-    "Sentry",
-    "Not installed. Install to start automations from Sentry alerts.",
-  ]);
+  assert.deepEqual(after, ["Sentry", "Not connected."]);
   assert.deepEqual(rowWords(memberRow), ["Sentry", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
@@ -2521,26 +2515,23 @@ const SLACK_TEAM = { id: "T0001", name: "Acme Slack" };
 test("an admin connects the Slack bot, which then says Connected, and disconnects it after asking; a member sees it read only", async () => {
   slackBot = { configured: true };
   const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  const before = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
 
-  act(() => button(rowNamed(githubGroup(admin.page), "Slack bot"), "Connect Slack bot").click());
+  act(() => button(rowNamed(githubGroup(admin.page), "Slack"), "Connect").click());
   await settle();
-  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
-  await chooseAction(rowNamed(githubGroup(admin.page), "Slack bot"), "Disconnect");
+  const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
+  await chooseAction(rowNamed(githubGroup(admin.page), "Slack"), "Disconnect");
   await confirm("Disconnect Slack bot");
-  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Slack"));
   for (const root of roots.splice(0)) act(() => root.unmount());
   slackBot = { configured: true, team: SLACK_TEAM };
   const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
-  const memberRow = rowNamed(githubGroup(member.page), "Slack bot");
+  const memberRow = rowNamed(githubGroup(member.page), "Slack");
 
-  assert.deepEqual(before, [
-    "Slack bot",
-    "Not connected. Connect Vespin's bot to message members in Slack.",
-  ]);
-  assert.deepEqual(connected, ["Slack bot", "Connected"]);
+  assert.deepEqual(before, ["Slack", "Not connected."]);
+  assert.deepEqual(connected, ["Slack", "Connected"]);
   assert.deepEqual(after, before);
-  assert.deepEqual(rowWords(memberRow), ["Slack bot", "Connected"]);
+  assert.deepEqual(rowWords(memberRow), ["Slack", "Connected"]);
   assert.deepEqual(rowButtons(memberRow), []);
 });
 

@@ -6,6 +6,7 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  IconButton,
   Inline,
   JUSTIFY,
   MARK_PROVIDER,
@@ -43,7 +44,7 @@ import {
   TextButton,
   TextField,
 } from "@repo/ui";
-import { ExternalLinkIcon } from "@repo/ui/icons";
+import { ExternalLinkIcon, GLYPH } from "@repo/ui/icons";
 import { useState } from "react";
 import { CATALOG_FAILURE } from "../catalog-failure";
 import type { Example } from "../examples";
@@ -406,7 +407,15 @@ function RowsFoldRows(): React.JSX.Element {
       <SettingsRowsFold
         label="GitHub accounts"
         head={(chevron) => (
-          <SettingsRow label="GitHub" leading={<Mark provider={MARK_PROVIDER.GITHUB} />}>
+          <SettingsRow
+            label="GitHub"
+            description={
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+                Connected
+              </SettingsRowStateLine>
+            }
+            leading={<Mark provider={MARK_PROVIDER.GITHUB} />}
+          >
             {() => (
               <>
                 <Button
@@ -435,10 +444,10 @@ function RowsFoldRows(): React.JSX.Element {
         }
       />
       <SettingsRowsFold
-        label="Slack bot settings"
+        label="Slack settings"
         head={(chevron) => (
           <SettingsRow
-            label="Slack bot"
+            label="Slack"
             description={
               <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
                 Connected
@@ -451,7 +460,7 @@ function RowsFoldRows(): React.JSX.Element {
                 <Button variant={BUTTON_VARIANT.OUTLINE} icon={<PlusIcon />}>
                   Add channel
                 </Button>
-                <MoreButton thing="Slack bot" />
+                <IconButton icon={<GLYPH.DISCONNECT />} label="Disconnect" />
                 {chevron}
               </>
             )}
@@ -483,7 +492,12 @@ function RowsFoldRows(): React.JSX.Element {
             }
             leading={<Mark provider={MARK_PROVIDER.SENTRY} />}
           >
-            {() => chevron}
+            {() => (
+              <>
+                <IconButton icon={<GLYPH.DISCONNECT />} label="Disconnect" />
+                {chevron}
+              </>
+            )}
           </SettingsRow>
         )}
       />
