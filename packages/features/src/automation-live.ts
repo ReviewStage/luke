@@ -158,14 +158,24 @@ function turnOf(row: RunAgentRow): StatusTurn | undefined {
       };
 }
 
-/** A run's agent as the wire says it, its status read at `now` and why it failed where it did; none where the run started none. */
-function runAgentOf(row: RunAgentRow, now: number): AutomationRunSummary["agent"] {
+/**
+ * A run's agent as the wire says it, its status read at `now` and why it
+ * failed where it did, and finished where a later run went to the same
+ * agent (`handedOnRuns`); none where the run started none.
+ */
+function runAgentOf(
+  row: RunAgentRow,
+  now: number,
+  handedOn = false,
+): AutomationRunSummary["agent"] {
   if (row.agentId === null || row.agentCreatedAt === null) return null;
-  const status = agentStatusAt(turnOf(row), {
-    createdAt: row.agentCreatedAt,
-    now,
-    awaitingLineAt: row.awaitingLineAt ?? undefined,
-  });
+  const status = handedOn
+    ? AGENT_STATUS.COMPLETED
+    : agentStatusAt(turnOf(row), {
+        createdAt: row.agentCreatedAt,
+        now,
+        awaitingLineAt: row.awaitingLineAt ?? undefined,
+      });
   const failureReason =
     status === AGENT_STATUS.FAILED && row.failureWord !== null ? row.failureWord : undefined;
   return {
@@ -200,6 +210,26 @@ function latestFired(
 ): number {
   if (a.firedAt !== b.firedAt) return b.firedAt - a.firedAt;
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+/**
+ * The runs, latest fired first, whose agent a later run went to. Note that a
+ * same-agent automation hands every run to one agent, whose newest turn is
+ * its latest run's work, so the agent's status is said on that run alone,
+ * and an earlier one reads as finished, rather than every run it ever took
+ * reading as at work.
+ */
+function handedOnRuns(
+  rows: readonly { readonly id: string; readonly agentId: string | null }[],
+): ReadonlySet<string> {
+  const taken = new Set<string>();
+  const handedOn = new Set<string>();
+  for (const row of rows) {
+    if (row.agentId === null) continue;
+    if (taken.has(row.agentId)) handedOn.add(row.id);
+    taken.add(row.agentId);
+  }
+  return handedOn;
 }
 
 /** One automation's newest run as the list says it; none where it has run none. */
@@ -287,33 +317,37 @@ export function automationsOfLiveRows(
     );
 }
 
-/** An automation's runs as the held history answers them, as the live rows stand at `now`: latest fired first. */
+/** An automation's runs as the held history answers them, as the live rows stand at `now`: latest fired first, an agent's status said on the latest run it took. */
 export function automationRunsOfLiveRows(
   rows: AutomationRunsLiveRows,
   now: number,
 ): readonly AutomationRunSummary[] {
-  return rows.runs.toSorted(latestFired).map((row) => ({
+  const runs = rows.runs.toSorted(latestFired);
+  const handedOn = handedOnRuns(runs);
+  return runs.map((row) => ({
     id: row.id,
     firing: row.firing,
     status: row.status,
     reason: row.reason,
-    agent: runAgentOf(row, now),
+    agent: runAgentOf(row, now, handedOn.has(row.id)),
     firedAt: row.firedAt,
     settledAt: row.settledAt,
   }));
 }
 
-/** A workspace's runs as the Runs tab reads them, newest first, each run's agent read at `now`. */
+/** A workspace's runs as the Runs tab reads them, newest first, each run's agent read at `now` and said on the latest run it took. */
 export function automationWorkspaceRunsOfLiveRows(
   rows: AutomationWorkspaceRunsLiveRows,
   now: number,
 ): readonly AutomationWorkspaceRun[] {
-  return rows.runs.toSorted(latestFired).map((row) => ({
+  const runs = rows.runs.toSorted(latestFired);
+  const handedOn = handedOnRuns(runs);
+  return runs.map((row) => ({
     id: row.id,
     firing: row.firing,
     status: row.status,
     reason: row.reason,
-    agent: runAgentOf(row, now),
+    agent: runAgentOf(row, now, handedOn.has(row.id)),
     firedAt: row.firedAt,
     settledAt: row.settledAt,
     automation: { id: row.automationId, name: row.automationName },
