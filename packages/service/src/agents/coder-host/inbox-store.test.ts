@@ -1288,7 +1288,11 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(messaged.updatedAt > answered.updatedAt, "and moves when it last changed");
 
         const closed = Option.getOrThrow(yield* closeInboxItem(agent, "closing", "Not needed."));
-        assert.equal(closed.settledAt, closed.updatedAt);
+        assert.equal(closed.settledAt, yield* Clock.currentTimeMillis);
+        assert.ok(
+          closed.updatedAt < (closed.settledAt ?? 0),
+          "an agent's close leaves its last change",
+        );
         // As an item settled before the stamp was kept stands.
         yield* Database.use((db) =>
           db.update(inboxItem).set({ settledAt: null }).where(eq(inboxItem.id, closed.id)),
@@ -1359,7 +1363,7 @@ const postedId = (agent: InboxAgent, key: string) =>
 
 it.layer(getTestDB())("an inbox item's read state", (it) => {
   it.effect(
-    "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read",
+    "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read but the agent withdrawing its ask",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -1397,12 +1401,11 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           "one member's read leaves another's unread",
         );
 
-        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a close, a post under its key.
+        // Each change after the read makes it unread again: the agent's reply, a teammate's answer, a post under its key.
         const changes = [
           replyInboxItem(agent, SETTINGS.key, "Still needed."),
           answerDone(teammate, posted),
           post(agent),
-          closeInboxItem(agent, SETTINGS.key, "Done another way."),
         ];
         for (const change of changes) {
           yield* markInboxItemRead(agent.userId, id);
@@ -1411,6 +1414,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           yield* change;
           assert.equal(yield* unreadFor(agent.userId, id), true);
         }
+
+        // The agent withdrawing its ask asks nothing of the reader, so it leaves the item read.
+        yield* markInboxItemRead(agent.userId, id);
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* closeInboxItem(agent, SETTINGS.key, "Done another way.");
+        assert.equal(yield* unreadFor(agent.userId, id), false);
       }),
   );
 
@@ -1468,6 +1477,16 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [true, false],
+        );
+        const markedOf = (reader: string) =>
+          Effect.map(
+            readInboxItem(reader, id),
+            (found) => Option.getOrThrow(found).item.markedUnread,
+          );
+        assert.deepEqual(
+          [yield* markedOf(agent.userId), yield* markedOf(teammate)],
+          [true, undefined],
+          "the read says whose mark it is, which Open reads on a closed thread",
         );
         yield* TestClock.adjust(Duration.seconds(1));
         yield* postInboxMessage(agent.userId, id, { text: "Later.", clientKey: randomUUID() });

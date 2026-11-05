@@ -78,8 +78,10 @@ function changedItem(change: InboxChange, item: InboxItem): InboxItem | undefine
         ? change.item(item)
         : undefined;
     case INBOX_CHANGE.MARKED:
-      return change.itemIds.has(item.id) && (item.unread === true) !== change.unread
-        ? { ...item, unread: change.unread }
+      // Note that a mark sets the reader's own mark as well, since Open reads it on a closed thread.
+      return change.itemIds.has(item.id) &&
+        ((item.unread === true) !== change.unread || (item.markedUnread === true) !== change.unread)
+        ? { ...item, unread: change.unread, markedUnread: change.unread }
         : undefined;
     case INBOX_CHANGE.ANSWERED:
       return item.id === change.item.id && item.updatedAt <= change.item.updatedAt

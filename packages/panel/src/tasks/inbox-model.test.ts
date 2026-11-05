@@ -494,11 +494,15 @@ test("a list's places are its rows', a held one kept and a new one where it stan
   ]);
 });
 
-test("an item is done with once it is settled, answered or closed, and read; one open, or settled and unread since, is not", () => {
+test("an item is done with once it is settled, answered or closed, and read, or closed without an answer however unread; one open, answered and unread since, or closed and marked unread or written on since, is not", () => {
+  const withdrawn = { status: INBOX_STATUS.CLOSED, unread: true, settledAt: 2_000 } as const;
   assert.equal(isDone(item({ id: "answered", status: INBOX_STATUS.ANSWERED })), true);
   assert.equal(isDone(item({ id: "closed", status: INBOX_STATUS.CLOSED })), true);
+  assert.equal(isDone(item({ id: "withdrawn", ...withdrawn })), true);
   assert.equal(isDone(item({ id: "open" })), false);
   assert.equal(isDone(item({ id: "again", status: INBOX_STATUS.ANSWERED, unread: true })), false);
+  assert.equal(isDone(item({ id: "marked", ...withdrawn, markedUnread: true })), false);
+  assert.equal(isDone(item({ id: "written", ...withdrawn, updatedAt: 3_000 })), false);
 });
 
 test("Open lists only what the reader is not done with, and the item chosen where one is given, as the steps through the list keep it", () => {
@@ -627,13 +631,20 @@ test("Needs you lists and counts only the questions whose ask waits on the reade
   assert.equal(inboxCounts(groups, ME.userId, dana)[INBOX_SHOW.NEEDS_ME], 1);
 });
 
-test("a task done or canceled hides none of its items: Open lists and counts its open ones and its unread settled ones as any task's", () => {
+test("a task done or canceled hides none of its items: Open lists and counts its open ones and its unread answered ones as any task's, and leaves out the asks its settle withdrew, which All keeps", () => {
   const finished = [
     {
       holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
       items: [
         item({ id: "done-open", updatedAt: 20 }),
         item({ id: "done-unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+        item({
+          id: "done-withdrawn",
+          status: INBOX_STATUS.CLOSED,
+          updatedAt: 3,
+          settledAt: 30,
+          unread: true,
+        }),
       ],
     },
     {
@@ -646,7 +657,7 @@ test("a task done or canceled hides none of its items: Open lists and counts its
   ];
   const counts = inboxCounts(finished, undefined);
   assert.equal(counts[INBOX_SHOW.OPEN], 4);
-  assert.equal(counts[INBOX_SHOW.ALL], 4);
+  assert.equal(counts[INBOX_SHOW.ALL], 5);
   const open = inboxList(finished, {
     readerId: undefined,
     chosen: undefined,

@@ -366,6 +366,11 @@ function unreadFor(readerId: string): SQL<boolean> {
   return sql<boolean>`coalesce((select ${READ.markedUnread} or ${ITEM_UPDATED_AT} > coalesce(greatest(${READ.readThrough}, ${ITEM_READ_THROUGH}), '-infinity'::timestamptz) from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), ${noMarker})`;
 }
 
+/** Whether the reader marked the item unread and has not read it since, as their marker holds it; false where they keep no marker. */
+function markedUnreadFor(readerId: string): SQL<boolean> {
+  return sql<boolean>`coalesce((select ${READ.markedUnread} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId}), false)`;
+}
+
 /** Until when the reader snoozed the item, as their marker holds it; null where they did not, or keep no marker. */
 function snoozedUntilFor(readerId: string): SQL<Date | null> {
   return sql<Date | null>`(select ${READ.snoozedUntil} from ${inboxItemRead} where ${READ.itemId} = ${ITEM_ID} and ${READ.userId} = ${readerId})`;
@@ -413,6 +418,7 @@ function inboxColumns(readerId: string) {
   return {
     ...INBOX_ITEM_COLUMNS,
     unread: unreadFor(readerId),
+    markedUnread: markedUnreadFor(readerId),
     snoozedUntil: snoozedUntilMillisFor(readerId),
   };
 }
@@ -527,6 +533,7 @@ const InboxRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(Schema.Number),
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  markedUnread: Schema.Boolean,
   snoozedUntil: Schema.NullOr(Schema.Number),
 });
 
@@ -569,6 +576,7 @@ function storedItem(row: InboxRow, keysFor?: string): StoredInboxItem {
       ...(row.settledAt === null ? undefined : { settledAt: row.settledAt }),
       updatedAt: row.updatedAt.getTime(),
       unread: row.unread,
+      ...(row.markedUnread ? { markedUnread: true } : undefined),
       ...(row.snoozedUntil === null ? undefined : { snoozedUntil: row.snoozedUntil }),
     },
     answerKey: row.answerKey,
@@ -971,7 +979,14 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/** The agent's item under the key that holds an ask open closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no such item under it, a notice among them. */
+/**
+ * The agent's item under the key that holds an ask open closed with why, its
+ * revision moved on and no ask held open; its id, or nothing where the agent
+ * has no such item under it, a notice among them. Note that the close moves
+ * no last change, as a settle by its task does (`inbox-settle.ts`), because
+ * a withdrawn ask asks nothing of the reader, so it must neither make the
+ * thread unread again nor lift it to the top of their Inbox.
+ */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -990,7 +1005,6 @@ const closeItem = SqlSchema.findOneOption({
           closedBy: null,
           revision: sql`${inboxItem.revision} + 1`,
           settledAt: now,
-          updatedAt: now,
           openAskMessageId: null,
         })
         .where(
@@ -1668,6 +1682,7 @@ function itemsLiveStatements(
             closedByName: INBOX_ITEM_COLUMNS.closedByName,
             openAskMessageId: inboxItem.openAskMessageId,
             unread: unreadFor(readerId),
+            markedUnread: markedUnreadFor(readerId),
           },
           {
             postedAt: inboxItem.postedAt,

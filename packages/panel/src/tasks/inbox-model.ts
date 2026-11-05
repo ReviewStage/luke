@@ -1396,7 +1396,7 @@ export function agentGroups(
  * which Addressed to never narrows; Open, every
  * thread the reader is not done with, a question not yet answered, a notice
  * not yet opened, or a thread they have not read since it changed or marked
- * unread, which Addressed to then narrows; All, every item, open and
+ * unread, bar a withdrawn ask they left alone, which Addressed to then narrows; All, every item, open and
  * settled; or Snoozed, the items the reader snoozed, which the other three
  * leave out until they come back. Note that Open keeps the value To do was kept by, so a scope
  * kept before it reads as Open. Note too that no scope asks where the
@@ -1715,18 +1715,36 @@ export function inboxAtNow(groups: readonly InboxGroup[], now: number): readonly
   });
 }
 
-/** Whether the reader is done with an item, as its row is drawn gray: settled, answered or closed, and read since. */
+/**
+ * Whether a thread closed without an answer, its ask withdrawn by its agent,
+ * a member, or its task's or agent's settle, says nothing new to the
+ * reader: they neither marked it unread nor missed a message written on it
+ * since it closed. Note that an item from a service before `settledAt` was
+ * kept reads its last change as its close, as the service does.
+ */
+function closedQuietly(item: InboxItem): boolean {
+  if (item.status !== INBOX_STATUS.CLOSED || item.markedUnread === true) return false;
+  return item.updatedAt <= (item.settledAt ?? item.updatedAt);
+}
+
+/**
+ * Whether the reader is done with an item, as its row is drawn gray:
+ * settled, answered or closed, and read since, or closed without an answer
+ * and saying nothing new (`closedQuietly`), since a withdrawn ask asks
+ * nothing of them however unread it stands.
+ */
 export function isDone(item: InboxItem): boolean {
-  return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
+  return item.status !== INBOX_STATUS.OPEN && (!isUnread(item) || closedQuietly(item));
 }
 
 /**
  * Whether a scope lists the item: Needs you every question whose ask waits
  * on the reader (`threadNeedsReader`), what main's to-do count and the
  * Dock's badge count but for those snoozed, a notice never; Open every
- * thread the reader is not done with (`isDone`), one still open or one
- * settled since they last read it or marked unread, as a mail app's inbox
- * keeps what is unread; and All all of them, each leaving out what the
+ * thread the reader is not done with (`isDone`), one still open, one
+ * answered since they last read it, or one closed without an answer that
+ * they marked unread or that was written on since it closed, as a mail
+ * app's inbox keeps what is unread; and All all of them, each leaving out what the
  * reader snoozed (`isSnoozed`), which Snoozed alone lists. Note that Open
  * reads the reader's own read state rather than the thread's status alone,
  * because a notice settles as it is opened (`acknowledgedOnOpen`), so a
