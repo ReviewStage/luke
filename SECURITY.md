@@ -16,7 +16,7 @@ as patches to an older one.
 
 ## Reporting a vulnerability
 
-Email **founders@stagereview.app**, or use GitHub's
+Email **founders@vespin.dev**, or use GitHub's
 [private vulnerability reporting](https://github.com/ReviewStage/vespin/security/advisories/new)
 on this repository. Please do not open a public issue for a security report.
 
