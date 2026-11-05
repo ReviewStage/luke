@@ -3,7 +3,8 @@
  *
  * A client a member allowed holds their consent and the tokens minted on
  * it, in the OAuth provider's own tables. The read lists the member's
- * consents for every client but the desktop's, on the account's bearer,
+ * consents for every client but the desktop's, and a client that skips
+ * consent by the live token it holds, on the account's bearer,
  * through Drizzle (`oauth-grants.ts`), since every endpoint of the
  * provider's that lists them takes a session. The revoke runs under the
  * Mac's session, since it deletes the consent through the provider's own
