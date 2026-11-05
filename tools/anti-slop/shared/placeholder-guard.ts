@@ -14,8 +14,13 @@ export const PLACEHOLDER_NAME = "placeholder";
 /** An ellipsis, one glyph or three dots, ending words: after a letter, digit, or space. */
 export const TRAILING_ELLIPSIS = /[\p{L}\p{N} ](?:…|\.\.\.)$/u;
 
-/** An ellipsis ending a quoted string, as far as the text says. */
-const QUOTED_TRAILING_ELLIPSIS = /[\p{L}\p{N} ](?:…|\.\.\.)["'`]/u;
+/**
+ * An ellipsis ending a quoted string, as far as the text says: the glyph,
+ * three dots, or the glyph escaped (`\u2026`, `\u{2026}`) or written as a JSX
+ * entity (`&hellip;`, `&#8230;`, `&#x2026;`), which the rule reads decoded.
+ */
+const QUOTED_TRAILING_ELLIPSIS =
+  /[\p{L}\p{N} ](?:…|\.\.\.|\\u2026|\\u\{2026\}|&hellip;|&#8230;|&#x2026;)["'`]/iu;
 
 /**
  * Whether a file's text names a placeholder and holds words ending in an

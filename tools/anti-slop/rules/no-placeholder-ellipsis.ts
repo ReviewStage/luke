@@ -5,8 +5,8 @@ import { PLACEHOLDER_NAME, TRAILING_ELLIPSIS } from "../shared/placeholder-guard
 
 /**
  * The literal endings a placeholder's value can take: a string literal whole,
- * a template literal's last part, and each branch of a conditional or a
- * logical expression. A value read off a name or a call is left alone, since
+ * a template literal's last part, each branch of a conditional or a logical
+ * expression, and a destructured default. A value read off a name or a call is left alone, since
  * the rule cannot tell how it ends.
  */
 function endingsOf(node: ESTree.Node | null | undefined): readonly string[] {
@@ -18,6 +18,7 @@ function endingsOf(node: ESTree.Node | null | undefined): readonly string[] {
     return [...endingsOf(node.consequent), ...endingsOf(node.alternate)];
   }
   if (node.type === "LogicalExpression") return [...endingsOf(node.left), ...endingsOf(node.right)];
+  if (node.type === "AssignmentPattern") return endingsOf(node.right);
   return [];
 }
 

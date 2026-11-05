@@ -40,18 +40,22 @@ tester.run("no-placeholder-ellipsis", noPlaceholderEllipsisRule, {
       filename: PANEL_FILE,
       errors: [{ messageId: "trailingEllipsis", data: { words: "Assign to…" } }],
     },
-    // Three dots, an object's property, and a built template's tail are refused alike.
+    // Three dots, an object's property, a built template's tail, either side of an `||`, and a destructured default are refused alike.
     {
       code: [
         'const COPY = { placeholder: "Search by name or email..." };',
         "const field = { placeholder: `Search ${count} skills…` };",
         'function A() { return <TextField placeholder={open ? "Reply" : "Comment …"} />; }',
+        'function B() { return <TextField placeholder={draft || "Reply…"} />; }',
+        'function C({ placeholder = "Search…" }) { return <TextField placeholder={placeholder} />; }',
       ].join("\n"),
       filename: PANEL_FILE,
       errors: [
         { messageId: "trailingEllipsis", data: { words: "Search by name or email..." } },
         { messageId: "trailingEllipsis", data: { words: " skills…" } },
         { messageId: "trailingEllipsis", data: { words: "Comment …" } },
+        { messageId: "trailingEllipsis", data: { words: "Reply…" } },
+        { messageId: "trailingEllipsis", data: { words: "Search…" } },
       ],
     },
   ],
