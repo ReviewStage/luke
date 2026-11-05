@@ -170,7 +170,7 @@ import {
   type EveMessage,
 } from "../eve-host/eve-sessions.js";
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
-import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
+import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
 import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
@@ -2466,7 +2466,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stops its agents first as the app's archive does and archives none, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, numbers, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
@@ -2512,7 +2512,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   assert.equal(
     await agentArchive(),
     null,
-    "its agent, still at work, is neither stopped nor archived",
+    "its agent is stopped first, as the app's archive stops it, and not archived",
   );
   // Every member still lists it, where list_tasks narrows to the status it settled in.
   assert.deepEqual(
@@ -3410,8 +3410,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     reason: UPDATE_TASK_REFUSAL.NO_TASK,
   });
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: theirs }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+    ...NO_SECTION_DELETED,
   });
   assert.deepEqual((await call(CODER_TOOL.LIST_TASKS, {})).sections, [
     { id: growth, title: "Growth" },
@@ -3437,8 +3436,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   const stillThere = await database.run(readTask(teammates.userId, taskIds.billing));
   assert.ok(Option.isSome(stillThere), "deleting a section deletes none of its tasks");
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+    ...NO_SECTION_DELETED,
   });
 });
 
