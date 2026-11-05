@@ -21,7 +21,6 @@ import { PROVIDER_KEY_STATUS } from "@repo/features/provider-key-wire";
 import { formatDate } from "@repo/features/time-format";
 import { readFailedWords } from "@repo/features/words";
 import {
-  Badge,
   Card,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -30,8 +29,9 @@ import {
   Inline,
   List,
   ListRow,
+  QUIET_MARK,
+  QuietWords,
   Skeleton,
-  STATUS_TONE,
   TEXT_LINK_LOOK,
   TEXT_TONE,
   Text,
@@ -85,8 +85,8 @@ const ATTENTION_SKELETON_ROWS = 5;
 /** The attention table's account column, the one whose cell is an account's. */
 const ATTENTION_ACCOUNT_COLUMN = "account";
 
-/** The bones standing for a badge's words and a provider's name. */
-const SKELETON_BADGE_WIDTH = "64px";
+/** The bones standing for a status's words and a provider's name. */
+const SKELETON_STATUS_WIDTH = "64px";
 
 const SKELETON_PROVIDER_WIDTH = "192px";
 
@@ -196,11 +196,7 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
   return (
     <ListRow
       title={integration.label}
-      meta={
-        <Badge tone={integration.configured ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}>
-          {integration.configured ? "Configured" : "Not configured"}
-        </Badge>
-      }
+      meta={<QuietWords>{integration.configured ? "Configured" : "Not configured"}</QuietWords>}
     />
   );
 }
@@ -231,9 +227,7 @@ function attentionColumns(
       cell: (row) => (
         <Inline>
           {row.problems.map((problem) => (
-            <Badge key={problemLabel(problem)} tone={STATUS_TONE.ATTENTION}>
-              {problemLabel(problem)}
-            </Badge>
+            <QuietWords key={problemLabel(problem)}>{problemLabel(problem)}</QuietWords>
           ))}
         </Inline>
       ),
@@ -451,17 +445,16 @@ function ReliabilityRecords({
 }
 
 /**
- * A badge while its words are read: the badge itself with a bone for its
- * words. Note that it stands in a row of its own, whose foot is the badge's,
- * because a bone gives the badge no words' baseline to sit on, and a badge
- * set on its line's baseline would stand the line taller than its words do.
+ * A status's quiet words while they are read: the words' own line with a
+ * bone for them. Note that it stands in a row of its own, as the database's
+ * loaded words do, so the bone sits on the line its words will.
  */
-function BadgeSkeleton(): React.JSX.Element {
+function StatusWordsSkeleton(): React.JSX.Element {
   return (
     <Inline>
-      <Badge>
-        <Skeleton width={SKELETON_BADGE_WIDTH} />
-      </Badge>
+      <QuietWords>
+        <Skeleton width={SKELETON_STATUS_WIDTH} />
+      </QuietWords>
     </Inline>
   );
 }
@@ -470,7 +463,7 @@ function BadgeSkeleton(): React.JSX.Element {
 function DatabaseCardSkeleton(): React.JSX.Element {
   return (
     <MetricCardSkeleton>
-      <BadgeSkeleton />
+      <StatusWordsSkeleton />
     </MetricCardSkeleton>
   );
 }
@@ -484,7 +477,7 @@ function IntegrationsCardSkeleton(): React.JSX.Element {
           <ListRow
             key={row}
             title={<Skeleton width={SKELETON_PROVIDER_WIDTH} />}
-            meta={<BadgeSkeleton />}
+            meta={<StatusWordsSkeleton />}
           />
         ))}
       </List>
@@ -509,11 +502,9 @@ function SystemHealth({
             hint={`probe round-trip ${formatCount(health.database.latencyMs)} ms`}
           >
             <Inline>
-              <Badge
-                tone={health.database.reachable ? STATUS_TONE.COMPLETE : STATUS_TONE.ATTENTION}
-              >
+              <QuietWords mark={health.database.reachable ? undefined : QUIET_MARK.FAILED}>
                 {health.database.reachable ? "Reachable" : "Unreachable"}
-              </Badge>
+              </QuietWords>
             </Inline>
           </MetricCard>
         )}

@@ -21,6 +21,7 @@ import {
   GAP,
   Inline,
   MARK_PROVIDER,
+  QuietWords,
   SKELETON_SHAPE,
   Skeleton,
   STATUS_TONE,
@@ -41,7 +42,7 @@ import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { ADMIN_TAB, workspaceReadQuery } from "../routing.js";
-import { INSTALLATION_LABEL, INSTALLATION_TONE } from "../status-words.js";
+import { INSTALLATION_LABEL, installationMark } from "../status-words.js";
 import { useAdminRead } from "../use-admin-read.js";
 
 const WORKSPACE_ERROR = readFailedWords("this workspace");
@@ -145,9 +146,9 @@ function Masthead({ detail }: { detail: AdminWorkspaceDetail }): React.JSX.Eleme
                     href: githubAccountPageUrl(installation.login),
                   }}
                 />
-                <Badge tone={INSTALLATION_TONE[installation.status]}>
+                <QuietWords mark={installationMark(installation.status)}>
                   {INSTALLATION_LABEL[installation.status]}
-                </Badge>
+                </QuietWords>
               </Inline>
             ))}
           </Inline>

@@ -1,12 +1,12 @@
 /**
- * status-words.ts -- the words and tones the admin pages say a status in, read from the app's own maps so a state reads the same on every screen.
+ * status-words.ts -- the words the admin pages say a status in, read from the app's own maps so a state reads the same on every screen.
  *
- * A pull request is the app's: its word from `PULL_REQUEST_STATE_LABEL` and
- * its tone from `PULL_REQUEST_TONE`, so open is green and closed is red as
- * they are in the sidebar. A GitHub App installation and an integration
- * connection are said once here, for the account page, the workspaces table,
- * and Reliability's problems alike: an expired sign-in needs attention, and an
- * uninstalled App is a danger.
+ * A status is drawn as quiet words (`@repo/ui`'s `QuietWords`), after the
+ * failure glyph where it is a failure. A pull request is the app's word for
+ * where it stands (`PULL_REQUEST_STATE_LABEL`). A GitHub App installation and
+ * an integration connection are said once here, for the account page, the
+ * workspaces table, and Reliability's problems alike: an uninstalled App is a
+ * failure.
  */
 
 import type { AdminPullRequest } from "@repo/features/admin-account-wire";
@@ -15,14 +15,10 @@ import {
   GITHUB_INSTALLATION_STATUS,
   type GitHubInstallationStatus,
 } from "@repo/features/github-installation-wire";
-import {
-  INTEGRATION_ROW_STATUS,
-  type IntegrationRowStatus,
-} from "@repo/features/integration-row-wire";
+import type { IntegrationRowStatus } from "@repo/features/integration-row-wire";
 import { INTEGRATION_STATUS_WORDS } from "@repo/features/integration-status-words";
-import { STATUS_TONE, type StatusTone } from "@repo/ui";
+import { QUIET_MARK, type QuietMark } from "@repo/ui";
 import { PULL_REQUEST_STATE_LABEL } from "../tasks/agent-model.js";
-import { PULL_REQUEST_TONE } from "../tasks/pull-request-mark.js";
 
 /** The state each pull request the admin pages draw stands in; a draft is one of the open. */
 const ADMIN_PULL_REQUEST_STATE = {
@@ -36,17 +32,10 @@ export function pullRequestWord(state: Exclude<AdminPullRequest, "none">): strin
   return PULL_REQUEST_STATE_LABEL[ADMIN_PULL_REQUEST_STATE[state]];
 }
 
-/** The tone a pull request's badge wears: the app's tone for where it stands. */
-export function pullRequestTone(state: Exclude<AdminPullRequest, "none">): StatusTone {
-  return PULL_REQUEST_TONE[ADMIN_PULL_REQUEST_STATE[state]];
+/** The mark an installation's words follow: the failure glyph for an uninstalled App, none for the rest. */
+export function installationMark(status: GitHubInstallationStatus): QuietMark | undefined {
+  return status === GITHUB_INSTALLATION_STATUS.DELETED ? QUIET_MARK.FAILED : undefined;
 }
-
-/** The tone each installation status is drawn in: working, held, or gone. */
-export const INSTALLATION_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: STATUS_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: STATUS_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: STATUS_TONE.DANGER,
-} as const satisfies Record<GitHubInstallationStatus, StatusTone>;
 
 /** What each installation status is called. */
 export const INSTALLATION_LABEL = {
@@ -55,24 +44,12 @@ export const INSTALLATION_LABEL = {
   [GITHUB_INSTALLATION_STATUS.DELETED]: "Uninstalled",
 } as const satisfies Record<GitHubInstallationStatus, string>;
 
-/** The tone each connection status is drawn in; an expired sign-in needs a person. */
-const CONNECTION_TONE = {
-  [INTEGRATION_ROW_STATUS.PENDING]: STATUS_TONE.WORKING,
-  [INTEGRATION_ROW_STATUS.CONNECTED]: STATUS_TONE.COMPLETE,
-  [INTEGRATION_ROW_STATUS.EXPIRED]: STATUS_TONE.ATTENTION,
-} as const satisfies Record<IntegrationRowStatus, StatusTone>;
-
 /** Whether a connection status is one this build knows, which the account page's answer, a bare string, may not be. */
 function isConnectionStatus(status: string): status is IntegrationRowStatus {
-  return Object.hasOwn(CONNECTION_TONE, status);
+  return Object.hasOwn(INTEGRATION_STATUS_WORDS, status);
 }
 
-/** The tone a connection's badge wears; a status this build does not know reads as needing attention. */
-export function connectionTone(status: string): StatusTone {
-  return isConnectionStatus(status) ? CONNECTION_TONE[status] : STATUS_TONE.ATTENTION;
-}
-
-/** What a connection is called on a badge; a status this build does not know is drawn as the service spelled it. */
+/** What a connection is called; a status this build does not know is drawn as the service spelled it. */
 export function connectionWord(status: string): string {
   return isConnectionStatus(status) ? INTEGRATION_STATUS_WORDS[status] : status;
 }
