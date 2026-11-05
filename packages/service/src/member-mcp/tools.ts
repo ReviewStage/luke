@@ -782,18 +782,7 @@ const MEMBER_EDIT_PLAN_TOOL = memberMcpTool({
       (userId) => readTaskWorkspace(userId, asked.taskId),
       PLAN_EDIT_REFUSAL.NO_TASK,
       ({ caller }) =>
-        Effect.tap(
-          recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
-          // Counted as the window's edit of the plan is, since it is the member's own.
-          (saved) =>
-            saved.status === ACTION_RESULT_STATUS.ACCEPTED && caller.kind === AGENT_CALLER.MEMBER
-              ? recordServerEvent(
-                  SERVER_EVENT.PLAN_EDIT,
-                  { userId: caller.userId, workspaceId: caller.workspaceId },
-                  {},
-                )
-              : Effect.void,
-        ),
+        recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
     ),
 });
 

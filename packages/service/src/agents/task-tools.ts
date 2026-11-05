@@ -73,24 +73,14 @@ import { workspaceNamingOf, writtenTaskMention } from "./written-mentions.js";
  * mentioned.
  *
  * `create_task` makes a task as the member the caller acts for makes one from
- * the sidebar: in the caller's workspace, owned by that member, on the
- * repository named, the one the caller works in where none is, or none,
- * confirmed through the workspace's installation as a task's repository is,
- * with the developer's brief and a plan to start from where they are given,
- * and no agent on it; `start_agent` starts one on it by its id, and a task
- * holds no place to run, each agent its own. Given a parent task of
- * the caller's workspace that the member reaches, it is made that task's
- * child, to any depth, and takes the parent's repository rather than its
- * own, refused where the call names another repository
- * (`tasks/task-parent.ts`). Given a relation instead, it is made a sub-task
- * of the other task, as with a parent, its parent, taking its repository,
- * or blocked by or blocking it, the relation written in the make's own
- * transaction so the task and its relation land together or not at all
- * (`tasks/task-create-relation.ts`). Only a pilot may make a task in pilot mode, and
- * only as a child, which is how it gives a part too big for one pull request
- * a pilot of its own; every other task is worked by its agents. It is made
- * under an id drawn from eve's key for the call (`called-id.ts`), so a call
- * run again answers the task it made and makes no second.
+ * the sidebar, through the one make every door shares
+ * (`tasks/task-create-relation.ts`): in the caller's workspace, on the
+ * repository named, the one the caller works in where none is, or none, and
+ * with a plan to start from where one is given. Only a pilot may make a task
+ * in pilot mode, and only as a child, which is how it gives a part too big
+ * for one pull request a pilot of its own. It is made under an id drawn from
+ * eve's key for the call (`called-id.ts`), so a call run again answers the
+ * task it made and makes no second.
  * Every answer is data the model reads, never a credential.
  */
 

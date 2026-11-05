@@ -38,9 +38,7 @@ import {
   readTask,
   type StoredTask,
   setTaskParent,
-  type TaskArchivedAgent,
   type TaskChanges,
-  updateTaskCommitted,
 } from "@repo/database/models/task-store";
 import { isWorkspaceMember } from "@repo/database/models/workspace-store";
 import type { StoreWriter } from "@repo/database/models/writer";
@@ -76,11 +74,7 @@ import {
   startBranchSchema,
 } from "@repo/features/agent-wire";
 import { deviceAgentRegisterRequestSchema } from "@repo/features/device-agent-wire";
-import {
-  GITHUB_ACCESS,
-  type GitHubAccess,
-  githubRepositoryFullNameSchema,
-} from "@repo/features/github-repositories-wire";
+import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { MENTION_KIND } from "@repo/features/mention-link";
 import { agentName, modelLabel } from "@repo/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@repo/features/models-wire";
@@ -114,11 +108,7 @@ import {
 } from "../core.js";
 import { SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
-import {
-  ownAgentWorkspace,
-  taskWorkspace,
-  workspaceRepository,
-} from "../github/workspace-repository.js";
+import { ownAgentWorkspace, taskWorkspace } from "../github/workspace-repository.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 import {
@@ -127,7 +117,7 @@ import {
   type OfferedModel,
   validateModelChoice,
 } from "../providers/model-catalog.js";
-import { archiveAskedStatus } from "../tasks/archive-settle.js";
+import { taskChangeAsked, taskChangeSettled, taskChangeWritten } from "../tasks/task-change.js";
 import { createTaskAsked } from "../tasks/task-create-relation.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
@@ -154,14 +144,11 @@ import {
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
-import {
-  canceledTurn,
-  idleStandingAgents,
-  standingsOf as turnStandingsOf,
-} from "./coder-host/stop.js";
+import { canceledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { discardedOrLogged } from "./device-discard.js";
 import type { AgentSessions } from "./eve-host/eve-sessions.js";
+import { deploymentSandboxStops } from "./session-sandboxes.js";
 import {
   assigneeIdOf,
   assigneeMentionOf,
@@ -362,6 +349,9 @@ export const UPDATE_TASK_REFUSAL = {
   PARENT_CYCLE:
     "Not run: that parent is the task itself or one of its sub-tasks, under which the task " +
     "would descend from itself; take that task out from under this one first.",
+  ARCHIVE_NOT_READY:
+    "Not run: an agent of that task is still starting or has a message waiting, so archiving " +
+    "the task would stop a turn no one could name yet; call again in a moment.",
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -2408,49 +2398,30 @@ export function repositoryRefusalWords(refusal: HostedRefusal): string {
     : AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
-interface RecordedRepository {
-  readonly repository: string | null;
-  readonly githubAccess: GitHubAccess;
+/** A change's refusal in the model's words (`taskChangeAsked`, `taskChangeWritten`): a task gone, an assignee who is no member, a repository its tree holds, an archive whose agents are not ready, or the repository's own. */
+function changeRefusalWords(refusal: HostedRefusal): string {
+  switch (refusal.error) {
+    case HOSTED_API_ERROR.NOT_FOUND:
+      return UPDATE_TASK_REFUSAL.NO_TASK;
+    case HOSTED_API_ERROR.INVALID_REQUEST:
+      return UPDATE_TASK_REFUSAL.NOT_MEMBER;
+    case HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED:
+      return UPDATE_TASK_REFUSAL.TREE_REPOSITORY;
+    case HOSTED_API_ERROR.AGENT_NOT_READY:
+      return UPDATE_TASK_REFUSAL.ARCHIVE_NOT_READY;
+    default:
+      return repositoryRefusalWords(refusal);
+  }
 }
 
 /**
- * A repository confirmed as the menu's PATCH confirms one, through the
- * workspace's installation or else the member's own token, or the refusal's
- * words; none clears it.
- */
-export const reachedRepository = (
-  workspaceId: string,
-  repository: string | null,
-  member: string | undefined,
-) =>
-  repository === null
-    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
-        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
-      )
-    : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository, member)),
-        (reached): Result.Result<RecordedRepository, string> =>
-          Result.isSuccess(reached)
-            ? Result.succeed({
-                repository: reached.success.repository.fullName,
-                githubAccess: reached.success.access,
-              })
-            : Result.fail(repositoryRefusalWords(reached.failure)),
-      );
-
-/**
  * One call of `update_task`: a task of the caller's workspace changed as the
- * member's own menu changes it (`updateTask`, which `tasks-procedures.ts`'s PATCH
- * runs), for the member the caller acts for, its repository confirmed first
- * as the PATCH confirms one, or why not. Note that the task is read first, on
- * that member's standing, both to hold it to the caller's workspace and to
- * tell a change already standing, which the store keeps as it stood; and
- * that the caller never archives the task it works on. A move to Done
- * archives the task's idle agents with it as the caller, for its member, and
- * lets each go on its device; one still at work is archived as its turn ends
- * (`tasks/task-finish.ts`), and the caller, where the task is its own, never
- * is, since it is still answering whoever asked.
+ * app's menu changes it (`tasks/task-change.ts`), for the member the caller
+ * acts for, with its place in the sidebar, its parent, and its blocks in the
+ * same transaction, or why not. Note that the task is read first, on that
+ * member's standing, both to hold it to the caller's workspace and to tell a
+ * change already standing; and that a move to Done archives the task's idle
+ * agents as the caller, which, still answering whoever asked, is never one.
  */
 export function runUpdateTask(
   call: AgentCall,
@@ -2506,37 +2477,18 @@ export function runUpdateTask(
       if (blocking !== undefined && Result.isFailure(blocking)) {
         return agentToolRejected(blocking.failure);
       }
-      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
-      const owner = read.value.ownerId === userId ? userId : undefined;
-      const repository =
-        changes.repository === undefined
+      // The change itself is confirmed as the app's is (`taskChangeAsked`), an archive stopping the task's agents but the caller.
+      const asked = archived === undefined ? changes : { ...changes, archived };
+      const confirmed =
+        Object.keys(asked).length === 0
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository, owner);
-      if (repository !== undefined && Result.isFailure(repository)) {
-        return agentToolRejected(repository.failure);
+          : yield* Effect.result(taskChangeAsked(userId, taskId, asked, callerAgent(caller)?.id));
+      if (confirmed !== undefined && Result.isFailure(confirmed)) {
+        return agentToolRejected(changeRefusalWords(confirmed.failure));
       }
-      // An archive from an older call settles the task, and an unarchive puts it back to work; a status named beside either is the one written.
-      const status =
-        changes.status !== undefined || archived === undefined
-          ? changes.status
-          : yield* archiveAskedStatus(
-              userId,
-              taskId,
-              read.value.task.status ?? TASK_STATUS.TODO,
-              archived,
-            );
-      // A repository is compared as GitHub spells it, which is how the task holds it.
-      const asWritten = {
-        ...changes,
-        ...(status === undefined ? undefined : { status }),
-        ...(repository === undefined
-          ? undefined
-          : {
-              repository: repository.success.repository,
-              githubAccess: repository.success.githubAccess,
-            }),
-      };
-      const stands = changesStand(read.value, asWritten) && (placing?.success.stands ?? true);
+      const stands =
+        changesStand(read.value, confirmed?.success.changes ?? {}) &&
+        (placing?.success.stands ?? true);
       // The tasks the blocks name, and the parent, are locked before the task's change, so the change takes no lock first that another call's writes wait on.
       const locking = [
         ...(blocking === undefined ? [] : tasksOfWrites(blocking.success)),
@@ -2546,91 +2498,68 @@ export function runUpdateTask(
       // refused, its section deleted meanwhile, a parent refused, or a block refused takes the change back with it.
       const writing = Effect.gen(function* () {
         if (locking.length > 0) yield* lockTasksForBlocks(userId, locking);
-        // A move to Done archives the task's idle agents with it, as this agent for its member.
         const updated =
-          Object.keys(asWritten).length === 0
-            ? Option.some({ task: read.value.task, archived: [], statusMoved: false })
-            : yield* updateTaskCommitted(userId, taskId, asWritten, undefined, {
-                archivedBy: archiverOf(caller, undefined),
-                idle: idleStandingAgents,
-              });
-        const task = Option.map(updated, (written) => written.task);
-        if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
+          confirmed === undefined
+            ? undefined
+            : yield* taskChangeWritten(
+                userId,
+                taskId,
+                confirmed.success,
+                archiverOf(caller, undefined),
+              ).pipe(
+                Effect.mapError(
+                  (refusal) => new TaskChangeRefused({ words: changeRefusalWords(refusal) }),
+                ),
+              );
+        if (updated !== undefined && Option.isNone(updated)) {
+          return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_TASK });
+        }
+        if (placing !== undefined && !placing.success.stands) {
           // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
           const placed = yield* writeTaskSections(userId, {
             kind: TASK_SECTION_WRITE.PLACE,
             taskId,
             sectionId: placing.success.section?.id ?? null,
           });
-          if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
+          if (Option.isNone(placed)) {
+            return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_SECTION });
+          }
         }
         // The parent is written under the store's own rules, and the task answered as it then stands.
         const parented =
-          Option.isSome(task) && parentTaskId !== undefined
-            ? yield* setTaskParent(userId, taskId, parentTaskId)
-            : undefined;
+          parentTaskId === undefined
+            ? undefined
+            : yield* setTaskParent(userId, taskId, parentTaskId);
         if (parented !== undefined && Option.isNone(parented)) {
-          return yield* Effect.fail(new TaskParentGone());
+          return yield* new TaskChangeRefused({ words: UPDATE_TASK_REFUSAL.NO_TASK });
         }
         const blocksChanged =
-          Option.isSome(task) && blocking !== undefined
-            ? yield* writeTaskBlocks(userId, blocking.success)
-            : false;
+          blocking === undefined ? false : yield* writeTaskBlocks(userId, blocking.success);
         return {
-          task: parented === undefined ? task : Option.map(parented, (written) => written.task),
-          parentChanged: parented !== undefined && Option.getOrThrow(parented).txid !== undefined,
+          updated: updated?.value,
+          task: parented?.value.task ?? updated?.value.task ?? read.value.task,
+          parentChanged: parented?.value.txid !== undefined,
           blocksChanged,
-          doneArchived: Option.match(updated, {
-            onNone: () => [],
-            onSome: (written) => written.archived,
-          }),
         };
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
         client.withTransaction(writing),
       ).pipe(
-        Effect.map(
-          (
-            written,
-          ): Result.Result<
-            {
-              task: Option.Option<StoredTask["task"]>;
-              parentChanged: boolean;
-              blocksChanged: boolean;
-              doneArchived: readonly TaskArchivedAgent[];
-            },
-            string
-          > => Result.succeed(written),
-        ),
-        Effect.catchTag("TaskAssigneeNotMember", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NOT_MEMBER)),
-        ),
-        Effect.catchTag("TaskPlaceRefused", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
-        ),
-        Effect.catchTag("TaskBlockRefused", ({ words }) => Effect.succeed(Result.fail(words))),
-        Effect.catchTag("TaskTreeRepositoryLocked", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.TREE_REPOSITORY)),
-        ),
-        Effect.catchTag("TaskParentGone", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_TASK)),
-        ),
-        Effect.catchTag("TaskParentUnreached", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_PARENT)),
-        ),
-        Effect.catchTag("TaskParentRepositoryDiffers", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY)),
-        ),
-        Effect.catchTag("TaskParentCycle", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_CYCLE)),
-        ),
+        Effect.map((written) => Result.succeed(written)),
+        Effect.catchTags({
+          TaskChangeRefused: ({ words }) => Effect.succeed(Result.fail(words)),
+          TaskBlockRefused: ({ words }) => Effect.succeed(Result.fail(words)),
+          TaskParentUnreached: () => Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_PARENT)),
+          TaskParentRepositoryDiffers: () =>
+            Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_REPOSITORY)),
+          TaskParentCycle: () => Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.PARENT_CYCLE)),
+        }),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
-      const { task, parentChanged, blocksChanged, doneArchived } = changed.success;
-      // The agents its Done archived are let go of on their devices once it commits, as an agent's archive lets one go.
-      yield* Effect.forEach(doneArchived, discardedOrLogged, { discard: true });
-      if (Option.isNone(task)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      return yield* taskUpdateAnswer(userId, task.value, {
+      const { updated, task, parentChanged, blocksChanged } = changed.success;
+      // The agents its Done archived are let go of once it commits, and a finish counted, as the app's change does.
+      if (updated !== undefined) yield* taskChangeSettled(deploymentSandboxStops, userId, updated);
+      return yield* taskUpdateAnswer(userId, task, {
         already: stands && !parentChanged && !blocksChanged,
         section: placing?.success.section,
         parentNamed: parentTaskId !== undefined,
@@ -2747,11 +2676,8 @@ export function runStopAgent(
 /** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
 class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
 
-/** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
-class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
-
-/** The task a parent write named went out of reach meanwhile, so nothing was written; the call takes back its every change. */
-class TaskParentGone extends Data.TaggedError("TaskParentGone") {}
+/** A task's change refused inside its transaction, its words for the model: its section or its parent gone meanwhile, or the change refused under the row's lock, which takes every change back. */
+class TaskChangeRefused extends Data.TaggedError("TaskChangeRefused")<{ readonly words: string }> {}
 
 /** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
 class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{

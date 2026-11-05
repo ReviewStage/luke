@@ -2466,7 +2466,7 @@ test("update_agent archives no agent still working, nor the caller itself, an ag
   assert.equal(teammates.title, null, "a refused archive renames nothing");
 });
 
-test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, leaves its agents as they stand, answers a call run again as done, and an unarchive puts it In progress", async () => {
+test("update_task, asked by a call from before tasks stopped being archived, settles the task Canceled where no agent's pull request merged and Done where one did, stops its agents first as the app's archive does and archives none, answers a call run again as done, and an unarchive puts it In progress", async () => {
   const { workspaceId, plans: tasks, numbers, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(), agents.caller, eve.services);
@@ -2512,7 +2512,7 @@ test("update_task, asked by a call from before tasks stopped being archived, set
   assert.equal(
     await agentArchive(),
     null,
-    "its agent, still at work, is neither stopped nor archived",
+    "its agent is stopped first, as the app's archive stops it, and not archived",
   );
   // Every member still lists it, where list_tasks narrows to the status it settled in.
   assert.deepEqual(

@@ -1,10 +1,8 @@
 /**
  * task-create-relation.ts -- a task made for a member, as every door makes one, with the relations it starts in, confirmed before it writes and written beside it in its own transaction.
  *
- * `createTaskAsked` is the one make: the app's New task (`plans.create`),
- * an agent's or a member's `create_task`, and the task `start_agent` makes
- * for an agent on no task all make theirs through it, so one rule holds
- * for each. Each door reads its own input and answers in its own words.
+ * `createTaskAsked` is the one make: the app's New task, `create_task`, and
+ * `start_agent`'s task for an agent on no task, each in its own words.
  *
  * A task may start related to others (`taskCreateRequestSchema`'s
  * `relations`, or an agent's `create_task`'s one `relation`, from the new
@@ -307,18 +305,14 @@ export interface TaskCreated extends TaskStartCommitted {
 }
 
 /**
- * Makes the task `userId` asked for in its workspace, the one make every
- * door shares, each door holding who may ask for what first. A task made
- * as a child of another, by `parentTaskId` or a relation as its sub-task,
- * takes its parent's repository and, where it names no assignee, its
- * parent's (`taskParentOf`), refused where it names another repository; one
- * made as others' parent takes their repository, which the tree shares, and
- * one blocking or blocked by others takes nothing of them (`relationsAsked`).
- * The repository is confirmed through the workspace's installation, or
- * else the member's own token. The task, its plan's first revision where
- * it starts with text, and every relation are one write
- * (`createTaskRelated`), so one refused makes nothing. A make under an id
- * that made its task already answers that task, unmade, and counts none.
+ * Makes the task `userId` asked for, the make every door shares, each door
+ * holding who may ask for what first. A child, by `parentTaskId` or a
+ * sub-task relation, takes its parent's repository and, where it names no
+ * assignee, its parent's (`taskParentOf`); a parent of others takes theirs
+ * (`relationsAsked`); a repository is reached as the workspace reaches it.
+ * The task, its plan's first revision, and every relation are one write
+ * (`createTaskRelated`). A make under an id that made its task answers it,
+ * unmade, and counts none.
  */
 export const createTaskAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
