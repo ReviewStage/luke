@@ -261,7 +261,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * logged as a status and the delete proceeds. Better Auth deletes the
      * account, and before it every workspace the account is the only member
      * of (`auth-policy.ts`'s `accountDeletion`); what outlasts their rows is
-     * settled after (`account-store.ts`). Every grant the account's
+     * settled after (`account-store.ts`), a settling that fails logged, since the account is already gone. Every grant the account's
      * integration rows name is revoked at Vercel Connect once the rows are
      * gone, as a Disconnect revokes one, so no grant outlives the account; a
      * revoke that fails is logged by its word and the account is deleted
@@ -280,10 +280,23 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       // Note that the grants and the reach are read before the delete, because nothing names them once the account's rows are gone.
       const grants = yield* hostedStoreOrUnavailable(readIntegrationConnections(userId));
       const reach = yield* hostedStoreOrUnavailable(seams.readDeletionReach(userId));
-      yield* seams.accountDeletion
-        .deleteUser(sessionHeaders)
-        .pipe(Effect.mapError(deletionRefusal));
-      yield* hostedStoreOrUnavailable(seams.settleDeletion(reach));
+      yield* seams.accountDeletion.deleteUser(sessionHeaders).pipe(
+        Effect.tapError((failure) =>
+          Effect.logWarning("Better Auth did not delete the account", failure),
+        ),
+        Effect.mapError(deletionRefusal),
+      );
+      // Note that the account is gone by now, so a settling that fails is logged rather than answered, and the grants are revoked all the same.
+      yield* seams
+        .settleDeletion(reach)
+        .pipe(
+          Effect.catch((failure) =>
+            Effect.logError(
+              "The account's deletion left its conversations or sandboxes unsettled",
+              failure,
+            ),
+          ),
+        );
       yield* revokeIntegrationGrants(userId, grants);
       return { deleted: true } as const;
     }),
