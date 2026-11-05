@@ -21,6 +21,7 @@ import {
   type AgentInboxReadStateView,
   type AgentInboxSnoozeParams,
   type AgentListAnswer,
+  type AgentMarkReadParams,
   type AgentMessagesAnswerView,
   type AgentPageAnswerView,
   type AgentPartView,
@@ -45,6 +46,7 @@ import {
   agentInboxSnoozeParamsSchema,
   agentInboxStartParamsSchema,
   agentListParamsSchema,
+  agentMarkReadParamsSchema,
   agentMessageParamsSchema,
   agentMessagesParamsSchema,
   agentPageParamsSchema,
@@ -112,6 +114,7 @@ import {
   pullRequestChaptersParamsSchema,
   pullRequestChaptersReadParamsSchema,
 } from "@repo/features/pull-request-chapters-view";
+import { markedAs } from "@repo/features/read-mark";
 import { commitShaSchema } from "@repo/features/task-wire";
 import type { WorkspaceToolsAnswer } from "@repo/features/workspace-tools-wire";
 import {
@@ -307,6 +310,7 @@ export type AgentClient = Pick<
   | "changeQueue"
   | "archive"
   | "pin"
+  | "markRead"
   | "stop"
   | "rewind"
   | "delete"
@@ -999,6 +1003,14 @@ function composed(
     ({ agentId, ...request }, key) => asked(client.pin(agentId, request, key)),
     { name: GATEWAY_METHOD.AGENTS_PIN, input: agentPinParamsSchema },
   );
+  /** The reader's read mark, drawn on the agent's row at once, and kept once the list carries the service's. */
+  const markedRead = agentWrite<AgentMarkReadParams>(
+    ({ readMark }) =>
+      (row) =>
+        markedAs(readMark, row, kernel.now()),
+    ({ agentId, ...request }, key) => asked(client.markRead(agentId, request, key)),
+    { name: GATEWAY_METHOD.AGENTS_MARK_READ, input: agentMarkReadParamsSchema },
+  );
   /**
    * A Start, on a task or from another agent, which draws no row, since
    * only the service names its agent, which the list then carries. Where
@@ -1551,6 +1563,16 @@ function composed(
         params,
         "pinning an agent names the agent and whether it is pinned",
       ),
+    ),
+    [GATEWAY_METHOD.AGENTS_MARK_READ]: declaredMethod(
+      dependencies.pool,
+      markedRead,
+      (params: WireRecord) =>
+        readParams(
+          agentMarkReadParamsSchema,
+          params,
+          "marking an agent read names the agent and how its mark moves",
+        ),
     ),
     [GATEWAY_METHOD.AGENTS_STOP]: (params) =>
       Effect.gen(function* () {

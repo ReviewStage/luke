@@ -28,6 +28,7 @@ import {
   integrationConnectionOf,
 } from "@repo/features/integration-wire";
 import type { ModelChoice } from "@repo/features/models-wire";
+import { READ_MARK, type ReadMark } from "@repo/features/read-mark";
 import { type TaskStatus, taskStatusSchema } from "@repo/features/task-wire";
 import { TURN_STATUS, type WireValue, WireValueSchema } from "@repo/wire";
 import {
@@ -65,6 +66,7 @@ import {
   type StoredStartedFrom,
 } from "../schemas/agent.js";
 import { agentPin } from "../schemas/agent-pin.js";
+import { agentRead } from "../schemas/agent-read.js";
 import { organization, user } from "../schemas/auth.js";
 import { automationRun } from "../schemas/automation.js";
 import { inboxItem } from "../schemas/inbox.js";
@@ -238,10 +240,12 @@ export interface AgentLine extends Omit<Agent, "automationOrigin" | "planSnapsho
   readonly brief: AgentBrief;
 }
 
-/** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
+/** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. Beside it, the reader's read mark: the instant they read it through, and whether they marked it unread. */
 export interface TasklessAgentRow extends AgentLine {
   readonly pinnedAt: Date | null;
   readonly pinPosition: string | null;
+  readonly readThrough: Date;
+  readonly markedUnread: boolean;
 }
 
 /** What a Start answered: the agent, and whether this Start made it or a retry found it. */
@@ -551,6 +555,8 @@ const TasklessAgentRowSchema = Schema.Struct({
   ...AgentLineRowSchema.fields,
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   pinPosition: Schema.NullOr(Schema.String),
+  readThrough: InstantColumnSchema,
+  markedUnread: Schema.Boolean,
 });
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -1793,7 +1799,7 @@ const findAgentLinesOfWorkspace = SqlSchema.findAll({
     ),
 });
 
-/** Every agent with no plan in the account's workspaces, newest started first, each with the account's own pin of it. */
+/** Every agent with no plan in the account's workspaces, newest started first, each with the account's own pin and read mark of it. */
 const findTasklessAgents = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
   Result: TasklessAgentRowSchema,
@@ -1804,9 +1810,16 @@ const findTasklessAgents = SqlSchema.findAll({
           ...AGENT_LINE_COLUMNS,
           pinnedAt: agentPin.pinnedAt,
           pinPosition: agentPin.position,
+          // Note that with no mark of the reader's own, the agent reads through the instant marks moved to the service, or its start.
+          readThrough: sql<Date>`coalesce(${agentRead.readThrough}, ${agentTable.readThrough}, ${agentTable.createdAt})`,
+          markedUnread: sql<boolean>`coalesce(${agentRead.markedUnread}, false)`,
         })
         .from(agentTable)
         .leftJoin(agentPin, and(eq(agentPin.agentId, agentTable.id), eq(agentPin.userId, userId)))
+        .leftJoin(
+          agentRead,
+          and(eq(agentRead.agentId, agentTable.id), eq(agentRead.userId, userId)),
+        )
         .where(
           and(
             isNull(agentTable.taskId),
@@ -2134,6 +2147,58 @@ const deleteAgentPin = SqlSchema.findOneOption({
       db
         .delete(agentPin)
         .where(and(eq(agentPin.userId, userId), eq(agentPin.agentId, agentId)))
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The account's read mark of the agent read through now, a mark by hand taken back. */
+const markAgentRead = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  Result: TxidRowSchema,
+  execute: ({ userId, agentId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(agentRead)
+        .values({ userId, agentId, readThrough: now })
+        .onConflictDoUpdate({
+          target: [agentRead.userId, agentRead.agentId],
+          set: { readThrough: now, markedUnread: false },
+        })
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The account's read mark of the agent read through now, a mark by hand left standing. */
+const markAgentSeen = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, now: Schema.Date }),
+  Result: TxidRowSchema,
+  execute: ({ userId, agentId, now }) =>
+    Database.use((db) =>
+      db
+        .insert(agentRead)
+        .values({ userId, agentId, readThrough: now })
+        .onConflictDoUpdate({
+          target: [agentRead.userId, agentRead.agentId],
+          set: { readThrough: now },
+        })
+        .returning({ txid: TXID }),
+    ),
+});
+
+/** The account's read mark of the agent marked unread, the instant it was read through left standing; nothing where it stands marked already. */
+const markAgentUnread = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: TxidRowSchema,
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .insert(agentRead)
+        .values({ userId, agentId, markedUnread: true })
+        .onConflictDoUpdate({
+          target: [agentRead.userId, agentRead.agentId],
+          set: { markedUnread: true },
+          setWhere: sql`not ${agentRead.markedUnread}`,
+        })
         .returning({ txid: TXID }),
     ),
 });
@@ -3204,6 +3269,32 @@ export function pinAgentCommitted(
       : position === undefined
         ? yield* insertAgentPin({ userId, agentId, now })
         : yield* placeAgentPin({ userId, agentId, position, now });
+    const txid = Option.getOrUndefined(written)?.txid;
+    return Option.some(txid === undefined ? { agent: found.value } : { agent: found.value, txid });
+  });
+}
+
+/**
+ * The account's read mark of the agent set as asked (`READ_MARK`), and the
+ * transaction it was written in; none where the account may not read the
+ * agent, or where it works on a task, whose mark is the task's. Every other member's mark stands as it was.
+ */
+export function markAgentReadCommitted(
+  userId: string,
+  agentId: string,
+  mark: ReadMark,
+): AgentStoreEffect<Option.Option<AgentCommitted>> {
+  return Effect.gen(function* () {
+    // Note that a read mark is gated as the member's read of the agent is, as a pin is, and kept only for an agent with no task, the one a list reads it on.
+    const found = yield* findVisibleAgent({ userId, agentId });
+    if (Option.isNone(found) || found.value.taskId !== null) return Option.none();
+    const now = yield* DateTime.nowAsDate;
+    const written =
+      mark === READ_MARK.READ
+        ? yield* markAgentRead({ userId, agentId, now })
+        : mark === READ_MARK.SEEN
+          ? yield* markAgentSeen({ userId, agentId, now })
+          : yield* markAgentUnread({ userId, agentId });
     const txid = Option.getOrUndefined(written)?.txid;
     return Option.some(txid === undefined ? { agent: found.value } : { agent: found.value, txid });
   });

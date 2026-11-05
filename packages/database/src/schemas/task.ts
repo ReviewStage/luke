@@ -158,6 +158,16 @@ export const task = pgTable(
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),
+    /**
+     * The instant every member without a read mark of their own
+     * (`task-read.ts`) has read the task through: the instant read marks
+     * moved to the service, on a task that stood before it, so no task that
+     * stood then reads unread until it changes again; null on a task started
+     * since, which reads through its start. The migration that added it
+     * stamped the standing rows through the column's default, in the catalog
+     * rather than by a write of each row, and then dropped the default.
+     */
+    readThrough: timestamptz("read_through"),
   },
   (table) => [
     // The task list reads one account's tasks, newest started first.

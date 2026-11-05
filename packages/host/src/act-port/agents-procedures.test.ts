@@ -21,6 +21,7 @@ import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@repo/features/pull-request-write-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
 import { AGENT_ACT_KIND, type PortActKind } from "../contract/index.js";
@@ -71,6 +72,7 @@ const REFUSAL = {
   [AGENT_ACT_KIND.AGENTS_STOP]: "Could not stop the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_ARCHIVE]: "Could not archive the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_PIN]: "Could not pin the agent on this system.",
+  [AGENT_ACT_KIND.AGENTS_MARK_READ]: "Could not mark the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_DELETE]: "Could not delete the agent on this system.",
   [AGENT_ACT_KIND.AGENTS_SHOWN]: "Could not note which agent is shown on this system.",
   [AGENT_ACT_KIND.AGENTS_SEEN]: "Could not mark the agent as read on this system.",
@@ -153,6 +155,11 @@ const ACTS: readonly {
     kind: AGENT_ACT_KIND.AGENTS_PIN,
     payload: { agentId: AGENT_ID, pinned: true },
     ask: "agentPin",
+  },
+  {
+    kind: AGENT_ACT_KIND.AGENTS_MARK_READ,
+    payload: { agentId: AGENT_ID, readMark: READ_MARK.READ },
+    ask: "agentMarkRead",
   },
   {
     kind: AGENT_ACT_KIND.AGENTS_DELETE,

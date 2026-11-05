@@ -12,6 +12,7 @@ import {
 import { applySectionWrite, memberOf } from "@repo/features/task-section-writes";
 import { TASK_STATUS, type TaskSummary } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { sectionOrder, sectionTaskIds, workspaceSections } from "@repo/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@repo/ui/tasks-model";
@@ -21,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
@@ -670,29 +672,38 @@ test("⌘-clicking a section's task and one under Tasks chooses both, opening ne
   assert.deepEqual(settled, [[[INVITES.id, RETRIES.id], TASK_STATUS.DONE]]);
 });
 
-test("a section's Mark all as read stands while a task in it is unread, and marks every one read", async () => {
-  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH);
+test("a section's Mark all as read stands while a task in it is unread, and asks the service to mark every unread one read", async () => {
+  const marks: string[] = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_MARK_READ]: ({ taskId, readMark }) => {
+      marks.push(`${readMark}:${taskId}`);
+      return Promise.resolve(true);
+    },
+  });
+  const read = await mountSidebar([], BOTH_IN_LAUNCH, {
+    tasks: [INVITES, RETRIES].map((each) => ({ ...each, readThrough: each.updatedAt })),
+  });
+  openSectionMenu(read, "Launch");
+  assert.ok(!menuLabels().includes("Mark all as read"));
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  read.remove();
 
-  for (const name of ["Invite expiry", "Retry audit"]) {
-    openRowMenu(sidebar, name);
-    act(() => item("Mark as unread").click());
-  }
-  openSectionMenu(sidebar, "Launch");
-  act(() => item("Mark all as read").click());
-  const marks = ["Invite expiry", "Retry audit"].map((name) => {
-    openRowMenu(sidebar, name);
-    const offered = menuLabels().filter((label) => /^Mark as (un)?read/u.test(label));
-    act(() => {
-      document.activeElement?.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-      );
-    });
-    return offered;
+  const sidebar = await mountSidebar([], BOTH_IN_LAUNCH, {
+    tasks: [
+      { ...INVITES, readThrough: INVITES.updatedAt - 1 },
+      { ...RETRIES, readThrough: RETRIES.updatedAt },
+    ],
   });
   openSectionMenu(sidebar, "Launch");
+  act(() => item("Mark all as read").click());
+  await settle();
 
-  assert.deepEqual(marks, [["Mark as unread"], ["Mark as unread"]]);
-  assert.ok(!menuLabels().includes("Mark all as read"));
+  assert.deepEqual(marks, [`read:${INVITES.id}`]);
 });
 
 test("a section without an icon draws its title behind the fold's chevron alone, and one with an icon behind its icon", async () => {

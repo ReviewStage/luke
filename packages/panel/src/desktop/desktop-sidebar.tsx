@@ -511,7 +511,6 @@ function TaskRows({
             agent={row.agent}
             agents={context.tasks.agents}
             current={context.currentRow(row)}
-            unread={context.unseenAgent(row.agent.id)}
             now={context.now}
             at={taskRowTime(row)}
             repository={repository?.(row)}
@@ -904,7 +903,6 @@ function PinnedRows({
                 agent={agent}
                 agents={context.tasks.agents}
                 current={context.currentRow(agentRow(agent))}
-                unread={context.unseenAgent(agent.id)}
                 now={context.now}
                 at={agent.activityAt}
                 nest={nest}
@@ -1888,10 +1886,7 @@ function SidebarColumn({
     control: taskView,
     shared,
   });
-  const unread = useUnreadTasks(tasks.tasks, {
-    listRead: tasks.listRead,
-    staged: sidebar.staged,
-  });
+  const unread = useUnreadTasks({ staged: sidebar.staged });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (taskId: string) => onTasks && !standingIn && taskId === tasks.activeTaskId;
@@ -2326,7 +2321,6 @@ function SidebarColumn({
                               agent={row.agent}
                               agents={tasks.agents}
                               current={currentRow(row)}
-                              unread={context.unseenAgent(row.agent.id)}
                               now={now}
                               at={taskRowTime(row)}
                               face={context.faces.creator && context.faces.assignee}

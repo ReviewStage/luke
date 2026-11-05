@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@repo/features/agent-wire";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
 import { INBOX_STATUS } from "@repo/features/inbox-wire";
+import { READ_MARK } from "@repo/features/read-mark";
 import {
   PLAN_ACTOR,
   TASK_MODE,
@@ -104,6 +105,56 @@ const pinnedOnes = (taskId: string) =>
   Database.use((db) =>
     db.select({ userId: taskPin.userId }).from(taskPin).where(eq(taskPin.taskId, taskId)),
   );
+
+/** The plan's read mark as the account reads it, in the list and opened alike, which must agree. */
+const markReadBy = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const { readThrough, markedUnread } = yield* listedTask(userId, taskId);
+    const opened = Option.getOrUndefined(yield* readTask(userId, taskId))?.task;
+    assert.deepEqual([opened?.readThrough, opened?.markedUnread], [readThrough, markedUnread]);
+    return { readThrough, markedUnread };
+  });
+
+it.layer(getTestDB())("a plan's read mark", (it) => {
+  it.effect(
+    "a member's read mark of a shared plan is theirs alone, a look reading it through now and a mark by hand standing until it is read",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, taskId } = yield* openSharedTask;
+        const startedAt = (yield* listedTask(dean, taskId)).createdAt;
+        yield* TestClock.adjust("1 minute");
+        const readAt = yield* Clock.currentTimeMillis;
+
+        yield* updateTask(dean, taskId, { readMark: READ_MARK.READ });
+        yield* updateTask(charles, taskId, { readMark: READ_MARK.UNREAD });
+
+        assert.deepEqual(yield* markReadBy(dean, taskId), {
+          readThrough: readAt,
+          markedUnread: false,
+        });
+        assert.deepEqual(yield* markReadBy(charles, taskId), {
+          readThrough: startedAt,
+          markedUnread: true,
+        });
+        yield* TestClock.adjust("1 minute");
+        const seenAt = yield* Clock.currentTimeMillis;
+        yield* updateTask(charles, taskId, { readMark: READ_MARK.SEEN });
+        assert.deepEqual(yield* markReadBy(charles, taskId), {
+          readThrough: seenAt,
+          markedUnread: true,
+        });
+        yield* updateTask(charles, taskId, { readMark: READ_MARK.READ });
+        assert.deepEqual(yield* markReadBy(charles, taskId), {
+          readThrough: seenAt,
+          markedUnread: false,
+        });
+        assert.deepEqual(yield* markReadBy(dean, taskId), {
+          readThrough: readAt,
+          markedUnread: false,
+        });
+      }),
+  );
+});
 
 it.layer(getTestDB())("a plan's pin", (it) => {
   it.effect("a member's pin of a shared plan reads pinned for them alone", () =>

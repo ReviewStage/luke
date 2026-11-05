@@ -182,6 +182,8 @@ export const AGENT_ACT_KIND = {
   AGENTS_REWIND: "agents.rewind",
   AGENTS_ARCHIVE: "agents.archive",
   AGENTS_PIN: "agents.pin",
+  /** The reader's own read mark of an agent with no task moved, kept on the account (`read-mark.ts`). */
+  AGENTS_MARK_READ: "agents.markRead",
   AGENTS_DELETE: "agents.delete",
   /**
    * Which agent's tab the panel shows, or none: what an agent's end leaves no
@@ -386,6 +388,8 @@ export const TASKS_ACT_KIND = {
   TASKS_DELETE: "tasks.delete",
   TASKS_RENAME: "tasks.rename",
   TASKS_PIN: "tasks.pin",
+  /** The reader's own read mark of a task moved, kept on the account (`read-mark.ts`); answers whether the service took it. */
+  TASKS_MARK_READ: "tasks.markRead",
   /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
@@ -808,6 +812,7 @@ export const PORT_ACT_USE = {
   AGENTS_REWIND: ACT_USE.WRITE,
   AGENTS_ARCHIVE: ACT_USE.WRITE,
   AGENTS_PIN: ACT_USE.WRITE,
+  AGENTS_MARK_READ: ACT_USE.WRITE,
   AGENTS_DELETE: ACT_USE.WRITE,
   AGENTS_SHOWN: ACT_USE.WRITE,
   AGENTS_SEEN: ACT_USE.WRITE,
@@ -890,6 +895,7 @@ export const PORT_ACT_USE = {
   TASKS_DELETE: ACT_USE.WRITE,
   TASKS_RENAME: ACT_USE.WRITE,
   TASKS_PIN: ACT_USE.WRITE,
+  TASKS_MARK_READ: ACT_USE.WRITE,
   TASKS_PIN_REPOSITORY: ACT_USE.WRITE,
   TASKS_WRITE_SECTION: ACT_USE.WRITE,
   TASKS_REPOSITORIES_FOLLOW: ACT_USE.READ,

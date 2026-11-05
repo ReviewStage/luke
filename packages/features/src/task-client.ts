@@ -182,8 +182,8 @@ const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as 
 /** A comment call refused because the plan is not the account's to read or write. */
 const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
-/** What a task's pin change names: pinned or not, and where the pin stands. */
-export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition">;
+/** What a task's mark names: pinned or not and where the pin stands, or the reader's read mark. */
+export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "readMark">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
@@ -1014,7 +1014,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Pins or unpins one task, under the idempotency key given where one is,
+   * Pins or unpins one task, or moves the reader's read mark on it, under the idempotency key given where one is,
    * answering it as changed with its document, or how it went untaken; a
    * change that names neither never travels.
    */

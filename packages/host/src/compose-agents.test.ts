@@ -517,6 +517,11 @@ function fakeService() {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
         return { agent: AGENT };
       }),
+    markRead: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`mark-read:${agentId}:${request.readMark}`);
+        return { agent: AGENT };
+      }),
     agent: (agentId) =>
       Effect.sync(() => {
         asked.push(`page:${agentId}`);

@@ -17,6 +17,7 @@ import { DEVICE_KIND, DEVICE_PLATFORM } from "./device-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { modelProviderSchema } from "./models-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { type ReadMark, readMarkSchema } from "./read-mark.js";
 import { chosenIdSchema, countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
 import { trimmedText } from "./text-schema.js";
 
@@ -406,6 +407,7 @@ function updateNamesAChange(update: {
   repository?: string | null;
   pinned?: boolean;
   pinPosition?: string;
+  readMark?: ReadMark;
   archived?: boolean;
   workspaceId?: string;
   status?: TaskStatus;
@@ -424,7 +426,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
 /**
  * Changing a task (PATCH): its name, its repository, whether it is pinned,
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
- * which comes only with `pinned: true` and pins a plan not yet pinned,
+ * which comes only with `pinned: true` and pins a plan not yet pinned, the
+ * asking member's own read mark (`read-mark.ts`),
  * whether it is archived, the workspace it moves to, where it stands, how
  * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. An assignee is confirmed a
@@ -439,6 +442,8 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
   pinPosition: EffectSchema.optionalKey(pinPositionSchema),
+  /** What the change makes of the asking member's own read mark (`read-mark.ts`). */
+  readMark: EffectSchema.optionalKey(readMarkSchema),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   status: EffectSchema.optionalKey(taskStatusSchema),
@@ -664,6 +669,10 @@ const taskSummaryFields = {
   pinnedAt: EffectSchema.optionalKey(countedNumber),
   /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
   pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** Epoch milliseconds the reader read the task through (`read-mark.ts`), the service's instant; absent from a service before read marks were kept. */
+  readThrough: EffectSchema.optionalKey(countedNumber),
+  /** Whether the reader marked the task unread and has not opened it since; absent from a service before read marks were kept. */
+  markedUnread: EffectSchema.optionalKey(EffectSchema.Boolean),
   /**
    * The account that started the task, its owner, which alone may move it to
    * another workspace; absent from a service before it was sent.

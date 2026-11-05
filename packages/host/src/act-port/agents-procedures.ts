@@ -24,6 +24,7 @@ import {
   type AgentGitHubImageView,
   type AgentListAnswer,
   type AgentListParams,
+  type AgentMarkReadParams,
   type AgentMessageParams,
   type AgentMessagesAnswerView,
   type AgentMessagesParams,
@@ -106,6 +107,7 @@ export interface AgentProceduresDependencies {
     agentRewind(params: AgentRewindParams): Effect.Effect<AgentAgentAnswer>;
     agentArchive(params: AgentArchiveParams): Effect.Effect<AgentAgentAnswer>;
     agentPin(params: AgentPinParams): Effect.Effect<AgentAgentAnswer>;
+    agentMarkRead(params: AgentMarkReadParams): Effect.Effect<AgentAgentAnswer>;
     agentDelete(params: AgentStopParams): Effect.Effect<AgentDeleteAnswerView>;
     agentPage(params: AgentPageParams): Effect.Effect<AgentPageAnswerView>;
     /** One agent's origin held followed at the host while any stream of it stands; what it holds reaches the panel on app state. */
@@ -460,6 +462,14 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
     }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* notedAgent(host.agentPin(input));
+    }),
+    [AGENT_ACT_KIND.AGENTS_MARK_READ]: actPort[AGENT_ACT_KIND.AGENTS_MARK_READ].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* notedAgent(host.agentMarkRead(input));
     }),
     [AGENT_ACT_KIND.AGENTS_DELETE]: actPort[AGENT_ACT_KIND.AGENTS_DELETE].effect(function* ({
       input,

@@ -30,6 +30,7 @@ import {
   agentListAnswerSchema,
   agentPageAnswerSchema,
   agentPinRequestSchema,
+  agentReadRequestSchema,
   agentRenameRequestSchema,
   agentReviewOptionsAnswerSchema,
   agentRewindRequestSchema,
@@ -77,14 +78,15 @@ const terminalParams = EffectSchema.Struct({
 const archivedQuery = EffectSchema.optionalKey(EffectSchema.String);
 
 /**
- * One change of an agent (PATCH): its title, its archive, its pin, its MCP
- * servers, or its model and effort, read in that order as the old group read
- * them.
+ * One change of an agent (PATCH): its title, its archive, its pin, the
+ * reader's read mark, its MCP servers, or its model and effort, read in that
+ * order as the old group read them.
  */
 const agentChangeRequestSchema = EffectSchema.Union([
   agentRenameRequestSchema,
   agentArchiveRequestSchema,
   agentPinRequestSchema,
+  agentReadRequestSchema,
   agentServersRequestSchema,
   modelChoiceSchema,
 ]);

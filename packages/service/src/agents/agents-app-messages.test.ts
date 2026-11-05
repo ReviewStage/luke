@@ -1206,9 +1206,11 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
 
         const [only, ...rest] = standing.planlessAgents ?? [];
         assert.ok(only !== undefined);
-        const { activityAt, ...read } = only;
+        const { activityAt, readThrough, markedUnread, ...read } = only;
         assert.deepEqual([read, rest], [page, []]);
         assert.ok(activityAt >= page.createdAt);
+        // Note that an agent no one has marked reads through its start for the member listing it.
+        assert.deepEqual([readThrough, markedUnread], [page.createdAt, false]);
         assert.equal(standing.plans.find((each) => each.id === task.id)?.agents, undefined);
         assert.deepEqual(outside.planlessAgents, []);
         assert.deepEqual(archived.planlessAgents, []);

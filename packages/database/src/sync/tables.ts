@@ -27,6 +27,7 @@ import { agentDelegationTable, agentTable } from "../schemas/agent.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { agentQueue } from "../schemas/agent-queue.js";
+import { agentRead } from "../schemas/agent-read.js";
 import { attachment } from "../schemas/attachment.js";
 import { invitation, member, organization, user } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -56,6 +57,7 @@ import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
 import { taskBlock } from "../schemas/task-block.js";
 import { taskPin } from "../schemas/task-pin.js";
+import { taskRead } from "../schemas/task-read.js";
 import { agentSectionEntry, taskSection, taskSectionEntry } from "../schemas/task-section.js";
 import { workspaceFormerSlug } from "../schemas/workspace-former-slug.js";
 import { TOPIC } from "./notification.js";
@@ -263,6 +265,18 @@ export const taskPinSync = defineSyncTable(taskPin, {
 /** An agent with no task an account pinned, on the account's topic. */
 export const agentPinSync = defineSyncTable(agentPin, {
   topics: [{ kind: TOPIC.ACCOUNT, column: agentPin.userId }],
+  log: LOG.EVERY,
+});
+
+/** How far an account read a task, or that it marked it unread, on the account's topic. */
+export const taskReadSync = defineSyncTable(taskRead, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: taskRead.userId }],
+  log: LOG.EVERY,
+});
+
+/** How far an account read an agent with no task, or that it marked it unread, on the account's topic. */
+export const agentReadSync = defineSyncTable(agentRead, {
+  topics: [{ kind: TOPIC.ACCOUNT, column: agentRead.userId }],
   log: LOG.EVERY,
 });
 
@@ -698,6 +712,8 @@ export const SYNC_TABLES: readonly SyncTable[] = [
   repositoryPinSync,
   taskPinSync,
   agentPinSync,
+  taskReadSync,
+  agentReadSync,
   macCommandSync,
   accountPreferenceSync,
   integrationConnectionSync,

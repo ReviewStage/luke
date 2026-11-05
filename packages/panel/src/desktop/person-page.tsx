@@ -699,7 +699,7 @@ function PersonColumn({
   // Note that the page keeps one identity while the list stands, because each of its lists follows its rows (`useLeaving`).
   const page = useMemo(() => personPage(userId, listed), [userId, listed]);
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
-  const unread = useUnreadTasks(tasks.tasks, { listRead: tasks.listRead, staged });
+  const unread = useUnreadTasks({ staged });
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;

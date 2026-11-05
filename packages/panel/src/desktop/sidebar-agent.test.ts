@@ -68,6 +68,8 @@ let standing: TasklessAgent = RUN;
 let archives: { agentId: string; archived: boolean }[] = [];
 /** Every agent marked read by hand in main, in order. */
 let seen: string[] = [];
+/** Every read mark asked of the service, in order, as `<mark>:<agent>`. */
+let readMarks: string[] = [];
 /** Every rename asked, in order. */
 let renames: { agentId: string; title: string }[] = [];
 /** Whether the service takes the names the rows ask for. */
@@ -86,6 +88,7 @@ beforeEach(() => {
   deletes = [];
   left = 0;
   seen = [];
+  readMarks = [];
   window.localStorage.clear();
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
@@ -93,6 +96,10 @@ beforeEach(() => {
         const { automationId, activityAt: _at, ...agent } = standing;
         const value = { agent: { ...agent, automationId } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AGENTS_MARK_READ) {
+        readMarks.push(`${request.payload.readMark}:${request.payload.agentId}`);
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: standing } });
       }
       if (request.kind === ACT_KIND.AGENTS_SEEN) {
         seen.push(request.payload.agentId);
@@ -113,7 +120,6 @@ afterEach(() => {
 function mount(
   agent: TasklessAgent,
   pullRequests: AgentsControl["pullRequests"] = new Map(),
-  unread = false,
 ): HTMLElement {
   const agents = agentsControl({
     me: ME,
@@ -142,7 +148,6 @@ function mount(
           agent,
           agents,
           current: false,
-          unread,
           now: 3,
           at: agent.activityAt,
           shown: true,
@@ -312,7 +317,6 @@ test("a draft waiting in the agent's box marks its row with the Draft pencil whi
               agent: RUN,
               agents,
               current,
-              unread: false,
               now: 3,
               at: RUN.activityAt,
               shown: true,
@@ -395,7 +399,7 @@ function heard(row: HTMLElement): string {
   return row.textContent ?? "";
 }
 
-test("an agent's row offers Mark as unread beside Rename, after Copy link, and the mark by hand reads it unread, as a task's row does", async () => {
+test("an agent's row offers Mark as unread beside Rename, after Copy link, which asks the service to mark it unread for the reader", async () => {
   const row = mount(RUN);
   const labels = rightClick(row).map((each) => wordsOf(each));
   assert.ok(labels.indexOf("Rename") > labels.indexOf("Copy link"));
@@ -403,40 +407,23 @@ test("an agent's row offers Mark as unread beside Rename, after Copy link, and t
   assert.ok(!heard(row).includes("(unread)"));
 
   await choose(row, "Mark as unread");
+  await settle();
 
-  assert.ok(heard(row).includes("(unread)"), "the row reads unread");
+  assert.deepEqual(readMarks, [`unread:${AGENT_ID}`]);
   assert.deepEqual(seen, [], "nothing is cleared in main for a mark unread");
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
-    [AGENT_ID]: { unread: true },
-  });
-  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as read"));
 });
 
-test("Mark as read on an agent marked unread by hand reads it again, in the store a task's marks are kept in", async () => {
-  const row = mount(RUN);
-  await choose(row, "Mark as unread");
-  assert.ok(heard(row).includes("(unread)"));
-
-  await choose(row, "Mark as read");
-
-  assert.ok(!heard(row).includes("(unread)"), "the row reads again");
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
-    [AGENT_ID]: RUN.activityAt,
-  });
-  assert.ok(rightClick(row).some((each) => wordsOf(each) === "Mark as unread"));
-});
-
-test("an agent whose turn ended unseen offers Mark as read, which clears main's unseen dot and moves the mark to its row's time", async () => {
-  const row = mount(RUN, new Map(), true);
+test("an agent the account marked unread, or that moved after the reader's mark, reads unread on every client, and Mark as read asks the service and clears main's unseen dot", async () => {
+  assert.ok(heard(mount({ ...RUN, readThrough: RUN.activityAt - 1 })).includes("(unread)"));
+  act(() => root?.unmount());
+  const row = mount({ ...RUN, readThrough: RUN.activityAt, markedUnread: true });
   assert.ok(heard(row).includes("(unread)"));
 
   await choose(row, "Mark as read");
   await settle();
 
+  assert.deepEqual(readMarks, [`read:${AGENT_ID}`]);
   assert.deepEqual(seen, [AGENT_ID]);
-  assert.deepEqual(JSON.parse(window.localStorage.getItem("app.taskLooks") ?? "null"), {
-    [AGENT_ID]: RUN.activityAt,
-  });
 });
 
 test("an archived agent's row offers the read mark too, as a task's does", () => {

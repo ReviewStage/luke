@@ -407,9 +407,9 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [
-        ...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child"),
-      ].map((name) => name.textContent),
+      [...section.querySelectorAll(".ui-list-row-title, .ui-task-row-press > :first-child")].map(
+        (name) => name.textContent,
+      ),
     ]),
   );
 }
@@ -1090,13 +1090,21 @@ test("a teammate's agent at rest is archived from its row at once, read again by
   );
 });
 
-test("a task marked unread from its row stands unread, and its menu then offers Mark as read", async () => {
+test("Mark as unread on a task's row asks the service to mark it unread for the reader", async () => {
+  const marks: string[] = [];
   const { page } = mount(CHARLES.userId);
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_MARK_READ]: ({ taskId, readMark }) => {
+      marks.push(`${readMark}:${taskId}`);
+      return Promise.resolve(true);
+    },
+  });
   await settle();
 
   openRowMenu(page, "Retry budget dashboard", "Task");
   act(() => button(document.body, "Mark as unread").click());
   await settle();
 
-  assert.ok(openRowMenu(page, "Retry budget dashboard", "Task").includes("Mark as read"));
+  assert.deepEqual(marks, [`unread:${DASHBOARD.id}`]);
 });
