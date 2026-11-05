@@ -403,7 +403,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
         id={menuId}
         label="Repository"
         placeholder="Search repositories"
-        rows={rows}
+        // Note that every row names a repository and its owner, so each stays masked, and the note, which can name the workspace, is left unmarked.
+        replayUnmasked
+        rows={rows.map((row) => ({ ...row, replayMasked: true }))}
         value={value ?? undefined}
         note={note}
         noMatch={MENU_NOTE.NO_MATCH}

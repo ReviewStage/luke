@@ -10,6 +10,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { useState } from "react";
 import { firstRefusal, type Kept } from "../act.js";
@@ -177,7 +178,9 @@ export function InboxSelectionBar({
     <>
       {listed.length === 0 ? null : (
         <Stack inset={INSET.COLUMN}>
-          <SelectionBar count={listed.length} acts={acts} onClear={onClear} controls={controls} />
+          <ReplayUnmask>
+            <SelectionBar count={listed.length} acts={acts} onClear={onClear} controls={controls} />
+          </ReplayUnmask>
         </Stack>
       )}
       <ConfirmDialog

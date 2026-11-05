@@ -55,6 +55,7 @@ import {
 } from "@repo/ui";
 import { actorName, personActor } from "@repo/ui/actor-model";
 import { CheckCheckIcon, GLYPH, InboxIcon, SlidersHorizontalIcon, UsersIcon } from "@repo/ui/icons";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import {
   VIRTUAL_ROWS_ANCHOR,
@@ -861,9 +862,11 @@ function ShowEmpty({
   onList: () => void;
 }): React.JSX.Element {
   return (
-    <EmptyState icon={<InboxIcon />} action={emptyWayOn(view, counts, onList)}>
-      {SHOW_EMPTY[view.whose.kind][view.show]}
-    </EmptyState>
+    <ReplayUnmask>
+      <EmptyState icon={<InboxIcon />} action={emptyWayOn(view, counts, onList)}>
+        {SHOW_EMPTY[view.whose.kind][view.show]}
+      </EmptyState>
+    </ReplayUnmask>
   );
 }
 
@@ -975,7 +978,7 @@ function ListHead({
               variant={TEXT_VARIANT.TOOLBAR_TITLE}
               className="ui-toolbar-title"
             >
-              {title}
+              <ReplayUnmask>{title}</ReplayUnmask>
             </Text>
           }
           end={
@@ -1036,7 +1039,13 @@ function ListHead({
 
 /** What a list its search left empty says, under its rows, on the window's Inbox. */
 function SearchEmpty({ searched }: { searched: string }): React.JSX.Element {
-  return <NoteLine look={NOTE_LINE_LOOK.ROWS}>{`No items match “${searched.trim()}”.`}</NoteLine>;
+  return (
+    <NoteLine look={NOTE_LINE_LOOK.ROWS}>
+      <ReplayUnmask>
+        No items match “<ReplayMask>{searched.trim()}</ReplayMask>”.
+      </ReplayUnmask>
+    </NoteLine>
+  );
 }
 
 /** The words of the way on from an Inbox with nothing in it. */
@@ -1083,23 +1092,27 @@ export function InboxPaneEmpty({
   const coarse = useCoarsePointer();
   if (listed === 0) {
     return (
-      <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
-        {none}
-      </EmptyState>
+      <ReplayUnmask>
+        <EmptyState icon={<InboxIcon />} action={newTaskAction(newTask)}>
+          {none}
+        </EmptyState>
+      </ReplayUnmask>
     );
   }
   return (
-    <EmptyState icon={<InboxIcon />}>
-      {coarse ? (
-        CHOOSE_AN_ITEM
-      ) : (
-        <>
-          {CHOOSE_AN_ITEM}, or step with{" "}
-          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord} spoken />{" "}
-          <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord} spoken />
-        </>
-      )}
-    </EmptyState>
+    <ReplayUnmask>
+      <EmptyState icon={<InboxIcon />}>
+        {coarse ? (
+          CHOOSE_AN_ITEM
+        ) : (
+          <>
+            {CHOOSE_AN_ITEM}, or step with{" "}
+            <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEXT_INBOX_ITEM].chord} spoken />{" "}
+            <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.PREVIOUS_INBOX_ITEM].chord} spoken />
+          </>
+        )}
+      </EmptyState>
+    </ReplayUnmask>
   );
 }
 
@@ -1138,13 +1151,15 @@ export function InboxListNote({
 }): React.JSX.Element | null {
   if (failed) {
     return (
-      <ErrorState
-        failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
-        onRetry={onRetry}
-        placement={ERROR_STATE_PLACEMENT.ROWS}
-      >
-        {INBOX_NOT_READ}
-      </ErrorState>
+      <ReplayUnmask>
+        <ErrorState
+          failure={unreadShown(FAILURE_SURFACE.INBOX_READ)}
+          onRetry={onRetry}
+          placement={ERROR_STATE_PLACEMENT.ROWS}
+        >
+          {INBOX_NOT_READ}
+        </ErrorState>
+      </ReplayUnmask>
     );
   }
   if (!empty) return null;
@@ -1156,9 +1171,11 @@ export function InboxListNote({
   if (!alone) return null;
   // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
   return (
-    <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
-      {none}
-    </EmptyState>
+    <ReplayUnmask>
+      <EmptyState icon={<InboxIcon />} action={newTaskAction(onNewTask)}>
+        {none}
+      </EmptyState>
+    </ReplayUnmask>
   );
 }
 

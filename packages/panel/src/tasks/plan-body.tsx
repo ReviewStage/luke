@@ -33,6 +33,7 @@ import { actorName } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { diffArrays } from "diff";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
@@ -268,7 +269,7 @@ function EmptyPlanLine({ onOpen }: { onOpen: () => void }): React.JSX.Element {
         onFocus={prefetchEditorBundle}
         onClick={onOpen}
       >
-        {PLAN_PLACEHOLDER}
+        <ReplayUnmask>{PLAN_PLACEHOLDER}</ReplayUnmask>
       </TextButton>
     </Text>
   );
@@ -358,19 +359,21 @@ function ChangedLine({
   // Note that the line keeps the room it always had under "Edited by" and Dismiss overhangs it, so the button does not push the document down.
   return (
     <p className="plan-changed-note -mt-ui-6 mb-ui-12 mx-0 flex h-plan-changed-note items-center gap-item-gap text-caption text-muted-foreground">
-      <span className="actor-line">
-        {changedLine(looks.changed.size, editors.length > 0)}
-        {editors.length === 0 ? null : (
-          <>
-            <ActorStack actors={editors} />
-            <VisuallyHidden>
-              {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
-            </VisuallyHidden>
-          </>
-        )}
-      </span>
-      <span aria-hidden="true">·</span>
-      <Button onClick={looks.dismiss}>Dismiss</Button>
+      <ReplayUnmask>
+        <span className="actor-line">
+          {changedLine(looks.changed.size, editors.length > 0)}
+          {editors.length === 0 ? null : (
+            <ReplayMask>
+              <ActorStack actors={editors} />
+              <VisuallyHidden>
+                {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
+              </VisuallyHidden>
+            </ReplayMask>
+          )}
+        </span>
+        <span aria-hidden="true">·</span>
+        <Button onClick={looks.dismiss}>Dismiss</Button>
+      </ReplayUnmask>
     </p>
   );
 }
@@ -403,17 +406,21 @@ function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | nul
   const { onShowHistory, place } = marks;
   return (
     <span className={UNIT_BYLINE_CLASS}>
-      {edit.actor === PLAN_ACTOR.EARLIER ? (
-        "Edited"
-      ) : (
-        <EditedBy edit={edit} place={place} faceOnly />
-      )}{" "}
-      <EditTime
-        at={edit.at}
-        label={(ago) => `${heading}: edited ${ago}. Show version history`}
-        onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
-        short
-      />
+      <ReplayUnmask>
+        {edit.actor === PLAN_ACTOR.EARLIER ? (
+          "Edited"
+        ) : (
+          <ReplayMask>
+            <EditedBy edit={edit} place={place} faceOnly />
+          </ReplayMask>
+        )}{" "}
+        <EditTime
+          at={edit.at}
+          label={(ago) => `${heading}: edited ${ago}. Show version history`}
+          onShow={onShowHistory === undefined ? undefined : () => onShowHistory(edit.at)}
+          short
+        />
+      </ReplayUnmask>
     </span>
   );
 }

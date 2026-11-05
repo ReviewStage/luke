@@ -422,6 +422,7 @@ function RelationRow({
     >
       {drawn.mounted ? (
         <SearchableMenu
+          replayUnmasked
           id={menuId}
           label={WORDS.SWAP}
           placeholder={WORDS.FIND}
