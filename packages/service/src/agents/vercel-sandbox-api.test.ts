@@ -417,20 +417,3 @@ it.effect(
       assert.equal(failure.message.includes(fixtureToken()), false);
     }),
 );
-
-it.effect("a delete whose answer a gateway lost reaches Vercel once, and names that answer", () =>
-  Effect.gen(function* () {
-    vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-    let deletes = 0;
-    const api = yield* apiOver((_url, init) => {
-      if (init.method !== "DELETE") return sandboxAnswer("GET");
-      deletes += 1;
-      return Response.json({ error: REFUSAL }, { status: 502 });
-    });
-    // Note that this case waits out the SDK's own backoff, about two seconds on its real timer, because nothing hands it a clock.
-    const failure = yield* Effect.flip(api.deleteSandbox(NAME));
-    assert.equal(deletes, 1);
-    assert.equal(failure.call, SANDBOX_CALL.DELETE);
-    assert.equal(failure.status, 502);
-  }),
-);

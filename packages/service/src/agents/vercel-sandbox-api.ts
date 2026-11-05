@@ -761,23 +761,6 @@ function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
   return refused(call, { status: cause.response.status, text: cause.text ?? "" });
 }
 
-/**
- * A `fetch` that sends a DELETE once and answers every later DELETE through
- * it with a copy of the first's answer, or its failure. Note that the SDK
- * would send a DELETE again by name after a 5xx or a lost connection, which
- * may stand for a delete that went through, and a name freed is one another
- * template build may already hold (`native-sandbox-template.ts`), so its
- * tries again replay the first answer rather than reach Vercel.
- */
-function deleteSentOnce(send: typeof fetch): typeof fetch {
-  let first: Promise<Response> | undefined;
-  return (input, init) => {
-    if (init?.method !== "DELETE") return send(input, init);
-    first ??= send(input, init);
-    return first.then((answer) => answer.clone());
-  };
-}
-
 /** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
@@ -1082,7 +1065,7 @@ export function vercelSandboxApi(
                 token: asked.token,
                 teamId: asked.teamId,
                 projectId: asked.projectId,
-                fetch: deleteSentOnce(sdkFetch),
+                fetch: sdkFetch,
                 signal,
               });
               await sandbox.delete({ deleteOrphanSnapshots: true, signal });
