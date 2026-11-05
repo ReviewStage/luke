@@ -57,9 +57,22 @@ export const UPDATE_COMMAND: Readonly<
   [INSTALL_KIND.SOURCE]: "pnpm --filter @repo/vespin-cli build",
 };
 
-/** A curl install's releases folder, ending in the separator, under this account's home. */
+/**
+ * This account's home with its symlinks resolved, as the bundle's own path is
+ * (`bundlePath`), so a home that links elsewhere still matches; the plain home
+ * where it cannot be read.
+ */
+function resolvedHome(): string {
+  try {
+    return realpathSync(homedir());
+  } catch {
+    return homedir();
+  }
+}
+
+/** A curl install's releases folder, ending in the separator, under this account's resolved home. */
 export function curlReleases(): string {
-  return `${join(homedir(), ...CURL_RELEASES)}${sep}`;
+  return `${join(resolvedHome(), ...CURL_RELEASES)}${sep}`;
 }
 
 /** A curl install's command link, under this account's home. */
