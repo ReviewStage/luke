@@ -19,11 +19,12 @@ import { dmThreadPost, settleThreadDms, threadStandsOpen } from "./thread-dms.js
 /**
  * A thread an agent posts, written by our Slack bot to the member it waits
  * on, over a real store and a fake Slack: the DM goes to that member's
- * Slack user and says the thread's title alone; the post is the first reply
+ * Slack user and says the thread's title; the post is the first reply
  * in its Slack thread, the agent's Markdown in a `markdown` block, a mention
  * chip as a plain link, and a link to the thread, the post's picture shared
- * under it; a follow-up is another reply there; and an answer rewrites the
- * post's reply to say it was answered.
+ * under it, and the title DM then says the open ask under the title; a
+ * follow-up is another reply there; and an answer rewrites the post's reply
+ * to say it was answered, and the title DM to say the title alone.
  *
  * Synthetic accounts, workspaces, and Slack ids throughout.
  */
@@ -112,7 +113,7 @@ const blocksOf = (call: SlackCall | undefined) => JSON.parse(call?.args.blocks ?
 
 it.layer(getTestDB())("a thread's Slack DM", (it) => {
   it.effect(
-    "writes the member it waits on the title, the post and a follow-up as replies under it, and says it was answered once they answer",
+    "writes the member it waits on the title, the post and a follow-up as replies under it, says the open ask under the title, and says it was answered once they answer",
     () => {
       const calls: SlackCall[] = [];
       const sent: { url: string; bytes: Uint8Array }[] = [];
@@ -187,12 +188,23 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
         yield* settleThreadDms(item.id);
         yield* settleThreadDms(item.id);
 
-        const updated = calls.filter((call) => call.method === "chat.update");
-        assert.equal(updated.length, 1);
-        assert.equal(updated[0]?.args.channel, "D0001");
-        assert.equal(updated[0]?.args.ts, "1700000000.000102");
-        assert.equal(updated[0]?.args.text, "Require a review on main · Answered in Vespin");
-        assert.deepEqual(blocksOf(updated[0])[1], {
+        const header = {
+          type: "header",
+          text: { type: "plain_text", text: "📥 Require a review on main" },
+        };
+        const [asking, answered, untitled, ...again] = calls.filter(
+          (call) => call.method === "chat.update",
+        );
+        assert.deepEqual(again, []);
+        // The title DM says the open ask while it waits, and the title alone once it is answered.
+        assert.equal(asking?.args.ts, "1700000000.000101");
+        assert.deepEqual(blocksOf(asking), [header, words]);
+        assert.equal(untitled?.args.ts, "1700000000.000101");
+        assert.deepEqual(blocksOf(untitled), [header]);
+        assert.equal(answered?.args.channel, "D0001");
+        assert.equal(answered?.args.ts, "1700000000.000102");
+        assert.equal(answered?.args.text, "Require a review on main · Answered in Vespin");
+        assert.deepEqual(blocksOf(answered)[1], {
           type: "context",
           elements: [{ type: "plain_text", text: "Answered in Vespin" }],
         });
@@ -227,10 +239,22 @@ it.layer(getTestDB())("a thread's Slack DM", (it) => {
           [undefined, "1700000000.000101", "1700000000.000101"],
         );
         assert.deepEqual(blocksOf(posted[2])[0], { type: "markdown", text: "Or a month?" });
+        // The title DM is never rewritten as a reply: it says the title and the ask now open.
+        const updated = calls.filter((call) => call.method === "chat.update");
         assert.deepEqual(
-          calls.filter((call) => call.method === "chat.update"),
-          [],
-          "the title DM is never rewritten",
+          updated.map((call) => [call.args.ts, blocksOf(call)]),
+          [
+            [
+              "1700000000.000101",
+              [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "📥 How long should an invitation last?" },
+                },
+                { type: "markdown", text: "Or a month?" },
+              ],
+            ],
+          ],
         );
       }).pipe(Effect.provideService(SlackBot, slackBotOver(fakeSlack(calls, true), fakeFiles([]))));
     },
