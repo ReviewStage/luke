@@ -426,7 +426,7 @@ test("a failure toast for a hosted call that never answered reports what the hos
   );
 });
 
-test("a failure toast's Copy details copies what its report sent, to paste as it is: an unexpected one with its issue's event id, a refusal with none", async () => {
+test("an unexpected failure toast's Copy details copies what its report sent, with its issue's event id, and a refusal's toast offers no copy", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-29T18:20:03.198Z"));
   const copied: string[] = [];
@@ -447,11 +447,12 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
     ),
   ];
+  assert.equal(copies.length, 1, "the refusal's toast offers no copy");
   for (const copy of copies) await act(async () => copy.click());
 
   assert.deepEqual(copied, [
     [
-      "Vespin showed an error. Find it in Sentry and the logs by these details:",
+      "Vespin error details. Include these when you report this problem:",
       "time: 2026-10-29T18:20:03.198Z",
       "failure.surface: agent.stop",
       "failure.kind: unexpected",
@@ -466,19 +467,6 @@ test("a failure toast's Copy details copies what its report sent, to paste as it
       "app.online: true",
       "app.account: unread",
       "sentry.event_id: event-fixture",
-      `sentry.trace_id: ${TRACE_FIXTURE}`,
-    ].join("\n"),
-    [
-      "Vespin showed an error. Find it in Sentry and the logs by these details:",
-      "time: 2026-10-29T18:20:03.198Z",
-      "failure.surface: agent.start",
-      "failure.kind: refused",
-      "failure.code: rejected",
-      "error.code: rejected",
-      "error.message: Messages are limited to 20,000 characters.",
-      "agent.id: agent-fixture",
-      "app.online: true",
-      "app.account: unread",
       `sentry.trace_id: ${TRACE_FIXTURE}`,
     ].join("\n"),
   ]);

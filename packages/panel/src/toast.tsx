@@ -21,14 +21,15 @@
  *
  * A toast saying a failure carries the failure, which is reported as it is
  * shown (`failure-report.ts`), so no failure the panel says in a toast goes
- * unreported. It offers the details of that report to copy, by the window's
- * copy button after its action, named "Copy details", which answers on
- * itself and leaves the toast and any action on it standing, so a person can
- * paste them to an agent to find the failure in Sentry and the logs. Its
+ * unreported. One saying an unexpected failure offers the details of that
+ * report to copy, by the window's copy button after its action, named "Copy
+ * details", which answers on itself and leaves the toast and any action on
+ * it standing, so a person can send them with a report of the problem. Its
  * glyph alone stands there, so the failure's words keep their room, and a
  * failure toast with nothing else to press takes the pointer for it, and so
- * pauses its hold under it, drains its bar, and may be dismissed. A window
- * with nothing to report through offers no copy (`reportShownFailure`).
+ * pauses its hold under it, drains its bar, and may be dismissed. A refusal,
+ * whose words already say what happened, and a window with nothing to report
+ * through offer no copy (`reportShownFailure`).
  *
  * Each stands for its own hold, paused while the pointer is over it or focus
  * is in it, and leaves by itself once it runs out. Only one

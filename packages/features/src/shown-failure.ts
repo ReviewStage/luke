@@ -27,8 +27,8 @@
  * The same facts are what a person copies from the failure they were shown
  * (`shownFailureDetails`), with the Sentry event id the issue was opened
  * under, the trace it was sent in, the time, and the app's version, so what
- * they paste to an agent names what Sentry and the logs hold and nothing
- * they do not.
+ * they send with a report of the problem names what Sentry and the logs hold
+ * and nothing they do not.
  *
  * Written against the few calls it makes rather than one SDK's types, so the
  * desktop's `@sentry/electron` and the web's `@sentry/browser` each hand
@@ -395,7 +395,7 @@ const DETAIL_KEY = {
 } as const;
 
 /** The line a failure's copied details open with, saying what the rest is for. */
-const DETAILS_HEADING = `${PRODUCT_NAME} showed an error. Find it in Sentry and the logs by these details:`;
+const DETAILS_HEADING = `${PRODUCT_NAME} error details. Include these when you report this problem:`;
 
 /** The issue's context its attributes travel under. */
 const SHOWN_FAILURE_CONTEXT = "shown_failure";
@@ -677,8 +677,8 @@ export function sendShownFailure(
 }
 
 /**
- * What a person copies from a failure they were shown, to paste to an agent
- * as it is: a line saying what it is, then one `key: value` line each for
+ * What a person copies from a failure they were shown, to send with a
+ * report of the problem as it is: a line saying what it is and what it is for, then one `key: value` line each for
  * the time it was shown (ISO 8601, UTC), the app's version, every attribute
  * its report sends under the name Sentry searches it by, and the event id
  * and trace Sentry answered, each where it is known. Note that it is built
