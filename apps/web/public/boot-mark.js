@@ -1,6 +1,6 @@
-// boot-mark.js -- the loading frame's mark as copper dots: they rise into the
-// product's mark, a studio light moves through them by density alone, and
-// they sink away as the app draws.
+// boot-mark.js -- the loading frame's mark as copper dots: they appear in
+// place as the product's mark, a studio light moves through them by density
+// alone, and they fade out with the frame as the app draws.
 //
 // app.html's frame holds the mark as an SVG; this classic script, run as the
 // body is parsed (a file, because the page's policy runs no inline script),
@@ -10,21 +10,24 @@
 // landing-paint.ts) over the light the landing's copper ball reflects
 // (`@repo/ui`'s mark-orb.tsx), here off a flat mark seen from close by, so
 // light reads as more dots and shadow as fewer, all in the theme's one
-// copper. The dots rise once the wait has run long enough to notice
-// (`--ui-hint-delay`), and the light keeps moving while the tab loads. When
+// copper. The dots appear once the wait has run long enough to notice
+// (`--ui-hint-delay`), each fading in where it stands, in the dither's order,
+// and settling the last few pixels into place, so the mark never draws outside
+// its own box; the light keeps moving while the tab loads. When
 // the panel draws, `src/app/web-root.tsx` lifts the frame out of the root and
 // sends it `boot-frame-leave`: the dots stop where they stand and fade out
 // with the frame's ground, as one layer, to the app beneath, and the frame
-// removes itself once it has. Note that nothing moves as the frame leaves,
-// because the panel's first screen (a sign-in card, most often) stands in the
-// middle of the window, right where the dots are. Where motion is held still, as
+// removes itself once it has. Note that the dots never travel beyond the
+// mark, because the panel's first screen (a sign-in card, most often) stands
+// in the middle of the window, around it, and may draw at any moment of the
+// dots' arrival. Where motion is held still, as
 // reduced motion and a capture run hold it (`@repo/ui`'s `motionHeld`, read
 // here the same way, off the motion tokens), or where a canvas cannot draw,
 // the SVG mark stands still as before.
 (() => {
   const GRID = { ACROSS: 40, DOT: 0.72, LEAST: 3 };
   const LIGHT = { FLOOR: 0.32, GAIN: 0.72, TURN: 0.55, LEAN: 0.8 };
-  const MOTION = { RISE: 1660, STAGGER: 0.38, CLIMB: 60, SWAY: 6 };
+  const MOTION = { REVEAL: 1000, STAGGER: 0.38, SETTLE: 4 };
   const HINT_FALLBACK = 500;
   const BAYER = [
     0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60,
@@ -176,20 +179,18 @@
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, width, height);
     // The dots hold where they stand once the frame leaves, so none crosses the panel as the frame fades.
-    if (leaveAt === null) gathered = clamp((now - start) / MOTION.RISE);
+    if (leaveAt === null) gathered = clamp((now - start) / MOTION.REVEAL);
     const angle = ((now - start) / 1000) * LIGHT.TURN;
     context.fillStyle = copper;
     for (const d of dots) {
       const lit = LIGHT.FLOOR + studio(d.rx, d.ry, d.rz, angle) * LIGHT.GAIN > d.threshold;
       if (!lit) continue;
-      // Each dot arrives in the dither's order, rising from below the screen and swaying as it comes.
+      // Each dot arrives in the dither's order, fading in where it stands and settling up the last few pixels into place.
       const arrival = clamp((gathered - d.threshold * MOTION.STAGGER) / (1 - MOTION.STAGGER));
       if (arrival <= 0) continue;
-      const eased = easeOut(arrival);
-      const from = height + (8 + d.drift * MOTION.CLIMB) * ratio;
-      const sway = Math.sin(d.drift * 20 + arrival * 6) * MOTION.SWAY * ratio * (1 - eased);
-      context.globalAlpha = Math.min(1, arrival * 1.6);
-      context.fillRect(Math.round(d.x + sway), Math.round(from + (d.y - from) * eased), dot, dot);
+      const settle = (0.5 + d.drift / 2) * MOTION.SETTLE * ratio * (1 - easeOut(arrival));
+      context.globalAlpha = arrival;
+      context.fillRect(d.x, Math.round(d.y + settle), dot, dot);
     }
     context.globalAlpha = 1;
     return true;
