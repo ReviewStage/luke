@@ -6,7 +6,7 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 import { Schema } from "effect";
 
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 /**
  * The product is named in one constant, `PRODUCT_NAME`
@@ -78,7 +78,7 @@ export const noProductNameRule = defineRule({
       productName:
         "Spell the product's name through `PRODUCT_NAME` (`@repo/features/product-name`), or say this without it. A file that cannot import it goes in `tools/anti-slop/product-name-allowed.json` with its reason.",
       productNameInComment:
-        "Say this comment without the product's name: \"we\", \"our\", \"the app\", or \"the service\". Code it quotes in backticks may spell it.",
+        'Say this comment without the product\'s name: "we", "our", "the app", or "the service". Code it quotes in backticks may spell it.',
     },
   },
   createOnce(context) {

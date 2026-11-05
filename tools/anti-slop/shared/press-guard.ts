@@ -1,6 +1,6 @@
 import { matchesGlob } from "node:path";
 
-import { repositoryPathOf } from "./effect-edges.ts";
+import { repositoryPathOf } from "./repository-path.ts";
 
 /**
  * The design system's guard: outside `@repo/ui`, a lowercase JSX element is

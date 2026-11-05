@@ -667,8 +667,8 @@ the hosted oRPC router answers through (`packages/service/src/orpc/`, its
 contract in `@repo/features/contract`); `/api/models` is the first. It meets
 the cookie origin guard, reads the web runtime's services through `runWeb`
 once per instance as `routeFromHttpRouter` does, and hands each request to
-`OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
-of its own (`tools/anti-slop/effect-edges.json`). The router matches the
+`OpenAPIHandler` with them as its `effect/context`, so it is an edge of its
+own. The router matches the
 public path itself: every `/api/` path no rule ahead of it takes reaches the
 route through the one fallback rewrite of `server/function-rewrites.ts`,
 which carries the whole path in `route-path` for the dispatcher to restore,

@@ -2,7 +2,6 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 import { baselineProblems } from "../shared/baseline.ts";
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import {
   isTestFile,
   isUiFile,
@@ -11,6 +10,7 @@ import {
   WINDOW_GLOBALS,
   WINDOW_OF_ELEMENT,
 } from "../shared/press-listener-guard.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 /**
  * A popover, menu or card closes on a press outside it through the layer it

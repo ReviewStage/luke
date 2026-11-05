@@ -2,8 +2,8 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 import { baselineProblems } from "../shared/baseline.ts";
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import { attributeName } from "../shared/jsx.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 import {
   GLYPH_REGISTRY,
   isAllowed,

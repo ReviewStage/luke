@@ -41,8 +41,8 @@ wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
 `@vercel/*`) is logic and belongs in a package unless it is shell: an app
-entry in `knip.json`, a `runtimeEdges` row in
-`tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
+entry in `knip.json`, an entry point that runs the program's Effects, or a
+deployment or test-support file.
 Review places a module and a component alike under this rule.
 
 Lint holds the UI half of this (`anti-slop/no-raw-press-outside-ui`): outside
@@ -293,58 +293,12 @@ deliberately.
 
 ### Where an Effect may run
 
-An Effect describes work; only a runtime edge runs one. The edges themselves
-are the files listed in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`,
-and that file is the source of truth for them.
-`Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
-`runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
-any of them belong nowhere else — everything between the edges returns an
-Effect and lets its caller decide — which the oxlint rule
-`no-run-promise-outside-edges` enforces against that same file's
-`runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists;
-`no-raw-async-primitives` enforces the equivalent for `setTimeout`,
-`setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
-`rawAsyncPrimitives` list. A file on those two run lists that is not a runtime
-edge is a permanent adaptor, listed below with the one thing that keeps
-it from ever moving onto the edges themselves; there is no other kind of row
-on those lists, because a shim on its way to deletion is deleted in the same
-PR that finishes the callers it was for, not left as a name on an allowlist.
-
-### The permanent adaptors
-
-- **`packages/runtime/src/effect/single-flight.ts`** — the check-and-create of
-  the one `Deferred` every concurrent caller joins is an uninterruptible step
-  that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks
-  the flight it decided on as a detached root fiber (`Effect.runFork`) rather
-  than a fiber of whoever asked first, because a caller that gives up on its
-  own await must not take the flight the other callers are still joined to.
-- **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
-  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the
-  composer that hands it on hands it to a seam outside this repository's host
-  package — the account session manager's consent
-  (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
-  `void | Promise<void>` and whose `reopen()` is synchronous) — so what would
-  end this row is a decision about that seam rather than an implementation
-  detail of this door.
-- **`packages/host/src/client/app-state-store.ts`** — `AppStateStore`'s `snapshot`,
-  `update`, and `touch` run their `SubscriptionRef` operation through
-  `Effect.runSyncWith` on the services the launch handed them, never an empty
-  context of their own, because every caller but the one production subscriber
-  (which forks over the store's `changes` Stream) still holds a synchronous
-  object, and the ordering those callers and this file's own tests depend on —
-  a listener's patch is not lost, a re-announce lands before the caller's next
-  statement — is what turning them into effects a caller awaits would give up.
-- **`packages/host/src/update-service.ts`** — synchronous Electron
-  IPC/menu callers (start, check, install) bridge into fibers on the services
-  the launch handed them, on the same terms as the client's `app-state-store.ts`.
-- **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
-- **`packages/service/src/member-mcp/server.ts`** — the MCP SDK's `McpServer` awaits each tool's handler as a promise, so a tool's effect runs there on the services the request's fiber handed it, the admitted member provided; what would end this row is an Effect-native MCP server that serves the 2026-07-28 revision without a session.
-- **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/hosted-store-database.ts`, and
-  `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database) so a suite still written on `node:assert` or a
-  plain fixture can hold a promise where an effect is described; a test body is
-  its own edge.
+As Effect's own guidance says (`node_modules/effect/AGENTS.md`, which the
+Effect-TS skill points at): an Effect describes work, and everything between
+the program's edges returns one and lets its caller decide. A process runs
+its program at its entry point, and where a framework awaits a promise of
+ours — a web handler, a library's hook, a callback API — the Effect runs
+there, on the runtime or the services that entry point built.
 
 ### Vocabulary
 
@@ -374,7 +328,7 @@ reads it: `packages/host/src/acts.ts`,
   layer that provides the `SqlClient` provides beside it; it is yielded, and
   `anti-slop/no-await-drizzle-statement` refuses one awaited.
   `apps/web/server/README.md`'s "The data layer" is the rest.
-- Runtime only at an edge above; everywhere else returns an Effect.
+- Run an Effect only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
 - `Schedule`, not a hand-rolled interval or backoff loop.
 - `TestClock`, not a fake clock: a test that waits on time advances the clock

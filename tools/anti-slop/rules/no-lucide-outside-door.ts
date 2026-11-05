@@ -1,8 +1,7 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
-
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import { isDoorFile, isLucideModule, LUCIDE_BASELINE } from "../shared/lucide-guard.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 /**
  * Every icon is imported through `@repo/ui/icons`, so one glyph stands for

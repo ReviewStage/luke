@@ -12,7 +12,7 @@ import {
   SHORTCUT_KEY_REGISTRY,
 } from "../shared/arrow-key-guard.ts";
 import { baselineProblems } from "../shared/baseline.ts";
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 /**
  * A list or menu is stepped by `useRovingKeys` and `List` (`@repo/ui`), never

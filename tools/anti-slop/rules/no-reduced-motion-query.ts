@@ -1,7 +1,7 @@
 import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
-import { repositoryPathOf } from "../shared/effect-edges.ts";
+import { repositoryPathOf } from "../shared/repository-path.ts";
 import { literalText, TEST_SOURCE } from "../shared/test-guard.ts";
 
 /** The OS setting's media feature, however a script spells the query around it. */

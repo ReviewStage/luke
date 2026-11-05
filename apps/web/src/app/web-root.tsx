@@ -2,8 +2,8 @@
  * web-root.tsx -- what the web app's entry runs to draw the panel in a tab: the host composed and started in the tab, its bridge, platform, and bundles installed, the first read, and the one root.
  *
  * The host is the shared one (`web-host.ts`), signed in by the service's own
- * cookie session on this origin. This module is a runtime edge
- * (`tools/anti-slop/effect-edges.json`), as the desktop's `window-root.tsx`
+ * cookie session on this origin. This module is the tab's edge, as the
+ * desktop's `window-root.tsx`
  * is: it builds the tab's one runtime over the host's layer, which every act
  * runs on, and runs the panel's first read. The tab is drawn in the
  * account's Theme setting beside the panel (`web-appearance.tsx`). It starts

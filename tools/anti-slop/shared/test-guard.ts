@@ -1,6 +1,6 @@
 import type { ESTree } from "@oxlint/plugins";
 
-import { repositoryPathOf } from "./effect-edges.ts";
+import { repositoryPathOf } from "./repository-path.ts";
 
 /**
  * The testing policy's guards: root AGENTS.md's "Testing" section states

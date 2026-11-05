@@ -1654,8 +1654,7 @@ own metadata is the next section's.
 description, wire input, and effect, and registered with the SDK by
 `src/member-mcp/server.ts`, which runs each tool's effect through the one
 promise door the SDK's awaited handlers need, on the services the request's
-fiber handed it, the admitted member provided (a permanent adaptor, root
-`AGENTS.md`). A tool's input is shown to the model as wire emits it, recorded
+fiber handed it, the admitted member provided. A tool's input is shown to the model as wire emits it, recorded
 under `fixtures/json-schema/`, and handed to the SDK as the same declaration
 in the Standard Schema's form (`@repo/wire/effect`'s `standardSchemaOf`), so
 the SDK checks a call's arguments against what the model was shown. The first

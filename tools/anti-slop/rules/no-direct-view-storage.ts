@@ -2,7 +2,6 @@ import type { ESTree } from "@oxlint/plugins";
 import { defineRule } from "@oxlint/plugins";
 
 import { baselineProblems } from "../shared/baseline.ts";
-import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/effect-edges.ts";
 import {
   isDoorFile,
   isKeptStorageModule,
@@ -11,6 +10,7 @@ import {
   NOT_VIEW_STORAGE,
   STORAGE_OBJECTS,
 } from "../shared/kept-guard.ts";
+import { repositoryPathOf, TYPESCRIPT_SOURCE } from "../shared/repository-path.ts";
 
 /**
  * A view choice (a fold, a filter, a sort, a view mode, a width, where a list

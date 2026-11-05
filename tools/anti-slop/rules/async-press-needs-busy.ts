@@ -13,9 +13,9 @@ import {
   PRESS_PROPS,
   PROMISE_CHAIN,
 } from "../shared/busy-guard.ts";
-import { repositoryPathOf } from "../shared/effect-edges.ts";
 import { attributeName, calleeName, isFunction, isNode } from "../shared/jsx.ts";
 import { JSX_SOURCE } from "../shared/press-guard.ts";
+import { repositoryPathOf } from "../shared/repository-path.ts";
 
 /** How many names a handler is followed through before the rule gives up on it. */
 const FOLLOW_DEPTH = 4;
