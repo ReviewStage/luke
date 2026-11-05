@@ -16,6 +16,7 @@ import { installedSkillActsContract } from "./installed-skills.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { macCommandActsContract } from "./mac-commands.js";
+import { macShellActsContract } from "./mac-shells.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
@@ -54,6 +55,7 @@ export {
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
   MAC_COMMAND_ACT_KIND,
+  MAC_SHELL_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
@@ -91,6 +93,7 @@ export const actContract = {
   ...installedSkillActsContract,
   ...integrationActsContract,
   ...macCommandActsContract,
+  ...macShellActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,
