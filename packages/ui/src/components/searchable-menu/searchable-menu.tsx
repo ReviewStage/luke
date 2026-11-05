@@ -441,6 +441,7 @@ function optionGroups(
       words: row.label,
       icon: row.icon,
       detail: rowWords(row, unmasked, row.detail),
+      detailWords: typeof row.detail === "string" ? row.detail : undefined,
       hint: rowWords(row, unmasked, rowHint(row)),
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
@@ -470,6 +471,7 @@ function submenuOptions(open: Submenu, unmasked: boolean): ComboboxOption[] {
     label: rowWords(row, unmasked, row.label),
     icon: row.icon,
     detail: rowWords(row, unmasked, row.detail),
+    detailWords: typeof row.detail === "string" ? row.detail : undefined,
     hint: rowWords(row, unmasked, rowHint(row)),
     card: row.card,
     current: row.id === open.value,
@@ -511,12 +513,15 @@ function LastLine({ line }: { line: MenuLastLine }): React.JSX.Element {
 function PlacedRow({
   row,
   title,
+  titleMasked,
   description,
   disabled,
   onPress,
 }: {
   row: MenuRow;
   title: string;
+  /** Whether the title names a person's thing: the row's own, or, for a submenu's choice, the row it opens from. */
+  titleMasked: boolean | undefined;
   description: React.ReactNode;
   disabled: boolean;
   onPress: () => void;
@@ -525,7 +530,7 @@ function PlacedRow({
     <RowHintOptions card={row.card}>
       <ListRow
         leading={row.icon}
-        title={rowWords(row, false, title)}
+        title={titleMasked === true ? <ReplayWords masked>{title}</ReplayWords> : title}
         description={rowWords(row, false, description)}
         meta={rowHint(row)}
         hint={row.card === undefined ? undefined : { Hint: RowHint, label: title }}
@@ -543,6 +548,7 @@ function submenuRows(row: MenuRow, submenu: Submenu): React.JSX.Element[] {
       key={choice.id}
       row={choice}
       title={row.label}
+      titleMasked={row.replayMasked}
       description={choice.label}
       disabled={row.disabled !== undefined}
       onPress={() => submenu.onPick(choice.id)}
@@ -589,6 +595,7 @@ export function MenuRowList({
                         key={row.id}
                         row={row}
                         title={row.label}
+                        titleMasked={row.replayMasked}
                         description={row.detail}
                         disabled={row.disabled !== undefined}
                         onPress={() => onPick(row.id)}
@@ -1017,7 +1024,10 @@ export function SearchableMenu(
               label: row.label,
               ...(row.icon === undefined ? undefined : { icon: row.icon }),
               tag: row.tag,
-              hint: row.detail,
+              hint:
+                row.detail === undefined ? undefined : (
+                  <ReplayWords unmasked={unmasked}>{row.detail}</ReplayWords>
+                ),
               onSelect: () => pressFoot(row, index),
               disabled: row.disabled !== undefined,
               checked: row.toggle?.on,

@@ -104,6 +104,8 @@ export interface ComboboxOption {
   readonly icon?: ReactNode;
   /** Words after the name, quieter, which give way to it in a narrow list. */
   readonly detail?: ReactNode;
+  /** The detail in plain words, where `detail` draws them as a tree (marked for a screen recording), so its hint still says it whole. */
+  readonly detailWords?: string | undefined;
   /** At the option's end: the chord that chooses it, or any short mark. */
   readonly hint?: ReactNode;
   /** Whether choosing it opens a further list rather than choosing it, which a chevron at its end says. */
@@ -181,7 +183,7 @@ export function ComboboxOptionItem({
       {/* Note that the first of the detail, the hint, and the end to stand pushes the rest to the row's end. */}
       {option.detail === undefined ? null : (
         <span className={cn("ui-combobox-option-detail", COMBOBOX_ITEM_DETAIL, "ml-auto")}>
-          <OneLine>{option.detail}</OneLine>
+          <OneLine words={option.detailWords}>{option.detail}</OneLine>
         </span>
       )}
       {option.hint === undefined ? null : (
