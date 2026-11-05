@@ -14,8 +14,10 @@ import { VIDEO_PLAYER_PLACE, VideoPlayer } from "../../index.js";
  * around it, whose arrows may walk files; a button's own Space is left to
  * the button. In the viewer it starts at
  * once, unless motion is held still. The browser's media element is
- * the boundary, so a stand-in plays, pauses, and seeks as one does, telling
- * its events, and the player is read by what its bar shows.
+ * the boundary, so a stand-in plays, pauses, seeks, and opens Safari's own
+ * player as one does, telling its events, and the player is read by what its
+ * bar shows. Full screen, where the browser fills the screen with no element,
+ * as Safari on an iPhone and jsdom alike, opens the video in that player.
  */
 
 const roots: Root[] = [];
@@ -43,11 +45,18 @@ const TENTH_FRAME_URL = "data:video/webm;base64,GkXfoyPjg4QF9eEAH0O2dQ==";
 /** How long the stand-in runs, in seconds. */
 const LENGTH_S = 20;
 
-/** Makes the page's video a stand-in that plays, pauses, and seeks as a browser's does, telling its events; answers where it stands. */
+/** Makes the page's video a stand-in that plays, pauses, seeks, and opens Safari's own player as a browser's does, telling its events; answers where it stands. */
 function standInMedia(video: HTMLVideoElement): () => number {
   let paused = true;
   let at = 0;
+  let displayingFullscreen = false;
   Object.defineProperties(video, {
+    webkitDisplayingFullscreen: { get: () => displayingFullscreen },
+    webkitEnterFullscreen: {
+      value: () => {
+        displayingFullscreen = true;
+      },
+    },
     paused: { get: () => paused },
     duration: { get: () => LENGTH_S },
     currentTime: {
@@ -120,7 +129,7 @@ function mountPlayer(onExpand?: () => void, dataUrl = WEBM_URL) {
     if (button === null) throw new Error(`the bar has a ${label}`);
     act(() => button.click());
   };
-  return { container, press, pressButton, toggleLabel, seekAt, playhead, reached };
+  return { container, video, press, pressButton, toggleLabel, seekAt, playhead, reached };
 }
 
 test("Space and K play and pause the video while focus is in its player, and neither reaches the place around it", () => {
@@ -203,6 +212,12 @@ test("comma and period, like the frame buttons, pause the video and step one fra
   press(",");
   expect(playhead()).toBeCloseTo(LENGTH_S - 0.15);
   expect(reached).toEqual([]);
+});
+
+test("Full screen opens the video in the browser's own player where the browser fills the screen with no element", () => {
+  const { video, pressButton } = mountPlayer();
+  pressButton("Full screen");
+  expect(Reflect.get(video, "webkitDisplayingFullscreen")).toBe(true);
 });
 
 /** Draws a player in the viewer, as the file viewer an Expand opens does, and answers its video. */
