@@ -40,6 +40,9 @@ const ENVIRONMENT = {
 /** The account service's routes, under the service origin, as the desktop's `accountBaseUrlFor` puts them. */
 const ACCOUNT_PATH = "/api/auth";
 
+/** The origin the URL standard gives an address with no host, such as `localhost:3000`, read as scheme `localhost:`. */
+const OPAQUE_ORIGIN = "null";
+
 /** What to run when a call has no sign-in, or one the service no longer takes. */
 export const SIGN_IN_HINT = "Run vespin login to sign in.";
 
@@ -52,13 +55,15 @@ function environmentValue(name: string): string | undefined {
 export const serviceOrigin = Effect.gen(function* () {
   const flag = yield* URL_FLAG;
   const named = Option.getOrUndefined(flag) ?? environmentValue(ENVIRONMENT.URL) ?? LINK_ORIGIN;
-  if (!URL.canParse(named)) {
+  // Note that a value such as localhost:3000 parses with an opaque origin, which names no service.
+  const origin = URL.canParse(named) ? new URL(named).origin : OPAQUE_ORIGIN;
+  if (origin === OPAQUE_ORIGIN) {
     return yield* new CommandFailed({
       exit: CLI_EXIT.USAGE,
       message: `${named} is not a service address, such as ${LINK_ORIGIN}.`,
     });
   }
-  return new URL(named).origin;
+  return origin;
 });
 
 /** The account service's base address for a service origin. */
