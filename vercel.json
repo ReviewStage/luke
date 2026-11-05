@@ -204,6 +204,10 @@
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },
         {
+          "src": "/api/maintenance/sandbox-sdk-probe",
+          "dest": "/api/default.js?route=maintenance/sandbox-sdk-probe"
+        },
+        {
           "src": "/api/slack/events",
           "dest": "/api/default.js?route=slack/events"
         },
