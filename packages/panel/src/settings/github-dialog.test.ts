@@ -30,7 +30,7 @@ import { AccountSection } from "./account-section.js";
  * a bridge answering as the host would, the token held on app state and each
  * write's answer laid there: the row offers Add with no token and
  * Manage with one, drawn as its hint, login, and expiry; a pasted token is
- * sent once from an unrecorded password field; Remove asks first; a refused
+ * sent once from an unrecorded password field; Disconnect asks first; a refused
  * save says why in a short label. Synthetic tokens.
  */
 
@@ -207,7 +207,7 @@ test("a token's expiry is one unbreakable unit and no fact on the row's line car
   );
 });
 
-test("the dialog opens with the token field focused, and Remove's question going back to a form leaves it there", async () => {
+test("the dialog opens with the token field focused, and Disconnect's question going back to a form leaves it there", async () => {
   await mountAndOpen();
   assert.ok(document.activeElement === tokenField(), "the field takes focus as the card opens");
   await paste(PASTED);
@@ -218,13 +218,13 @@ test("the dialog opens with the token field focused, and Remove's question going
   await settle();
   assert.equal(tokenField(), null);
   act(() => {
-    button("Remove", dialog()).focus();
-    button("Remove", dialog()).click();
+    button("Disconnect", dialog()).focus();
+    button("Disconnect", dialog()).click();
   });
   await settle();
   act(() =>
     button(
-      "Remove token",
+      "Disconnect token",
       dialog().querySelector<HTMLElement>('[role="group"]') ?? dialog(),
     ).click(),
   );
@@ -232,22 +232,22 @@ test("the dialog opens with the token field focused, and Remove's question going
   assert.ok(document.activeElement === tokenField(), "the form drawn again has focus");
 });
 
-test("a saved token's Manage opens it with Remove, which asks at the dialog's foot, then takes it away", async () => {
+test("a saved token's Manage opens it with Disconnect, which asks at the dialog's foot, then takes it away", async () => {
   stored = KEPT;
   await mountAndOpen();
   assert.equal(tokenField(), null);
   const asked = () => dialog().querySelector<HTMLElement>('[role="group"]');
 
-  // Note that the press is made from Remove holding focus, as a pointer's or a key's press is.
+  // Note that the press is made from Disconnect holding focus, as a pointer's or a key's press is.
   act(() => {
-    button("Remove", dialog()).focus();
-    button("Remove", dialog()).click();
+    button("Disconnect", dialog()).focus();
+    button("Disconnect", dialog()).click();
   });
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "no card opens over it");
   const question = asked() ?? assert.fail("no question at the foot");
-  assert.match(question.textContent ?? "", /Remove your GitHub token\?/u);
+  assert.match(question.textContent ?? "", /Disconnect your GitHub token\?/u);
   // The question has a one-line body saying what goes.
   assert.match(question.textContent ?? "", /Vespin deletes the token it holds/u);
   assert.doesNotMatch(dialog().textContent ?? "", /Create token|Done/u, "the foot is the question");
@@ -257,11 +257,14 @@ test("a saved token's Manage opens it with Remove, which asks at the dialog's fo
   await settle();
   assert.equal(asked(), null, "Cancel takes the question back");
   assert.match(dialog().textContent ?? "", /Create token/u, "and the dialog stays");
-  assert.ok(document.activeElement === button("Remove", dialog()), "focus goes back to Remove");
+  assert.ok(
+    document.activeElement === button("Disconnect", dialog()),
+    "focus goes back to Disconnect",
+  );
 
-  act(() => button("Remove", dialog()).click());
+  act(() => button("Disconnect", dialog()).click());
   await settle();
-  act(() => button("Remove token", asked() ?? assert.fail()).click());
+  act(() => button("Disconnect token", asked() ?? assert.fail()).click());
   await settle();
   assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 1);
   assert.ok(tokenField(), "the field stands again");
@@ -290,21 +293,24 @@ test("each refused save says why and what to do next, and keeps the field", asyn
   });
 });
 
-test("a saved token GitHub rejected says to remove it and add a new one", async () => {
+test("a saved token GitHub rejected says to disconnect it and add a new one", async () => {
   stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.INVALID };
   await mountAndOpen();
 
   assert.match(
     dialog().textContent ?? "",
-    /GitHub rejected this token\. Remove it and add a new one\./u,
+    /GitHub rejected this token\. Disconnect it and add a new one\./u,
   );
 });
 
-test("a saved token Vespin can no longer read says to remove it and add it again", async () => {
+test("a saved token Vespin can no longer read says to disconnect it and add it again", async () => {
   stored = { ...KEPT, status: GITHUB_TOKEN_STATUS.UNREADABLE };
   await mountAndOpen();
 
-  assert.match(dialog().textContent ?? "", /Can no longer be read\. Remove it and add it again\./u);
+  assert.match(
+    dialog().textContent ?? "",
+    /Can no longer be read\. Disconnect it and add it again\./u,
+  );
 });
 
 test("a read that went unanswered says so as an alert with Retry in place of Add, which reads the token again", async () => {

@@ -230,7 +230,7 @@ function ChannelRow({
           [
             {
               label: WORDS.REMOVE,
-              icon: <GLYPH.DISCONNECT />,
+              icon: <GLYPH.REMOVE />,
               danger: true,
               onSelect: () => remove.ask(),
             },

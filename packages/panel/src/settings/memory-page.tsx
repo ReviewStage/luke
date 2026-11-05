@@ -91,15 +91,15 @@ import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
  * words whole at any width, drawn as the notes are, since a memory is
  * Markdown (`pnpm db:generate` in backticks). It opens nothing, so a plain
  * press on it only marks where a run of ⇧-clicks starts. Its ⋯ and a
- * right-click offer Copy words and Forget, which stands unavailable, saying
- * who may, on a memory the reader may not forget: its words are theirs, or
+ * right-click offer Copy words and Delete, which stands unavailable, saying
+ * who may, on a memory the reader may not delete: its words are theirs, or
  * they own or administer the workspace.
  *
  * Memories are chosen together as the Tasks page's rows are (#5761): the box
  * in a row's gutter under the pointer, X, ⌘- and ⇧-clicks, ⌘A, and Esc. A
  * bar floating at the page's foot then forgets or copies them all, and a
  * chosen row's ⋯ and right-click offer the bar's acts under how many it acts
- * on. Forget, of one or of several, asks once first, in red, as the Inbox's
+ * on. Delete, of one or of several, asks once first, in red, as the Inbox's
  * Resolve does, since no memory comes back once forgotten. Each is gone from
  * the list the moment it is sent, and back only where the service refused
  * it; several are forgotten one after another, the first refusal stopping
@@ -115,7 +115,7 @@ const PAGE_LINE = {
   WORKSPACES_FAILED: readFailedWords("your workspaces"),
   SIGNED_OUT: SIGNED_OUT_WORDS,
   EMPTY: `${PRODUCT_NAME} hasn't remembered anything yet.`,
-  FORGET_FAILED: "The memory could not be forgotten. Try again.",
+  FORGET_FAILED: "The memory could not be deleted. Try again.",
   NO_MATCH: "No memories match",
   CLEAR: "Clear search and filter",
 } as const;
@@ -126,7 +126,7 @@ const KEPT_BY = "Kept by";
 
 /** What the selection's acts and a row's menu say. */
 const MEMORY_ACT = {
-  FORGET: "Forget",
+  FORGET: "Delete",
   COPY: "Copy words",
 } as const;
 
@@ -205,7 +205,7 @@ function keeperKey(memory: MemorySummary, actor: Actor): string {
   return memory.keptBy.userId;
 }
 
-/** Who may forget a memory, as its unavailable Forget says it. */
+/** Who may delete a memory, as its unavailable Delete says it. */
 function forgetterOf(memory: MemorySummary, actor: Actor): string {
   if (actor.kind === ACTOR_KIND.PERSON && actor.you) return "You: its words are yours";
   if (memory.forgettable) return "You, as an owner or admin of the workspace";
@@ -368,7 +368,7 @@ function toggled(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
   return next;
 }
 
-/** The Tasks page's Filter: its glyph alone, named by its tooltip, a dot at its corner while it keeps anything, and Kept by its one field. */
+/** The Tasks page's Filter: its glyph alone, named by its tooltip, a dot at its corner while it keeps anything, and Kept by its one field, its keepers listed under it in the menu itself. */
 function KeptByFilter({
   keepers,
   kept,
@@ -399,7 +399,9 @@ function KeptByFilter({
         <ActionMenu
           label={FILTER}
           menu={menu.drawn}
-          groups={[[{ label: KEPT_BY, icon: <GLYPH.PERSON />, items: people }]]}
+          // Note that Kept by is the filter's one field, so its keepers stand in the menu itself under its heading rather than behind a submenu of their own.
+          heading={KEPT_BY}
+          groups={[people]}
           replayUnmasked
           onClose={menu.close}
         />
@@ -473,7 +475,7 @@ function KeptByChips(props: {
   );
 }
 
-/** What Forget asks, of one memory or of several, and what it says of those the reader may not forget. */
+/** What Delete asks, of one memory or of several, and what it says of those the reader may not delete. */
 function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   const one = asked.length === 1;
   const them = one ? "it" : "them";
@@ -481,12 +483,12 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   const kept =
     left === 0
       ? ""
-      : ` ${countWords(left, TERM.MEMORY)} you may not forget ${left === 1 ? "stays" : "stay"}.`;
+      : ` ${countWords(left, TERM.MEMORY)} you may not delete ${left === 1 ? "stays" : "stay"}.`;
   return {
-    title: one ? "Forget this memory?" : `Forget ${countWords(asked.length, TERM.MEMORY)}?`,
+    title: one ? "Delete this memory?" : `Delete ${countWords(asked.length, TERM.MEMORY)}?`,
     body: `${body}${kept}`,
     verb: `${MEMORY_ACT.FORGET} ${one ? TERM.MEMORY.one : TERM.MEMORY.many}`,
-    running: "Forgetting",
+    running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
     replayUnmasked: true,
   };

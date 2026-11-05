@@ -56,12 +56,12 @@ import { MenuRow } from "./menu-row.js";
  * by the host while the page shows and again whenever the window is focused
  * (`LIVE_READ.MCP_CLIENTS`): its name, where its sign-in returns to as the
  * consent page said it, when it was allowed, and when it last refreshed its
- * access. Its ⋯ holds Revoke, as an integration's holds Disconnect, which
+ * access. Its ⋯ holds Disconnect, as an integration's does, which
  * asks first in the confirm dialog, then cuts the agent off: its next
  * refresh is refused and its next sign-in asks again, but an access token it
  * already holds keeps working until it expires, so a row revoked stays on
  * the page saying so. A revoke that did not finish says so under its row,
- * which keeps its Revoke, since an agent half revoked could sign in again
+ * which keeps its Disconnect, since an agent half revoked could sign in again
  * without being asked.
  *
  * Connect an agent asks which agent first, and then shows only that agent's
@@ -95,8 +95,8 @@ const PAGE_LINE = {
   UNNAMED: "Unnamed agent",
   AGENT: "Agent",
   SERVER: "Server URL",
-  REVOKE: "Revoke",
-  REVOKED: `Revoked. Its access ends within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
+  DISCONNECT: "Disconnect",
+  REVOKED: `Disconnected. Its access ends within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
 } as const;
 
 /** The agents Connect an agent knows, in the order it offers them, any other last. */
@@ -259,7 +259,7 @@ function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   );
 }
 
-/** One agent the account allowed: its line and its ⋯ holding Revoke, or, once revoked, how long what it holds lasts. */
+/** One agent the account allowed: its line and its ⋯ holding Disconnect, or, once revoked, how long what it holds lasts. */
 function ClientRow({
   client,
   revoked,
@@ -314,7 +314,7 @@ function ClientRow({
             ? []
             : [
                 {
-                  label: PAGE_LINE.REVOKE,
+                  label: PAGE_LINE.DISCONNECT,
                   icon: <GLYPH.DISCONNECT />,
                   danger: true,
                   onSelect: confirm.ask,
@@ -333,10 +333,10 @@ function ClientRow({
         open
         confirm={confirm}
         question={{
-          title: `Revoke ${name}?`,
+          title: `Disconnect ${name}?`,
           body: `${name} can no longer use your ${PRODUCT_NAME} account. Access it already holds stops working within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
-          verb: "Revoke agent",
-          running: "Revoking",
+          verb: "Disconnect agent",
+          running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
           replayUnmasked: true,
           titleReplayMasked: named,

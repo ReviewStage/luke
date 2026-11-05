@@ -249,7 +249,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           page: SETTINGS_VIEW.MCP,
           haystack: [
             "Connected agents",
-            "mcp server clients oauth allowed agents with access revoke external outside",
+            "mcp server clients oauth allowed agents with access revoke disconnect external outside",
           ],
         }
       : undefined,

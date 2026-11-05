@@ -6,6 +6,7 @@ import {
   CircleDashed,
   CircleDot,
   CircleDotDashed,
+  CircleMinus,
   CircleSlash,
   ClipboardCheck,
   Clock,
@@ -180,6 +181,8 @@ export const GLYPH = {
   SEARCH: SearchIcon,
   RENAME: PencilIcon,
   DELETE: TrashIcon,
+  /** Taking a thing off a list here, which still stands elsewhere: a host, a channel, a repository, a member; never Delete's, which destroys. */
+  REMOVE: lucideGlyph(CircleMinus),
   COPY: CopyIcon,
   LINK: LinkIcon,
   STOP: StopIcon,

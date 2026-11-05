@@ -18,7 +18,7 @@ import { McpClientsSections } from "./mcp-clients-section.js";
 /**
  * mcp-clients-section.test.ts -- Settings › our MCP's connected
  * agents: a revoke that did not finish leaves its row standing with its
- * Revoke and says so, never that it landed, and one that lands leaves the
+ * Disconnect and says so, never that it landed, and one that lands leaves the
  * row saying how long the access the agent already holds lasts. Synthetic
  * ids and addresses.
  */
@@ -95,7 +95,7 @@ function pageText(): string {
     .join(" ");
 }
 
-test("a revoke that did not finish leaves the agent standing with its Revoke and says so, and one that lands says how long its access lasts", async () => {
+test("a revoke that did not finish leaves the agent standing with its Disconnect and says so, and one that lands says how long its access lasts", async () => {
   handState(
     {},
     {
@@ -130,20 +130,23 @@ test("a revoke that did not finish leaves the agent standing with its Revoke and
   await settle();
   assert.ok(pageText().includes("Goes to an app on this computer"), pageText());
 
-  await choose("Revoke");
-  await press("Revoke agent", dialog());
+  await choose("Disconnect");
+  await press("Disconnect agent", dialog());
   await press("Cancel", dialog());
   assert.ok(pageText().includes("Revoking Claude Code didn't finish. Try again."), pageText());
-  assert.ok(!pageText().includes("Revoked."), "a revoke that did not finish never says it landed");
+  assert.ok(
+    !pageText().includes("Disconnected."),
+    "a revoke that did not finish never says it landed",
+  );
 
-  await choose("Revoke");
-  await press("Revoke agent", dialog());
-  assert.ok(pageText().includes("Revoked. Its access ends within 15 minutes."), pageText());
+  await choose("Disconnect");
+  await press("Disconnect agent", dialog());
+  assert.ok(pageText().includes("Disconnected. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(
     container.querySelector('button[aria-haspopup="menu"]'),
     null,
-    "a revoked agent offers no Revoke",
+    "a disconnected agent offers no Disconnect",
   );
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);
 });
