@@ -37,6 +37,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { agentWakeOf, checksCompletedWakeOf, wakeAgents } from "./agent-wakes.js";
 import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
+import { GitHubBackground } from "./github-rate-gate.js";
 
 /**
  * github-webhook-app.ts -- our GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again, one about an installation marks its workspace active or not, and a revoked authorization clears that GitHub user's tokens.
@@ -442,6 +443,8 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     const told = counts.reduce((sum, count) => sum + count, 0);
     return hostedJsonResponse(200, { read, queued, told });
   },
+  // Note that no member waits on a delivery, so what it asks GitHub waits in the background lane (`github-rate-gate.ts`).
+  Effect.provideService(GitHubBackground, true),
 );
 
 /** The group: the one delivery path, and the hosted vocabulary's own refusal for any other. */
