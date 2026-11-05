@@ -14,8 +14,6 @@
  * calls, never at module load.
  */
 
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
 import type { AppBridge, PushListeners } from "@repo/host/bridge";
 import {
   type ActPortClient,
@@ -24,6 +22,8 @@ import {
   type PushEvent,
   type PushName,
 } from "@repo/host/contract";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/message-port";
 
 let installed: AppBridge | undefined;
 let installedActPort: ActPortClient | undefined;

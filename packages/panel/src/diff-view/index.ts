@@ -1,3 +1,7 @@
+import { MOTION_DELAY_MS } from "@repo/brand";
+import { DIFF_LAYOUT } from "@repo/settings/diff-view";
+import { onDrawnThemeChange } from "@repo/ui/appearance";
+import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@repo/ui/landed";
 import {
   CodeView,
   type CodeViewDiffItem,
@@ -15,10 +19,6 @@ import {
   parsePatchFiles,
   type SelectedLineRange,
 } from "@pierre/diffs";
-import { MOTION_DELAY_MS } from "@repo/brand";
-import { DIFF_LAYOUT } from "@repo/settings/diff-view";
-import { onDrawnThemeChange } from "@repo/ui/appearance";
-import { LANDED, LANDED_ANIMATION, LANDED_ATTRIBUTE, land } from "@repo/ui/landed";
 import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
 import {

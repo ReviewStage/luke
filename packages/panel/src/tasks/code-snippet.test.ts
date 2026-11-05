@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { getSharedHighlighter } from "@pierre/diffs";
 import type { InboxCodeBlock } from "@repo/features/inbox-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
+import { getSharedHighlighter } from "@pierre/diffs";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";

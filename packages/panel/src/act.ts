@@ -19,7 +19,6 @@
  * pressed anything.
  */
 
-import { ORPCError } from "@orpc/client";
 import type { AGENT_CALL_FAILURE, AgentAgentAnswer } from "@repo/features/agent-view";
 import { FAILURE_CONDITION, FAILURE_SURFACE, failureAboutOf } from "@repo/features/shown-failure";
 import { ACT_UNREACHED_WORDS } from "@repo/features/words";
@@ -35,6 +34,7 @@ import type { AppSettingField, AppSettingValue } from "@repo/settings";
 import type { SettingsUpdateResult } from "@repo/settings/wire";
 import { STATUS_TONE } from "@repo/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { ORPCError } from "@orpc/client";
 import { useMemo } from "react";
 import { actPort } from "./app-bridge.js";
 import type { ShownFailure } from "./failure-report.js";
