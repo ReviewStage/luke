@@ -2104,7 +2104,10 @@ const upsertSnooze = SqlSchema.findOneOption({
           target: [inboxItemRead.itemId, inboxItemRead.userId],
           set:
             until === null
-              ? { snoozedUntil: sql`least(${inboxItemRead.snoozedUntil}, now())` }
+              ? // Note that `least` passes over a null, so a marker with no snooze keeps none.
+                {
+                  snoozedUntil: sql`case when ${inboxItemRead.snoozedUntil} is null then null else least(${inboxItemRead.snoozedUntil}, now()) end`,
+                }
               : {
                   snoozedUntil: excluded(inboxItemRead.snoozedUntil),
                   snoozedThrough: excluded(inboxItemRead.snoozedThrough),

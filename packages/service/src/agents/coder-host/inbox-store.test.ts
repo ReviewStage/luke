@@ -1592,6 +1592,9 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           ended !== undefined && ended < ahead.getTime(),
           "ending a snooze brings the item back now rather than forgetting when",
         );
+        yield* markInboxItemRead(teammate, id);
+        yield* snoozeInboxItem(teammate, id, null);
+        assert.equal(yield* snoozedFor(teammate), undefined, "ending no snooze makes none");
 
         assert.equal(
           yield* snoozeInboxItem(outsider, id, ahead),
