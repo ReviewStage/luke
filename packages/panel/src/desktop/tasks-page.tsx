@@ -35,7 +35,6 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { keptKey, useKept } from "../use-kept.js";
 import { storedScrolls, useKeptScroll } from "../use-kept-scroll.js";
-import { NewTaskButton } from "./new-task-button.js";
 import { PhoneHead, PlaceMore, phoneFindGroups, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
 import { TasksList } from "./tasks-list.js";
@@ -220,7 +219,8 @@ export function TasksPage({
   const listed = tasks.listed.tasks;
   const filterAsk = useMenuAsk();
   const optionsAsk = useMenuAsk();
-  // A phone heads the page as it heads every place (`phone-head.tsx`): New task, the title centered, and a ⋯ holding
+  // A phone heads the page as it heads every place (`phone-head.tsx`): its start corner empty where the places bar
+  // holds New task (`mobile-bar.tsx`), the title centered, and a ⋯ holding
   // the view's switch and opening the Filter's and View options' own menus where it stands.
   const phone = room === SHELL_ROOM.NARROW;
   const viewItem = (value: TasksView, label: string, icon: React.JSX.Element) => ({
@@ -234,7 +234,7 @@ export function TasksPage({
     <>
       <PhoneHead
         place="tasks"
-        start={<NewTaskButton tasks={tasks} />}
+        start={null}
         title={
           <Text
             as={TEXT_ELEMENT.H1}

@@ -848,6 +848,8 @@
   /* A phone bar's count, its left edge a step in from its glyph's end, ringed in the ground the bar stands on. */
   --spacing-bar-count-reach: calc(100% - var(--ui-space-8));
   --shadow-bar-count-ring: 0 0 0 var(--ui-space-2) var(--ui-color-ground);
+  /* A phone bar's one action, as tall as the pill of places beside it: an item's height and the pill's inset either side. */
+  --spacing-bar-action: calc(var(--ui-space-48) + 2 * var(--ui-space-4));
   --spacing-pane-bar: var(--ui-pane-bar-height);
   /* A toolbar's title, in the dialog's size on the line of the bar it stands in. */
   --text-dialog-size: var(--ui-type-dialog-size);

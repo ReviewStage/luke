@@ -81,7 +81,7 @@ export function useHoverPane(
   /** Whether Escape put the pane away, which gives the keyboard back once it is drawn away. */
   const returning = useRef(false);
   const { state, onState } = float;
-  // Note that a pane drawn already open came from away, as the drawer Settings' More opens is (`mobile-bar.tsx`), so it takes the keyboard too.
+  // Note that a pane drawn already open came from away, as the drawer the places bar's Tasks opens from Settings is (`mobile-bar.tsx`), so it takes the keyboard too.
   const was = useRef<PaneFloat>(PANE_FLOAT.CLOSED);
   const floating = state !== PANE_FLOAT.CLOSED;
   const { focusAt, stays, floatsNow = alwaysFloats } = look;

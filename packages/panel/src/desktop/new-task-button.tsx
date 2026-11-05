@@ -5,7 +5,7 @@ import { TASKS_GROUP, type TasksGroupHead } from "@repo/ui/tasks-page-model";
 import type { QuickAddInto, TasksControl } from "../tasks/use-tasks-tab.js";
 
 /**
- * new-task-button.tsx -- New task as a glyph: the title bar's while the sidebar is folded, and the start corner of a phone's Inbox and Tasks page (`phone-head.tsx`), opening New task's dialog; and a group's +: a sidebar repository's, opening it on the repository, and a Tasks page group's, adding a task in the group in place (`quick-add.tsx`).
+ * new-task-button.tsx -- New task as a glyph: the title bar's while the sidebar is folded, opening New task's dialog; and a group's +: a sidebar repository's, opening it on the repository, and a Tasks page group's, adding a task in the group in place (`quick-add.tsx`).
  */
 
 /** What a Tasks page group's + names, to a reader, for the task it adds: one in a status, priority, or repository, or for a person. */

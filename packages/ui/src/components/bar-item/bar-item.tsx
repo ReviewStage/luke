@@ -7,7 +7,7 @@ import { pulseOnPress } from "../../press-pulse.js";
  * A BarItem is a press that goes somewhere or opens something, standing in
  * a row of its kind (a flex row, which it shares equally). The place shown
  * (`current`) is announced as the page (`aria-current="page"`) and drawn in
- * the accent's ink; the rest are muted. One that opens something says
+ * the accent's ink on the selection's fill; the rest are muted. One that opens something says
  * whether it stands open (`expanded`), and one the room around it has made
  * inert takes no press. `onPointerDown` lets its caller mark the press
  * before the click lands. It takes no class or style.
@@ -17,11 +17,23 @@ import { pulseOnPress } from "../../press-pulse.js";
  * with its noun ("Inbox, 3 need you"); it is left out at none. It is a
  * NavItem's needs-you count (`STATUS_TONE.ATTENTION`) turned inside out, so a
  * place reads the same in the bar as in a column of places.
+ *
+ * A phone's bar floats its places in one pill (`BarItems`), beside the one
+ * action the bar offers (`BarAction`), a round press in the primary fill,
+ * as a phone's own bars float their tabs beside a compose button.
  */
 
-/** The press: a share of the bar, its glyph over its name in the caption's type, muted until it is the place shown. */
+/** The press: a share of the bar, its glyph over its name in the caption's type, muted until it is the place shown, which stands on the selection's fill. */
 const BAR_ITEM =
-  "ui-bar-item flex min-h-ui-48 flex-1 basis-0 flex-col items-center justify-center gap-ui-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground aria-[current=page]:text-accent-ink";
+  "ui-bar-item flex min-h-ui-48 flex-1 basis-0 flex-col items-center justify-center gap-ui-2 border-0 bg-transparent [font-family:inherit] [font-style:inherit] [font-weight:inherit] text-caption text-muted-foreground rounded-ui-full aria-[current=page]:bg-fill-selected aria-[current=page]:text-accent-ink";
+
+/** The pill a phone's places float in: a share of the bar's row, on the ground, lifted off the work by a floating edge. */
+const BAR_ITEMS =
+  "ui-bar-items flex min-w-0 flex-1 items-center rounded-ui-full bg-ground p-ui-4 shadow-floating-edge";
+
+/** The bar's one action: a round press in the primary fill, as tall as the pill beside it, lifted as the pill is. */
+const BAR_ACTION =
+  "ui-bar-action flex size-bar-action flex-none items-center justify-center rounded-ui-full border-0 bg-primary text-primary-foreground shadow-floating-edge disabled:opacity-disabled [&_svg]:size-ui-24";
 
 /**
  * What waits on the reader, as a badge on the glyph's top corner: a
@@ -90,6 +102,43 @@ export function BarItem({
             {count.noun === undefined ? `, ${count.value}` : `, ${count.value} ${count.noun}`}
           </span>
         ) : null}
+      </span>
+    </button>
+  );
+}
+
+/** A phone bar's places, floating in one pill; see the module's head. */
+export function BarItems({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className={BAR_ITEMS}>{children}</div>;
+}
+
+export interface BarActionProps {
+  /** The glyph, decoration a reader is not told. */
+  icon: ReactNode;
+  /** What the press does, the name a reader is told. */
+  label: string;
+  /** Whether it takes no press, as while no one is signed in. */
+  disabled?: boolean | undefined;
+  onPress: () => void;
+}
+
+/** A phone bar's one action, beside its places; see the module's head. */
+export function BarAction({
+  icon,
+  label,
+  disabled = false,
+  onPress,
+}: BarActionProps): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={BAR_ACTION}
+      aria-label={label}
+      disabled={disabled}
+      onClick={pulseOnPress(onPress)}
+    >
+      <span className="flex" aria-hidden="true">
+        {icon}
       </span>
     </button>
   );

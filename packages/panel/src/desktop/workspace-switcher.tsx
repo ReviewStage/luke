@@ -38,7 +38,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  */
 
 /** The menu's items: every workspace by its tile, with who shares it under its name as the head says it, the listed one checked; then New workspace and Workspace settings. */
-function workspaceMenuGroups(
+export function workspaceMenuGroups(
   listed: Workspace,
   tasks: TasksControl,
   onNew: () => void,

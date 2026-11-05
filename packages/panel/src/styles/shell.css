@@ -625,10 +625,39 @@
    under the work, which keeps the row above it whole, so nothing in it is
    measured against the bar. The stage already stops above the home
    indicator and the keyboard (desktop.css), so the bar needs no inset of
-   its own. While a field is being typed in, the keyboard takes the screen's
-   foot and the bar steps aside, giving the field's column the room. */
+   its own. It stands over the drawer's scrim, live while the tree is open.
+   While a field is being typed in, the keyboard takes the screen's foot and
+   the bar steps aside, giving the field's column the room. */
 :where(:root)[data-ui-room="narrow"] .desktop-shell[data-mobile-bar="true"] {
+  position: relative;
   grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.mobile-bar {
+  position: relative;
+  z-index: 2;
+}
+
+/* Under the tree the bar stands on the sidebar's ground, so the two read as one screen. */
+.desktop-shell[data-sidebar-overlay="open"] .mobile-bar {
+  background: var(--ui-color-sidebar);
+}
+
+/* A phone's tree heads itself as every place does (`phone-account.tsx`), so its
+   head spans the column past the sidebar's inset, its corners where theirs are. */
+.desktop-sidebar > .sidebar-head {
+  margin-inline: calc(-1 * var(--column-inset));
+}
+
+/* Over the places the bar stands on, the drawer is the bar's Tasks: the
+   sidebar's tree of tasks across the whole screen above the bar, the row
+   the work stands in, rather than a drawer beside the work, so it reads as
+   a place of its own. */
+:where(:root)[data-ui-room="narrow"]
+  .desktop-shell[data-mobile-bar="true"][data-sidebar-collapsed]
+  .desktop-sidebar {
+  grid-row: 1 / 2;
+  width: 100%;
 }
 
 .desktop-shell:has(

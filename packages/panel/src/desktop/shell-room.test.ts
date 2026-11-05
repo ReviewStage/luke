@@ -193,12 +193,12 @@ function sidebarToggle(page: HTMLElement): HTMLButtonElement {
   return button;
 }
 
-/** The places bar's More, which opens a phone's drawer where no title bar's toggle stands. */
-function drawerMore(page: HTMLElement): HTMLButtonElement {
+/** The places bar's Tasks, which opens a phone's drawer, the sidebar's tree, where no title bar's toggle stands. */
+function drawerTasks(page: HTMLElement): HTMLButtonElement {
   const button = [
     ...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button'),
-  ].find((each) => each.textContent === "More");
-  assert.ok(button, "the places bar's More stands");
+  ].find((each) => each.textContent === "Tasks");
+  assert.ok(button, "the places bar's Tasks stands");
   return button;
 }
 
@@ -288,11 +288,11 @@ for (const { zoom, width } of ZOOMED_LEAST_WINDOW) {
     );
   });
 
-  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the places bar's More opens`, () => {
+  test(`the sidebar at ${zoom}% zoom, ${width} CSS px, is a drawer that the places bar's Tasks opens`, () => {
     const page = mount(width, false);
     assert.equal(roomOf(page), "narrow");
     assert.equal(sidebarStanding(page), "away");
-    act(() => drawerMore(page).click());
+    act(() => drawerTasks(page).click());
     assert.equal(sidebarStanding(page), "drawer");
   });
 }
@@ -346,7 +346,7 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
   );
 });
 
-test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's More opens it over the work, and a press outside puts it away", () => {
+test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no title bar's toggle stands, the places bar's Tasks opens it over the work, and a press outside puts it away", () => {
   const sheets = layContainersAt({});
   const page = mount(PHONE, false);
   const shell = page.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
@@ -367,9 +367,9 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out and no tit
     null,
     "a phone's page heads itself, so no toggle stands over it",
   );
-  act(() => drawerMore(page).click());
+  act(() => drawerTasks(page).click());
   assert.equal(sidebarStanding(page), "drawer");
-  assert.equal(drawerMore(page).getAttribute("aria-expanded"), "true");
+  assert.equal(drawerTasks(page).getAttribute("aria-current"), "page");
 
   const main = page.querySelector("main.desktop-main");
   assert.ok(main);
@@ -393,14 +393,10 @@ test("a phone's drawer is modal: while it stands over the work, the work is iner
   const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
   assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
 
-  act(() => drawerMore(page).click());
+  act(() => drawerTasks(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
-  assert.equal(
-    drawerMore(page).closest("[inert]"),
-    null,
-    "the More that opened it still closes it",
-  );
+  assert.equal(drawerTasks(page).closest("[inert]"), null, "the bar stays live over it");
 
   act(() => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -438,7 +434,7 @@ function historyArrows(page: HTMLElement): boolean {
 test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
   inBrowserTab();
   const page = mount(PHONE, false);
-  act(() => drawerMore(page).click());
+  act(() => drawerTasks(page).click());
   assert.equal(historyArrows(page), false);
 
   resizeStage(WIDE);
@@ -447,7 +443,7 @@ test("a phone's browser tab draws no Back and Forward in the drawer's head, its 
 
 test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
   const page = mount(PHONE, false);
-  act(() => drawerMore(page).click());
+  act(() => drawerTasks(page).click());
   assert.equal(historyArrows(page), true);
 });
 
@@ -467,7 +463,7 @@ test("Escape puts a phone's drawer away and gives the keyboard back to the work 
     assert.fail("the work holds a button");
   work.focus();
 
-  act(() => drawerMore(page).click());
+  act(() => drawerTasks(page).click());
   assert.equal(sidebarStanding(page), "drawer");
   const held = document.activeElement;
   assert.ok(

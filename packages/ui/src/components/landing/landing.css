@@ -982,13 +982,10 @@
 
   .ui-landing-phone-places {
     display: flex;
-    padding: 2px 4px 20px;
-    border-top: 1px solid var(--ui-color-border);
+    align-items: center;
+    gap: var(--ui-space-12);
+    padding: var(--ui-space-8) var(--ui-space-12) var(--ui-space-20);
     background: var(--ui-color-ground);
-  }
-
-  .ui-landing-phone-places > * {
-    flex: 1;
   }
 
   .ui-landing-keys {

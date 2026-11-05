@@ -76,7 +76,6 @@ import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
-import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
   changesTabOf,
@@ -188,10 +187,13 @@ function useHeldWhile<Drawn>(holding: boolean, drawn: Drawn): Drawn {
 export const DesktopInbox = memo(function DesktopInbox({
   tasks,
   room = SHELL_ROOM.WIDE,
+  phoneStart = null,
 }: {
   tasks: TasksControl;
   /** The room the stage gives; narrow, a phone's, the list is headed as a phone's page is (`phone-head.tsx`). */
   room?: ShellRoom;
+  /** What a phone's head leads with, the reader's face (`phone-account.tsx`); none elsewhere. */
+  phoneStart?: React.ReactNode;
 }): React.JSX.Element {
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
@@ -628,7 +630,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                     phone:
                       room === SHELL_ROOM.NARROW
                         ? {
-                            start: <NewTaskButton tasks={tasks} />,
+                            start: phoneStart,
                             readAll: { unread, onMarkAll: markAll },
                           }
                         : undefined,

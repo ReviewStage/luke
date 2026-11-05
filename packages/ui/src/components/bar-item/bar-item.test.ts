@@ -3,14 +3,15 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { BarItem } from "./bar-item.js";
+import { BarAction, BarItem } from "./bar-item.js";
 
 /**
  * bar-item.test.ts -- a bar item is a button named by its words; the place
  * shown is announced as the page; one that opens something says whether it
  * stands open; a press and a pointer's press reach the caller; an inert
  * one is inert; and a count is drawn and said with its name, and stands
- * nowhere at none.
+ * nowhere at none. The bar's action, a glyph alone, is named by its label,
+ * and takes no press while disabled.
  */
 
 const roots: Root[] = [];
@@ -106,4 +107,19 @@ test("a count is drawn on the glyph and said after the name with its noun, and s
   );
   expect(spokenName(none)).toBe("Board");
   expect(none.textContent).toBe("Board");
+});
+
+test("the bar's action is named by its label, and takes no press while disabled", () => {
+  const onPress = vi.fn();
+  const button = mount(
+    createElement(BarAction, {
+      icon: createElement("svg"),
+      label: "New task",
+      disabled: true,
+      onPress,
+    }),
+  );
+  act(() => button.click());
+  expect(button.getAttribute("aria-label")).toBe("New task");
+  expect(onPress).not.toHaveBeenCalled();
 });

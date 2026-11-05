@@ -34,10 +34,10 @@ import { Tooltip } from "../tooltip/hint.js";
  * field stays where it is while the rows under it come and go, and it
  * fades out over `--ui-duration-exit` as it closes, inert while it does,
  * as every dialog does.
- * In a narrow room, a phone's, it is a sheet hung from the top of what is
- * seen rather than a card floating in it: the screen's whole width, its
- * corners rounded only where it ends. Under a finger its foot, whose keys
- * are none to press, is not drawn.
+ * In a narrow room, a phone's, the card spans the screen but for a margin
+ * on every side, clear of a phone's notch and status bar, and stands near
+ * the top, so the keyboard leaves its rows the room under it. Under a
+ * finger its foot, whose keys are none to press, is not drawn.
  *
  * Each row is a menu's row (`ComboboxOptionItem`), its lead, its glyph,
  * its name and detail fading where they are cut, its hint (a chord) and its
@@ -90,12 +90,13 @@ export interface CommandGroup {
   readonly note?: ReactNode;
 }
 
-/** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, against its top and sides. Its one column is the window's width and no more, since an auto track would grow to the widest row and push the card past the screen. */
-const ROOM = "grid-cols-[minmax(0,1fr)] items-start pt-dialog-command-top room-narrow:p-0";
+/** The dimmed window: the card stands a fifth of the way down it rather than in its middle; in a narrow room, a margin in from its edges and below a phone's notch and status bar. Its one column is the window's width and no more, since an auto track would grow to the widest row and push the card past the screen. */
+const ROOM =
+  "grid-cols-[minmax(0,1fr)] items-start pt-dialog-command-top room-narrow:p-ui-12 room-narrow:pt-[max(var(--ui-space-12),env(safe-area-inset-top,0px))]";
 
-/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, a sheet across the screen, edged and rounded only along its foot, its ground under a phone's notch and status bar and what it holds clear of them. */
+/** The card: the palette's measure, unpadded, its field, band, list, and foot edge to edge; in a narrow room, the screen's width inside the window's margin. */
 const CARD =
-  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none room-narrow:w-full room-narrow:max-h-dialog-command-sheet room-narrow:rounded-t-none room-narrow:border-x-0 room-narrow:border-t-0 room-narrow:pt-[env(safe-area-inset-top,0px)] room-narrow:pr-[env(safe-area-inset-right,0px)] room-narrow:pl-[env(safe-area-inset-left,0px)]";
+  "w-dialog-command max-h-dialog-command-room gap-0 overflow-clip p-0 focus:outline-none room-narrow:w-full room-narrow:max-h-dialog-command-sheet";
 
 /** cmdk's root: a column that gives way to the card's height, so the list scrolls inside it. */
 const ROOT = "flex min-h-0 flex-1 flex-col outline-none";
