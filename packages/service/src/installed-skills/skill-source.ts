@@ -26,8 +26,8 @@
  * it was not told about (`skill-discovery.ts`), every copy of a name kept
  * for its `SKILL.md` to settle which stands (`skill-paste-install.ts`). The
  * whole tree is listed in one read, which also gives every file's size,
- * so a folder holding a file past its bound is refused before any of its
- * files is read.
+ * so a folder holding a file past its bound is refused before any file
+ * beyond its `SKILL.md` is read.
  *
  * A GitHub that does not answer, or answers past its rate limit, is
  * refused as unanswered; a repository nobody reaches as not reachable.

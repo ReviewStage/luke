@@ -1078,7 +1078,7 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
     () =>
       Effect.gen(function* () {
         const big = fakeRepository("acme", "big");
-        // Note that `wide` is stageshow's shape: 372 files, 2.36 MB together.
+        // `wide` has 372 files, 2.36 MB together: many files, none large.
         const wide = Object.fromEntries(
           Array.from({ length: 371 }, (_, index) => [
             `skills/wide/assets/${index}.txt`,
