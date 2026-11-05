@@ -10,6 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
@@ -117,6 +118,8 @@ test("a revoke that did not finish leaves the agent standing with its Revoke and
       return Promise.resolve(answer);
     },
   });
+  // Note that Codex's mark is served under the platform's asset base, which a row may draw.
+  fakeAppPlatform(QUIET_PANEL);
   const registry = AtomRegistry.make();
   registries.push(registry);
   const container = document.createElement("div");

@@ -1,6 +1,7 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
+import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { oauthRedirectDestination } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -11,16 +12,20 @@ import {
   BUTTON_VARIANT,
   ButtonLink,
   CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
   ChoiceBar,
   CONFIRM_LOSS,
   COPY_FIELD_WIDTH,
   ConfirmDialog,
   CopyField,
   ErrorState,
+  MARK_PROVIDER,
+  ProviderMark,
   SETTINGS_ROW_STATE,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  SettingsRowMark,
   SettingsRowStateLine,
   SettingsSection,
   type SettingsSectionSkeletonShape,
@@ -36,6 +41,7 @@ import { useState } from "react";
 import { useAct } from "../act.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
+import { HarnessMark } from "../harness-marks.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
@@ -67,9 +73,11 @@ import { MenuRow } from "./menu-row.js";
  * the browser, lights its row and is said to be connected under the step.
  * While the account has none, Connect an agent stands first.
  *
- * Each section is `@repo/ui`'s `SettingsSection`, the agent asked for its
- * segmented `ChoiceBar`, each allowed agent `MenuRow`'s row, and an address
- * or a command its `CopyField`.
+ * Each agent is led by its brand's mark, in the picker and on its row, an
+ * allowed agent's found by the name it registered under; one the page does
+ * not know wears a plain agent's glyph. Each section is `@repo/ui`'s
+ * `SettingsSection`, the agent asked for its segmented `ChoiceBar`, each
+ * allowed agent `MenuRow`'s row, and an address or a command its `CopyField`.
  */
 
 const SECTION_TITLE = {
@@ -110,6 +118,8 @@ type ConnectAgent = (typeof CONNECT_AGENT)[keyof typeof CONNECT_AGENT];
  */
 interface ConnectStep {
   readonly name: string;
+  /** Its brand's mark, or a plain agent's glyph for any other. */
+  readonly mark: React.JSX.Element;
   readonly label: string;
   readonly words: string;
   readonly command?: (serverUrl: string) => string;
@@ -127,24 +137,28 @@ function cursorInstallUrl(serverUrl: string): string {
 const CONNECT_STEPS = {
   [CONNECT_AGENT.CLAUDE_CODE]: {
     name: "Claude Code",
+    mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
     label: "Run this in a terminal",
     words: `Then type /mcp in Claude Code, choose ${SERVER_NAME}, and sign in.`,
     command: (serverUrl) => `claude mcp add --transport http ${SERVER_NAME} ${serverUrl}`,
   },
   [CONNECT_AGENT.CODEX]: {
     name: "Codex",
+    mark: <HarnessMark provider={MODEL_PROVIDER.OPENAI} />,
     label: "Run this in a terminal",
     words: `It opens your browser to sign in. If it doesn't, run codex mcp login ${SERVER_NAME}.`,
     command: (serverUrl) => `codex mcp add ${SERVER_NAME} --url ${serverUrl}`,
   },
   [CONNECT_AGENT.CURSOR]: {
     name: "Cursor",
+    mark: <ProviderMark provider={MARK_PROVIDER.CURSOR} />,
     label: `Add ${PRODUCT_NAME} to Cursor`,
     words: `Then sign in to ${SERVER_NAME} from Cursor's MCP settings.`,
     install: { label: "Add to Cursor", url: cursorInstallUrl },
   },
   [CONNECT_AGENT.VS_CODE]: {
     name: "VS Code",
+    mark: <ProviderMark provider={MARK_PROVIDER.VS_CODE} />,
     label: "Run this in a terminal",
     words: `Then start ${SERVER_NAME} from VS Code's MCP servers and sign in.`,
     command: (serverUrl) =>
@@ -152,6 +166,7 @@ const CONNECT_STEPS = {
   },
   [CONNECT_AGENT.CLAUDE]: {
     name: "Claude",
+    mark: <ProviderMark provider={MARK_PROVIDER.CLAUDE} />,
     label: "Copy the server URL",
     words:
       "In Claude, open Customize › Connectors, choose Add custom connector, paste it, then connect. On a Team or Enterprise plan, an owner adds it in Organization settings › Connectors.",
@@ -159,6 +174,7 @@ const CONNECT_STEPS = {
   },
   [CONNECT_AGENT.CHATGPT]: {
     name: "ChatGPT",
+    mark: <ProviderMark provider={MARK_PROVIDER.CHATGPT} />,
     label: "Copy the server URL",
     words:
       "In ChatGPT, open Plugins, choose + › Add custom MCP server, paste it under Connection, then choose Create as a plugin.",
@@ -166,11 +182,26 @@ const CONNECT_STEPS = {
   },
   [CONNECT_AGENT.OTHER]: {
     name: "Other",
+    mark: <GLYPH.AGENT />,
     label: PAGE_LINE.SERVER,
     words: "Add it to any agent that supports remote MCP servers. It signs in with OAuth.",
     address: true,
   },
 } as const satisfies Record<ConnectAgent, ConnectStep>;
+
+/** The names an agent registers under where they are not the name the picker calls it by. */
+const REGISTERED_AS: ReadonlyMap<string, ConnectAgent> = new Map([
+  ["visual studio code", CONNECT_AGENT.VS_CODE],
+]);
+
+/** The mark an allowed agent's row leads with: its brand's, where the name it registered under is one the picker knows, or a plain agent's. */
+function clientMark(client: McpClient): React.JSX.Element {
+  const name = client.name?.trim().toLowerCase() ?? "";
+  const agent =
+    REGISTERED_AS.get(name) ??
+    Object.values(CONNECT_AGENT).find((each) => CONNECT_STEPS[each].name.toLowerCase() === name);
+  return agent === undefined ? <GLYPH.AGENT /> : CONNECT_STEPS[agent].mark;
+}
 
 /** How many agents stand as rows while the read is out. */
 const CLIENT_SKELETON_ROWS = 1;
@@ -291,6 +322,7 @@ function ClientRow({
               ]
         }
         row={{
+          leading: <SettingsRowMark>{clientMark(client)}</SettingsRowMark>,
           label: <ReplayWords masked={named}>{name}</ReplayWords>,
           description: revoked ? PAGE_LINE.REVOKED : <ClientLine client={client} />,
           error: refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE),
@@ -391,9 +423,11 @@ function ConnectSection({
             items={Object.values(CONNECT_AGENT).map((each) => ({
               value: each,
               label: CONNECT_STEPS[each].name,
+              icon: CONNECT_STEPS[each].mark,
             }))}
             value={agent}
             look={CHOICE_BAR_LOOK.SEGMENTED}
+            size={CHOICE_BAR_SIZE.COMPACT}
             onChange={setAgent}
           />
         )}
