@@ -1,0 +1,219 @@
+name: Release CLI
+
+# Staged here, outside .github/workflows, because Vespin's GitHub App may not
+# push a workflow; it moves to .github/workflows/release-cli.yml, the path
+# npm's trusted publisher names, in this branch's last commit before merge.
+#
+# Builds the `vespin` command's bundle (apps/cli) once, publishes it to npm as
+# the unscoped package `vespin`, and attaches the curl install's tarballs, the
+# bundle with its own Node for linux-x64, linux-arm64, and darwin-arm64, each
+# with its .sha256, to a GitHub release of their own, tagged cli-v<version> to
+# match apps/cli/package.json. A manual dispatch is a rehearsal: it builds,
+# checks every tarball on its own platform and the npm package on Node 20,
+# runs `npm publish --dry-run`, and keeps everything as artifacts, and
+# publishes nothing.
+#
+# npm is published to with trusted publishing over GitHub's OIDC token, which
+# npm's trusted publisher for `vespin` names this file by: no npm token is
+# stored anywhere. The GitHub release is never marked latest, because the
+# desktop's download link and its updater read releases/latest
+# (scripts/release/publish-github.sh), and it stays a draft until every
+# tarball has uploaded. Once it is published, CLI_RELEASE in
+# packages/features/src/cli-release.ts moves to its version and the digests
+# the .sha256 files carry, which is what the served install.sh's `cli` mode
+# checks, and what `vespin update` installs on a curl install.
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+
+      - name: Resolve release version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./apps/cli/package.json').version")
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF" != "refs/tags/cli-v$VERSION" ]]; then
+            echo "error: tag $GITHUB_REF does not match CLI version cli-v$VERSION" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build the bundle
+        run: pnpm --filter @repo/vespin-cli build
+
+      # The npm package and every tarball are packed from that one bundle.
+      - name: Package the npm package and the tarballs
+        run: pnpm --filter @repo/vespin-cli package
+
+      - name: Pack the npm package
+        working-directory: apps/cli/dist/npm
+        run: |
+          npm pack --pack-destination ..
+          npm publish "../vespin-$VERSION.tgz" --dry-run --access public
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: vespin-${{ env.VERSION }}-npm
+          path: apps/cli/dist/vespin-${{ env.VERSION }}.tgz
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: vespin-${{ env.VERSION }}-tarballs
+          path: |
+            apps/cli/dist/release/*.tar.gz
+            apps/cli/dist/release/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  check:
+    name: Check ${{ matrix.target }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    permissions: {}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: darwin-arm64
+            runner: macos-15
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: vespin-${{ needs.build.outputs.version }}-tarballs
+          path: release
+
+      - name: Check the tarball on its own platform
+        working-directory: release
+        run: |
+          tarball="vespin-$VERSION-${{ matrix.target }}.tar.gz"
+          if command -v sha256sum >/dev/null; then sha256sum -c "$tarball.sha256"; else shasum -a 256 -c "$tarball.sha256"; fi
+          scratch=$(mktemp -d)
+          tar -xzf "$tarball" -C "$scratch"
+          sh -n "$scratch/vespin/bin/vespin"
+          "$scratch/vespin/node/bin/node" --version
+          reported=$("$scratch/vespin/bin/vespin" version --quiet)
+          if [[ "$reported" != "$VERSION" ]]; then
+            echo "error: the packaged command says $reported, not $VERSION" >&2
+            exit 1
+          fi
+          "$scratch/vespin/bin/vespin" --help >/dev/null
+
+  check-npm:
+    name: Check the npm package on Node 20
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions: {}
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "20"
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: vespin-${{ needs.build.outputs.version }}-npm
+          path: npm
+
+      - name: Install it globally and run it
+        run: |
+          npm install --global "./npm/vespin-$VERSION.tgz"
+          vespin --help >/dev/null
+          reported=$(vespin version --quiet)
+          if [[ "$reported" != "$VERSION" ]]; then
+            echo "error: the npm package says $reported, not $VERSION" >&2
+            exit 1
+          fi
+
+  publish-npm:
+    name: Publish to npm
+    needs: [build, check, check-npm]
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: vespin-${{ needs.build.outputs.version }}-npm
+          path: npm
+
+      # Trusted publishing needs npm 11.5.1 or later; there is no token to fall back on.
+      - name: Check npm can publish over OIDC
+        run: |
+          npm --version
+          node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$(npm --version)" ||
+            { echo "error: npm $(npm --version) is older than 11.5.1, which trusted publishing needs" >&2; exit 1; }
+
+      - name: Publish the package
+        run: npm publish "./npm/vespin-$VERSION.tgz" --provenance --access public
+
+  publish-release:
+    name: Publish GitHub release
+    needs: [build, check]
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: vespin-${{ needs.build.outputs.version }}-tarballs
+          path: release
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#cli-v}"
+          cd release
+          sha256sum -c ./*.sha256
+          gh release create "$TAG" --draft --latest=false --verify-tag \
+            --title "Vespin CLI $VERSION" \
+            --notes "The vespin command $VERSION for linux-x64, linux-arm64, and darwin-arm64, each with its own Node. Install it with: curl -fsSL https://vespin.dev/install.sh | sh -s cli, or from npm: npm i -g vespin" \
+            ./*.tar.gz ./*.sha256
+          gh release edit "$TAG" --draft=false --latest=false
+          echo "Move CLI_RELEASE (packages/features/src/cli-release.ts) to $VERSION with these digests:"
+          cat ./*.sha256
