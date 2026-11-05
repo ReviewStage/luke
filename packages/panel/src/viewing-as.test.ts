@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,6 +47,7 @@ async function mount(
   stopImpersonating: AppPlatform["stopImpersonating"],
 ): Promise<HTMLElement> {
   const { account } = signedInAs(MEMBER);
+  assert.equal(account.status, ACCOUNT_STATUS.SIGNED_IN);
   handState({}, { account: impersonated ? { ...account, impersonated: true } : account });
   fakeAppPlatform(stopImpersonating === undefined ? {} : { stopImpersonating });
   const container = document.body.appendChild(document.createElement("div"));
