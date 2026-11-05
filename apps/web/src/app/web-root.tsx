@@ -15,8 +15,8 @@
  * Until the panel draws, the tab shows the loading frame app.html stands in
  * the root element, which the root's first render replaces; where the frame
  * draws its mark as moving dots (`public/boot-mark.js`), it is lifted out of
- * the root over the panel instead and told to leave, so its dots sink away
- * and its ground then clears to the panel. A tab that can draw nothing takes the frame down and
+ * the root over the panel instead and told to leave, so its dots and ground
+ * fade out together to the panel. A tab that can draw nothing takes the frame down and
  * says so with Reload in its place, so it is never left looking as though the
  * panel were still coming, nor blank. The panel stands in an error boundary
  * that does the same for a render that throws.
@@ -82,7 +82,7 @@ function reportCaught(thrown: unknown): void {
  * Lifts the loading frame out of `rootElement`, over the panel about to draw
  * there, and sends it away, where its mark is drawing as moving dots; a frame
  * with no such mark is left for the root's first render to replace. Note that
- * the frame takes itself down once its dots have left and its ground cleared.
+ * the frame takes itself down once it has faded.
  */
 function liftLoadingFrame(rootElement: HTMLElement): void {
   const frame = rootElement.querySelector<HTMLElement>(BOOT_FRAME.SELECTOR);

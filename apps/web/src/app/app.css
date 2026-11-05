@@ -56,11 +56,11 @@
 
 /* Where `public/boot-mark.js` draws the mark as dots, the canvas takes the
    SVG's place, and the frame stands over the panel as it leaves: the dots
-   sink away over its ground, which then clears to the panel drawing beneath,
-   so they never cross what the panel draws. */
+   and the ground fade out together, as one layer, to the panel drawing
+   beneath, so nothing crosses what the panel draws. */
 .boot-frame[data-boot-mark="live"] {
   z-index: var(--ui-z-tooltip);
-  transition: background-color var(--ui-duration-shape) var(--ui-motion-pane);
+  transition: opacity var(--ui-duration-fast) var(--ui-motion-pane);
 }
 
 .boot-frame[data-boot-mark="live"] .boot-frame-mark {
@@ -68,7 +68,7 @@
 }
 
 .boot-frame[data-leaving="true"] {
-  background-color: transparent;
+  opacity: 0;
   pointer-events: none;
 }
 

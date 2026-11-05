@@ -13,18 +13,18 @@
 // copper. The dots rise once the wait has run long enough to notice
 // (`--ui-hint-delay`), and the light keeps moving while the tab loads. When
 // the panel draws, `src/app/web-root.tsx` lifts the frame out of the root and
-// sends it `boot-frame-leave`: the dots sink away over the frame's ground,
-// which only then clears to the app, and the frame removes itself once it
-// has. Note that the ground holds until the dots have gone, because the
-// panel's first screen (a sign-in card, most often) stands in the middle of
-// the window, right where the dots sink through. Where motion is held still, as
+// sends it `boot-frame-leave`: the dots stop where they stand and fade out
+// with the frame's ground, as one layer, to the app beneath, and the frame
+// removes itself once it has. Note that nothing moves as the frame leaves,
+// because the panel's first screen (a sign-in card, most often) stands in the
+// middle of the window, right where the dots are. Where motion is held still, as
 // reduced motion and a capture run hold it (`@repo/ui`'s `motionHeld`, read
 // here the same way, off the motion tokens), or where a canvas cannot draw,
 // the SVG mark stands still as before.
 (() => {
   const GRID = { ACROSS: 40, DOT: 0.72, LEAST: 3 };
   const LIGHT = { FLOOR: 0.32, GAIN: 0.72, TURN: 0.55, LEAN: 0.8 };
-  const MOTION = { RISE: 1660, LEAVE: 900, STAGGER: 0.38, CLIMB: 60, SWAY: 6 };
+  const MOTION = { RISE: 1660, STAGGER: 0.38, CLIMB: 60, SWAY: 6 };
   const HINT_FALLBACK = 500;
   const BAYER = [
     0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60,
@@ -133,22 +133,13 @@
   );
   const start = performance.now() + hint;
   let leaveAt = null;
-  let leaveFrom = 0;
+  let fading = 0;
   let gathered = 0;
-  let clearedAt = null;
-  let clearing = 0;
 
   /** Takes the dots down and gives the frame back its still SVG, for the root's first render to replace as before. */
   function standDown() {
     canvas.remove();
     delete frame.dataset.bootMark;
-  }
-
-  /** Clears the frame's ground to the panel beneath, once its dots have gone, for as long as the ground's transition runs. */
-  function clearGround(now) {
-    frame.dataset.leaving = "true";
-    clearedAt = now;
-    clearing = millisecondsOf(getComputedStyle(frame).transitionDuration);
   }
 
   /** Whether `layout` was laid out for the frame and the mark as they stand now. */
@@ -167,8 +158,7 @@
   /** Draws one frame of the dots; answers whether there is another to draw. */
   function drawn(now) {
     if (!frame.isConnected) return false;
-    if (clearedAt !== null) {
-      if (now - clearedAt < clearing) return true;
+    if (leaveAt !== null && now - leaveAt >= fading) {
       frame.remove();
       return false;
     }
@@ -185,16 +175,8 @@
     const { width, height, ratio, dot, dots, copper } = layout;
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, width, height);
-    if (leaveAt === null) {
-      gathered = clamp((now - start) / MOTION.RISE);
-    } else {
-      // The dots sink at one pace from wherever they stood, so a mark half risen leaves in half the time and the panel waits no longer than it must.
-      gathered = leaveFrom - clamp((now - leaveAt) / MOTION.LEAVE);
-      if (gathered <= 0) {
-        clearGround(now);
-        return true;
-      }
-    }
+    // The dots hold where they stand once the frame leaves, so none crosses the panel as the frame fades.
+    if (leaveAt === null) gathered = clamp((now - start) / MOTION.RISE);
     const angle = ((now - start) / 1000) * LIGHT.TURN;
     context.fillStyle = copper;
     for (const d of dots) {
@@ -230,9 +212,13 @@
   frame.addEventListener(
     "boot-frame-leave",
     () => {
+      if (gathered <= 0) {
+        frame.remove();
+        return;
+      }
       leaveAt = performance.now();
-      leaveFrom = gathered;
-      if (gathered <= 0) frame.remove();
+      frame.dataset.leaving = "true";
+      fading = millisecondsOf(getComputedStyle(frame).transitionDuration);
     },
     { once: true },
   );
