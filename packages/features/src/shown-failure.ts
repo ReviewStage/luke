@@ -94,7 +94,7 @@ export const FAILURE_SURFACE = {
   AUTOMATION_TOGGLE: "automation.toggle",
   BROWSER_OPEN: "browser.open",
   BUNDLE_LOAD: "bundle.load",
-  CHAPTERS_MODEL_READ: "chapters_model.read",
+  CHAPTERS_MODEL_WRITE: "chapters_model.write",
   COPY: "copy",
   DICTATION: "dictation",
   DIFF_READ: "diff.read",

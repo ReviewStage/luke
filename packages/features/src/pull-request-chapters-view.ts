@@ -14,7 +14,7 @@ import { pullRequestChaptersAnswerSchema } from "./pull-request-chapters-wire.js
  * GitHub did not say, or the service cannot generate chapters right now,
  * where a deployment holds no key for the model or its store is down.
  *
- * Settings › Coding agents reads and writes the member's own chapters model
+ * The Chapters view's Generate writes the member's own chapters model
  * through the same host on the same terms: the model as kept, or why there
  * is none.
  */
@@ -59,12 +59,12 @@ export const pullRequestChaptersAnswerViewSchema = EffectSchema.Union([
 
 export type PullRequestChaptersAnswerView = typeof pullRequestChaptersAnswerViewSchema.Type;
 
-/** The member's chapters model as Settings writes it: one of the set. */
+/** The member's chapters model as the Chapters view writes it: one of the set. */
 export const chaptersModelWriteParamsSchema = EffectSchema.Struct({ model: chaptersModelSchema });
 
 export type ChaptersModelWriteParams = typeof chaptersModelWriteParamsSchema.Type;
 
-/** The member's chapters model, as Settings hears it written: the model as kept, with the transaction it committed in where the service names one, or why there is none. */
+/** The member's chapters model, as the Chapters view hears it written: the model as kept, with the transaction it committed in where the service names one, or why there is none. */
 export const chaptersModelAnswerViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
     model: chaptersModelSchema,

@@ -1699,7 +1699,7 @@ function composed(
         readParams(
           chaptersModelWriteParamsSchema,
           params,
-          "the chapters model names one of the models Settings offers",
+          "the chapters model names one of the models Generate offers",
         ),
     ),
     // An agent's own tools are held for the windows while its servers popover shows, and told only on the app state (`WORKSPACE_TOOLS_CHANGED`). Note that the windows' hold is one fiber standing until let go, so a window holding it again holds nothing anew.

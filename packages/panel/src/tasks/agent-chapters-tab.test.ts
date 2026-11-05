@@ -18,6 +18,7 @@ import {
   REVIEW_STATE,
   type ReviewThread,
 } from "@repo/features/agent-wire";
+import { CHAPTERS_MODEL, type ChaptersModelId } from "@repo/features/chapters-model-choice";
 import {
   CHAPTER_KIND,
   CHAPTER_RISK,
@@ -49,7 +50,7 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileTreeModule } from "../file-tree/contract.js";
 import { GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handHostReads, holdMembers, holdPullRequestParts } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -588,6 +589,46 @@ test("Chapters stands after Checks; with none yet it offers Generate chapters, w
     tabNames(tab).some((name) => name === "Chapters3"),
     "the tab counts the chapters",
   );
+});
+
+test("a model picked on Generate's chevron is kept before the Generate after it is asked, since the service reads the model it keeps", async () => {
+  const kept = Promise.withResolvers<{ model: ChaptersModelId }>();
+  const picked: ChaptersModelId[] = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CHAPTERS_MODEL_WRITE]: ({ model }) => {
+      picked.push(model);
+      return kept.promise;
+    },
+  });
+  let asked = 0;
+  const tab = await draw(
+    controlAnswering({
+      generateChapters: () => {
+        asked += 1;
+        return Promise.resolve(answering(ready()));
+      },
+    }),
+  );
+
+  const chevron =
+    tab.querySelector<HTMLButtonElement>(
+      'button[aria-label="Choose the model chapters are generated on"]',
+    ) ?? assert.fail("Generate chapters has a chevron");
+  act(() => chevron.click());
+  const sonnet =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find(
+      (item) => item.textContent === "Sonnet 5.5",
+    ) ?? assert.fail("the chevron offers Sonnet 5.5");
+  act(() => sonnet.click());
+  act(() => button(tab, "Generate chapters").click());
+  await settle();
+  assert.deepEqual(picked, [CHAPTERS_MODEL.SONNET]);
+  assert.equal(asked, 0, "the Generate waits on the pick");
+
+  kept.resolve({ model: CHAPTERS_MODEL.SONNET });
+  await settle();
+  assert.equal(asked, 1);
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
