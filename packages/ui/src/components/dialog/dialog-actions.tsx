@@ -1,4 +1,5 @@
 import type { Ref } from "react";
+import { ReplayUnmask } from "../../session-replay-marks.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 
 /**
@@ -12,6 +13,8 @@ import { BUTTON_VARIANT, Button } from "../button/button.js";
  * the act names what it is doing; once it lands its check stands in the
  * act's words until it has been seen. A dialog that asks nothing, one that
  * shows a secret or a result, closes from its one Done in the accent.
+ * Cancel and Done are the foot's own words, so a screen recording shows
+ * them as they read (`ReplayUnmask`); the act's words are its owner's.
  */
 
 /** How the act is drawn: red for an act that destroys, the accent for one that does not. */
@@ -72,7 +75,7 @@ export function DialogActions(props: DialogActionsProps): React.JSX.Element {
   if (props.onDone !== undefined) {
     return (
       <Button variant={BUTTON_VARIANT.PRIMARY} onClick={props.onDone}>
-        {DONE}
+        <ReplayUnmask>{DONE}</ReplayUnmask>
       </Button>
     );
   }
@@ -86,7 +89,7 @@ export function DialogActions(props: DialogActionsProps): React.JSX.Element {
         disabled={settling}
         onClick={props.onCancel}
       >
-        {CANCEL}
+        <ReplayUnmask>{CANCEL}</ReplayUnmask>
       </Button>
       <Button
         ref={act.ref}

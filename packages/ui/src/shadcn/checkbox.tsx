@@ -21,7 +21,7 @@ import { ignoredByReplay } from "../session-replay-marks.js";
  * utilities, because the window's own focus ring (`@repo/panel`'s base.css)
  * draws the keyboard's ring and a utility would outrank it
  * (`anti-slop/no-shadcn-focus-ring`); and its hidden input kept out of the
- * screen recording (`session-replay-marks.ts`). `@repo/ui`'s `Checkbox`
+ * screen recording (`session-replay-marks.tsx`). `@repo/ui`'s `Checkbox`
  * (`components/checkbox/checkbox.tsx`) is what an app draws; this is its inside.
  */
 

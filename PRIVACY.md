@@ -110,9 +110,11 @@ workspace, with each workspace's name and creation date.
 
 While you are signed in, released builds of the Mac app and the web app also
 record the layout of Vespin's own window, never your screen or other apps.
-Before a recording leaves your device, every word, label, and link address is
-replaced with blocks of the same length, and the parts that hold the most of
-your words are left out entirely, including the feedback form, plan editing,
+Vespin's own labels, headings, buttons, and menu words are recorded as they
+read. Before a recording leaves your device, every other word, meaning
+anything you or your agents wrote, names, titles, branches, and link
+addresses, is replaced with blocks of the same length, and the parts that hold
+the most of your words are left out entirely, including the feedback form, plan editing,
 File tabs, pages, version history, Inbox items, agent and Terminal tabs,
 Browser tabs, the API keys page, and hover previews. Canvas recording is off,
 and clicks are not reported. Each recording is filed under your account's

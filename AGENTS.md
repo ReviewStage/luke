@@ -142,9 +142,11 @@ component, factored out of the surface where it builds the box by hand.
   error's words from any of them; a credential among it is replaced only where
   Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
-  (`packages/panel/src/session-replay.ts`), so what leaves the machine is
-  layout, not text; an unmasked attribute or a new way of drawing words is what
-  would change that.
+  (`packages/panel/src/session-replay.ts`) unless it sits under `@repo/ui`'s
+  unmask mark (`ReplayUnmask`) with no nearer mask mark (`ReplayMask`), so
+  what leaves the machine is layout and the app's own words, not a person's;
+  an unmasked attribute or a new way of drawing words is what would change
+  that.
 - Never push PR media to a branch but `pr-assets`, under `pr-<number>/`, if
   you add any; a fresh `pr-assets-<topic>` branch mails a failed Vercel Preview
   on every push. PR media is not required.
