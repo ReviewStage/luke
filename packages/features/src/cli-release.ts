@@ -1,5 +1,5 @@
 /**
- * cli-release.ts -- the `vespin` command's release the install script's `cli` mode serves: its version and each tarball's SHA-256, and where CI publishes them.
+ * cli-release.ts -- the `vespin` command's release the install script's `cli` mode serves: its version and each tarball's SHA-256, where CI publishes them, and the commands a person installs it with.
  *
  * CI builds the command's bundle once and publishes it to npm as `vespin`,
  * and packs it with the Node it runs on into one tarball per target the host
@@ -19,6 +19,34 @@ import { HOST_TARGET, type HostTarget } from "./host-release.js";
 
 /** The repository whose releases carry the command's tarballs. */
 const RELEASE_REPOSITORY = "ReviewStage/vespin";
+
+/** The npm package the command is published as, unscoped, so `npx vespin` and `npm i -g vespin` reach it. */
+const CLI_PACKAGE = "vespin";
+
+/** The install script's mode that installs the command rather than the host, as the script reads its first argument (`apps/web/install/install.sh`). */
+export const CLI_INSTALL_MODE = "cli";
+
+/** Where the install script's `cli` mode links the command, as a person's shell expands it. */
+export const CLI_LINK_FOLDER = "~/.local/bin";
+
+/**
+ * The commands a person is shown to install the command and sign it in, as
+ * the command's README spells them: with npm, once with npx, and then
+ * `vespin login`.
+ */
+export const CLI_COMMAND = {
+  NPM_INSTALL: `npm i -g ${CLI_PACKAGE}`,
+  NPX_LOGIN: `npx ${CLI_PACKAGE} login`,
+  LOGIN: `${CLI_PACKAGE} login`,
+} as const;
+
+/** The line the install script's `cli` mode says to add to a shell's profile where `CLI_LINK_FOLDER` is not on its PATH. */
+export const CLI_PATH_LINE = 'export PATH="$HOME/.local/bin:$PATH"';
+
+/** The command that installs the command with its own Node into `CLI_LINK_FOLDER`: the install script the service serves, run in its `cli` mode. */
+export function cliInstallCommand(installScriptUrl: string): string {
+  return `curl -fsSL ${installScriptUrl} | sh -s ${CLI_INSTALL_MODE}`;
+}
 
 /** A published release of the command: its version, and each of the host's targets' tarball by its SHA-256 in hex. */
 export interface CliRelease {

@@ -5,13 +5,15 @@ import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_CLIENTS_CALL_FAILURE, type McpClientsView } from "@repo/features/mcp-client-view";
 import type { McpClient } from "@repo/features/mcp-client-wire";
 import { ACT_KIND } from "@repo/host/acts";
+import { CLI_INSTALL_OUTCOME } from "@repo/host/contract";
+import { HOST_CAPABILITY, type HostCapability } from "@repo/settings";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState, signedInAs } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handState, signedInAs, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { McpClientsSections } from "./mcp-clients-section.js";
 
@@ -19,8 +21,9 @@ import { McpClientsSections } from "./mcp-clients-section.js";
  * mcp-clients-section.test.ts -- Settings › our MCP's connected
  * agents: a revoke that did not finish leaves its row standing with its
  * Disconnect and says so, never that it landed, and one that lands leaves the
- * row saying how long the access the agent already holds lasts. Synthetic
- * ids and addresses.
+ * row saying how long the access the agent already holds lasts; and the
+ * command-line tool's install, which only the desktop offers. Synthetic ids
+ * and addresses.
  */
 
 declare global {
@@ -50,6 +53,34 @@ const CLAUDE: McpClient = {
   allowedAt: Date.parse("2026-11-01T10:00:00Z"),
   lastRefreshedAt: null,
 };
+
+/** The words the page's copy fields hold, a command or a line each. */
+function copyable(): readonly string[] {
+  return [...document.querySelectorAll<HTMLInputElement>("input[readonly]")].map(
+    (each) => each.value,
+  );
+}
+
+/** The page drawn for an account with no agent connected, on a client offering `capabilities`. */
+async function drawPage(capabilities: readonly HostCapability[]): Promise<void> {
+  handState(
+    {},
+    {
+      account: signedInAs({ id: ACCOUNT_ID, email: "dana@app.test", name: "Dana" }).account,
+      run: { ...stateWith({}, {}).run, capabilities },
+      [LIVE_READ.MCP_CLIENTS]: { [ACCOUNT_ID]: { rows: { serverUrl: SERVER_URL, clients: [] } } },
+    },
+  );
+  fakeAppPlatform(QUIET_PANEL);
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(onRegistry(registry, createElement(McpClientsSections))));
+  await settle();
+}
 
 /** Lets the window's document and a press's acts land. */
 async function settle(): Promise<void> {
@@ -149,4 +180,43 @@ test("a revoke that did not finish leaves the agent standing with its Disconnect
     "a disconnected agent offers no Disconnect",
   );
   assert.deepEqual(asked, [CLAUDE.clientId, CLAUDE.clientId]);
+});
+
+test("the desktop's install says why it failed, then the version installed and the PATH line where the shell lacks ~/.local/bin", async () => {
+  const answers = [
+    { outcome: CLI_INSTALL_OUTCOME.FAILED, reason: "Vespin CLI has no release yet." },
+    { outcome: CLI_INSTALL_OUTCOME.INSTALLED, version: "0.3.0", onPath: false },
+  ] as const;
+  let asked = 0;
+  fakeActPort({
+    [ACT_KIND.CLI_INSTALL]: () => Promise.resolve(answers[asked++] ?? assert.fail("asked twice")),
+  });
+  await drawPage(DESKTOP_CAPABILITIES);
+
+  await press("Install command-line tool");
+  assert.ok(pageText().includes("Vespin CLI has no release yet."), pageText());
+  assert.ok(!pageText().includes("Installed vespin"), "a failed install never says it landed");
+
+  await press("Install command-line tool");
+  assert.ok(pageText().includes("Installed vespin 0.3.0."), pageText());
+  assert.ok(!pageText().includes("no release yet"), pageText());
+  assert.ok(copyable().includes(`export PATH="$HOME/.local/bin:$PATH"`), copyable().join("\n"));
+});
+
+test("a browser tab offers the commands, its install script at the server's origin, and no install", async () => {
+  fakeActPort({});
+  await drawPage(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.CLI_INSTALL));
+
+  assert.ok(copyable().includes("npm i -g vespin"), copyable().join("\n"));
+  assert.ok(
+    copyable().includes("curl -fsSL https://app.test/install.sh | sh -s cli"),
+    copyable().join("\n"),
+  );
+  assert.equal(
+    [...document.querySelectorAll("button")].some(
+      (each) => each.textContent === "Install command-line tool",
+    ),
+    false,
+    "a tab cannot run the install",
+  );
 });

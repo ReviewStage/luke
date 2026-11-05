@@ -14,6 +14,7 @@ import { PRODUCT_NAME } from "@repo/features/product-name";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { readingWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import { HOST_CAPABILITY } from "@repo/settings";
 import { SETTINGS_SEARCH_ROW } from "@repo/settings/settings-anchors";
 import {
   BUTTON_VARIANT,
@@ -51,8 +52,9 @@ import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useCapability } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { CliSection, cliSectionSkeleton } from "./cli-section.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -79,7 +81,9 @@ import { MenuRow } from "./menu-row.js";
  * their own settings, and any other agent by the address alone. An agent
  * that arrives while the page shows, which is how a member comes back from
  * the browser, lights its row and is said to be connected under the step.
- * While the account has none, Connect an agent stands first.
+ * While the account has none, Connect an agent stands first. The
+ * `vespin` command-line tool's section stands last either way
+ * (`cli-section.tsx`), its install script named at the server's origin.
  *
  * Each agent is led by its brand's mark, in the picker and on its row, an
  * allowed agent's found by the name it registered under; Other stands in
@@ -209,25 +213,29 @@ const CLIENT_SKELETON_ROWS = 1;
 
 /**
  * The sections that stand while the agents are read: a row to each agent
- * likely, ending in its ⋯, and Connect an agent's two rows, the agent asked
- * for and its step.
+ * likely, ending in its ⋯, Connect an agent's two rows, the agent asked for
+ * and its step, and the command-line tool's, its install among them where
+ * the client runs it.
  */
-const SECTIONS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
-  {
-    headed: true,
-    rows: Array.from({ length: CLIENT_SKELETON_ROWS }, () => ({
-      described: true,
-      controls: [SETTINGS_SKELETON_CONTROL.MORE],
-    })),
-  },
-  {
-    headed: true,
-    rows: [
-      { described: false, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
-      { described: true, controls: [] },
-    ],
-  },
-];
+function sectionsSkeleton(installs: boolean): readonly SettingsSectionSkeletonShape[] {
+  return [
+    {
+      headed: true,
+      rows: Array.from({ length: CLIENT_SKELETON_ROWS }, () => ({
+        described: true,
+        controls: [SETTINGS_SKELETON_CONTROL.MORE],
+      })),
+    },
+    {
+      headed: true,
+      rows: [
+        { described: false, controls: [SETTINGS_SKELETON_CONTROL.CHOICE] },
+        { described: true, controls: [] },
+      ],
+    },
+    cliSectionSkeleton(installs),
+  ];
+}
 
 /** What an agent is called on its row: the name it registered under, or a plain one where it gave none. */
 function clientName(client: McpClient): string {
@@ -451,8 +459,9 @@ function ConnectSection({
   );
 }
 
-/** The agents allowed and Connect an agent, for the account signed in. */
+/** The agents allowed, Connect an agent, and the command-line tool, for the account signed in. */
 export function McpClientsSections(): React.JSX.Element {
+  const installsCli = useCapability(HOST_CAPABILITY.CLI_INSTALL);
   const accountId = signedInAccountId(useAppSlice(APP_SLICE.ACCOUNT));
   const { rows, status, retry } = useHostRead(LIVE_READ.MCP_CLIENTS, accountId);
   // The agents revoked while the page shows, which stand saying so after the read no longer lists them.
@@ -474,7 +483,7 @@ export function McpClientsSections(): React.JSX.Element {
     ) : (
       <SettingsSectionsSkeleton
         label={readingWords("the connected agents")}
-        sections={SECTIONS_SKELETON}
+        sections={sectionsSkeleton(installsCli)}
       />
     );
   }
@@ -500,15 +509,18 @@ export function McpClientsSections(): React.JSX.Element {
   );
   const connect = <ConnectSection serverUrl={rows.serverUrl} arrived={shown.find(isNew)} />;
   // Note that an account with no agent yet is led to connect one, rather than to an empty list.
+  const cli = <CliSection serverUrl={rows.serverUrl} />;
   return shown.length === 0 ? (
     <>
       {connect}
       {clients}
+      {cli}
     </>
   ) : (
     <>
       {clients}
       {connect}
+      {cli}
     </>
   );
 }

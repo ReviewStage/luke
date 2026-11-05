@@ -11,6 +11,7 @@ import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
+import { cliActsContract } from "./cli.js";
 import { installedSkillActsContract } from "./installed-skills.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
@@ -40,6 +41,7 @@ export {
   type MacCommandDecision,
 } from "../mac-command-ask.js";
 export { ACT_ERROR } from "./base.js";
+export { CLI_INSTALL_OUTCOME, type CliInstallAnswer } from "./cli.js";
 export {
   ACCOUNT_ACT_KIND,
   ACCOUNT_ASK_ACT_KIND,
@@ -48,6 +50,7 @@ export {
   AUTOMATION_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHAPTERS_ACT_KIND,
+  CLI_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
   MAC_COMMAND_ACT_KIND,
@@ -84,6 +87,7 @@ export const actContract = {
   ...automationActsContract,
   ...browserLiveActsContract,
   ...chaptersActsContract,
+  ...cliActsContract,
   ...installedSkillActsContract,
   ...integrationActsContract,
   ...macCommandActsContract,

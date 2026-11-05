@@ -242,7 +242,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           }
         : undefined,
     ),
-    // The product MCP page's two groups, drawn once an account is signed in: the outside agents it let in, and how to connect one.
+    // The product MCP page's three groups, drawn once an account is signed in: the outside agents it let in, how to connect one, and the command-line tool.
     input.accountDrawn
       ? {
           id: SETTINGS_SEARCH_ROW.MCP_CLIENTS,
@@ -262,6 +262,17 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: [
             "Connect an agent",
             "mcp server url address claude code codex cursor vs code chatgpt connector external outside",
+          ],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.MCP_CLI,
+          label: "Command-line tool",
+          page: SETTINGS_VIEW.MCP,
+          haystack: [
+            "Command-line tool",
+            "cli vespin command terminal shell install npm npx curl login path",
           ],
         }
       : undefined,

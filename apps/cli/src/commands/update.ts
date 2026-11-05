@@ -12,6 +12,7 @@
  */
 
 import { CLI_EXIT } from "@repo/features/cli-exit";
+import { CLI_INSTALL_MODE } from "@repo/features/cli-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Effect, FileSystem, Stdio, Stream } from "effect";
@@ -29,9 +30,6 @@ import {
 import { answer, CommandFailed, note } from "../output.js";
 import { serviceOrigin } from "../session.js";
 import { VERSION } from "./version.js";
-
-/** The install script's mode that installs the command, as it reads its first argument. */
-const CLI_MODE = "cli";
 
 /** The only scheme the install script is fetched over, since what it answers is run as a shell script. */
 const SCRIPT_PROTOCOL = "https:";
@@ -72,7 +70,7 @@ const runInstallScript = Effect.fnUntraced(function* (script: string) {
   const code = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
-        ChildProcess.make("sh", ["-s", CLI_MODE], {
+        ChildProcess.make("sh", ["-s", CLI_INSTALL_MODE], {
           stdin: { stream: Stream.make(encoder.encode(script)) },
           stdout: "pipe",
           stderr: "inherit",
