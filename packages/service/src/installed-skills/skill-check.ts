@@ -1,5 +1,5 @@
 /**
- * skill-check.ts -- what keeps a skill's files from installing, read before anything is written: its `SKILL.md` held to the convention, its files to a skill's bounds, and every file to the credential-shape scan.
+ * skill-check.ts -- what keeps a skill's files from installing, read before anything is written: its `SKILL.md` held to the convention, its files to a file's bound, and every file to the credential-shape scan.
  *
  * A pasted skill is read by `parseSkillPaste`; a skill found in a
  * repository by its `SKILL.md`'s own frontmatter, named by its folder
@@ -21,10 +21,7 @@ import {
   type InstalledSkillFilesRefusal,
   type InstalledSkillProblem,
 } from "@repo/features/installed-skill-route-wire";
-import {
-  INSTALLED_SKILL_BOUNDS,
-  INSTALLED_SKILL_MAIN_FILE,
-} from "@repo/features/installed-skill-wire";
+import { holdsFileTooLarge, INSTALLED_SKILL_MAIN_FILE } from "@repo/features/installed-skill-wire";
 import {
   readSkillFile,
   SKILL_FILE_BOUNDS,
@@ -69,19 +66,13 @@ export function holdsCredentialShape(text: string): boolean {
   return CREDENTIAL_SHAPES.some((shape) => shape.test(text));
 }
 
-/** The problems of a skill's files as a set: too many, too many bytes, or one carrying a credential. */
+/** The problems of a skill's files as a set: one larger than a file may be. */
 export function filesProblems(
   files: readonly { readonly bytes: number }[],
 ): readonly InstalledSkillProblem[] {
-  const bytes = files.reduce((total, file) => total + file.bytes, 0);
-  return [
-    ...(files.length > INSTALLED_SKILL_BOUNDS.MAX_FILES
-      ? [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES]
-      : []),
-    ...(bytes > INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES
-      ? [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]
-      : []),
-  ];
+  return holdsFileTooLarge(files.map((file) => file.bytes))
+    ? [INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE]
+    : [];
 }
 
 /**
@@ -127,8 +118,6 @@ export function refusalOf(problem: InstalledSkillProblem): InstalledSkillFilesRe
       return INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_TOO_LARGE;
     case INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED:
       return INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED;
-    case INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES:
-      return INSTALLED_SKILL_FILES_REFUSAL.TOO_MANY_FILES;
     case INSTALLED_SKILL_PROBLEM.FILES_TOO_LARGE:
       return INSTALLED_SKILL_FILES_REFUSAL.TOO_LARGE;
     default:

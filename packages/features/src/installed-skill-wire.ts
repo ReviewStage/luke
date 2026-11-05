@@ -1,7 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 
 /**
- * installed-skill-wire.ts -- a skill a member installs into the app: whose it is, where it came from, and how large it may be.
+ * installed-skill-wire.ts -- a skill a member installs into the app: whose it is, where it came from, and how large its files may be.
  *
  * A repository's skills are read from GitHub at session start; an installed
  * skill is kept by the service itself, its files stored beside it, and
@@ -66,23 +66,22 @@ export type InstalledSkillSource = typeof installedSkillSourceSchema.Type;
 /** The file every skill holds at its folder's root: its frontmatter and its procedure. */
 export const INSTALLED_SKILL_MAIN_FILE = "SKILL.md";
 
-/** The bounds on one installed skill's files, past which an install or update is refused. */
+/** The bound on an installed skill's files, past which an install or update is refused: each file's bytes, whatever the skill holds together. */
 export const INSTALLED_SKILL_BOUNDS = {
-  /** The most files a skill holds, its `SKILL.md` among them. */
-  MAX_FILES: 64,
-  /** The most bytes a skill's files hold together; a single file is held to it too. */
-  MAX_TOTAL_BYTES: 1024 * 1024,
+  /** The most bytes one file holds: 3 MB, which a Mac takes whole in one queued message once base64 swells it to 4 MB. */
+  MAX_FILE_BYTES: 3_000_000,
 } as const;
+
+/** Whether any of the files, by their sizes, is larger than one may be. */
+export function holdsFileTooLarge(sizes: readonly number[]): boolean {
+  return sizes.some((bytes) => bytes > INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES);
+}
 
 /** Why a skill's files were refused. */
 export const INSTALLED_SKILL_REFUSAL = {
   /** None of its files is `SKILL.md` at its root. */
   NO_SKILL_FILE: "no-skill-file",
-  /** Two of its files share one path. */
-  DUPLICATE_PATH: "duplicate-path",
-  /** More files than `INSTALLED_SKILL_BOUNDS.MAX_FILES`. */
-  TOO_MANY_FILES: "too-many-files",
-  /** More bytes than `INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES`. */
+  /** A file larger than `INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES`. */
   TOO_LARGE: "too-large",
 } as const;
 

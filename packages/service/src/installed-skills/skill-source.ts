@@ -1,5 +1,5 @@
 /**
- * skill-source.ts -- a GitHub repository a member pasted as a skill source, read as an install takes it: reached, its ref pinned to a commit, its skill folders found, and one folder's files fetched within a skill's bounds.
+ * skill-source.ts -- a GitHub repository a member pasted as a skill source, read as an install takes it: reached, its ref pinned to a commit, its skill folders found, and one folder's files fetched within a file's bound.
  *
  * The repository is read on the workspace's GitHub App installation where
  * it reaches it, else on the member's own token where it may push there,
@@ -26,8 +26,8 @@
  * it was not told about (`skill-discovery.ts`), every copy of a name kept
  * for its `SKILL.md` to settle which stands (`skill-paste-install.ts`). The
  * whole tree is listed in one read, which also gives every file's size,
- * so a folder past a skill's bounds is refused before any of its files is
- * read.
+ * so a folder holding a file past its bound is refused before any of its
+ * files is read.
  *
  * A GitHub that does not answer, or answers past its rate limit, is
  * refused as unanswered; a repository nobody reaches as not reachable.
@@ -429,8 +429,8 @@ export const readSkillFolderFile = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Every file of the folder at the commit, read a few at once, in the
  * folder's order; a file GitHub holds as no regular file there, as a link
  * may read, is left out, and nothing is answered where one carries no
- * bytes. The caller holds the folder to a skill's bounds first, so no
- * folder past them costs a read.
+ * bytes. The caller holds the folder to a file's bound first, so no
+ * folder past it costs a read.
  */
 export const readSkillFolder = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,

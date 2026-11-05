@@ -88,9 +88,8 @@ export const installedSkill = pgTable(
  * One file of an installed skill, by its path from the skill's folder,
  * `SKILL.md` among them, its bytes kept here since this deployment keeps no
  * blob store. A path is relative and climbs out of no folder. Each file is
- * held to the skill's whole bound and `SKILL.md` to a repository's; how
- * many a skill holds and how many bytes together are the store's to hold,
- * since a check reads one row. The rows go with their skill.
+ * held to a file's bound and `SKILL.md` to a repository's; a skill holds
+ * any number of files. The rows go with their skill.
  */
 export const installedSkillFile = pgTable(
   "installed_skill_file",
@@ -113,10 +112,10 @@ export const installedSkillFile = pgTable(
       "installed_skill_file_relative",
       sql`${table.path} <> '' and left(${table.path}, 1) <> '/' and ${table.path} !~ '(^|/)\\.\\.?(/|$)' and position(chr(92) in ${table.path}) = 0`,
     ),
-    // No file larger than the skill's bound, and `SKILL.md` no larger than a repository's.
+    // No file larger than a file's bound, and `SKILL.md` no larger than a repository's.
     check(
       "installed_skill_file_bytes_bound",
-      sql`octet_length(${table.bytes}) <= ${bound(INSTALLED_SKILL_BOUNDS.MAX_TOTAL_BYTES)} and (${table.path} <> ${literal(INSTALLED_SKILL_MAIN_FILE)} or octet_length(${table.bytes}) <= ${bound(MAX_MAIN_FILE_BYTES)})`,
+      sql`octet_length(${table.bytes}) <= ${bound(INSTALLED_SKILL_BOUNDS.MAX_FILE_BYTES)} and (${table.path} <> ${literal(INSTALLED_SKILL_MAIN_FILE)} or octet_length(${table.bytes}) <= ${bound(MAX_MAIN_FILE_BYTES)})`,
     ),
   ],
 );
