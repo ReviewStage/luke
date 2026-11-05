@@ -40,11 +40,16 @@ function escapeMarkup(text: string): string {
     .replaceAll('"', "&quot;");
 }
 
-/** A page drawing the tile with the build's band across its foot, its label in white. */
+/**
+ * A page drawing the tile with the build's band across its foot, its label in
+ * white. Note that the SVG stands as a block, because an inline one sits on
+ * the text baseline and leaves the page a few pixels taller than the window,
+ * which paints scrollbars into the tile's right and bottom edges.
+ */
 function bandedTilePage(tile: NativeImage, badge: DevBuildBadge): string {
   const { CANVAS, TILE_EDGE, TILE_SIDE, TILE_RADIUS, TOP, BASELINE, FONT_SIZE, PIXELS } = BAND;
   const svg = [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" width="${PIXELS}" height="${PIXELS}">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS} ${CANVAS}" width="${PIXELS}" height="${PIXELS}" style="display:block">`,
     `<defs><clipPath id="tile"><rect x="${TILE_EDGE}" y="${TILE_EDGE}" width="${TILE_SIDE}" height="${TILE_SIDE}" rx="${TILE_RADIUS}"/></clipPath></defs>`,
     `<image href="${tile.toDataURL()}" width="${CANVAS}" height="${CANVAS}"/>`,
     `<g clip-path="url(#tile)"><rect x="${TILE_EDGE}" y="${TOP}" width="${TILE_SIDE}" height="${TILE_EDGE + TILE_SIDE - TOP}" fill="${escapeMarkup(badge.color)}"/>`,
