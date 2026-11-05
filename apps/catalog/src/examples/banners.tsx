@@ -1,6 +1,7 @@
 /**
  * banners.tsx -- a notice in each look: a strip across a column in the
- * attention tone, a card over a document in either tone, and a quiet row in
+ * attention tone, a card over a document in either tone, a card whose glyph
+ * is a failure's bare mark, and a quiet row in
  * its place's frame; then each in a narrow column, where the presses drop
  * beneath the words; and a strip whose words its column cuts short, fading
  * out at their end; and the strip a maintainer signed in as a member reads,
@@ -10,6 +11,7 @@
 import {
   AlertIcon,
   ArchiveIcon,
+  BANNER_GLYPH,
   BANNER_LOOK,
   Banner,
   BUTTON_VARIANT,
@@ -49,6 +51,21 @@ function Looks(): React.JSX.Element {
       <Banner look={BANNER_LOOK.CARD} tone={STATUS_TONE.ATTENTION} glyph={<AlertIcon />}>
         <Text variant={TEXT_VARIANT.SECTION}>Every new plan starts from this template</Text>
         <Text tone={TEXT_TONE.MUTED}>Edit it to change what a plan holds when it is made.</Text>
+      </Banner>
+      <Banner
+        look={BANNER_LOOK.CARD}
+        tone={STATUS_TONE.DANGER}
+        glyph={<AlertIcon />}
+        glyphLook={BANNER_GLYPH.MARK}
+        actions={
+          <>
+            <Button variant={BUTTON_VARIANT.OUTLINE}>Move to cloud</Button>
+            <Button variant={BUTTON_VARIANT.PRIMARY}>Retry</Button>
+          </>
+        }
+      >
+        <Text variant={TEXT_VARIANT.LABEL}>Studio can't reach acme/relay on GitHub.</Text>
+        <Text tone={TEXT_TONE.MUTED}>Sign in on that Mac, then retry.</Text>
       </Banner>
       <div className="catalog-frame">
         <Banner

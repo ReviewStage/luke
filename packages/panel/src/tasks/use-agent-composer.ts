@@ -209,6 +209,8 @@ export interface HeldComposer extends AgentComposerControl {
   };
   /** Sends a line marked as not sent again under its key, from the line itself. */
   readonly retryLine: (id: string) => void;
+  /** Sends the words given as a new line of the developer's own, under a fresh key, leaving the box as it is; nothing on a closed agent. */
+  readonly sendWords: (text: string) => void;
   /** The developer's line open for writing again where it stands, by its message id; none while none is. */
   readonly editing: string | undefined;
   /** Opens one of the developer's lines for writing again where it stands. */
@@ -386,10 +388,8 @@ export function useAgentComposer(input: {
     });
   };
 
-  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
-    const text = kept.draft.text.trim();
-    const { attachments } = kept.draft;
-    if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
+  /** Sends the words and files as a new line under its key, as the developer's own. */
+  const sendLine = (text: string, attachments: readonly AgentAttachment[], clientKey: string) => {
     const line: SentLine = {
       id: sentLineId(clientKey),
       clientKey,
@@ -399,9 +399,16 @@ export function useAgentComposer(input: {
       sentAt: Date.now(),
       state: SENT_LINE_STATE.PENDING,
     };
-    update(() => EMPTY_DRAFT);
     setHeld((was) => ({ ...was, failed: undefined, sent: [...was.sent, line] }));
     deliver(line);
+  };
+
+  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
+    const text = kept.draft.text.trim();
+    const { attachments } = kept.draft;
+    if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
+    update(() => EMPTY_DRAFT);
+    sendLine(text, attachments, clientKey);
   };
 
   /** Sends the words and files in place of the line named, the messages from it on hidden at once; the box is left as it is. */
@@ -508,6 +515,10 @@ export function useAgentComposer(input: {
       else resend(failed.lineId);
     },
     retryLine: resend,
+    sendWords: (text) => {
+      if (text.trim() === "" || held.closed !== undefined) return;
+      sendLine(text.trim(), [], crypto.randomUUID());
+    },
     sent,
     unsent: { words: kept.draft.text, attachments: kept.draft.attachments },
     editing: held.editing,

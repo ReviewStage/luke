@@ -36,6 +36,12 @@
     max-width: 50%;
   }
 
+  /* A card's presses stand at its end, beside the words or, where they
+     drop beneath them, on their own line, as a failure note's do. */
+  .ui-banner[data-look="card"] .ui-banner-actions {
+    margin-inline-start: auto;
+  }
+
   /* A strip's words fade out over their last few pixels only while they
      are measured cut short (`banner.tsx`), as every cut line does, so short
      words end on their last letter. Note that the fade stays here, because

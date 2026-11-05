@@ -6,7 +6,8 @@ import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
  * A notice comes in four looks: a slim strip across a column, its words held
  * to one line and fading out at its end where it cuts them short (a stranded
  * repository's); a card over a document, its glyph
- * in a disc (an archived plan's); and a quiet row in the
+ * in a disc (an archived plan's), or bare in its tone's ink as a failure
+ * note's mark (a launch a Mac could not start); and a quiet row in the
  * frame its place draws around it (an archived agent's, in its composer's
  * place); and the strip's line set inside a card, with no fill or edge of
  * its own (a queued message being edited, at its composer's head). Each is
@@ -46,17 +47,28 @@ export const BANNER_LOOK = {
 
 export type BannerLook = (typeof BANNER_LOOK)[keyof typeof BANNER_LOOK];
 
+/** How a card's glyph stands: in a disc of its tone's tint, or as the bare mark a failure note wears, in its tone's ink beside the words' first line. */
+export const BANNER_GLYPH = {
+  DISC: "disc",
+  MARK: "mark",
+} as const;
+
+export type BannerGlyph = (typeof BANNER_GLYPH)[keyof typeof BANNER_GLYPH];
+
 /** A notice: its look and tone, its glyph, its words, which name it to a reader, and the presses that answer it, if any. */
 export function Banner({
   look,
   tone = STATUS_TONE.NEUTRAL,
   glyph,
+  glyphLook = BANNER_GLYPH.DISC,
   actions,
   children,
 }: {
   look: BannerLook;
   tone?: StatusTone;
   glyph: ReactNode;
+  /** How a card's glyph stands; every other look draws its glyph bare whatever this says. */
+  glyphLook?: BannerGlyph;
   /** The presses, in reading order; the last is the banner's primary one. */
   actions?: ReactNode;
   children: ReactNode;
@@ -67,7 +79,7 @@ export function Banner({
   return (
     <Alert look={look} tone={tone} aria-labelledby={wordsId}>
       <AlertRow look={look}>
-        <AlertGlyph look={look} tone={tone}>
+        <AlertGlyph look={look} tone={tone} mark={glyphLook === BANNER_GLYPH.MARK}>
           {glyph}
         </AlertGlyph>
         <AlertDescription

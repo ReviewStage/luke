@@ -16,6 +16,7 @@ import {
   agentMessageWords,
   QUEUE_CHANGE,
 } from "@repo/features/agent-wire";
+import { DEVICE_LAUNCH_UNSTARTED } from "@repo/features/device-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@repo/features/failure-remedy";
 import { threadLineWords } from "@repo/features/inbox-wire";
 import type { CatalogModel, ModelChoice, ModelProvider } from "@repo/features/models-wire";
@@ -198,6 +199,7 @@ import { CopyMessageAction } from "./copy-message.js";
 import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
+import { GitHubSignInCard, type GitHubSignInDoors, RETRY_LINE } from "./github-sign-in-card.js";
 import {
   CommentLineHead,
   GitHubLineCard,
@@ -213,6 +215,7 @@ import {
   MessagePlaceProvider,
   useMessageReveal,
 } from "./message-links.js";
+import { useMoveToCloud } from "./move-agent.js";
 import { PilotComposerNote } from "./pilot-note.js";
 import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
@@ -2258,6 +2261,7 @@ function AgentTranscriptView({
   replay,
   endPress,
   endTrail,
+  signIn,
   bringIn,
   holding = false,
 }: {
@@ -2325,12 +2329,21 @@ function AgentTranscriptView({
   endPress?: ReactNode;
   /** The row under the end line, or at the transcript's end where it has none: the agents that continued it, where an archive took the box (`continue-agent.tsx`). */
   endTrail?: ReactNode;
+  /** What the card a launch its Mac's GitHub sign-in could not reach the repository for draws and presses, in the end line's place (`github-sign-in-card.tsx`); none where the tab offers it none, which draws the line. */
+  signIn?: GitHubSignInDoors | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
   const unsent = useUnsentLines();
   useTurnEndSaid(ended, pageRuns);
+  // Note that the card stands alone in the end line's place, without its press, since its own presses answer the failure.
+  const signInCard =
+    ended?.unstarted === DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN && signIn !== undefined ? (
+      <div className="agent-sign-in self-stretch">
+        <GitHubSignInCard {...signIn} />
+      </div>
+    ) : undefined;
   // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
   const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
@@ -2510,16 +2523,18 @@ function AgentTranscriptView({
                     className="agent-end flex flex-col items-start gap-control-gap"
                     data-ended={ended === undefined ? undefined : ""}
                   >
-                    {ended === undefined ? null : (
-                      <AgentEndRow
-                        ended={ended}
-                        endReason={endReason}
-                        keyProvider={keyProvider}
-                        onOpenApiKeys={onOpenApiKeys}
-                        about={failureAbout ?? { agentId, taskId }}
-                        press={endPress}
-                      />
-                    )}
+                    {ended === undefined
+                      ? null
+                      : (signInCard ?? (
+                          <AgentEndRow
+                            ended={ended}
+                            endReason={endReason}
+                            keyProvider={keyProvider}
+                            onOpenApiKeys={onOpenApiKeys}
+                            about={failureAbout ?? { agentId, taskId }}
+                            press={endPress}
+                          />
+                        ))}
                     {endTrail}
                   </div>
                 )}
@@ -2568,6 +2583,8 @@ function AgentTranscriptView({
         <>
           {ended === undefined ? (
             <Text tone={TEXT_TONE.MUTED}>{lead.startingLine}</Text>
+          ) : signInCard !== undefined ? (
+            signInCard
           ) : (
             <AgentEndRow
               ended={ended}
@@ -2626,6 +2643,7 @@ function AgentTabView({
   continuedNote,
   pilotNote,
   continuable = false,
+  onMoveToCloud,
   bringIn,
   holding = false,
 }: {
@@ -2688,6 +2706,8 @@ function AgentTabView({
   pilotNote?: ReactNode;
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
+  /** Moves the agent to the cloud, as Move to's Cloud does, which a launch its Mac's GitHub sign-in could not start offers; none where Move to would not. */
+  onMoveToCloud?: (() => void) | undefined;
 }): React.JSX.Element {
   // Note that the messages a rewind drops are hidden at once, until the transcript reads back without them.
   const { cut } = composer;
@@ -2757,6 +2777,20 @@ function AgentTabView({
   // lands awaiting its turn moves the page and not the list the summary is read from.
   const pageRuns = transcript.pageStatus !== undefined && agentStillWriting(transcript.pageStatus);
   const working = agentStillWriting(agent.status) || pageRuns || lineGoing;
+  // Note that the sign-in card's Retry is a line of the developer's own, so the card is offered only where the box stands to send it.
+  const signIn: GitHubSignInDoors | undefined =
+    pilotNote === undefined &&
+    onUnarchive === undefined &&
+    continuedNote === undefined &&
+    composer.closed === undefined
+      ? {
+          host: agent.mac?.name,
+          repository: published?.repository ?? undefined,
+          onRetry: () => composer.sendWords(RETRY_LINE),
+          onMoveToCloud,
+          copy: copyThroughShell,
+        }
+      : undefined;
   const name = agentName(agent, models);
   const keyProvider = providerOf(agent.model);
   const tab = useRef<HTMLElement>(null);
@@ -2922,6 +2956,7 @@ function AgentTabView({
                       }
                       endPress={endPress}
                       endTrail={endTrail}
+                      signIn={signIn}
                       onRetry={transcript.onRetry}
                       onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
                       olderFailed={transcript.olderFailed}
@@ -3162,6 +3197,7 @@ function AgentTabBody({
     shown,
     known: control.pullRequests.get(agent.id),
   });
+  const moveToCloud = useMoveToCloud(agent, control);
   // Note that the log never waits on the pull request's dock over the box, because its read asks GitHub and would hold every tab's first draw for a second or more.
   // Note that nothing counts as landed before the first page.
   const surroundsLanded = messages.length > 0;
@@ -3310,6 +3346,7 @@ function AgentTabBody({
           ) : undefined
         }
         continuable={continued.length > 0 || (continues && control.continueAgent !== undefined)}
+        onMoveToCloud={moveToCloud}
         endTrail={
           // Note that the box's note names them while it stands, so the transcript names them only where an archive took the box.
           continued.length === 0 || control.onUnarchive === undefined ? undefined : (
