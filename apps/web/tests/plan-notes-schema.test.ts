@@ -1,4 +1,4 @@
-import { planNotesSchema } from "@repo/features/plan-template";
+import { planNotesSchema } from "@repo/features/plan-notes";
 import { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "@repo/wire/testing";
 import { test } from "vitest";
 

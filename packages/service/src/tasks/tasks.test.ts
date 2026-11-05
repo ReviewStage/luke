@@ -20,7 +20,7 @@ import {
 } from "@repo/database/testing";
 import { noDatabase } from "@repo/database/testing/no-database";
 import { planSections } from "@repo/features/plan-document";
-import type { PlanNote } from "@repo/features/plan-template";
+import type { PlanNote } from "@repo/features/plan-notes";
 import { type PlanDocument, TASK_STATUS } from "@repo/features/task-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";

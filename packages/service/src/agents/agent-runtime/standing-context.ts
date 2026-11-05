@@ -13,7 +13,7 @@ import type { LabeledAgentEdit, StoredTask } from "@repo/database/models/task-st
 import { dateLabel } from "@repo/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@repo/features/mention-link";
 import type { PlanCommentThread } from "@repo/features/plan-comment-wire";
-import { NOTE_KIND, type PlanAgentEdit } from "@repo/features/plan-template";
+import { NOTE_KIND, type PlanAgentEdit } from "@repo/features/plan-notes";
 import { DateTime, Option } from "effect";
 import { openThreadsText } from "../../tasks/comment-tools.js";
 

@@ -36,7 +36,7 @@ import { LINK_PLACE, type LinkPlace, linkOf } from "@repo/features/link-grammar"
 import { linkLabels } from "@repo/features/mention-link";
 import type { ModelChoice } from "@repo/features/models-wire";
 import { planAttachmentOf } from "@repo/features/plan-attachment-link";
-import type { PlanAgentEdit } from "@repo/features/plan-template";
+import type { PlanAgentEdit } from "@repo/features/plan-notes";
 import {
   browserCallWords,
   CALL_KIND,

@@ -13,7 +13,7 @@ import {
   type PlanAgentEdit,
   type PlanNote,
   withAgentEdit,
-} from "@repo/features/plan-template";
+} from "@repo/features/plan-notes";
 import {
   PLAN_ACTOR,
   type PlanDocument,
@@ -32,7 +32,7 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * A plan is one Markdown text (`@repo/features/plan-document`). Its caller
  * is a coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose model
  * answers with
- * notes (`@repo/features/plan-template`): a point added under a heading, a
+ * notes (`@repo/features/plan-notes`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as
  * it stands under the plan's lock, and taken whole or not at all: a note that

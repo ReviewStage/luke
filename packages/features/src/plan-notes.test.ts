@@ -9,7 +9,7 @@ import {
   type PlanNote,
   readNotes,
   withAgentEdit,
-} from "./plan-template.js";
+} from "./plan-notes.js";
 
 function add(section: string, text: string): PlanNote {
   return { kind: NOTE_KIND.ADD, section, text };

@@ -107,7 +107,7 @@
     "./plan-document": "./src/plan-document.js",
     "./plan-edit": "./src/plan-edit.js",
     "./plan-markdown": "./src/plan-markdown.js",
-    "./plan-template": "./src/plan-template.js",
+    "./plan-notes": "./src/plan-notes.js",
     "./task-section-wire": "./src/task-section-wire.js",
     "./task-section-writes": "./src/task-section-writes.js",
     "./task-wire": "./src/task-wire.js",

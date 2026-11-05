@@ -8,7 +8,7 @@ import { PLAN_SECTION_BOUNDS, TASK_BOUNDS } from "./task-wire.js";
 import { trimmedText } from "./text-schema.js";
 
 /**
- * plan-template.ts -- the notes the app takes into a plan's text, and the agents' journal of them.
+ * plan-notes.ts -- the notes the app takes into a plan's text, and the agents' journal of them.
  *
  * A plan is one Markdown text that starts empty (`plan-document.ts`,
  * `docs/TASKS.md`), its headings its sections.

@@ -13,7 +13,7 @@ import {
   planNoteSectionSchema,
   planNotesSchema,
   readNotes,
-} from "@repo/features/plan-template";
+} from "@repo/features/plan-notes";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { PLAN_ACTOR } from "@repo/features/task-wire";
 import { describeWire, readEither } from "@repo/wire/effect";

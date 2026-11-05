@@ -47,7 +47,7 @@ import {
   PLAN_COMMENT_SCOPE,
   PLAN_COMMENT_STATUS,
 } from "@repo/features/plan-comment-wire";
-import { NOTE_KIND } from "@repo/features/plan-template";
+import { NOTE_KIND } from "@repo/features/plan-notes";
 import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { TASK_SECTION_WRITE } from "@repo/features/task-section-wire";
 import { PLAN_ACTOR, TASK_STATUS } from "@repo/features/task-wire";

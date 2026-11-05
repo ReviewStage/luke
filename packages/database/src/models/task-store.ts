@@ -10,7 +10,7 @@ import { INBOX_STATUS } from "@repo/features/inbox-wire";
 import { agentName } from "@repo/features/model-label";
 import { planAttachmentIdsIn } from "@repo/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@repo/features/plan-document";
-import { type PlanAgentEdit, planAgentEditSchema } from "@repo/features/plan-template";
+import { type PlanAgentEdit, planAgentEditSchema } from "@repo/features/plan-notes";
 import { READ_MARK, type ReadMark } from "@repo/features/read-mark";
 import {
   PLAN_ACTOR,

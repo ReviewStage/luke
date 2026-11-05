@@ -647,7 +647,7 @@ is read off the plan's revisions by heading (`sectionWritersOf`,
 against the template plans started as before they started empty, which a
 plan started empty reads the same against, so a heading renamed with nothing
 beneath it changed is the same section under its new words. An agent's notes may land
-anywhere in the text (`applyNotesToText` in `plan-template.ts`): an addition
+anywhere in the text (`applyNotesToText` in `plan-notes.ts`): an addition
 at the end of the one section under its heading, or as a new section at the
 end of the text where the text has none; a replacement names text standing
 once in the whole text, headings and whole sections among it, so a heading
