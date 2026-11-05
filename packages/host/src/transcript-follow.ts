@@ -1,3 +1,4 @@
+import { CALL_FAULT } from "@repo/features";
 import {
   AGENT_CALL_FAILURE,
   type AgentMessagesAnswerView,
@@ -36,7 +37,7 @@ import {
 } from "effect";
 import type { AppTranscript } from "./app-state.js";
 import type { HeldAnswers } from "./live-collection.js";
-import { decodedLiveRows, LIVE_STATE, type SealedRead, serviceAnswers } from "./live-follow.js";
+import { decodedLiveRows, LIVE_STATE, type SealedRead } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here over the service's held poll for the windows that draw it, each page laid on its app-state slice as it is read.
@@ -70,11 +71,11 @@ import { decodedLiveRows, LIVE_STATE, type SealedRead, serviceAnswers } from "./
  *
  * The live read is let go a while after the last follow let go of it. A
  * first read the service did not answer is asked for again every `RESEAL`:
- * for as long as the service answers nothing, so a transcript opened
- * offline reads itself once the connection is back, and otherwise at most
- * `RESEALS` times, and then the follow is told the transcript could not be
- * read, which the window offers to try again, as it is where the live read
- * stops for good. One the account does not reach is told not found.
+ * for as long as its calls get no answer at all, so a transcript opened
+ * offline reads itself once the connection is back, and otherwise up to
+ * `RESEALS` refusals, and then the follow is told the transcript could not
+ * be read, which the window offers to try again, as it is where the live
+ * read stops for good. One the account does not reach is told not found.
  */
 
 /** How many transcripts no window holds any longer stay drawn at most, the least recently let go closed first. */
@@ -88,23 +89,28 @@ export const HELD_BYTES_EACH = HELD_BYTES / 4;
 const IDLE = Duration.seconds(30);
 /** How long after a read the service did not answer the transcript is read again. */
 const RESEAL = Duration.seconds(1);
-/** How many times in a row a read the service did not answer is asked for again, while it answers other calls, before the follow says the transcript could not be read. */
+/** How many refusals of a read the service answered are asked for again before the follow says the transcript could not be read. */
 const RESEALS = 30;
+
+/** Whether a failure's own facts say its call got no answer: it ended on the network or its deadline, anywhere down its chain (`CALL_FAULT.NETWORK`). */
+function noAnswer(facts: FailureFacts | undefined): boolean {
+  if (facts === undefined) return false;
+  return facts.fault === CALL_FAULT.NETWORK || noAnswer(facts.cause);
+}
 
 /**
  * Whether a read that failed is asked again, counting from the first
- * failure: always while the service answers nothing (`serviceAnswers`),
- * since the read is then waiting for the connection rather than refused,
- * and up to `RESEALS` times while it answers.
+ * failure: always where its call got no answer (`noAnswer`), since the read
+ * is then waiting for the connection rather than refused, and up to
+ * `RESEALS` refusals the service answered.
  */
-function resealing(): () => Effect.Effect<boolean> {
-  let counted = 0;
-  return () =>
-    Effect.map(serviceAnswers, (answers) => {
-      if (!answers) return true;
-      counted += 1;
-      return counted <= RESEALS;
-    });
+function resealing(): (failed: Failed) => boolean {
+  let refused = 0;
+  return (failed) => {
+    if (noAnswer(failed.cause)) return true;
+    refused += 1;
+    return refused <= RESEALS;
+  };
 }
 
 /** The service did not answer the transcript's live read, asked again as `resealing` allows: the last failure it answered, and what failed beneath it where the client said. */
@@ -277,7 +283,7 @@ function sealedOf(
         new SealUnanswered(cause === undefined ? { failure } : { failure, cause }),
       );
     }),
-    Effect.retry({ schedule: Schedule.spaced(RESEAL), while: again }),
+    Effect.retry({ schedule: Schedule.spaced(RESEAL), while: (unsealed) => again(unsealed) }),
   );
 }
 
@@ -568,7 +574,7 @@ export function followTranscript<Key>(
           // Note that a newest page the service keeps not answering is asked for again as the live read is (`resealing`), and then ends the follow on the failure told, so the window offers Try again.
           Effect.repeat({
             schedule: Schedule.spaced(RESEAL),
-            while: (answer) => (unanswered(answer) ? again() : Effect.succeed(false)),
+            while: (answer) => "failure" in answer && unanswered(answer) && again(answer),
           }),
         );
       });

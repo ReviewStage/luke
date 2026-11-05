@@ -81,15 +81,6 @@ const serviceRegained: Stream.Stream<boolean> = Stream.unwrap(
   ),
 );
 
-/** Whether the service answered the last word the host had of it (`ServiceReach`); answering where the host keeps no reach. */
-export const serviceAnswers: Effect.Effect<boolean> = Effect.flatMap(
-  Effect.serviceOption(ServiceReach),
-  Option.match({
-    onNone: () => Effect.succeed(true),
-    onSome: (reach) => Effect.map(SubscriptionRef.get(reach), (state) => state.reachable),
-  }),
-);
-
 /**
  * `duration` waited out, or less where the service answers again first
  * (`serviceRegained`), so a read waiting to ask again after a failure asks
