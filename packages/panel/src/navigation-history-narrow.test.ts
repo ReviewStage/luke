@@ -102,6 +102,8 @@ interface Standing {
   readonly admin?: { readonly view: AdminView } | undefined;
   /** How many times a door naming a thing opened it in the side panel, as the real one counts them. */
   readonly opened?: number | undefined;
+  /** Whether the window stands on Home, no task open, rather than on the task. */
+  readonly home?: boolean | undefined;
 }
 
 /** The window on the task, every pane over it shut. */
@@ -153,11 +155,14 @@ function tasksTab(
             },
         }
       : base.leaveGuard;
+  const onTask = at.home !== true;
   return tasksControl({
-    page: TASKS_PAGE.DOCUMENT,
-    activeTaskId: DOCUMENT_TASK.id,
-    boundFor: DOCUMENT_TASK.id,
-    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } },
+    page: onTask ? TASKS_PAGE.DOCUMENT : TASKS_PAGE.HOME,
+    activeTaskId: onTask ? DOCUMENT_TASK.id : undefined,
+    boundFor: onTask ? DOCUMENT_TASK.id : undefined,
+    region: onTask
+      ? { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, workspaceId: ACME.id } }
+      : base.region,
     workspaces: [ACME],
     workspace: ACME,
     sidePanel: {
@@ -373,6 +378,17 @@ function backAndForth<Shown>(
   act(() => window.history().onForward());
   assert.deepEqual(list(window.at()), expectedItem, "Forward stands the item again");
 }
+
+test("on a narrow stage the window has no Home: standing there, it stands on the Inbox's list instead, which takes Home's step, so Back has nothing to land on; a wide one stands on Home as ever", () => {
+  const phone = mount(SHELL_ROOM.NARROW, { ...ON_TASK, home: true });
+  assert.equal(phone.at().inbox.open, true, "the Inbox stands");
+  assert.deepEqual(phone.addresses(), ["/acme/inbox"]);
+  assert.equal(phone.history().canGoBack, false);
+  unmountAll();
+
+  const wide = mount(SHELL_ROOM.WIDE, { ...ON_TASK, home: true });
+  assert.equal(wide.at().inbox.open, false, "Home stands");
+});
 
 test("on a narrow stage the side panel opened over the plan is a step: Back shuts it, Forward opens it on its tab, and each step's address is its link", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);

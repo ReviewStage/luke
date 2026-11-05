@@ -899,7 +899,7 @@ export function DesktopShell({
           <MobileBar
             tasks={tasks}
             sidebar={sidebar}
-            onPressMore={keepOverlay}
+            onPressTasks={keepOverlay}
             leave={() => onTabChange(PANEL_TAB.TASKS)}
           />
         ) : null}
@@ -1098,7 +1098,7 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
-      {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressMore={keepOverlay} /> : null}
+      {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressTasks={keepOverlay} /> : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&
@@ -1113,7 +1113,7 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
       {/* A phone's every page heads itself with one row of its own (`phone-head.tsx`), its way back or its one control
-          where these stood; the drawer opens from the places bar's More, or a swipe in from the screen's edge. */}
+          where these stood; the drawer opens from the places bar's Tasks, or a swipe in from the screen's edge. */}
       {room === SHELL_ROOM.NARROW ? (
         <SidebarChord sidebar={sidebar} />
       ) : (

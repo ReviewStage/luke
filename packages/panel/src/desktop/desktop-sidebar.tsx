@@ -1479,10 +1479,13 @@ function SidebarHomeRow({
 function SidebarTasksRow({
   current,
   disabled,
+  phone,
   onOpen,
 }: {
   current: boolean;
   disabled: boolean;
+  /** Whether the row stands in a phone's Tasks (`mobile-bar.tsx`), which it names apart from by naming its page whole. */
+  phone: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   useWhenIdle(() => {
@@ -1498,7 +1501,7 @@ function SidebarTasksRow({
       onPointerEnter={TASKS_ROUTE.prefetch}
       onClick={onOpen}
     >
-      Tasks
+      {phone ? "All tasks" : "Tasks"}
     </NavItem>
   );
 }
@@ -1738,7 +1741,9 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * most recently first; under their creators'; or in one run. A task
  * archived by an older build, before archiving went, stands nowhere.
  * It is where the developer moves between things; what they work on is the
- * column beside it.
+ * column beside it. On a phone it is the places bar's Tasks (`mobile-bar.tsx`),
+ * whose bar already holds New task, Search, and the Inbox, and whose phone
+ * opens on the Inbox rather than Home, so it leaves those four rows to the bar.
  * The open task's row is marked, or, where the task was opened from a pin,
  * that pin's row, while the task stays open.
  * A task's actions are a right-click on it away, whether or not it is open.
@@ -2151,37 +2156,47 @@ function SidebarColumn({
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
-  // The pages' rows, then the rule under them, heading the tasks' scroller.
+  // The pages' rows, then the rule under them, heading the tasks' scroller; a phone's bar holds the first four (`mobile-bar.tsx`).
+  const phone = room === SHELL_ROOM.NARROW;
   const places = (
     <>
       <SidebarPlaces>
-        <NewTaskButton
-          tasks={tasks}
-          // A person's page stands in Home's place without leaving its page, and draws no composer.
-          shown={
-            tasks.newTask.open ||
-            (atHome && tasks.signedIn && tasks.personView.userId === undefined)
-          }
-          onNewTask={chosen(newTask)}
-        />
-        {/* Search is a second door to the command palette, drawn as New task
-            is, since it heads the list the same way. */}
-        <NavItem
-          icon={<SearchIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />}
-          onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
-        >
-          Search
-        </NavItem>
-        <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
-        <SidebarInboxRow
-          waiting={waiting}
-          current={inInbox}
+        {phone ? null : (
+          <>
+            <NewTaskButton
+              tasks={tasks}
+              // A person's page stands in Home's place without leaving its page, and draws no composer.
+              shown={
+                tasks.newTask.open ||
+                (atHome && tasks.signedIn && tasks.personView.userId === undefined)
+              }
+              onNewTask={chosen(newTask)}
+            />
+            {/* Search is a second door to the command palette, drawn as New task
+                is, since it heads the list the same way. */}
+            <NavItem
+              icon={<SearchIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+              shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COMMAND_PALETTE].chord} />}
+              onClick={chosen(() => runAppCommand(APP_COMMAND.COMMAND_PALETTE))}
+            >
+              Search
+            </NavItem>
+            <SidebarHomeRow current={atHome} disabled={!tasks.signedIn} onOpen={chosen(goHome)} />
+            <SidebarInboxRow
+              waiting={waiting}
+              current={inInbox}
+              disabled={!tasks.signedIn}
+              onOpen={chosen(openInbox)}
+            />
+          </>
+        )}
+        <SidebarTasksRow
+          current={inBoard}
           disabled={!tasks.signedIn}
-          onOpen={chosen(openInbox)}
+          phone={phone}
+          onOpen={chosen(openBoard)}
         />
-        <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         <SidebarAutomationsRow
           current={inAutomations}
           failed={automationFailed}

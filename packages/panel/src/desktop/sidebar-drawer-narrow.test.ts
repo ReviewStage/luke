@@ -90,13 +90,15 @@ async function mountIn(room: ShellRoom): Promise<HTMLElement> {
   return container;
 }
 
-/** Where the sidebar draws the Inbox's row and the Tasks list: whether each stands in the column's scroller. */
+/** Where the sidebar draws a page's row and the Tasks list: whether each stands in the column's scroller. */
 function scrolled(sidebar: HTMLElement) {
   const scroller =
     sidebar.querySelector(".sidebar-section .ui-scroll-area") ?? assert.fail("the scroller");
+  // Note that the Automations row is read, because a phone's bar holds the rows above it (`mobile-bar.tsx`).
   const home =
-    [...sidebar.querySelectorAll("button")].find((each) => each.textContent?.startsWith("Inbox")) ??
-    assert.fail("the Inbox's row");
+    [...sidebar.querySelectorAll("button")].find((each) =>
+      each.textContent?.startsWith("Automations"),
+    ) ?? assert.fail("the Automations row");
   const list = sidebar.querySelector('nav[aria-label="My tasks"]') ?? assert.fail("the Tasks list");
   return { home: scroller.contains(home), tasks: scroller.contains(list) };
 }

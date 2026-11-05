@@ -80,7 +80,9 @@
  * first, as leaving an automation with unsaved changes does. A phone's way
  * out of a task goes back past all of the task's own steps at once, to the
  * nearest step on another page, the list it was opened from, and is named
- * as that step is (`WindowHistory`'s `away` and `onLeave`).
+ * as that step is (`WindowHistory`'s `away` and `onLeave`). A phone has no
+ * Home: where the window would stand on it, the Inbox's list takes its step
+ * in place, so a phone opens on the Inbox and Back never lands on Home.
  */
 
 import { PRODUCT_SURFACE } from "@repo/features/analytics";
@@ -1020,6 +1022,8 @@ function useHistory(input: {
 }): NavigationHistory & {
   backTo: (place: Place) => boolean;
   upTo: (place: Place, stand: () => void) => void;
+  /** Stands the window on `place` by `stand`, its step taking the step standing in place rather than adding one. */
+  inPlace: (place: Place, stand: () => void) => void;
   /** A step back, answering whether one stood behind to take, though the leave ask may yet hold it. */
   stepBack: () => boolean;
   /** The step behind on another page (`awayFrom`), where one stands. */
@@ -1213,6 +1217,12 @@ function useHistory(input: {
     stand();
   };
 
+  // Note that this is the mark `upTo` sets where no step stands behind, so the visit it leads to takes the step in place.
+  const inPlace = (to: Place, stand: () => void) => {
+    wentUp.current = to;
+    stand();
+  };
+
   return {
     canGoBack: reading.canGoBack,
     canGoForward: reading.canGoForward,
@@ -1222,6 +1232,7 @@ function useHistory(input: {
     onGoTo: goTo,
     backTo,
     upTo,
+    inPlace,
     stepBack: () => step(-1),
     away: reading.away,
     stepAway: () => goTo(awayFrom(history.current(), latest.current.reachable)),
@@ -1279,6 +1290,7 @@ export function useWindowHistory(input: {
     | "onLeaveTask"
     | "onGoHome"
     | "history"
+    | "signedIn"
     | "inboxView"
     | "onShowInbox"
     | "agentView"
@@ -1609,7 +1621,7 @@ export function useWindowHistory(input: {
     personListed ? tasks.workspace?.id : undefined,
   ).rows?.members;
   const named = (to: Place) => liveStepTitle(namedStepOf(to), titleOf(to), tasks, members);
-  const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
+  const { backTo, upTo, inPlace, stepBack, stepAway, ...history } = useHistory({
     place,
     address: addressOf(input.link),
     reachable,
@@ -1618,6 +1630,14 @@ export function useWindowHistory(input: {
     guard: tasks.leaveGuard.guard,
     opened: tasks.sidePanel.opened,
   });
+  // A phone has no Home: wherever the window would stand on it, it stands on
+  // the Inbox's list (`mobile-bar.tsx`), which takes Home's step in place, so
+  // Back never lands on a Home that would only leave again.
+  const homeOnPhone = narrow && tasks.signedIn && untitled?.kind === PLACE_KIND.HOME;
+  const openInbox = tasks.inboxView.onOpen;
+  useEffect(() => {
+    if (homeOnPhone) inPlace({ kind: PLACE_KIND.INBOX, listed: true }, openInbox);
+  }, [homeOnPhone, inPlace, openInbox]);
   // Note that only a narrow room holds a list as a step of its own, so a wide one only stands it.
   const up = (to: Place, stand: () => void) => (narrow ? upTo(to, stand) : stand());
   // Note that the history is handed back steady, its ways back among it, so the screens it is handed hold while nothing they read moves.

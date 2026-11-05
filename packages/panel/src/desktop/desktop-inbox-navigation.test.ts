@@ -958,14 +958,15 @@ test("a teammate's open item of an agent with no plan is listed, wearing the tea
   );
 });
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centered between them, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
-  const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
+test("on a phone the Inbox's list is headed by one ⋯, its title centered before it, the ⋯ opening View options' own menu and offering Mark all as read, and the search standing under the head", async () => {
+  const { page } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
   assert.ok(head, "the phone's head stands");
   assert.deepEqual(
     [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
-    ["New task", "Inbox actions"],
+    ["Inbox actions"],
+    "the places bar holds New task",
   );
   assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
   const field = page.querySelector<HTMLInputElement>(
@@ -999,13 +1000,6 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
     "View options' own menu stands",
   );
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-    );
-  });
-  act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
-  assert.equal(asked.newTasks, 1);
 });
 
 /** The thread a box's checkbox starts, as the service hands it back: the reader's words its first message, settled on their own nod. */

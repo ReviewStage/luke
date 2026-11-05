@@ -373,7 +373,8 @@ test("a Settings page standing alone on a phone is named by its bar, opens a sec
   assert.deepEqual([...places.querySelectorAll("button")].map(controlName), [
     "Inbox",
     "Tasks",
-    "More",
+    "Search",
+    "New task",
   ]);
   assert.equal(places.querySelector('[aria-current="page"]'), null, "no place is current");
 });

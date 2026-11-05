@@ -76,7 +76,6 @@ import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
-import { NewTaskButton } from "./new-task-button.js";
 import {
   COLUMN,
   changesTabOf,
@@ -628,7 +627,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                     phone:
                       room === SHELL_ROOM.NARROW
                         ? {
-                            start: <NewTaskButton tasks={tasks} />,
+                            // The places bar holds New task, so the start corner stands empty.
+                            start: null,
                             readAll: { unread, onMarkAll: markAll },
                           }
                         : undefined,

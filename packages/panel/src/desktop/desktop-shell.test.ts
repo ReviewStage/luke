@@ -724,39 +724,43 @@ function barItems(page: HTMLElement): HTMLButtonElement[] {
   return [...page.querySelectorAll<HTMLButtonElement>('nav[aria-label="Places"] button')];
 }
 
+/** What a bar item is named: its words, or its label where it is a glyph alone, as New task is. */
+function barName(item: HTMLButtonElement): string {
+  return item.getAttribute("aria-label") ?? item.textContent ?? "";
+}
+
 function barItem(page: HTMLElement, name: string): HTMLButtonElement {
-  const item = barItems(page).find((button) => button.textContent === name);
+  const item = barItems(page).find((button) => barName(button) === name);
   assert.ok(item, `the bar offers ${name}`);
   return item;
 }
 
-test("on a phone the Tasks page stands over a bar of the window's places, its own marked, and the bar's Inbox opens the Inbox", async () => {
+test("on a phone the Tasks page stands over a bar of the window's places, its own marked, the bar's Inbox opening the Inbox and its New task New task", async () => {
   const asked: string[] = [];
   const page = await mountNarrow({
     boardView: { ...tasksControl().boardView, open: true },
     inboxView: {
       ...tasksControl().inboxView,
-      onOpen: () => asked.push("open"),
+      onOpen: () => asked.push("inbox"),
     },
+    onNewTask: () => asked.push("new task"),
   });
-  assert.deepEqual(
-    barItems(page).map((item) => item.textContent),
-    ["Inbox", "Tasks", "More"],
-  );
+  assert.deepEqual(barItems(page).map(barName), ["Inbox", "Tasks", "Search", "New task"]);
   assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
   assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
   act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, ["open"]);
+  act(() => barItem(page, "New task").click());
+  assert.deepEqual(asked, ["inbox", "new task"]);
 });
 
-test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
-  let toggled = 0;
+test("on a phone the bar's Tasks opens the sidebar's tree over the Inbox", async () => {
+  const overlays: string[] = [];
   const page = await mountNarrow(
-    { boardView: { ...tasksControl().boardView, open: true } },
-    { onToggle: () => (toggled += 1) },
+    { inboxView: { ...tasksControl().inboxView, open: true } },
+    { onOverlay: (overlay) => overlays.push(overlay) },
   );
-  act(() => barItem(page, "More").click());
-  assert.equal(toggled, 1);
+  act(() => barItem(page, "Tasks").click());
+  assert.deepEqual(overlays, [SIDEBAR_OVERLAY.OPEN]);
 });
 
 test("on a phone the places bar stands over the Tasks page though the task left behind it holds its panel open, which is not on screen", async () => {
@@ -764,21 +768,26 @@ test("on a phone the places bar stands over the Tasks page though the task left 
     boardView: { ...tasksControl().boardView, open: true },
     sidePanel: { ...tasksControl().sidePanel, open: true, fullScreen: true, fullScreenOnly: true },
   });
-  assert.deepEqual(
-    barItems(page).map((item) => item.textContent),
-    ["Inbox", "Tasks", "More"],
-  );
+  assert.deepEqual(barItems(page).map(barName), ["Inbox", "Tasks", "Search", "New task"]);
 });
 
-test("on a phone the drawer More opened leaves the bar's other places inert, as the work it covers is, and More still puts it away", async () => {
+test("on a phone the tree open over the Inbox is the place marked, the bar staying live over it, and the bar's Inbox puts it away", async () => {
+  const asked: string[] = [];
   const page = await mountNarrow(
-    { boardView: { ...tasksControl().boardView, open: true } },
-    { overlay: SIDEBAR_OVERLAY.OPEN },
+    {
+      inboxView: {
+        ...tasksControl().inboxView,
+        open: true,
+        onOpen: () => asked.push("inbox"),
+      },
+    },
+    { overlay: SIDEBAR_OVERLAY.OPEN, onOverlay: (overlay) => asked.push(overlay) },
   );
-  assert.equal(barItem(page, "Inbox").hasAttribute("inert"), true);
-  assert.equal(barItem(page, "Tasks").hasAttribute("inert"), true);
-  assert.equal(barItem(page, "More").hasAttribute("inert"), false);
-  assert.equal(barItem(page, "More").getAttribute("aria-expanded"), "true");
+  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
+  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
+  assert.equal(barItem(page, "Inbox").hasAttribute("inert"), false);
+  act(() => barItem(page, "Inbox").click());
+  assert.deepEqual(asked, [SIDEBAR_OVERLAY.CLOSED, "inbox"]);
 });
 
 /** What a reader hears an item named: its words, less what is drawn for the eye alone. */
@@ -788,7 +797,7 @@ function spokenName(item: HTMLElement): string {
   return heard.textContent ?? "";
 }
 
-test("on a phone the bar's Inbox wears the count the drawer's row shows, named in the sidebar's words, and none at zero", async () => {
+test("on a phone the bar's Inbox wears the count of what needs the reader, named in the sidebar's words, and none at zero", async () => {
   // Note that main lists the three questions it counts, as its read of the account does.
   const asks = ["q-1", "q-2", "q-3"].map((id) => ({ id, agentId: "a-1", title: id, postedAt: 0 }));
   const listed = {
@@ -808,11 +817,6 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
   const inbox = barItems(page).find((item) => spokenName(item) === "Inbox, 3 need you");
   assert.ok(inbox, "the bar's Inbox is named with its count");
   assert.match(inbox.textContent ?? "", /3/u, "the Inbox's count is drawn");
-  assert.match(
-    placeRow(page, "Inbox")?.textContent ?? "",
-    /^Inbox3 need you/u,
-    "the drawer counts the same",
-  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -820,11 +824,13 @@ test("on a phone the bar's Inbox wears the count the drawer's row shows, named i
     boardView: { ...tasksControl().boardView, open: true },
   });
   assert.deepEqual(
-    barItems(none).map((item) => [spokenName(item), item.textContent]),
+    barItems(none)
+      .slice(0, 3)
+      .map((item) => [spokenName(item), item.textContent]),
     [
       ["Inbox", "Inbox"],
       ["Tasks", "Tasks"],
-      ["More", "More"],
+      ["Search", "Search"],
     ],
     "nothing waiting, nothing is drawn or said",
   );
