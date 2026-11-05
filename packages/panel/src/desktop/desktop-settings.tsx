@@ -154,7 +154,15 @@ function ListHead({
     />
   );
   if (room === SHELL_ROOM.NARROW) {
-    return <PhoneHead place="settings-pages" start={exit} title={SETTINGS_LIST} end={null} />;
+    return (
+      <PhoneHead
+        place="settings-pages"
+        start={exit}
+        title={SETTINGS_LIST}
+        titleReplayUnmasked
+        end={null}
+      />
+    );
   }
   return (
     <>
@@ -415,7 +423,7 @@ export function DesktopSettings({
         {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
         <SettingsPage
           key={settings.view}
-          // Note that a page's name shows in a screen recording and a workspace's stays masked; on a phone the bar draws the title as words, which stay masked until the bar takes a mark.
+          // Note that a page's name shows in a screen recording and a workspace's stays masked: in its header on a desktop, and on a phone's bar, which draws the title as words.
           title={
             onList === undefined ? (
               <ReplayUnmask>{named ? <ReplayMask>{title}</ReplayMask> : title}</ReplayUnmask>
@@ -423,6 +431,7 @@ export function DesktopSettings({
               title
             )
           }
+          titleReplayUnmasked={!named}
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}
