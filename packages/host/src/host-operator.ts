@@ -11,6 +11,7 @@ import {
 import {
   AGENT_CALL_FAILURE,
   type AgentAccountInboxAnswerView,
+  type AgentAddRepositoryParams,
   type AgentAgentAnswer,
   type AgentArchiveParams,
   type AgentChangesAnswerView,
@@ -764,6 +765,8 @@ export interface HostOperator {
   /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
   agentRename(params: AgentRenameParams): Effect.Effect<AgentAgentAnswer>;
   agentServers(params: AgentServersParams): Effect.Effect<AgentAgentAnswer>;
+  /** A repository added to one agent beside the ones it works in; the agent as it then stands, or why it was not added. */
+  agentAddRepository(params: AgentAddRepositoryParams): Effect.Effect<AgentAgentAnswer>;
   agentQueue(params: AgentQueueParams): Effect.Effect<AgentQueueAnswerView>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   agentStop(params: AgentStopParams): Effect.Effect<AgentAgentAnswer>;
@@ -2078,6 +2081,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AGENTS_SERVERS, {
           agentId: params.agentId,
           disabledServers: params.disabledServers,
+        }),
+        answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
+      ),
+    agentAddRepository: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_ADD_REPOSITORY, {
+          agentId: params.agentId,
+          addRepository: params.addRepository,
         }),
         answerOf(agentAgentAnswerSchema, AGENT_UNANSWERED),
       ),

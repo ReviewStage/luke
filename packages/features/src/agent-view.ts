@@ -3,6 +3,7 @@ import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
   AGENT_ATTACHMENT_TYPE,
   AGENT_BOUNDS,
+  agentAddRepositoryRequestSchema,
   agentAnswerSchema,
   agentArchiveRequestSchema,
   agentBeforeSchema,
@@ -328,6 +329,7 @@ export const agentAgentAnswerSchema = EffectSchema.Union([
     agent: agentSummarySchema,
     txid: agentAnswerSchema.fields.txid,
     notice: agentAnswerSchema.fields.notice,
+    addedCheckout: agentAnswerSchema.fields.addedCheckout,
   }),
   failedReaching,
 ]);
@@ -473,6 +475,14 @@ export const agentServersParamsSchema = EffectSchema.Struct({
 });
 
 export type AgentServersParams = typeof agentServersParamsSchema.Type;
+
+/** A repository added to one agent beside the ones it works in, as the window asks it of the host. */
+export const agentAddRepositoryParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...agentAddRepositoryRequestSchema.fields,
+});
+
+export type AgentAddRepositoryParams = typeof agentAddRepositoryParamsSchema.Type;
 
 /** One agent archived or brought back, as the window asks it: the agent, and which. */
 export const agentArchiveParamsSchema = EffectSchema.Struct({

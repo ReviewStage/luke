@@ -102,6 +102,7 @@ import {
   type PullRequestSubject,
   pullRequestNumberOf,
 } from "./asked-pull-request.js";
+import { addAgentRepository } from "./coder-host/agent-repository-add.js";
 import {
   agentPullRequestReach,
   instancePublishedCache,
@@ -505,7 +506,9 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * `pinned` pins it for the asking member alone, or unpins it.
      * `readMark` moves the asking member's own read mark of it.
      * `disabledServers` replaces the list of MCP servers switched off for
-     * it, which its next turn reads as it starts. A model and effort, and the
+     * it, which its next turn reads as it starts. `addRepository` adds a
+     * repository beside the ones it works in, checked out and told to it
+     * (`agent-repository-add.ts`), refused by why as `update_agent` refuses it. A model and effort, and the
      * standard context window where it is chosen, change what its next step
      * runs on, checked against the catalog as a Start checks its own; a body
      * naming no window puts it back on the model's whole one, and the
@@ -571,6 +574,15 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
             updateAgentServersCommitted(userId, agent.id, body.disabledServers),
           ),
         );
+      }
+      if ("addRepository" in body) {
+        // The member adds it as `update_agent` does, and the agent hears it in its conversation.
+        const added = yield* addAgentRepository({ userId }, agent, body.addRepository, {
+          eve: yield* routedSessions<EveTypedTurn>(userId),
+          writer,
+          clientKey: randomUUID(),
+        });
+        return { agent: yield* summaryOf(userId, agent), addedCheckout: added.checkout };
       }
       const route = Option.getOrUndefined(
         yield* hostedStoreOrUnavailable(nativeRouteOfReached(agent.conversationId)),

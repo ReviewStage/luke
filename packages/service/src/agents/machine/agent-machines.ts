@@ -66,6 +66,8 @@ function routedMachine(cloud: AgentMachineService, mac: DeviceMachineService): A
     ...routedLifecycle(cloud, mac),
     layout: (agent) => of(agent.machine).layout(agent),
     open: (ask, use) => of(ask.agent.machine).open(ask, use),
+    checkOutExtras: (place, target, agent, shared) =>
+      of(place.machine).checkOutExtras(place, target, agent, shared),
     launchRunner: (place, launch) => of(place.machine).launchRunner(place, launch),
   };
 }

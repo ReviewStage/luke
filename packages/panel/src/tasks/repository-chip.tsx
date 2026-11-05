@@ -254,6 +254,8 @@ interface RepositoryMenuProps {
   align?: PopoverAlign | undefined;
   /** The repositories the menu leaves out, in any case, as an opener that adds one leaves out those it holds; none where left out. */
   omit?: readonly string[] | undefined;
+  /** Whether the menu offers only what the workspace's GitHub App reaches, leaving out what the developer's own token alone reaches, as a repository added to a running agent must be; every reached one where left out. */
+  appOnly?: boolean | undefined;
 }
 
 /**
@@ -333,7 +335,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     setOpen(!open);
   };
   const omitted = new Set((props.omit ?? []).map((each) => each.toLowerCase()));
-  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures).filter(
+  const reached =
+    props.appOnly === true
+      ? listed?.repositories.filter((each) => each.access === GITHUB_ACCESS.APP)
+      : listed?.repositories;
+  // Note that an App-only menu offers no recent repository before the read says how each is reached.
+  const recent = props.appOnly === true && reached === undefined ? [] : chooser.recent;
+  const rows = repositoryRows(recent, reached, chooser.pictures).filter(
     (row) => !omitted.has(row.id.toLowerCase()),
   );
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.

@@ -9,7 +9,9 @@
  * the checkout, and the instructions. An agent with no repository has none,
  * since a Start names extras only beside a primary. The read is made as the
  * account the agent works for, as the agent reads itself (`agentReachableBy`),
- * so an account reads none of another's agent.
+ * so an account reads none of another's agent. A repository added to an
+ * agent once it stands (`appendAgentRepository`) is written after its
+ * extras, at the next position, under the agent row's lock.
  *
  * An extra's pull request is written here too, on its own row, as the agent
  * row keeps its own: the head branch `open_pull_request` opened it from, and
@@ -18,8 +20,9 @@
  * Start names each repository once (`start.ts`'s `extraRepositoriesOf`).
  */
 
+import { AGENT_BOUNDS } from "@repo/features/agent-wire";
 import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, queryBuilder } from "../core/query.js";
 import { agentTable, type StoredPublishedRead, type StoredPullRequest } from "../schemas/agent.js";
@@ -210,6 +213,96 @@ export function recordAgentRepositoryPublished(
         if (Option.isNone(kept)) return false;
         yield* updateExtraPublished({ ...key, published, publishedRead: read });
         return newlyMerged(kept.value.published, published);
+      }),
+    ),
+  );
+}
+
+/** The agent's own repository under its row's lock, as the account reaches the agent; none where it does not. */
+const lockAgentRepository = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ repository: Schema.NullOr(Schema.String) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ repository: agentTable.repository })
+        .from(agentTable)
+        .where(and(eq(agentTable.id, agentId), agentReachableBy(userId)))
+        .for("update", { of: agentTable }),
+    ),
+});
+
+/** The agent's extras by position, as far as an append reads them. */
+const findExtraPositions = SqlSchema.findAll({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ position: Schema.Number, repository: Schema.String }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ position: agentRepository.position, repository: agentRepository.repository })
+        .from(agentRepository)
+        .where(eq(agentRepository.agentId, agentId)),
+    ),
+});
+
+const insertAgentRepository = SqlSchema.void({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    position: Schema.Number,
+    repository: Schema.String,
+    baseBranch: Schema.NullOr(Schema.String),
+  }),
+  execute: (row) => Database.use((db) => db.insert(agentRepository).values(row)),
+});
+
+/** Why a repository was not added beside an agent's own: the account does not reach the agent or it works in no repository of its own, it already works in this one, or in as many beside its own as a Start may name. */
+export const APPEND_REFUSAL = {
+  UNREACHED: "unreached",
+  ALREADY: "already",
+  FULL: "full",
+} as const;
+
+export type AppendRefusal = (typeof APPEND_REFUSAL)[keyof typeof APPEND_REFUSAL];
+
+/**
+ * A repository added to the agent beside the ones it works in, as the
+ * account the agent works for reaches it: written after its extras, at the
+ * position after the last, with the branch its checkout is cloned at, none
+ * for its default branch. Answers the position written, or why not
+ * (`APPEND_REFUSAL`): the account does not reach the agent or it works in no
+ * repository of its own, it already works in this one, in any case, or in
+ * as many beside its own as a Start may name
+ * (`AGENT_BOUNDS.MAX_ALSO_REPOSITORIES`). The agent row is locked for the
+ * read and the write, so two adds at once take two positions, never add one
+ * repository twice, and never pass the bound.
+ */
+export function appendAgentRepository(
+  userId: string,
+  agentId: string,
+  added: { readonly repository: string; readonly baseBranch: string | null },
+): AgentStoreEffect<Result.Result<number, AppendRefusal>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        type Appended = Result.Result<number, AppendRefusal>;
+        const refused = (why: AppendRefusal): Appended => Result.fail(why);
+        const locked = yield* lockAgentRepository({ userId, agentId });
+        if (Option.isNone(locked) || locked.value.repository === null) {
+          return refused(APPEND_REFUSAL.UNREACHED);
+        }
+        const extras = yield* findExtraPositions({ agentId });
+        const named = added.repository.toLowerCase();
+        const every = [locked.value.repository, ...extras.map((extra) => extra.repository)];
+        if (every.some((each) => each.toLowerCase() === named)) {
+          return refused(APPEND_REFUSAL.ALREADY);
+        }
+        if (extras.length >= AGENT_BOUNDS.MAX_ALSO_REPOSITORIES) {
+          return refused(APPEND_REFUSAL.FULL);
+        }
+        const position = Math.max(0, ...extras.map((extra) => extra.position)) + 1;
+        yield* insertAgentRepository({ agentId, position, ...added });
+        const appended: Appended = Result.succeed(position);
+        return appended;
       }),
     ),
   );

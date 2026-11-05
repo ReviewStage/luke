@@ -13,6 +13,7 @@
 
 import { eventIterator, type } from "@orpc/contract";
 import {
+  agentAddRepositoryParamsSchema,
   agentAgentAnswerSchema,
   agentArchiveParamsSchema,
   agentChangesAnswerViewSchema,
@@ -175,6 +176,11 @@ export const agentActsContract = {
     "Could not switch the agent's MCP servers on this system.",
   )
     .input(exactInput(agentServersParamsSchema))
+    .output(EffectSchema.flip(agentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.AGENTS_ADD_REPOSITORY]: actProcedure(
+    "Could not add a repository to the agent on this system.",
+  )
+    .input(exactInput(agentAddRepositoryParamsSchema))
     .output(EffectSchema.flip(agentAgentAnswerSchema)),
   [AGENT_ACT_KIND.AGENTS_QUEUE]: actProcedure("Could not change the agent's queue on this system.")
     .input(exactInput(agentQueueParamsSchema))

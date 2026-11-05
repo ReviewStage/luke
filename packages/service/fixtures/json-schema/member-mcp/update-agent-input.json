@@ -54,6 +54,27 @@
       "minLength": 1,
       "maxLength": 500,
       "description": "Why it is archived, in a short sentence its archived banner shows beside the member's name, such as its pull request having merged; only with archived true."
+    },
+    "addRepository": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "maxLength": 140,
+          "description": "The repository, as owner/name."
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "description": "The branch to clone its checkout at, which must already be on GitHub; leave it out for its default branch."
+        }
+      },
+      "required": [
+        "repository"
+      ],
+      "additionalProperties": false,
+      "description": "A repository the agent works in beside its own from now on, added after the others and checked out in a folder of its own, which its token then reaches and it is told of; named alone, with no other change. Only for an agent the member started, in the cloud, in a repository of its own, its repositories all reached through one GitHub App installation, and the member with the Several repositories experiment on. Nothing removes one."
     }
   },
   "required": [

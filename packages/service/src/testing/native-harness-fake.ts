@@ -18,7 +18,9 @@ import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
 import {
   NativeAgentSessions,
   type NativeAgentSessionsService,
+  RUNNER_CHECKOUT,
   RUNNER_CHOICE,
+  type RunnerCheckout,
 } from "../agents/coder-host/runtime-sessions.js";
 import {
   type AgentSessions,
@@ -32,9 +34,10 @@ export function harnessFor(account: string): string {
   return `harness for ${account}`;
 }
 
-/** The native harnesses, every one answered by the script acting for the account each is asked for, as above. */
+/** The native harnesses, every one answered by the script acting for the account each is asked for, as above, an added repository's checkout answered as `checkout` says, not live unless named. */
 export function scriptedHarness(
   script: (account: string) => AgentSessions,
+  checkout: RunnerCheckout = RUNNER_CHECKOUT.NOT_LIVE,
 ): NativeAgentSessionsService {
   return {
     sessions: (_runtime, account) =>
@@ -42,6 +45,7 @@ export function scriptedHarness(
         Effect.succeed({
           ...script(account),
           retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+          checkOut: () => Effect.succeed(checkout),
           halt: () => Effect.succeed(true),
           deliverWaiting: () => Effect.succeed(false),
         }),

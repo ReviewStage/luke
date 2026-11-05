@@ -363,6 +363,8 @@ export interface AgentsControl {
   onChoose: ChoiceWriter;
   /** Switches one agent's MCP servers for its next turn on, drawn at once by the host; a refusal is said in a toast. */
   onSwitchServers: ServersWriter;
+  /** Adds a repository beside the ones an agent works in, which the service checks out and tells it of (`add-repository.tsx`); answers the agent, or why not, for the dialog that asked to say. None where a surface offers no add. */
+  onAddRepository?: ((agentId: string, repository: string) => Promise<AgentActAnswer>) | undefined;
   /** Opens Settings on its Integrations page, where an MCP server is connected. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page at the provider's harness row, where the developer's key for it is; at the page's top where none is known. */
@@ -1344,6 +1346,15 @@ export function useAgents(input: {
     [act, failed],
   );
 
+  // A repository added draws nothing on the agent's row, so its answer is only the dialog's to say.
+  const onAddRepository = useCallback(
+    (agentId: string, repository: string): Promise<AgentActAnswer> =>
+      act(ACT_KIND.AGENTS_ADD_REPOSITORY, { agentId, addRepository: { repository } }).catch(
+        agentUnreached,
+      ),
+    [act],
+  );
+
   // A rename's field closes as the edit ends, and the host draws the new name at once, so a second
   // rename may be out before the first answers; only the newest one's refusal is said, in a toast,
   // as the name it replaced comes back.
@@ -1590,6 +1601,7 @@ export function useAgents(input: {
     onMessage,
     onChoose,
     onSwitchServers,
+    onAddRepository,
     onOpenIntegrations: () => latest.current.onOpenIntegrations(),
     me: input.me,
     onOpenApiKeys: (provider) => latest.current.onOpenApiKeys(provider),
