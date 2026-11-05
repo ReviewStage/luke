@@ -43,6 +43,7 @@ import {
   isNull,
   lte,
   ne,
+  not,
   notExists,
   notInArray,
   or,
@@ -632,7 +633,7 @@ const findNewestAgentPlace = SqlSchema.findOneOption({
           and(
             eq(agentTable.userId, userId),
             eq(agentTable.taskId, taskId),
-            isNull(agentTable.automationOrigin),
+            not(agentAutomationRunSql(agentTable)),
           ),
         )
         .orderBy(desc(agentTable.createdAt), desc(agentTable.id))
