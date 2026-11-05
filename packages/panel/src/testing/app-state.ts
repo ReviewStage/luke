@@ -2,6 +2,7 @@
  * app-state.ts -- what a test of a surface gated by an experiment or a platform capability, or one that names the signed-in account or draws a call, stands on: main's document as the bridge hands it, with the account's experiments, the platform's capabilities, its identity, and its call as given.
  */
 
+import { RegistryContext } from "@effect/atom-react";
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import type { AccountPreferencesLive } from "@repo/features/account-preferences-live";
 import {
@@ -83,6 +84,12 @@ import { appSettingsWire, settingsView } from "@repo/settings/testing";
 import { UPDATE_STATUS } from "@repo/settings/update";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import type * as Atom from "effect/reactivity/Atom";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { createElement, useContext } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { vi } from "vitest";
+import { APP_SLICE } from "../use-app-state.js";
 import type { IntegrationServer } from "../use-host-read.js";
 import {
   fakeActPort,
@@ -213,10 +220,67 @@ export function handState(
   });
 }
 
-/** Hands the window main's document on a platform offering `capabilities`, no experiment on, beside whatever else the bridge already holds. */
-export function handCapabilities(capabilities: readonly HostCapability[]): void {
+/** The registry a surface drawn under no `RegistryContext.Provider` reads from. */
+function defaultRegistry(): AtomRegistry.AtomRegistry {
+  let held: AtomRegistry.AtomRegistry | undefined;
+  const Probe = () => {
+    held = useContext(RegistryContext);
+    return null;
+  };
+  renderToStaticMarkup(createElement(Probe));
+  if (held === undefined) throw new Error("No default registry was drawn.");
+  return held;
+}
+
+/**
+ * Hands the window main's document with the account's experiments as given,
+ * as `handState` does, and reads it into `registry` before it answers, the
+ * default one where none is named: for a suite whose draws are synchronous,
+ * so a surface an experiment gates stands in its first frame. Note that the
+ * document is held for the registry's life, so a suite drawing under the
+ * default registry reads it once (`beforeAll`).
+ */
+export async function readExperiments(
+  experiments: ExperimentChoices,
+  registry: AtomRegistry.AtomRegistry = defaultRegistry(),
+): Promise<void> {
+  handState(experiments);
+  const release = registry.mount(APP_SLICE.SETTINGS);
+  // Note that the read lands a task after it is asked for, since the renderer's runtime runs it.
+  await vi.waitFor(
+    () => {
+      if (registry.get(APP_SLICE.SETTINGS) === undefined)
+        throw new Error("The document is unread.");
+    },
+    { interval: 1 },
+  );
+  release();
+}
+
+/**
+ * A registry whose settings hold these experiments from its first draw, for
+ * a case that draws under a registry of its own synchronously. Note that the
+ * settings are read again once main's document lands, so the bridge must hand
+ * the same experiments (`handState`, `readExperiments`) for them to stand.
+ * `initialValues` are laid beside them, as a case's own clock is.
+ */
+export function registryWith(
+  experiments: ExperimentChoices,
+  initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]> = [],
+): AtomRegistry.AtomRegistry {
+  const { settings } = snapshotWith(experiments);
+  return AtomRegistry.make({
+    initialValues: [[APP_SLICE.SETTINGS, settings], ...initialValues],
+  });
+}
+
+/** Hands the window main's document on a platform offering `capabilities`, the experiments given on and no other, beside whatever else the bridge already holds. */
+export function handCapabilities(
+  capabilities: readonly HostCapability[],
+  experiments: ExperimentChoices = {},
+): void {
   const snapshot = snapshotWith({});
-  handState({}, { run: { ...snapshot.run, capabilities } });
+  handState(experiments, { run: { ...snapshot.run, capabilities } });
 }
 
 /**

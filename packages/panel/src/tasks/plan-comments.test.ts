@@ -17,15 +17,17 @@ import {
 import type { Task } from "@repo/features/task-wire";
 import { pasteCutWords } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@repo/ui/plan-comments";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { readExperiments, registryWith } from "../testing/app-state.js";
 import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
@@ -49,6 +51,9 @@ import {
   PlanCommentsTab,
 } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 /**
  * A plan's comments on its own page: each open thread's words marked where
@@ -201,7 +206,7 @@ function drawn(
           ...(me === undefined ? undefined : { reader: { readerId: me } }),
         });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const treeOf = (value: PlanCommentsControl) =>
     createElement(
       PlanCommentsProvider,
@@ -1984,7 +1989,7 @@ test("a thread resolved fades out of a page's column where its row stood, out of
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const registry = AtomRegistry.make();
+    const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
     const draw = (threads: readonly PlanCommentThread[]) =>
       act(() =>
         root.render(

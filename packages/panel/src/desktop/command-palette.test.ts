@@ -31,7 +31,7 @@ import { APP_COMMAND, type AppCommand } from "@repo/settings/shortcuts";
 import { experimentsOn, settingsView } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASK_MARK, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -67,6 +67,7 @@ import {
   handMembers,
   handState,
   holdAutomations,
+  registryWith,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
@@ -172,7 +173,7 @@ function Looker({ looked }: { looked: typeof DOCUMENT_TASK | undefined }): null 
 function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   const tasks = tasksControl({
     region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     activeTaskId: DOCUMENT_TASK.id,
@@ -932,7 +933,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     act(() =>
       root.render(
         onRegistry(
-          AtomRegistry.make(),
+          registryWith(experimentsOn(EXPERIMENT.PLANS)),
           createElement(ListedAutomations, { tasks, children: palette }),
         ),
       ),
@@ -1138,16 +1139,23 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
       ]),
     }),
   });
-  openPalette(tasks, () =>
-    Promise.resolve({
-      folder: {
-        path: "",
-        repository: "acme/relay",
-        branch: "main",
-        entries: [{ name: "accept.ts", kind: TASK_TREE_ENTRY.FILE }],
-        truncated: false,
-      },
-    }),
+  handState(experimentsOn(EXPERIMENT.PLANS));
+  openPalette(
+    tasks,
+    () =>
+      Promise.resolve({
+        folder: {
+          path: "",
+          repository: "acme/relay",
+          branch: "main",
+          entries: [{ name: "accept.ts", kind: TASK_TREE_ENTRY.FILE }],
+          truncated: false,
+        },
+      }),
+    undefined,
+    DESKTOP_CAPABILITIES,
+    PANEL_TAB.TASKS,
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   type("#42");
   const pulls = rows().filter((row) => row.startsWith("#42"));
@@ -1699,10 +1707,17 @@ test("a task's command wears the same chord in ⌘K as in the open task's Plan t
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   roots.push(root);
+  handState(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   act(() =>
-    root.render(createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks })),
+    root.render(
+      onRegistry(
+        registry,
+        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+      ),
+    ),
   );
-  openPalette(tasks);
+  openPalette(tasks, undefined, undefined, DESKTOP_CAPABILITIES, PANEL_TAB.TASKS, registry);
   type("permanently delete");
   const deleteKeys = rowChord("Permanently delete");
   type("mark done");
@@ -1744,7 +1759,7 @@ test("an agent tab's right-click words and keys Close and Show terminal as ⌘K 
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
       ),
     ),
@@ -2054,7 +2069,7 @@ test("People lists the listed workspace's members as every people menu does, the
     undefined,
     undefined,
     undefined,
-    AtomRegistry.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
@@ -2128,7 +2143,7 @@ test("under All, a query nothing else matches says the repository's files are st
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    AtomRegistry.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await settle();
   type("zqx");
@@ -2184,7 +2199,7 @@ test("Files says a failed read with a Retry that reads the repository's files ag
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    AtomRegistry.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await settle();
   chooseFilter("Files");
@@ -2237,7 +2252,7 @@ test("People says the members are being read until they answer, and a refused re
     undefined,
     undefined,
     undefined,
-    AtomRegistry.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   chooseFilter("People");
   await settle();
@@ -2493,7 +2508,11 @@ test("with a task open, ⌘K offers Pin task, which pins it under Pinned and tur
   });
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), createElement(PinnableTask))));
+  act(() =>
+    root.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(PinnableTask)),
+    ),
+  );
 
   assert.deepEqual(pinRows(), ["Pin task"]);
   press("Pin task");
@@ -2513,7 +2532,7 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(WindowPalette, {
           available: true,
           tab: PANEL_TAB.TASKS,
@@ -2636,7 +2655,7 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(
           Fragment,
           null,
@@ -2698,7 +2717,7 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(
           ShellRoomContext.Provider,
           { value: room },
@@ -2970,7 +2989,7 @@ function paletteOverInbox(inbox: FedInbox, changed = 9_000) {
     undefined,
     DESKTOP_CAPABILITIES,
     PANEL_TAB.TASKS,
-    AtomRegistry.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   return { deliver: (next: FedInbox) => deliver(fedOf(next)), opened };
 }

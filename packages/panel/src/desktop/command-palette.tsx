@@ -84,7 +84,13 @@ import type {
   WorkspaceMember,
   WorkspaceMembersAnswer,
 } from "@repo/features/workspace-wire";
-import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@repo/settings";
+import {
+  EXPERIMENT,
+  type ExperimentChoices,
+  experimentOn,
+  HOST_CAPABILITY,
+  type HostCapability,
+} from "@repo/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@repo/settings/settings-views";
 import {
   APP_COMMAND,
@@ -956,6 +962,7 @@ function agentRows(
   tasks: TasksControl,
   doors: PanelOfferDoors,
   show: (pick: () => void) => void,
+  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
@@ -980,6 +987,7 @@ function agentRows(
         panel: tasks.sidePanel,
         agents: tasks.agents,
         pages,
+        experiments,
         onNewTerminal: doors.onNewTerminal,
         viewedAgent: undefined,
         plan: openPlanStanding(tasks),
@@ -1261,12 +1269,15 @@ function commandLabel(command: AppCommand, experiments: ExperimentChoices): stri
   return isKeyedCommand(command) ? shortcutLabel(command, experiments) : appCommandLabel(command);
 }
 
-/** What a command's row says: a place as "Go to" it, and else the words its menu item or its shortcut says. */
+/**
+ * What a command's row says: a place as "Go to" it, and else the words its
+ * shortcut says for the account's experiments, which its menu item says too
+ * (`panelCommandOf`) but where an experiment renames it, as Copy plan or
+ * transcript is Copy transcript while Plans is off.
+ */
 function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
   const label = commandLabel(command, experiments);
-  if (PLACE_COMMANDS.has(command)) return `Go to ${label.toLowerCase()}`;
-  const item = panelCommandOf(command);
-  return item === undefined ? label : commandWords(item, COMMAND_PLACE.PALETTE);
+  return PLACE_COMMANDS.has(command) ? `Go to ${label.toLowerCase()}` : label;
 }
 
 /**
@@ -1359,10 +1370,11 @@ function copyLinkRows(
 function panelTabRows(
   tasks: TasksControl,
   show: (pick: () => void) => void,
+  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   if (tasks.region.kind !== DOCUMENT_REGION.READY || !holdsTaskPanel(tasks)) return [];
   const plan = openPlanStanding(tasks);
-  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK);
+  const kinds = offeredPanelKinds(SIDE_PANEL_HOLDER.TASK, experiments);
   return kinds.map((tab) => {
     // Note that the row says the kind, Show plan, while its glyph is the Plan tab's, the task's status.
     const { icon } = tabLook({ kind: TAB_KIND.PANEL, tab, plan });
@@ -1490,7 +1502,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history, New sub-task, Add task relation, which
+ * the door its ⋯ asks, Version history while Plans is on, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history
@@ -1503,13 +1515,16 @@ function taskCommandRows(
   reads: ReadMarks,
   rename: OpenTaskRename | undefined,
   choose: (run: () => void) => void,
+  experiments: ExperimentChoices,
 ): readonly PaletteRow[] {
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
   if (task === undefined) return [];
   const renamed = rename?.taskId === task.id ? rename.begin : undefined;
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
-    { item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) },
+    ...(experimentOn(experiments, EXPERIMENT.PLANS)
+      ? [{ item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) }]
+      : []),
     {
       item: PANEL_COMMAND.NEW_CHILD_TASK,
       run: () => tasks.onNewRelatedTask(task.id, TASK_CREATE_RELATION_KIND.SUB_TASK_OF),
@@ -2224,7 +2239,7 @@ export function CommandPalette({
   // Every other kind's rows in tiers, built only for the filter shown and only
   // while open: every row a tier matches ranks above the next tier's.
   const tiersOf = {
-    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks)],
+    [PALETTE_FILTER.THIS_TASK]: () => [agentRows(tasks, offerDoors, onTasks, experiments)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
     ],
@@ -2251,9 +2266,9 @@ export function CommandPalette({
         ...agentReadMarkRows(tasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
         ...agentPinRows(tasks, choose),
-        ...taskCommandRows(tasks, reads, renameOffer, choose),
+        ...taskCommandRows(tasks, reads, renameOffer, choose, experiments),
         ...agentArchiveRows(openAgent, askArchive, choose),
-        ...panelTabRows(tasks, onTasks),
+        ...panelTabRows(tasks, onTasks, experiments),
         ...actionRows(OPEN_THING_SHOW_COMMANDS, runCommand, experiments),
         ...actionRows(OPEN_THING_LAST_COMMANDS, runCommand, experiments),
         ...actionRows(GO_TO_COMMANDS, runCommand, experiments),

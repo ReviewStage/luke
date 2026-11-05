@@ -60,7 +60,7 @@ import type {
   AppInboxTaskHolding,
   AppInboxTasklessItem,
 } from "@repo/host/app-state";
-import { APP_SETTING_DEFAULTS } from "@repo/settings";
+import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
@@ -134,7 +134,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
 import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice, useExperimentChoices } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import {
   startFailureNote as agentStartFailureNote,
@@ -194,7 +194,7 @@ import {
   usePlanHistory,
 } from "./use-plan-history.js";
 import {
-  DRAWN_KINDS,
+  drawnKinds,
   drawsChanges,
   drawsSubagent,
   drawsTerminal,
@@ -1671,6 +1671,8 @@ export function useTasksTab(input: {
           : { agentId: panelPagesAgent },
     [panelTaskId, panelPagesAgent],
   );
+  // The account's experiments, which hold what the panel reopens and where a link to the plan's parts lands.
+  const experiments = useExperimentChoices();
   const sidePanel = useSidePanel(
     tasksFixture?.fixtureSidePanel(input.run),
     inboxView !== undefined
@@ -1828,8 +1830,11 @@ export function useTasksTab(input: {
   // back. A fixture's tasks are opened nowhere, so nothing is asked of them.
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
-  // The version history is the task's, so another task, or none, leaves it.
-  if (historyFor !== undefined && historyFor.taskId !== boundFor) setHistoryFor(undefined);
+  // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
+  const plansOn = experimentOn(experiments, EXPERIMENT.PLANS);
+  if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
+    setHistoryFor(undefined);
+  }
   // A plan the service would not hand the reader has no history to show, so its Not found stands in the history's place, as a version's link may ask for one.
   const historyOpen =
     historyFor !== undefined &&
@@ -2879,7 +2884,12 @@ export function useTasksTab(input: {
   if (!shown && newTaskAsk !== undefined) setNewTaskAsk(undefined);
 
   // A plan's version history opens over the task, so another task opens first.
+  // Note that a task's versions are its plan's, so while Plans is off whatever would open them, a link to a version among them, opens the task's Overview.
   const openHistory = (opening: HistoryOpening) => {
+    if (!plansOn) {
+      showOverview({ kind: LINK_PLACE.TASK, planId: opening.taskId });
+      return;
+    }
     if (opening.taskId !== boundFor) select(opening.taskId);
     setStandIn(undefined);
     setHistoryFor(opening);
@@ -2961,8 +2971,9 @@ export function useTasksTab(input: {
   };
 
   // Each ask is its own, so the same section asked twice scrolls twice.
+  // Note that a section is the plan's, so while Plans is off a mention of one opens its task's Overview at its top.
   const showMention = (mention: PlanMention) => {
-    const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
+    const anchor = mention.kind === MENTION_KIND.SECTION && plansOn ? mention.anchor : undefined;
     showOverview(
       anchor === undefined
         ? { kind: LINK_PLACE.TASK, planId: mention.taskId }
@@ -3260,6 +3271,8 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.COMMENT:
         showOverview(place);
+        // A comment is the plan's, so while Plans is off its link opens the task's Overview alone.
+        if (!plansOn) return;
         commentAsks.current += 1;
         setCommentReveal({
           planId: place.planId,
@@ -3580,8 +3593,10 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, so they are passed over.
-    const closedKind = sidePanel.closedTabs.findLast((tab) => DRAWN_KINDS.includes(tab));
+    // Note that the plan's and the Inbox's kinds of old stand nowhere in the panel now, nor a kind whose experiment is off, so they are passed over.
+    const closedKind = sidePanel.closedTabs.findLast((tab) =>
+      drawnKinds(experiments).includes(tab),
+    );
     if (closedKind === undefined) sidePanel.onToggle();
     else sidePanel.onChoose(closedKind);
   };

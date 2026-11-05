@@ -16,7 +16,9 @@ import {
   type TasksBrowserTabOpenParams,
 } from "@repo/features/tasks-view";
 import { ACT_KIND } from "@repo/host/acts";
+import { EXPERIMENT } from "@repo/settings";
 import { COMMAND_KEY } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import type { WireBoundaryInput } from "@repo/wire";
 import { Clock, Context, Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -29,7 +31,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { announcedAsAlert, mountAnnouncer } from "../testing/announcer.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { handHostReads, holdBrowserTabs } from "../testing/app-state.js";
+import { handHostReads, holdBrowserTabs, registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
@@ -99,7 +101,7 @@ function draw(element: React.ReactElement): { rerender: (next: React.ReactElemen
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = AtomRegistry.make();
+  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
   act(() => root.render(onRegistry(registry, element)));
   return { rerender: (next) => act(() => root.render(onRegistry(registry, next))) };
 }

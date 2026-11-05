@@ -10,10 +10,11 @@ import {
 import { pageFrameUrl } from "@repo/features/page-frame";
 import type { PageLine } from "@repo/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -22,7 +23,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, registryWith } from "../testing/app-state.js";
 import { editorBundleLanded } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -110,7 +111,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES);
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.PLANS));
 });
 
 afterEach(() => {
@@ -190,7 +191,7 @@ async function mount(
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(
           ChipCards,
           { value: chipCards },

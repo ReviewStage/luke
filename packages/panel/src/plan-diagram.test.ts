@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@repo/features/task-wire";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
@@ -10,7 +12,6 @@ import {
   type DiagramModule,
 } from "@repo/ui/diagram-contract";
 import { Effect } from "effect";
-import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
@@ -23,6 +24,7 @@ import { PlanBody } from "./tasks/plan-body.js";
 import { HISTORY_READ } from "./tasks/use-plan-history.js";
 import { VersionView } from "./tasks/version-view.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { registryWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
@@ -109,7 +111,11 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(AtomRegistry.make(), onSideBundles(bundles, node))));
+  act(() =>
+    root.render(
+      onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), onSideBundles(bundles, node)),
+    ),
+  );
   await settle();
   return container;
 }
@@ -212,7 +218,7 @@ test("while an edited diagram is drawn again, the picture kept is still named fo
     act(() =>
       root.render(
         onRegistry(
-          AtomRegistry.make(),
+          registryWith(experimentsOn(EXPERIMENT.PLANS)),
           onSideBundles(bundles, createElement(DiagramPreview, { code, previous })),
         ),
       ),
@@ -268,7 +274,7 @@ test("a diagram bundle that failed to load says so with Retry, which imports it 
   act(() =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         onSideBundles(unloaded, createElement(PlanBody, { task: taskWith(mermaidFence(code)) })),
       ),
     ),

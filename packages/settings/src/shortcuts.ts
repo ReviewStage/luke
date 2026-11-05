@@ -21,7 +21,12 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { isWireString, type UnparsedWireValue } from "@repo/wire";
 import { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
-import { type Experiment, type ExperimentChoices, experimentOn } from "./experiments.js";
+import {
+  EXPERIMENT,
+  type Experiment,
+  type ExperimentChoices,
+  experimentOn,
+} from "./experiments.js";
 
 /** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}, {@link MENU_COMMAND_LABELS}, or {@link PALETTE_COMMAND_LABELS}. */
 export const APP_COMMAND = {
@@ -422,8 +427,9 @@ export const APP_SHORTCUTS = {
   // Note that a link takes ⇧⌘C, as Arc and Dia copy a page's address, and what the focused pane shows takes ⌥⌘C beside it: the plan where the plan is focused, an agent's concise transcript where its pane or tab is, each menu item saying which (`command-items.tsx` in `@repo/panel`).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, shift: true } },
   [APP_COMMAND.COPY_CONTENT]: {
-    label: "Copy plan or transcript",
+    label: "Copy transcript",
     chord: { key: SHORTCUT_KEY.C, option: true },
+    renamed: { experiment: EXPERIMENT.PLANS, label: "Copy plan or transcript" },
   },
   // Note that the full transcript is the concise copy's chord with Shift, as VS Code's Copy Relative Path is its Copy Path's.
   [APP_COMMAND.COPY_FULL_TRANSCRIPT]: {
@@ -433,6 +439,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COMMENT_ON_SELECTION]: {
     label: "Comment on selection",
     chord: { key: SHORTCUT_KEY.M, option: true },
+    experiment: EXPERIMENT.PLANS,
   },
   // Note that U and P act on the focused sidebar row, and otherwise on what is open, answered only where the press is not typing, as the Inbox's U always has.
   [APP_COMMAND.TOGGLE_READ]: {
@@ -452,6 +459,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.VERSION_HISTORY]: {
     label: "Version history",
     chord: { key: SHORTCUT_KEY.H, option: true, shift: true },
+    experiment: EXPERIMENT.PLANS,
   },
   // Note that Open on GitHub takes ⇧⌘O, beside the ⌘O that opens a thing here, because GitHub Desktop's own ⇧⌘G is Find previous.
   [APP_COMMAND.OPEN_ON_GITHUB]: {
@@ -584,6 +592,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.EXIT_VERSION_HISTORY]: {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.PLANS,
   },
   [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
@@ -650,6 +659,7 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.INSERT_PICTURE]: {
     label: "Insert image",
     chord: { key: SHORTCUT_KEY.I, option: true },
+    experiment: EXPERIMENT.PLANS,
   },
   // Note that ⌃Tab is a desktop app's alone, because a browser keeps it for its own tabs.
   [APP_COMMAND.NEXT_RECENT_TAB]: {

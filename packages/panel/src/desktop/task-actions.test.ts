@@ -13,14 +13,16 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@repo/features/workspace-wire";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { experimentsOn } from "@repo/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@repo/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
-import { runAppCommand } from "../app-commands.js";
+import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { appCommandOffered, runAppCommand } from "../app-commands.js";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
@@ -30,7 +32,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
 import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handMembers } from "../testing/app-state.js";
+import { handMembers, readExperiments, registryWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -39,6 +41,9 @@ import { ToastHost } from "../toast.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -153,15 +158,17 @@ function mountReading(element: ReactElement): HTMLElement {
   return mount(onRegistry(AtomRegistry.make(), element));
 }
 
-/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu. */
-function mountPlanTab(tasks: TasksControl): HTMLButtonElement {
-  const container = mount(
-    createElement(DesktopTasks, {
-      summary: UNPINNED_SUMMARY,
-      looks: NO_LOOKS,
-      tasks,
-    }),
-  );
+/** The task's page drawn, and the Plan tab's ⋯ in the side panel's bar, which drops the task's own menu; on `registry` where one is named. */
+function mountPlanTab(
+  tasks: TasksControl,
+  registry?: AtomRegistry.AtomRegistry,
+): HTMLButtonElement {
+  const page = createElement(DesktopTasks, {
+    summary: UNPINNED_SUMMARY,
+    looks: NO_LOOKS,
+    tasks,
+  });
+  const container = mount(registry === undefined ? page : onRegistry(registry, page));
   const more = container.querySelector(".desktop-task-main .toolbar-tab-actions button");
   assert.ok(more instanceof HTMLButtonElement, "the Plan tab's ⋯ stands in the panel's bar");
   return more;
@@ -970,6 +977,19 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
     ],
     "no chord but the focused row's letters acts on a task that is not open",
   );
+});
+
+test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version history, and neither chord answers", () => {
+  const { tasks } = openTab({ [TASK.id]: "acme/app" });
+
+  openMenu(mountPlanTab(tasks, registryWith({})));
+  const offered = menuItems().map(itemLabel);
+  assert.deepEqual(
+    ["Copy plan", "Version history"].filter((item) => offered.includes(item)),
+    [],
+  );
+  assert.equal(appCommandOffered(APP_COMMAND.COPY_CONTENT), false);
+  assert.equal(appCommandOffered(APP_COMMAND.VERSION_HISTORY), false);
 });
 
 test("a task is found in the list the control hands down now, a renamed one by its new name and an added one at once, else in the open document", () => {

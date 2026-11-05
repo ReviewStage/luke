@@ -8,6 +8,7 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND, type KeyedCommand } from "@repo/settings/shortcuts";
 import {
   ANNOUNCE,
@@ -108,7 +109,7 @@ import { useReadMark, useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { type MenuAction, type MenuEntry, type MenuSubmenu, rowMenu } from "./action-menu.js";
 import { useMoveTaskDialog } from "./move-task-dialog.js";
@@ -623,14 +624,15 @@ function taskActionGroups(
     relationId: string;
     /** The open task, where it is this one. */
     opened: OpenedTask | undefined;
+    /** Whether the account has Plans on, without which there is no plan to copy and no version history. */
+    plans: boolean;
   },
   surface: TaskMenuSurface,
 ): MenuEntry[][] {
-  const { opened } = doors;
+  const { opened, plans } = doors;
   const drawn = opened !== undefined;
-  const copy: MenuAction[] = drawn
-    ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.onCopyPlan, drawn)]
-    : [];
+  const copy: MenuAction[] =
+    drawn && plans ? [commandAction(PANEL_COMMAND.COPY_PLAN, tasks.onCopyPlan, drawn)] : [];
   const link: MenuAction[] =
     task === undefined
       ? []
@@ -649,7 +651,9 @@ function taskActionGroups(
     task?.parentTaskId === undefined
       ? []
       : [commandAction(PANEL_COMMAND.REMOVE_PARENT, () => tasks.onRemoveTaskParent(taskId), drawn)];
-  const versions = versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn);
+  const versions: MenuAction[] = plans
+    ? [versionHistoryItem(() => tasks.onOpenHistory(taskId), drawn)]
+    : [];
   const change = commandAction(
     PANEL_COMMAND.CHANGE_REPOSITORY,
     () => tasks.onChangeRepository(taskId),
@@ -667,7 +671,7 @@ function taskActionGroups(
     surface === TASK_MENU_SURFACE.DOCUMENT
       ? [
           [...copy, ...link],
-          [rename, versions, ...read],
+          [rename, ...versions, ...read],
           [...relate, ...unparent],
           [...pinAction(tasks, task, lettered), ...move],
           [repository],
@@ -709,7 +713,9 @@ function TaskMenuFooter({
   const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const origin = useTaskMaker(task)?.actor;
-  const edit = opened === undefined ? undefined : lastEditOf(opened.task);
+  // Note that the open task's last editor is its plan's, so while Plans is off it is said only by when the task last changed, as another task is.
+  const plans = useExperiment(EXPERIMENT.PLANS);
+  const edit = opened === undefined || !plans ? undefined : lastEditOf(opened.task);
   const place: EditPlace = {
     reader,
     sections: opened?.task.sectionEdits ?? [],
@@ -841,6 +847,7 @@ export function useTaskMenuItems(
       : undefined;
   const setStanding = useStandingDoor(tasks);
   const relationId = useId();
+  const plans = useExperiment(EXPERIMENT.PLANS);
   const assignees = useAssigneeRows(task?.assignee);
   const standing =
     doors.surface === TASK_MENU_SURFACE.ROW && task !== undefined
@@ -863,6 +870,7 @@ export function useTaskMenuItems(
           standing,
           relationId,
           opened,
+          plans,
           read: {
             unread: doors.unread,
             onMark: (unread) => {
@@ -943,7 +951,10 @@ export function TaskActions({
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE, asking || deletion.busy ? undefined : deletion.ask);
   useAppCommand(APP_COMMAND.MARK_TASK_DONE, actions.markDone);
-  useAppCommand(APP_COMMAND.VERSION_HISTORY, () => tasks.history.onOpen(task.id));
+  useAppCommand(
+    APP_COMMAND.VERSION_HISTORY,
+    useExperiment(EXPERIMENT.PLANS) ? () => tasks.history.onOpen(task.id) : undefined,
+  );
   return actions.dialog;
 }
 

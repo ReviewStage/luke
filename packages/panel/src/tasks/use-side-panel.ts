@@ -1,5 +1,6 @@
 import { type PagePlace, pagePlaceId } from "@repo/features/page-wire";
 import type { CodeRef } from "@repo/features/task-wire";
+import { EXPERIMENT, type Experiment, type ExperimentChoices, experimentOn } from "@repo/settings";
 import { CommentsIcon, DocumentIcon } from "@repo/ui";
 import {
   type AgentStripTab,
@@ -34,6 +35,7 @@ import { Option, Schema } from "effect";
 import { InboxIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { useExperimentChoices } from "../use-app-state.js";
 import { fileName } from "./file-ref-model.js";
 import {
   type ByPullRequestTab,
@@ -58,7 +60,8 @@ import {
  * drawn or offered now, since the column's Overview holds the plan and a
  * task's threads open in the window's Inbox, and what
  * an earlier version kept of either reads and opens nothing
- * (`DRAWN_KINDS`). So a new task has no tab,
+ * (`drawnKinds`), and Comments stand only while the account has Plans on.
+ * So a new task has no tab,
  * and what arrives on it adds its tab at the strip's end as it arrives,
  * never taking the chosen one's place. Beside the window's Inbox the panel
  * draws none of them. The developer's own choices lie
@@ -173,14 +176,14 @@ export const SIDE_PANEL_TAB = {
   /**
    * The task's plan, which the column's Overview holds now
    * (`use-main-tabs.ts`). Note that it is kept here, drawn and offered
-   * nowhere (`DRAWN_KINDS`), because what an earlier version kept and pinned
+   * nowhere (`drawnKinds`), because what an earlier version kept and pinned
    * names it, and a pin or a link naming it opens Overview instead.
    */
   PLAN: "plan",
   /**
    * The task's Inbox, whose threads open in the window's Inbox narrowed to
    * the task now. Note that it is kept here, drawn and offered nowhere
-   * (`DRAWN_KINDS`), because what an earlier version kept and pinned names
+   * (`drawnKinds`), because what an earlier version kept and pinned names
    * it, and a pin naming it opens the window's Inbox instead.
    */
   INBOX: "inbox",
@@ -287,12 +290,18 @@ export type FileHistoryStep = (typeof FILE_HISTORY_STEP)[keyof typeof FILE_HISTO
 interface SidePanelTabKind {
   label: string;
   icon: React.ComponentType;
+  /** The experiment the kind's feature belongs to: while the account has it off, the panel draws, offers, and reopens no tab of the kind. */
+  experiment?: Experiment;
 }
 
 export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.PLAN]: { label: "Plan", icon: DocumentIcon },
   [SIDE_PANEL_TAB.INBOX]: { label: TAB_WORDS.INBOX, icon: InboxIcon },
-  [SIDE_PANEL_TAB.COMMENTS]: { label: "Comments", icon: CommentsIcon },
+  [SIDE_PANEL_TAB.COMMENTS]: {
+    label: "Comments",
+    icon: CommentsIcon,
+    experiment: EXPERIMENT.PLANS,
+  },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order the "+" offers them and a task whose order holds none of them stands them in. */
@@ -300,14 +309,37 @@ export const SIDE_PANEL_TABS: readonly FixedSidePanelTab[] = Object.values(SIDE_
 
 const FIXED_TABS: ReadonlySet<StripTab> = new Set(SIDE_PANEL_TABS);
 
-/** The kinds the panel draws, every one but the plan's, which the column's Overview holds, and the Inbox's, whose threads the window's Inbox holds. */
-export const DRAWN_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
+/** The kinds the panel can draw, every one but the plan's, which the column's Overview holds, and the Inbox's, whose threads the window's Inbox holds. */
+const CURRENT_KINDS: readonly FixedSidePanelTab[] = SIDE_PANEL_TABS.filter(
   (kind) => kind !== SIDE_PANEL_TAB.PLAN && kind !== SIDE_PANEL_TAB.INBOX,
 );
+
+/** The current kinds no experiment holds, the same array every call. */
+const UNGATED_KINDS: readonly FixedSidePanelTab[] = CURRENT_KINDS.filter((kind) => {
+  const look: SidePanelTabKind = SIDE_PANEL_TAB_KIND[kind];
+  return look.experiment === undefined;
+});
+
+/**
+ * The kinds the panel draws for the account's experiments: every current
+ * kind but one whose experiment is off, as Comments while Plans is. Note
+ * that the answer is one of two arrays, the same every call while the
+ * choices hold, so a strip drawn from it is the same until they move.
+ */
+export function drawnKinds(experiments: ExperimentChoices): readonly FixedSidePanelTab[] {
+  return experimentOn(experiments, EXPERIMENT.PLANS) ? CURRENT_KINDS : UNGATED_KINDS;
+}
 
 /** Whether a tab is one of the fixed kinds. */
 function isFixedTab(tab: SidePanelTab): tab is FixedSidePanelTab {
   return FIXED_TABS.has(tab);
+}
+
+/** Whether a tab is of a kind an experiment holds that the account has off, which nothing opens or chooses: Comments while Plans is off. */
+function gatedOff(tab: SidePanelTab, kinds: readonly FixedSidePanelTab[]): boolean {
+  if (!isFixedTab(tab)) return false;
+  const look: SidePanelTabKind = SIDE_PANEL_TAB_KIND[tab];
+  return look.experiment !== undefined && !kinds.includes(tab);
 }
 
 /**
@@ -826,6 +858,8 @@ export interface OpenTask {
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files opened on it. */
 export interface DrawnTabs {
   task: OpenTask;
+  /** The fixed kinds the panel draws for the account's experiments (`drawnKinds`). */
+  kinds: readonly FixedSidePanelTab[];
   agents: readonly string[] | undefined;
   subagents: readonly string[];
   /** The files opened on the task, by path, whose open tabs the strip draws. */
@@ -875,14 +909,18 @@ function orderOn(held: HeldState, taskId: string | undefined): readonly SidePane
 /**
  * The task's fixed tabs in the strip's order: each it holds something of and
  * was not closed on, and each opened on it, of the kinds the panel draws
- * (`DRAWN_KINDS`).
+ * (`drawnKinds`).
  */
-function drawnFixed(held: HeldState, task: OpenTask): readonly FixedSidePanelTab[] {
+function drawnFixed(
+  held: HeldState,
+  task: OpenTask,
+  kinds: readonly FixedSidePanelTab[],
+): readonly FixedSidePanelTab[] {
   if (task.bare === true) return NO_FIXED;
   const chosen = taskTabs(held, task.id);
   const open = held.tabs.filter(
     (tab) =>
-      DRAWN_KINDS.includes(tab) &&
+      kinds.includes(tab) &&
       (chosen.opened.includes(tab) || (!chosen.closed.includes(tab) && task.holds[tab] === true)),
   );
   return inTaskOrder(open, orderOn(held, task.id), (tab) => tab);
@@ -1437,7 +1475,7 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStr
  */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
   const kinds = [
-    ...drawnFixed(held, drawn.task),
+    ...drawnFixed(held, drawn.task, drawn.kinds),
     ...held.transcripts.filter((each) => drawsTranscript(each, drawn)),
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
@@ -1457,7 +1495,7 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
  * one render to the next, as the tab shown must be.
  */
 function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
-  const fixed = drawnFixed(held, drawn.task);
+  const fixed = drawnFixed(held, drawn.task, drawn.kinds);
   const head = stripOf(held, drawn)[0];
   const ahead =
     head === undefined || isFixedTab(head)
@@ -1491,7 +1529,7 @@ function withChosenViewed(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs):
  */
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
   const closed: HeldState | undefined = isFixedTab(tab)
-    ? drawnFixed(held, drawn.task).includes(tab)
+    ? drawnFixed(held, drawn.task, drawn.kinds).includes(tab)
       ? drawn.task.bare === true
         ? held
         : withChoice(held, drawn.task.id, tab, false)
@@ -2011,6 +2049,8 @@ export function useSidePanel(
     );
     return beside.length === 0 ? pages : [...pages, ...beside];
   }, [state.pages, pages, taskId]);
+  // The fixed kinds drawn for the account's experiments, Comments only while Plans is on.
+  const kinds = drawnKinds(useExperimentChoices());
   const update = useCallback(
     (change: (held: HeldState) => HeldState) => {
       if (stage === undefined) setKept(change);
@@ -2021,6 +2061,7 @@ export function useSidePanel(
   const shownFor = (holds: TaskHolds) =>
     shownIn(state, {
       task: { id: taskId, holds },
+      kinds,
       agents,
       subagents,
       files: taskFiles,
@@ -2053,14 +2094,15 @@ export function useSidePanel(
   // Past the check above, `seen` is the task as it is, and a new object
   // only where the task or what it holds changed, so the strip drawn from
   // it is the same array until something it is drawn from changes.
-  const tabs = useMemo(() => drawnFixed(state, seen), [state, seen]);
+  const tabs = useMemo(() => drawnFixed(state, seen, kinds), [state, seen, kinds]);
   const used = useMemo(
-    () => DRAWN_KINDS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
-    [tabs, seen],
+    () => kinds.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
+    [kinds, tabs, seen],
   );
   const drawn = useMemo(
     () => ({
       task: seen,
+      kinds,
       agents,
       subagents,
       files: taskFiles,
@@ -2069,7 +2111,7 @@ export function useSidePanel(
       heldAgents,
       cloudBrowsers,
     }),
-    [seen, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers],
+    [seen, kinds, agents, subagents, taskFiles, pagesHere, taskAgents, heldAgents, cloudBrowsers],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -2160,7 +2202,7 @@ export function useSidePanel(
   const onToggleAskedAnswered = useCallback(() => setToggleAskedOn(undefined), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (tab === SIDE_PANEL_TAB.INBOX || gatedOff(tab, drawn.kinds)) return;
       setAsked(undefined);
       update((held) => ({
         ...withPagePlaced(
@@ -2186,7 +2228,7 @@ export function useSidePanel(
   // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
-      if (tab === SIDE_PANEL_TAB.INBOX) return;
+      if (tab === SIDE_PANEL_TAB.INBOX || gatedOff(tab, drawn.kinds)) return;
       setAsked({ task: on, tab, carry: on !== taskId || stop !== taskId });
       setOpened((was) => was + 1);
       update((held) => {
@@ -2332,6 +2374,7 @@ export function useSidePanel(
   // the strip the tab is placed in draws it from the moment it stands again.
   const onReopen = useCallback(
     (tab: SidePanelTab, at: number, file: OpenFile | undefined) => {
+      if (gatedOff(tab, drawn.kinds)) return;
       setAsked(undefined);
       update((held) => {
         // A file stands in one tab at most, so the record kept with the tab
@@ -2380,6 +2423,11 @@ export function useSidePanel(
       update((held) => withViewedAt(held, on, viewed, standing, at)),
     [update],
   );
+  // A pin of a kind whose experiment is off is kept, for the experiment turned on again, and drawn nowhere meanwhile.
+  const pins = useMemo(
+    () => state.pins.filter((pin) => !gatedOff(pin.tab, kinds)),
+    [state.pins, kinds],
+  );
   const carried = useMemo(
     () =>
       state.carried.map(({ task, tab, position }): CarriedAgentPin => {
@@ -2395,7 +2443,7 @@ export function useSidePanel(
     order: orderOn(state, taskId),
     closedTabs: taskTabs(state, taskId).closed,
     used,
-    pins: state.pins,
+    pins,
     carried,
     subagents: state.subagents,
     changes: taskTabs(state, taskId).changes ?? NO_CHANGES,

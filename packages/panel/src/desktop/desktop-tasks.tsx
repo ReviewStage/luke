@@ -10,6 +10,7 @@ import type {
   TaskStanding,
 } from "@repo/features/task-wire";
 import { readingWords } from "@repo/features/words";
+import { EXPERIMENT } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import {
   EmptyState,
@@ -79,6 +80,7 @@ import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/u
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useExperiment } from "../use-app-state.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -336,7 +338,11 @@ function AgentColumn({ children }: { children: React.ReactNode }): React.JSX.Ele
  * (`main-tabs.tsx`, `side-panel.tsx`).
  */
 function CopyChord({ copy }: { copy: TasksControl["copy"] }): null {
-  useAppCommand(APP_COMMAND.COPY_CONTENT, copy.onPress);
+  // While Plans is off there is no plan to copy, so the chord is an agent's alone.
+  useAppCommand(
+    APP_COMMAND.COPY_CONTENT,
+    useExperiment(EXPERIMENT.PLANS) ? copy.onPress : undefined,
+  );
   return null;
 }
 
@@ -402,8 +408,9 @@ function PlanDocument({
     readerId: tasks.me,
     agents: tasks.agents,
   });
-  // The task's comments are held from its open while it is shown, for its plan's margin, its Comments tab, and its summary, so its first ready frame marks them.
-  const commentsTaskId = tasks.shown ? tasks.activeTaskId : undefined;
+  // The task's comments are held from its open while it is shown, for its plan's margin, its Comments tab, and its summary, so its first ready frame marks them; none are read while Plans is off.
+  const plansOn = useExperiment(EXPERIMENT.PLANS);
+  const commentsTaskId = tasks.shown && plansOn ? tasks.activeTaskId : undefined;
   const comments = usePlanComments(
     useMemo(
       () => (commentsTaskId === undefined ? undefined : { taskId: commentsTaskId }),

@@ -43,19 +43,19 @@ import {
 } from "@repo/host/app-state";
 import type { PortActKind, PortActResult } from "@repo/host/contract";
 import { FIXTURE_IDS } from "@repo/host/fixture-stage";
+import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
-import { appSettingsWire, settingsView } from "@repo/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
 import { memoryHistory } from "@repo/ui/history-adapter";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
-import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type ActHandle, KEPT, type Kept } from "../act.js";
 import {
   installWindowHistory,
@@ -84,6 +84,8 @@ import {
   handState,
   holdPages,
   holdRepositoryLists,
+  readExperiments,
+  registryWith,
   stateWith,
 } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -107,6 +109,11 @@ import {
   useLeaveGuard,
   useTasksTab,
 } from "./use-tasks-tab.js";
+
+// Note that the plan's document, comments, and history stand only while the account has Plans on.
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -302,7 +309,7 @@ function mount(
   roots.push(root);
   // A fresh registry reads the document handed here, its plans among it, rather than one an earlier test handed.
   act(() => {
-    root.render(onRegistry(registry ?? AtomRegistryModule.make(), surface));
+    root.render(onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface));
   });
   return {
     told,
@@ -562,7 +569,14 @@ const readQuiet = Schema.decodeUnknownOption(
 );
 
 test("with Open a task once it starts off, New task starts the task and its agent without opening them, and its toast's Open opens the agent's tab, asking first while a page stands unsaved work", async () => {
-  handState({}, { settings: appSettingsWire(settingsView({ openNewTask: false })) });
+  handState(
+    {},
+    {
+      settings: appSettingsWire(
+        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.PLANS) }),
+      ),
+    },
+  );
   const agent = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
     { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW },
@@ -571,7 +585,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
-    AtomRegistryModule.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await settle();
 
@@ -613,7 +627,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     { tab: { agent: AGENT_ID }, panel: false },
     "the task opens on its agent alone, no plan laid over it in a narrow room",
   );
-  handState({});
+  handState(experimentsOn(EXPERIMENT.PLANS));
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */
@@ -1237,7 +1251,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    AtomRegistryModule.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await settle();
 
@@ -1266,7 +1280,7 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    AtomRegistryModule.make(),
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
   await settle();
 
@@ -1571,7 +1585,11 @@ function inboxTaskNow(): () => string | undefined {
 }
 
 test("a task's Inbox door and its link narrow the Inbox to the task, an agent's waiting thread choosing that thread there, and the Inbox's own row lists everything", async () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
+  const tab = mount(
+    { shown: true, tasks: TWO_WORKSPACES },
+    {},
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+  );
   await settle();
   const narrowed = inboxTaskNow();
   const narrowedTo = () => ({
@@ -1748,7 +1766,9 @@ test("a task whose plan the host holds opens on its plan in its first frame agai
 
 test("a version history opened on a held task lists its versions in its first frame, with no page read", async () => {
   const versions = [revisionLine(2), revisionLine(1)];
-  handState({}, { [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } } });
+  handState(experimentsOn(EXPERIMENT.PLANS), {
+    [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } },
+  });
   const tab = mount({ shown: true, tasks: OPEN });
   await settle();
 
@@ -1866,11 +1886,16 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
+  handState(experimentsOn(EXPERIMENT.PLANS));
   // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
   // A fresh registry reads the document handed here, rather than one an earlier test handed.
-  const tab = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {},
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+  );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
   const panel = () => tab.control().sidePanel;
@@ -2496,7 +2521,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        AtomRegistryModule.make(),
+        registryWith(experimentsOn(EXPERIMENT.PLANS)),
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2709,11 +2734,14 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
-  handState(
+  handState(experimentsOn(EXPERIMENT.PLANS), {
+    run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
+  });
+  const page = mount(
+    { ...run, profile: RUN_PROFILE.AGENT_PAGE },
     {},
-    { run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE } },
+    registryWith(experimentsOn(EXPERIMENT.PLANS)),
   );
-  const page = mount({ ...run, profile: RUN_PROFILE.AGENT_PAGE }, {}, AtomRegistryModule.make());
   await settle();
 
   assert.deepEqual(tasks.control().agents.agents, []);
@@ -3685,12 +3713,10 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   fakeActPort({});
-  return AtomRegistryModule.make({
-    initialValues: [
-      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
-    ],
-  });
+  return registryWith(experimentsOn(EXPERIMENT.PLANS), [
+    [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+  ]);
 }
 
 /** Lets `span` pass on the test's clock, then lets what fell due land. */
