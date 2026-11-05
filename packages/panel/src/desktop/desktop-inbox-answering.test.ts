@@ -194,7 +194,7 @@ test("an open item's ⋯ menu in the pane's bar offers Resolve without answering
   );
 });
 
-test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and Send, reading Send & resolve, sends the words with the close as its note, in one send", async () => {
+test("the × on an open question's card stages its resolve, asking nothing: the question gives way to a strip whose Undo brings it back as it was left, and the plain Send sends the words with the close as its note, in one send", async () => {
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const closes = takenCloses();
@@ -210,7 +210,7 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
   await settle();
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "the × asks nothing");
   assert.deepEqual(closes, [], "and resolves nothing until Send");
-  assert.equal(sendWords(pane), "Resolve", "Send with nothing written resolves alone");
+  assert.equal(sendWords(pane), "Send", "Send stays the plain Send");
   assert.equal(document.activeElement?.textContent, "Undo", "Undo takes the ×'s focus");
   const undo =
     [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].find(
@@ -227,7 +227,6 @@ test("the × on an open question's card stages its resolve, asking nothing: the 
   act(() => cross().click());
   typeInComposer(pane, "Hold off until the backfill lands");
   await settle();
-  assert.equal(sendWords(pane), "Send & resolve");
   await act(async () => answerSend(pane).click());
   await settle();
 
@@ -260,7 +259,13 @@ test("a staged resolve outlasts a reload of the window while its ask stands, and
     return itemPane(page);
   };
 
-  assert.equal(sendWords(await reload()), "Resolve", "the reloaded box still resolves");
+  const reloaded = await reload();
+  assert.ok(
+    [...reloaded.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].some(
+      (button) => button.textContent === "Undo",
+    ),
+    "the reloaded box still stages the resolve",
+  );
   world.inboxes.set(
     BILLING.id,
     (world.inboxes.get(BILLING.id) ?? []).map((each) =>
@@ -302,7 +307,12 @@ test("a resolve the service did not take stands staged again with its words back
   await act(async () => answerSend(pane).click());
   await settle();
 
-  assert.equal(sendWords(pane), "Send & resolve", "the resolve stands staged again");
+  assert.ok(
+    [...pane.querySelectorAll<HTMLButtonElement>("[data-inbox-draft-ask] button")].some(
+      (button) => button.textContent === "Undo",
+    ),
+    "the resolve stands staged again",
+  );
   assert.equal(
     composerEditor(pane).textContent,
     "Hold off until the backfill lands",

@@ -160,12 +160,6 @@ const SEND = "Send";
 /** What Send is named while its send is out. */
 const SENDING = "Sending";
 
-/** What Send reads, in words, while a resolve is staged and the box holds nothing to say beside it. */
-const RESOLVE = "Resolve";
-
-/** What Send reads, in words, while a resolve is staged and the box holds words or files to send beside it. */
-const SEND_AND_RESOLVE = "Send & resolve";
-
 /** What the line asks for while a resolve is staged, its words going to the agent beside it. */
 const RESOLVE_PLACEHOLDER = "Tell the agent why (optional)";
 
@@ -298,8 +292,6 @@ interface AnswerFormProps {
   readonly nod: boolean;
   /** Whether Send reads Start thread, the box starting a new thread rather than replying. */
   readonly starts?: boolean | undefined;
-  /** What Send reads while a resolve is staged; none where none is. */
-  readonly resolves?: typeof RESOLVE | typeof SEND_AND_RESOLVE | undefined;
   readonly sending: boolean;
   /** Whether a send waits, while one is out or files are read. */
   readonly held: boolean;
@@ -337,7 +329,6 @@ function AnswerForm({
   says,
   nod,
   starts = false,
-  resolves,
   sending,
   held,
   sendable,
@@ -383,8 +374,8 @@ function AnswerForm({
         actions={<DictateButton dictation={dictation} disabled={module === undefined} />}
         strip={dictating ? <DictationStrip dictation={dictation} /> : undefined}
         send={{
-          label: nod ? GOT_IT : starts ? START_THREAD : (resolves ?? SEND),
-          inWords: nod || starts || resolves !== undefined,
+          label: nod ? GOT_IT : starts ? START_THREAD : SEND,
+          inWords: nod || starts,
           empty: !sendable,
           held,
           busy: sending,
@@ -706,7 +697,6 @@ function AnswerCard({
         }
         nod={nod}
         starts={starts}
-        resolves={resolves ? (emptyBox(draft) ? RESOLVE : SEND_AND_RESOLVE) : undefined}
         sending={sending}
         held={held}
         sendable={sendable}
