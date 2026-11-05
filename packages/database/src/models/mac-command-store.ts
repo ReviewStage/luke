@@ -37,6 +37,7 @@ import { agentTable } from "../schemas/agent.js";
 import { automationRun } from "../schemas/automation.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
 import { conversations, messages, standingLine } from "../schemas/storage.js";
+import { task } from "../schemas/task.js";
 import { MESSAGE_SENDER, messageSenderSchema } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect } from "./task-store.js";
@@ -298,8 +299,6 @@ const ForeignLineSchema = Schema.Struct({
   shown: Schema.Boolean,
 });
 
-export type ForeignLine = typeof ForeignLineSchema.Type;
-
 /** That an account other than the owner's wrote a line or owns the agent that did, and other than the one the conversation is handed to where it is handed on: a member's id, or an agent's owner's. */
 function anotherAccounts(column: AnyPgColumn, userId: string, besides: string | null): SQL {
   return besides === null ? ne(column, userId) : notInArray(column, [userId, besides]);
@@ -428,6 +427,33 @@ const findForeignLine = SqlSchema.findOneOption({
     ),
 });
 
+/** The agent whose conversation, or whose worker's, is asked after, read for its task. */
+const ownAgent = alias(agentTable, "own_agent");
+
+/**
+ * The account whose Mac the conversation's commands run on: the assignee of
+ * the task its agent works on, or else the agent's starter, read through a
+ * worker's conversation to the agent it was delegated from.
+ */
+const findMacOwner = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ userId: sql<string>`coalesce(${task.assigneeId}, ${ownAgent.userId})` })
+        .from(conversations)
+        .leftJoin(parent, eq(parent.id, conversations.parentConversationId))
+        .innerJoin(
+          ownAgent,
+          eq(ownAgent.conversationId, sql`coalesce(${parent.id}, ${conversations.id})`),
+        )
+        .leftJoin(task, eq(task.id, ownAgent.taskId))
+        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
+        .limit(1),
+    ),
+});
+
 const deleteCommand = SqlSchema.void({
   Request: CommandKeySchema,
   execute: ({ userId, id }) =>
@@ -478,11 +504,17 @@ export function heardFromAnyoneBut(
   return Effect.map(findForeignLine({ ...target, besides: recipientUserId }), Option.isSome);
 }
 
-/** The first line another account put into the conversation, as `heardFromAnotherAccount` counts one; none where no one has. */
-export function firstForeignLine(
-  target: ConversationTarget,
-): TaskStoreEffect<Option.Option<ForeignLine>> {
-  return findForeignLine({ ...target, besides: null });
+/**
+ * The account whose Mac the conversation's `run_on_mac` runs on: the
+ * assignee of its agent's task, whoever started the agent and whoever has
+ * written to it since, or the conversation's own account where the agent
+ * works on no task, its task is assigned to no one, or it is no agent's.
+ */
+export function macOwnerOf(target: ConversationTarget): TaskStoreEffect<string> {
+  return Effect.map(
+    findMacOwner(target),
+    Option.match({ onNone: () => target.userId, onSome: (row) => row.userId }),
+  );
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */
