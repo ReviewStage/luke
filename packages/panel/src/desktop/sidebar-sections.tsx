@@ -48,13 +48,7 @@ import {
   useLeaving,
   useMenu,
 } from "@repo/ui";
-import {
-  FolderOutputIcon,
-  FolderPlusIcon,
-  GLYPH,
-  MailOpenIcon,
-  SmilePlusIcon,
-} from "@repo/ui/icons";
+import { FolderOutputIcon, FolderPlusIcon, GLYPH, MailOpenIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   type DrawnTaskRow,
@@ -132,9 +126,6 @@ const TITLE_ASKED = "Name the section.";
 
 /** What the toast says once a section is deleted. */
 const SECTION_DELETED = "Section deleted";
-
-/** What opens a section's head with its icon's picker open, on its menu. */
-const CHANGE_ICON = "Change icon";
 
 /** What makes a section, as the Tasks head's button and every Move to section name it. */
 export const NEW_SECTION = "New section";
@@ -403,7 +394,6 @@ type InPlace =
   | {
       readonly kind: typeof TASK_SECTION_WRITE.EDIT;
       readonly sectionId: string;
-      readonly picking: boolean;
     };
 
 /** The sidebar's naming in place: what is being named, if anything, and the section whose head takes the focus once its edit ends by a key. */
@@ -412,8 +402,8 @@ export interface SectionEdits {
   readonly focusing: string | undefined;
   /** Stands a new section's editor at the foot of the workspace's sections; Escape hands the focus back to `from`. */
   beginCreate: (workspaceId: string, from: HTMLElement | null) => void;
-  /** Turns a section's head into its editor, its picker open where `picking`. */
-  beginEdit: (sectionId: string, picking: boolean) => void;
+  /** Turns a section's head into its editor, whose icon well opens its picker. */
+  beginEdit: (sectionId: string) => void;
   /** Ends the naming, the focus going to the head of `focus` where it names a section. */
   end: (focus?: string) => void;
   /** Says the head asked for has the focus. */
@@ -429,8 +419,7 @@ export function useSectionEdits(): SectionEdits {
     focusing,
     beginCreate: (workspaceId, from) =>
       setInPlace({ kind: TASK_SECTION_WRITE.CREATE, workspaceId, from }),
-    beginEdit: (sectionId, picking) =>
-      setInPlace({ kind: TASK_SECTION_WRITE.EDIT, sectionId, picking }),
+    beginEdit: (sectionId) => setInPlace({ kind: TASK_SECTION_WRITE.EDIT, sectionId }),
     end: (focus) => {
       setInPlace(undefined);
       if (focus !== undefined) setFocusing(focus);
@@ -450,23 +439,21 @@ function sameIcon(a: TaskSectionIcon | undefined, b: TaskSectionIcon | undefined
 
 /**
  * A section's head being named in place: the icon well in the glyph's cell,
- * its picker open from the start where `picking`, and the name field in the
- * label's place, opened over `title`. How it ended is heard with the icon
+ * which opens its picker, and the name field in the label's place, opened
+ * over `title`. How it ended is heard with the icon
  * chosen meanwhile.
  */
 function SectionEditor({
   title,
   icon,
-  picking,
   onEnd,
 }: {
   title: string;
   icon: TaskSectionIcon | undefined;
-  picking: boolean;
   onEnd: (end: GroupHeaderEditEnd, icon: TaskSectionIcon | undefined) => void;
 }): React.JSX.Element {
   const [chosen, setChosen] = useState(icon);
-  const [open, setOpen] = useState(picking);
+  const [open, setOpen] = useState(false);
   const editor = useRef<GroupHeaderEditorHandle | null>(null);
   return (
     <GroupHeaderEditor
@@ -649,9 +636,8 @@ function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry
 }
 
 /**
- * A section's menu: Rename and Change icon, which name it in place, its
- * head turning into its editor, the icon's picker open for Change icon, and
- * Mark all as read; then Status for its tasks; then Move all to section and Remove all
+ * A section's menu: Rename, which names it in place, its head turning into
+ * its editor, whose icon well changes its icon, and Mark all as read; then Status for its tasks; then Move all to section and Remove all
  * from section; then Delete section. Only the rows drawn are acted on, so
  * one kept in it but pinned or archived, which it draws not, is left where
  * it stands; what only a task takes, a read mark or a status, acts on its
@@ -665,12 +651,7 @@ function sectionActionGroups(
   const { section } = drawn;
   const { tasks, dialogs, edits } = context;
   const edit: MenuEntry[] = [
-    commandAction(PANEL_COMMAND.RENAME, () => edits.beginEdit(section.id, false), false),
-    {
-      label: CHANGE_ICON,
-      icon: <SmilePlusIcon />,
-      onSelect: () => edits.beginEdit(section.id, true),
-    },
+    commandAction(PANEL_COMMAND.RENAME, () => edits.beginEdit(section.id), false),
   ];
   const remove: MenuEntry[] = [
     {
@@ -863,12 +844,7 @@ function SidebarSection({
       <GroupHeader
         editing={
           renaming === undefined ? undefined : (
-            <SectionEditor
-              title={section.title}
-              icon={section.icon}
-              picking={renaming.picking}
-              onEnd={renamed}
-            />
+            <SectionEditor title={section.title} icon={section.icon} onEnd={renamed} />
           )
         }
         heading={GROUP_HEADING.NONE}
@@ -992,7 +968,7 @@ export function SidebarSections({
         {creating === undefined ? null : (
           <li className="sidebar-sections-item sidebar-sections-new">
             <div className="sidebar-repository sidebar-own-section">
-              <SectionEditor title="" icon={undefined} picking={false} onEnd={created} />
+              <SectionEditor title="" icon={undefined} onEnd={created} />
             </div>
           </li>
         )}

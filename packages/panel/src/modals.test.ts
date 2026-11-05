@@ -102,6 +102,7 @@ function FeedbackOwner({ shown }: OwnerProps): ReactElement {
     createElement(FeedbackDialog, {
       kind: open && shown ? FEEDBACK_KIND.FEEDBACK : undefined,
       account: undefined,
+      onKind: () => undefined,
       onClose: () => setOpen(false),
     }),
   );

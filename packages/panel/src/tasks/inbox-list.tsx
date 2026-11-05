@@ -234,7 +234,7 @@ const SKELETON_TIME = "20px";
 
 /** What each scope is called, in the view's menu and the list's region's name, and its glyph in the menu. */
 const SCOPE_WORDS = {
-  [INBOX_SHOW.NEEDS_ME]: { label: "Needs me", icon: <GLYPH.PERSON /> },
+  [INBOX_SHOW.NEEDS_ME]: { label: "Needs you", icon: <GLYPH.PERSON /> },
   [INBOX_SHOW.OPEN]: { label: "Open", icon: <GLYPH.TODOS /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
   [INBOX_SHOW.SNOOZED]: { label: "Snoozed", icon: <GLYPH.TIME /> },
@@ -253,7 +253,7 @@ const INBOX_TITLE = "Inbox";
 
 /**
  * Whether the list holds only what needs the reader, the window's Inbox's
- * Needs me, or its Open addressed to them: its rows then leave Needs you
+ * Needs you, or its Open addressed to them: its rows then leave Needs you
  * unsaid (`needsYouShown`), and its region says it once.
  */
 function needsYouListed(head: InboxListHead): boolean {
@@ -265,7 +265,7 @@ function needsYouListed(head: InboxListHead): boolean {
   );
 }
 
-/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs me, or where the Inbox offers no view. */
+/** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs you, or where the Inbox offers no view. */
 function narrowingWhose(view: InboxViewChoices | undefined): InboxWhoseChoice | undefined {
   return view !== undefined && narrowedByWhose(view.show) ? view : undefined;
 }
@@ -284,7 +284,7 @@ function whoseWords(whose: InboxWhose): string {
 
 /**
  * The list's region's name, saying what it lists, since the head names the
- * Inbox alone: Needs me by its scope's name alone, whom Addressed to names
+ * Inbox alone: Needs you by its scope's name alone, whom Addressed to names
  * leaving it as it is; Needs you where Open holds only what needs the
  * reader, whose rows leave it unsaid (`needsYouShown`), so a reader hears it
  * once; else the scope and whom Addressed to names. A task's own Inbox
@@ -304,7 +304,7 @@ export const NOTHING_HERE = "Nothing here";
 /** What the Snoozed scope says holding nothing the reader snoozed. */
 const NOTHING_SNOOZED = "Nothing snoozed";
 
-/** What Needs me says holding no question that waits on the reader, whomever Addressed to names. */
+/** What Needs you says holding no question that waits on the reader, whomever Addressed to names. */
 const NOTHING_NEEDS_ME = "Nothing needs your response";
 
 /**
@@ -603,8 +603,8 @@ function whoseEntries(
 
 /**
  * The window's Inbox's head's button that drops the view's menu: first what
- * it shows, Needs me, Open, All, or Snoozed, the one shown checked; then, but
- * under Needs me, Addressed to, a submenu of Anyone, Me, or a teammate by
+ * it shows, Needs you, Open, All, or Snoozed, the one shown checked; then, but
+ * under Needs you, Addressed to, a submenu of Anyone, Me, or a teammate by
  * face and name, its choice checked.
  */
 function ViewOptions({
@@ -815,11 +815,11 @@ function FilterChips({
 }
 
 /**
- * The way on from an empty scope: from Needs me, Open of whom Addressed to
+ * The way on from an empty scope: from Needs you, Open of whom Addressed to
  * names where it holds anything; else All where it holds anything; else,
  * where Addressed to narrows the scope, back to the reader's own from a
  * teammate's, or to anyone's from the reader's own; none from anyone's, or
- * from Needs me, where nothing else holds anything.
+ * from Needs you, where nothing else holds anything.
  */
 function emptyWayOn(
   view: InboxViewChoices,
@@ -839,7 +839,7 @@ function emptyWayOn(
   if (view.show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) {
     return turn(SHOW_INSTEAD.ALL, () => view.onShow(INBOX_SHOW.ALL));
   }
-  // Note that Addressed to never narrows Needs me, so naming another lists nothing more.
+  // Note that Addressed to never narrows Needs you, so naming another lists nothing more.
   if (!narrowedByWhose(view.show)) return undefined;
   if (view.whose.kind === INBOX_WHOSE.PERSON) {
     return turn(SHOW_INSTEAD.MINE, () => view.onWhose(MINE));

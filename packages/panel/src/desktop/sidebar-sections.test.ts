@@ -558,7 +558,6 @@ test("a section holding tasks offers what acts on all of them between Rename and
   assert.deepEqual(menuLabels(), [
     "Move up",
     "Rename",
-    "Change icon",
     "Status",
     "Move all to section",
     "Remove all from section",
@@ -575,7 +574,7 @@ test("a section holding no task offers only Rename and Delete, after its move", 
 
   openSectionMenu(sidebar, "Someday");
 
-  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Change icon", "Delete section"]);
+  assert.deepEqual(menuLabels(), ["Move down", "Rename", "Delete section"]);
 });
 
 test("a section's Move all to section puts every task in it on top of the section chosen, in its order", async () => {
@@ -1229,11 +1228,12 @@ test("an icon found by searching, in a color chosen, is the new section's", asyn
   });
 });
 
-test("Change icon opens a section's head with its picker, where a color chosen recolors the glyph it wears", async () => {
+test("Rename opens a section's head, whose icon well opens its picker, where a color chosen recolors the glyph it wears", async () => {
   const writes: TaskSectionWrite[] = [];
   const sidebar = await mountSidebar(writes, GLYPHS);
 
-  sectionMenuChoose(sidebar, "Stars", "Change icon");
+  sectionMenuChoose(sidebar, "Stars", "Rename");
+  act(() => dialogButton("Change icon").click());
   await settleLoaded();
   assert.equal(dialogButton("Telescope").getAttribute("aria-pressed"), "true");
   act(() => dialogButton("No color").click());
@@ -1253,7 +1253,8 @@ test("Change icon opens a section's head with its picker, where a color chosen r
 test("a section wearing a glyph no Lucide knows still leaves the grid one tab stop", async () => {
   const sidebar = await mountSidebar([], GLYPHS);
 
-  sectionMenuChoose(sidebar, "Lost", "Change icon");
+  sectionMenuChoose(sidebar, "Lost", "Rename");
+  act(() => dialogButton("Change icon").click());
   await settleLoaded();
 
   const panel = document.querySelector('[role="tabpanel"]') ?? assert.fail("no picker panel");

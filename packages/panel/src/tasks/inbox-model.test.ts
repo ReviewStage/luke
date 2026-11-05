@@ -599,7 +599,7 @@ test("an item waits on whoever the service says, its task's assignee, rather tha
   assert.deepEqual(whose({ kind: INBOX_WHOSE.PERSON, ...KAI }), ["older-service"]);
 });
 
-test("Needs me lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
+test("Needs you lists and counts only the questions whose ask waits on the reader, whomever Addressed to names: never a notice of theirs, which asks nothing, a question of theirs they snoozed, or a question that waits on a teammate", () => {
   const question = [asking({ type: INBOX_ASK.ANSWER })];
   const groups = [
     {

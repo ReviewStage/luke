@@ -7,8 +7,10 @@
  * focus goes back to whatever opened it. Enter in the field sends, as every
  * box's does (`enter-sends.ts`), and Shift+Enter adds a line.
  *
- * Each kind keeps its own draft, so a note is always sent as the kind it was
- * written as. One rule keeps it: only a delivered send discards it; Cancel,
+ * One door opens it, Send feedback; a choice at the card's head turns the note
+ * into a feature suggestion and back, so the menus hold one item rather than
+ * one per kind. Each kind keeps its own draft, so a note is always sent as the
+ * kind it was written as. One rule keeps it: only a delivered send discards it; Cancel,
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
@@ -45,7 +47,9 @@ import {
   AttachmentChip,
   BUTTON_VARIANT,
   Button,
+  CHOICE_BAR_LOOK,
   Checkbox,
+  ChoiceBar,
   DIALOG_SIZE,
   Dialog,
   ErrorState,
@@ -106,6 +110,12 @@ const IMAGE_REFUSAL = {
 const IMAGE_REFUSALS: ReadonlySet<string> = new Set(Object.values(IMAGE_REFUSAL));
 
 const SEND_REFUSAL = "Could not send that. Try again.";
+
+/** The choice at the card's head, one option per kind, named as the person writing it would. */
+const KIND_CHOICES = [
+  { value: FEEDBACK_KIND.FEEDBACK, label: "Feedback" },
+  { value: FEEDBACK_KIND.PROMPT, label: "Feature idea" },
+] as const;
 
 /** How many lines the empty note stands tall before it grows with its words. */
 const MESSAGE_ROWS = 5;
@@ -265,6 +275,7 @@ export function FeedbackDialog({
   kind,
   about,
   account,
+  onKind,
   onClose,
 }: {
   /** The kind being written, or nothing while the dialog is closed. */
@@ -272,6 +283,8 @@ export function FeedbackDialog({
   /** The experiment the note is about, where an experiment's row opened it. */
   about?: Experiment | undefined;
   account: AccountSnapshot | undefined;
+  /** Turns the note into the other kind, from the choice at the card's head; a note about an experiment offers no choice. */
+  onKind: (kind: FeedbackKind) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
   const { act } = useAct();
@@ -461,6 +474,16 @@ export function FeedbackDialog({
       }
     >
       <div className="feedback-dialog ph-no-capture flex min-h-0 flex-col gap-block-gap">
+        {shown.about === undefined ? (
+          <ChoiceBar<FeedbackKind>
+            label="Kind of note"
+            items={KIND_CHOICES}
+            value={shown.kind}
+            look={CHOICE_BAR_LOOK.SEGMENTED}
+            disabled={busy}
+            onChange={onKind}
+          />
+        ) : null}
         <FormField
           label={FEEDBACK_COPY[shown.kind].field}
           description={

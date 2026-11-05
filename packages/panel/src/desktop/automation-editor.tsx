@@ -1085,7 +1085,7 @@ function AutomationActions({
   lead,
   heading,
 }: {
-  /** The automation, whose link, Run now, and Delete the menu offers; none on a new automation's page, a phone's alone. */
+  /** The automation, whose link and Delete the menu offers, and Run now on a phone; none on a new automation's page, a phone's alone. */
   automation: AutomationSummary | undefined;
   onDelete: () => void;
   /** Whether a Run now is out. */
@@ -1103,7 +1103,8 @@ function AutomationActions({
       ? []
       : automationActionGroups({
           copyLink: linkItem({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id }),
-          runNow: runNowAction(running, onRunNow),
+          // Note that the desktop's toolbar stands Run now beside the ⋯, so only a phone's ⋯, the one given a lead, offers it.
+          runNow: lead === undefined ? undefined : runNowAction(running, onRunNow),
           onDelete,
         });
   return (

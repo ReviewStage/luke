@@ -24,9 +24,6 @@ import { ActionMenu, type MenuEntry } from "../desktop/action-menu.js";
 /** The words a + that takes any file says. */
 const ATTACH_FILES = "Attach files";
 
-/** What the + menu's row that opens the file picker is named. */
-const ATTACHMENT = "Attachment";
-
 /** What a box holds to open the button's picker from elsewhere. */
 export interface AttachPicker {
   open: () => void;
@@ -34,7 +31,7 @@ export interface AttachPicker {
 
 /** The + menu's row that opens the file picker, as the + menu and a narrow box's overflow both offer it. */
 export function attachmentRow(open: () => void, disabled: boolean): MenuEntry {
-  return { label: ATTACHMENT, icon: <PaperclipIcon />, disabled, onSelect: open };
+  return { label: ATTACH_FILES, icon: <PaperclipIcon />, disabled, onSelect: open };
 }
 
 export function AttachFilesButton({

@@ -54,7 +54,6 @@ import {
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
-  SettingsRowActSlot,
   SettingsRowMark,
   type SettingsRowSkeletonShape,
   SettingsRowStateLine,
@@ -446,22 +445,19 @@ function useMembersRead(workspace: Workspace) {
  * the other; Make owner and Remove from workspace ask first, and a removal
  * confirmed takes the row away at once, as the host draws it on the press.
  * A role change refused is said under the row, and a removal refused, its
- * row back, in a toast. A row with no ⋯ in a list where others have one
- * keeps the ⋯'s room, so every role ends in the same place. The row is
- * `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
+ * row back, in a toast. Every row holds Copy link, so every row has its ⋯
+ * and every role ends in the same place. The row is `@repo/ui`'s
+ * `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
   member,
   readerId,
-  slotted,
 }: {
   workspace: Workspace;
   member: WorkspaceMember;
   /** The reader's account id, whose own row wears You. */
   readerId: string | undefined;
-  /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
-  slotted: boolean;
 }): React.JSX.Element {
   const { act, press } = useAct();
   const workspaceId = workspace.id;
@@ -541,7 +537,6 @@ function MemberRow({
         },
       ]
     : [];
-  const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
@@ -566,12 +561,7 @@ function MemberRow({
             </OneLine>
           ),
           error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_MEMBER)),
-          control: (
-            <>
-              <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>
-              {slotted && !acting ? <SettingsRowActSlot /> : null}
-            </>
-          ),
+          control: <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>,
         }}
       />
       <ConfirmDialog
@@ -870,7 +860,6 @@ function TeamMembers({
   members: ListRead<WorkspaceMember>;
   onRetry: () => void;
 }): React.JSX.Element {
-  const manages = managesWorkspace(workspace);
   if (members === undefined) {
     return (
       <SettingsRowsSkeleton
@@ -893,13 +882,7 @@ function TeamMembers({
   return (
     <>
       {members.items.map((member) => (
-        <MemberRow
-          key={member.userId}
-          workspace={workspace}
-          member={member}
-          readerId={readerId}
-          slotted={manages}
-        />
+        <MemberRow key={member.userId} workspace={workspace} member={member} readerId={readerId} />
       ))}
     </>
   );
@@ -1257,6 +1240,8 @@ function ManagedSentry({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Sentry"
+        // Note that a lone installation's Disconnect draws as a button of its own, and several share the ⋯.
+        alone
         actions={actions}
         row={{
           leading: SENTRY_MARK,
@@ -1397,6 +1382,7 @@ function ManagedSlackBot({
     <Stack gap={GAP.NONE}>
       <MenuRow
         thing="Slack bot"
+        alone
         actions={actions}
         row={{
           leading: SLACK_MARK,

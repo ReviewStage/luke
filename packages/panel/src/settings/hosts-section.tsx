@@ -219,6 +219,7 @@ function HostRow({
   return (
     <MenuRow
       thing={label}
+      alone
       actions={
         kept
           ? []

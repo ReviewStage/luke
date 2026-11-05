@@ -44,7 +44,6 @@ import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   LifeBuoyIcon,
-  LightbulbIcon,
   LogOutIcon,
   MailIcon,
   MessageSquareIcon,
@@ -266,10 +265,11 @@ function AccountHeading({
 }
 
 /**
- * The account's menu, in Cursor's order: the reader's own page where the
- * window offers one, then Settings; what the Help menu
- * offers, the changelog before it, and the ways to write to the people who
- * make the app after it; then Sign out, while anyone is signed in to leave.
+ * The account's menu: the reader's own page where the window offers one; the
+ * changelog, the Keyboard shortcuts page, and the ways to write to the people
+ * who make the app; then Sign out, while anyone is signed in to leave. Note
+ * that Settings and Send feedback are left to the gear and the button beside
+ * the account, which already stand one press away.
  */
 function accountMenuGroups(
   signedIn: boolean,
@@ -278,7 +278,6 @@ function accountMenuGroups(
   acts: {
     /** Opens the reader's own page; none outside the window, or before the account's id is known. */
     onProfile: (() => void) | undefined;
-    onSettings: () => void;
     onOpenChangelog: () => void;
     onOpenIssues: () => void;
     onEmail: () => void;
@@ -290,27 +289,9 @@ function accountMenuGroups(
       ? []
       : [{ label: "Your profile", icon: <UserRoundIcon />, onSelect: acts.onProfile }];
   const groups: MenuEntry[][] = [
-    [
-      ...profile,
-      {
-        label: "Settings",
-        icon: <GearIcon />,
-        command: APP_COMMAND.SETTINGS,
-        onSelect: acts.onSettings,
-      },
-    ],
+    ...(profile.length === 0 ? [] : [profile]),
     [
       { label: "Changelog", icon: <NewspaperIcon />, onSelect: acts.onOpenChangelog },
-      {
-        label: "Send feedback",
-        icon: <MessageSquareIcon />,
-        onSelect: () => runAppCommand(APP_COMMAND.SEND_FEEDBACK),
-      },
-      {
-        label: "Suggest a feature",
-        icon: <LightbulbIcon />,
-        onSelect: () => runAppCommand(APP_COMMAND.SUGGEST_FEATURE),
-      },
       ...(desktopApp
         ? [
             {
@@ -348,12 +329,10 @@ function accountMenuGroups(
 function AccountMenu({
   account,
   shown,
-  onSettings,
   onSignOut,
 }: {
   account: AccountSnapshot;
   shown: boolean;
-  onSettings: () => void;
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
   const { press } = useAct();
@@ -365,7 +344,6 @@ function AccountMenu({
   const groups = accountMenuGroups(signedIn, desktopApp, {
     onProfile:
       openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
-    onSettings,
     onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
     onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
     onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
@@ -397,7 +375,7 @@ function AccountMenu({
 /**
  * The foot of the column: the account, which opens its menu; a release on
  * its way in, and the Mac offline, while they hold; Send feedback, which
- * opens the dialog the menu's own item does; and the gear, the one press to
+ * opens the feedback dialog; and the gear, the one press to
  * Settings.
  */
 export function SidebarFoot({
@@ -421,12 +399,7 @@ export function SidebarFoot({
     <SidebarFootBox>
       <SidebarBuild />
       <SidebarAccountRow>
-        <AccountMenu
-          account={account}
-          shown={shown}
-          onSettings={onSettings}
-          onSignOut={onSignOut}
-        />
+        <AccountMenu account={account} shown={shown} onSignOut={onSignOut} />
         <OfflineMark />
         <SidebarUpdate updates={updates} />
         <Tooltip label="Send feedback">

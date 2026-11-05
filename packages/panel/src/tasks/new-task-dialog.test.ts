@@ -397,7 +397,7 @@ test("a server switched off from the + menu's Integrations is handed to the agen
     const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
     assert.deepEqual(
       rows.map((row) => row.textContent),
-      ["Attachment", "Integrations", "Task relation"],
+      ["Attach files", "Integrations", "Task relation"],
     );
     act(() => rows[1]?.click());
     await settle();
