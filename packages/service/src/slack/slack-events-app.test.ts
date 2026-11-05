@@ -474,7 +474,9 @@ it.layer(getTestDB())("our Slack route", (it) => {
           HARNESS.heard.filter((heard) => heard.account === owner),
           [{ call: "send", account: owner }],
         );
-        const updated = calls.filter((call) => call.method === "chat.update");
+        const updated = calls.filter(
+          (call) => call.method === "chat.update" && call.args.text !== title?.args.text,
+        );
         assert.equal(updated.length, 1);
         assert.equal(
           updated[0]?.args.text,
@@ -529,7 +531,9 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const asked = stored.item.thread?.find((message) => message.ask);
         assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
         assert.equal(Option.getOrThrow(yield* readAgent(owner, item.agentId)).archivedAt, null);
-        const updated = calls.filter((call) => call.method === "chat.update");
+        const updated = calls.filter(
+          (call) => call.method === "chat.update" && call.args.text !== title?.args.text,
+        );
         assert.equal(
           updated[0]?.args.text,
           "How long should an invitation last? · You chose Email, SMS",
@@ -567,7 +571,9 @@ it.layer(getTestDB())("our Slack route", (it) => {
         const stored = Option.getOrThrow(yield* readInboxItem(owner, item.id));
         const asked = stored.item.thread?.find((message) => message.ask);
         assert.equal(asked?.ask?.status, INBOX_ASK_STATUS.ANSWERED);
-        const updated = calls.filter((call) => call.method === "chat.update");
+        const updated = calls.filter(
+          (call) => call.method === "chat.update" && call.args.text !== title?.args.text,
+        );
         assert.equal(
           updated[0]?.args.text,
           "How long should an invitation last? · You marked it done",

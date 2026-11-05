@@ -39,10 +39,10 @@ function withPlainMentions(markdown: string): string {
   return out + markdown.slice(at);
 }
 
-/** An agent's Markdown as one `markdown` block, which Slack draws as standard Markdown, clipped to Slack's bound. */
-export function slackMarkdownBlock(markdown: string): SlackBlock {
+/** An agent's Markdown as one `markdown` block, which Slack draws as standard Markdown, clipped to the bound given, else Slack's own. */
+export function slackMarkdownBlock(markdown: string, bound = SLACK_MARKDOWN_CHARS): SlackBlock {
   return {
     type: "markdown",
-    text: slackClipped(withPlainMentions(markdown), SLACK_MARKDOWN_CHARS),
+    text: slackClipped(withPlainMentions(markdown), Math.min(bound, SLACK_MARKDOWN_CHARS)),
   };
 }
