@@ -502,6 +502,8 @@ export function NewTaskComposer({
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
   // An agent needs a repository to work in, and something to work on: words or files.
   const blocked = repository === null;
+  // Note that no pick is asked for while the tasks the default comes from are read, because the default may yet name one.
+  const awaitsDefault = blocked && chosen === undefined && repositories.reading === true;
   // Note that an agent nothing of the account's pays for is held here, with the press that connects one, rather than refused once pressed; a bare task needs none.
   const unpaid =
     newTask.models === undefined || choice === undefined
@@ -749,7 +751,7 @@ export function NewTaskComposer({
             : undefined
         }
       />
-      {blocked ? (
+      {blocked && !awaitsDefault ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
           {tree ? COMPOSER_WORDS.RELATED_HAS_NO_REPOSITORY : COMPOSER_WORDS.NEEDS_REPOSITORY}
         </Text>

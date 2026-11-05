@@ -209,12 +209,21 @@ test("Home greets the reader by first name over New task's composer, the items w
   );
 });
 
-test("while the task list is read, Home greets the reader over the composer and says it is reading in place of its sections", async () => {
-  const { page } = mount({ listRead: false });
+test("while the task list is read, Home greets the reader over the composer, asks for no repository, and says it is reading in place of its sections", async () => {
+  const base = tasksControl();
+  const newTask = {
+    ...base.newTask,
+    repositoriesIn: (scope: string | undefined) => ({
+      ...base.newTask.repositoriesIn(scope),
+      reading: true,
+    }),
+  };
+  const { page } = mount({ listRead: false, newTask });
   await settle();
 
   assert.equal(page.querySelector("h1")?.textContent, "Welcome back, Dean");
   assert.ok(page.querySelector(".home-composer .new-task-composer"), "New task's composer stands");
+  assert.doesNotMatch(page.textContent ?? "", /Choose a repository/u);
   assert.equal(page.querySelector('[role="status"]')?.textContent, "Reading your tasks…");
   assert.deepEqual(sections(page), {});
 });
