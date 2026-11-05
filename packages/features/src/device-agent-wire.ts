@@ -39,6 +39,18 @@ export const DEVICE_AGENT_BOUNDS = {
    * (`SANDBOX_DOOR_MAX_BYTES`), past every bound a tool holds a file to.
    */
   MAX_ANSWER_BYTES: 8 * 1024 * 1024,
+  /**
+   * The most bytes of files, raw, one files line carries: about 4 MB in its
+   * base64, so its claim answers under the 4.5 MB a Vercel function may
+   * answer. A file is never split, so one larger goes in a line alone.
+   */
+  MAX_FILES_LINE_BYTES: 3_000_000,
+  /**
+   * The most bytes of payload one read of a Mac's waiting lines lists, well
+   * under the 4.5 MB a Vercel function may answer. A read always lists the
+   * first line waiting, however large, and the Mac reads again for the rest.
+   */
+  MAX_LINES_READ_BYTES: 2_000_000,
 } as const;
 
 /** What one line to a local runner is. */
@@ -564,7 +576,7 @@ export const deviceAgentLiveAgentsAnswerSchema = EffectSchema.Struct({
   agentIds: EffectSchema.Array(wireUuidSchema),
 });
 
-/** The lines waiting for this Mac, in their order, none where none came while the read was held; nothing claimed. */
+/** The lines waiting for this Mac, in their order and as far as `MAX_LINES_READ_BYTES` goes, none where none came while the read was held; nothing claimed. */
 export const deviceAgentLinesAnswerSchema = EffectSchema.Struct({
   lines: EffectSchema.Array(deviceAgentLineSchema),
 });
