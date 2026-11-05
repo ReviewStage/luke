@@ -30,6 +30,7 @@
     "./sentry-early-reports": "./src/sentry-early-reports.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
+    "./sentry-tunnel": "./src/sentry-tunnel.js",
     "./shown-failure": "./src/shown-failure.js",
     "./live-wire": "./src/live-wire.js",
     "./transcript-window": "./src/transcript-window.js",

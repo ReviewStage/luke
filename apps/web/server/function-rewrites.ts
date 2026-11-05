@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HOST_WIRE } from "@repo/features/host-wire";
 import { POSTHOG_PROXY } from "@repo/features/posthog-proxy";
+import { SENTRY_TUNNEL } from "@repo/features/sentry-tunnel";
 import { AUTH_SERVER_METADATA_PATHS } from "@repo/service/auth/auth-app";
 import { MEMBER_MCP_METADATA_PATHS, MEMBER_MCP_METADATA_ROUTE } from "@repo/service/member-mcp/app";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@repo/wire";
@@ -132,6 +133,10 @@ const PUBLIC_REWRITES: readonly PublicRewrite[] = [
   {
     path: HOST_WIRE.INSTALL_SCRIPT_PATH,
     route: HOST_WIRE.INSTALL_SCRIPT_ROUTE.slice(API_ROUTE_PREFIX.length),
+  },
+  {
+    path: SENTRY_TUNNEL.PATH,
+    route: SENTRY_TUNNEL.ROUTE.slice(API_ROUTE_PREFIX.length),
   },
   ...MEMBER_MCP_METADATA_PATHS.map((path) => ({
     path,
