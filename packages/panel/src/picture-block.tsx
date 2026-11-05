@@ -17,8 +17,8 @@ import { PICTURE_STATE, type PictureState } from "@repo/ui/picture-cache";
  * window's spinner; a picture this reader cannot reach, or whose bytes are
  * gone, is its alt text and says it is not available, as a tile of a set
  * says it (`@repo/ui`'s `PictureStandIn`); one whose read did not land this
- * time stands in the box it was read in, the fault's glyph and Retry where
- * the spinner stood. A gone picture
+ * time stands in the box it was read in, the gone picture's glyph, a short
+ * line, and Retry where the spinner stood. A gone picture
  * is plain words, never a `role="img"` named by its alt, which would hide the
  * "not available" beside it and leave an empty alt with no name at all. The block is left out
  * of the screen recording (`ph-no-capture`), because a picture can hold

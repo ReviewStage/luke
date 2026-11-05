@@ -1460,7 +1460,7 @@ test("an image side whose read did not land offers Retry, which reads it again a
   await drawTab();
   const slot = await standNearView("logo.png");
   const retry = [...slot.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => each.getAttribute("aria-label") === "Retry",
+    (each) => each.textContent === "Retry",
   );
 
   refusing.clear();
