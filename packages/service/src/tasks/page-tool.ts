@@ -112,7 +112,9 @@ const PAGE_LAYOUT_WORDS =
   "side padding of your own; a box that needs a ground of its own gets one inside. Its body " +
   "stands at reading width, centered, by itself; give an element that needs the room, such as " +
   `a board of many columns, a wide chart, or a long timeline, the class \`${PAGE_WIDE_CLASS}\` ` +
-  `to span the frame, or the body itself for a page wide throughout. Draw with ` +
+  `to span the frame, or the body itself for a page wide throughout; a wide flex row or grid ` +
+  "centers what it holds unless it sets its own `justify-content`, so a gallery of mockups " +
+  "stands under the words, and scrolls from its start where it overflows. Draw with " +
   "the app's theme, which every page is handed as CSS variables in the app's light or dark, " +
   `its \`color-scheme\` set to match: ${THEME_VARIABLES_SAID}. ` +
   "Let the content set the height: no `vh` units or `height: 100%` on `html` or `body`, and a " +
