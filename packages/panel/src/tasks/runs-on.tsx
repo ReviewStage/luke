@@ -250,13 +250,14 @@ interface StartPlaceSeed {
  * can tell it, where the source runs for a fork or a continue, else where
  * the member's newest agent on the task runs, else the member's last pick
  * kept in this window, which a pick here keeps too, else Cloud. Answers the
- * device it shows, none for the cloud or a device not listed, and the
- * setter, which hands `onPick` the place picked. Note that the last pick is
+ * device it shows, none for the cloud, and the setter, which hands `onPick` the place picked. Note that the last pick is
  * this window's, while the service keeps the account's (`runs-on-pick.ts`),
  * so a pick made in another window, or a task's own place where no pick was
  * ever made, can run an untouched draft elsewhere than its chip says; a
  * Start sends a place only once one is picked, so the service still decides
- * the rest.
+ * the rest. A default device the member's list does not name, a teammate's
+ * a fork's source runs on, or one before the list is read, is named as the
+ * agent it came from names it, rather than said to be Cloud.
  */
 export function useStartRunsOn(
   devices: readonly MacOffer[],
@@ -278,8 +279,13 @@ export function useStartRunsOn(
       : picked.machine === AGENT_MACHINE.DEVICE
         ? picked.deviceId
         : CLOUD_ROW;
+  // Note that the agent names its device by its name alone, so it stands as an offer of no model, its standing unread.
+  const unlisted =
+    picked === undefined && seeded?.mac?.deviceId !== undefined && seeded.mac.deviceId === row
+      ? { deviceId: row, name: seeded.mac.name, providers: [] }
+      : undefined;
   return [
-    devices.find((each) => each.deviceId === row),
+    devices.find((each) => each.deviceId === row) ?? unlisted,
     (deviceId: string | undefined) => {
       const chosen = deviceId ?? CLOUD_ROW;
       keep(chosen);
