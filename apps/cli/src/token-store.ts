@@ -15,8 +15,6 @@
  * command line.
  */
 
-import os from "node:os";
-import path from "node:path";
 import {
   type CliAccount,
   type CliAccountStore,
@@ -24,19 +22,20 @@ import {
   cliAccountSchema,
 } from "@repo/credentials/cli";
 import { PRODUCT_NAME } from "@repo/features/product-name";
-import { type Context, Effect, FileSystem, Schema, Stream } from "effect";
+import { type Context, Effect, type FileSystem, Schema, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import {
+  type ConfigEnvironment,
+  configFile,
+  readConfigFile,
+  writeConfigFile,
+} from "./config-files.js";
 
 /** The platform whose machines keep the sign-in in the Keychain. */
 const MAC_PLATFORM = "darwin";
 
-/** The file store's place under the config folder, and the modes its folder and file are held to. */
-const CREDENTIALS_FILE = {
-  FOLDER: "vespin",
-  NAME: "credentials.json",
-  FOLDER_MODE: 0o700,
-  FILE_MODE: 0o600,
-} as const;
+/** The file the file store keeps its accounts in, in the config folder. */
+const CREDENTIALS_FILE = "credentials.json";
 
 /** The Keychain item's service, which Keychain Access lists it under; its account is the service origin. */
 const KEYCHAIN = {
@@ -55,56 +54,9 @@ type CredentialsFile = typeof credentialsFileSchema.Type;
 
 const credentialsJson = Schema.fromJsonString(credentialsFileSchema);
 
+const NO_ACCOUNTS: CredentialsFile = { accounts: {} };
+
 const accountJson = Schema.fromJsonString(cliAccountSchema);
-
-/** The file the store keeps its accounts in, under the XDG config folder the environment names. */
-export function credentialsPath(environment: {
-  readonly XDG_CONFIG_HOME?: string | undefined;
-  readonly HOME?: string | undefined;
-}): string {
-  const config =
-    environment.XDG_CONFIG_HOME || path.join(environment.HOME || os.homedir(), ".config");
-  return path.join(config, CREDENTIALS_FILE.FOLDER, CREDENTIALS_FILE.NAME);
-}
-
-/**
- * The accounts kept in a credentials file, or none where there is no file
- * yet. A file that does not read as one is refused rather than overwritten,
- * since it may be a newer version's.
- */
-const readCredentials = Effect.fnUntraced(function* (file: string) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const exists = yield* Effect.orElseSucceed(fileSystem.exists(file), () => false);
-  if (!exists) return { accounts: {} } satisfies CredentialsFile;
-  const text = yield* Effect.mapError(
-    fileSystem.readFileString(file),
-    () => new CliStoreFailed({ message: `Could not read ${file}.` }),
-  );
-  return yield* Effect.mapError(
-    Schema.decodeUnknownEffect(credentialsJson)(text),
-    () => new CliStoreFailed({ message: `${file} is not a sign-in this version can read.` }),
-  );
-});
-
-/** The accounts written whole: a file of the owner's alone beside the old one, renamed over it. */
-const writeCredentials = Effect.fnUntraced(function* (file: string, contents: CredentialsFile) {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const failed = () => new CliStoreFailed({ message: `Could not write ${file}.` });
-  const folder = path.dirname(file);
-  yield* Effect.mapError(
-    fileSystem.makeDirectory(folder, { recursive: true, mode: CREDENTIALS_FILE.FOLDER_MODE }),
-    failed,
-  );
-  const staged = `${file}.${process.pid}`;
-  const text = yield* Effect.mapError(Schema.encodeEffect(credentialsJson)(contents), failed);
-  yield* Effect.mapError(
-    fileSystem.writeFileString(staged, text, { mode: CREDENTIALS_FILE.FILE_MODE }),
-    failed,
-  );
-  // Note that the mode a file is created with is narrowed by the umask but never widened past it, so it is set again outright.
-  yield* Effect.mapError(fileSystem.chmod(staged, CREDENTIALS_FILE.FILE_MODE), failed);
-  yield* Effect.mapError(fileSystem.rename(staged, file), failed);
-});
 
 /** The store's three effects, before the services they run on are handed over. */
 interface StoreOf<Requirements> {
@@ -115,17 +67,20 @@ interface StoreOf<Requirements> {
 
 /** The file store for one service origin, in the credentials file named. */
 function fileStore(file: string, origin: string): StoreOf<FileSystem.FileSystem> {
+  const read = readConfigFile(file, credentialsJson, NO_ACCOUNTS);
   return {
-    read: Effect.map(readCredentials(file), (contents) => contents.accounts[origin]),
+    read: Effect.map(read, (contents) => contents.accounts[origin]),
     write: (account) =>
-      Effect.flatMap(readCredentials(file), (contents) =>
-        writeCredentials(file, { accounts: { ...contents.accounts, [origin]: account } }),
+      Effect.flatMap(read, (contents) =>
+        writeConfigFile(file, credentialsJson, {
+          accounts: { ...contents.accounts, [origin]: account },
+        }),
       ),
     clear: Effect.gen(function* () {
-      const contents = yield* readCredentials(file);
+      const contents = yield* read;
       if (contents.accounts[origin] === undefined) return;
       const { [origin]: _cleared, ...accounts } = contents.accounts;
-      yield* writeCredentials(file, { accounts });
+      yield* writeConfigFile(file, credentialsJson, { accounts });
     }),
   };
 }
@@ -218,7 +173,7 @@ export const accountStore = Effect.fnUntraced(function* (
   origin: string,
   machine: {
     readonly platform: NodeJS.Platform;
-    readonly environment: Parameters<typeof credentialsPath>[0];
+    readonly environment: ConfigEnvironment;
   },
 ) {
   const services = yield* Effect.context<
@@ -226,5 +181,5 @@ export const accountStore = Effect.fnUntraced(function* (
   >();
   return machine.platform === MAC_PLATFORM
     ? provided(keychainStore(origin), services)
-    : provided(fileStore(credentialsPath(machine.environment), origin), services);
+    : provided(fileStore(configFile(machine.environment, CREDENTIALS_FILE), origin), services);
 });

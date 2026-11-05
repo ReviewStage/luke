@@ -37,6 +37,7 @@
     "./task-list-live": "./src/task-list-live.js",
     "./checkout-identity": "./src/checkout-identity.js",
     "./cli-exit": "./src/cli-exit.js",
+    "./cli-workspace": "./src/cli-workspace.js",
     "./image-signature": "./src/image-signature.js",
     "./installed-skill-client": "./src/installed-skill-client.js",
     "./installed-skill-live": "./src/installed-skill-live.js",

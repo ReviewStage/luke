@@ -37,7 +37,7 @@ export const URL_FLAG = GlobalFlag.Setting("url")({
 });
 
 /** `-w/--workspace`: the workspace a command acts in, over `VESPIN_WORKSPACE`. */
-const WORKSPACE_FLAG = GlobalFlag.Setting("workspace")({
+export const WORKSPACE_FLAG = GlobalFlag.Setting("workspace")({
   flag: Flag.String("workspace").pipe(
     Flag.withAlias("w"),
     Flag.optional,
