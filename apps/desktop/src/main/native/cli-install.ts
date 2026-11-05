@@ -28,7 +28,7 @@ import { printed } from "./this-mac-host";
 const LINK_FOLDER = [".local", "bin"] as const;
 const LINK_NAME = "vespin";
 
-/** The shell a Mac's account logs in with where `SHELL` names none. */
+/** The shell a Mac's account logs in with where neither `SHELL` nor its user record names one. */
 const DEFAULT_SHELL = "/bin/zsh";
 
 /** How long the script, which downloads a release, may take; its own download, the command, and the shell, less. */
@@ -65,6 +65,22 @@ function holds(printedPath: string, folder: string): boolean {
   return pathLine.split(":").some((entry) => path.resolve(entry) === folder);
 }
 
+/**
+ * The account's login shell: `SHELL`, which an app launched from the Finder
+ * may go without, then the shell its user record names, then zsh. Note that
+ * the user record is read in a `try`, because `os.userInfo` throws for an
+ * account with no record.
+ */
+function loginShell(): string {
+  const named = process.env.SHELL;
+  if (named !== undefined && named !== "") return named;
+  try {
+    return os.userInfo().shell || DEFAULT_SHELL;
+  } catch {
+    return DEFAULT_SHELL;
+  }
+}
+
 const layers = Layer.mergeAll(
   Layer.provideMerge(
     NodeChildProcessSpawner.layer,
@@ -77,7 +93,7 @@ const layers = Layer.mergeAll(
 export function installCli(serviceBaseUrl: string): Effect.Effect<CliInstallAnswer> {
   const folder = path.join(os.homedir(), ...LINK_FOLDER);
   const link = path.join(folder, LINK_NAME);
-  const shell = process.env.SHELL ?? DEFAULT_SHELL;
+  const shell = loginShell();
   const scriptUrl = new URL(HOST_WIRE.INSTALL_SCRIPT_PATH, serviceBaseUrl).href;
   return Effect.gen(function* () {
     // Note that a download that stalls is bounded too, so Install never waits on it for good.
