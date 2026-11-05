@@ -119,7 +119,9 @@ reaches the service again.
   [#6834](https://github.com/ReviewStage/vespin/pull/6834))
 - Expired MCP sign-ins show as toasts, one per server ([#6906](https://github.com/ReviewStage/vespin/pull/6906))
 - A video steps a frame at a time and changes its speed ([#6827](https://github.com/ReviewStage/vespin/pull/6827))
-- Setup asks for an agent and GitHub, and lets you sign out ([#6947](https://github.com/ReviewStage/vespin/pull/6947))
+- Setup asks for an agent, and lets you sign out
+  ([#6947](https://github.com/ReviewStage/vespin/pull/6947),
+  [#6956](https://github.com/ReviewStage/vespin/pull/6956))
 - Agents on a Mac run in git worktrees of a shared clone ([#6786](https://github.com/ReviewStage/vespin/pull/6786))
 - Slack threads link a Slack-started agent as soon as it starts, and a
   thread's title DM shows its open ask
