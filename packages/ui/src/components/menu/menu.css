@@ -30,6 +30,16 @@
     outline: none; /* no ring: the row's fill marks it */
   }
 
+  /* A row that cannot be chosen dims its glyph, words, and end, but not
+     its detail, which says why: the reason is read, so it keeps a muted
+     line's contrast (docs/DESIGN.md, "Readability and access"). */
+  .ui-menu-item:is(:disabled, [aria-disabled="true"]) > :not(.ui-menu-item-copy),
+  .ui-menu-item:is(:disabled, [aria-disabled="true"])
+    .ui-menu-item-copy
+    > :not(.ui-menu-item-detail) {
+    opacity: var(--ui-disabled-opacity);
+  }
+
   /* A detail's words: a caption, muted. They are drawn here rather than in
      utilities, so a row's own words cannot outrank them. */
   .ui-menu-item-detail {

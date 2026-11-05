@@ -75,7 +75,7 @@ const TASK_ACTIONS: readonly (readonly MenuEntry[])[] = [
       hint: <Shortcut chord={APP_SHORTCUTS[APP_COMMAND.COPY_LINK].chord} />,
       onSelect: ignore,
     },
-    { label: "Move to workspace", onSelect: ignore, disabled: true },
+    { label: "Move to workspace", detail: "No other workspace", onSelect: ignore, disabled: true },
     { label: "Archive", icon: <ArchiveIcon />, onSelect: ignore },
   ],
   [{ label: "Delete", icon: <TrashIcon />, danger: true, onSelect: ignore }],
