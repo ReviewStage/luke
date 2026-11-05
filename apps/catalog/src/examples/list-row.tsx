@@ -1,6 +1,13 @@
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
+  AttentionMark,
+  CHIP_LOOK,
+  CHIP_SIZE,
+  Chip,
+  ChipName,
+  GAP,
   IconButton,
+  Inline,
   LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CHEVRON,
@@ -31,8 +38,9 @@ import { CatalogSection } from "../section";
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
  * one open now, unread rows, what a row belongs to on a line of its own,
  * rows that open nothing, rows in a card,
- * a row a finger's height on a coarse pointer, compact and dense, rows whose
- * acts show on hover, rows that go deeper, rows nested under a row that
+ * a row a finger's height on a coarse pointer, compact and dense, compact
+ * and dense rows with their metadata, a mark, and a chip on the title's
+ * line, rows whose acts show on hover, rows that go deeper, rows nested under a row that
  * folds them, rows whose menu their ⋯, a right-click, and the menu key
  * open, a rail's rows counting what each holds on their last line, and
  * long words in a narrow column.
@@ -408,6 +416,49 @@ function ListRows(): React.JSX.Element {
             />
           </List>
         </div>
+      </CatalogSection>
+      <CatalogSection
+        id="list-row-dense-meta-title"
+        title="Dense and compact rows with their metadata on the title's line, a mark, and a chip beside them"
+      >
+        {[LIST_DENSITY.DENSE, LIST_DENSITY.COMPACT].map((density) => (
+          <div key={density} className="catalog-column">
+            <List label="Agents" density={density}>
+              <ListRow
+                leading={<GLYPH.AGENT />}
+                title="Audit the skills we ship"
+                metaAt={LIST_ROW_META.TITLE}
+                meta="Cloud"
+                actions={
+                  <Chip look={CHIP_LOOK.PILL} size={CHIP_SIZE.COMPACT} onClick={() => undefined}>
+                    <GLYPH.PULL_REQUEST />
+                    <ChipName>#6979</ChipName>
+                  </Chip>
+                }
+                onPress={() => undefined}
+              />
+              <ListRow
+                leading={<GLYPH.AGENT />}
+                title="Fix the agent list's glyphs"
+                description="Approve the plan"
+                metaAt={LIST_ROW_META.TITLE}
+                meta={
+                  <Inline gap={GAP.ITEM} wrap={false}>
+                    <AttentionMark />
+                    Cloud
+                  </Inline>
+                }
+                actions={
+                  <Chip look={CHIP_LOOK.PILL} size={CHIP_SIZE.COMPACT} onClick={() => undefined}>
+                    <GLYPH.PULL_REQUEST />
+                    <ChipName>#6980</ChipName>
+                  </Chip>
+                }
+                onPress={() => undefined}
+              />
+            </List>
+          </div>
+        ))}
       </CatalogSection>
       <CatalogSection id="list-row-menu" title="Rows with a menu: ⋯, right-click, and the menu key">
         <div className="catalog-column">
