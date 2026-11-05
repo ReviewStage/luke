@@ -12,13 +12,10 @@ import {
 import type { InstalledSkillsLiveAnswer } from "./installed-skill-live.js";
 import type {
   InstalledSkillContent,
-  InstalledSkillFilesRefusal,
   InstalledSkillPreview,
-  InstalledSkillUpdateCheck,
   installedSkillAnswerSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
-  installedSkillPreviewFileRequestSchema,
   installedSkillRemovedAnswerSchema,
   installedSkillUpdatedAnswerSchema,
 } from "./installed-skill-route-wire.js";
@@ -38,21 +35,20 @@ import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
  * renewed and retried once. Each call answers what the service said or why
  * there is no answer, never a failure, because every caller does the same
  * with one: says why, and offers to try again. A skill refused is answered
- * with its name and why its files were refused where the service said.
+ * by the store's reason, with its name where the service said.
  * A preview, an install, and an update read GitHub on the service before
  * they answer, so they wait as long as a Start does. Each write answers the
  * service's answer whole, the transaction it committed in among it, which
  * the host waits for on the skills it holds live (`installedSkillsLive`).
  */
 
-/** A call's answer, or why there is none: for a skill refused, which, and why its files were. */
+/** A call's answer, or why there is none, with the skill refused where one was. */
 export type InstalledSkillCallResult<Answer> =
   | { readonly ok: true; readonly answer: Answer }
   | {
       readonly ok: false;
       readonly failure: InstalledSkillCallFailure;
       readonly skillName?: string;
-      readonly skillRefusal?: InstalledSkillFilesRefusal;
     };
 
 export interface HostedInstalledSkillClientOptions {
@@ -63,11 +59,8 @@ export interface HostedInstalledSkillClientOptions {
   requestTimeoutMs?: number;
 }
 
-/** What an install sends: the paste, whose the skills are, and for a source the skills chosen, for text the name and description it lacks. */
+/** What an install sends: the paste, whose the skills are, and for a source the skills chosen and the commit previewed, for text its name and description. */
 export type InstalledSkillInstallParams = typeof installedSkillInstallRequestSchema.Type;
-
-/** A previewed skill's `SKILL.md` asked for: the workspace, and the repository, commit, and folder the preview named. */
-export type InstalledSkillPreviewFileParams = typeof installedSkillPreviewFileRequestSchema.Type;
 
 /** A live read the service did not answer, in the window's own words. */
 export interface InstalledSkillsLiveFailed {
@@ -80,18 +73,15 @@ const REFUSALS: ReadonlyMap<HostedApiError, InstalledSkillCallFailure> = new Map
   [HOSTED_API_ERROR.NOT_PERMITTED, INSTALLED_SKILL_CALL_FAILURE.NOT_PERMITTED],
   [HOSTED_API_ERROR.INVALID_REQUEST, INSTALLED_SKILL_CALL_FAILURE.INVALID],
   [HOSTED_API_ERROR.SKILL_NAME_TAKEN, INSTALLED_SKILL_CALL_FAILURE.NAME_TAKEN],
-  [HOSTED_API_ERROR.SKILL_FILES_REFUSED, INSTALLED_SKILL_CALL_FAILURE.FILES_REFUSED],
-  [
-    HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
-    INSTALLED_SKILL_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
-  ],
-  [HOSTED_API_ERROR.BRANCH_NOT_FOUND, INSTALLED_SKILL_CALL_FAILURE.REF_NOT_FOUND],
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, INSTALLED_SKILL_CALL_FAILURE.UNREACHABLE],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED],
 ]);
 
-/** The window's word for a refusal named here; unanswered for everything else. */
+/** The window's word for a refusal named here, a skill refused by the store's reason for it; nothing for everything else. */
 function failureOf(failed: HostedFailure): InstalledSkillCallFailure | undefined {
-  return failed._tag === "HostedRefused" ? REFUSALS.get(failed.refusal) : undefined;
+  if (failed._tag !== "HostedRefused") return undefined;
+  if (failed.refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED) return failed.data?.skillRefusal;
+  return REFUSALS.get(failed.refusal);
 }
 
 /** A procedure's answer picked, or the refusal it failed with where it is one named here, with the skill it names; unanswered for everything else. */
@@ -106,13 +96,8 @@ function resultOf<Answer, Picked>(
       if (failed._tag !== "HostedRefused" || failure === undefined) {
         return { ok: false, failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED };
       }
-      const { skillName, skillRefusal } = failed.data ?? {};
-      return {
-        ok: false,
-        failure,
-        ...(skillName === undefined ? undefined : { skillName }),
-        ...(skillRefusal === undefined ? undefined : { skillRefusal }),
-      };
+      const skillName = failed.data?.skillName;
+      return { ok: false, failure, ...(skillName === undefined ? undefined : { skillName }) };
     },
   });
 }
@@ -176,16 +161,6 @@ export class HostedInstalledSkillClient {
     );
   }
 
-  /** One previewed skill's `SKILL.md` at the commit the preview pinned, for "View" on a skill the preview carried none of. */
-  previewFile(
-    params: InstalledSkillPreviewFileParams,
-  ): Effect.Effect<InstalledSkillCallResult<string>, never, HttpClient.HttpClient> {
-    return resultOf(
-      askHosted(this.#hosted.installedSkills.previewFile, params, HOSTED_DEADLINE.START),
-      (answer) => answer.markdown,
-    );
-  }
-
   /** The skills a paste makes, installed in the scope asked, all or none. */
   install(
     params: InstalledSkillInstallParams,
@@ -214,21 +189,6 @@ export class HostedInstalledSkillClient {
         params: { id: skillId },
         body: { enabled },
       }),
-      (answer) => answer,
-    );
-  }
-
-  /** Whether a GitHub skill's folder moved at its ref, for an "Update available" badge; never for a pasted one. */
-  checkUpdate(
-    workspaceId: string,
-    skillId: string,
-  ): Effect.Effect<
-    InstalledSkillCallResult<InstalledSkillUpdateCheck>,
-    never,
-    HttpClient.HttpClient
-  > {
-    return resultOf(
-      askHosted(this.#hosted.installedSkills.checkUpdate, { id: skillId, workspaceId }),
       (answer) => answer,
     );
   }

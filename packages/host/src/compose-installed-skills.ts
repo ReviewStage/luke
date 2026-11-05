@@ -7,13 +7,10 @@ import {
   type InstalledSkillContentView,
   type InstalledSkillFailedView,
   type InstalledSkillInstallView,
-  type InstalledSkillPreviewFileView,
   type InstalledSkillPreviewView,
-  type InstalledSkillUpdateCheckView,
   installedSkillFollowParamsSchema,
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
-  installedSkillPreviewFileParamsSchema,
   installedSkillPreviewParamsSchema,
   installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
@@ -42,7 +39,7 @@ import type { HeldSlice } from "./live-collection.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-installed-skills.ts -- the skills the account installs, held for the windows that draw them and asked of the service on the window's behalf: one read, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, shared with a workspace, or removed.
+ * compose-installed-skills.ts -- the skills the account installs, held for the windows that draw them and asked of the service on the window's behalf: one read, a paste previewed and installed, one toggled, updated, shared with a workspace, or removed.
  *
  * What Settings › Skills draws, a workspace's skills beside the account's
  * own, it holds (`heldSlice`): the host follows them on the service's live
@@ -57,9 +54,8 @@ import type { RunMode } from "./run-mode.js";
  * every held read of the skill the moment they are asked; an update and an
  * install draw from their answers, since only the service reads what they
  * install. Each answers the service's answer whole, as the window's view of
- * it: the answer, or the failure with the skill it names and why its files
- * were refused. A skill read whole, a preview, and an update check are
- * fetched and held nowhere. Behind a closed account gate, or on a run that
+ * it: the answer, or why there is none, with the skill it names. A skill
+ * read whole and a preview are fetched and held nowhere. Behind a closed account gate, or on a run that
  * sends nothing, every ask answers unanswered.
  */
 
@@ -69,10 +65,8 @@ export type InstalledSkillsClient = Pick<
   | "installedSkillsLive"
   | "read"
   | "preview"
-  | "previewFile"
   | "install"
   | "setEnabled"
-  | "checkUpdate"
   | "update"
   | "share"
   | "remove"
@@ -97,18 +91,14 @@ export interface InstalledSkillsComposer extends Composer {
 
 const UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
 
-/** A client's result as the window's view: the answer shaped by `shape`, or the failure with what it names. */
+/** A client's result as the window's view: the answer shaped by `shape`, or the failure with the skill it names. */
 function viewOf<Answer, View>(
   result: InstalledSkillCallResult<Answer>,
   shape: (answer: Answer) => View,
 ): View | InstalledSkillFailedView {
   if (result.ok) return shape(result.answer);
-  const { failure, skillName, skillRefusal } = result;
-  return {
-    failure,
-    ...(skillName === undefined ? undefined : { skillName }),
-    ...(skillRefusal === undefined ? undefined : { skillRefusal }),
-  };
+  const { failure, skillName } = result;
+  return { failure, ...(skillName === undefined ? undefined : { skillName }) };
 }
 
 export function composeInstalledSkills(
@@ -226,16 +216,6 @@ function composed(
         const view = yield* asked(client.preview(workspaceId, text), whole);
         return carried<InstalledSkillPreviewView>(view);
       }),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW_FILE]: (params) =>
-      Effect.gen(function* () {
-        const candidate = yield* readParams(
-          installedSkillPreviewFileParamsSchema,
-          params,
-          "a previewed skill names a workspace, a repository, a commit, and a folder",
-        );
-        const view = yield* asked(client.previewFile(candidate), (markdown) => ({ markdown }));
-        return carried<InstalledSkillPreviewFileView>(view);
-      }),
     // An install's skills are drawn on every held read whose scope they are in the moment it answers, each standing until those reads carry its transaction.
     [GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL]: (params) =>
       Effect.gen(function* () {
@@ -264,16 +244,6 @@ function composed(
           "a toggle names a skill and whether it is on",
         ),
     ),
-    [GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE]: (params) =>
-      Effect.gen(function* () {
-        const { workspaceId, skillId } = yield* readParams(
-          installedSkillUpdateParamsSchema,
-          params,
-          "an update check names a workspace and a skill",
-        );
-        const view = yield* asked(client.checkUpdate(workspaceId, skillId), whole);
-        return carried<InstalledSkillUpdateCheckView>(view);
-      }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE]: (params) =>
       Effect.gen(function* () {
         const update = yield* readParams(

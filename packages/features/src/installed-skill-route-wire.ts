@@ -6,19 +6,22 @@ import {
 } from "./installed-skill-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 import { SKILL_FILE_BOUNDS } from "./skill-file.js";
-import { SKILL_PASTE_KIND, SKILL_PASTE_UNSUPPORTED, SKILL_TEXT_PROBLEM } from "./skill-paste.js";
 
 /**
  * installed-skill-route-wire.ts -- what the installed skills routes take and answer: a paste previewed, skills installed from it, and one listed, read, toggled, updated, shared, or removed.
  *
- * A member installs a skill by pasting a `skills add` command or a skill's
- * text into one box (`skill-paste.ts`). The preview reads the paste as the
- * service would install it: for a GitHub source, the commit its ref stands
- * at and every skill folder found there, each with what would be installed
- * and what is wrong with it; for text, the skill it would make. An install
- * sends the same paste again, and the service reads it afresh rather than
- * trusting the preview. A skill is answered as the account sees it: whether
- * it may manage it, and who installed it.
+ * A member installs a skill by pasting a GitHub repository, a link to one
+ * of its folders, an `npx skills add` line naming one, or a skill's text
+ * into one box. The preview reads a GitHub source at the commit its ref
+ * stands at and lists every skill folder there; for text, it says the
+ * name and description the text declares. An install sends the paste
+ * again with the commit the preview pinned, and the service reads it
+ * afresh rather than trusting the preview. A skill is answered as the
+ * account sees it: whether it may manage it, and who installed it.
+ *
+ * Desktops released before this read a preview through a wider schema,
+ * so the fields it requires are still answered here, empty where nothing
+ * reads them now.
  */
 
 /** The list's query: the workspace whose skills are listed beside the account's own. */
@@ -26,61 +29,38 @@ export const INSTALLED_SKILL_LIST_QUERY = {
   WORKSPACE_ID: "workspaceId",
 } as const;
 
-/** The update check's query: the workspace whose GitHub installation reads the skill's repository. */
-export const INSTALLED_SKILL_UPDATE_QUERY = {
-  WORKSPACE_ID: "workspaceId",
-} as const;
-
-/** The longest paste a preview or an install reads: twice the largest `SKILL.md`, so one past it is answered as too large rather than refused unread. */
+/** The longest paste a preview or an install reads: twice the largest `SKILL.md`. */
 export const INSTALLED_SKILL_PASTE_MAX_CHARS = SKILL_FILE_BOUNDS.MAX_FILE_BYTES * 2;
-
-/** What is wrong with a skill a preview found, as the window words it: what its text breaks, and what its files do. */
-export const INSTALLED_SKILL_PROBLEM = {
-  ...SKILL_TEXT_PROBLEM,
-  /** A file holds a literal shaped like a provider's credential, which a skill must never carry. */
-  CREDENTIAL_SHAPED: "credential-shaped",
-  /** One of its files holds more bytes than a file may. */
-  FILES_TOO_LARGE: "files-too-large",
-} as const;
-
-export type InstalledSkillProblem =
-  (typeof INSTALLED_SKILL_PROBLEM)[keyof typeof INSTALLED_SKILL_PROBLEM];
-
-const installedSkillProblemSchema = EffectSchema.Literals(Object.values(INSTALLED_SKILL_PROBLEM));
-
-/** Why an install or an update refused a skill's files: the store's reasons, and the ones read before it. */
-export const INSTALLED_SKILL_FILES_REFUSAL = {
-  ...INSTALLED_SKILL_REFUSAL,
-  /** Its `SKILL.md` breaks the convention: no valid name, no description, or an unclosed frontmatter. */
-  SKILL_FILE_INVALID: "skill-file-invalid",
-  /** Its `SKILL.md` is larger than a `SKILL.md` may be. */
-  SKILL_FILE_TOO_LARGE: "skill-file-too-large",
-  /** A file holds a literal shaped like a provider's credential. */
-  CREDENTIAL_SHAPED: "credential-shaped",
-} as const;
-
-export type InstalledSkillFilesRefusal =
-  (typeof INSTALLED_SKILL_FILES_REFUSAL)[keyof typeof INSTALLED_SKILL_FILES_REFUSAL];
 
 /**
  * What a refused install or update carries beside its slug: the skill it
- * refused, by name, where it read one, and why its files were refused.
+ * refused, by name, where it read one, and why.
  */
 export const installedSkillRefusedDataSchema = EffectSchema.Struct({
   skillName: EffectSchema.optionalKey(EffectSchema.String),
   skillRefusal: EffectSchema.optionalKey(
-    EffectSchema.Literals(Object.values(INSTALLED_SKILL_FILES_REFUSAL)),
+    EffectSchema.Literals(Object.values(INSTALLED_SKILL_REFUSAL)),
   ),
 });
 
 /* ----- The preview ----- */
 
+/** What a preview read a paste as. */
+export const SKILL_PASTE_KIND = {
+  /** A GitHub repository, or one of its folders. */
+  SOURCE: "source",
+  /** A skill's own text. */
+  TEXT: "text",
+  /** Neither: we install from GitHub alone. */
+  UNSUPPORTED: "unsupported",
+} as const;
+
 const pasteText = EffectSchema.String.check(
   EffectSchema.isMaxLength(INSTALLED_SKILL_PASTE_MAX_CHARS),
 );
 
-/** The most bytes of `SKILL.md` text one preview carries across its candidates; a candidate past it is read with `previewFile`. */
-export const INSTALLED_SKILL_PREVIEW_MARKDOWN_BYTES = SKILL_FILE_BOUNDS.MAX_FILE_BYTES * 4;
+/** A full commit sha, which pins a read to the tree a preview answered. */
+const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
 
 /** A paste to preview, read in the workspace whose GitHub installation reaches its repository. */
 export const installedSkillPreviewRequestSchema = EffectSchema.Struct({
@@ -88,146 +68,72 @@ export const installedSkillPreviewRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
 });
 
-/**
- * What installing a candidate would meet where a skill of its name is
- * already installed in a scope the account sees. The store keeps one skill
- * of a name in each scope and refuses a second whatever its source
- * (`skill-name-taken`), and never replaces one; an install in the other
- * scope stands beside it, the workspace's shadowing the personal one in a
- * session.
- */
-export const INSTALLED_SKILL_STANDING = {
-  /** The same folder of the same repository at the same ref, its tree unchanged at the commit previewed: installing would change nothing. */
-  CURRENT: "current",
-  /** The same folder of the same repository at the same ref, its tree moved since it was pinned: an update, which reads that ref, brings it to the files previewed. */
-  UPDATE: "update",
-  /** Another source holds the name: another repository, folder, or ref, or pasted text. */
-  TAKEN: "taken",
-} as const;
-
-export type InstalledSkillStanding =
-  (typeof INSTALLED_SKILL_STANDING)[keyof typeof INSTALLED_SKILL_STANDING];
-
-/** One installed skill a candidate's name meets, in the scope it is installed in. */
-const installedSkillMatchSchema = EffectSchema.Struct({
-  id: EffectSchema.String,
-  scope: installedSkillScopeSchema,
-  standing: EffectSchema.Literals(Object.values(INSTALLED_SKILL_STANDING)),
-});
-
-export type InstalledSkillMatch = typeof installedSkillMatchSchema.Type;
-
-/** The risk a skills.sh partner rates a skill at, as the `skills` tool reads its audit (`src/telemetry.ts`'s `PartnerAudit`). */
-export const SKILL_AUDIT_RISK = {
-  SAFE: "safe",
-  LOW: "low",
-  MEDIUM: "medium",
-  HIGH: "high",
-  CRITICAL: "critical",
-  UNKNOWN: "unknown",
-} as const;
-
-export type SkillAuditRisk = (typeof SKILL_AUDIT_RISK)[keyof typeof SKILL_AUDIT_RISK];
-
-/** One partner's rating of a skill on skills.sh: its risk, and its alerts and score where it gives them. */
-export const skillPartnerAuditSchema = EffectSchema.Struct({
-  risk: EffectSchema.Literals(Object.values(SKILL_AUDIT_RISK)),
-  alerts: EffectSchema.optionalKey(countedNumber),
-  score: EffectSchema.optionalKey(EffectSchema.Finite),
-  /** When the partner rated it, as skills.sh spells the instant. */
-  analyzedAt: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type SkillPartnerAudit = typeof skillPartnerAuditSchema.Type;
-
-/** One skill folder a GitHub source holds, as an install would take it. */
+/** One skill folder a GitHub source holds. */
 const installedSkillCandidateSchema = EffectSchema.Struct({
   /** The name its `SKILL.md` declares, or its folder's where it declares none. */
   name: EffectSchema.String,
   description: EffectSchema.optionalKey(EffectSchema.String),
   /** Its folder from the repository's root; empty for a skill at the root. */
   path: EffectSchema.String,
-  fileCount: countedNumber,
+  /** Its files' bytes together. */
   bytes: countedNumber,
-  /** Whether the paste asked for it: by `--skill`, `@skill`, or the folder it names, or as the one skill there is. */
+  /** Whether the paste named it with `--skill`, or it is the one skill there is. */
   selected: EffectSchema.Boolean,
-  /** What keeps it from installing; none where it installs. */
-  problems: EffectSchema.Array(installedSkillProblemSchema),
-  /** The skills of its name the account already sees, one a scope; absent where none. */
-  installed: EffectSchema.optionalKey(EffectSchema.Array(installedSkillMatchSchema)),
-  /** Whether its folder ships code: a `scripts/` folder, or a file with a script's extension. */
-  hasScripts: EffectSchema.optionalKey(EffectSchema.Boolean),
-  /** The other candidates of this preview its `SKILL.md` body names, which it calls on; absent where none. */
-  references: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
-  /** The plugin a `.claude-plugin` manifest groups it under; absent where none does. */
-  group: EffectSchema.optionalKey(EffectSchema.String),
-  /** Its `SKILL.md` whole, for a skill the paste asked for and the skills those reference, within `INSTALLED_SKILL_PREVIEW_MARKDOWN_BYTES` together; else read with `previewFile`. */
-  markdown: EffectSchema.optionalKey(EffectSchema.String),
-  /** skills.sh's partners' ratings, by partner (`ath`, `socket`, `snyk`), for a public repository's skills shown in detail; absent where skills.sh did not say in time. */
-  audit: EffectSchema.optionalKey(
-    EffectSchema.Record(EffectSchema.String, skillPartnerAuditSchema),
-  ),
+  /** How many files it holds; kept for desktops released before this, which require it. */
+  fileCount: countedNumber,
+  /** Always empty, since an install checks each skill; kept for desktops released before this, which require it. */
+  problems: EffectSchema.Tuple([]),
 });
 
 export type InstalledSkillCandidate = typeof installedSkillCandidateSchema.Type;
 
 const previewSourceSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(SKILL_PASTE_KIND.SOURCE),
-  /** The repository as GitHub spells it. */
+  /** The repository as GitHub spells it, or as pasted where it was read anonymously. */
   owner: EffectSchema.String,
   repo: EffectSchema.String,
-  /** The ref read: the one the paste named, or the default branch's name. */
+  /** The ref read: the one the paste named, else the default branch's name, or `HEAD` where the repository was read anonymously. */
   ref: EffectSchema.String,
   /** The commit the ref stands at now, which an install pins its files to. */
   sha: EffectSchema.String,
-  /** The skill names the paste asked for that no folder holds. */
-  missing: EffectSchema.Array(EffectSchema.String),
   skills: EffectSchema.Array(installedSkillCandidateSchema),
+  /** Always empty; kept for desktops released before this, which require it. */
+  missing: EffectSchema.Tuple([]),
 });
 
 const previewTextSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(SKILL_PASTE_KIND.TEXT),
+  /** What the text's frontmatter declares, which the dialog's fields start from. */
   name: EffectSchema.optionalKey(EffectSchema.String),
   description: EffectSchema.optionalKey(EffectSchema.String),
+  /** Kept for desktops released before this, which require them. */
   bytes: countedNumber,
-  problems: EffectSchema.Array(installedSkillProblemSchema),
+  problems: EffectSchema.Tuple([]),
 });
+
+/** Why a released desktop reads an unsupported paste: the one reason it words as GitHub alone. */
+const UNSUPPORTED_REASON = "other-host";
 
 const previewUnsupportedSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(SKILL_PASTE_KIND.UNSUPPORTED),
-  reason: EffectSchema.Literals(Object.values(SKILL_PASTE_UNSUPPORTED)),
+  /** Kept for desktops released before this, which require it. */
+  reason: EffectSchema.Literal(UNSUPPORTED_REASON),
 });
 
-const previewEmptySchema = EffectSchema.Struct({
-  kind: EffectSchema.Literal(SKILL_PASTE_KIND.EMPTY),
-});
-
-/** What a paste would install: a GitHub source's skills, a skill's text, or why nothing. */
+/** What a paste would install: a GitHub source's skills, a skill's text, or nothing. */
 export const installedSkillPreviewSchema = EffectSchema.Union([
   previewSourceSchema,
   previewTextSchema,
   previewUnsupportedSchema,
-  previewEmptySchema,
 ]);
 
 export type InstalledSkillPreview = typeof installedSkillPreviewSchema.Type;
 
-/** A full commit sha, which pins a read to the tree a preview answered. */
-const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
-
-/** One candidate's `SKILL.md` read at the commit a preview pinned, by its folder from the repository's root, empty for the root. */
-export const installedSkillPreviewFileRequestSchema = EffectSchema.Struct({
-  workspaceId: EffectSchema.NonEmptyString,
-  owner: EffectSchema.NonEmptyString,
-  repo: EffectSchema.NonEmptyString,
-  sha: commitShaSchema,
-  path: EffectSchema.String,
-});
-
-/** The candidate's `SKILL.md` as it stands at that commit. */
-export const installedSkillPreviewFileSchema = EffectSchema.Struct({
-  markdown: EffectSchema.String,
-});
+/** A paste no preview installs from, as the service answers it. */
+export const UNSUPPORTED_PREVIEW = {
+  kind: SKILL_PASTE_KIND.UNSUPPORTED,
+  reason: UNSUPPORTED_REASON,
+} as const satisfies InstalledSkillPreview;
 
 /* ----- A skill ----- */
 
@@ -277,14 +183,16 @@ export type InstalledSkillContent = typeof installedSkillContentSchema.Type;
 
 /**
  * An install: the paste, read afresh; whose the skills are; for a source,
- * the skills chosen by name, where the paste's own choice or its one skill
- * is not meant; and for text, the name and description it lacks.
+ * the skills chosen by name and the commit the preview pinned, which a
+ * desktop released before this sends none of; and for text, the name and
+ * description to install it by, its frontmatter's where none is sent.
  */
 export const installedSkillInstallRequestSchema = EffectSchema.Struct({
   text: pasteText,
   workspaceId: EffectSchema.NonEmptyString,
   scope: installedSkillScopeSchema,
   skills: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.NonEmptyString)),
+  sha: EffectSchema.optionalKey(commitShaSchema),
   name: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
   description: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
 });
@@ -329,19 +237,6 @@ export const installedSkillUpdatedAnswerSchema = EffectSchema.Struct({
 export const installedSkillShareRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
 });
-
-/**
- * Whether a GitHub skill's folder moved since it was installed: its ref's
- * commit now, and whether the folder there differs from the one pinned.
- * A pasted skill has nothing to update from.
- */
-export const installedSkillUpdateCheckSchema = EffectSchema.Struct({
-  available: EffectSchema.Boolean,
-  /** The commit the skill's ref stands at now; absent for a pasted skill. */
-  latestSha: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type InstalledSkillUpdateCheck = typeof installedSkillUpdateCheckSchema.Type;
 
 /** A skill removed, and the transaction it was removed in. */
 export const installedSkillRemovedAnswerSchema = EffectSchema.Struct({

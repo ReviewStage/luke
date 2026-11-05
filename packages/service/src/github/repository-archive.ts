@@ -13,13 +13,14 @@
  *
  * Every entry sits under one top folder, which is left off. A link, a
  * folder, or anything else but a regular file is left out, as the contents
- * API answers none of them as a file. An archive past `ARCHIVE_BOUNDS`, one
- * GitHub does not serve, or one that does not name its commit is answered
- * as none, and the caller reads the commit file by file instead.
+ * API answers none of them as a file. An archive is refused as not found
+ * where GitHub serves none, as too large past `ARCHIVE_BOUNDS`, and as
+ * unanswered where GitHub answers otherwise or serves one that does not
+ * name its commit.
  */
 
 import { gunzipSync } from "node:zlib";
-import { Effect, Option, type Redacted, Stream } from "effect";
+import { Data, Effect, Option, type Redacted, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
@@ -56,6 +57,23 @@ const PAX_COMMIT = "comment";
 const PAX_PATH = "path";
 
 const COMMIT_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
+
+/** Why an archive was not read. */
+export const ARCHIVE_UNREAD = {
+  /** GitHub serves none: no such repository or ref, or none the reader reaches. */
+  NOT_FOUND: "not-found",
+  /** It is past `ARCHIVE_BOUNDS`. */
+  TOO_LARGE: "too-large",
+  /** GitHub did not answer, answered otherwise, or served one naming no commit. */
+  UNANSWERED: "unanswered",
+} as const;
+
+type ArchiveUnreadReason = (typeof ARCHIVE_UNREAD)[keyof typeof ARCHIVE_UNREAD];
+
+/** An archive not read, and why. */
+export class ArchiveUnread extends Data.TaggedError("ArchiveUnread")<{
+  readonly reason: ArchiveUnreadReason;
+}> {}
 
 /** A commit read whole: its sha, and every regular file by its path from the repository's root. */
 export interface RepositoryArchive {
@@ -151,45 +169,51 @@ function refPath(ref: string): string {
 /**
  * The repository's commit at the ref, read whole from its archive: a
  * public repository's from codeload with no token, a private one's through
- * the API on the bearer given; none where GitHub serves no archive, it is
- * past the bounds, or it names no commit, which is logged by its kind
- * alone, since the caller reads the commit file by file instead.
+ * the API on the bearer given; refused for why it was not, an answer
+ * GitHub gave otherwise logged by its status or its kind alone.
  */
 export function readRepositoryArchive(
   repository: { readonly fullName: string; readonly public: boolean },
   bearer: Redacted.Redacted | null,
   ref: string,
-): Effect.Effect<Option.Option<RepositoryArchive>, never, HttpClient.HttpClient> {
-  if (!repository.public && bearer === null) return Effect.succeed(Option.none());
+): Effect.Effect<RepositoryArchive, ArchiveUnread, HttpClient.HttpClient> {
   const request = repository.public
     ? HttpClientRequest.get(`${CODELOAD}/${repository.fullName}/tar.gz/${refPath(ref)}`)
     : githubRead(`/repos/${repository.fullName}/tarball/${refPath(ref)}`, bearer);
+  const unread = (reason: ArchiveUnreadReason) => new ArchiveUnread({ reason });
   const read = Effect.scoped(
     Effect.gen(function* () {
       const response = yield* send(request);
+      if (response.status === 404) return yield* unread(ARCHIVE_UNREAD.NOT_FOUND);
       if (response.status !== 200) {
         yield* Effect.logWarning(`An archive was not served: GitHub answered ${response.status}`);
-        return Option.none<RepositoryArchive>();
+        return yield* unread(ARCHIVE_UNREAD.UNANSWERED);
       }
       const gzipped = yield* boundedBody(response);
       if (gzipped.byteLength > ARCHIVE_BOUNDS.MAX_ARCHIVE_BYTES) {
-        yield* Effect.logWarning("An archive past its bound was not read");
-        return Option.none<RepositoryArchive>();
+        return yield* unread(ARCHIVE_UNREAD.TOO_LARGE);
       }
-      const tar = yield* Effect.try(() =>
-        gunzipSync(gzipped, { maxOutputLength: ARCHIVE_BOUNDS.MAX_UNPACKED_BYTES }),
-      );
+      // Note that GitHub serves a well-formed gzip, so an unpack fails on the bound alone.
+      const tar = yield* Effect.try({
+        try: () => gunzipSync(gzipped, { maxOutputLength: ARCHIVE_BOUNDS.MAX_UNPACKED_BYTES }),
+        catch: () => unread(ARCHIVE_UNREAD.TOO_LARGE),
+      });
       const archive = readTar(tar);
-      if (Option.isNone(archive)) yield* Effect.logWarning("An archive named no commit");
-      return archive;
+      if (Option.isNone(archive)) {
+        yield* Effect.logWarning("An archive named no commit");
+        return yield* unread(ARCHIVE_UNREAD.UNANSWERED);
+      }
+      return archive.value;
     }),
   );
   return read.pipe(
     Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning(`An archive was not read: ${failure._tag}`),
-        Option.none<RepositoryArchive>(),
-      ),
+      failure instanceof ArchiveUnread
+        ? Effect.fail(failure)
+        : Effect.andThen(
+            Effect.logWarning(`An archive was not read: ${failure._tag}`),
+            Effect.fail(unread(ARCHIVE_UNREAD.UNANSWERED)),
+          ),
     ),
   );
 }

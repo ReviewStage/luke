@@ -663,10 +663,6 @@ const ANSWERS: { readonly [Kind in PortActKind]?: StagedAnswer<Kind> } = {
   },
   [ACT_KIND.INSTALLED_SKILLS_READ]: ({ skillId: id }) =>
     skillContent(id) ?? { failure: INSTALLED_SKILL_CALL_FAILURE.NOT_FOUND },
-  [ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE]: ({ skillId: id }) => ({
-    available: id === skillId(1),
-    latestSha: "9a8b7c6d5e4f30211a2b3c4d5e6f708192a3b4c5",
-  }),
   [ACT_KIND.ADMIN_READ]: ({ procedure, query }) =>
     procedure === ADMIN_READ.METRICS
       ? { answer: adminMetrics(query) }

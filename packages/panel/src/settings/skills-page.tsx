@@ -6,7 +6,6 @@ import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
 } from "@repo/features/installed-skill-view";
-import { INSTALLED_SKILL_SOURCE } from "@repo/features/installed-skill-wire";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { formatBytes } from "@repo/features/number-format";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -53,7 +52,7 @@ import {
 import { GLYPH } from "@repo/ui/icons";
 import type { SkillOption } from "@repo/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -91,8 +90,8 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * switch and a ⋯ (`skillActions`): View, which
  * opens its `SKILL.md` and its files over the window; Share with workspace,
  * for the account's own skill outside a personal workspace, which asks
- * first because it moves the skill; Update, where a GitHub skill's folder
- * moved at its ref; and Remove, which asks first. A row the account may not
+ * first because it moves the skill; Update, for a GitHub skill; and
+ * Remove, which asks first. A row the account may not
  * change, a teammate's workspace skill to a member who is not an owner or
  * admin, as the service says by `manageable`, draws its switch unavailable
  * and View alone in its ⋯. A line at the top says where repository skills
@@ -103,8 +102,7 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * followed live on the service (`LIVE_READ.INSTALLED_SKILLS`), so one a
  * teammate installs or toggles draws while the page is open, and the host
  * draws each toggle, share, and removal the moment it is asked and an
- * update as it answers; a row says only why one was refused. Each GitHub
- * skill the account may change is checked for an update once.
+ * update as it answers; a row says only why one was refused.
  */
 
 /** An installed skill's row while the skills are read: its book, its words over its source, its switch, and its ⋯. */
@@ -260,16 +258,11 @@ function SkillFileDialog({
 function SkillRowView({
   row,
   workspace,
-  updateAvailable,
   landed,
-  onUpdated,
 }: {
   row: SkillRow;
   workspace: Workspace;
-  updateAvailable: boolean;
   landed: boolean;
-  /** Tells the page the skill was updated, so it offers no update until it is checked again. */
-  onUpdated: (skillId: string) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   const { skill } = row;
@@ -288,7 +281,6 @@ function SkillRowView({
   /** A toggle or an update sent, which the host draws in the list, or why it is unchanged under the row. */
   const write = (
     asked: Promise<{ readonly skill: InstalledSkillSummary } | InstalledSkillFailedView>,
-    updated: boolean,
   ) => {
     setBusy(true);
     setError(undefined);
@@ -297,8 +289,7 @@ function SkillRowView({
       .then((answer) => {
         setBusy(false);
         if (answer === undefined) return setError(UNANSWERED_LINE);
-        if ("failure" in answer) return setError(failureLine(answer));
-        if (updated) onUpdated(skill.id);
+        if ("failure" in answer) setError(failureLine(answer));
       });
   };
 
@@ -337,11 +328,10 @@ function SkillRowView({
     [SKILL_ACTION.UPDATE]: () =>
       write(
         act(ACT_KIND.INSTALLED_SKILLS_UPDATE, { workspaceId: workspace.id, skillId: skill.id }),
-        true,
       ),
     [SKILL_ACTION.REMOVE]: removal.ask,
   } as const satisfies Record<SkillAction, () => void>;
-  const actions = skillActions(row, { workspace, updateAvailable }).map((group) =>
+  const actions = skillActions(row, workspace).map((group) =>
     group.map((each) => ({
       label: ACTION_LABEL[each],
       icon: ACTION_ICON[each],
@@ -388,7 +378,6 @@ function SkillRowView({
                   onChange={(enabled) =>
                     write(
                       act(ACT_KIND.INSTALLED_SKILLS_SET_ENABLED, { skillId: skill.id, enabled }),
-                      false,
                     )
                   }
                 />
@@ -418,7 +407,7 @@ function SkillRowView({
   );
 }
 
-/** The page over one workspace: its skills as the host holds them, each GitHub one checked for an update. */
+/** The page over one workspace: its skills as the host holds them. */
 function ShownSkills({
   workspace,
   readerId,
@@ -428,44 +417,15 @@ function ShownSkills({
   readerId: string | undefined;
   pause: ((ms: number) => Promise<void>) | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
   // The skills as the host holds them, followed live while the page shows them, so one a teammate installs meanwhile draws as it lands.
   const held = useHostRead(LIVE_READ.INSTALLED_SKILLS, workspace.id);
   const [adding, setAdding] = useState(false);
   // Note that the card keeps what is typed and previewed while it is drawn, from its opening until its fade has run, so each opening starts afresh.
   const added = useDrawnThroughExit(adding);
-  const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
   const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id).rows?.members;
 
-  // Note that each GitHub skill the account may change is asked once, whatever else the list does,
-  // so an answer is kept even after a toggle redraws the list; React drops one landing after the page closes.
   const skills = held.rows;
-  const checked = useRef(new Set<string>());
-  useEffect(() => {
-    const unasked = (skills ?? []).filter(
-      (each) =>
-        each.manageable &&
-        each.source.type === INSTALLED_SKILL_SOURCE.GITHUB &&
-        !checked.current.has(each.id),
-    );
-    for (const skill of unasked) {
-      checked.current.add(skill.id);
-      void act(ACT_KIND.INSTALLED_SKILLS_CHECK_UPDATE, {
-        workspaceId: workspace.id,
-        skillId: skill.id,
-      })
-        .catch(() => undefined)
-        .then((answer) => {
-          const available = answer !== undefined && !("failure" in answer) && answer.available;
-          setUpdates((held) => new Map(held).set(skill.id, available));
-        });
-    }
-  }, [act, skills, workspace.id]);
-
-  const updated = useCallback((skillId: string) => {
-    setUpdates((checked) => new Map(checked).set(skillId, false));
-  }, []);
   // Note that an install lights only its own rows, each once, which say what it made; the host draws them.
   const installed = useCallback((made: readonly InstalledSkillSummary[]) => {
     setLanded(new Set(made.map((each) => each.id)));
@@ -484,9 +444,7 @@ function ShownSkills({
           key={row.skill.id}
           row={row}
           workspace={workspace}
-          updateAvailable={updates.get(row.skill.id) === true}
           landed={landed.has(row.skill.id)}
-          onUpdated={updated}
         />
       ))
     );
