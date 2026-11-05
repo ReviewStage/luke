@@ -201,6 +201,13 @@ function marked(
   return sent.map((each) => (each.id === id ? { ...each, state } : each));
 }
 
+/** The lines as a refusal for good leaves them: the one it refused, and every one refused for now, marked as not delivered. */
+function settled(sent: readonly SentLine[], id: string): readonly SentLine[] {
+  return marked(sent, id, SENT_LINE_STATE.UNDELIVERED).map((each) =>
+    each.state === SENT_LINE_STATE.FAILED ? { ...each, state: SENT_LINE_STATE.UNDELIVERED } : each,
+  );
+}
+
 /** The composer as an agent's tab holds it: what it draws, the words and files its draft keeps, which a closed box draws none of and Continue carries, and the Retry a line marked as not sent offers. */
 export interface HeldComposer extends AgentComposerControl {
   readonly unsent: {
@@ -373,10 +380,11 @@ export function useAgentComposer(input: {
       };
       // A refusal for good closes the box, and the line stays where it went, marked as not
       // delivered, its words kept in the agent's draft for Continue with every other line that
-      // did not go, ahead of what the box holds, which is newer. Note that the lines kept past
-      // the tab go with it, because their words are in the draft now, which a tab opened again
-      // draws in its box.
-      const sent = marked(heldNow.current.sent, line.id, SENT_LINE_STATE.UNDELIVERED);
+      // did not go, ahead of what the box holds, which is newer. Every line refused for now
+      // before it is marked so too, since the box takes no Retry any more. Note that the lines
+      // kept past the tab go with it, because their words are in the draft now, which a tab
+      // opened again draws in its box.
+      const sent = settled(heldNow.current.sent, line.id);
       // Note that the draft store takes a change at once, so the box as the refusal lands is what stands behind.
       let behind: Draft = EMPTY_DRAFT;
       update((draft) => {
@@ -388,7 +396,7 @@ export function useAgentComposer(input: {
         ...was,
         closed: note.text,
         behind,
-        sent: marked(was.sent, line.id, SENT_LINE_STATE.UNDELIVERED),
+        sent: settled(was.sent, line.id),
       }));
     });
   };

@@ -15,12 +15,34 @@
 
 import { GLYPH } from "../../icons/glyph-registry.js";
 import { isReported, type ReportedFailure, type Unreported } from "../../reported-failure.js";
+import { ANNOUNCE, announce } from "../announcer/announcer.js";
 import { BUTTON_VARIANT, IconButton } from "../button/button.js";
 import { useFailureDetails } from "../failure-copy/failure-copy.js";
 import { Menu, type MenuEntry, useMenu } from "../menu/menu.js";
 
-/** What Copy details is called, as a failure note's copy is named. */
+/** What Copy details is called, as a failure note's copy is named, and what its press is answered with, as Copy's is. */
 const COPY_DETAILS = "Copy details";
+const COPIED = "Copied";
+const NOT_COPIED = "Could not copy";
+
+/**
+ * Copies `details` through `copy` and says how it went, as the window's one
+ * Copy answers: politely where it landed, as an alert where it was refused,
+ * since the menu it was pressed in has closed and shows no answer. Note that
+ * a copy that throws before it hands a promise back is a refused copy too.
+ */
+function copyAnswered(copy: (text: string) => Promise<void>, details: string): void {
+  let copying: Promise<void>;
+  try {
+    copying = copy(details);
+  } catch (refusal) {
+    copying = Promise.reject(refusal);
+  }
+  copying.then(
+    () => announce(ANNOUNCE.POLITE, COPIED),
+    () => announce(ANNOUNCE.ALERT, NOT_COPIED),
+  );
+}
 
 /** The mark beside a message that did not go, named `label`, whose menu is headed by `reason` and offers `groups`, then Copy details where `failure` is the app's. */
 export function MessageFailedMark({
@@ -47,7 +69,15 @@ export function MessageFailedMark({
   const copy: readonly (readonly MenuEntry[])[] =
     reported === undefined || details === undefined
       ? []
-      : [[{ label: COPY_DETAILS, icon: <GLYPH.COPY />, onSelect: () => reported.copy(details) }]];
+      : [
+          [
+            {
+              label: COPY_DETAILS,
+              icon: <GLYPH.COPY />,
+              onSelect: () => copyAnswered(reported.copy, details),
+            },
+          ],
+        ];
   return (
     <>
       <IconButton

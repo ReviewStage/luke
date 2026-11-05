@@ -384,6 +384,26 @@ test("Edit takes a message that did not go back into the box, ahead of the words
   assert.notEqual(tab.sent[1]?.clientKey, tab.sent[0]?.clientKey, "as a message of its own");
 });
 
+test("a refusal for good marks the lines refused for now before it as not delivered too, offering no Retry the closed box could not take", async () => {
+  const tab = await drawnTab([]);
+  await tab.send("Rebase on main");
+  await tab.answer(0, { failure: AGENT_CALL_FAILURE.UNANSWERED });
+  await tab.send("Then fix CI");
+  await tab.answer(1, { failure: AGENT_CALL_FAILURE.AGENT_RETIRED });
+
+  const mark =
+    tab
+      .lines("Rebase on main")[0]
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Not delivered"]') ??
+    assert.fail("the earlier line wears the red alert");
+  await act(async () => mark.click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
+    [],
+    "its menu says why with nothing to press",
+  );
+});
+
 test("a refusal that lands while the tab is closed is drawn where the line went once the tab opens again, never in the box", async () => {
   const tab = await drawnTab([]);
   await tab.send("Rebase on main");

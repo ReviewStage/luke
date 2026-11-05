@@ -1621,7 +1621,10 @@ export function AgentMessage({
         ) : (
           content
         )}
-        {shown === "" ? <UndeliveredMark messageId={message.id} /> : null}
+        {/* A line of files alone stands its mark on a row of its own, kept clear of the files' fade. */}
+        {shown === "" && marked ? (
+          <MessageBeside mark={<UndeliveredMark messageId={message.id} />}>{null}</MessageBeside>
+        ) : null}
         <MessageLine
           align={received ? MESSAGE_LINE_ALIGN.START : MESSAGE_LINE_ALIGN.END}
           status={status}
