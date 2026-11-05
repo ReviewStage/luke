@@ -137,7 +137,7 @@ test("Space and K play and pause the video while focus is in its player, and nei
 
 test("the arrows seek five seconds within the video's length, flashing how far, from its scrubber too, and never reach the place around it", () => {
   const { container, press, seekAt, reached } = mountPlayer();
-  const flash = () => container.querySelector(".ui-video-player-jump")?.textContent;
+  const flash = () => container.querySelector(".ui-video-player-flash")?.textContent;
   press("ArrowRight");
   press("ArrowRight");
   expect(seekAt()).toBe("10");

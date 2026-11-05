@@ -239,6 +239,10 @@ export const SHORTCUT_KEY = {
   // ⌃Tab and ⌃⇧Tab are the tab switcher's own; a bare Tab moves focus, as everywhere.
   TAB: { accelerator: "Tab", glyph: "⇥", key: "Tab", code: "Tab" },
   ESCAPE: { accelerator: "Escape", glyph: "Esc", key: "Escape", code: "Escape" },
+  // A bare Space, Home, and End are a video player's own play and pause and its two ends; no app command holds them.
+  SPACE: { accelerator: "Space", glyph: "Space", key: " ", code: "Space", aria: "Space" },
+  HOME: { accelerator: "Home", glyph: "Home", key: "Home", code: "Home" },
+  END: { accelerator: "End", glyph: "End", key: "End", code: "End" },
   OPEN_BRACKET: { accelerator: "[", glyph: "[", key: "[", code: "BracketLeft" },
   CLOSE_BRACKET: { accelerator: "]", glyph: "]", key: "]", code: "BracketRight" },
   BACKSPACE: {
@@ -686,6 +690,15 @@ export const IN_CONTEXT_KEY = {
   VIEWER_ZOOM_IN: "in-context-viewer-zoom-in",
   VIEWER_ZOOM_OUT: "in-context-viewer-zoom-out",
   VIEWER_FIT: "in-context-viewer-fit",
+  VIDEO_PLAY: "in-context-video-play",
+  VIDEO_JUMP_BACK: "in-context-video-jump-back",
+  VIDEO_JUMP_AHEAD: "in-context-video-jump-ahead",
+  VIDEO_FRAME_BACK: "in-context-video-frame-back",
+  VIDEO_FRAME_AHEAD: "in-context-video-frame-ahead",
+  VIDEO_START: "in-context-video-start",
+  VIDEO_END: "in-context-video-end",
+  VIDEO_SLOWER: "in-context-video-slower",
+  VIDEO_FASTER: "in-context-video-faster",
   LINK: "in-context-link",
   MENTION_WRITE: "in-context-mention-write",
   MENTION_OPEN: "in-context-mention-open",
@@ -712,7 +725,8 @@ export interface InContextShortcut {
  * (`inbox-ask-controls.tsx`); a tab strip's arrows and Delete (`tabs.tsx` in
  * `@repo/ui`); the tab switcher's keys while ⌃ is held (`tab-switcher.tsx`);
  * the file viewer's arrows and its picture's zoom (`attachment-viewer.tsx`,
- * `zoom-image.tsx` in `@repo/ui`); ⌘K over selected words for a link
+ * `zoom-image.tsx` in `@repo/ui`); a video player's keys while focus is in
+ * it (`video-player.tsx` in `@repo/ui`), K playing and pausing as Space does; ⌘K over selected words for a link
  * (`writing-format.ts`); and the `@` list's Tab and → (`mention-picker.tsx`).
  */
 export const IN_CONTEXT_SHORTCUTS = {
@@ -771,6 +785,42 @@ export const IN_CONTEXT_SHORTCUTS = {
   [IN_CONTEXT_KEY.VIEWER_FIT]: {
     label: "Fit image",
     chord: { key: SHORTCUT_KEY.ZERO, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_PLAY]: {
+    label: "Play or pause video",
+    chord: { key: SHORTCUT_KEY.SPACE, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_JUMP_BACK]: {
+    label: "Jump video back 5 seconds",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_JUMP_AHEAD]: {
+    label: "Jump video ahead 5 seconds",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_FRAME_BACK]: {
+    label: "Previous frame of video",
+    chord: { key: SHORTCUT_KEY.COMMA, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_FRAME_AHEAD]: {
+    label: "Next frame of video",
+    chord: { key: SHORTCUT_KEY.PERIOD, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_START]: {
+    label: "Go to start of video",
+    chord: { key: SHORTCUT_KEY.HOME, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_END]: {
+    label: "Go to end of video",
+    chord: { key: SHORTCUT_KEY.END, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_SLOWER]: {
+    label: "Slow video down",
+    chord: { key: SHORTCUT_KEY.COMMA, shift: true, plain: true },
+  },
+  [IN_CONTEXT_KEY.VIDEO_FASTER]: {
+    label: "Speed video up",
+    chord: { key: SHORTCUT_KEY.PERIOD, shift: true, plain: true },
   },
   [IN_CONTEXT_KEY.LINK]: {
     label: "Link selected words",
@@ -910,6 +960,21 @@ export const APP_SHORTCUT_GROUPS = [
       IN_CONTEXT_KEY.VIEWER_ZOOM_IN,
       IN_CONTEXT_KEY.VIEWER_ZOOM_OUT,
       IN_CONTEXT_KEY.VIEWER_FIT,
+    ],
+    commands: [],
+  },
+  {
+    title: "Video player",
+    keys: [
+      IN_CONTEXT_KEY.VIDEO_PLAY,
+      IN_CONTEXT_KEY.VIDEO_JUMP_BACK,
+      IN_CONTEXT_KEY.VIDEO_JUMP_AHEAD,
+      IN_CONTEXT_KEY.VIDEO_FRAME_BACK,
+      IN_CONTEXT_KEY.VIDEO_FRAME_AHEAD,
+      IN_CONTEXT_KEY.VIDEO_START,
+      IN_CONTEXT_KEY.VIDEO_END,
+      IN_CONTEXT_KEY.VIDEO_SLOWER,
+      IN_CONTEXT_KEY.VIDEO_FASTER,
     ],
     commands: [],
   },

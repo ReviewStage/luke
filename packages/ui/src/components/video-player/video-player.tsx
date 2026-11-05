@@ -1,6 +1,11 @@
 import { CONVERSATION_MEDIA_TYPE } from "@repo/features/conversation-picture-wire";
 import { playheadText } from "@repo/features/time-format";
-import { SHORTCUT_KEY, type ShortcutChord } from "@repo/settings/shortcuts";
+import {
+  IN_CONTEXT_KEY,
+  IN_CONTEXT_SHORTCUTS,
+  SHORTCUT_KEY,
+  type ShortcutChord,
+} from "@repo/settings/shortcuts";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import {
@@ -36,7 +41,11 @@ import { Tooltip } from "../tooltip/hint.js";
  * it, all kept from the place around it, such as the viewer whose arrows
  * walk its files; a button's own Space presses the button. An arrow's jump
  * flashes on the side it went, as on the video sites, how far in seconds,
- * and presses in one direction while it stands add up ("10 seconds").
+ * and presses in one direction while it stands add up ("10 seconds"); a
+ * speed key flashes the speed in the middle, since the bar may stand faded.
+ * The flash is the window's hint pill drawn in the veil's ink: it arrives as
+ * a hint does, once for a run of presses, each press standing it again for
+ * `--ui-flash-delay`, and leaves over the exit.
  *
  * A frame step lands in the middle of the frame it goes to, never on its
  * edge, so a time a hair off either way still shows that frame, and the
@@ -114,8 +123,14 @@ const HEADER_BASE64_CHARS = 16_384;
 /** How far an arrow key seeks, in seconds. */
 const ARROW_SEEK_S = 5;
 
-/** The keyframes whose end takes a jump's flash, its fade (`video-player.css`). */
-const JUMP_OUT = "ui-video-player-jump-out";
+/** The keyframes whose end takes the flash, its fade (`video-player.css`). */
+const FLASH_OUT = "ui-video-player-flash-out";
+
+/** What a key flashes over the video: an arrow's jump, or a speed key's speed. */
+const FLASH_KIND = {
+  JUMP: "jump",
+  SPEED: "speed",
+} as const;
 
 /** The speeds the player plays at, slowest first; the bar's speed button walks them round, and < and > step along them. */
 const SPEEDS: readonly number[] = [0.25, 0.5, 1, 1.5, 2];
@@ -145,12 +160,12 @@ const SPEED_KEYS: ReadonlyMap<string, number> = new Map([
 ]);
 
 /** Where Home and End send the video: its start, or its end. */
-const END_KEYS = { START: "Home", END: "End" } as const;
+const END_KEYS = { START: SHORTCUT_KEY.HOME.key, END: SHORTCUT_KEY.END.key } as const;
 
-/** The keys the frame buttons name in their hints. */
+/** The keys the frame buttons name in their hints, as the Keyboard shortcuts page lists them. */
 const FRAME_CHORD = {
-  PREVIOUS: { key: SHORTCUT_KEY.COMMA, plain: true },
-  NEXT: { key: SHORTCUT_KEY.PERIOD, plain: true },
+  PREVIOUS: IN_CONTEXT_SHORTCUTS[IN_CONTEXT_KEY.VIDEO_FRAME_BACK].chord,
+  NEXT: IN_CONTEXT_SHORTCUTS[IN_CONTEXT_KEY.VIDEO_FRAME_AHEAD].chord,
 } as const satisfies Record<string, ShortcutChord>;
 
 /** Where a video plays: in place of a picture, or in the file viewer. */
@@ -161,10 +176,20 @@ export const VIDEO_PLAYER_PLACE = {
 
 export type VideoPlayerPlace = (typeof VIDEO_PLAYER_PLACE)[keyof typeof VIDEO_PLAYER_PLACE];
 
-/** The jump an arrow made, flashed over the video: how far in seconds, signed, and which flash it is, so each press plays its motion over. */
-interface Jump {
-  readonly seconds: number;
-  readonly count: number;
+/** What one key asks the flash to say: how far a jump went in seconds, signed, or the speed it set. */
+type FlashAsk =
+  | { readonly kind: typeof FLASH_KIND.JUMP; readonly seconds: number }
+  | { readonly kind: typeof FLASH_KIND.SPEED; readonly speed: number };
+
+/**
+ * The flash over the video: what it says, which run of presses it belongs
+ * to, which arrives once, and which press stood it last, each standing it
+ * again.
+ */
+interface Flash {
+  readonly ask: FlashAsk;
+  readonly run: number;
+  readonly press: number;
 }
 
 /** A video's size in pixels, as its file states it. */
@@ -340,7 +365,7 @@ function playerKey(
   event: React.KeyboardEvent<HTMLElement>,
   video: HTMLVideoElement | null,
   frame: number,
-  onJump: (seconds: number) => void,
+  onFlash: (ask: FlashAsk) => void,
 ): void {
   if (video === null || event.metaKey || event.ctrlKey || event.altKey) return;
   const onButton = event.target instanceof HTMLButtonElement;
@@ -354,13 +379,16 @@ function playerKey(
     const from = video.currentTime;
     video.currentTime = Math.min(endOf(video), Math.max(0, from + seek));
     // A jump at an end that moves nothing flashes nothing; one cut short by an end still says the key's step, as the video sites do.
-    if (video.currentTime !== from) onJump(seek);
+    if (video.currentTime !== from) onFlash({ kind: FLASH_KIND.JUMP, seconds: seek });
   } else if (step !== undefined) {
     stepFrame(video, frame, step);
   } else if (event.key === END_KEYS.START || event.key === END_KEYS.END) {
     video.currentTime = event.key === END_KEYS.START ? 0 : endOf(video);
   } else if (speed !== undefined) {
-    setSpeed(video, speedBy(video.playbackRate, speed));
+    const next = speedBy(video.playbackRate, speed);
+    // A speed key at the slowest or the fastest changes nothing and flashes nothing.
+    if (next !== video.playbackRate) onFlash({ kind: FLASH_KIND.SPEED, speed: next });
+    setSpeed(video, next);
   } else {
     return;
   }
@@ -387,37 +415,67 @@ function BarButton({
   );
 }
 
-/** The jump `seconds` makes on from `was`: added to it where it stands in the same direction, else a jump of its own. */
-function jumpOn(was: Jump | undefined, seconds: number): Jump {
-  const count = (was?.count ?? 0) + 1;
-  if (was === undefined || Math.sign(was.seconds) !== Math.sign(seconds)) return { seconds, count };
-  return { seconds: was.seconds + seconds, count };
+/**
+ * The flash `ask` makes on from `was`: one run with it where it says the
+ * same kind of thing (a jump the same way, which it adds to, or a speed),
+ * else a run of its own.
+ */
+function flashOn(was: Flash | undefined, ask: FlashAsk): Flash {
+  const press = (was?.press ?? 0) + 1;
+  if (was === undefined || was.ask.kind !== ask.kind)
+    return { ask, run: (was?.run ?? 0) + 1, press };
+  if (ask.kind === FLASH_KIND.SPEED) return { ask, run: was.run, press };
+  if (was.ask.kind === FLASH_KIND.JUMP && Math.sign(was.ask.seconds) === Math.sign(ask.seconds)) {
+    return {
+      ask: { kind: FLASH_KIND.JUMP, seconds: was.ask.seconds + ask.seconds },
+      run: was.run,
+      press,
+    };
+  }
+  return { ask, run: was.run + 1, press };
 }
 
+/** The pill a flash is drawn as: the window's hint pill, its corner, edge, padding, and type, in the veil's ink. */
+const FLASH_PILL =
+  "ui-video-player-flash flex items-center gap-icon-gap rounded-tooltip border border-tooltip-edge bg-veil px-2 py-1 text-tag font-tag whitespace-nowrap tabular-nums text-on-veil [&>svg]:size-caption-leading [&>svg]:flex-none";
+
 /**
- * The flash over the video an arrow's jump gives: a pill on the veil on the
- * side it went, its glyph and how far, which springs in, stands, and fades
- * (`video-player.css`), and is taken as its fade ends. Note that it is
- * hidden from a reader, because the scrubber already tells where the video
- * stands, and lets a press through to the video under it.
+ * The flash over the video a key gives: a jump on the side it went, its
+ * glyph and how far, or a speed in the middle. It arrives as the window's
+ * hint does, once a run, while each press stands it again by drawing its
+ * pill anew (`video-player.css`), and is taken as its fade ends. Note that it
+ * is hidden from a reader, because the scrubber and the speed button already
+ * say where the video stands and how fast, and lets a press through to the
+ * video under it.
  */
-function JumpFlash({ jump, onGone }: { jump: Jump; onGone: () => void }): React.JSX.Element {
-  const back = jump.seconds < 0;
+function KeyFlash({ flash, onGone }: { flash: Flash; onGone: () => void }): React.JSX.Element {
+  const { ask } = flash;
+  const back = ask.kind === FLASH_KIND.JUMP && ask.seconds < 0;
+  const side =
+    ask.kind === FLASH_KIND.SPEED ? "justify-center" : back ? "justify-start" : "justify-end";
   return (
     <span
-      className={`ui-video-player-jumps pointer-events-none absolute inset-0 flex items-center px-ui-24 ${back ? "justify-start" : "justify-end"}`}
+      className={`ui-video-player-flashes pointer-events-none absolute inset-0 flex items-center px-ui-24 ${side}`}
       aria-hidden="true"
     >
-      <span
-        key={jump.count}
-        className="ui-video-player-jump flex items-center gap-ui-6 rounded-ui-full bg-veil px-ui-12 py-ui-6 text-caption whitespace-nowrap tabular-nums text-on-veil [&>svg]:size-caption-leading [&>svg]:flex-none"
-        onAnimationEnd={(event) => {
-          if (event.animationName === JUMP_OUT) onGone();
-        }}
-      >
-        {back ? <RewindIcon /> : null}
-        {`${String(Math.abs(jump.seconds))} seconds`}
-        {back ? null : <FastForwardIcon />}
+      <span key={flash.run} className="flex animate-tooltip-in">
+        <span
+          key={flash.press}
+          className={FLASH_PILL}
+          onAnimationEnd={(event) => {
+            if (event.animationName === FLASH_OUT) onGone();
+          }}
+        >
+          {ask.kind === FLASH_KIND.SPEED ? (
+            speedText(ask.speed)
+          ) : (
+            <>
+              {back ? <RewindIcon /> : null}
+              {`${String(Math.abs(ask.seconds))} seconds`}
+              {back ? null : <FastForwardIcon />}
+            </>
+          )}
+        </span>
       </span>
     </span>
   );
@@ -571,7 +629,7 @@ export function VideoPlayer({
     speed: NORMAL_SPEED,
   });
   const frameSeconds = useMemo(() => frameSecondsOf(dataUrl), [dataUrl]);
-  const [jump, setJump] = useState<Jump>();
+  const [flash, setFlash] = useState<Flash>();
   // The video's own pixels once its size is read, which the viewer fits it by.
   const [natural, setNatural] = useState<VideoSize>();
   const viewer = place === VIDEO_PLAYER_PLACE.VIEWER;
@@ -615,9 +673,7 @@ export function VideoPlayer({
       // Note that the player hears a key before the control it lands on, because the scrubber's
       // slider steps on an arrow itself and stands down only for a key already taken.
       onKeyDownCapture={(event) =>
-        playerKey(event, video.current, frameSeconds, (seconds) =>
-          setJump((was) => jumpOn(was, seconds)),
-        )
+        playerKey(event, video.current, frameSeconds, (ask) => setFlash((was) => flashOn(was, ask)))
       }
     >
       {url === undefined ? null : (
@@ -658,7 +714,7 @@ export function VideoPlayer({
           onRateChange={(event) => read(event.currentTarget)}
         />
       )}
-      {jump === undefined ? null : <JumpFlash jump={jump} onGone={() => setJump(undefined)} />}
+      {flash === undefined ? null : <KeyFlash flash={flash} onGone={() => setFlash(undefined)} />}
       <VideoBar
         playback={playback}
         frame={frameSeconds}

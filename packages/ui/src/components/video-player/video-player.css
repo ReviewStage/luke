@@ -1,30 +1,16 @@
-/* video-player.css -- the flash an arrow's jump gives over a video: the
-   pill springs in on the side it went, stands a moment, and fades. The pill
-   is drawn in utilities (`video-player.tsx`), which takes it once its fade
-   ends; only its keyframes and the rule that plays them stand here. */
+/* video-player.css -- the flash a key gives over a video, standing for the
+   flash delay and fading over the exit. The pill is drawn in utilities and
+   arrives as the window's hint does (`video-player.tsx`), which takes it once
+   its fade ends; each press draws the pill anew, which stands it again. Only
+   the fade's keyframes and the rule that plays them stand here. */
 
 @layer components {
-  .ui-video-player-jump {
-    animation:
-      ui-video-player-jump-in var(--ui-duration-quick) var(--ui-motion-exit) backwards,
-      ui-video-player-jump-pop var(--ui-duration-fast) var(--ui-spring-fast) backwards,
-      ui-video-player-jump-out var(--ui-duration-fast) var(--ui-motion-exit) var(--ui-hint-delay)
-      forwards;
+  .ui-video-player-flash {
+    animation: ui-video-player-flash-out var(--ui-duration-exit) var(--ui-motion-exit)
+      var(--ui-flash-delay) forwards;
   }
 
-  @keyframes ui-video-player-jump-in {
-    from {
-      opacity: 0;
-    }
-  }
-
-  @keyframes ui-video-player-jump-pop {
-    from {
-      transform: scale(0.8);
-    }
-  }
-
-  @keyframes ui-video-player-jump-out {
+  @keyframes ui-video-player-flash-out {
     to {
       opacity: 0;
     }
