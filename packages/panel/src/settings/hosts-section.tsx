@@ -37,11 +37,11 @@ import {
   Stack,
   TEXT_TONE,
   Text,
-  TrashIcon,
   useAnnounce,
   useConfirmDialog,
   useSecond,
 } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useState } from "react";
@@ -226,7 +226,7 @@ function HostRow({
           : [
               {
                 label: "Remove",
-                icon: <TrashIcon />,
+                icon: <GLYPH.REMOVE />,
                 danger: true,
                 disabled: locked,
                 onSelect: onRemove,

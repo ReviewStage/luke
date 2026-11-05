@@ -27,7 +27,7 @@ import { MemorySection } from "./memory-page.js";
  * Settings › Memory over a bridge answering as the host would: the memories
  * of the workspace Settings shows are held for that workspace and drawn as
  * the host lays them on the document, listed in the service's order with
- * their words whole and whose words they are; Forget is offered from a
+ * their words whole and whose words they are; Delete is offered from a
  * memory's ⋯, unavailable on one the reader may not forget, asks first in
  * the confirm dialog, and the memory leaves the list as the host draws it
  * gone; several chosen are forgotten one after another on one question; a
@@ -243,17 +243,17 @@ function openMenu(page: HTMLElement, memory: MemorySummary): void {
   act(() => more.click());
 }
 
-/** Chooses Forget from a memory's ⋯, which puts its question up. */
+/** Chooses Delete from a memory's ⋯, which puts its question up. */
 function askForget(page: HTMLElement, memory: MemorySummary): void {
   openMenu(page, memory);
-  chooseMenuItem("Forget");
+  chooseMenuItem("Delete");
 }
 
 /** Asks Forget, then presses the dialog's own Forget; answers whether it asked before forgetting. */
 async function forget(page: HTMLElement, memory: MemorySummary): Promise<boolean> {
   askForget(page, memory);
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.MEMORIES_FORGET);
-  act(() => button(dialog(), "Forget memory").click());
+  act(() => button(dialog(), "Delete memory").click());
   await settle();
   return askedFirst;
 }
@@ -308,7 +308,7 @@ test("a memory's code in backticks is drawn as inline code, never as the backtic
   assert.doesNotMatch(page.textContent ?? "", /`/u);
 });
 
-test("Forget asks first, then forgets the memory for good and lists what the host then holds", async () => {
+test("Delete asks first, then deletes the memory for good and lists what the host then holds", async () => {
   const { page } = await mount();
 
   const askedFirst = await forget(page, DEPLOYS);
@@ -349,7 +349,7 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
   assert.deepEqual(words(page), [DEPLOYS.text, TESTS.text]);
   assert.equal(
     dialog().querySelector('[data-slot="field-error"]:not(:empty)')?.textContent,
-    "The memory could not be forgotten. Try again.",
+    "The memory could not be deleted. Try again.",
   );
 });
 
@@ -363,14 +363,14 @@ test("the search keeps the memories whose words or keeper hold it", async () => 
   assert.deepEqual(words(page), [TESTS.text]);
 });
 
-test("a memory the reader may not forget offers Forget unavailable, saying who may", async () => {
+test("a memory the reader may not delete offers Delete unavailable, saying who may", async () => {
   const { page } = await mount();
 
   openMenu(page, TESTS);
 
   assert.deepEqual(
-    menuItems().find((item) => item.label === "Forget"),
-    { label: "Forget", disabled: true },
+    menuItems().find((item) => item.label === "Delete"),
+    { label: "Delete", disabled: true },
   );
   assert.match(
     document.querySelector('[role="menu"]')?.textContent ?? "",
@@ -394,12 +394,12 @@ test("several memories chosen are forgotten on one question, one after another, 
       );
     });
   }
-  act(() => button(page.querySelector('[role="toolbar"]') ?? page, "Forget").click());
+  act(() => button(page.querySelector('[role="toolbar"]') ?? page, "Delete").click());
   assert.match(
     dialog().textContent ?? "",
-    /Forget 3 memories\?.*1 memory you may not forget stays\./u,
+    /Delete 3 memories\?.*1 memory you may not delete stays\./u,
   );
-  act(() => button(dialog(), "Forget memories").click());
+  act(() => button(dialog(), "Delete memories").click());
   await settle();
 
   assert.deepEqual(

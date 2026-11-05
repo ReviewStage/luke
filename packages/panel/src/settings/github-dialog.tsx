@@ -47,7 +47,7 @@ import { useAnnounceShown } from "../use-announce-shown.js";
 /**
  * github-dialog.tsx -- Settings › Profile › GitHub personal access token: the member's own classic token, added, shown, and removed.
  *
- * The dialog holds the token alone: a password field with Save, or once a token is saved its hint, login, expiry, and Remove, which asks
+ * The dialog holds the token alone: a password field with Save, or once a token is saved its hint, login, expiry, and Disconnect, which asks
  * first at the dialog's own foot (`FootQuestion`), and at its foot Create token, which opens
  * GitHub's page for a new classic token in the browser. Every refusal and status says what to do
  * next, in a line.
@@ -88,9 +88,9 @@ function statusLabel(status: GitHubTokenStatus): string | undefined {
     case GITHUB_TOKEN_STATUS.VERIFIED:
       return undefined;
     case GITHUB_TOKEN_STATUS.INVALID:
-      return "GitHub rejected this token. Remove it and add a new one.";
+      return "GitHub rejected this token. Disconnect it and add a new one.";
     case GITHUB_TOKEN_STATUS.UNREADABLE:
-      return "Can no longer be read. Remove it and add it again.";
+      return "Can no longer be read. Disconnect it and add it again.";
   }
 }
 
@@ -142,7 +142,7 @@ export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.
   );
 }
 
-/** A saved token with Remove, which asks first. */
+/** A saved token with Disconnect, which asks first, as every connection in Settings ends. */
 function SavedToken({
   token,
   onRemove,
@@ -161,18 +161,18 @@ function SavedToken({
       <Button
         variant={BUTTON_VARIANT.DANGER_OUTLINE}
         busy={removal.busy}
-        busyLabel="Removing"
+        busyLabel="Disconnecting"
         onClick={removal.ask}
       >
-        Remove
+        Disconnect
       </Button>
       <FootQuestion
         confirm={removal}
         question={{
-          title: "Remove your GitHub token?",
+          title: "Disconnect your GitHub token?",
           body: `${PRODUCT_NAME} deletes the token it holds, and your pull requests stop using it until you add one again.`,
-          verb: "Remove token",
-          running: "Removing",
+          verb: "Disconnect token",
+          running: "Disconnecting",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
           replayUnmasked: true,
         }}

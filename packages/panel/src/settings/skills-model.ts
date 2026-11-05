@@ -61,7 +61,7 @@ export const SKILLS_LINE = {
   VIEW: "Open",
   SHARE: "Share with workspace",
   UPDATE: "Update",
-  REMOVE: "Remove",
+  REMOVE: "Delete",
   FILES: "Files",
   VIEW_FAILED: "The skill could not be read.",
   SEARCH: "Search skills",
@@ -204,12 +204,12 @@ export function removeQuestion(
 } {
   const shared = skill.scope === INSTALLED_SKILL_SCOPE.WORKSPACE;
   return {
-    title: `Remove ${skill.name}?`,
+    title: `Delete ${skill.name}?`,
     body: shared
       ? `${everyoneIn(workspace)} loses ${skill.name}: agents they start afterwards no longer load it, and its files are deleted.`
       : "Its files are deleted, and agents started afterwards no longer load it. Installing it again takes the paste again.",
-    verb: "Remove skill",
-    running: "Removing",
+    verb: "Delete skill",
+    running: "Deleting",
     loss: shared ? CONFIRM_LOSS.AFFECTS_OTHERS : CONFIRM_LOSS.IRREVERSIBLE,
   };
 }

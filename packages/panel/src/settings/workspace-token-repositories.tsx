@@ -279,7 +279,7 @@ function TokenOwnerRow({
     .map((repository) => ({
       label: `${WORDS.REMOVE} ${nameOf(repository)}`,
       replayMasked: true,
-      icon: <GLYPH.DELETE />,
+      icon: <GLYPH.REMOVE />,
       danger: true,
       onSelect: () => {
         setAsked(repository);

@@ -1,5 +1,4 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
-import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
 import { LINK_HOME } from "@repo/features/link-home";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -54,6 +53,7 @@ import {
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  SettingsRowActSlot,
   SettingsRowMark,
   type SettingsRowSkeletonShape,
   SettingsRowStateLine,
@@ -65,7 +65,6 @@ import {
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TextField,
-  TrashIcon,
   useConfirmDialog,
   useFilePicker,
   useMenu,
@@ -80,7 +79,6 @@ import {
   ImageUpIcon,
   ShieldIcon,
   UserIcon,
-  UserMinusIcon,
   UserRoundIcon,
   XIcon,
 } from "@repo/ui/icons";
@@ -92,7 +90,6 @@ import { useAccountPreferences } from "../account-choices.js";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, YouBadge } from "../actor-ref.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
@@ -439,25 +436,28 @@ function useMembersRead(workspace: Workspace) {
 /**
  * One member's row: their face, their name with You on the reader's own,
  * their email under it, and their role as the row's value in one column,
- * then in its ⋯ Copy link to their person page, their profile, where the
- * window offers one, and what the reader may do to them (`memberActs`).
+ * then in its ⋯ their profile, where the window offers one, whose page
+ * holds their Copy link, and what the reader may do to them (`memberActs`).
  * Make admin and Make member take hold at once, since either is undone by
  * the other; Make owner and Remove from workspace ask first, and a removal
  * confirmed takes the row away at once, as the host draws it on the press.
  * A role change refused is said under the row, and a removal refused, its
- * row back, in a toast. Every row holds Copy link, so every row has its ⋯
- * and every role ends in the same place. The row is `@repo/ui`'s
- * `SettingsRow` led by the face, through `MenuRow`.
+ * row back, in a toast. A row with no ⋯ in a list where others have one
+ * keeps the ⋯'s room, so every role ends in the same place. The row is
+ * `@repo/ui`'s `SettingsRow` led by the face, through `MenuRow`.
  */
 function MemberRow({
   workspace,
   member,
   readerId,
+  slotted,
 }: {
   workspace: Workspace;
   member: WorkspaceMember;
   /** The reader's account id, whose own row wears You. */
   readerId: string | undefined;
+  /** Whether the list's rows may carry a ⋯, so one without keeps its room. */
+  slotted: boolean;
 }): React.JSX.Element {
   const { act, press } = useAct();
   const workspaceId = workspace.id;
@@ -486,14 +486,8 @@ function MemberRow({
     );
   };
   const openPerson = useOpenPerson();
-  const copy = useCopyToast();
-  const chord = useChordLinks();
+  // Note that Open profile is the one way to the person, whose page holds their Copy link.
   const profileActs = [
-    copyLinkItem(
-      copy,
-      linkOf({ kind: LINK_PLACE.PERSON, userId }, workspace.slug ?? workspaceId),
-      chord,
-    ),
     ...(openPerson === undefined
       ? []
       : [
@@ -531,12 +525,13 @@ function MemberRow({
     ? [
         {
           label: REMOVE_MEMBER,
-          icon: <UserMinusIcon />,
+          icon: <GLYPH.REMOVE />,
           danger: true,
           onSelect: remove.ask,
         },
       ]
     : [];
+  const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
     <Stack gap={GAP.NONE}>
       <MenuRow
@@ -561,7 +556,12 @@ function MemberRow({
             </OneLine>
           ),
           error: replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_MEMBER)),
-          control: <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>,
+          control: (
+            <>
+              <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>
+              {slotted && !acting ? <SettingsRowActSlot /> : null}
+            </>
+          ),
         }}
       />
       <ConfirmDialog
@@ -882,7 +882,13 @@ function TeamMembers({
   return (
     <>
       {members.items.map((member) => (
-        <MemberRow key={member.userId} workspace={workspace} member={member} readerId={readerId} />
+        <MemberRow
+          key={member.userId}
+          workspace={workspace}
+          member={member}
+          readerId={readerId}
+          slotted={managesWorkspace(workspace)}
+        />
       ))}
     </>
   );
@@ -1736,7 +1742,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           ? [
               {
                 label: PHOTO_WORDS.REMOVE,
-                icon: <TrashIcon />,
+                icon: <GLYPH.REMOVE />,
                 danger: true,
                 disabled: uploading,
                 onSelect: remove.ask,

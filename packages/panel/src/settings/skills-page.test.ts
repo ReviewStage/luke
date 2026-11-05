@@ -41,7 +41,7 @@ import { SkillsPage } from "./skills-page.js";
  * not an owner or admin sees a workspace skill's switch unavailable and
  * View alone in its ⋯; Update sends its act; View reads the skill's text
  * and files; Share asks in plain words, moves the skill into the
- * workspace, and says a taken name in the question; Remove asks first; and
+ * workspace, and says a taken name in the question; Delete asks first; and
  * an install lights its rows. In the dialog, a GitHub source's skills are
  * one list to tick, searched once it is long, the named one ticked, and
  * Install sends the ticked ones with the commit previewed; a skill's text
@@ -493,7 +493,7 @@ test("a skill's row leads with the book in the settings mark slot, and hangs the
 test("the account's own skill offers Share with workspace, which asks in plain words and moves it there", async () => {
   await mountPage();
 
-  assert.deepEqual(menuOf("pr-style"), ["Open", "Share with workspace", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Share with workspace", "Delete"]);
   await choose("pr-style", "Share with workspace");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Share pr-style with Stage\?/u);
@@ -534,7 +534,7 @@ test("Share is never offered in a personal workspace", async () => {
   stored = [PR_STYLE];
   await mountPage(workspace({ personal: true }));
 
-  assert.deepEqual(menuOf("pr-style"), ["Open", "Remove"]);
+  assert.deepEqual(menuOf("pr-style"), ["Open", "Delete"]);
 });
 
 test("View reads the skill and draws its text as written and every file with its size", async () => {
@@ -553,22 +553,22 @@ test("View reads the skill and draws its text as written and every file with its
   assert.equal(document.querySelector('[role="dialog"]'), null);
 });
 
-test("Remove asks first, red for a personal skill whose files go, then takes it off the page", async () => {
+test("Delete asks first, red for a personal skill whose files go, then takes it off the page", async () => {
   await mountPage();
 
-  await choose("pr-style", "Remove");
+  await choose("pr-style", "Delete");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Its files are deleted/u);
-  act(() => button("Remove skill", question).click());
+  act(() => button("Delete skill", question).click());
   await settle();
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_REMOVE), [{ skillId: PR_STYLE.id }]);
   assert.ok(!(document.body.textContent ?? "").includes("pr-style described"));
 });
 
-test("Removing a workspace skill says everyone in the workspace loses it, in the accent", async () => {
+test("Deleting a workspace skill says everyone in the workspace loses it, in the accent", async () => {
   await mountPage();
 
-  await choose("release-notes", "Remove");
+  await choose("release-notes", "Delete");
   const question = dialog("alertdialog");
   assert.match(question.textContent ?? "", /Everyone in Stage loses release-notes/u);
 });
@@ -594,7 +594,7 @@ test("a personal workspace lists the account's own skills alone", async () => {
 test("a GitHub skill offers Update in its ⋯, which sends its act", async () => {
   await mountPage();
 
-  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Remove"]);
+  assert.deepEqual(menuOf("release-notes"), ["Open", "Update", "Delete"]);
   await choose("release-notes", "Update");
   assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_UPDATE), [
     { workspaceId: "workspace-stage", skillId: RELEASE_NOTES.id },
