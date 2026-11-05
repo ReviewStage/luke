@@ -163,7 +163,7 @@ import {
   standsAt,
   taskSubject,
   useStandingDoor,
-  WaitingBadge,
+  WaitingCount,
 } from "./task-row-parts.js";
 import {
   assigneeFor,
@@ -472,7 +472,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
         <span className="tasks-board-card-marks ml-auto inline-flex min-w-0 items-center gap-item-gap text-caption text-muted-foreground tabular-nums">
           {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
             <span className="tasks-board-waiting flex flex-none">
-              <WaitingBadge count={waiting} />
+              <WaitingCount count={waiting} />
             </span>
           ) : null}
           {drawn(TASK_PROPERTY.UPDATED) ? (

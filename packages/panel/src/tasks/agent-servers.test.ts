@@ -199,7 +199,7 @@ function tools(container: HTMLElement) {
   return [...container.querySelectorAll('ul[aria-label$=" tools"] > li')].map((tool) => [
     (tool.querySelector(".integration-tool-id") ?? tool.querySelector(".integration-tool-title"))
       ?.textContent,
-    tool.querySelector(".ui-badge")?.textContent,
+    tool.querySelector(".ui-quiet-words")?.textContent,
   ]);
 }
 

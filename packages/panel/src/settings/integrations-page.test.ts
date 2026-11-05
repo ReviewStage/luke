@@ -894,7 +894,7 @@ function rowNamed(page: HTMLElement, name: string): Element {
 /** Each tool the page shows opened: its name and its badge, where it wears one. */
 function shownTools(page: HTMLElement) {
   return [...page.querySelectorAll('.integration-tools-panel ul[aria-label$=" tools"] > li')].map(
-    (tool) => [toolName(tool), tool.querySelector(".ui-badge")?.textContent ?? undefined],
+    (tool) => [toolName(tool), tool.querySelector(".ui-quiet-words")?.textContent ?? undefined],
   );
 }
 

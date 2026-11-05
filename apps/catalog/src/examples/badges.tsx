@@ -5,6 +5,8 @@ import {
   CheckIcon,
   GAP,
   Inline,
+  QUIET_MARK,
+  QuietWords,
   SETTINGS_ROW_INDENT,
   SettingsRow,
   SettingsSection,
@@ -23,7 +25,10 @@ import { CatalogSection } from "../section";
  * words given up to a glyph or a tone's dot in a narrow room, a long
  * label in a narrow column, and a short badge beside a long row name in a
  * settings column at a page's measure and narrower, where the name gives way
- * and the badge stays whole.
+ * and the badge stays whole; and where a state is a note rather than a
+ * call to act, its quiet words in place of a badge, alone, after the
+ * attention mark as a count named by its whole words, and after the failure
+ * glyph.
  */
 
 const SAYS = {
@@ -71,7 +76,16 @@ function Badges(): React.JSX.Element {
           <Badge tone={STATUS_TONE.COMPLETE} icon={<CheckIcon />}>
             Signed in
           </Badge>
-          <Badge dot>Waiting on a teammate</Badge>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="quiet-words" title="Quiet words">
+        <Inline gap={GAP.CONTROL}>
+          <QuietWords>Waiting on a teammate</QuietWords>
+          <QuietWords>Pending</QuietWords>
+          <QuietWords mark={QUIET_MARK.ATTENTION} label="2 need you">
+            2
+          </QuietWords>
+          <QuietWords mark={QUIET_MARK.FAILED}>Destructive</QuietWords>
         </Inline>
       </CatalogSection>
       <CatalogSection id="badge-swatch" title="A provider's colors">
@@ -122,9 +136,6 @@ function Badges(): React.JSX.Element {
           </Badge>
           <Badge tone={STATUS_TONE.ATTENTION} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
             Pending
-          </Badge>
-          <Badge dot hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
-            Outdated
           </Badge>
         </div>
       </CatalogSection>

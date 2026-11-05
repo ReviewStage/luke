@@ -10,7 +10,6 @@ import {
   type TaskSummary,
 } from "@repo/features/task-wire";
 import {
-  Badge,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
@@ -18,6 +17,8 @@ import {
   ChipName,
   dropBelowStart,
   type MenuSubject,
+  QUIET_MARK,
+  QuietWords,
   STATUS_TONE,
   TaskPriorityMark,
   TaskStatusMark,
@@ -285,10 +286,14 @@ export function StatusChip({
   );
 }
 
-/** How many of a task's questions wait on the reader, as a badge; nothing at none. */
-export function WaitingBadge({ count }: { count: number }): React.JSX.Element | null {
+/** How many of a task's questions wait on the reader, its count after the attention mark, named by its whole words; nothing at none. */
+export function WaitingCount({ count }: { count: number }): React.JSX.Element | null {
   if (count === 0) return null;
-  return <Badge tone={STATUS_TONE.ATTENTION}>{needsYouWords(count)}</Badge>;
+  return (
+    <QuietWords mark={QUIET_MARK.ATTENTION} label={needsYouWords(count)}>
+      {count}
+    </QuietWords>
+  );
 }
 
 /**

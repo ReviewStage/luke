@@ -9,7 +9,6 @@ import {
 import { automationRun } from "@repo/features/model-label";
 import { momentText, sinceText } from "@repo/features/time-format";
 import {
-  Badge,
   FiringGlyph,
   GAP,
   Inline,
@@ -17,6 +16,7 @@ import {
   PAGER_COUNT,
   Pager,
   PaneBar,
+  QuietWords,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -27,7 +27,6 @@ import {
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { AGENT_STATUS_TONE } from "../tasks/agent-model.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 
@@ -121,9 +120,9 @@ export function AutomationRunStrip({
           </Tooltip>
           <Tooltip label={line}>
             <span>
-              <Badge tone={AGENT_STATUS_TONE[status]}>
+              <QuietWords>
                 <ReplayUnmask>{AGENT_STATUS_WORDS[status]}</ReplayUnmask>
-              </Badge>
+              </QuietWords>
             </span>
           </Tooltip>
         </Inline>

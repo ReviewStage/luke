@@ -13,7 +13,6 @@ import {
 import {
   ALIGN,
   BackButton,
-  Badge,
   FILL_ELEMENT,
   Fill,
   GAP,
@@ -27,9 +26,10 @@ import {
   NO_BACK_KEY,
   ONE_LINE_ELEMENT,
   OneLine,
+  QUIET_MARK,
+  type QuietMark,
+  QuietWords,
   ScrollArea,
-  STATUS_TONE,
-  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -61,8 +61,8 @@ import { Highlighted } from "./search-field.js";
  * the words a search landed on marked in it, then its parameters, those a
  * call must give first, each its name, its
  * type, what it is, and the values it takes as chips, its default outlined.
- * The badge and the hints are `@repo/ui`'s Badge, the danger tone for what
- * destroys.
+ * The badge and the hints are quiet words (`@repo/ui`'s QuietWords), after
+ * the failure glyph in the danger ink for what destroys.
  * A page whose server said nothing of its tool says so. The page's body is
  * its one scroller, which the owner may hand the focus to, so the arrows
  * scroll it. Where either is drawn, and what the keys do, is the owner's.
@@ -103,20 +103,20 @@ const PointerHighlight: ListRowHint = ({ children }) => {
   });
 };
 
-/** The badge a tool wears on its row and at the head of its page's hints. */
+/** The words a tool wears on its row, after the failure glyph where it destroys. */
 function ToolBadge({ tool }: { tool: IntegrationTool }): React.JSX.Element | null {
   const badge = toolBadge(tool.annotations);
   if (badge === undefined) return null;
   return (
-    <Badge tone={badge === TOOL_BADGE.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL}>
+    <QuietWords mark={badge === TOOL_BADGE.DESTRUCTIVE ? QUIET_MARK.FAILED : undefined}>
       {badge}
-    </Badge>
+    </QuietWords>
   );
 }
 
-/** The tone a hint is said in: the danger tone for what destroys, the quiet one for the rest. */
-function hintTone(hint: ToolHint): StatusTone {
-  return hint === TOOL_HINT.DESTRUCTIVE ? STATUS_TONE.DANGER : STATUS_TONE.NEUTRAL;
+/** The mark a hint's words follow: the failure glyph for what destroys, none for the rest. */
+function hintMark(hint: ToolHint): QuietMark | undefined {
+  return hint === TOOL_HINT.DESTRUCTIVE ? QUIET_MARK.FAILED : undefined;
 }
 
 /**
@@ -214,7 +214,7 @@ export function IntegrationToolList({
               id={idOf?.(tool)}
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
-                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-badge]:flex-none [&>.ui-badge]:self-center">
+                <span className="integration-tool-name flex min-w-0 items-baseline gap-item-gap [&>.ui-quiet-words]:flex-none [&>.ui-quiet-words]:self-center">
                   <OneLine
                     className={
                       namedApart(tool)
@@ -448,13 +448,13 @@ export function IntegrationToolDetail({
             >
               {hints.map((hint) => (
                 <li key={hint}>
-                  <Badge tone={hintTone(hint)}>
+                  <QuietWords mark={hintMark(hint)}>
                     <HintWords
                       words={toolHintWords(hint, server)}
                       server={server}
                       masked={serverReplayMasked}
                     />
-                  </Badge>
+                  </QuietWords>
                 </li>
               ))}
             </Inline>

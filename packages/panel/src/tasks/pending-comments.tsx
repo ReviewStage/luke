@@ -3,7 +3,6 @@ import { PULL_REQUEST_ACTION } from "@repo/features/pull-request-write-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { IRREVERSIBLE_WORDS } from "@repo/features/words";
 import {
-  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -12,7 +11,7 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   nextRowOrHead,
-  STATUS_TONE,
+  QuietWords,
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
@@ -151,9 +150,9 @@ export function usePendingThread(thread: ReviewThread): boolean {
   return usePendingComment(thread.comments[0]?.url) !== undefined;
 }
 
-/** The Pending mark a pending comment and a thread it starts wear. */
-export function PendingBadge(): React.JSX.Element {
-  return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
+/** The Pending words a pending comment and a thread it starts wear. */
+export function PendingWords(): React.JSX.Element {
+  return <QuietWords>{PENDING_WORDS.PENDING}</QuietWords>;
 }
 
 /**
@@ -257,7 +256,7 @@ export function PendingComment({
       nameRef={<ActorRef actor={writer} nameOnly />}
       at={head.at}
       now={head.now}
-      trailing={marked ? <PendingBadge /> : undefined}
+      trailing={marked ? <PendingWords /> : undefined}
     >
       {body}
     </Comment>
