@@ -97,8 +97,10 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * with Retry, because a start sent before the list is read names no device, and
  * the service starts such an agent in the cloud for good: Cloud is only ever
  * where an agent runs because the chip said Cloud. The repository chip starts on the one the press chose
- * (a repository group's +), else the one the newest task in the workspace
- * was about, either only where the workspace's GitHub reaches it.
+ * (a repository group's +), else the newest the workspace's tasks were about
+ * that its GitHub reaches, else the first its read lists, and stands on none
+ * only where it reaches none or No repository was picked. A repository a read
+ * does not list is dropped, so a later read listing it does not bring it back.
  *
  * While the Pilot experiment is on, a task's card offers Pilot or Agent at
  * the head row's end, set to Pilot: how the task is worked, kept on the task
@@ -253,6 +255,9 @@ const NONE_OFF: readonly string[] = [];
 /** The repositories a card's agent works in beside the task's as it opens: none. */
 const NONE_ALSO: readonly string[] = [];
 
+/** The repositories a card's default passes over as it opens: none, until a read leaves one out. */
+const NONE_DROPPED: readonly string[] = [];
+
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
@@ -298,6 +303,11 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.agent.disabledServers.every((server) => b.agent.disabledServers.includes(server)) &&
     sameInOrder(a.agent.alsoRepositories ?? [], b.agent.alsoRepositories ?? [])
   );
+}
+
+/** Whether two names are one repository, as GitHub spells it or not. */
+function sameRepository(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 /** Whether two lists name the same in the same order. */
@@ -476,6 +486,8 @@ export function NewTaskComposer({
   const runsOn = runsOnStands ? newTaskRunsOn(device) : undefined;
   // The repositories the chip's last read listed, an App's and a member's token's alike.
   const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
+  // The repositories a read did not list, which the default passes over from then on.
+  const [dropped, setDropped] = useState<readonly string[]>(NONE_DROPPED);
   // A repository picked in one workspace is none of another's,
   // so the owner's switch, as Home's, lets it go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
@@ -485,17 +497,33 @@ export function NewTaskComposer({
     if (scope !== undefined) {
       setChosen(undefined);
       setAlsoChosen(NONE_ALSO);
+      setDropped(NONE_DROPPED);
     }
     setScope(repositories.scope);
   }
   const isListed = (name: string) =>
-    listed === undefined || listed.some((each) => each.toLowerCase() === name.toLowerCase());
-  // A pick or the recent default a read does not list is let go, so a later read listing it does
-  // not bring it back; a read made before the workspace resolved, or for the
-  // one before a switch still under way, judges none.
+    listed === undefined || listed.some((each) => sameRepository(each, name));
+  const kept = (name: string) => !dropped.some((each) => sameRepository(each, name));
+  // Note that a null chosen is No repository picked, and an undefined one is no pick yet, which
+  // falls to the newest recent repository still kept, then to the first the read lists.
+  const fallback =
+    repositories.recent.find((each) => kept(each) && isListed(each)) ?? listed?.find(kept) ?? null;
+  const candidate = chosen === undefined ? fallback : chosen;
+  // A pick, a preset, or the recent default a read does not list is dropped, so a later read
+  // listing it does not bring it back and the default falls to the next; a read made before the
+  // workspace resolved, or for the one before a switch still under way, judges none.
   const judged = repositories.scope !== undefined && repositories.scope === scope;
-  const candidate = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
-  if (candidate !== null && !isListed(candidate) && judged) setChosen(null);
+  const drop = (name: string) => {
+    setDropped((was) => (was.some((each) => sameRepository(each, name)) ? was : [...was, name]));
+    setChosen(undefined);
+  };
+  const unlisted = [candidate, ...repositories.recent].filter(
+    (each): each is string => each !== null && kept(each) && !isListed(each),
+  );
+  if (judged && unlisted.length > 0) {
+    setDropped([...dropped, ...unlisted]);
+    if (chosen !== undefined && chosen !== null) setChosen(undefined);
+  }
   // Note that a repository is not started on before the read lands unless
   // the workspace's GitHub reaches it, because the service would refuse it.
   const picked =
@@ -652,9 +680,10 @@ export function NewTaskComposer({
       value={repository}
       chooser={repositories}
       onChoose={setChosen}
-      onUnreached={judged ? () => setChosen(null) : undefined}
+      onUnreached={judged && repository !== null ? () => drop(repository) : undefined}
       onClear={tree ? undefined : () => setChosen(null)}
       onListed={setListed}
+      pending={!tree && chosen !== null && repository === null}
       held={tree ? REPOSITORY_HELD : undefined}
     />
   );

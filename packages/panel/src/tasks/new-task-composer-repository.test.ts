@@ -146,6 +146,15 @@ async function mount(
   return { container, starts, also, redraw, comeForward };
 }
 
+test("with no recent task, the chip stands on the first repository the read lists", async () => {
+  const { container } = await mount(TOKEN_LISTING);
+  const chip =
+    container.querySelector<HTMLButtonElement>(".ui-chip") ??
+    assert.fail("the card draws the repository chip");
+
+  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
   const { container } = await mount(TOKEN_LISTING);
   const chip =
