@@ -240,6 +240,8 @@ function ready(
 }
 
 let root: Root | undefined;
+/** The toasts drawn beside the tab, where a test reads one. */
+let toasts: Root | undefined;
 /** What each of Files changed's lists was handed, mount first, each draw after it, with the box it was drawn in. */
 let lists: Array<{ readonly host: HTMLElement; readonly props: DiffListProps }> = [];
 /** The files the lists were scrolled to, in order. */
@@ -317,6 +319,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
+  act(() => toasts?.unmount());
+  toasts = undefined;
   document.body.innerHTML = "";
   for (const style of document.head.querySelectorAll("style")) style.remove();
   document.body.style.removeProperty("--ui-duration-pane");
@@ -643,8 +647,8 @@ test("a pick the service refuses says so in a toast, and the Generate after it s
     [ACT_KIND.CHAPTERS_MODEL_WRITE]: () =>
       Promise.resolve({ failure: PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED }),
   });
-  const toasts = createRoot(document.body.appendChild(document.createElement("div")));
-  act(() => toasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
+  toasts = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => toasts?.render(onRegistry(rendererRegistry, createElement(ToastHost))));
   let asked = 0;
   const tab = await draw(
     controlAnswering({
@@ -672,7 +676,6 @@ test("a pick the service refuses says so in a toast, and the Generate after it s
 
   assert.match(newestToastSays() ?? "", /The chapters model could not be saved\. Try again\./u);
   assert.equal(asked, 1);
-  act(() => toasts.unmount());
 });
 
 test("a chapter's diff is Files changed's list handed only its hunks, and its rail row counts the review threads on them", async () => {
