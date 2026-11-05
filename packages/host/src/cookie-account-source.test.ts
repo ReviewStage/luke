@@ -62,6 +62,8 @@ const USER = {
 
 interface ServiceState {
   user: Record<string, string> | undefined;
+  /** The admin whose sign-in as the user the session is, where it is one. */
+  impersonatedBy?: string;
   /** How many session reads answer as an outage before the service answers again. */
   outages: number;
   experiments: Record<string, boolean>;
@@ -90,7 +92,12 @@ function respond(
         return new Response(null, { status: 503 });
       }
       const answer = jsonResponse(
-        state.user ? { session: { id: "session-1" }, user: state.user } : null,
+        state.user
+          ? {
+              session: { id: "session-1", impersonatedBy: state.impersonatedBy ?? null },
+              user: state.user,
+            }
+          : null,
       );
       const held = state.heldRead;
       state.heldRead = undefined;
@@ -281,6 +288,19 @@ describe("the cookie account source", () => {
       assert.equal(yield* session.token.readAccountKey?.() ?? Effect.void, USER.email);
       assert.ok(service.requests.every((request) => request.authorization === undefined));
     }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "says the account is a maintainer's sign-in as the user where get-session names one",
+    () =>
+      Effect.gen(function* () {
+        const { open } = scene({ impersonatedBy: "admin-1" });
+        const session = yield* open;
+
+        const account = yield* session.initialize;
+
+        assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.impersonated, true);
+      }).pipe(Effect.scoped),
   );
 
   it.effect("reads a session whose last sign-in names no known provider as no account", () =>

@@ -6,9 +6,10 @@
  * here, by its status, as the screens tell it apart, and an answer that came
  * through a redirect is something in front of the service answering, such as
  * a preview's deployment protection. The page keeps an account's page and a
- * typed search in its address bar. Until a sign-in has been pressed on
- * this page once, every read is held at the gate, whatever cookie the
- * browser holds (`SIGN_IN_CHOSEN`).
+ * typed search in its address bar. It alone signs a maintainer in as a
+ * member, through Better Auth's admin plugin (`../auth-client.ts`). Until a
+ * sign-in has been pressed on this page once, every read is held at the
+ * gate, whatever cookie the browser holds (`SIGN_IN_CHOSEN`).
  */
 
 import type {
@@ -45,6 +46,7 @@ import {
   searchHref,
   workspaceHref,
 } from "@repo/panel/admin/routing";
+import { impersonate } from "../auth-client";
 import { ForbiddenCard, SignInCard } from "./chrome/gate-cards";
 
 /** The word the screens tell a refusal apart by, from the status it was answered under. */
@@ -117,6 +119,8 @@ const WEB_ADMIN_DOORS: AdminDoors = {
       return () => window.removeEventListener("popstate", listener);
     },
   },
+  // The page's cookie session is the one kind a maintainer may sign in as a member from.
+  impersonate,
 };
 
 /** The page's doors, handed to every admin screen under it. */

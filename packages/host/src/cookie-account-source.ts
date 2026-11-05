@@ -5,8 +5,9 @@
  * fetch on every same-origin request, so nothing here reads, keeps, or
  * forwards it: every request below goes out with no `Authorization`, and the
  * only things read off an answer are the user's id, address, name, picture
- * and how they last signed in. A refused hosted call re-reads the session,
- * which is how a session that ended elsewhere signs this tab out.
+ * and how they last signed in, and whether a maintainer is signed in as
+ * them. A refused hosted call re-reads the session, which is how a session
+ * that ended elsewhere signs this tab out.
  */
 
 import {
@@ -69,10 +70,17 @@ const LAUNCH_REREAD = {
  */
 const REVISIT_WINDOW = Duration.seconds(1);
 
-/** The answer `get-session` gives: the session's user, or `null` for none. */
+/**
+ * The answer `get-session` gives: the session's user, and whether a
+ * maintainer opened it as them (`impersonatedBy`, the admin plugin's), or
+ * `null` for none.
+ */
 const SessionAnswerSchema = Schema.fromJsonString(
   Schema.NullOr(
     Schema.Struct({
+      session: Schema.optionalKey(
+        Schema.Struct({ impersonatedBy: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
+      ),
       user: Schema.Struct({
         id: Schema.NonEmptyString,
         email: Schema.NonEmptyString,
@@ -145,13 +153,16 @@ type SessionRead =
  * one whose last sign-in names no provider this build knows is no account,
  * exactly as the settings store drops a stored account without one.
  */
-function accountOf(user: {
-  readonly id: string;
-  readonly email: string;
-  readonly name?: string | null;
-  readonly image?: string | null;
-  readonly lastLoginMethod?: string | null;
-}): SessionRead {
+function accountOf(
+  user: {
+    readonly id: string;
+    readonly email: string;
+    readonly name?: string | null;
+    readonly image?: string | null;
+    readonly lastLoginMethod?: string | null;
+  },
+  impersonated: boolean,
+): SessionRead {
   const provider = user.lastLoginMethod;
   if (!isAccountProvider(provider)) return { signedIn: false };
   const pictureUrl = pinnedPictureUrl(user.image);
@@ -164,6 +175,7 @@ function accountOf(user: {
       ...(user.name ? { name: user.name } : undefined),
       ...(pictureUrl ? { pictureUrl } : undefined),
       provider,
+      ...(impersonated ? { impersonated: true } : undefined),
     },
   };
 }
@@ -388,7 +400,7 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     if (Result.isFailure(decoded)) return yield* new SessionUnreadable();
     return decoded.success === null
       ? ({ signedIn: false } as const)
-      : accountOf(decoded.success.user);
+      : accountOf(decoded.success.user, Boolean(decoded.success.session?.impersonatedBy));
   });
 
   /**

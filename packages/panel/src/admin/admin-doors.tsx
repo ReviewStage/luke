@@ -20,7 +20,7 @@ import type {
 import { createContext, useContext } from "react";
 
 /**
- * admin-doors.tsx -- what the admin screens reach through the shell that mounts them: the service's admin reads and its one write, and the gate's own words.
+ * admin-doors.tsx -- what the admin screens reach through the shell that mounts them: the service's admin reads and its one write, the gate's own words, and the web page's sign-in as a member.
  *
  * The screens are the panel's, mounted by the web's standalone `/admin` page
  * and by the app's Admin place, and each mount reaches the service its own
@@ -102,6 +102,14 @@ export interface AdminDoors {
   readonly reads: AdminReads;
   readonly gate: AdminGate;
   readonly address: AdminAddress;
+  /**
+   * Signs the maintainer in as an account, for up to an hour, and leaves
+   * for the app as them; answers why not, in the service's own words, where
+   * it refused, such as an account whose grant of support access no longer
+   * stands. Only a browser's cookie session may hold such a sign-in, so only
+   * the web page answers it, and the app leaves it out.
+   */
+  readonly impersonate?: (userId: string) => Promise<string | undefined>;
 }
 
 const AdminDoorsContext = createContext<AdminDoors | undefined>(undefined);

@@ -23,10 +23,10 @@ import { UsersScreen } from "@repo/panel/admin/screens/users";
 import { WorkspaceScreen } from "@repo/panel/admin/screens/workspace";
 import { WorkspacesScreen } from "@repo/panel/admin/screens/workspaces";
 import { useCallback, useEffect, useState } from "react";
-import { authClient } from "./admin/auth-client";
 import { SignInCard } from "./admin/chrome/gate-cards";
 import { AdminShell } from "./admin/chrome/sidebar";
 import { WebAdminDoors } from "./admin/web-admin-doors";
+import { authClient } from "./auth-client";
 
 /** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
 export function AdminDashboard(): React.JSX.Element {
