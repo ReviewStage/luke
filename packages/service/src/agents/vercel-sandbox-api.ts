@@ -38,7 +38,17 @@ import { gzipSync } from "node:zlib";
 import { readEither } from "@repo/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { APIError, Sandbox } from "@vercel/sandbox";
-import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
+import {
+  Context,
+  Data,
+  Duration,
+  Effect,
+  Option,
+  Redacted,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { EXCESS_KEYS, unparsedWire } from "../core.js";
 import { jsonOf } from "../http/http-effect.js";
@@ -751,6 +761,23 @@ function sdkFailure(call: SandboxCall, cause: unknown): SandboxUnavailable {
   return refused(call, { status: cause.response.status, text: cause.text ?? "" });
 }
 
+/**
+ * A `fetch` that sends a DELETE once and answers every later DELETE through
+ * it with a copy of the first's answer, or its failure. Note that the SDK
+ * would send a DELETE again by name after a 5xx or a lost connection, which
+ * may stand for a delete that went through, and a name freed is one another
+ * template build may already hold (`native-sandbox-template.ts`), so its
+ * tries again replay the first answer rather than reach Vercel.
+ */
+function deleteSentOnce(send: typeof fetch): typeof fetch {
+  let first: Promise<Response> | undefined;
+  return (input, init) => {
+    if (init?.method !== "DELETE") return send(input, init);
+    first ??= send(input, init);
+    return first.then((answer) => answer.clone());
+  };
+}
+
 /** The call tried again where Vercel answered one of the passing refusals given; any other failure answers at once. */
 function retryingPassing<A>(
   effect: Effect.Effect<A, SandboxUnavailable>,
@@ -847,6 +874,15 @@ function tarOf(files: readonly SandboxFile[]): Uint8Array {
   return gzipSync(Buffer.concat(blocks));
 }
 
+/**
+ * The `fetch` `@vercel/sandbox` sends each request through: the platform's
+ * own, unless a test hands the fake of Vercel it already answers the
+ * `HttpClient` with.
+ */
+export const SandboxFetch = Context.Reference<typeof fetch>("@repo/service/SandboxFetch", {
+  defaultValue: () => globalThis.fetch,
+});
+
 /** How the deployment's own OIDC token is read: the function's in production, a fixed one in a test. */
 export type OidcTokenRead = () => Promise<string>;
 
@@ -919,7 +955,7 @@ function commandRunOf(text: string): CommandRun | undefined {
 export function vercelSandboxApi(
   readToken: OidcTokenRead,
 ): Effect.Effect<VercelSandboxApi, never, HttpClient.HttpClient> {
-  return Effect.map(HttpClient.HttpClient, (client) => {
+  return Effect.map(Effect.all([HttpClient.HttpClient, SandboxFetch]), ([client, sdkFetch]) => {
     /** The token's headers and claims for the call given, which a failure to read them names. */
     const credentials = (call: SandboxCall) =>
       Effect.gen(function* () {
@@ -1046,6 +1082,7 @@ export function vercelSandboxApi(
                 token: asked.token,
                 teamId: asked.teamId,
                 projectId: asked.projectId,
+                fetch: deleteSentOnce(sdkFetch),
                 signal,
               });
               await sandbox.delete({ deleteOrphanSnapshots: true, signal });
