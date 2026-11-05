@@ -535,6 +535,12 @@ body,
   --ui-toolbar-start-at: calc(var(--sidebar-toggle-clearance) - var(--sheet-gap));
 }
 
+/* The task's agents' bar stands under its topbar, clear of the title bar's
+   buttons, so it starts at the sheet's edge however the sidebar stands. */
+.desktop-task-main .task-agents-bar {
+  --ui-toolbar-start-at: 0px;
+}
+
 /* The plan's toolbar answers its own width (`Toolbar`'s `measure`), so its
    controls give way before its tabs do: where the column is narrowest the
    agents' Retry draws its glyph alone (`FoldingButton`). */

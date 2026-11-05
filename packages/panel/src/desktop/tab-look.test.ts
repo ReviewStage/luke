@@ -274,23 +274,30 @@ test("the side panel's + offers an agent's Pull request in the look its tab wear
   );
 });
 
-test("the column's strip leads with the task itself, named as the list names it now, and the side panel offers no Plan", async () => {
+test("the task's topbar names the task itself, as the list names it now, over the agents' strip, and the side panel offers no Plan", async () => {
   // Note that the list renamed the task before its document was read again, so the tab follows the list.
   const container = await mount({ listed: { ...SUMMARY, name: "Expire invites after a week" } });
-  const column = container.querySelector(".main-tabs");
-  assert.ok(column, "the task's column's strip");
-  const first = column.querySelector<HTMLElement>('[role="tab"] .ui-tab-label');
-  assert.equal(first?.textContent, "Expire invites after a week", "the task leads the strip");
+  const topbar = container.querySelector(".desktop-task-main .ui-toolbar");
+  assert.ok(topbar, "the task's topbar");
+  const labels = [...topbar.querySelectorAll<HTMLElement>('[role="tab"] .ui-tab-label')];
+  assert.deepEqual(
+    labels.map((label) => label.textContent),
+    ["Expire invites after a week"],
+    "the topbar holds the task's tab alone",
+  );
+  const agents = container.querySelector(".task-agents-bar .main-tabs");
+  assert.ok(agents, "the agents' strip under it");
+  assert.ok(!tabLooks(agents).has("Expire invites after a week"), "the task is no agent's tab");
   const panel = container.querySelector(".side-panel-tabs");
   assert.ok(panel, "the side panel's strip");
   assert.ok(!tabLooks(panel).has(TASK.name) && !tabLooks(panel).has("Plan"), "no Plan tab");
   assert.ok(!rowLooks(panel).has(TASK.name) && !rowLooks(panel).has("Plan"), "nor a Plan row");
 });
 
-test("the column's first tab hangs the task's card, as its sidebar row does", async () => {
-  const column = (await mount()).querySelector(".main-tabs");
-  const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.ok(tab, "the strip leads with the task's tab");
+test("the topbar's task tab hangs the task's card, as its sidebar row does", async () => {
+  const topbar = (await mount()).querySelector(".desktop-task-main .ui-toolbar");
+  const tab = topbar?.querySelector<HTMLElement>('[role="tab"]');
+  assert.ok(tab, "the topbar holds the task's tab");
   restOn(tab);
   const card = document.querySelector(".ui-tooltip-card [data-task-card]");
   assert.ok(card, "the task's card is hung");

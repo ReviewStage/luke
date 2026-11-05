@@ -85,10 +85,11 @@ import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopHome } from "./desktop-home.js";
 import {
   AgentPane,
-  MainTabStrip,
+  MainTabBars,
   mainTabLabel,
   newAgentStarts,
   phoneAgentStarts,
+  TaskAgentsBar,
 } from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
@@ -143,14 +144,17 @@ import {
  * the repository chip only while the task has none, and otherwise only the
  * chip's menu, which Change repository opens.
  *
- * The strip's first tab names the task whichever tab is chosen, by its
- * status mark and name, and opens its Overview, whose head draws the task's
- * path over its title: its repository, the task it is a child of, and its
- * key. A phone heads the task with its own row instead (`TaskHead`).
+ * The column has two bars. The task's topbar names the task whichever tab
+ * is chosen, by its status mark and name, a tab that opens its Overview,
+ * whose head draws the task's path over its title: its repository, the task
+ * it is a child of, and its key; the task's ⋯ and the summary's button stand
+ * at its end. The agents' bar under it holds their tabs, the "+", and the
+ * chosen agent's ⋯ (`main-tabs.tsx`). A phone heads the task with its own
+ * row instead (`TaskHead`).
  *
- * The column's summary stands at its right, under the toolbar, listing what
+ * The column's summary stands at its right, under the bars, listing what
  * both "+" menus open, with its button last in the
- * toolbar, after the ⋯ menu (`task-summary.tsx`).
+ * topbar, after the ⋯ menu (`task-summary.tsx`).
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
@@ -257,9 +261,12 @@ function TaskPageSkeleton({
         fullScreen={panel?.fullScreen === true}
         column={
           <>
-            {/* Note that the bar stands empty, never in blocks for the tabs and actions it lands with, and a phone, whose page hides the bar, draws none. */}
+            {/* Note that the bars stand empty, never in blocks for the tabs and actions they land with, and a phone, whose page hides them, draws none. */}
             {head === undefined ? (
-              <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
+              <>
+                <Toolbar start={TOOLBAR_INSET.COLUMN} look={TOOLBAR_LOOK.TABS} measure />
+                <TaskAgentsBar />
+              </>
             ) : null}
             <TaskBody>
               <Fill className="desktop-task-column">
@@ -378,8 +385,6 @@ function PlanDocument({
   // The tab a phone's panel shows past the plan, which its header is named by, and the tab its column shows, whose menu the header's ⋯ offers on the agent's screen (`strip-tabs.tsx`'s `ShownTab`).
   const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
   const [shownAgentTab, setShownAgentTab] = useState<ShownTab | undefined>(undefined);
-  // The toolbar's slot the chosen agent's ⋯ stands in, as the side panel's bar keeps one for its chosen tab's; a phone's header offers the tab's actions instead.
-  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   const phone = room === SHELL_ROOM.NARROW;
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
@@ -1213,35 +1218,28 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        {/* On a phone no strip stands, Overview listing the agents instead, the strip drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
+                        {/* On a phone no bar stands, Overview listing the agents instead, the bars drawn hidden so its shown agent's tab still hands the header's ⋯ its menu (`onShown`). */}
                         <div className={phone ? undefined : "contents"} hidden={phone}>
-                          <Toolbar
-                            start={TOOLBAR_INSET.COLUMN}
-                            look={TOOLBAR_LOOK.TABS}
-                            measure
-                            title={
-                              <MainTabStrip
-                                task={listed}
-                                main={mainTabs}
-                                agents={agents}
-                                unread={tasks.unreadTabs}
-                                views={views}
-                                pins={{
-                                  pinned: (agentId) =>
-                                    tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
-                                  onPin: tasks.onPinAgent,
-                                }}
-                                keys={!phone && tasks.shown && !sideFocused}
-                                shown={tasks.shown}
-                                onOpenTerminal={terminalDoors.onOpenTerminal}
-                                onOpenBrowser={phone ? openBrowser : undefined}
-                                slot={phone ? null : actionsSlot}
-                                onShown={phone ? setShownAgentTab : undefined}
-                                planMenu={planMenu}
-                                waiting={waitingOf}
-                              />
-                            }
-                            actions={
+                          <MainTabBars
+                            task={listed}
+                            main={mainTabs}
+                            agents={agents}
+                            unread={tasks.unreadTabs}
+                            views={views}
+                            pins={{
+                              pinned: (agentId) =>
+                                tasks.taskAgentPins.some((pin) => pin.agentId === agentId),
+                              onPin: tasks.onPinAgent,
+                            }}
+                            keys={!phone && tasks.shown && !sideFocused}
+                            shown={tasks.shown}
+                            onOpenTerminal={terminalDoors.onOpenTerminal}
+                            onOpenBrowser={phone ? openBrowser : undefined}
+                            slots={!phone}
+                            onShown={phone ? setShownAgentTab : undefined}
+                            planMenu={planMenu}
+                            waiting={waitingOf}
+                            taskActions={
                               <>
                                 {rename.refused ? (
                                   <FailureNote
@@ -1275,11 +1273,6 @@ function PlanDocument({
                                     }
                                   />
                                 ) : null}
-                                {/* The chosen agent's ⋯, portaled in from its tab (`strip-tabs.tsx`'s `DoorsTab`), so it acts on what is under the bar. */}
-                                <span
-                                  ref={setActionsSlot}
-                                  className="toolbar-tab-actions flex min-w-control flex-none items-center"
-                                />
                                 <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                               </>
                             }
