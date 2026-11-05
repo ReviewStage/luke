@@ -22,6 +22,7 @@ import {
   CHOICE_BAR_SIZE,
   ChoiceBar,
   CONFIRM_LOSS,
+  COPY_FIELD_PROMPT,
   COPY_FIELD_WIDTH,
   ConfirmDialog,
   CopyField,
@@ -397,6 +398,9 @@ function ConnectStepRow({
                 what={step.command === undefined ? "URL" : "command"}
                 copy={copyThroughShell}
                 width={COPY_FIELD_WIDTH.FULL}
+                prompt={
+                  step.command === undefined ? COPY_FIELD_PROMPT.NONE : COPY_FIELD_PROMPT.SHELL
+                }
               />
             ),
           })}

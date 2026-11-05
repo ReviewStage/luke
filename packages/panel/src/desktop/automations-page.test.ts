@@ -993,6 +993,19 @@ function button(name: string): HTMLButtonElement {
   return found;
 }
 
+/** The value a copy field shows beside its "Copy {what}", or nothing where none stands. */
+function copyFieldValue(page: HTMLElement, what: string): HTMLElement | undefined {
+  let at: Element | null | undefined = [...page.querySelectorAll("button")].find(
+    (each) => each.getAttribute("aria-label") === `Copy ${what}`,
+  );
+  while (at && at !== page) {
+    const value = at.querySelector<HTMLElement>("code");
+    if (value !== null) return value;
+    at = at.parentElement;
+  }
+  return undefined;
+}
+
 /** Stands a phone's automation's runs, from its head's ⋯, where its Runs now stands. */
 function phoneRuns(): void {
   act(() => button("Automation actions").click());
@@ -2770,7 +2783,7 @@ test("a schedule Vespin cannot read is not created, and the refusal is announced
   );
 });
 
-test("a webhook made in the window shows its secret once, read-only with Copy, left out of the screen recording and the app state, and gone once Done is pressed", async () => {
+test("a webhook made in the window shows its secret once, with Copy, left out of the screen recording and the app state, and gone once Done is pressed", async () => {
   const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
   await settle();
 
@@ -2780,9 +2793,8 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   act(() => button("Create automation").click());
   await settle();
 
-  const field = page.querySelector<HTMLInputElement>("input[aria-label='Secret']");
-  assert.equal(field?.value, MADE_SECRET);
-  assert.equal(field?.readOnly, true);
+  const field = copyFieldValue(page, "secret");
+  assert.equal(field?.textContent, MADE_SECRET);
   assert.ok(field?.closest(".ph-no-capture"), "the secret is left out of the screen recording");
   assert.match(page.textContent ?? "", /You won't be able to see this again/u);
   assert.ok(!JSON.stringify(appStateNow() ?? {}).includes(MADE_SECRET), "no app state holds it");
@@ -2792,7 +2804,7 @@ test("a webhook made in the window shows its secret once, read-only with Copy, l
   assert.ok(copiedShown(button("Copy secret")));
 
   act(() => button("Done").click());
-  assert.equal(page.querySelector("input[aria-label='Secret']"), null);
+  assert.equal(copyFieldValue(page, "secret"), undefined);
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET), "it is gone");
   assert.ok(button("New secret"), "a new secret is the only way to another");
 });
@@ -2819,10 +2831,7 @@ test("a new secret shown after one was copied says nothing was copied of it yet"
   });
   await settle();
 
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
-    ROTATED_SECRET,
-  );
+  assert.equal(copyFieldValue(page, "secret")?.textContent, ROTATED_SECRET);
   assert.ok(!copiedShown(button("Copy secret")), "the new secret is not shown as copied");
 });
 
@@ -2834,17 +2843,14 @@ test("a shown secret is let go of once the automation is saved as anything but a
   type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the error the alert names.");
   act(() => button("Create automation").click());
   await settle();
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
-    MADE_SECRET,
-  );
+  assert.equal(copyFieldValue(page, "secret")?.textContent, MADE_SECRET);
 
   pick(page, "Type", "Schedule");
   act(() => button("Save").click());
   await settle();
   pick(page, "Type", "Webhook");
 
-  assert.equal(page.querySelector("input[aria-label='Secret']"), null);
+  assert.equal(copyFieldValue(page, "secret"), undefined);
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(MADE_SECRET));
 });
 
@@ -2858,15 +2864,8 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
   const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: hooked.id });
   await settle();
 
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Webhook address']")?.value,
-    hooked.webhookUrl,
-  );
-  assert.equal(
-    page.querySelector("input[aria-label='Secret']"),
-    null,
-    "no secret is shown unasked",
-  );
+  assert.equal(copyFieldValue(page, "address")?.textContent, hooked.webhookUrl);
+  assert.equal(copyFieldValue(page, "secret"), undefined, "no secret is shown unasked");
   act(() => button("Copy address").click());
   await settle();
   assert.deepEqual(copied, [hooked.webhookUrl]);
@@ -2885,17 +2884,14 @@ test("a new secret, asked for first, is shown once on the page that asked, and i
 
   assert.deepEqual(copied, [hooked.webhookUrl]);
   assert.deepEqual(secretsAsked, [hooked.id]);
-  assert.equal(
-    page.querySelector<HTMLInputElement>("input[aria-label='Secret']")?.value,
-    ROTATED_SECRET,
-  );
+  assert.equal(copyFieldValue(page, "secret")?.textContent, ROTATED_SECRET);
   assert.match(page.textContent ?? "", /Don't send secrets in the body/u);
 
   act(() => button("Automations").click());
   await settle();
   act(() => rowOf(page, "Fix Sentry alerts").querySelector<HTMLButtonElement>("button")?.click());
   await settle();
-  assert.equal(page.querySelector("input[aria-label='Secret']"), null, "never shown again");
+  assert.equal(copyFieldValue(page, "secret"), undefined, "never shown again");
   assert.ok(!(page.ownerDocument.body.innerHTML ?? "").includes(ROTATED_SECRET));
 });
 
@@ -2905,7 +2901,7 @@ test("a webhook not yet saved as one says it gets its address once it is saved",
 
   pick(page, "Type", "Webhook");
 
-  assert.equal(page.querySelector("input[aria-label='Webhook address']"), null);
+  assert.equal(copyFieldValue(page, "address"), undefined);
   assert.match(page.textContent ?? "", /Save it as a webhook to get its address/u);
   assert.equal(pickerDetail(page, "Type"), "When its webhook is called");
 });

@@ -382,7 +382,9 @@
     2 *
     var(--ui-control-inset)
   ); /* off-scale: "12:00 PM" and its insets */
-  --spacing-copy-field: 240px; /* off-scale: a value shown to be copied, a webhook's address, a little wider than a picker */
+  /* off-scale: a value shown to be copied, a webhook's address, a little
+     wider than a picker, with the Copy nested inside its right edge. */
+  --spacing-copy-field: calc(240px + var(--ui-space-8) + var(--ui-control-height));
   --spacing-automation-runs: max(
     280px,
     calc(100% - 480px)
