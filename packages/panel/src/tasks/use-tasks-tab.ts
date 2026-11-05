@@ -1,11 +1,6 @@
 import type { AccountFailedRun } from "@repo/features/account-inbox-wire";
 import { AGENT_CALL_FAILURE, type AgentAgentAnswer } from "@repo/features/agent-view";
-import {
-  AGENT_MACHINE,
-  type AgentAttachment,
-  type ListedAgent,
-  type TasklessAgent,
-} from "@repo/features/agent-wire";
+import type { AgentAttachment, ListedAgent, TasklessAgent } from "@repo/features/agent-wire";
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
 import type { GitHubConnection } from "@repo/features/github-connection-wire";
@@ -575,11 +570,15 @@ export interface StartingTask {
 
 /**
  * What a start comes from beyond its name, repository, and workspace: where
- * its agents run, and the agent New task's composer starts on its words in
+ * its agent runs, and the agent New task's composer starts on its words in
  * the task's own start (`handed`).
  */
 export interface NewTaskStart {
-  /** Where the task's agents run, where the card's Runs on chose: the cloud, or one of the member's devices. */
+  /**
+   * Where the card's Runs on chose: the cloud, or one of the member's
+   * devices. A task holds no place, so it is where the handed agent runs,
+   * and, with none handed, the member's last pick.
+   */
   readonly runsOn?: TaskRunsOnRequest;
   /** The device Runs on chose, which a refusal names; none for the cloud. */
   readonly device?: MacOffer;
@@ -1524,10 +1523,7 @@ export function useTasksTab(input: {
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
-    startsWithoutRepository:
-      startsWithoutRepository &&
-      openDocument?.id === viewed.activeTaskId &&
-      openDocument?.runsOn?.machine === AGENT_MACHINE.DEVICE,
+    startsWithoutRepository: startsWithoutRepository && openDocument?.id === viewed.activeTaskId,
     listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
       ? liveAgents
       : undefined,
@@ -1539,7 +1535,6 @@ export function useTasksTab(input: {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
     keywords: dictationWords,
-    device: openDocument?.id === viewed.activeTaskId ? openDocument?.runsOn?.device : undefined,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
   // each named, archived, and pinned as main draws it.
@@ -2715,13 +2710,22 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+      ...(from.runsOn === undefined || from.handed !== undefined
+        ? undefined
+        : { runsOn: from.runsOn }),
       ...(from.mode === undefined ? undefined : { mode: from.mode }),
       ...(from.relations === undefined || from.relations.length === 0
         ? undefined
         : { relations: from.relations }),
       planning: false,
-      ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
+      ...(from.handed === undefined
+        ? undefined
+        : {
+            agent: {
+              ...agentRequest(from.handed),
+              ...(from.runsOn === undefined ? undefined : { runsOn: from.runsOn }),
+            },
+          }),
       ...(stays ? { quiet: true } : undefined),
     }).then(
       (answer) => {

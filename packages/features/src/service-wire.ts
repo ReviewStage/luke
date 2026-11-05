@@ -165,8 +165,6 @@ export const HOSTED_API_ERROR = {
   HOST_UPGRADE_NEEDED: "host-upgrade-needed",
   /** The agent ran on a host its starter removed, so no message reaches it again; Continue starts a new agent elsewhere. Nothing was sent. */
   DEVICE_REMOVED: "device-removed",
-  /** A change named where a task runs, which is set when the task is created and never changed after; nothing was written. */
-  RUNS_ON_LOCKED: "runs-on-locked",
   /** A child task was asked for in a repository other than its parent's, which a child always works in; nothing was written. */
   CHILD_REPOSITORY_LOCKED: "child-repository-locked",
   /** A block asked for would close a cycle: the task it blocks already blocks it, itself or through others. Nothing was written. */

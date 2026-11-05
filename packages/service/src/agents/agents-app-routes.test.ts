@@ -21,7 +21,6 @@ import { registerDevice } from "@repo/database/models/device-store";
 import { childConversationId } from "@repo/database/models/ids";
 import { sentLineStands } from "@repo/database/models/message-reads";
 import { writePage } from "@repo/database/models/plan-pages";
-import { createTask } from "@repo/database/models/task-store";
 import { ensurePersonalWorkspace } from "@repo/database/models/workspace-store";
 import { storeWriter } from "@repo/database/models/writer";
 import { agentTable } from "@repo/database/schemas/agent";
@@ -617,22 +616,21 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a Start on a task that runs on another member's device is refused on the route, naming the device and its owner, and no agent is made for the teammate",
+    "a Start naming another member's device is refused on the route, naming the device and its owner, and no agent is made for the teammate",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, eve, ask } = yield* openTask();
         yield* joinWorkspace(task.workspaceId, other);
         const studio = randomUUID();
         yield* registerDevice(owner, { id: studio, name: "Studio", ...DEVICE_LAYOUT });
-        const onStudio = yield* createTask(owner, {
-          organizationId: task.workspaceId,
-          name: "On the Studio",
-          repository: RELAY_FULL_NAME,
-          runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
-        });
 
         const theirKey = randomUUID();
-        const byTeammate = yield* ask(startAs(other, onStudio.id, { idempotencyKey: theirKey }));
+        const byTeammate = yield* ask(
+          startAs(other, task.id, {
+            idempotencyKey: theirKey,
+            runsOn: { machine: AGENT_MACHINE.DEVICE, deviceId: studio },
+          }),
+        );
         assert.deepEqual(byTeammate, {
           status: HOSTED_HTTP_STATUS.CONFLICT,
           body: {
