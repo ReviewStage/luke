@@ -10,6 +10,7 @@ import {
 } from "@repo/features/agent-wire";
 import { Schema } from "effect";
 import { test } from "vitest";
+import { COMMIT_BY } from "./checkout.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { CODER_HARNESS, coderInstructions, type OwnTask } from "./instructions.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -394,21 +395,45 @@ test("the session sends whatever is ready for the developer to look at or review
   }
 });
 
-test("an agent writing as its developer is told to end every commit on the trailer naming Vespin as co-author, one writing as the App is told never to add one, and both open a pull request through the service, never gh", () => {
-  const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+test("an agent is told whose its commits are and to end each on the trailer it is handed, never to add one where it is handed none, and to open a pull request through the service, never gh", () => {
+  const BOT_TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
+  const DEVELOPER_TRAILER = "Co-authored-by: Ada Lovelace <7001+ada@users.noreply.github.com>";
+  const cases = [
+    {
+      by: COMMIT_BY.DEVELOPER,
+      coAuthor: BOT_TRAILER,
+      says: "set to the developer's own GitHub account",
+    },
+    {
+      by: COMMIT_BY.DEVELOPER,
+      coAuthor: undefined,
+      says: "set to the developer's own GitHub account",
+    },
+    { by: COMMIT_BY.APP, coAuthor: DEVELOPER_TRAILER, says: "set to its bot" },
+    { by: COMMIT_BY.APP, coAuthor: undefined, says: "set to its bot" },
+  ] as const;
   for (const brief of Object.values(AGENT_BRIEF)) {
-    const developer = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER);
-    const app = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
-    assert.ok(developer.includes(`exactly as written: \`${TRAILER}\``), brief);
-    assert.ok(!developer.includes("add a `Co-authored-by` trailer"), brief);
-    assert.ok(app.includes("add a `Co-authored-by` trailer"), brief);
-    assert.ok(!app.includes(TRAILER), brief);
-    for (const instructions of [developer, app]) {
+    for (const authorship of cases) {
+      const words = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, authorship);
+      const named = `${brief}, ${authorship.by}, ${authorship.coAuthor ?? "no co-author"}`;
+      assert.ok(words.includes(authorship.says), named);
+      assert.equal(
+        words.includes("The service opens your pull request as the developer too."),
+        authorship.by === COMMIT_BY.DEVELOPER,
+        named,
+      );
+      if (authorship.coAuthor === undefined) {
+        assert.ok(words.includes("add a `Co-authored-by` trailer"), named);
+        assert.ok(!words.includes("exactly as written: `Co-authored-by"), named);
+      } else {
+        assert.ok(words.includes(`exactly as written: \`${authorship.coAuthor}\``), named);
+        assert.ok(!words.includes("add a `Co-authored-by` trailer"), named);
+      }
       assert.ok(
-        instructions.includes(
+        words.includes(
           `open the pull request with \`${CODER_TOOL.OPEN_PULL_REQUEST}\`, never \`gh pr create\``,
         ),
-        brief,
+        named,
       );
     }
   }
@@ -418,7 +443,15 @@ test("an agent on its starter's own token reads its checks and its pull request 
   const TRAILER = "Co-authored-by: luke[bot] <90001+luke[bot]@users.noreply.github.com>";
   for (const brief of Object.values(AGENT_BRIEF)) {
     const words = (memberToken: boolean) =>
-      coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS, TRAILER, null, memberToken);
+      coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        TASK_ADDRESS,
+        { by: COMMIT_BY.DEVELOPER, coAuthor: TRAILER },
+        null,
+        memberToken,
+      );
     const onToken = words(true);
     for (const cli of ["`gh pr checks", "`gh run view", "marking a draft ready"]) {
       assert.ok(!onToken.includes(cli), `${brief}: ${cli}`);

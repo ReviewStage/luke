@@ -12,6 +12,13 @@ import {
 } from "./agent-enter.js";
 import { HOST_CAPABILITY } from "./capabilities.js";
 import {
+  COMMIT_AUTHOR_DEFAULT,
+  COMMIT_AUTHOR_DETAIL,
+  COMMIT_AUTHOR_LABEL,
+  COMMIT_AUTHOR_LIST,
+  isCommitAuthor,
+} from "./commit-author.js";
+import {
   DIFF_FONT,
   DIFF_FONT_LABEL,
   DIFF_FONT_SIZES,
@@ -282,6 +289,33 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.COMPOSER,
     order: 400,
     // Nothing to run per write: the message box reads the choice as a key is pressed.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: accountDrawn,
+  }),
+  /*
+   * Who authors an agent's commits and opens its pull request, the
+   * developer or our App's bot, and whether the other is credited as
+   * co-author. An account preference riding a part of the snapshot of its
+   * own, as Enter's choice does, since the service reads it as an agent
+   * starts wherever it was chosen.
+   */
+  commitAuthor: choiceSetting({
+    field: "commitAuthor",
+    id: APP_SETTING_ID.COMMIT_AUTHOR,
+    label: "Commit author",
+    detail: (settings) => {
+      const chosen = settings("commitAuthor");
+      return COMMIT_AUTHOR_DETAIL[isCommitAuthor(chosen) ? chosen : COMMIT_AUTHOR_DEFAULT];
+    },
+    values: COMMIT_AUTHOR_LIST,
+    token: (choice) => choice,
+    optionLabel: (choice) => COMMIT_AUTHOR_LABEL[choice],
+    guard: (value: UnparsedWireValue) => optional(value, isCommitAuthor),
+    default: COMMIT_AUTHOR_DEFAULT,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.COMMITS,
+    order: 450,
+    // Nothing to run per write: an agent reads the choice as its first session starts.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
   }),

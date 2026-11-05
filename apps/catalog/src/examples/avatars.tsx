@@ -18,7 +18,7 @@ import { CatalogSection } from "../section";
  * avatars.tsx -- every size with a picture, a letter, a picture that fails,
  * a name with no letter, and no one's dashed outline, side by side so their
  * boxes line up; an app's square by its picture, its glyph bare and tiled,
- * and its letter; a workspace's tile, plain or edged and blank as a
+ * the product's as GitHub shows its App's bot, and its letter; a workspace's tile, plain or edged and blank as a
  * repository's owner is; the six
  * hues; and discs beside the names they stand for in a narrow column.
  */
@@ -56,7 +56,10 @@ function Avatars(): React.JSX.Element {
           ))}
         </Stack>
       </CatalogSection>
-      <CatalogSection id="avatar-squares" title="Square: picture, glyph, tiled glyph, letter">
+      <CatalogSection
+        id="avatar-squares"
+        title="Square: picture, glyph, tiled glyph, GitHub's bot, letter"
+      >
         <Stack gap={GAP.CONTROL}>
           {Object.values(AVATAR_SIZE).map((size) => (
             <Inline key={size} gap={GAP.CONTROL}>
@@ -73,6 +76,13 @@ function Avatars(): React.JSX.Element {
                 shape={AVATAR_SHAPE.SQUARE}
                 size={size}
                 tiled
+              />
+              <Avatar
+                name={PRODUCT_NAME}
+                glyph={<ProductMark small />}
+                shape={AVATAR_SHAPE.SQUARE}
+                size={size}
+                branded
               />
               <Avatar name="Vercel" shape={AVATAR_SHAPE.SQUARE} size={size} />
             </Inline>

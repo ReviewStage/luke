@@ -1414,10 +1414,15 @@ only where granted). The token is set at the firewall for the session's own
 minted again at each launch and each message to a running runner. Who the
 agent writes as is settled once, as its first session starts, and kept on its
 row (`coder-host/checkout.ts`, `AGENT_AUTHOR`): an agent a developer started
-writes as them where their GitHub sign-in may push to the repository, its
-commits authored as their GitHub account and ending on a `Co-authored-by`
-trailer naming the App's bot; an automation's agent, and one whose developer
-has no GitHub sign-in or may not push, writes as the App's bot. The agent
+writes as them where their GitHub sign-in may push to the repository and
+their Commit author choice (`@repo/settings`'s `COMMIT_AUTHOR`) has them
+author, its commits authored as their GitHub account and ending on a
+`Co-authored-by` trailer naming the App's bot where the choice credits it;
+an automation's agent, and one whose developer chose the bot, has no GitHub
+sign-in, or may not push, writes as the App's bot, its commits ending on a
+trailer naming the developer's GitHub account where they chose the bot with
+themselves credited. Whether a trailer is written is read as each session
+starts. The agent
 opens its pull request with `open_pull_request` (`coder-host/pull-request.ts`),
 which the service runs with the developer's own GitHub App token where the
 agent writes as them, in one `POST /repos/{owner}/{name}/pulls` on the

@@ -28,6 +28,12 @@ const COPPER = {
   DARK: { FILL: "#cf7b26", INK: "#f19a4b" },
 };
 
+// The product's avatar as GitHub shows the App's bot, cut as
+// assets/avatar/avatar-dark.svg: copper on the night tile. It is a picture
+// of something else's, so it is the same in either theme, and the window
+// draws it from these where it shows how a commit reads on GitHub.
+const AVATAR = { TILE: "#171412", INK: COPPER.DARK.FILL };
+
 export const BRAND_PALETTES = {
   COPPER: {
     LIGHT: {
@@ -61,6 +67,8 @@ export const BRAND_PALETTES = {
       WORKING: "#1666aa",
       COMPLETE: "#067040",
       MERGED: "#744caf",
+      AVATAR_TILE: AVATAR.TILE,
+      AVATAR_INK: AVATAR.INK,
     },
     DARK: {
       GROUND: "#0f0d0b",
@@ -95,6 +103,8 @@ export const BRAND_PALETTES = {
       WORKING: "#76bafe",
       COMPLETE: "#56d089",
       MERGED: "#c29fff",
+      AVATAR_TILE: AVATAR.TILE,
+      AVATAR_INK: AVATAR.INK,
     },
   },
 };

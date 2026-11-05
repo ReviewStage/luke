@@ -6,6 +6,15 @@ export {
   isAgentEnter,
 } from "./agent-enter.js";
 export { HOST_CAPABILITY, type HostCapability } from "./capabilities.js";
+export {
+  appAuthors,
+  COMMIT_AUTHOR,
+  COMMIT_AUTHOR_DEFAULT,
+  COMMIT_AUTHOR_LIST,
+  type CommitAuthor,
+  coAuthorCredited,
+  isCommitAuthor,
+} from "./commit-author.js";
 export { EXPERIMENT_COUNTED_AS, SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
   EXPERIMENT,

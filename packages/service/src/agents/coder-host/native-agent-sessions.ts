@@ -36,7 +36,7 @@ import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
 import { deploymentOidcToken } from "../vercel-sandbox-api.js";
 import { WORKSPACE_MCP_PATH, workspaceIntegrationMcpUrl } from "../workspace-mcp/app.js";
 import { workspaceStepOf } from "../written-mentions.js";
-import { agentCiReadable, agentCoAuthor } from "./checkout.js";
+import { agentAuthorship, agentCiReadable } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { codexSessions } from "./codex-sessions.js";
 import { agentCoderInstructions, CODER_HARNESS, type CoderHarness } from "./instructions.js";
@@ -63,8 +63,8 @@ const agentTaskNumber = (userId: string, agent: Agent) =>
 /**
  * Our coder instructions for an agent on the harness given, composed on
  * what its row names (`instructions.ts`'s `agentCoderInstructions`): whether
- * its token reads the repository's CI, the co-author trailer where it writes
- * as its developer, the workspace its links are written under, the number
+ * its token reads the repository's CI, whose its commits are and the
+ * co-author trailer where its starter's choice credits one, the workspace its links are written under, the number
  * its task goes by there, and whether its starter turned Memory on.
  */
 const nativeCoderInstructions = (
@@ -76,7 +76,7 @@ const nativeCoderInstructions = (
   Effect.gen(function* () {
     const target = { userId, conversationId: agent.conversationId };
     const ciReadable = hasRepository(agent) ? yield* agentCiReadable(target, agent) : false;
-    const coAuthor = hasRepository(agent) ? yield* agentCoAuthor(target, agent) : undefined;
+    const authorship = hasRepository(agent) ? yield* agentAuthorship(target, agent) : undefined;
     const workspace = yield* workspaceStepOf(userId, agent.organizationId).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => agent.organizationId),
@@ -85,7 +85,7 @@ const nativeCoderInstructions = (
     const memoryOn = yield* memoryOnFor(userId);
     return agentCoderInstructions(agent, {
       ciReadable,
-      coAuthor,
+      authorship,
       workspace,
       taskNumber,
       memoryOn,

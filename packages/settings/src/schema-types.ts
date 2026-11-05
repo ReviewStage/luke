@@ -64,6 +64,8 @@ export const SETTING_SECTION = {
   MICROPHONE: "microphone",
   /** How an agent's message box sends while its turn runs, a group of its own on Agents, under the default model. */
   COMPOSER: "composer",
+  /** Who authors an agent's commits, a group of its own on Account, under the message box. */
+  COMMITS: "commits",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];

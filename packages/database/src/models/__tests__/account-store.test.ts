@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CHAPTERS_MODEL } from "@repo/features/chapters-model-choice";
 import { LINK_OPEN } from "@repo/features/link-open";
-import { AGENT_ENTER, EXPERIMENT } from "@repo/settings";
+import { AGENT_ENTER, COMMIT_AUTHOR, EXPERIMENT } from "@repo/settings";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { Database } from "../../core/query.js";
@@ -127,7 +127,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
   );
 });
 
-it.layer(getTestDB())("the account store's link and Enter choices and setup finished", (it) => {
+it.layer(getTestDB())("the account store's own-part choices and setup finished", (it) => {
   it.effect(
     "are each written on their own, stand through a shared preferences write, move no instant, and are no other account's",
     () =>
@@ -137,6 +137,7 @@ it.layer(getTestDB())("the account store's link and Enter choices and setup fini
         assert.deepEqual(chosen.preferences, { linkOpen: LINK_OPEN.MAC_APP });
         assert.equal(chosen.updatedAt, undefined);
         yield* writeAccountPreferences(userId, { agentEnter: AGENT_ENTER.QUEUE });
+        yield* writeAccountPreferences(userId, { commitAuthor: COMMIT_AUTHOR.APP });
         yield* writeAccountPreferences(userId, { setupFinished: true });
 
         yield* writeAccountPreferences(userId, { preferences: {} });
@@ -144,6 +145,7 @@ it.layer(getTestDB())("the account store's link and Enter choices and setup fini
         assert.deepEqual(read?.preferences, {
           linkOpen: LINK_OPEN.MAC_APP,
           agentEnter: AGENT_ENTER.QUEUE,
+          commitAuthor: COMMIT_AUTHOR.APP,
           setupFinished: true,
         });
         assert.deepEqual(

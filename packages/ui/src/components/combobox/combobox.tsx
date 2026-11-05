@@ -87,6 +87,20 @@ export const COMBOBOX_LIST_HEIGHT = {
 
 export type ComboboxListHeight = (typeof COMBOBOX_LIST_HEIGHT)[keyof typeof COMBOBOX_LIST_HEIGHT];
 
+/** How wide the column an option's lead stands in is: a task's key's, or a pair of overlapping faces', as a commit's author and co-author lead a choice of who authors it. */
+export const COMBOBOX_LEAD = {
+  KEY: "key",
+  FACES: "faces",
+} as const;
+
+export type ComboboxLead = (typeof COMBOBOX_LEAD)[keyof typeof COMBOBOX_LEAD];
+
+/** Each lead's column, at least as wide as the widest lead of its kind. */
+const LEAD_WIDTH: Record<ComboboxLead, string> = {
+  [COMBOBOX_LEAD.KEY]: "min-w-combobox-lead",
+  [COMBOBOX_LEAD.FACES]: "min-w-combobox-faces",
+};
+
 /** One option: what it is called, and what is drawn around its name. */
 export interface ComboboxOption {
   /** The caller's own key for the option, stable while it stands. */
@@ -96,6 +110,8 @@ export interface ComboboxOption {
   readonly words?: string | undefined;
   /** Before its glyph, in a column the options leading with one line up in, as a task's key leads its row in the Tasks list. */
   readonly lead?: ReactNode;
+  /** How wide the lead's column stands: a task's key's where none is said. */
+  readonly leadWidth?: ComboboxLead | undefined;
   /**
    * Its glyph; null keeps the glyph's room, empty, so an option with no
    * glyph of its own names itself at the edge the glyphed options beside it
@@ -170,7 +186,15 @@ export function ComboboxOptionItem({
       style={undefined}
     >
       {option.lead === undefined ? null : (
-        <span className={cn("ui-combobox-option-lead", COMBOBOX_ITEM_LEAD)}>{option.lead}</span>
+        <span
+          className={cn(
+            "ui-combobox-option-lead",
+            COMBOBOX_ITEM_LEAD,
+            LEAD_WIDTH[option.leadWidth ?? COMBOBOX_LEAD.KEY],
+          )}
+        >
+          {option.lead}
+        </span>
       )}
       {/* Note that a null glyph still stands, empty, so the names of a group whose options mix glyphs and none start at one edge. */}
       {option.icon === undefined ? null : (

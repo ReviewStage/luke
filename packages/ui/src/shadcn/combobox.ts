@@ -38,9 +38,9 @@ export const COMBOBOX_WELL =
 export const COMBOBOX_ITEM =
   "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-row-inset font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary";
 
-/** What leads an item before its glyph, a task's key say, in a column wide enough for a long one, so the glyphs and names it leads line up down the list. */
+/** What leads an item before its glyph, a task's key say, in a column its caller sizes wide enough for a long one, so the glyphs and names it leads line up down the list. */
 export const COMBOBOX_ITEM_LEAD =
-  "inline-flex min-w-combobox-lead flex-none items-center group-aria-disabled/option:opacity-disabled";
+  "inline-flex flex-none items-center group-aria-disabled/option:opacity-disabled";
 
 /** An item's leading glyph, muted, a glyph's size whatever it is handed. */
 export const COMBOBOX_ITEM_GLYPH =

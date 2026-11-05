@@ -40,7 +40,8 @@ type ResolvedSettingField =
   | "diffFont"
   | "diffFontSize"
   | "diffLineHeight"
-  | "linkOpen";
+  | "linkOpen"
+  | "commitAuthor";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & { experiments: ExperimentChoices; accountRead: boolean };
@@ -61,6 +62,7 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     diffFontSize: settings.stored.diffFontSize ?? APP_SETTING_DEFAULTS.diffFontSize,
     diffLineHeight: settings.stored.diffLineHeight ?? APP_SETTING_DEFAULTS.diffLineHeight,
     linkOpen: settings.stored.linkOpen ?? APP_SETTING_DEFAULTS.linkOpen,
+    commitAuthor: settings.stored.commitAuthor ?? APP_SETTING_DEFAULTS.commitAuthor,
   };
 }
 

@@ -545,6 +545,8 @@
   --spacing-combobox-list: var(--ui-combobox-list-max, 280px);
   /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
   --spacing-combobox-lead: 9ch;
+  /* A pair of a facepile's faces, the second overlapping the first. */
+  --spacing-combobox-faces: calc(var(--spacing-avatar-stack) * 2 - var(--spacing-actor-overlap));
   --text-group: var(--ui-type-group-size);
   --text-group--line-height: var(--ui-type-group-leading);
   --text-tag: var(--ui-type-tag-size);
@@ -685,6 +687,10 @@
   --color-identity-4: var(--ui-color-identity-4);
   --color-identity-5: var(--ui-color-identity-5);
   --color-identity-6: var(--ui-color-identity-6);
+  /* The product's avatar as GitHub shows the App's bot: copper on the night
+     tile, the same in either theme. */
+  --color-avatar-tile: var(--ui-color-avatar-tile);
+  --color-avatar-ink: var(--ui-color-avatar-ink);
   --spacing-skeleton-line: 0.8em; /* off-scale: a line's words, as tall as their type */
   --spacing-skeleton-line-gap: calc((1lh - 0.8em) / 2);
   --radius-skeleton: 4px; /* off-scale: a line's corner */

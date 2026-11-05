@@ -158,6 +158,8 @@ export const AGENT_AUTHOR = {
   APP_UNREAD: "app-unread",
   /** The developer who started the agent, through their own GitHub personal access token, where no installation reaches the repository. */
   TOKEN: "token",
+  /** The App: the developer chose our bot to author their agents' commits (`@repo/settings`'s `COMMIT_AUTHOR`). */
+  APP_CHOSEN: "app-chosen",
 } as const;
 
 export type AgentAuthor = (typeof AGENT_AUTHOR)[keyof typeof AGENT_AUTHOR];
