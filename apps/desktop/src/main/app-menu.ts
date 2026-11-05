@@ -548,7 +548,6 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_FULL_TRANSCRIPT),
         SEPARATOR,
         commandItem(APP_COMMAND.VERSION_HISTORY),
-        commandItem(APP_COMMAND.OPEN_ON_GITHUB),
         SEPARATOR,
         menuItem(APP_COMMAND.MARK_TASK_DONE),
         opening(commandItem(APP_COMMAND.DELETE)),
@@ -563,8 +562,6 @@ function fullMenuTemplate(
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
-        { role: "pasteAndMatchStyle" },
-        { role: "delete" },
         { role: "selectAll" },
         SEPARATOR,
         {
@@ -579,11 +576,6 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.MENTION_LINES),
         commandItem(APP_COMMAND.INSERT_PICTURE),
         commandItem(APP_COMMAND.COMMENT_ON_SELECTION),
-        SEPARATOR,
-        {
-          label: "Speech",
-          submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }],
-        },
       ],
     },
     {
@@ -603,9 +595,6 @@ function fullMenuTemplate(
         // lower case, so the item reads as every Mac app's Zoom In.
         { ...commandItem(APP_COMMAND.ZOOM_IN), label: "Zoom In" },
         commandItem(APP_COMMAND.ZOOM_OUT),
-        SEPARATOR,
-        commandItem(APP_COMMAND.PREVIOUS_TASK),
-        commandItem(APP_COMMAND.NEXT_TASK),
         ...(developerTools ? [SEPARATOR, developerItem(buildLabel)] : []),
       ],
     },
@@ -622,11 +611,8 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.BACK),
         commandItem(APP_COMMAND.FORWARD),
         SEPARATOR,
-        commandItem(APP_COMMAND.NEXT_RECENT_TAB),
-        commandItem(APP_COMMAND.PREVIOUS_RECENT_TAB),
-        SEPARATOR,
-        commandItem(APP_COMMAND.MOVE_TAB_LEFT),
-        commandItem(APP_COMMAND.MOVE_TAB_RIGHT),
+        commandItem(APP_COMMAND.PREVIOUS_TASK),
+        commandItem(APP_COMMAND.NEXT_TASK),
       ],
     },
     {

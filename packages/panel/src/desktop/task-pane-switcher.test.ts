@@ -276,7 +276,7 @@ test("on a phone an agent's screen goes back to its task's plan, named for the t
     title: AGENT.title,
   });
   const menu = page.menu();
-  assert.ok(menu.includes("Copy link") && menu.includes("Copy concise transcript"));
+  assert.ok(menu.includes("Copy link") && menu.includes("Copy transcript"));
   assert.ok(menu.includes("Show browser"), "the agent's browser, which no list of tabs offers");
   assert.ok(!menu.includes("Copy plan"), "none of the task's own");
 

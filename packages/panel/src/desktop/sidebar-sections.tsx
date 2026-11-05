@@ -48,7 +48,7 @@ import {
   useLeaving,
   useMenu,
 } from "@repo/ui";
-import { FolderOutputIcon, FolderPlusIcon, GLYPH, MailOpenIcon } from "@repo/ui/icons";
+import { FolderPlusIcon, MailOpenIcon } from "@repo/ui/icons";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   type DrawnTaskRow,
@@ -80,7 +80,6 @@ import { type RowPlace, RowPlaced, useRowMoveKeys, withRowMoves } from "./row-mo
 import { SectionIconWell, sectionGlyph } from "./section-icon-picker.js";
 import { foldedCount, SIDEBAR_SECTION_SLOT, sidebarFold, TASK_NOUN } from "./sidebar-fold.js";
 import { HiddenStatusesLine, NONE_MATCH } from "./sidebar-task-view.js";
-import { sharedStatus, statusSubmenu } from "./standing-submenus.js";
 import { useFormDialog } from "./use-form-dialog.js";
 import { useRowDrag } from "./use-row-drag.js";
 
@@ -598,50 +597,12 @@ interface SectionDoors {
 }
 
 /**
- * Move all to section: the workspace's other sections and New section, each
- * taking every row of the section, its agents' with its tasks', in its
- * order, onto the top of the one chosen, with Undo on its toast.
- */
-function moveTasksEntry(drawn: DrawnSection, context: SectionContext): MenuEntry {
-  const { section } = drawn;
-  const { tasks, dialogs } = context;
-  const members = drawn.entries.map(memberOf);
-  const put = (sectionId: string) =>
-    placeAllWrites(tasks.taskSections, members, sectionId, Date.now());
-  const others = workspaceSections(tasks.taskSections, section.workspaceId)
-    .filter((other) => other.id !== section.id)
-    .map((other): MenuAction => {
-      const glyph = sectionGlyph(other.icon);
-      return {
-        label: other.title,
-        replayMasked: true,
-        ...(glyph === undefined ? undefined : { icon: glyph }),
-        onSelect: () => dialogs.move(members, other.id, put(other.id)),
-      };
-    });
-  return {
-    label: "Move all to section",
-    icon: <GLYPH.MOVE />,
-    items: [
-      ...others,
-      newSectionAction(() =>
-        dialogs.askNew(
-          section.workspaceId,
-          put,
-          movesInto(members.length, drawnSectionTasks(drawn)[0]?.name),
-        ),
-      ),
-    ],
-  };
-}
-
-/**
  * A section's menu: Rename, which names it in place, its head turning into
- * its editor, whose icon well changes its icon, and Mark all as read; then Status for its tasks; then Move all to section and Remove all
- * from section; then Delete section. Only the rows drawn are acted on, so
- * one kept in it but pinned or archived, which it draws not, is left where
- * it stands; what only a task takes, a read mark or a status, acts on its
- * tasks alone.
+ * its editor, whose icon well changes its icon, and Mark all as read; then
+ * Delete section, which leaves every row where it stands and offers Undo.
+ * Note that a status for every task in it at once, or a move of every row,
+ * is the selection bar's, not the head's. Only the rows drawn are read, so
+ * Mark all as read leaves one kept in it but pinned or archived alone.
  */
 function sectionActionGroups(
   drawn: DrawnSection,
@@ -649,7 +610,7 @@ function sectionActionGroups(
   doors: SectionDoors,
 ): MenuEntry[][] {
   const { section } = drawn;
-  const { tasks, dialogs, edits } = context;
+  const { dialogs, edits } = context;
   const edit: MenuEntry[] = [
     commandAction(PANEL_COMMAND.RENAME, () => edits.beginEdit(section.id), false),
   ];
@@ -661,33 +622,10 @@ function sectionActionGroups(
       onSelect: () => dialogs.askDelete(section, doors.opener.current),
     },
   ];
-  if (drawn.rows.length === 0) return [edit, remove];
-  const held = drawnSectionTasks(drawn);
-  const read: MenuEntry[] = held.some(context.unread)
+  const read: MenuEntry[] = drawnSectionTasks(drawn).some(context.unread)
     ? [{ label: "Mark all as read", icon: <MailOpenIcon />, onSelect: doors.onMarkRead }]
     : [];
-  const status: MenuEntry[] =
-    held.length === 0
-      ? []
-      : [
-          statusSubmenu(
-            tasks,
-            held.map(({ id }) => id),
-            sharedStatus(held),
-          ),
-        ];
-  const organize: MenuEntry[] = [
-    moveTasksEntry(drawn, context),
-    {
-      label: "Remove all from section",
-      icon: <FolderOutputIcon />,
-      onSelect: () => {
-        const members = drawn.entries.map(memberOf);
-        dialogs.move(members, null, unplaceAllWrites(members));
-      },
-    },
-  ];
-  return [[...edit, ...read], status, organize, remove].filter((group) => group.length > 0);
+  return [[...edit, ...read], remove];
 }
 
 /**

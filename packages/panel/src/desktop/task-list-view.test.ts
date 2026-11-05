@@ -250,6 +250,20 @@ function menuItem(label: string): HTMLElement {
   return found;
 }
 
+/** Turns off Group by repository in the Tasks head's View options, listing the tasks in one run, and lets the menu go. */
+function listUngrouped(sidebar: HTMLElement): void {
+  const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(button, "the Tasks head offers View options");
+  act(() => button.click());
+  const grouping = menuItem("Group by repository");
+  act(() => grouping.click());
+  act(() => {
+    grouping.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+}
+
 /** Chooses `choice` under `submenu` in the Tasks head's View options. */
 function choose(sidebar: HTMLElement, submenu: string, choice: string): void {
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
@@ -341,14 +355,13 @@ test("a shared workspace opens on your own tasks, those you are on and those no 
   assert.equal(options?.getAttribute("aria-description"), null);
 });
 
-test("View options offers Group by, Repository or None, and Assigned to: Me, Anyone, then each teammate by name with their email beside it, hanging their card", async () => {
+test("View options offers Group by repository, on at first, and Assigned to: Me, Anyone, then each teammate by name with their email beside it, hanging their card", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
   const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   assert.ok(button, "the Tasks head offers View options");
   act(() => button.click());
-  assert.deepEqual(lastMenuItems(), ["Group by", "Assigned to"]);
-  act(() => menuItem("Group by").click());
-  assert.deepEqual(lastMenuItems(), ["Repository", "None"]);
+  assert.deepEqual(lastMenuItems(), ["Group by repository", "Assigned to"]);
+  assert.equal(menuItem("Group by repository").getAttribute("aria-checked"), "true");
   act(() => menuItem("Assigned to").click());
   const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
   assert.deepEqual(
@@ -385,7 +398,7 @@ test("the Tasks head says My tasks, then Everyone's tasks once Assigned to › A
 test("grouped by none, the tasks run in one list, each row naming its repository and wearing who is on it", () => {
   keepAnyone();
   const sidebar = mountSidebar(ACME, ASSIGNED);
-  choose(sidebar, "Group by", "None");
+  listUngrouped(sidebar);
   assert.deepEqual(groupNames(sidebar), []);
   assert.deepEqual(taskRows(sidebar), [
     { name: "Billing empty states", repository: "console", face: true },
@@ -411,7 +424,7 @@ test("the pins stand in a section of their own above Tasks, whatever the view li
 });
 
 test("each workspace keeps its own view on this Mac across launches", () => {
-  choose(mountSidebar(ACME), "Group by", "None");
+  listUngrouped(mountSidebar(ACME));
   unmountAll();
 
   assert.deepEqual(groupNames(mountSidebar(ACME)), []);
@@ -421,7 +434,7 @@ test("each workspace keeps its own view on this Mac across launches", () => {
   assert.deepEqual(groupNames(mountSidebar(other, elsewhere)), ["relay"]);
 });
 
-test("a workspace nobody shares lists every task and offers Group by alone", () => {
+test("a workspace nobody shares lists every task and offers Group by repository alone", () => {
   const sidebar = mountSidebar(PERSONAL);
   assert.equal(taskRows(sidebar).length, 3);
   assert.equal(headWords(sidebar), "My tasks");
@@ -429,7 +442,7 @@ test("a workspace nobody shares lists every task and offers Group by alone", () 
   assert.ok(button, "the Tasks head offers View options");
   assert.equal(button.getAttribute("aria-description"), null);
   act(() => button.click());
-  assert.deepEqual(lastMenuItems(), ["Group by"]);
+  assert.deepEqual(lastMenuItems(), ["Group by repository"]);
 });
 
 test("a list of your own that holds nothing says so, and Show all lists everyone's", async () => {
@@ -471,7 +484,7 @@ test("a workspace whose list names no member count still filters by person once 
 test("in one run, a task with no repository says so on its row", async () => {
   const notes = task("t-6", "Hiring loop notes", null, DEAN, { createdAt: 1, updatedAt: 700 });
   const sidebar = await mountRead(ACME, [...TASKS, notes]);
-  choose(sidebar, "Group by", "None");
+  listUngrouped(sidebar);
   assert.deepEqual(taskRows(sidebar)[0], {
     name: "Hiring loop notes",
     repository: "No repository",
@@ -701,13 +714,13 @@ test("a one-off agent's row offers the agent's one menu: Copy link, Rename and M
   await act(async () => menuItem("Pin").click());
   // Note that Sweep stands under Pinned, in a list that reorders, whose rows offer to move.
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
-    "Move down",
     "Copy link",
     "Rename",
     "Mark as unread",
     "Unpin",
     "Move to section",
     "Archive",
+    "Move down",
     "Permanently delete",
   ]);
   await act(async () => menuItem("Unpin").click());
@@ -799,7 +812,7 @@ function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
 test("a row wears its assignee's face where someone else is on it, none where you are, and the unassigned mark, never its creator's, where no one is", async () => {
   keepAnyone();
   const sidebar = await mountRead(ACME, ASSIGNED);
-  choose(sidebar, "Group by", "None");
+  listUngrouped(sidebar);
 
   assert.deepEqual(heardFaces(sidebar), [
     ["Billing empty states", "(unassigned)"],

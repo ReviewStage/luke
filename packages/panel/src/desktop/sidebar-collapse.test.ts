@@ -393,7 +393,8 @@ test("a press on no control in a peek keeps the keyboard in the work, and Escape
   const page = mount(1000);
   const main = page.querySelector("main.desktop-main");
   const edge = page.querySelector("[data-sidebar-peek-edge]");
-  const work = main?.querySelector<HTMLButtonElement>("button");
+  // Note that the work is the first press that takes the keyboard, since a dimmed one, as the Inbox's Mark all as read with nothing unread, takes none.
+  const work = main?.querySelector<HTMLButtonElement>("button:not(:disabled)");
   assert.ok(main && edge && work);
   work.focus();
   pointerCross(main, edge);

@@ -407,10 +407,32 @@ function escapeOnly(command: KeyedCommand): boolean {
   return APP_SHORTCUTS[command].chord.key === SHORTCUT_KEY.ESCAPE;
 }
 
-/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only, then the menu bar's own chordless commands, then its own, the sidebar's view of its tasks. */
+/**
+ * The one-step keys the palette lists none of: a step to the next or the
+ * previous thing, or a move of the row or tab that has the keyboard, each of
+ * which acts on where the keyboard stood, which opening the palette took it
+ * from, so a row chosen there would step once from somewhere else. Their
+ * chords and the Keyboard shortcuts page still name them.
+ */
+const ONE_STEP: ReadonlySet<AppCommand> = new Set([
+  APP_COMMAND.FIND_NEXT,
+  APP_COMMAND.FIND_PREVIOUS,
+  APP_COMMAND.PREVIOUS_INBOX_ITEM,
+  APP_COMMAND.NEXT_INBOX_ITEM,
+  APP_COMMAND.MOVE_TAB_LEFT,
+  APP_COMMAND.MOVE_TAB_RIGHT,
+  APP_COMMAND.MOVE_ROW_UP,
+  APP_COMMAND.MOVE_ROW_DOWN,
+  APP_COMMAND.NEXT_RECENT_TAB,
+  APP_COMMAND.PREVIOUS_RECENT_TAB,
+  APP_COMMAND.PREVIOUS_TASK,
+  APP_COMMAND.NEXT_TASK,
+]);
+
+/** The commands the palette lists: the Keyboard shortcuts page's but the Esc-only and the one-step, then the menu bar's own chordless commands, then its own, the sidebar's view of its tasks. */
 const LISTED_COMMANDS: readonly AppCommand[] = [
   ...APP_SHORTCUT_GROUPS.flatMap((group) => group.commands).filter(
-    (command) => !escapeOnly(command),
+    (command) => !escapeOnly(command) && !ONE_STEP.has(command),
   ),
   APP_COMMAND.NEW_TERMINAL,
   APP_COMMAND.MARK_TASK_DONE,

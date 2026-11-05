@@ -1594,8 +1594,7 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does, in the one order
   );
   assert.deepEqual(offered, [
     "Copy link",
-    "Copy concise transcript⌥⌘C",
-    "Copy full transcript⌥⇧⌘C",
+    "Copy transcript",
     "Rename",
     "Show terminal⌘J",
     "Archive",
@@ -1629,8 +1628,7 @@ test("a taskless agent the sidebar lists gains its row's own items on its page's
   act(() => page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]')?.click());
   assert.deepEqual(offered(), [
     "Copy link",
-    "Copy concise transcript⌥⌘C",
-    "Copy full transcript⌥⇧⌘C",
+    "Copy transcript",
     "Rename",
     "Mark as unreadU",
     "PinP",

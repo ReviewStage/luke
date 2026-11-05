@@ -40,7 +40,7 @@ export interface WaitingItems {
  * agent's items among them, as every member's Inbox lists them, and each
  * agent with no plan main says holds an item; and the read they come from.
  */
-export function useListedInboxGroups(tasks: TasksControl): {
+function useListedInboxGroups(tasks: TasksControl): {
   readonly groups: readonly InboxGroup[];
   readonly read: HolderInboxItems;
 } {

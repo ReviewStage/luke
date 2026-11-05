@@ -9,6 +9,7 @@ import { TERMINAL_ASK } from "@repo/features/terminal-entry";
 import { ACT_KIND } from "@repo/host/acts";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
+import { GLYPH } from "@repo/ui/icons";
 import { type InlineRename, useInlineRename } from "@repo/ui/use-inline-rename";
 import { pressAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -40,8 +41,8 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * Every surface that draws an agent offers what `useAgentActions` answers,
  * laid out by `agentMenuGroups` in the one order every menu of the window
  * keeps, Copy, then name and read, then organize, then open elsewhere, then
- * lifecycle, and Delete last and alone: Copy link and the transcript's two
- * copies, read whole from the service; Rename, which opens its name's field
+ * lifecycle, and Delete last and alone: Copy link and Copy transcript ›,
+ * Concise or Full, read whole from the service; Rename, which opens its name's field
  * where the surface draws its name, while neither it nor what it stands
  * under is archived, and Mark as unread or Mark as read, for an agent with
  * no task, whose marks are a task's (`agent-read-marks.ts`); Pin or Unpin
@@ -66,6 +67,10 @@ import { type TranscriptRead, useTranscriptCopier } from "./strip-tabs.js";
  * task's draft tab, or the draft on an agent's own page, each started
  * through the same control.
  */
+
+/** What the agent menu's one copy of its words is called, and the two ways it copies them. */
+const COPY_TRANSCRIPT = "Copy transcript";
+const TRANSCRIPT_WAY = { CONCISE: "Concise", FULL: "Full" } as const;
 
 /** A pin as a menu offers it, Pin or Unpin: whether it stands, and the press that sets it or takes it away. */
 export interface PinDoor {
@@ -135,19 +140,32 @@ export function agentMenuGroups(doors: AgentMenuDoors): MenuEntry[][] {
   const lettered = chosen || doors.rowKeys === true;
   const copies: MenuEntry[] = [
     ...(copyLink === undefined ? [] : [copyLink]),
+    // Note that the two copies share one Copy transcript beside Copy link, so the menu leads with one copy of the agent's words rather than two.
     ...(onCopy === undefined
       ? []
       : [
-          commandAction(
-            PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
-            () => onCopy(TRANSCRIPT_COPY.CONCISE),
-            chosen,
-          ),
-          commandAction(
-            PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
-            () => onCopy(TRANSCRIPT_COPY.FULL),
-            chosen,
-          ),
+          {
+            label: COPY_TRANSCRIPT,
+            icon: <GLYPH.COPY />,
+            items: [
+              {
+                ...commandAction(
+                  PANEL_COMMAND.COPY_CONCISE_TRANSCRIPT,
+                  () => onCopy(TRANSCRIPT_COPY.CONCISE),
+                  chosen,
+                ),
+                label: TRANSCRIPT_WAY.CONCISE,
+              },
+              {
+                ...commandAction(
+                  PANEL_COMMAND.COPY_FULL_TRANSCRIPT,
+                  () => onCopy(TRANSCRIPT_COPY.FULL),
+                  chosen,
+                ),
+                label: TRANSCRIPT_WAY.FULL,
+              },
+            ],
+          },
         ]),
   ];
   const named: MenuEntry[] = [

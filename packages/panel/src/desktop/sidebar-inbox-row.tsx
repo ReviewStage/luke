@@ -1,27 +1,12 @@
 import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
-import {
-  BUTTON_SIZE,
-  commandKeyshortcuts,
-  MoreButton,
-  moreLabel,
-  NAV_CURRENT,
-  NavItem,
-  Shortcut,
-  STATUS_TONE,
-  useMenu,
-} from "@repo/ui";
+import { commandKeyshortcuts, NAV_CURRENT, NavItem, Shortcut, STATUS_TONE } from "@repo/ui";
 import { InboxIcon } from "@repo/ui/icons";
-import { useRef } from "react";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { groupCount } from "./sidebar-fold.js";
-import { ReadAllMenu, type SidebarReadAll } from "./sidebar-read-all.js";
 
 /**
- * sidebar-inbox-row.tsx -- the sidebar's Inbox row, its ⋯ and its menu.
+ * sidebar-inbox-row.tsx -- the sidebar's Inbox row.
  */
-
-/** What the Inbox's ⋯ is named for, and the menu it drops. */
-const INBOX_THING = "Inbox";
 
 /**
  * The Inbox's row, last of the rows heading the list and drawn as they are:
@@ -32,66 +17,34 @@ const INBOX_THING = "Inbox";
  * while the row is hovered or reached from the keyboard, as New task's and
  * Search's show theirs. A press opens the window's Inbox
  * (`desktop-inbox.tsx`), and the row is the place shown while it stands.
- * Its ⋯, which comes in beside its chord while it is hovered, a
- * right-click, a long press, or the menu key opens its menu, Mark all as
- * read, which marks every unread thread of the listed workspace read
- * (`sidebar-read-all.tsx`).
+ * Note that it opens no menu: Mark all as read stands on the Inbox's own
+ * head, where its reader looks for it.
  */
 export function SidebarInboxRow({
   waiting,
   current,
   disabled,
-  shown,
-  readAll,
   onOpen,
 }: {
   waiting: number;
   current: boolean;
   disabled: boolean;
-  /** Whether the sidebar is in sight, which its menu closes with. */
-  shown: boolean;
-  readAll: SidebarReadAll;
   onOpen: () => void;
 }): React.JSX.Element {
-  const menu = useMenu(shown && !disabled);
-  const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
-    <>
-      <NavItem
-        icon={<InboxIcon />}
-        current={current ? NAV_CURRENT.PAGE : undefined}
-        count={{
-          ...groupCount(waiting, NEEDS_YOU.COUNT),
-          tone: STATUS_TONE.ATTENTION,
-        }}
-        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
-        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
-        disabled={disabled}
-        actions={
-          disabled ? undefined : (
-            <MoreButton
-              ref={ellipsis}
-              thing={INBOX_THING}
-              size={BUTTON_SIZE.COMPACT}
-              {...menu.trigger()}
-            />
-          )
-        }
-        contextMenu={disabled ? undefined : menu.contextMenu(ellipsis)}
-        onKeyDown={disabled ? undefined : menu.keyMenu}
-        onClick={onOpen}
-      >
-        Inbox
-      </NavItem>
-      {menu.drawn === undefined ? null : (
-        <ReadAllMenu
-          readAll={readAll}
-          label={moreLabel(INBOX_THING)}
-          menu={menu.drawn}
-          groups={(markAll) => [[markAll]]}
-          onClose={menu.close}
-        />
-      )}
-    </>
+    <NavItem
+      icon={<InboxIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      count={{
+        ...groupCount(waiting, NEEDS_YOU.COUNT),
+        tone: STATUS_TONE.ATTENTION,
+      }}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.INBOX)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.INBOX].chord} />}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      Inbox
+    </NavItem>
   );
 }

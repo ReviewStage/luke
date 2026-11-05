@@ -484,8 +484,7 @@ test("an agent beside the Inbox has the agent's menu from its tab's ⋯ and its 
   const fromMore = offered();
   const agentMenu = [
     "Copy link",
-    "Copy concise transcript",
-    "Copy full transcript",
+    "Copy transcript",
     "Rename",
     "Show terminal",
     "Open in task",
