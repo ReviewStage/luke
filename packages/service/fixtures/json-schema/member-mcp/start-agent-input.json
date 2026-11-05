@@ -98,9 +98,30 @@
             "deviceId"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "machine": {
+              "type": "string",
+              "enum": [
+                "device"
+              ]
+            },
+            "device": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "machine",
+            "device"
+          ],
+          "additionalProperties": false
         }
       ],
-      "description": "Where the agent runs: {\"machine\":\"vercel\"} for the cloud, or {\"machine\":\"device\",\"deviceId\":\"<id>\"} for one of the member's own devices (a Mac or a host) by its id, which must be registered and online. With from, another place than that agent's moves it there. Leave it out for where the agent it starts from runs, with from; else where the member's newest agent on the task runs; else where the member last chose to run one; else the cloud."
+      "description": "Where the agent runs: {\"machine\":\"vercel\"} for the cloud, or {\"machine\":\"device\",\"device\":\"<name>\"} for one of the member's own devices (a Mac or a host) by its name, in any case, or {\"machine\":\"device\",\"deviceId\":\"<id>\"} by its id, which must be registered and online; a name that matches none of the member's devices, or more than one, is refused with their devices listed by name, id, and whether each is online. With from, another place than that agent's moves it there. Leave it out for where the agent it starts from runs, with from; else where the member's newest agent on the task runs; else where the member last chose to run one; else the cloud."
     },
     "from": {
       "type": "object",
