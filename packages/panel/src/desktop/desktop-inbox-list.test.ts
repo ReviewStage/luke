@@ -361,7 +361,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).length;
 }
 
-test("the sidebar's Inbox counts what Needs you lists, the questions and the update waiting on you, never a settled thread however unread nor a teammate's question", async () => {
+test("the sidebar's Inbox counts the questions and the update waiting on you, never a settled thread however unread, which Open lists until it is read, nor a teammate's question", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   window.localStorage.removeItem(WHOSE_KEY);
   const NOTE: InboxItem = {
@@ -396,8 +396,8 @@ test("the sidebar's Inbox counts what Needs you lists, the questions and the upd
   ];
   const { page } = mount([], { holding, waiting, withSidebar: true });
   await settle();
-  assert.equal(toDoRows(page), 3, "the two questions and the update");
-  assert.equal(sidebarInboxCount(page), 3, "the sidebar counts the rows Needs you lists");
+  assert.equal(toDoRows(page), 4, "the two questions, the update, and the settled thread unread");
+  assert.equal(sidebarInboxCount(page), 3, "the sidebar counts what waits on you");
 });
 
 test("the sidebar's Inbox counts the open items alone, as before, where main carries no To do count from an older service", async () => {
@@ -411,12 +411,12 @@ test("the sidebar's Inbox counts the open items alone, as before, where main car
   );
 });
 
-test("a fresh profile opens the Inbox on Open addressed to Me, which is Needs you, its head naming the Inbox alone, a settled item left out until All is chosen, the head naming the Inbox still", async () => {
+test("a fresh profile opens the Inbox on Open addressed to Me, its head naming the Inbox alone, a settled item left out until All is chosen, the head naming the Inbox still", async () => {
   window.localStorage.clear();
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "Needs you", "[Open]", "All"]);
-  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   openViewOptions(page);
   act(() => viewItem("Addressed to").click());
   assert.equal(viewItem("Me").getAttribute("aria-checked"), "true");
@@ -460,7 +460,7 @@ test("a task done or canceled keeps its items listed and counted as any other's,
   const rows = listed(page);
   for (const row of ["Alert at 80%?", "Expire after 7 days?", "Quarantine the flaky test?"]) {
     assert.ok(
-      rows.some((each) => each.replace(/^▸ /u, "") === row),
+      rows.some((each) => each.replace(/^(▸ )?\*?/u, "") === row),
       `Open lists ${row}: ${rows.join(" | ")}`,
     );
   }
@@ -719,7 +719,7 @@ test("with only settled items, read, Needs you lists no row, the item read still
   showScope(page, "Open");
   assert.equal(headTitle(page), "Inbox");
   assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(listEmpty(page), [undefined, "Nothing needs you", "Show all"]);
+  assert.deepEqual(listEmpty(page), [undefined, "Nothing open", "Show all"]);
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
@@ -729,7 +729,7 @@ test("with only settled items, read, Needs you lists no row, the item read still
   assert.equal(pagerOf(page), null);
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(listEmpty(page)?.[1], "Nothing needs you");
+  assert.equal(listEmpty(page)?.[1], "Nothing open");
 
   const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .ui-empty-state button");
   assert.ok(showAll, "the empty state offers Show all");
@@ -754,7 +754,7 @@ test("one column wide, an answered item that Needs you draws no row for shows no
   await settle();
   act(() => rowNamed(page, "How is a failed email retried?").click());
   showScope(page, "Open");
-  assert.deepEqual(listed(page), ["Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["*Expire after 7 days?", "*Alert at 80%?"]);
   layOut(page, 800);
   assert.equal(readTitle(page), "How is a failed email retried?");
   assert.equal(pagerOf(page), null, "no row, so no count");
@@ -779,7 +779,7 @@ test("on Needs you, a focused row whose item is answered on another Mac leaves t
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["▸ Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
   assert.ok(
     document.activeElement === page.querySelector('button[aria-label="View options"]'),
     "the keyboard is on View options",
@@ -811,7 +811,7 @@ test("on a phone, a focused row whose item is answered elsewhere leaves the keyb
     ]),
   );
   await settle();
-  assert.deepEqual(listed(page), ["▸ Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
   assert.ok(document.activeElement === more(), "the keyboard is on the head's ⋯");
 });
 
@@ -881,7 +881,7 @@ test("on Needs you, an item answered on another Mac slides out from where its ro
   act(() => {
     for (const fade of fades) fade.finish();
   });
-  assert.deepEqual(listed(page), ["▸ Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Alert at 80%?"]);
   assert.equal(page.querySelector("[data-leaving]"), null);
 });
 
@@ -1060,12 +1060,12 @@ test("a row is heard as its task, Unread, its title, and its time, and described
   showScope(page, "Open");
   const time = rowNamed(page, CODED.title).querySelector("time")?.textContent;
   assert.deepEqual(heardRow(page, CODED.title), [
-    `Invites Unread Expire after 7 days? ${time}`,
+    `Invites Unread Expire after 7 days? Needs you ${time}`,
     "A link opened twice adds them twice:",
   ]);
 });
 
-test("a row says Needs you to a reader only outside Needs you, whose name says it of every row, the list's name saying what it lists since the head names the Inbox alone", async () => {
+test("a row says Needs you to a reader under Open as under All, since Open may hold a thread that needs nobody, the list's name saying what it lists since the head names the Inbox alone", async () => {
   window.localStorage.removeItem(WHOSE_KEY);
   world.inboxes.set(INVITES.id, [CODED]);
   const { page } = mount();
@@ -1081,11 +1081,13 @@ test("a row says Needs you to a reader only outside Needs you, whose name says i
     `Invites Unread Expire after 7 days? Needs you ${time}`,
   );
   showScope(page, "Open");
-  assert.equal(heardRow(page, CODED.title)[0], `Invites Unread Expire after 7 days? ${time}`);
+  assert.equal(
+    heardRow(page, CODED.title)[0],
+    `Invites Unread Expire after 7 days? Needs you ${time}`,
+  );
   assert.equal(
     page.querySelector("nav.inbox-tasks")?.getAttribute("aria-label"),
-    "Inbox items · Needs you",
-    "the list says it once",
+    "Inbox items · Open · Me",
   );
 });
 

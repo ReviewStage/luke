@@ -853,7 +853,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
   const { answer } = gatedAnswers();
-  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
   assert.equal(rowMuted(page, "Expire after 7 days?"), false);
 
   answerWithNote(page, "Keep 7 days");
@@ -869,7 +869,7 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
   await settle();
   assert.deepEqual(
     listed(page),
-    ["▸ Expire after 7 days?", "Alert at 80%?"],
+    ["▸ Expire after 7 days?", "*Alert at 80%?"],
     "the answered row stays where it stood",
   );
   assert.equal(rowMuted(page, "Expire after 7 days?"), true, "drawn gray");
@@ -877,7 +877,11 @@ test("on To do, answering the chosen item draws its row gray where it stood, and
 
   act(() => rowNamed(page, "Alert at 80%?").click());
   await settle();
-  assert.deepEqual(listed(page), ["▸ Alert at 80%?"], "the gray row clears once another is chosen");
+  assert.deepEqual(
+    listed(page),
+    ["▸ *Alert at 80%?"],
+    "the gray row clears once another is chosen",
+  );
 });
 
 test("on To do, the chosen row is let go once the Inbox is left, so an item answered while it was hidden is gone when it is come back to", async () => {
@@ -885,7 +889,7 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   window.localStorage.removeItem(WHOSE_KEY);
   const { page } = mount([], { chosen: ON_EXPIRY });
   await settle();
-  assert.deepEqual(listed(page), ["▸ Expire after 7 days?", "Alert at 80%?"]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
 
   act(() => world.setInboxOpen(false));
   await settle();
@@ -900,7 +904,7 @@ test("on To do, the chosen row is let go once the Inbox is left, so an item answ
   await settle();
   assert.deepEqual(
     listed(page),
-    ["Alert at 80%?"],
+    ["*Alert at 80%?"],
     "the item answered while the Inbox was hidden no longer needs you, so it has no row",
   );
 });
@@ -924,9 +928,9 @@ test("on To do, an answered item a link or Back chooses stands its row, gray, un
   act(() => world.chooseFromOutside(onRetry));
   await settle();
 
-  assert.deepEqual(linked, ["▸ How is a failed email retried?", "Expire after 7 days?"]);
-  assert.deepEqual(left, ["▸ Expire after 7 days?"], "its row goes once another is chosen");
-  assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "Expire after 7 days?"]);
+  assert.deepEqual(linked, ["▸ How is a failed email retried?", "*Expire after 7 days?"]);
+  assert.deepEqual(left, ["▸ *Expire after 7 days?"], "its row goes once another is chosen");
+  assert.deepEqual(listed(page), ["▸ How is a failed email retried?", "*Expire after 7 days?"]);
   assert.equal(rowMuted(page, "How is a failed email retried?"), true, "drawn gray");
 });
 

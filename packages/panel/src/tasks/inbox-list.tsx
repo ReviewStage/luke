@@ -255,16 +255,11 @@ const INBOX_TITLE = "Inbox";
 
 /**
  * Whether the list holds only what needs the reader, the window's Inbox's
- * Needs you, or its Open addressed to them: its rows then leave Needs you
- * unsaid (`needsYouShown`), and its region says it once.
+ * Needs you: its rows then leave Needs you unsaid (`needsYouShown`), and its
+ * region says it once.
  */
 function needsYouListed(head: InboxListHead): boolean {
-  const { view } = head;
-  if (view === undefined) return false;
-  return (
-    view.show === INBOX_SHOW.NEEDS_ME ||
-    (view.show === INBOX_SHOW.OPEN && view.whose.kind === INBOX_WHOSE.MINE)
-  );
+  return head.view?.show === INBOX_SHOW.NEEDS_ME;
 }
 
 /** Addressed to's choice where it narrows the scope shown (`narrowedByWhose`), for the chip it calls for; none under Needs you, or where the Inbox offers no view. */
@@ -287,16 +282,13 @@ function whoseWords(whose: InboxWhose): string {
 /**
  * The list's region's name, saying what it lists, since the head names the
  * Inbox alone: Needs you by its scope's name alone, whom Addressed to names
- * leaving it as it is; Needs you where Open holds only what needs the
- * reader, whose rows leave it unsaid (`needsYouShown`), so a reader hears it
- * once; else the scope and whom Addressed to names. A task's own Inbox
- * lists everything, so its region is named alone.
+ * leaving it as it is; else the scope and whom Addressed to names. A task's
+ * own Inbox lists everything, so its region is named alone.
  */
 function regionLabel(head: InboxListHead): string {
   const { view } = head;
   if (view === undefined) return INBOX_ITEMS;
   if (!narrowedByWhose(view.show)) return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label}`;
-  if (needsYouListed(head)) return `${INBOX_ITEMS} · ${NEEDS_YOU.LABEL}`;
   return `${INBOX_ITEMS} · ${SCOPE_WORDS[view.show].label} · ${whoseWords(view.whose)}`;
 }
 
@@ -306,24 +298,23 @@ export const NOTHING_HERE = "Nothing here";
 /** What the Snoozed scope says holding nothing the reader snoozed. */
 const NOTHING_SNOOZED = "Nothing snoozed";
 
+/** What Open says holding no thread the reader is not done with. */
+const NOTHING_OPEN = "Nothing open";
+
 /** What Needs you says holding no question that waits on the reader, whomever Addressed to names. */
 const NOTHING_NEEDS_ME = "Nothing needs your response";
 
-/**
- * What the list says where its scope and Addressed to leave out every item
- * it holds, by whom Addressed to names: the reader's Open is Needs you, and
- * anyone's Open every thread still open.
- */
+/** What the list says where its scope and Addressed to leave out every item it holds, by whom Addressed to names. */
 const SHOW_EMPTY = {
   [INBOX_WHOSE.MINE]: {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
-    [INBOX_SHOW.OPEN]: NEEDS_YOU.NONE,
+    [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: "Nothing addressed to you",
     [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
   [INBOX_WHOSE.EVERYONE]: {
     [INBOX_SHOW.NEEDS_ME]: NOTHING_NEEDS_ME,
-    [INBOX_SHOW.OPEN]: "Nothing open",
+    [INBOX_SHOW.OPEN]: NOTHING_OPEN,
     [INBOX_SHOW.ALL]: NOTHING_HERE,
     [INBOX_SHOW.SNOOZED]: NOTHING_SNOOZED,
   },
