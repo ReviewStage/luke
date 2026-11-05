@@ -74,8 +74,9 @@ import { MenuRow } from "./menu-row.js";
  * While the account has none, Connect an agent stands first.
  *
  * Each agent is led by its brand's mark, in the picker and on its row, an
- * allowed agent's found by the name it registered under; one the page does
- * not know wears a plain agent's glyph. Each section is `@repo/ui`'s
+ * allowed agent's found by the name it registered under; Other stands in
+ * the picker by its name alone, and a row whose agent the page does not
+ * know wears a plain agent's glyph, so the rows' names stay in one column. Each section is `@repo/ui`'s
  * `SettingsSection`, the agent asked for its segmented `ChoiceBar`, each
  * allowed agent `MenuRow`'s row, and an address or a command its `CopyField`.
  */
@@ -118,8 +119,8 @@ type ConnectAgent = (typeof CONNECT_AGENT)[keyof typeof CONNECT_AGENT];
  */
 interface ConnectStep {
   readonly name: string;
-  /** Its brand's mark, or a plain agent's glyph for any other. */
-  readonly mark: React.JSX.Element;
+  /** Its brand's mark; any other agent has none. */
+  readonly mark?: React.JSX.Element;
   readonly label: string;
   readonly words: string;
   readonly command?: (serverUrl: string) => string;
@@ -134,7 +135,7 @@ function cursorInstallUrl(serverUrl: string): string {
 }
 
 /** Each agent's one step. */
-const CONNECT_STEPS = {
+const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
   [CONNECT_AGENT.CLAUDE_CODE]: {
     name: "Claude Code",
     mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
@@ -182,12 +183,11 @@ const CONNECT_STEPS = {
   },
   [CONNECT_AGENT.OTHER]: {
     name: "Other",
-    mark: <GLYPH.AGENT />,
     label: PAGE_LINE.SERVER,
     words: "Add it to any agent that supports remote MCP servers. It signs in with OAuth.",
     address: true,
   },
-} as const satisfies Record<ConnectAgent, ConnectStep>;
+};
 
 /** The names an agent registers under where they are not the name the picker calls it by. */
 const REGISTERED_AS: ReadonlyMap<string, ConnectAgent> = new Map([
@@ -200,7 +200,7 @@ function clientMark(client: McpClient): React.JSX.Element {
   const agent =
     REGISTERED_AS.get(name) ??
     Object.values(CONNECT_AGENT).find((each) => CONNECT_STEPS[each].name.toLowerCase() === name);
-  return agent === undefined ? <GLYPH.AGENT /> : CONNECT_STEPS[agent].mark;
+  return (agent === undefined ? undefined : CONNECT_STEPS[agent].mark) ?? <GLYPH.AGENT />;
 }
 
 /** How many agents stand as rows while the read is out. */
