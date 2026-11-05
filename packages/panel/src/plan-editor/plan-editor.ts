@@ -143,8 +143,14 @@ const TASK_MARK_LENGTH = "- [ ] ".length;
  * the mark rather than as a text node, which would escape the `&`. Its
  * Markdown rule is kept out of a table's cell before it is extended, because
  * extending it after would hand its own writing to itself as its parent's.
+ * It takes a list nested under its words, because TipTap's Markdown reader
+ * lays an indented list into the item whatever it takes, so one that took
+ * words alone opened invalid and ticking its checkbox threw.
  */
 const DocumentTaskItem = blockRulesOutOfCells(TaskItem).extend({
+  addOptions() {
+    return { ...this.parent?.(), nested: true };
+  },
   parseMarkdown(token, helpers) {
     const empty = token.text === EMPTY_TASK_WORDS;
     return this.parent?.(empty ? { ...token, text: "", tokens: [] } : token, helpers) ?? [];
