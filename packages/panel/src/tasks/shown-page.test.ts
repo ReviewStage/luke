@@ -83,10 +83,33 @@ test("words selected in the page offer Reply, which lays them into the box and l
   act(() => press.click());
   assert.deepEqual(replies, [WORDS]);
   assert.deepEqual(told.mock.calls[0]?.[0], { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.UNSELECT });
-  assert.equal(replyPress(), undefined, "Reply goes once pressed");
+  assert.ok(replyPress() === undefined, "Reply goes once pressed");
 });
 
 test("words selected in the page offer nothing where no box takes them", () => {
   selectInFrame(drawPage(undefined));
-  assert.equal(replyPress(), undefined);
+  assert.ok(replyPress() === undefined);
+});
+
+test("a press landing in another page takes Reply away, and lets the words go in this one", () => {
+  const framed = drawPage(() => undefined);
+  const told = vi.spyOn(framed, "postMessage").mockImplementation(() => undefined);
+  selectInFrame(framed);
+  const elsewhere = document.body.appendChild(document.createElement("iframe")).contentWindow;
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: PAGE_PICK_TYPE, pressed: true },
+        source: elsewhere,
+      }),
+    );
+  });
+  assert.ok(replyPress() === undefined);
+  assert.deepEqual(told.mock.calls[0]?.[0], { type: PAGE_PICK_TYPE, act: PAGE_PICK_ACT.UNSELECT });
+});
+
+test("a page loading again takes Reply away, since its words selected went with the old document", () => {
+  selectInFrame(drawPage(() => undefined));
+  act(() => document.body.querySelector("iframe")?.dispatchEvent(new Event("load")));
+  assert.ok(replyPress() === undefined);
 });

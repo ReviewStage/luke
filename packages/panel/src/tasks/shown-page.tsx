@@ -44,8 +44,9 @@ import { pressPlace, ReplyPress, useReplyDoor } from "./reply-to-selection.js";
  * (`useReplyDoor`). No selection in the frame reaches this window, so the
  * frame says the words and where they stand (`@repo/features/page-pick`),
  * heard from that frame alone; Reply goes as they go, as a press lands
- * anywhere else in the window, or as another frame says words of its own,
- * each telling its frame to let its words go. Note that the words are the
+ * anywhere else in the window, in another frame included, or as another
+ * frame says words of its own, each telling its frame to let its words go,
+ * and as the frame loads again, whose new document holds none. Note that the words are the
  * page's own word, since its scripts share the frame with ours: the worst a
  * page that lies does is offer a quote of itself, which the box shows before
  * anything is sent.
@@ -114,23 +115,30 @@ function FrameReply({
     unselect(frame);
   };
 
-  // The frame says its words as they are selected, and that none are once they go; another frame's words take Reply from this one's.
+  // The frame says its words as they are selected, and that none are once they go; another frame's words, or a press in it, take Reply from this one's.
   useEffect(() => {
+    const element = frame.current;
     const hear = (event: MessageEvent) => {
       const framed = frame.current?.contentWindow;
       if (framed === null || framed === undefined) return;
       const said = readPick(event.data);
-      if (Option.isNone(said) || !("selected" in said.value)) return;
-      const words = said.value.selected;
-      if (event.source === framed) {
+      if (Option.isNone(said)) return;
+      const words = "selected" in said.value ? said.value.selected : undefined;
+      if (event.source === framed && words !== undefined) {
         setSelected(words === null ? undefined : { quote: words.quote, box: words.box });
-      } else if (words !== null) {
+      } else if (event.source !== framed && (words != null || "pressed" in said.value)) {
         setSelected(undefined);
         unselect(frame);
       }
     };
+    // Note that a frame loading again, a reload or another version, holds a new document, whose words selected are none.
+    const loaded = () => setSelected(undefined);
     window.addEventListener("message", hear);
-    return () => window.removeEventListener("message", hear);
+    element?.addEventListener("load", loaded);
+    return () => {
+      window.removeEventListener("message", hear);
+      element?.removeEventListener("load", loaded);
+    };
   }, [frame]);
 
   // Once offered, Reply follows the frame as the window scrolls, and hides with its pane.
