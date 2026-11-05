@@ -108,7 +108,7 @@ function ComposerFoots(): React.JSX.Element {
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
             <Box
-              words={`Ask ${PRODUCT_NAME} to change something…`}
+              words={`Ask ${PRODUCT_NAME} to change something`}
               send={{ label: "Send", empty: true }}
             />
             <Box
@@ -206,10 +206,10 @@ function ComposerFoots(): React.JSX.Element {
       <CatalogSection id="composer-foot-looks" title="Looks">
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
-            <Box look={COMPOSER_LOOK.FIELD} words="Reply…" send={{ label: "Reply", empty: true }} />
+            <Box look={COMPOSER_LOOK.FIELD} words="Reply" send={{ label: "Reply", empty: true }} />
             <Box
               look={COMPOSER_LOOK.BARE}
-              words="Comment…"
+              words="Comment"
               send={{ label: "Comment", empty: false }}
             />
             <BoxSkeleton />
