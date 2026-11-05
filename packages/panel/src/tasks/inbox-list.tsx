@@ -1,6 +1,7 @@
 import { type InboxItem, inboxAddressedTo } from "@repo/features/inbox-wire";
 import type { CatalogModel } from "@repo/features/models-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
+import type { TaskStatus } from "@repo/features/task-wire";
 import { sameShape } from "@repo/features/turn-rows";
 import { APP_COMMAND, APP_SHORTCUTS } from "@repo/settings/shortcuts";
 import {
@@ -145,6 +146,7 @@ import {
 } from "./inbox-model.js";
 import { type InboxListMark, InboxSelectionBar } from "./inbox-selection.js";
 import { type InboxSnoozer, useInboxSnoozing } from "./inbox-snooze.js";
+import { PlanGlyph } from "./tab-look.js";
 import { cardTitle } from "./tool-call-model.js";
 
 /**
@@ -730,16 +732,17 @@ function whoseChipEntries(
   ];
 }
 
-/** The chip the task the Inbox is narrowed to calls for, by its name; none while it lists every task's. */
+/** The chip the task the Inbox is narrowed to calls for, its status's mark and its name, as every chip naming a task wears them; none while it lists every task's. */
 function taskChipEntries(
   name: string | undefined,
+  status: TaskStatus | undefined,
   onClear: (() => void) | undefined,
 ): FilterChipEntry[] {
   if (onClear === undefined) return [];
   return [
     {
       key: FILTER_CHIP_KEY.TASK,
-      mark: <GLYPH.TASK />,
+      mark: <PlanGlyph status={status} />,
       words: name ?? UNNAMED_TASK,
       removeLabel: CLEAR_TASK,
       onRemove: onClear,
@@ -767,16 +770,17 @@ function FilterChipLine({
   const chosen = whose?.whose;
   const onWhose = whose?.onWhose;
   const taskName = task?.name;
+  const taskStatus = task?.status;
   const onClearTask = task?.onClear;
   // Note that the entries are made once for what they are made from, because `useLeaving` reads a new list as a change.
   const listed = useMemo(
     () => [
-      ...taskChipEntries(taskName, onClearTask),
+      ...taskChipEntries(taskName, taskStatus, onClearTask),
       ...(chosen === undefined || onWhose === undefined
         ? []
         : whoseChipEntries({ whose: chosen, onWhose }, directory, readerId)),
     ],
-    [taskName, onClearTask, chosen, onWhose, directory, readerId],
+    [taskName, taskStatus, onClearTask, chosen, onWhose, directory, readerId],
   );
   const drawn = useLeaving(listed, (entry) => entry.key);
   // Note that the box around the row stands hidden while no task and no teammate is chosen, so the row's padding takes no room, and the chip arriving arrives into a row that stands.
@@ -1233,9 +1237,10 @@ export interface InboxListHead {
   readonly task?: InboxTaskHead | undefined;
 }
 
-/** The task the window's Inbox is narrowed to, as the chip over its list names it: its name, none while it is not listed yet, and the × that clears it. */
+/** The task the window's Inbox is narrowed to, as the chip over its list names it: its name and its status, none while it is not listed yet, and the × that clears it. */
 interface InboxTaskHead {
   readonly name: string | undefined;
+  readonly status: TaskStatus | undefined;
   readonly onClear: () => void;
 }
 
