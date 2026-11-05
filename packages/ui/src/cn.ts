@@ -33,7 +33,6 @@ const PANEL_PLACES = {
     "automation-time",
     "automation-webhook",
     "em",
-    "onboarding-foot",
   ],
 } as const;
 

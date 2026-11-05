@@ -841,12 +841,15 @@ export function DesktopShell({
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
   const away = useMemo(() => ({ label: awayLabel, onPress: onLeave }), [awayLabel, onLeave]);
+  // Note that the onboarding column's drag strip stands over its top rather
+  // than in flow, because the AuthPage beneath is already a whole window tall
+  // and a strip above it would overflow the window by the strip's height.
   if (setup !== SETUP_GATE.NONE && signedInId !== undefined) {
     // While a new account's agent is still read, the window waits on setup's own ground rather than glimpsing the app.
     return (
       <ScrollArea>
-        <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
-          <div className="desktop-drag-strip" />
+        <div className="desktop-onboarding relative">
+          <div className="desktop-drag-strip absolute inset-x-0 top-0" />
           {setup === SETUP_GATE.OWED ? (
             <SetupSteps
               tasks={tasks}
@@ -862,8 +865,8 @@ export function DesktopShell({
     const macAppLink = appPlatform().macAppLink?.();
     return (
       <ScrollArea>
-        <div className="desktop-onboarding flex min-h-full flex-col pb-onboarding-foot">
-          <div className="desktop-drag-strip" />
+        <div className="desktop-onboarding relative">
+          <div className="desktop-drag-strip absolute inset-x-0 top-0" />
           <ReplayUnmask>
             <SignInGate
               account={account}

@@ -388,7 +388,6 @@
     calc(100% - 480px)
   ); /* off-scale: the form's reserve, FORM_RESERVE */
   --spacing-em: 1em;
-  --spacing-onboarding-foot: calc(var(--ui-stage-height) * 0.08);
   --color-sidebar: var(--ui-color-sidebar);
   --ease-spring: var(--ui-spring);
   --spacing-viewport-top: var(--ui-viewport-top);
