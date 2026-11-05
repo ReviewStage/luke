@@ -8,9 +8,9 @@ import type { PageThumbFrame } from "../page-thumb/page-thumb.js";
  * Where an agent shows a page, the page stands in the words that tell of it,
  * a transcript's or an Inbox thread's, rather than only behind a chip. It is
  * drawn on the words' own ground, as a picture is, with no border or fill of
- * ours around it, only its corners rounded, so a page that leaves its root
- * clear reads as part of the words and one that paints its own ground still
- * stands as a soft-cornered block. It is sandboxed as the caller says, and
+ * ours around it and its corners square, so a page that leaves its root
+ * clear reads as part of the words and one that paints its own ground
+ * stands as a block flush with them. It is sandboxed as the caller says, and
  * may be read and pressed in as in its tab.
  *
  * Its height is the caller's to hand, as the page reports it: until it does,
@@ -120,7 +120,7 @@ export function PageEmbed({
   const load = useLoaded(frame.src);
   return (
     <div
-      className="ui-page-embed ph-no-capture overflow-hidden rounded-card bg-muted data-[loaded=true]:bg-transparent"
+      className="ui-page-embed ph-no-capture bg-muted data-[loaded=true]:bg-transparent"
       data-loaded={String(load.loaded)}
     >
       <LiveFrame
