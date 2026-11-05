@@ -27,6 +27,7 @@ import {
   agentServersRequestSchema,
   agentStartRequestFields,
   agentSummarySchema,
+  extraRepositoryRefusalSchema,
   localAgentRefusalSchema,
   refusedDeviceSchema,
 } from "./agent-wire.js";
@@ -142,6 +143,8 @@ export const AGENT_CALL_FAILURE = {
   OPENAI_KEY_MISSING: "openai-key-missing",
   /** The device the Start would run its agent on would not take it, for the reason that travels beside it where the service said (`LOCAL_AGENT_REFUSAL`). */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
+  /** The repositories the Start named beside its agent's own were refused, for the reason that travels beside it where the service said (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. */
+  EXTRA_REPOSITORY_REFUSED: "extra-repository-refused",
 } as const;
 
 export type AgentCallFailure = (typeof AGENT_CALL_FAILURE)[keyof typeof AGENT_CALL_FAILURE];
@@ -154,7 +157,7 @@ const failed = EffectSchema.Struct({
   cause: EffectSchema.optionalKey(failureFactsSchema),
 });
 
-/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that. */
+/** A failed start or message, with why the repository is out of reach where it is and the service said (`repository-reach-wire.ts`), when a plan's reached limit resets where it is that, the provider whose credential is missing where it is that, and why the task's device would not take the agent, with the device and its owner where it is another member's, where it is that, and why the repositories named beside the agent's own were refused, with the repository where one is why, where it is that. */
 const failedReaching = EffectSchema.Struct({
   ...failed.fields,
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
@@ -162,6 +165,8 @@ const failedReaching = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
   refusedDevice: EffectSchema.optionalKey(refusedDeviceSchema),
+  extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
+  refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /** The models the service offers, as the window hears them: the list and the Mac a Start may run on where it offers one (`modelsAnswerSchema`), or why there is none. */

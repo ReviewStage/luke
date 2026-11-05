@@ -499,10 +499,13 @@ export interface NewTaskAgent {
   readonly attachments: readonly AgentAttachment[];
   readonly choice: ModelChoice | undefined;
   readonly disabledServers: readonly string[];
+  /** The repositories the agent works in beside the task's, `owner/name`, which the card offers while Several repositories is on; none where left out. */
+  readonly alsoRepositories?: readonly string[] | undefined;
 }
 
-/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, the chip's model where one was picked, and the servers switched off where any. */
+/** The agent a task's start starts on it, as the act carries it: the card's key, the prompt, the files where any, the chip's model where one was picked, the servers switched off where any, and the repositories beside the task's where any. */
 function agentRequest(handed: NewTaskAgent) {
+  const also = handed.alsoRepositories ?? [];
   return {
     idempotencyKey: handed.idempotencyKey,
     prompt: handed.prompt,
@@ -511,6 +514,9 @@ function agentRequest(handed: NewTaskAgent) {
     ...(handed.disabledServers.length === 0
       ? undefined
       : { disabledServers: handed.disabledServers }),
+    ...(also.length === 0
+      ? undefined
+      : { alsoRepositories: also.map((repository) => ({ repository })) }),
   };
 }
 

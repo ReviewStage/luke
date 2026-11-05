@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@repo/database/core/query";
 import { readAccountPreferences } from "@repo/database/models/account-store";
+import { readAgentRepositories } from "@repo/database/models/agent-repositories";
 import {
   type Agent,
   settleAgentAuthor,
@@ -16,7 +17,7 @@ import {
   type CommitAuthor,
   coAuthorCredited,
 } from "@repo/settings";
-import { Data, Effect, Option, type Redacted } from "effect";
+import { Data, Effect, Option, type Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   GITHUB_HTTP_STATUS,
@@ -24,14 +25,16 @@ import {
   type GitHubTokenAccess,
   type GitHubUser,
   noreplyAddress,
+  REPOSITORY_SET_UNREACHED,
 } from "../../github/github-app.js";
 import {
   agentMember,
   agentWorkspace as workspaceOfAgent,
 } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { extraCheckoutPaths, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
+  cloneExtraRepository,
   cloneRepository,
   deepenRepository,
   REPOSITORY_REFUSAL,
@@ -302,7 +305,14 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 /**
  * A write token for the agent's repository, minted as the App where the
  * installation of its task's workspace still reaches the repository, with
- * the repository as GitHub spells it.
+ * the repository as GitHub spells it. An agent that works in other
+ * repositories beside its own (`readAgentRepositories`) is minted one token
+ * for them all, on the one installation that reaches them
+ * (`repositoriesWriteToken`), its own repository still the one answered;
+ * refused as not reachable, naming the first repository the token does not
+ * reach, where one is no longer reached, is reached only on its starter's
+ * token, or moved to another installation since it started. Note that an
+ * agent in one repository is minted as it always was.
  */
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
@@ -320,6 +330,16 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
     CheckoutServices
   > {
     const app = yield* GitHubApp;
+    const repositories = yield* readAgentRepositories(target.userId, agent.id).pipe(
+      Effect.mapError(refusedBy),
+    );
+    if (repositories.length > 1) {
+      return yield* agentRepositoriesToken(
+        target,
+        agent,
+        repositories.map((each) => each.repository),
+      );
+    }
     const reached = yield* Effect.gen(function* () {
       const workspace = yield* agentWorkspace(target, agent);
       if (Option.isNone(workspace)) return Option.none();
@@ -336,6 +356,39 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
     };
   },
 );
+
+/** The one write token for every repository the agent works in, its own first, as `agentRepositoryToken` mints it for an agent in several. */
+const agentRepositoriesToken = Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  agent: WithRepository<Agent>,
+  repositories: readonly string[],
+) {
+  const app = yield* GitHubApp;
+  const minted = yield* Effect.gen(function* () {
+    const workspace = yield* agentWorkspace(target, agent);
+    if (Option.isNone(workspace)) return Option.none();
+    return Option.some(
+      yield* app.repositoriesWriteToken(workspace.value, repositories, agentMember(agent)),
+    );
+  }).pipe(Effect.mapError(refusedBy));
+  if (Option.isNone(minted))
+    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+  if (Result.isFailure(minted.value)) {
+    const refused = minted.value.failure;
+    const repository =
+      refused.why === REPOSITORY_SET_UNREACHED.UNREACHED
+        ? refused.unreached.repository
+        : refused.repository;
+    return yield* new CheckoutRefused({
+      reason: CODER_REFUSAL.NOT_REACHABLE,
+      detail: `Not reached: ${repository}.`,
+    });
+  }
+  const { repositories: reached, token, access } = minted.value.success;
+  const [own] = reached;
+  if (own === undefined) return yield* Effect.die("a set of repositories answered none");
+  return { token, defaultBranch: own.defaultBranch, fullName: own.fullName, access };
+});
 
 /**
  * Who the checkout's commits are by: the developer's GitHub account where
@@ -421,6 +474,83 @@ export const agentRepositoryRead = /* @__PURE__ */ Effect.fn("web/agentRepositor
     token,
     access,
   };
+});
+
+/** A repository the agent works in beside its own, as its workspace reaches it: the repository as GitHub spells it, the branch its checkout is cloned at, the folder it is cloned into, and a read token for it with whose it is. */
+export interface AgentExtraRead {
+  readonly fullName: string;
+  readonly branch: string;
+  readonly path: string;
+  readonly token: Redacted.Redacted;
+  readonly access: GitHubTokenAccess;
+}
+
+/**
+ * The repositories the agent works in beside its own (`readAgentRepositories`),
+ * each as its workspace reaches it now, with a read token for that one
+ * repository, the branch it was named at or its default branch, and the
+ * folder it is cloned into (`extraCheckoutPaths`); none for an agent in one
+ * repository, which reads nothing of GitHub. Refused as not reachable,
+ * naming the repository, where one is no longer reached.
+ */
+export const agentExtraReads = /* @__PURE__ */ Effect.fn("web/agentExtraReads")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<Agent>,
+): Effect.fn.Return<readonly AgentExtraRead[], CheckoutRefused, CheckoutServices> {
+  const [, ...extras] = yield* readAgentRepositories(target.userId, agent.id).pipe(
+    Effect.mapError(refusedBy),
+  );
+  if (extras.length === 0) return [];
+  const app = yield* GitHubApp;
+  const workspace = yield* agentWorkspace(target, agent).pipe(Effect.mapError(refusedBy));
+  if (Option.isNone(workspace))
+    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+  const paths = extraCheckoutPaths(extras.map((each) => each.repository));
+  return yield* Effect.forEach(
+    extras,
+    (extra, index) =>
+      Effect.gen(function* () {
+        const reached = yield* app
+          .repositoryReadToken(workspace.value, extra.repository, agentMember(agent))
+          .pipe(Effect.mapError(refusedBy));
+        if (Option.isNone(reached)) {
+          return yield* new CheckoutRefused({
+            reason: CODER_REFUSAL.NOT_REACHABLE,
+            detail: `Not reached: ${extra.repository}.`,
+          });
+        }
+        const { repository, token, access } = reached.value;
+        const read: AgentExtraRead = {
+          fullName: repository.fullName,
+          branch: extra.baseBranch ?? repository.defaultBranch,
+          path: paths[index] ?? REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE,
+          token,
+          access,
+        };
+        return read;
+      }),
+    { concurrency: "unbounded" },
+  );
+});
+
+/**
+ * The repositories the agent works in beside its own cloned whole into
+ * their folders, on the reads the caller made of them, one after another,
+ * since each clone's token stands in the one slot the firewall keeps for a
+ * clone (`underCloneCredential`); nothing for an agent with none.
+ */
+export const cloneAgentExtras = /* @__PURE__ */ Effect.fn("web/cloneAgentExtras")(function* (
+  sandbox: RepositorySandbox,
+  reads: readonly AgentExtraRead[],
+): Effect.fn.Return<void, CheckoutRefused> {
+  for (const read of reads) {
+    yield* cloneExtraRepository(
+      sandbox,
+      { fullName: read.fullName, branch: read.branch, folder: read.path.split("/").pop() ?? "" },
+      read.token,
+      read.access,
+    ).pipe(Effect.mapError(refusedWith));
+  }
 });
 
 /** How deep an agent's checkout is cloned: one commit for eve's, whose first write deepens it, or whole for a native harness's, deepened at once anyway. */

@@ -7,6 +7,7 @@ import {
   type Agent,
   createAgent,
   hasRepository,
+  type NewAgentRepository,
   readAgent,
 } from "@repo/database/models/agent-store";
 import { createAutomation } from "@repo/database/models/automation-store";
@@ -40,11 +41,15 @@ import {
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { CODER_REFUSAL } from "./bounds.js";
 import {
   agentAuthorship,
   agentDeepenPlan,
+  agentExtraReads,
   agentRepositoryRead,
+  CheckoutRefused,
   COMMIT_BY,
+  cloneAgentExtras,
   cloneAgentRepository,
   deepenCheckoutWith,
 } from "./checkout.js";
@@ -180,7 +185,11 @@ const openGoogleUser = Effect.gen(function* () {
  */
 const openAgent = (
   installation: InstallationFixture,
-  options: { readonly userId?: string; readonly byAutomation?: boolean } = {},
+  options: {
+    readonly userId?: string;
+    readonly byAutomation?: boolean;
+    readonly extraRepositories?: readonly NewAgentRepository[];
+  } = {},
 ) =>
   Effect.gen(function* () {
     const userId = options.userId ?? (yield* openGithubUser());
@@ -220,6 +229,7 @@ const openAgent = (
       planSnapshot: "# Teammate invitations\n",
       prompt: null,
       repository: RELAY_FULL_NAME,
+      extraRepositories: options.extraRepositories,
       automationId: automation?.id,
       automationOrigin:
         automation === undefined
@@ -522,6 +532,72 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         for (const run of sandbox.runs) {
           assert.equal(JSON.stringify(run).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
         }
+      }),
+  );
+
+  it.effect(
+    "an agent in several repositories clones each beside its own checkout, in a folder of its name unless the workspace holds one, at its branch or its default, and is minted one write token for them all, set at the firewall as one repository's is",
+    () =>
+      Effect.gen(function* () {
+        const web = { owner: RELAY.owner, name: "Web" } as const;
+        const named = { owner: RELAY.owner, name: "Repository" } as const;
+        const installation = { ...installationOf(21), repositories: [RELAY, web, named] };
+        const { agent, target } = yield* openAgent(installation, {
+          extraRepositories: [
+            { repository: `${web.owner}/${web.name}` },
+            { repository: `${named.owner}/${named.name}`, baseBranch: "next" },
+          ],
+        });
+        const github = githubReaching([installation], undefined, {}, developerReach(false));
+        const sandbox = sandboxDouble(() => undefined);
+
+        const standing = yield* Effect.gen(function* () {
+          yield* checkOut(target, agent, sandbox);
+          yield* cloneAgentExtras(sandbox, yield* agentExtraReads(target, agent));
+          yield* deepenCheckoutWith(sandbox, yield* agentDeepenPlan(target, agent));
+          return sandbox.policies.at(-1);
+        }).pipe(Effect.provide(github.layer));
+
+        assert.equal(sandbox.checkedOut, RELAY_FULL_NAME);
+        assert.deepEqual(sandbox.extraClones, [
+          { folder: "Web", branch: "main", url: "https://github.com/Acme/Web.git" },
+          {
+            folder: "Acme-Repository",
+            branch: "next",
+            url: "https://github.com/Acme/Repository.git",
+          },
+        ]);
+        assert.deepEqual(standing, APP_CREDENTIAL);
+        assert.deepEqual(repositoryMints(github.sent).at(-1), {
+          repositories: [RELAY.name, web.name, named.name],
+          permissions: { contents: "write", pull_requests: "write" },
+        });
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
+      }),
+  );
+
+  it.effect(
+    "an agent in several repositories is refused its token, naming the repository, where one is no longer reached",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(22);
+        const { agent, target } = yield* openAgent(installation, {
+          extraRepositories: [{ repository: "Acme/Gone" }],
+        });
+        const github = githubReaching([installation], undefined, {}, developerReach(false));
+
+        const refused = yield* agentDeepenPlan(target, agent).pipe(
+          Effect.provide(github.layer),
+          Effect.flip,
+        );
+
+        assert.ok(refused instanceof CheckoutRefused);
+        assert.deepEqual(
+          [refused.reason, refused.detail],
+          [CODER_REFUSAL.NOT_REACHABLE, "Not reached: Acme/Gone."],
+        );
       }),
   );
 

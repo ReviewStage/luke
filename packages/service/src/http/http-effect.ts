@@ -1,4 +1,8 @@
-import type { LocalAgentRefusal, RefusedDevice } from "@repo/features/agent-wire";
+import type {
+  ExtraRepositoryRefusal,
+  LocalAgentRefusal,
+  RefusedDevice,
+} from "@repo/features/agent-wire";
 import type { InstalledSkillRefusal } from "@repo/features/installed-skill-wire";
 import type { ModelProvider } from "@repo/features/models-wire";
 import type { RepositoryUnreached } from "@repo/features/repository-reach-wire";
@@ -66,6 +70,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -89,6 +94,8 @@ export type HostedRefusal = {
   readonly skillRefusal?: InstalledSkillRefusal;
   readonly localAgentRefusal?: LocalAgentRefusal;
   readonly refusedDevice?: RefusedDevice;
+  readonly extraRepositoryRefusal?: ExtraRepositoryRefusal;
+  readonly refusedRepository?: string;
   readonly minimumVersion?: string;
   readonly heldUntil?: number;
   readonly hostRemoved?: true;
@@ -179,6 +186,7 @@ export const HOSTED_REFUSAL = {
   WORKSPACE_SLUG_TAKEN: { error: HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN },
   /** A Start on This Mac was refused (`localAgentRefused`, which names why); nothing was written. */
   LOCAL_AGENT_REFUSED: { error: HOSTED_API_ERROR.LOCAL_AGENT_REFUSED },
+  EXTRA_REPOSITORY_REFUSED: { error: HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED },
   /** A host's daemon is below the service's floor (`hostUpgradeNeeded`, which names the floor); nothing was read or written. */
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
   /** The agent ran on a host its starter removed; nothing was sent. */
@@ -213,6 +221,18 @@ export function localAgentRefused(
     ...HOSTED_REFUSAL.LOCAL_AGENT_REFUSED,
     localAgentRefusal,
     ...(refusedDevice === undefined ? undefined : { refusedDevice }),
+  };
+}
+
+/** A Start naming repositories beside its agent's own refused, named so the words can say why, and which repository where one is why. */
+export function extraRepositoryRefused(
+  extraRepositoryRefusal: ExtraRepositoryRefusal,
+  refusedRepository?: string,
+): HostedRefusal {
+  return {
+    ...HOSTED_REFUSAL.EXTRA_REPOSITORY_REFUSED,
+    extraRepositoryRefusal,
+    ...(refusedRepository === undefined ? undefined : { refusedRepository }),
   };
 }
 

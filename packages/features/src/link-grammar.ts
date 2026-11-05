@@ -264,6 +264,20 @@ export const GITHUB_REPOSITORY_BOUNDS = {
 export const GITHUB_REPOSITORY_PATTERN =
   /^[A-Za-z0-9](?:-?[A-Za-z0-9])*\/(?!\.{1,2}$)[A-Za-z0-9_.-]+$/u;
 
+/**
+ * A repository's full name as the wire takes it: trimmed, and held to GitHub's
+ * own shape and bounds. Note that it stands here beside its pattern, below
+ * the agent's wire, because the start request names repositories and
+ * `github-repositories-wire.ts`, which reads the agent's wire, would close a
+ * loop.
+ */
+export const githubRepositoryFullNameSchema = EffectSchema.Trim.check(
+  EffectSchema.isMaxLength(
+    GITHUB_REPOSITORY_BOUNDS.MAX_OWNER_CHARS + 1 + GITHUB_REPOSITORY_BOUNDS.MAX_NAME_CHARS,
+  ),
+  EffectSchema.isPattern(GITHUB_REPOSITORY_PATTERN),
+);
+
 /** The kinds of GitHub's pages the app reads. */
 export const GITHUB_PAGE = {
   PULL_REQUEST: "pull-request",

@@ -55,6 +55,8 @@ export interface SandboxDouble extends RepositorySandbox {
   checkedOut: string | undefined;
   /** The clone's arguments, as the last clone was handed them. */
   readonly clones: { repository: string; branch: string; url: string }[];
+  /** Every clone of a repository the agent works in beside its own, in order: the folder it went into, its branch, and its URL. */
+  readonly extraClones: { folder: string; branch: string; url: string }[];
   /** Every commit identity set in the checkout, in order. */
   readonly identities: { name: string; email: string }[];
   /** How the next clones end; a clone with nothing scripted succeeds. */
@@ -95,6 +97,7 @@ export function sandboxDouble(
     deepened: 0,
     checkedOut: undefined,
     clones: [],
+    extraClones: [],
     identities: [],
     cloneAnswers: [],
     identityAnswers: [],
@@ -115,6 +118,17 @@ export function sandboxDouble(
       if (env?.[VARIABLE.URL] === undefined && env?.[VARIABLE.REPOSITORY] !== undefined) {
         const standing = double.checkedOut === env[VARIABLE.REPOSITORY];
         return Promise.resolve(result(standing ? EXIT.OK : EXIT.FAILED));
+      }
+      // An extra repository's clone into its folder, recorded with the firewall that stood for it.
+      const folder = env?.[VARIABLE.FOLDER];
+      if (folder !== undefined) {
+        double.policiesDuringClone.push(policy);
+        double.extraClones.push({
+          folder,
+          branch: env?.[VARIABLE.BRANCH] ?? "",
+          url: env?.[VARIABLE.URL] ?? "",
+        });
+        return Promise.resolve(result(EXIT.OK));
       }
       // The clone, answered as scripted, and recorded with the firewall that stood for it.
       const url = env?.[VARIABLE.URL];

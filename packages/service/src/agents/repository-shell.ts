@@ -99,6 +99,31 @@ const CHECKOUT_SCRIPT = [
 ].join("\n");
 
 /**
+ * The checkout of a repository an agent works in beside its own: a whole
+ * clone of the one branch into a directory of this call's own under the
+ * workspace, moved to the folder named once whole, as the agent's own
+ * checkout is cloned (`CHECKOUT_SCRIPT`), a repository with no commits yet
+ * cloned empty the same way. Note that a folder already holding a checkout
+ * is kept, so a clone run again on a sandbox that holds it clones nothing.
+ */
+const EXTRA_CHECKOUT_SCRIPT = [
+  "set -e",
+  `folder="$${SANDBOX_VARIABLE.FOLDER}"`,
+  'if [ -d "$folder/.git" ]; then exit 0; fi',
+  'partial="$folder.$$"',
+  'rm -rf "$partial"',
+  `if ! git clone --quiet --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"; then`,
+  `  head="$(git ls-remote "$${SANDBOX_VARIABLE.URL}" HEAD)"`,
+  '  test -z "$head"',
+  '  rm -rf "$partial"',
+  `  git clone --quiet "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `  git -C "$partial" symbolic-ref HEAD "refs/heads/$${SANDBOX_VARIABLE.BRANCH}"`,
+  "fi",
+  'rm -rf "$folder"',
+  'mv "$partial" "$folder"',
+].join("\n");
+
+/**
  * A whole checkout a repository snapshot holds (`repository-snapshot.ts`)
  * brought up to its branch as GitHub has it now: the branch fetched through
  * the credential the caller set at the firewall and checked out at what was
@@ -308,6 +333,37 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   );
   yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
 });
+
+/**
+ * A repository an agent works in beside its own cloned whole into the
+ * folder named under the workspace, at the branch given, with the token at
+ * the firewall for the clone alone (`underCloneCredential`), or the refusal
+ * that stopped it. Nothing records it, since no probe reads it.
+ */
+export const cloneExtraRepository = /* @__PURE__ */ Effect.fn("web/cloneExtraRepository")(
+  function* (
+    sandbox: RepositorySandbox,
+    confirmed: { readonly fullName: string; readonly branch: string; readonly folder: string },
+    token: Redacted.Redacted,
+    access: GitHubTokenAccess,
+  ): Effect.fn.Return<void, RepositoryRefusal> {
+    const clone = runInSandbox(
+      sandbox,
+      {
+        command: EXTRA_CHECKOUT_SCRIPT,
+        workingDirectory: SANDBOX_PATH.WORKSPACE,
+        env: {
+          ...COMMAND_ENVIRONMENT,
+          [SANDBOX_VARIABLE.FOLDER]: confirmed.folder,
+          [SANDBOX_VARIABLE.BRANCH]: confirmed.branch,
+          [SANDBOX_VARIABLE.URL]: cloneUrl(confirmed.fullName),
+        },
+      },
+      REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+    );
+    yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
+  },
+);
 
 /**
  * What a repository snapshot's checkout records it is of: the repository as

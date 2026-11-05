@@ -56,6 +56,7 @@ import {
   AGENT_KIND,
   AGENT_MACHINE,
   AGENT_SOURCE,
+  type AgentAlsoRepository,
   type AgentAttachment,
   type AgentKind,
   type AgentMachineKind,
@@ -65,6 +66,7 @@ import {
   type AgentStartRequest,
   type AgentSummary,
   CONTEXT_WINDOW,
+  EXTRA_REPOSITORY_REFUSAL,
   LOCAL_AGENT_REFUSAL,
 } from "@repo/features/agent-wire";
 import type { GitHubAccess } from "@repo/features/github-repositories-wire";
@@ -87,16 +89,18 @@ import {
   type ServerAgentStarter,
   type ServerAgentStartFailure,
 } from "../../events/server-events.js";
-import { GitHubApp } from "../../github/github-app.js";
+import { GitHubApp, REPOSITORY_SET_UNREACHED } from "../../github/github-app.js";
 import { githubReachOrRefusal } from "../../github/github-refusal.js";
 import { readBranchHead } from "../../github/repository-file.js";
 import { workspaceRepository } from "../../github/workspace-repository.js";
 import {
   credentialMissing,
+  extraRepositoryRefused,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
   localAgentRefused,
+  repositoryNotReachable,
 } from "../../http/http-effect.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
@@ -235,6 +239,13 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * does. A pilot is refused for an account with the Pilot experiment off.
  * A Start with no task names a prompt, and a repository where it works in
  * one; one that names none works in none.
+ * A Start may name repositories its agent works in beside its own
+ * (`alsoRepositories`), kept after it as the agent's extras
+ * (`agent-repositories.ts`), each cloned beside its checkout under one token
+ * for them all, and only in the cloud, through the one installation of the
+ * App that reaches its own, for a starter with the Several repositories
+ * experiment on (`extraRepositoriesOf`); a Start that names none reads and
+ * writes exactly what it did before.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh, and so does one that could not be
  * reached, a first line that could not be written, and a Start cut short
@@ -306,6 +317,8 @@ export type StartAsk = StartPlace & {
   readonly landed?: StoredTask | undefined;
   /** Where the agent runs, the cloud or one of the starter's devices; none for where `machineOfStart` defaults it. */
   readonly runsOn?: AgentRunsOnRequest | undefined;
+  /** The repositories the agent works in beside its own, each with the branch its checkout is cloned at where one is named; none for an agent in one repository or none. */
+  readonly alsoRepositories?: readonly AgentAlsoRepository[] | undefined;
 };
 
 /** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
@@ -1142,6 +1155,81 @@ const keptPick = (userId: string, runsOn: AgentRunsOnRequest | undefined) =>
         ),
       );
 
+/**
+ * The repositories a Start names beside its agent's own, as GitHub spells
+ * them, each with the branch its checkout is cloned at, read before
+ * anything is written; none for a Start that names none, which reads
+ * nothing more. They are refused, by why, for a starter with the Several
+ * repositories experiment off, for an agent with no repository of its own,
+ * and for one that would run on a device; refused as invalid where one is
+ * named twice, the agent's own among them; and the agent's own and every
+ * extra must be reached through the one installation of the App that
+ * reaches the first, so one token reaches them all (`repositorySetReach`),
+ * each refused by name where it is reached only on the starter's token or
+ * through another installation, and as not reachable, with why, where
+ * neither reaches it. A branch named is confirmed on GitHub as the agent's
+ * own is.
+ */
+const extraRepositoriesOf = Effect.fnUntraced(function* (
+  userId: string,
+  named: readonly AgentAlsoRepository[] | undefined,
+  landing: Pick<StartLanding, "workspaceId" | "repository">,
+  where: StartMachine,
+  member: string | undefined,
+): Effect.fn.Return<
+  readonly { readonly repository: string; readonly baseBranch: string | undefined }[] | undefined,
+  HostedRefusal,
+  DatabaseServices | HttpClient.HttpClient | GitHubApp
+> {
+  if (named === undefined || named.length === 0) return undefined;
+  const on = yield* hostedStoreOrUnavailable(
+    accountExperimentOn(userId, EXPERIMENT.SEVERAL_REPOSITORIES),
+  );
+  if (!on)
+    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.EXPERIMENT_OFF));
+  const own = landing.repository;
+  if (own === null) {
+    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.NO_REPOSITORY));
+  }
+  if (where.asked.machine === AGENT_MACHINE.DEVICE) {
+    return yield* Effect.fail(extraRepositoryRefused(EXTRA_REPOSITORY_REFUSAL.DEVICE));
+  }
+  const every = [own, ...named.map((each) => each.repository)];
+  if (new Set(every.map((each) => each.toLowerCase())).size !== every.length) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const app = yield* GitHubApp;
+  const reached = yield* githubReachOrRefusal(
+    app.repositorySetReach(landing.workspaceId, every, member),
+  );
+  if (Result.isFailure(reached)) {
+    const refused = reached.failure;
+    return yield* Effect.fail(
+      refused.why === REPOSITORY_SET_UNREACHED.UNREACHED
+        ? repositoryNotReachable(refused.unreached)
+        : extraRepositoryRefused(
+            refused.why === REPOSITORY_SET_UNREACHED.TOKEN
+              ? EXTRA_REPOSITORY_REFUSAL.TOKEN
+              : EXTRA_REPOSITORY_REFUSAL.OTHER_INSTALLATION,
+            refused.repository,
+          ),
+    );
+  }
+  const [, ...extras] = reached.success;
+  return yield* Effect.forEach(
+    named,
+    (each, index) =>
+      Effect.gen(function* () {
+        const repository = extras[index]?.fullName ?? each.repository;
+        if (each.branch !== undefined) {
+          yield* confirmedBranch(landing.workspaceId, repository, member, each.branch);
+        }
+        return { repository, baseBranch: each.branch };
+      }),
+    { concurrency: READ_CONCURRENCY },
+  );
+});
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* (
   eve: Effect.Effect<
@@ -1261,6 +1349,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       : undefined;
   // Where it runs, the runtime, and the payer are decided as the agent is made, by the place it names or else its source or its starter's default, and its model, and never change.
   const where = yield* machineOfStart(userId, ask, from?.source, landing.task);
+  const extras = yield* extraRepositoriesOf(userId, ask.alsoRepositories, landing, where, member);
   const runtime = yield* startRuntimeOf(userId, choice.model, keys);
   const placed = yield* startMachineOf(userId, where.asked, runtime.runtime, reached?.access);
   const started = yield* hostedStoreOrUnavailable(
@@ -1285,6 +1374,7 @@ export const startAgent = /* @__PURE__ */ Effect.fn("web/startAgent")(function* 
       deviceId: placed.deviceId,
       githubAccess: reached?.access,
       startBranch: branch,
+      extraRepositories: extras,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
       mentionedServers:
@@ -1534,6 +1624,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     blank: request.blank,
     call: request.call,
     runsOn: request.runsOn,
+    alsoRepositories: request.alsoRepositories,
     summaryModel,
     reached,
     landed,

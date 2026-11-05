@@ -57,7 +57,7 @@ import {
   treeKind,
   treeRelationOf,
 } from "./new-task-relation.js";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
+import { AlsoRepositoryChips, CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { NewTaskRunsOnChip, newTaskRunsOn, useNewTaskRunsOn } from "./runs-on.js";
 import { SkillFiles } from "./skill-chip.js";
@@ -250,6 +250,9 @@ const DEVICES_UNREAD: Failure = {
 /** The servers a card switches off as it opens: none, as an agent started with none named runs with every one on. */
 const NONE_OFF: readonly string[] = [];
 
+/** The repositories a card's agent works in beside the task's as it opens: none. */
+const NONE_ALSO: readonly string[] = [];
+
 /** The devices Runs on offers before a read lists any, or while Bring your own host is off: none, so it offers Cloud alone. */
 const NO_DEVICES: readonly MacOffer[] = [];
 
@@ -272,7 +275,7 @@ export interface NewTaskPress {
   readonly key: string;
 }
 
-/** Whether two presses ask the same: the same task, device, mode, relations in the same order, words, files in the same order, model, and servers switched off. */
+/** Whether two presses ask the same: the same task, device, mode, relations in the same order, words, files in the same order, model, servers switched off, and repositories beside the task's in the same order. */
 function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   return (
     a.repository === b.repository &&
@@ -292,8 +295,14 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
     a.agent.choice?.effort === b.agent.choice?.effort &&
     a.agent.choice?.contextWindow === b.agent.choice?.contextWindow &&
     a.agent.disabledServers.length === b.agent.disabledServers.length &&
-    a.agent.disabledServers.every((server) => b.agent.disabledServers.includes(server))
+    a.agent.disabledServers.every((server) => b.agent.disabledServers.includes(server)) &&
+    sameInOrder(a.agent.alsoRepositories ?? [], b.agent.alsoRepositories ?? [])
   );
+}
+
+/** Whether two lists name the same in the same order. */
+function sameInOrder(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((each, index) => each === b[index]);
 }
 
 /** A card's draft place: its purpose's, in its workspace, none before the workspaces are read. */
@@ -371,6 +380,10 @@ export function NewTaskComposer({
         : newTask.preset?.repository,
   );
   const [choice, pickedModel, choose] = useDefaultChoice(refused?.card.choice);
+  // The repositories the agent works in beside the task's, a refused card's as it was pressed.
+  const [alsoChosen, setAlsoChosen] = useState<readonly string[]>(
+    refused?.card.press.ask.agent.alsoRepositories ?? NONE_ALSO,
+  );
   // The servers the + menu switched off, a refused card's as it was pressed.
   const [disabledServers, setDisabledServers] = useState<readonly string[]>(
     refused?.card.press.ask.agent.disabledServers ?? NONE_OFF,
@@ -469,7 +482,10 @@ export function NewTaskComposer({
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
     setListed(undefined);
-    if (scope !== undefined) setChosen(undefined);
+    if (scope !== undefined) {
+      setChosen(undefined);
+      setAlsoChosen(NONE_ALSO);
+    }
     setScope(repositories.scope);
   }
   const isListed = (name: string) =>
@@ -490,6 +506,15 @@ export function NewTaskComposer({
       : candidate;
   // A tree's two tasks work in one repository, the other task's, which the chip is held to.
   const repository = treeRelation === undefined ? picked : treeRelation.task.repository;
+  // Several repositories offers repositories beside the task's on a task's card, once the task names
+  // one; a pick the chip's read does not list, or the task's own, is let go as the task's is.
+  const offersAlso = useExperiment(EXPERIMENT.SEVERAL_REPOSITORIES) && !forAutomation;
+  const also =
+    !offersAlso || repository === null
+      ? NONE_ALSO
+      : alsoChosen.filter(
+          (each) => each.toLowerCase() !== repository.toLowerCase() && isListed(each),
+        );
   const said = words.trim();
   // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
@@ -582,7 +607,13 @@ export function NewTaskComposer({
       deviceId: device?.deviceId,
       mode: asked,
       relations: relationsAsked(relations),
-      agent: { prompt, attachments, choice: pickedModel, disabledServers },
+      agent: {
+        prompt,
+        attachments,
+        choice: pickedModel,
+        disabledServers,
+        ...(also.length === 0 ? undefined : { alsoRepositories: also }),
+      },
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -677,6 +708,14 @@ export function NewTaskComposer({
             <VisuallyHidden id={titleId}>{PURPOSE_HEADING[purpose]}</VisuallyHidden>
           )}
           {repositoryChip}
+          {offersAlso && repository !== null ? (
+            <AlsoRepositoryChips
+              own={repository}
+              value={also}
+              chooser={repositories}
+              onChange={setAlsoChosen}
+            />
+          ) : null}
         </div>
         {offersPilot ? (
           <div className="new-task-mode ml-auto shrink-0">

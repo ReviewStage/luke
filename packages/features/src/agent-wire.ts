@@ -11,6 +11,7 @@ import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { AGENT_QUEUE_BOUNDS, agentQueueSchema } from "./agent-queue-wire.js";
 import { DEVICE_LAUNCH_STEP, DEVICE_LAUNCH_UNSTARTED } from "./device-agent-wire.js";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
+import { githubRepositoryFullNameSchema } from "./link-grammar.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
   mergeMethodSchema,
@@ -71,6 +72,10 @@ export const AGENT_BOUNDS = {
   MAX_KEY_CHARS: 128,
   /** The most characters a model id or an effort may spell on the way in; the catalog decides whether they name anything. */
   MAX_CHOICE_CHARS: 200,
+  /** The most characters a branch a Start names may spell, as `start_agent` has always held it. */
+  MAX_BRANCH_CHARS: 255,
+  /** The most repositories a Start may name beside the agent's own: one less than an automation names (`AUTOMATION_BOUNDS.MAX_REPOSITORIES`). */
+  MAX_ALSO_REPOSITORIES: 9,
   /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
   MAX_MESSAGE_CHARS: 16_000,
   /**
@@ -284,6 +289,27 @@ export type LocalAgentRefusal = (typeof LOCAL_AGENT_REFUSAL)[keyof typeof LOCAL_
  * not take the agent, and never that the service did not answer.
  */
 export const localAgentRefusalSchema = EffectSchema.Literals(Object.values(LOCAL_AGENT_REFUSAL));
+
+/** Why a Start naming repositories beside its agent's own was refused, which the refusal names (`extra-repository-refused`). */
+export const EXTRA_REPOSITORY_REFUSAL = {
+  /** The starter has the Several repositories experiment off. */
+  EXPERIMENT_OFF: "experiment-off",
+  /** The agent works in no repository of its own, which extras stand beside. */
+  NO_REPOSITORY: "no-repository",
+  /** The agent would run on a device, and only an agent in the cloud works in several repositories. */
+  DEVICE: "device",
+  /** The repository the refusal names is reached on the starter's own GitHub token, and an agent's repositories are all reached through the GitHub App. */
+  TOKEN: "token",
+  /** The repository the refusal names is on another installation of the GitHub App than the agent's own, and one token reaches an agent's repositories only on one. */
+  OTHER_INSTALLATION: "other-installation",
+} as const;
+
+export type ExtraRepositoryRefusal =
+  (typeof EXTRA_REPOSITORY_REFUSAL)[keyof typeof EXTRA_REPOSITORY_REFUSAL];
+
+export const extraRepositoryRefusalSchema = EffectSchema.Literals(
+  Object.values(EXTRA_REPOSITORY_REFUSAL),
+);
 
 /** The device a refused Start named, by the name it registered with, and its owner's name where the service knew it. */
 export const refusedDeviceSchema = EffectSchema.Struct({
@@ -623,6 +649,31 @@ export const agentRunsOnRequestSchema = EffectSchema.Union([
 
 export type AgentRunsOnRequest = typeof agentRunsOnRequestSchema.Type;
 
+/** A branch a Start names for a checkout to be cloned at: a name git takes, with no space and none of the characters a ref refuses. */
+export const startBranchSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_BRANCH_CHARS),
+  EffectSchema.isPattern(/^[^\s~^:?*[\\]+$/u),
+);
+
+/** A repository a Start names beside the agent's own: `owner/name`, and the branch its checkout is cloned at, none for its default branch. */
+export const agentAlsoRepositorySchema = EffectSchema.Struct({
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.optionalKey(startBranchSchema),
+});
+
+export type AgentAlsoRepository = typeof agentAlsoRepositorySchema.Type;
+
+/** The repositories a Start names beside the agent's own: at least one where the list is named, at most the bound, and each once, in any case. */
+export const agentAlsoRepositoriesSchema = EffectSchema.Array(agentAlsoRepositorySchema).check(
+  EffectSchema.isMinLength(1),
+  EffectSchema.isMaxLength(AGENT_BOUNDS.MAX_ALSO_REPOSITORIES),
+  EffectSchema.makeFilter(
+    (named: readonly AgentAlsoRepository[]) =>
+      new Set(named.map((each) => each.repository.toLowerCase())).size === named.length,
+  ),
+);
+
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
@@ -649,7 +700,12 @@ export type AgentRunsOnRequest = typeof agentRunsOnRequestSchema.Type;
  * a fork, else where the starting member's newest agent on the task runs,
  * else where the member last named (`account_preference.runs_on_*`), else
  * in the cloud; a task holds no place of its own. An automation's run reads
- * neither of its owner's own and runs in the cloud.
+ * neither of its owner's own and runs in the cloud. A Start's
+ * `alsoRepositories` names the repositories its agent works in beside its
+ * own, each with the branch its checkout is cloned at where it names one:
+ * only beside a repository of its own, in the cloud, through the same
+ * installation of the GitHub App, and only for a member with the Several
+ * repositories experiment on; none for an agent in one repository or none.
  */
 export const agentStartRequestFields = {
   idempotencyKey: trimmedText(AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -664,6 +720,7 @@ export const agentStartRequestFields = {
   blank: EffectSchema.optionalKey(EffectSchema.Boolean),
   call: EffectSchema.optionalKey(EffectSchema.Boolean),
   runsOn: EffectSchema.optionalKey(agentRunsOnRequestSchema),
+  alsoRepositories: EffectSchema.optionalKey(agentAlsoRepositoriesSchema),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */

@@ -161,6 +161,8 @@ export const HOSTED_API_ERROR = {
   WORKSPACE_SLUG_TAKEN: "workspace-slug-taken",
   /** A Start on This Mac was refused, for the reason it names (`LOCAL_AGENT_REFUSAL`). Nothing was written. */
   LOCAL_AGENT_REFUSED: "local-agent-refused",
+  /** A Start naming repositories beside its agent's own was refused, for the reason it names (`EXTRA_REPOSITORY_REFUSAL`), with the repository where one is why. Nothing was written. */
+  EXTRA_REPOSITORY_REFUSED: "extra-repository-refused",
   /** A host called with a daemon below the service's floor, or with no version at all (`host-wire.ts`); nothing was read or written, and the box's install script upgrades it in place. */
   HOST_UPGRADE_NEEDED: "host-upgrade-needed",
   /** The agent ran on a host its starter removed, so no message reaches it again; Continue starts a new agent elsewhere. Nothing was sent. */

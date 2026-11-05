@@ -71,11 +71,14 @@ import {
 } from "../agent-sandbox-image.js";
 import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
+  type AgentExtraRead,
   type AgentRepositoryRead,
   agentDeepenPlan,
+  agentExtraReads,
   agentRepositoryRead,
   CHECKOUT_DEPTH,
   CheckoutRefused,
+  cloneAgentExtras,
   cloneAgentRepository,
   deepenCheckoutWith,
   openWorkingFolder,
@@ -232,14 +235,27 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  */
 const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
 
+/** A checkout marked safe for git and shared with `agent`'s group, as the launch marks each: the agent's own and every repository it works in beside it. */
+function sharedCheckout(path: string): readonly string[] {
+  return [
+    `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${path} || git config --system --add safe.directory ${path}`,
+    `if [ -d ${path}/.git ] && ! git -C ${path} config --get core.sharedRepository | grep -Fxq group; then git -C ${path} config core.sharedRepository group; fi`,
+    `chmod -R g+rwX ${path}`,
+    `find ${path} -type d -exec chmod g+s {} +`,
+  ];
+}
+
 /**
  * The launch, run by bash as root: the uploaded bundle installed where only
  * root writes and checked against the digest we computed, the member's
  * installed skills, where the sandbox's opening uploaded them, moved where
- * only root writes and every user reads (`native-skills.ts`), the checkout
- * marked safe for git and shared with `agent`'s group, the folder an agent
- * saves what the service reads back in made `agent`'s and readable by the default
- * user the service reads as (`SHARED_FILES_DIRECTORY`), then the runner in
+ * only root writes and every user reads (`native-skills.ts`), each checkout
+ * marked safe for git and shared with `agent`'s group, the agent's own and
+ * those of the repositories it works in beside it at the paths given
+ * (`extraCheckoutPaths`), none for an agent in one repository, whose launch
+ * is the text it always was, the folder an agent saves what the service
+ * reads back in made `agent`'s and readable by the default user the
+ * service reads as (`SHARED_FILES_DIRECTORY`), then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
  * `exec` hands them on to the runner alone. Note that the checkout's git
@@ -247,20 +263,19 @@ const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ]
  * `config.lock` an agent's git left behind when its runner was killed would
  * otherwise fail every relaunch after it.
  */
-const LAUNCH_SCRIPT = [
-  "set -euo pipefail",
-  LINK_TOOLS_DIRECTORY,
-  `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
-  `rm -f ${RUNNER_PATH.UPLOAD}`,
-  `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
-  `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
-  `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${CODER.CHECKOUT_PATH} || git config --system --add safe.directory ${CODER.CHECKOUT_PATH}`,
-  `if [ -d ${CODER.CHECKOUT_PATH}/.git ] && ! git -C ${CODER.CHECKOUT_PATH} config --get core.sharedRepository | grep -Fxq group; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
-  `chmod -R g+rwX ${CODER.CHECKOUT_PATH}`,
-  `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
-  `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
-  `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
-].join("\n");
+function launchScript(extraCheckouts: readonly string[]): string {
+  return [
+    "set -euo pipefail",
+    LINK_TOOLS_DIRECTORY,
+    `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
+    `rm -f ${RUNNER_PATH.UPLOAD}`,
+    `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
+    `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
+    ...[CODER.CHECKOUT_PATH, ...extraCheckouts].flatMap(sharedCheckout),
+    `install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0755 ${SHARED_FILES_DIRECTORY}`,
+    `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
+  ].join("\n");
+}
 
 /** What `$0` reads as in the launch's shell. */
 const LAUNCH_NAME = "agent-runner";
@@ -729,7 +744,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
    * next launch (`repository-snapshot.ts`). A snapshot Vercel could not be
    * asked about is passed by, and no build is started on it.
    */
-  const checkedOutSandbox = (
+  const primaryCheckedOut = (
     image: AgentSandboxImageService,
     agent: WithRepository<Agent>,
     read: AgentRepositoryRead,
@@ -766,6 +781,38 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     });
 
   /**
+   * The agent's sandbox with its repository checked out (`primaryCheckedOut`),
+   * and then each repository it works in beside its own cloned whole into
+   * its folder, on the reads the caller made of them (`cloneAgentExtras`),
+   * the sandbox deleted again where one would not clone; an agent in one
+   * repository clones nothing more.
+   */
+  const checkedOutSandbox = (
+    image: AgentSandboxImageService,
+    agent: WithRepository<Agent>,
+    read: AgentRepositoryRead,
+    extras: readonly AgentExtraRead[],
+    sessionId: string,
+    harness: string,
+    imageSnapshotId: string,
+  ) =>
+    Effect.gen(function* () {
+      const opened = yield* primaryCheckedOut(
+        image,
+        agent,
+        read,
+        sessionId,
+        harness,
+        imageSnapshotId,
+      );
+      if (extras.length === 0) return opened;
+      yield* cloneAgentExtras(yield* checkoutIn(opened.running, agent.userId), extras).pipe(
+        Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))),
+      );
+      return opened;
+    });
+
+  /**
    * The agent's sandbox opened from the image, its repository checked out
    * in it where it has one (`checkedOutSandbox`). The image's snapshot and
    * the repository are asked at once, since neither waits on the other and
@@ -779,16 +826,17 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
   ) =>
     Effect.gen(function* () {
       const image = yield* AgentSandboxImage;
-      const [snapshot, read] = yield* Effect.all(
+      const [snapshot, read, extras] = yield* Effect.all(
         [
           image.snapshotId,
           hasRepository(agent) ? agentRepositoryRead(target, agent) : Effect.succeed(undefined),
+          hasRepository(agent) ? agentExtraReads(target, agent) : Effect.succeed([]),
         ],
         { concurrency: "unbounded" },
       );
       if (Option.isNone(snapshot)) return yield* new LaunchRefused({ reason: "no snapshot" });
       return hasRepository(agent) && read !== undefined
-        ? yield* checkedOutSandbox(image, agent, read, sessionId, harness, snapshot.value)
+        ? yield* checkedOutSandbox(image, agent, read, extras, sessionId, harness, snapshot.value)
         : yield* openedFromImage(image, agent, sessionId, snapshot.value);
     });
 
@@ -863,7 +911,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
         );
         const commandId = yield* api.start(running, {
           command: "bash",
-          args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
+          args: ["-c", launchScript(launch.extraCheckouts ?? []), LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
           // Note that the credential and the bearer ride in the environment alone, which the API's
           // sudo keeps, as Vercel documents it does, on an image that honors that (`sandbox-image.ts`).

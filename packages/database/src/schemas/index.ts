@@ -6,6 +6,7 @@ export * from "./agent-browser-tab.js";
 export * from "./agent-pin.js";
 export * from "./agent-queue.js";
 export * from "./agent-read.js";
+export * from "./agent-repository.js";
 export * from "./agent-runner-lease.js";
 export * from "./agent-wakeup.js";
 export * from "./attachment.js";

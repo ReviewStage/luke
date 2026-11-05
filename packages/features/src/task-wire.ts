@@ -8,6 +8,7 @@ import {
   agentStartRequestFields,
   agentSummarySchema,
   CHECK_SUMMARY,
+  extraRepositoryRefusalSchema,
   localAgentRefusalSchema,
   PULL_REQUEST_STATE,
   startBrief,
@@ -212,8 +213,9 @@ export type TaskRunsOnRequest = typeof taskRunsOnRequestSchema.Type;
 /**
  * The coding agent a task's start starts on it: an agent Start's own fields
  * (`agent-wire.ts`), its key, which a retry carries again, the choice,
- * a prompt and its files, the servers switched off, and where it runs,
- * held to the same words-or-files rule, but never `from` or a note, since a new task has no
+ * a prompt and its files, the servers switched off, where it runs, and
+ * the repositories it works in beside the task's, held to the same
+ * words-or-files rule, but never `from` or a note, since a new task has no
  * agent to take over from. The prompt travels as `prompt`, the key the
  * desktop's own Start params name it by: the `task` an agent Start's body
  * spells it as is a released desktop's, which never sends this.
@@ -227,6 +229,7 @@ const taskAgentStartSchema = EffectSchema.Struct({
   attachments: agentStartRequestFields.attachments,
   disabledServers: agentStartRequestFields.disabledServers,
   runsOn: agentStartRequestFields.runsOn,
+  alsoRepositories: agentStartRequestFields.alsoRepositories,
 }).check(startBrief);
 
 export type TaskAgentStart = typeof taskAgentStartSchema.Type;
@@ -1008,6 +1011,9 @@ const taskAgentRefusalSchema = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
   /** Why the task's device would not take the agent, where that is why. */
   localAgentRefusal: EffectSchema.optionalKey(localAgentRefusalSchema),
+  /** Why the repositories named beside the agent's own were refused, where that is why, and the repository where one is. */
+  extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
+  refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;

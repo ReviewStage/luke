@@ -67,6 +67,7 @@ import {
 } from "../schemas/agent.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { agentRead } from "../schemas/agent-read.js";
+import { agentRepository } from "../schemas/agent-repository.js";
 import { organization, user } from "../schemas/auth.js";
 import { automationRun } from "../schemas/automation.js";
 import { inboxItem } from "../schemas/inbox.js";
@@ -333,6 +334,8 @@ export type NewAgent = AgentPlace & {
   readonly repository: string | null;
   /** The branch the agent's checkout is cloned at; none for the repository's default branch. */
   readonly startBranch?: string | undefined;
+  /** The repositories the agent works in beside its own, in the order the Start named them; none for an agent in one or none. */
+  readonly extraRepositories?: readonly NewAgentRepository[] | undefined;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
   readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
@@ -348,6 +351,12 @@ export type NewAgent = AgentPlace & {
   /** The account's Mac a local agent is pinned to; none for one in a sandbox. */
   readonly deviceId?: string | undefined;
 };
+
+/** A repository a Start names for the agent beside its own: `owner/name` as reached, and the branch its checkout is cloned at, none for its default branch. */
+export interface NewAgentRepository {
+  readonly repository: string;
+  readonly baseBranch?: string | undefined;
+}
 
 /**
  * How an agent is run, as its rows hold it: what answers its conversation,
@@ -861,6 +870,27 @@ const insertAgent = SqlSchema.findOne({
           createdAt: write.now,
         })
         .returning({ ...AGENT_COLUMNS, txid: TXID }),
+    ),
+});
+
+/** The extra repositories a Start names, at positions 1 and on, written beside the agent in its transaction. */
+const insertAgentRepositories = SqlSchema.void({
+  Request: Schema.Struct({
+    agentId: Schema.String,
+    repositories: Schema.Array(
+      Schema.Struct({ repository: Schema.String, baseBranch: Schema.NullOr(Schema.String) }),
+    ),
+  }),
+  execute: ({ agentId, repositories }) =>
+    Database.use((db) =>
+      db.insert(agentRepository).values(
+        repositories.map((extra, index) => ({
+          agentId,
+          position: index + 1,
+          repository: extra.repository,
+          baseBranch: extra.baseBranch,
+        })),
+      ),
     ),
 });
 
@@ -1832,7 +1862,7 @@ const findTasklessAgents = SqlSchema.findAll({
 });
 
 /** The `published` column as the service writes it (`StoredPullRequest`): the wire's pull request, and what the service alone reads, absent from a row written before it was kept. */
-const PublishedColumnSchema = Schema.Struct({
+export const PublishedColumnSchema = Schema.Struct({
   ...agentPullRequestSchema.fields,
   headSha: Schema.optionalKey(Schema.String),
   mergedAt: Schema.optionalKey(Schema.Number),
@@ -2360,6 +2390,17 @@ export function createAgent(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
+        // Note that an agent in one repository or none writes no row here, so its rows are as they were.
+        const extras = started.extraRepositories ?? [];
+        if (extras.length > 0) {
+          yield* insertAgentRepositories({
+            agentId: row.id,
+            repositories: extras.map((extra) => ({
+              repository: extra.repository,
+              baseBranch: extra.baseBranch ?? null,
+            })),
+          });
+        }
         // The pilot's agents report to the one that continues it from the moment it stands.
         if (started.takesOverFrom !== undefined) {
           yield* updateTakenOver({ userId, from: started.takesOverFrom, to: row.id });

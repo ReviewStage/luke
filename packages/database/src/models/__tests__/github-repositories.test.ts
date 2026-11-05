@@ -13,6 +13,7 @@ import { user } from "../../schemas/auth.js";
 import { githubRepositoryRead } from "../../schemas/github-repository-read.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { getTestDB, openWorkspace } from "../../testing/index.js";
+import { readAgentRepositories } from "../agent-repositories.js";
 import { createAgent, readAgent } from "../agent-store.js";
 import { createAutomation, readAutomation } from "../automation-store.js";
 import { noteGitHubRepository } from "../github-repositories.js";
@@ -96,6 +97,19 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
             runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
           }),
         ).agent;
+        const alsoInRelay = Option.getOrThrow(
+          yield* createAgent(owner, {
+            taskId: otherTask.id,
+            planSnapshot: "# Other",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: other,
+            extraRepositories: [{ repository: relay.toLowerCase() }],
+            runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          }),
+        ).agent;
         const automation = Option.getOrThrow(
           yield* createAutomation(owner, {
             organizationId: workspace,
@@ -136,6 +150,10 @@ it.layer(getTestDB())("GitHub's repositories by their id", (it) => {
         assert.equal(yield* taskRepository(stranger, strangerTask.id), rocket);
         assert.equal(yield* taskRepository(owner, otherTask.id), other);
         assert.equal(Option.getOrThrow(yield* readAgent(owner, agent.id)).repository, rocket);
+        assert.deepEqual(
+          (yield* readAgentRepositories(owner, alsoInRelay.id)).map((each) => each.repository),
+          [other, rocket],
+        );
         assert.deepEqual(
           Option.getOrThrow(yield* readAutomation(owner, automation.id)).repositories,
           [rocket],
