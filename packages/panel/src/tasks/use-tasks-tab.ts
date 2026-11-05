@@ -2318,7 +2318,8 @@ export function useTasksTab(input: {
    * GitHub connected, so a read finding none installed says GitHub removed
    * or suspended it. A workspace not yet read is taken as managed, so the
    * chip still points somewhere, and its recent repositories are left to the
-   * service's read to judge.
+   * service's read to judge; and whether the tasks are still being read, so
+   * the chip asks for no pick before its default could be known.
    */
   const repositoriesIn = useCallback(
     (workspaceId: string | undefined): RepositoryChooser => {
@@ -2338,6 +2339,7 @@ export function useTasksTab(input: {
             );
       return {
         recent: recentRepositories(offered),
+        reading: tasks.listStatus !== TASKS_READ.READY && tasks.listStatus !== TASKS_READ.FAILED,
         openGitHub,
         pictures: fixture === undefined,
         scope: workspaceId,
@@ -2346,7 +2348,7 @@ export function useTasksTab(input: {
         ...(workspace?.github == null ? undefined : { connected: true }),
       };
     },
-    [viewed.workspaces, tasks.tasks, fixture, openGitHub],
+    [viewed.workspaces, tasks.tasks, tasks.listStatus, fixture, openGitHub],
   );
   // The open task's chip, or New task's, made again only as what it lists from moves.
   const repositories = useMemo(
