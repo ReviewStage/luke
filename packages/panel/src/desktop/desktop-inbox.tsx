@@ -852,7 +852,10 @@ function InboxSidePanel({
     }
   };
   // An agent's transcript beside the item reads and writes as its tab in the task's column does,
-  // through the agents the Inbox read of the item's task.
+  // through the agents the Inbox read of the item's task, its plan's card naming the task, whose
+  // press opens the plan.
+  const listedTask =
+    taskId === undefined ? undefined : tasks.tasks.find((each) => each.id === taskId);
   const cards = taskCards({
     agents,
     held: views.held,
@@ -861,6 +864,14 @@ function InboxSidePanel({
         ? panel.tab.transcript === opened.agent
         : panel.tab !== undefined && sameTab(opened, panel.tab),
     pages: taskId === undefined ? undefined : { taskId },
+    task:
+      listedTask === undefined
+        ? undefined
+        : {
+            name: listedTask.name,
+            status: listedTask.status,
+            card: taskCardOf(tasks, listedTask, undefined),
+          },
   });
   const transcript = (agentId: string) => {
     const agent = agents.agents?.find((each) => each.id === agentId);

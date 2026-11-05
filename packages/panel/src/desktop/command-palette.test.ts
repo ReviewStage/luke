@@ -1455,7 +1455,7 @@ test("a task's row ends with its key, which marks what the query typed, a key ty
       workspaces: [stage],
       workspace: stage,
       tasks: [task(421, "Cut the release"), task(42, "Billing usage alerts from the meter")],
-      onSelect: (taskId) => {
+      onResume: (taskId) => {
         sent.push(taskId);
       },
     }),

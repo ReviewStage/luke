@@ -269,10 +269,10 @@ test("on a phone Overview is headed by the way out of the task and one ⋯ of th
   assert.deepEqual(page.told, ["away"], "the way back goes where the shell says, pushing nothing");
 });
 
-test("on a phone an agent's screen goes back to Overview, is titled by the agent, and its ⋯ is the agent's, Show browser beside Show terminal, unnamed under each item", () => {
+test("on a phone an agent's screen goes back to its task's plan, named for the task, is titled by the agent, and its ⋯ is the agent's, Show browser beside Show terminal, unnamed under each item", () => {
   const page = mount(SHELL_ROOM.NARROW, false, undefined, false, true);
   assert.deepEqual(page.head(), {
-    buttons: ["Back to Overview", "Agent actions"],
+    buttons: [`Back to ${TASK.name}`, "Agent actions"],
     title: AGENT.title,
   });
   const menu = page.menu();
@@ -292,7 +292,7 @@ test("on a phone an agent's screen goes back to Overview, is titled by the agent
 test("on a phone a draft's screen is titled New agent, and its ⋯ discards it as the strip's close did", () => {
   const page = mount(SHELL_ROOM.NARROW, false, undefined, false, false, [AGENT], true);
   assert.deepEqual(page.head(), {
-    buttons: ["Back to Overview", "Agent actions"],
+    buttons: [`Back to ${TASK.name}`, "Agent actions"],
     title: "New agent",
   });
   assert.deepEqual(page.menu(), ["Find", "Discard draft"]);
@@ -312,7 +312,7 @@ test("on a phone ⌘T starts New agent at once, the panel shut over it, since no
 test("on a phone a tab of the panel is pushed over the column, titled by the tab, going back shutting the panel, its ⋯ the tab's own", () => {
   const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
   assert.deepEqual(page.head(), {
-    buttons: ["Back to Overview", "Tab actions"],
+    buttons: [`Back to ${TASK.name}`, "Tab actions"],
     title: PAGE.title,
   });
   const menu = page.menu();
