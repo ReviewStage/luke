@@ -788,7 +788,11 @@ export function ListRow({
   const firstLine = above ? leadMark : heading;
   // Note that a row of one line keeps its metadata at its middle, its first line, because a dense row centers its title in its height.
   const metaPlace =
-    metaAt === LIST_ROW_META.TITLE && !said(description) && lead === undefined && !said(attachments)
+    metaAt === LIST_ROW_META.TITLE &&
+    titleLines === LIST_ROW_TITLE_LINES.ONE &&
+    !said(description) &&
+    lead === undefined &&
+    !said(attachments)
       ? LIST_ROW_META.MIDDLE
       : metaAt;
   // Note that a row described apart is named by its words but the description, the time last, as a mail app's row is read.
