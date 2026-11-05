@@ -399,6 +399,8 @@ export interface EndLineParts {
   readonly failed: boolean;
   /** Why a failed turn failed, as the service's word, which the failure it reports names; none for a stop, or a failure that said no reason. */
   readonly failure?: AgentFailure | undefined;
+  /** Why a host's launch never started, where its host said, which may draw a card of its own in the line's place (`github-sign-in-card.tsx`). */
+  readonly unstarted?: DeviceLaunchUnstarted | undefined;
 }
 
 /** Where a launch its host settled unstarted stopped, and why where its host said, as the page said, and the harness the agent runs, as its summary says. */
@@ -442,7 +444,8 @@ export function endLineParts(
           launchStopped.runtime,
           launchStopped.unstarted,
         );
-        return { words, failed: true, failure };
+        const { unstarted } = launchStopped;
+        return { words, failed: true, failure, ...(unstarted === undefined ? {} : { unstarted }) };
       }
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);

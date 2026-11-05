@@ -6,6 +6,7 @@ import {
   AGENT_BRIEF,
   AGENT_FAILURE,
   AGENT_LAUNCH,
+  AGENT_MACHINE,
   AGENT_PAYER,
   AGENT_RUNTIME,
   AGENT_STATUS,
@@ -13,12 +14,21 @@ import {
   type AgentFailure,
   type AgentLaunch,
   type AgentMessagesAnswer,
+  type AgentRunsOnRequest,
   type AgentStatus,
   type AgentSummary,
   type AgentTranscriptMessage,
 } from "@repo/features/agent-wire";
+import {
+  DEVICE_LAUNCH_UNSTARTED,
+  type DeviceLaunchUnstarted,
+} from "@repo/features/device-agent-wire";
 import { FAILURE_REASON, type Failure } from "@repo/features/failure-remedy";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@repo/features/models-wire";
+import { OWN_PULL_REQUEST } from "@repo/host/app-state";
+import { EXPERIMENT } from "@repo/settings";
+import { experimentsOn } from "@repo/settings/testing";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@repo/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,6 +37,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DRAFT_PLACE, type DraftWriter, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handHostReads, handState } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -181,18 +193,31 @@ async function drawnTab(input: {
   launch?: AgentLaunch;
   /** Where the end line's key press turns, by the provider it names. */
   onOpenApiKeys?: (provider: ModelProvider | undefined) => void;
+  /** Why the first page says the launch never started, where its host said. */
+  launchUnstarted?: DeviceLaunchUnstarted;
+  /** The repository the agent works in, as what it published says. */
+  repository?: string;
+  /** Takes each message the tab sends, by its words, answering as the service does; none answers it as unanswered. */
+  onMessage?: (text: string) => Promise<AgentAgentAnswer>;
+  /** Whether Bring your own host is on, which Move to stands behind. */
+  ownHost?: boolean;
+  /** Takes each copy the tab makes, by its words. */
+  copied?: string[];
 }) {
   fakeAppBridge({});
+  if (input.ownHost === true) handState(experimentsOn(EXPERIMENT.BRING_YOUR_OWN_HOST));
+  if (input.copied !== undefined) fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(input.copied) });
   const source = agentOf(SOURCE, { status: input.status, ...input.source });
   const continued: {
     agentId: string;
     note: string | undefined;
     attachments: readonly unknown[] | undefined;
+    runsOn?: AgentRunsOnRequest;
   }[] = [];
   const opened: ToolTarget[] = [];
   const drafted: { words: string; attachments: readonly AgentAttachment[] }[] = [];
-  const continueAgent: AgentContinuer = (agentId, note, attachments) => {
-    continued.push({ agentId, note, attachments });
+  const continueAgent: AgentContinuer = (agentId, note, attachments, runsOn) => {
+    continued.push({ agentId, note, attachments, ...(runsOn === undefined ? {} : { runsOn }) });
     return input.answer?.() ?? Promise.resolve(undefined);
   };
   pushedTranscripts(() => [
@@ -203,6 +228,9 @@ async function drawnTab(input: {
       title: null,
       ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
       ...(input.launch === undefined ? undefined : { launch: input.launch }),
+      ...(input.launchUnstarted === undefined
+        ? undefined
+        : { launchUnstarted: input.launchUnstarted }),
       ...input.usage,
     },
   ]);
@@ -222,8 +250,12 @@ async function drawnTab(input: {
       return Promise.resolve(true);
     },
     onOpenApiKeys: (provider) => input.onOpenApiKeys?.(provider),
-    onMessage: () => Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
+    onMessage: (_agentId, text) =>
+      input.onMessage?.(text) ??
+      Promise.resolve(input.message ?? { failure: AGENT_CALL_FAILURE.UNANSWERED }),
   });
+  // Note that what the agent published is laid over the transcripts' host, which it hands everything else on to.
+  const parts = handHostReads({});
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -261,6 +293,19 @@ async function drawnTab(input: {
     ),
   );
   await settle();
+  if (input.repository !== undefined) {
+    const { repository } = input;
+    act(() =>
+      parts.deliverParts({
+        [LIVE_READ.PULL_REQUEST_PUBLISHED]: {
+          [SOURCE]: {
+            [OWN_PULL_REQUEST]: { rows: { repository, branch: null, pullRequest: null } },
+          },
+        },
+      }),
+    );
+    await settle();
+  }
   const buttons = (within: ParentNode) =>
     [...within.querySelectorAll("button")].filter(
       (each) => each.textContent === LABEL || each.textContent === AGAIN,
@@ -351,6 +396,79 @@ test("a failed agent whose host settled its launch unstarted ends on the step it
     /The host couldn't start this agent: it failed while starting Codex\. Send a message to try again\./,
   );
   assert.doesNotMatch(line.textContent ?? "", /Failed:/);
+});
+
+/** A failed agent on Studio whose launch Studio settled unstarted, its GitHub sign-in unable to reach the repository. */
+const SIGN_IN_REFUSED = {
+  status: AGENT_STATUS.FAILED,
+  failure: AGENT_FAILURE.OTHER,
+  launch: AGENT_LAUNCH.PREPARING,
+  launchUnstarted: DEVICE_LAUNCH_UNSTARTED.GITHUB_SIGN_IN as DeviceLaunchUnstarted,
+  source: { machine: AGENT_MACHINE.DEVICE, mac: { name: "Studio" } },
+} as const;
+
+/** The sign-in card the transcript ends on, none where it ends otherwise. */
+function signInCard(container: ParentNode): HTMLElement | null {
+  return container.querySelector<HTMLElement>(".agent-end .ui-banner");
+}
+
+test("a launch its Mac's GitHub sign-in could not start ends on a card naming the Mac and the repository, whose Copy copies the sign-in command and whose Retry sends one line of the developer's own however often pressed", async () => {
+  const copied: string[] = [];
+  const sent: string[] = [];
+  const tab = await drawnTab({
+    ...SIGN_IN_REFUSED,
+    repository: "acme/web",
+    copied,
+    // Note that the line is never answered, so it stays going, as a launch that takes its time does.
+    onMessage: (text) => {
+      sent.push(text);
+      return new Promise(() => undefined);
+    },
+  });
+  const card = signInCard(tab.container) ?? assert.fail("the transcript ends on the card");
+  assert.match(
+    card.textContent ?? "",
+    /^Studio can't reach acme\/web on GitHub\.Sign in on that Mac, then retry:/,
+  );
+  assert.equal(tab.endRow(), null);
+  assert.equal(tab.buttons(tab.container).length, 0);
+
+  const copy = card.querySelector<HTMLButtonElement>('button[aria-label="Copy command"]');
+  await act(async () => (copy ?? assert.fail("the card offers Copy")).click());
+  assert.deepEqual(copied, ["gh auth login"]);
+
+  const retry = tab.named(card, "Retry") ?? assert.fail("the card offers Retry");
+  act(() => {
+    retry.click();
+    retry.click();
+  });
+  await settle();
+  assert.deepEqual(sent, ["Try again"]);
+  assert.equal(tab.lines("Try again").length, 1);
+  assert.equal(signInCard(tab.container), null);
+});
+
+test("the sign-in card's Move to cloud continues the agent in the cloud while Bring your own host is on, and is left out with it off, where an unknown Mac and repository are named as such", async () => {
+  const on = await drawnTab({ ...SIGN_IN_REFUSED, ownHost: true });
+  const card = signInCard(on.container) ?? assert.fail("the transcript ends on the card");
+  act(() =>
+    (on.named(card, "Move to cloud") ?? assert.fail("the card offers Move to cloud")).click(),
+  );
+  await settle();
+  assert.deepEqual(on.continued, [
+    {
+      agentId: SOURCE,
+      note: undefined,
+      attachments: [],
+      runsOn: { machine: AGENT_MACHINE.VERCEL },
+    },
+  ]);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+
+  const off = await drawnTab({ ...SIGN_IN_REFUSED, source: { machine: AGENT_MACHINE.DEVICE } });
+  const offCard = signInCard(off.container) ?? assert.fail("the transcript ends on the card");
+  assert.match(offCard.textContent ?? "", /^This Mac can't reach the repository on GitHub\./);
+  assert.equal(off.named(offCard, "Move to cloud"), undefined);
 });
 
 test("a failed turn's end line names no price, even from a service that sent the turn's, while the model menu's foot still says the whole run's", async () => {

@@ -50,19 +50,42 @@ const NO_DEVICES: readonly MacOffer[] = [];
 /** The cloud, as a move names it. */
 const TO_THE_CLOUD: AgentRunsOnRequest = { machine: AGENT_MACHINE.VERCEL };
 
-/** The agent's Move to ›, the places it may move to, or none where it offers no move or has nowhere to go. */
-export function useMoveToEntry(
-  agent: Pick<AgentSummary, "id" | "status" | "archivedAt" | "machine" | "mac" | "pilot">,
-  agents: Pick<AgentsControl, "agents" | "continueAgent" | "macs" | "mode" | "onUnarchive">,
-): MenuSubmenu | undefined {
-  const { continueAgent } = agents;
-  const offered =
+/** The agent a move is offered on, as Move to reads it. */
+type MovedAgent = Pick<AgentSummary, "id" | "status" | "archivedAt" | "machine" | "mac" | "pilot">;
+
+/** What Move to reads of the control: where a continue could start, the agents it lists, and the member's devices. */
+type MoveDoors = Pick<AgentsControl, "agents" | "continueAgent" | "macs" | "mode" | "onUnarchive">;
+
+/** Whether the agent offers a move at all, on the terms the header says, the continue that carries it aside. */
+function useMoveOffered(agent: MovedAgent, agents: MoveDoors): boolean {
+  return (
     useExperiment(EXPERIMENT.BRING_YOUR_OWN_HOST) &&
     agents.onUnarchive === undefined &&
     agents.agents?.some((each) => each.id === agent.id) === true &&
     agent.archivedAt === undefined &&
     !agentStillWriting(agent.status) &&
-    offersContinue(agents.mode, agent);
+    offersContinue(agents.mode, agent)
+  );
+}
+
+/**
+ * The agent moved to the cloud, as Move to's Cloud does, for a surface that
+ * offers that move alone, such as a launch its Mac could not start; none
+ * where Move to would not offer the cloud: no move offered, or an agent
+ * already in the cloud.
+ */
+export function useMoveToCloud(agent: MovedAgent, agents: MoveDoors): (() => void) | undefined {
+  const offered = useMoveOffered(agent, agents);
+  const { continueAgent } = agents;
+  if (!offered || continueAgent === undefined || agent.machine !== AGENT_MACHINE.DEVICE)
+    return undefined;
+  return () => void continueAgent(agent.id, undefined, [], TO_THE_CLOUD);
+}
+
+/** The agent's Move to ›, the places it may move to, or none where it offers no move or has nowhere to go. */
+export function useMoveToEntry(agent: MovedAgent, agents: MoveDoors): MenuSubmenu | undefined {
+  const { continueAgent } = agents;
+  const offered = useMoveOffered(agent, agents);
   const devices = (offered ? agents.macs : undefined) ?? NO_DEVICES;
   // Note that the beats are read only while a device is listed, so a member with none reads nothing.
   const book = useDevicePresence(devices.length > 0);
