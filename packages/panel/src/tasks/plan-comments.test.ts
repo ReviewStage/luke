@@ -42,7 +42,12 @@ import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
 import type { EditAgents } from "./edit-ref.js";
 import { PlanBody } from "./plan-body.js";
-import { CommentFocusScope, PageComments, PlanCommentsTab } from "./plan-comments.js";
+import {
+  COMMENTS_FILTER,
+  CommentFocusScope,
+  PageComments,
+  PlanCommentsTab,
+} from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 /**
@@ -1973,6 +1978,8 @@ test("a thread resolved fades out of a page's column where its row stood, out of
               },
               doors: { agents: undefined, me: "u-dean" },
               open: undefined,
+              filter: COMMENTS_FILTER.OPEN,
+              onFilter: () => undefined,
               onOpen: () => undefined,
             }),
           ),

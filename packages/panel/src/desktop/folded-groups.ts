@@ -38,7 +38,8 @@ import { keptKey, useKept } from "../use-kept.js";
  * channels before they were removed. A fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
- * Changes tab, one width for them all.
+ * Changes tab, one width for them all, and a page's comments pane, one
+ * width for every page.
  */
 
 /** Where the folds are kept in the renderer's storage. */
@@ -54,6 +55,7 @@ const STORAGE_KEY = {
   INBOX_LIST_WIDTH: "app.inboxListWidth",
   RUNS_PANEL: "app.automationRunsPanel",
   FILE_TREE_WIDTH: "app.fileTreeWidth",
+  PAGE_COMMENTS_WIDTH: "app.pageCommentsWidth",
 } as const;
 
 /** How wide an automation's Runs panel may stand, as the side panel is bounded. */
@@ -66,6 +68,18 @@ export const FILE_TREE_WIDTH = {
   MIN: 220,
   MAX: 480,
   DEFAULT: 264,
+} as const;
+
+/**
+ * How wide a page's comments pane may be dragged, in CSS pixels, and where
+ * it starts: a comment card and the list's insets, as the plan's margin
+ * holds one, and never so wide that the page beside it loses its reading
+ * width's worth of room.
+ */
+export const PAGE_COMMENTS_WIDTH = {
+  MIN: 280,
+  MAX: 560,
+  DEFAULT: 320,
 } as const;
 
 export const RUNS_PANEL_WIDTH = {
@@ -174,6 +188,7 @@ const KEPT = {
   OPENED_TASKS: keptKey(STORAGE_KEY.OPENED_TASKS, storedTasks),
   INBOX_LIST_WIDTH: keptKey(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth),
   FILE_TREE_WIDTH: keptKey(STORAGE_KEY.FILE_TREE_WIDTH, storedWidth),
+  PAGE_COMMENTS_WIDTH: keptKey(STORAGE_KEY.PAGE_COMMENTS_WIDTH, storedWidth),
   RUNS_PANEL: keptKey(STORAGE_KEY.RUNS_PANEL, storedRunsPanel),
 } as const;
 
@@ -307,6 +322,18 @@ export function useFileTreeWidth(): FileTreeWidth {
   // Note that the drag's door is the same door across draws, so the tree the panel hands every tab is the same tree while nothing changed.
   const onResize = useCallback((asked: number) => keep(clampTreeWidth(asked)), [keep]);
   return { width: clampTreeWidth(kept), onResize };
+}
+
+/** A page comments pane's width held within its bounds, in whole pixels. */
+function clampPageCommentsWidth(width: number): number {
+  return Math.min(PAGE_COMMENTS_WIDTH.MAX, Math.max(PAGE_COMMENTS_WIDTH.MIN, Math.round(width)));
+}
+
+/** The width of a page's comments pane, one for every page, the default until first dragged, and kept as it is. */
+export function usePageCommentsWidth(): FileTreeWidth {
+  const [kept, keep] = useKept(KEPT.PAGE_COMMENTS_WIDTH, PAGE_COMMENTS_WIDTH.DEFAULT);
+  const onResize = useCallback((asked: number) => keep(clampPageCommentsWidth(asked)), [keep]);
+  return { width: clampPageCommentsWidth(kept), onResize };
 }
 
 /** A Runs panel width held within its bounds, in whole pixels. */
