@@ -120,6 +120,8 @@ function heldAfter(
   const settledSince = now - ACCOUNT_INBOX_ITEMS.SETTLED_WINDOW_MILLIS;
   for (const [id, { item }] of next) {
     if (item.status === INBOX_STATUS.OPEN) continue;
+    // Note that an item the reader snoozed is kept however long ago it settled, as the service carries it.
+    if (item.snoozedUntil !== undefined) continue;
     // A nod on an old notice settles it without moving its last change, so it stands by the later of the two.
     if (Math.max(item.updatedAt, item.settledAt ?? item.updatedAt) < settledSince) next.delete(id);
   }

@@ -388,7 +388,8 @@ function instantParam(param: string): Date {
  * item's task and agent, and a task or an agent written itself no account,
  * as for the account's inbox: either shows at the hold's end. The settled
  * items it carries are those changed since `settledSince`, which its
- * procedure binds from the clock, since a live statement reads none.
+ * procedure binds from the clock, since a live statement reads none, and
+ * those the reader snoozed and has not read since.
  *
  * A reader past a sync id is answered the items that moved alone, each
  * whole (`accountItemsDeltaStatements`), taking the moved rows its

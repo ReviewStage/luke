@@ -1,5 +1,5 @@
 import { dateChipText, readerZone } from "@repo/features/date-mention";
-import { INBOX_STATUS, type InboxItem } from "@repo/features/inbox-wire";
+import type { InboxItem } from "@repo/features/inbox-wire";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { dropBelowStart, STATUS_TONE, useMenu } from "@repo/ui";
 import { GLYPH, InboxIcon } from "@repo/ui/icons";
@@ -128,12 +128,10 @@ function unsnoozeActions(item: InboxItem, onSnooze: InboxSnoozer): MenuAction[] 
 /**
  * An item's menu's snooze entries: Snooze, a submenu of the times and,
  * where the menu's surface holds a picker, a time of the reader's own,
- * printing H where `keyed`, on an open item; and Unsnooze on an item
- * snoozed already.
+ * printing H where `keyed`, on any item, open or settled, as H snoozes
+ * any; and Unsnooze on an item snoozed already.
  */
 export function snoozeEntries(item: InboxItem, doors: SnoozeDoors, keyed: boolean): MenuEntry[] {
-  // Note that a settled item waits on nobody, so it offers no snooze, only the end of one standing.
-  if (item.status !== INBOX_STATUS.OPEN) return unsnoozeActions(item, doors.onSnooze);
   const { onPick } = doors;
   const pick: MenuAction[] =
     onPick === undefined

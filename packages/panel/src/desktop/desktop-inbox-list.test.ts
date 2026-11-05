@@ -1111,14 +1111,14 @@ test("an unread item wears the blue dot in its row's gutter, its title in the un
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
 });
 
-test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, and H on the Snooze an open item offers, after Copy link", async () => {
+test("a row's menu and U each mark an item read or unread: Mark as unread on a read item, Mark as read on an unread one, U the chosen item, and only the chosen item's menu names U, and H on the Snooze every item offers, after Copy link", async () => {
   world.listedWorkspace = ACME;
   const keys = standKeymap();
   const { page } = mount([], { chosen: ON_THRESHOLD });
   await settle();
   const retry = "How is a failed email retried?";
   // Note that U acts only on the chosen item, so another row's menu does not name it.
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as unread", "Snooze"]);
   act(() => menuItem("Mark as unread").click());
   await settle();
   assert.equal(unreadOf(page, retry), true);
@@ -1128,7 +1128,7 @@ test("a row's menu and U each mark an item read or unread: Mark as unread on a r
     "a press on the mark opens nothing",
   );
 
-  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read"]);
+  assert.deepEqual(rowMenu(page, retry), ["Copy link", "—", "Mark as read", "Snooze"]);
   act(() => menuItem("Mark as read").click());
   await settle();
   assert.equal(unreadOf(page, retry), false);
