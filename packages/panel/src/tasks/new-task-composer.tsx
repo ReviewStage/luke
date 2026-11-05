@@ -46,6 +46,7 @@ import { useExperiment } from "../use-app-state.js";
 import { AgentComposer, COMPOSER_DOCK_CLASS, type ComposerWords } from "./agent-composer.js";
 import { unrunnableChoice } from "./agent-model.js";
 import type { AgentServersControl } from "./agent-servers.js";
+import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import type { MentionMenuSide } from "./mention-picker.js";
 import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import {
@@ -703,6 +704,9 @@ export function NewTaskComposer({
           <NewTaskRelationRows control={relationControl} />
         </div>
       )}
+      {unpaid === undefined || newTask.models === undefined ? null : (
+        <ConnectAgentBanner models={newTask.models} unpaid={unpaid} />
+      )}
       <AgentComposer
         status={AGENT_STATUS.STARTING}
         composer={composer}
@@ -714,7 +718,6 @@ export function NewTaskComposer({
           (startsBare || unpaid === undefined) &&
           (!forAutomation || said !== "")
         }
-        unpaid={unpaid}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
         models={newTask.models}
         modelsFailed={newTask.modelsFailed}

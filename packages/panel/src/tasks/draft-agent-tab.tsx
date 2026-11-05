@@ -4,11 +4,12 @@ import { TAB_WORDS } from "@repo/ui/tab-strip-model";
 import { useRef, useState } from "react";
 import { useAgentDefault } from "../account-choices.js";
 import { ConversationEmptyState } from "../ai-elements/conversation.js";
-import { AgentComposer } from "./agent-composer.js";
+import { AgentComposer, COMPOSER_DOCK_CLASS } from "./agent-composer.js";
 import { agentName, unrunnableChoice } from "./agent-model.js";
 import type { TranscriptCards } from "./agent-tab.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { ArchivedComposerNote } from "./archived-note.js";
+import { ConnectAgentBanner } from "./connect-agent-banner.js";
 import { ForkChip } from "./fork-action.js";
 import { forkChoice, startingWords } from "./fork-model.js";
 import type { AgentComposerControl, ComposerNote } from "./use-agent-composer.js";
@@ -181,12 +182,16 @@ export function DraftAgentTab({
         {fork === undefined ? null : (
           <ForkChip fork={fork} source={source} cards={cards} onDrop={control.onDropFork} />
         )}
+        {unpaid === undefined || control.models === undefined ? null : (
+          <div className={COMPOSER_DOCK_CLASS}>
+            <ConnectAgentBanner models={control.models} unpaid={unpaid} />
+          </div>
+        )}
         <AgentComposer
           status={AGENT_STATUS.STARTING}
           sendsEmpty={fork !== undefined}
           composer={composer}
           sendable={unpaid === undefined}
-          unpaid={unpaid}
           model={
             choice === undefined
               ? undefined
