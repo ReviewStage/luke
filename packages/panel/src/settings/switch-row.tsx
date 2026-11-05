@@ -1,6 +1,7 @@
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { searchAnchorProps } from "@repo/settings/settings-anchors";
 import { SettingsRow, type SettingsRowDensity, STATUS_TONE, Switch } from "@repo/ui";
+import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { useOptimisticSettingWrite } from "@repo/ui/use-setting-write";
 import type { ActionResult } from "@repo/wire";
 import { showToast, TOAST_HOLD } from "../toast.js";
@@ -17,6 +18,7 @@ import { SettingMarks } from "./marks.js";
  */
 export function SwitchRow({
   label,
+  labelReplayUnmasked = false,
   detail,
   checked,
   anchor,
@@ -26,6 +28,8 @@ export function SwitchRow({
   onChange,
 }: {
   label: string;
+  /** Whether its name is the app's own words, which a screen recording shows as they read; masked where none is named. */
+  labelReplayUnmasked?: boolean | undefined;
   /** The why under the name: words, and where a row needs one, a link among them. */
   detail?: React.ReactNode;
   checked: boolean;
@@ -51,7 +55,7 @@ export function SwitchRow({
   );
   return (
     <SettingsRow
-      label={label}
+      label={<ReplayWords unmasked={labelReplayUnmasked}>{label}</ReplayWords>}
       adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       density={density}

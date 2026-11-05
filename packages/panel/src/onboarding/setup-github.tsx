@@ -25,6 +25,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useEffect, useState } from "react";
 import { useAct } from "../act.js";
 import { rejectionLabel } from "../settings/github-dialog.js";
@@ -94,7 +95,11 @@ function AppRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element {
         busyLabel="Opening GitHub"
         onPress={install}
       />
-      {refusal === undefined ? null : <CardWords>{refusal}</CardWords>}
+      {refusal === undefined ? null : (
+        <CardWords>
+          <ReplayMask>{refusal}</ReplayMask>
+        </CardWords>
+      )}
     </>
   );
 }
@@ -140,7 +145,11 @@ function TokenRoute({ workspaceId }: { workspaceId: string }): React.JSX.Element
             onRefused={setRefusal}
           />
         </span>
-        {refusal === undefined ? null : <CardWords>{refusal}</CardWords>}
+        {refusal === undefined ? null : (
+          <CardWords>
+            <ReplayMask>{refusal}</ReplayMask>
+          </CardWords>
+        )}
       </>
     );
   }

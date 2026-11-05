@@ -43,12 +43,14 @@ import {
   TextArea,
   TextField,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { failureShown, refusedShown } from "../failure-report.js";
 import { rendererPause } from "../renderer-runtime.js";
 import { SkillMark } from "../tasks/skill-ref.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
+import { replayMaskedError } from "./marks.js";
 import {
   candidateFacts,
   type DetectedLine,
@@ -101,7 +103,7 @@ function DetectedText({ line }: { line: DetectedLine }): React.JSX.Element {
   );
   return (
     <span className="settings-state" data-state={LINE_STATE[line.tone]}>
-      {line.text}
+      <ReplayMask>{line.text}</ReplayMask>
     </span>
   );
 }
@@ -126,16 +128,16 @@ function SkillOption({
             <SkillMark />
           </GlyphSlot>
           <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.SPAN}>
-            {candidate.name}
+            <ReplayMask>{candidate.name}</ReplayMask>
           </Text>
         </Inline>
         {candidate.description === undefined ? null : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-            {candidate.description}
+            <ReplayMask>{candidate.description}</ReplayMask>
           </Text>
         )}
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
-          {candidateFacts(candidate)}
+          <ReplayMask>{candidateFacts(candidate)}</ReplayMask>
         </Text>
       </Stack>
     </Checkbox>
@@ -256,9 +258,8 @@ export function AddSkillDialog({
     ticked,
     fill,
   });
-  const label = installLabel(
-    request?.skills ?? (request?.name === undefined ? [] : [request.name]),
-  );
+  const toInstall = request?.skills ?? (request?.name === undefined ? [] : [request.name]);
+  const label = installLabel(toInstall);
 
   const tick = (name: string, on: boolean) => {
     const next = new Set(ticked);
@@ -289,6 +290,8 @@ export function AddSkillDialog({
       open={open}
       title={SKILLS_LINE.ADD_SKILL}
       size={DIALOG_SIZE.WIDE}
+      // Note that its own words show in a screen recording, but every skill's name, description, and source, the workspace's name, and a refusal stay masked.
+      replayUnmasked
       busy={installing}
       holding={asks}
       initialFocus={box}
@@ -296,20 +299,26 @@ export function AddSkillDialog({
       onExited={onExited}
       actionsStart={
         scopes.length > 1 ? (
-          <ChoiceBar
-            label={SKILLS_LINE.INSTALL_FOR}
-            items={scopes.map((each) => ({ value: each.value, label: each.label }))}
-            value={scope}
-            look={CHOICE_BAR_LOOK.SEGMENTED}
-            disabled={installing}
-            onChange={setScope}
-          />
+          <ReplayUnmask>
+            <ChoiceBar
+              label={SKILLS_LINE.INSTALL_FOR}
+              items={scopes.map((each) => ({
+                value: each.value,
+                label: each.label,
+                replayMasked: each.value === INSTALLED_SKILL_SCOPE.WORKSPACE,
+              }))}
+              value={scope}
+              look={CHOICE_BAR_LOOK.SEGMENTED}
+              disabled={installing}
+              onChange={setScope}
+            />
+          </ReplayUnmask>
         ) : undefined
       }
       actions={
         <>
           <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
-            Cancel
+            <ReplayUnmask>Cancel</ReplayUnmask>
           </Button>
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
@@ -318,7 +327,8 @@ export function AddSkillDialog({
             busyLabel="Installing"
             onClick={install}
           >
-            {label}
+            {/* Note that a lone skill's Install names it, so only Install and a count show. */}
+            <ReplayWords unmasked={toInstall.length !== 1}>{label}</ReplayWords>
           </Button>
         </>
       }
@@ -328,7 +338,7 @@ export function AddSkillDialog({
         <FormField
           label={SKILLS_LINE.PASTE_LABEL}
           description={SKILLS_LINE.PASTE_HINT}
-          error={refusedShown(refusal, FAILURE_SURFACE.SKILL_ADD)}
+          error={replayMaskedError(refusedShown(refusal, FAILURE_SURFACE.SKILL_ADD))}
         >
           {(field) => (
             <TextArea
@@ -357,7 +367,7 @@ export function AddSkillDialog({
               setAttempt((was) => was + 1);
             }}
           >
-            {line.text}
+            <ReplayMask>{line.text}</ReplayMask>
           </ErrorState>
         ) : (
           <DetectedText line={line} />

@@ -36,6 +36,7 @@ import {
   TextLink,
   useConfirmDialog,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { type ReactNode, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -173,6 +174,7 @@ function SavedToken({
           verb: "Remove token",
           running: "Removing",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
+          replayUnmasked: true,
         }}
       />
     </Inline>
@@ -282,6 +284,7 @@ export function GitHubTokenDialog({
       open={open}
       title="Personal access token"
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
       initialFocus={field}
       onDismiss={onClose}
       onExited={onExited}
@@ -295,7 +298,7 @@ export function GitHubTokenDialog({
             openLink(GITHUB_TOKEN_CREATE_URL);
           }}
         >
-          Create token
+          <ReplayUnmask>Create token</ReplayUnmask>
         </TextLink>
       }
       actions={<DialogActions onDone={onClose} />}

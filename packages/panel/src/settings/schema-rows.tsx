@@ -46,6 +46,7 @@ function SchemaChoiceRow({
   return (
     <SelectRow
       label={label}
+      labelReplayUnmasked
       detail={detail}
       changed={changed}
       value={value}
@@ -87,6 +88,7 @@ export function SchemaSettingRows({
           key={entry.id}
           {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           label={entry.label}
+          labelReplayUnmasked
           detail={entry.detail}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}

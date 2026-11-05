@@ -13,6 +13,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
@@ -131,17 +132,29 @@ const AUDIENCES: readonly ChoiceOption<SetupAudience>[] = [
   { value: SETUP_AUDIENCE.TEAM, label: "With my team" },
 ];
 
-/** Setup, step by step; `onFinish` lets the app in. */
-export function SetupSteps({
-  tasks,
-  accountId,
-  onFinish,
-}: {
+/**
+ * Setup, step by step; `onFinish` lets the app in. Note that its words show
+ * in a screen recording, because they are the app's own, but for a person's,
+ * which each step masks where it draws them.
+ */
+export function SetupSteps(props: SetupStepsProps): React.JSX.Element {
+  return (
+    <ReplayUnmask>
+      <SetupStep {...props} />
+    </ReplayUnmask>
+  );
+}
+
+/** What setup is handed. */
+interface SetupStepsProps {
   tasks: TasksControl;
   /** The account set up, whose place in setup is kept under its id. */
   accountId: string;
   onFinish: () => void;
-}): React.JSX.Element {
+}
+
+/** The step setup stands at. */
+function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.Element {
   const { tell } = useAct();
   const [places, , changePlaces] = useKept(SETUP_PLACE, {});
   const [, , keepFinished] = useKept(SETUP_FINISHED, []);
@@ -262,7 +275,7 @@ export function SetupSteps({
             </SettingsRowStateLine>
             {refused.map((words) => (
               <Text key={words} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {words}
+                <ReplayMask>{words}</ReplayMask>
               </Text>
             ))}
           </>
