@@ -16,6 +16,7 @@ import {
   TextField,
   useFilePicker,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { useState } from "react";
 import { useAct } from "../act.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
@@ -136,13 +137,15 @@ export function TeamForm({ form }: { form: TeamFormState }): React.JSX.Element {
     <Stack gap={GAP.FIELD}>
       <div className="flex items-center gap-control-gap">
         {trimmed === "" && form.photo === undefined ? null : (
-          <Avatar
-            name={trimmed === "" ? "Team" : trimmed}
-            src={form.photo}
-            size={AVATAR_SIZE.CARD}
-            shape={AVATAR_SHAPE.SQUARE}
-            decorative
-          />
+          <ReplayMask>
+            <Avatar
+              name={trimmed === "" ? "Team" : trimmed}
+              src={form.photo}
+              size={AVATAR_SIZE.CARD}
+              shape={AVATAR_SHAPE.SQUARE}
+              decorative
+            />
+          </ReplayMask>
         )}
         <Button variant={BUTTON_VARIANT.OUTLINE} onClick={form.picker.open}>
           {form.photo === undefined ? "Add photo" : "Replace photo"}
@@ -173,7 +176,7 @@ export function TeamForm({ form }: { form: TeamFormState }): React.JSX.Element {
       </FormField>
       {form.refusal === undefined ? null : (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {form.refusal}
+          <ReplayMask>{form.refusal}</ReplayMask>
         </Text>
       )}
     </Stack>

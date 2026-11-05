@@ -548,10 +548,12 @@ function CredentialQuestion({
   confirm: DialogConfirm;
   question: DialogQuestion;
 }): React.JSX.Element {
+  // Note that every question here is worded from fixed tables, so a screen recording shows it as it reads.
+  const shown = { ...question, replayUnmasked: true };
   return inDialog ? (
-    <FootQuestion confirm={confirm} question={question} />
+    <FootQuestion confirm={confirm} question={shown} />
   ) : (
-    <ConfirmDialog open confirm={confirm} question={question} />
+    <ConfirmDialog open confirm={confirm} question={shown} />
   );
 }
 
@@ -1542,6 +1544,7 @@ function AgentAuthDialog({
       open={open}
       title={HARNESS[provider].name}
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
       initialFocus={firstField}
       onDismiss={onClose}
       onExited={onExited}

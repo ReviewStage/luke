@@ -84,6 +84,7 @@ import {
 import { GLYPH, PlusIcon, RefreshCwIcon } from "@repo/ui/icons";
 import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { searchTokens } from "@repo/ui/search-tokens";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
@@ -374,7 +375,9 @@ function RowLineText({
   return (
     <>
       {state}
-      <SettingsRowStateLine block>{line.said}</SettingsRowStateLine>
+      <SettingsRowStateLine block>
+        <ReplayMask>{line.said}</ReplayMask>
+      </SettingsRowStateLine>
     </>
   );
 }
@@ -499,30 +502,34 @@ function RowToolsPanel({
         <ScrollArea ref={list}>
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
-            <IntegrationToolList
-              server={name}
-              tools={shown}
-              tokens={tools.tokens}
-              current={current?.name}
-              onOpen={hold}
-              onKeyDown={onRowKey}
-              rowRef={(tool, button) => {
-                if (button === null) rows.current.delete(tool.name);
-                else rows.current.set(tool.name, button);
-              }}
-            />
+            {/* Note that a server's tools are named and described by the server, so they stay masked in a screen recording. */}
+            <ReplayMask>
+              <IntegrationToolList
+                server={name}
+                tools={shown}
+                tokens={tools.tokens}
+                current={current?.name}
+                onOpen={hold}
+                onKeyDown={onRowKey}
+                rowRef={(tool, button) => {
+                  if (button === null) rows.current.delete(tool.name);
+                  else rows.current.set(tool.name, button);
+                }}
+              />
+            </ReplayMask>
           </div>
         </ScrollArea>
         {current !== undefined ? (
-          <IntegrationToolDetail
-            // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
-            key={current.name}
-            server={name}
-            tool={current}
-            tokens={tools.tokens}
-            bodyRef={body}
-            onBodyKeyDown={onBodyKey}
-          />
+          // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
+          <ReplayMask key={current.name}>
+            <IntegrationToolDetail
+              server={name}
+              tool={current}
+              tokens={tools.tokens}
+              bodyRef={body}
+              onBodyKeyDown={onBodyKey}
+            />
+          </ReplayMask>
         ) : null}
       </div>
     </div>
@@ -744,7 +751,9 @@ function IntegrationRow({
                 onEnd={renamed}
               >
                 <AccountWords words={accountName}>
-                  <Highlighted text={accountName} tokens={tools.tokens} />
+                  <ReplayMask>
+                    <Highlighted text={accountName} tokens={tools.tokens} />
+                  </ReplayMask>
                 </AccountWords>
               </InlineEdit>
             ),
@@ -817,6 +826,8 @@ function IntegrationRow({
           verb: `Disconnect ${INTEGRATION_NAME[provider]}`,
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          titleReplayMasked: true,
         }}
       />
     </Stack>
@@ -872,7 +883,12 @@ function turned(set: ReadonlySet<string>, server: string): ReadonlySet<string> {
 function NoMatchNote({ query }: { query: string }): React.JSX.Element {
   const words = `No integrations or tools match “${query.trim()}”`;
   useAnnounceShown(ANNOUNCE.POLITE, words);
-  return <PageNote>{words}</PageNote>;
+  // Note that the note quotes the query, so it stays masked in a screen recording.
+  return (
+    <ReplayMask>
+      <PageNote>{words}</PageNote>
+    </ReplayMask>
+  );
 }
 
 /** The rows each section stands, by its heading, as the connections the rows are followed by. */

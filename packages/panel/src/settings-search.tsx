@@ -61,6 +61,7 @@ import { integrationLines } from "@repo/ui/integration-search";
 import { land } from "@repo/ui/landed";
 import { searchHit } from "@repo/ui/search-score";
 import { type MatchRange, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { useStateWithRef } from "@repo/ui/use-state-with-ref";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "./app-commands.js";
@@ -107,6 +108,8 @@ export interface SettingsSearchEntry {
   id: string;
   /** The row's own name, which is what the result draws. */
   label: string;
+  /** Whether that name holds a person's words, a workspace's name, kept masked in a screen recording though the results show the app's own. */
+  replayMasked?: true;
   /** The page the row is drawn on, which is where the result leads. */
   page: SettingsView;
   /** Every line the query is read against: the label, and words about it. */
@@ -364,6 +367,7 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       ? {
           id: SETTINGS_SECTION.LEAVE,
           label: `Leave ${input.workspace.name}`,
+          replayMasked: true,
           page: SETTINGS_VIEW.WORKSPACE,
           haystack: [`Leave ${input.workspace.name}`, "leave quit exit workspace"],
         }
@@ -746,7 +750,9 @@ export function SettingsSearchResults({
                     roving
                     onClick={() => onOpen(entry)}
                   >
-                    <Highlighted text={entry.label} ranges={entry.marks} />
+                    <ReplayWords masked={entry.replayMasked}>
+                      <Highlighted text={entry.label} ranges={entry.marks} />
+                    </ReplayWords>
                   </NavItem>
                 </li>
               ))}

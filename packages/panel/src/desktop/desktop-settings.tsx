@@ -33,6 +33,7 @@ import {
   useRovingKeys,
 } from "@repo/ui";
 import { integrationNamed } from "@repo/ui/integration-search";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -152,7 +153,14 @@ function ListHead({
     />
   );
   if (room === SHELL_ROOM.NARROW) {
-    return <PhoneHead place="settings-pages" start={exit} title={SETTINGS_LIST} end={null} />;
+    return (
+      <PhoneHead
+        place="settings-pages"
+        start={exit}
+        title={<ReplayUnmask>{SETTINGS_LIST}</ReplayUnmask>}
+        end={null}
+      />
+    );
   }
   return (
     <>
@@ -165,7 +173,7 @@ function ListHead({
         variant={TEXT_VARIANT.TITLE}
         className={`settings-pages-title ${PLACE_LIST_TITLE}`}
       >
-        {SETTINGS_LIST}
+        <ReplayUnmask>{SETTINGS_LIST}</ReplayUnmask>
       </Text>
     </>
   );
@@ -187,8 +195,20 @@ function PageGroup({
   return (
     <section className="settings-nav-group [.settings-nav-group+&]:mt-section-gap">
       <GroupHeader
-        label={workspace?.name ?? settingsGroupHeadingOf(group, capabilities)}
-        glyph={workspace === undefined ? undefined : <WorkspaceTile workspace={workspace} />}
+        label={
+          workspace === undefined ? (
+            settingsGroupHeadingOf(group, capabilities)
+          ) : (
+            <ReplayMask>{workspace.name}</ReplayMask>
+          )
+        }
+        glyph={
+          workspace === undefined ? undefined : (
+            <ReplayMask>
+              <WorkspaceTile workspace={workspace} />
+            </ReplayMask>
+          )
+        }
         fold={{ defaultOpen: true }}
       >
         {children}
@@ -275,7 +295,8 @@ export function DesktopSettings({
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
       ? shownWorkspace(settings.workspace)
       : undefined;
-  const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
+  const named = settings.view === SETTINGS_VIEW.WORKSPACE && listed !== undefined;
+  const title = named ? listed.name : shown.title;
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
   // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
@@ -361,31 +382,34 @@ export function DesktopSettings({
                 className="sidebar-section-body flex min-h-list-held flex-col p-ring-reach"
                 {...roving}
               >
-                {search ? (
-                  <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
-                ) : (
-                  shownSettingsPageGroups(settings.capabilities, experiments).map(
-                    ({ group, pages }) => (
-                      <PageGroup
-                        key={group}
-                        group={group}
-                        listed={listed}
-                        capabilities={settings.capabilities}
-                      >
-                        <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
-                          {pages.map((view) => (
-                            <SettingsPageRow
-                              key={view}
-                              view={view}
-                              current={view === settings.view}
-                              onOpen={() => open(view)}
-                            />
-                          ))}
-                        </Stack>
-                      </PageGroup>
-                    ),
-                  )
-                )}
+                {/* Note that the pages' names and the search's results show in a screen recording, because they are the app's own, but for the workspace's name over its group. */}
+                <ReplayUnmask>
+                  {search ? (
+                    <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
+                  ) : (
+                    shownSettingsPageGroups(settings.capabilities, experiments).map(
+                      ({ group, pages }) => (
+                        <PageGroup
+                          key={group}
+                          group={group}
+                          listed={listed}
+                          capabilities={settings.capabilities}
+                        >
+                          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
+                            {pages.map((view) => (
+                              <SettingsPageRow
+                                key={view}
+                                view={view}
+                                current={view === settings.view}
+                                onOpen={() => open(view)}
+                              />
+                            ))}
+                          </Stack>
+                        </PageGroup>
+                      ),
+                    )
+                  )}
+                </ReplayUnmask>
               </div>
             </ScrollArea>
           </Fill>
@@ -397,7 +421,7 @@ export function DesktopSettings({
         {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
         <SettingsPage
           key={settings.view}
-          title={title}
+          title={<ReplayUnmask>{named ? <ReplayMask>{title}</ReplayMask> : title}</ReplayUnmask>}
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

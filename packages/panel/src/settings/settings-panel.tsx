@@ -10,6 +10,7 @@ import type {
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import type { AppSettingsView } from "@repo/settings/wire";
 import { TEXT_TONE, TEXT_VARIANT, Text } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import type { ActionResult } from "@repo/wire";
 import { AccountSection } from "./account-section.js";
 import { AgentComposerSection } from "./agent-composer-section.js";
@@ -85,9 +86,11 @@ export function SettingsPanel({
   const writes = useSettingsWrites();
   const panelView = settingsRowsInput({ settings, account, capabilities });
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
-  // The shared settings page frames these, spacing them as sections.
+  // The shared settings page frames these, spacing them as sections. Note
+  // that every page's words show in a screen recording, because they are
+  // the app's own, but for a person's, which each page masks where it draws them.
   return (
-    <>
+    <ReplayUnmask>
       {view === SETTINGS_VIEW.ACCOUNT ? (
         signedIn ? (
           <>
@@ -185,6 +188,6 @@ export function SettingsPanel({
           capabilities={capabilities}
         />
       ) : null}
-    </>
+    </ReplayUnmask>
   );
 }

@@ -25,6 +25,7 @@ import {
   Time,
   useConfirmDialog,
 } from "@repo/ui";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
@@ -32,6 +33,7 @@ import { copyThroughShell } from "../copy-feedback.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
+import { replayMaskedError } from "./marks.js";
 
 /**
  * mcp-clients-section.tsx -- Settings › MCP's outside MCP clients: the agents the account allowed in, each revoked from its row, and how to connect one.
@@ -146,7 +148,7 @@ function destinations(client: McpClient): string {
 function ClientLine({ client }: { client: McpClient }): React.JSX.Element {
   return (
     <>
-      {`Goes to ${destinations(client)}`}
+      Goes to <ReplayMask>{destinations(client)}</ReplayMask>
       {client.allowedAt === null ? null : (
         <>
           {" · Allowed "}
@@ -207,9 +209,9 @@ function ClientRow({
   return (
     <>
       <SettingsRow
-        label={name}
+        label={<ReplayMask>{name}</ReplayMask>}
         description={revoked ? PAGE_LINE.REVOKED : <ClientLine client={client} />}
-        error={refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE)}
+        error={replayMaskedError(refusedShown(rejection, FAILURE_SURFACE.MCP_CLIENT_REVOKE))}
       >
         {() =>
           revoked ? null : (
@@ -228,6 +230,9 @@ function ClientRow({
           verb: "Revoke agent",
           running: "Revoking",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          titleReplayMasked: true,
+          bodyReplayMasked: true,
         }}
       />
     </>

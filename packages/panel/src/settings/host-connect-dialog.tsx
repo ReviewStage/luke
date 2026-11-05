@@ -253,6 +253,7 @@ function ReadingDialog({
     <Dialog
       open
       title={WORDS.TITLE}
+      replayUnmasked
       onDismiss={onClose}
       actions={unread ? <DialogActions onDone={onClose} /> : undefined}
     >

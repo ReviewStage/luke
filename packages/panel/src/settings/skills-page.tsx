@@ -50,6 +50,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import type { SkillOption } from "@repo/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useCallback, useEffect, useState } from "react";
@@ -144,6 +145,13 @@ const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 function rejected(reason: string): ActionResult {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
+
+/** How a skill's questions read in a screen recording: their verbs show, and their titles and bodies, which name the skill or the workspace, stay masked. */
+const SKILL_NAMED_IN_REPLAY = {
+  replayUnmasked: true,
+  titleReplayMasked: true,
+  bodyReplayMasked: true,
+} as const;
 
 /** The line for a write that never reached the service. */
 const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
@@ -359,12 +367,14 @@ function SkillRowView({
                   <SkillMark />
                 </SettingsRowMark>
               ),
-              label: skill.name,
+              label: <ReplayMask>{skill.name}</ReplayMask>,
               // Note that the source line stands under the description as the row's detail, never run onto its end.
               description: (
                 <>
-                  {skill.description}
-                  <SettingsRowStateLine block>{row.line}</SettingsRowStateLine>
+                  <ReplayMask>{skill.description}</ReplayMask>
+                  <SettingsRowStateLine block>
+                    <ReplayMask>{row.line}</ReplayMask>
+                  </SettingsRowStateLine>
                 </>
               ),
               error: refusedShown(error, FAILURE_SURFACE.SKILL_WRITE),
@@ -386,13 +396,18 @@ function SkillRowView({
           />
         </div>
       </Tooltip>
-      <ConfirmDialog open confirm={removal} question={removeQuestion(skill, workspace)} />
+      <ConfirmDialog
+        open
+        confirm={removal}
+        question={{ ...removeQuestion(skill, workspace), ...SKILL_NAMED_IN_REPLAY }}
+      />
       <ConfirmDialog
         open
         confirm={sharing}
         question={{
           ...shareQuestion(skill.name, workspace),
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          ...SKILL_NAMED_IN_REPLAY,
         }}
       />
       {viewed.drawn ? (
@@ -475,7 +490,7 @@ function ShownSkills({
       ) : (
         <>
           {workspace.personal === true ? null : (
-            <SettingsSection title={workspaceGroupTitle(workspace)}>
+            <SettingsSection title={<ReplayMask>{workspaceGroupTitle(workspace)}</ReplayMask>}>
               {rows(groups?.workspace)}
             </SettingsSection>
           )}

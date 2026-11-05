@@ -476,6 +476,7 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
     verb: `${MEMORY_ACT.FORGET} ${one ? TERM.MEMORY.one : TERM.MEMORY.many}`,
     running: "Forgetting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
   };
 }
 

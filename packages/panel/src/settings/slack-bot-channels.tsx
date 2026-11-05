@@ -18,6 +18,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { useMemo, useState } from "react";
 import { useAct } from "../act.js";
@@ -163,9 +164,12 @@ function DefaultRepositoryRow({
       label={WORDS.DEFAULT_LABEL}
       value={chosen ?? NONE_ROW}
       valueLabel={chosen ?? WORDS.NONE}
+      valueReplayMasked={chosen !== undefined}
       valueIcon={
         chosen === undefined ? undefined : (
-          <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
+          <ReplayMask>
+            <RepositoryPicture repository={chosen} pictures={repositories.pictures} />
+          </ReplayMask>
         )
       }
       rows={[{ id: NONE_ROW, label: WORDS.NONE }, ...repositories.rows]}
@@ -239,7 +243,7 @@ function ChannelRow({
               <ChannelMark channel={channel} />
             </SettingsRowMark>
           ),
-          label: channel.name,
+          label: <ReplayMask>{channel.name}</ReplayMask>,
           error: refusedShown(refusal, FAILURE_SURFACE.WORKSPACE_SLACK_BOT_CHANNEL),
           describedControl: (control) => (
             <Picker
@@ -248,9 +252,12 @@ function ChannelRow({
               invalid={control["aria-invalid"]}
               value={named ?? NONE_ROW}
               valueLabel={named ?? WORDS.DEFAULT}
+              valueReplayMasked={named !== undefined}
               valueIcon={
                 named === undefined ? undefined : (
-                  <RepositoryPicture repository={named} pictures={repositories.pictures} />
+                  <ReplayMask>
+                    <RepositoryPicture repository={named} pictures={repositories.pictures} />
+                  </ReplayMask>
                 )
               }
               rows={[
@@ -279,6 +286,9 @@ function ChannelRow({
           verb: "Remove Slack bot",
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+          replayUnmasked: true,
+          titleReplayMasked: true,
+          bodyReplayMasked: true,
         }}
       />
     </>
