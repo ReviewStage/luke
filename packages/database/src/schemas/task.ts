@@ -1,5 +1,5 @@
 import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
-import type { PlanAgentEdit } from "@repo/features/plan-template";
+import type { PlanAgentEdit } from "@repo/features/plan-notes";
 import {
   PLAN_ACTOR,
   TASK_MODE,

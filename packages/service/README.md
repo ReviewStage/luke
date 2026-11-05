@@ -1268,7 +1268,7 @@ through the shared doors (`src/agents/coder-host/agent-doors.ts`): Claude
 Code sees them as `mcp__workspace__<tool>`, Codex as the `workspace` server. Its shell,
 files, search, and page reads are the harness's own. Among Vespin's tools,
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`) takes notes
-(`@repo/features/plan-template`'s `planNotesSchema`)
+(`@repo/features/plan-notes`'s `planNotesSchema`)
 into the plan of the task the call names, the agent's own or any other of
 its workspace, through the plan's one write (`plan-notes.ts`): an open
 question the agent met with the assumption it goes on under, a fact it
@@ -2351,7 +2351,7 @@ where it can be, and answered as a conflict with the text as it stands and
 the plan's last edit, naming who wrote it, with nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
 restore above is the second. An agent's
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), the third, answers with notes
-(`packages/features/src/plan-template.ts`): a point added under a heading, a
+(`packages/features/src/plan-notes.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
 hold, and saves it under a binding of account and task the service built

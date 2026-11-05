@@ -85,7 +85,7 @@ import {
   PLAN_COMMENT_STATUS,
   planCommentWordsSchema,
 } from "@repo/features/plan-comment-wire";
-import { locatedPhrase, planNotesSchema } from "@repo/features/plan-template";
+import { locatedPhrase, planNotesSchema } from "@repo/features/plan-notes";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   PULL_REQUEST_ACTION,

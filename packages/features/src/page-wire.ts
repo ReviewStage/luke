@@ -61,7 +61,7 @@ export const PAGE_SHOWER = {
 /**
  * Who showed a version of a page: the app, or a coding agent by its id alone,
  * so whoever reads it names the agent by what its row says now, as a plan's
- * agent edits are named (`plan-template.ts`'s `planAgentEditSchema`). Note
+ * agent edits are named (`plan-notes.ts`'s `planAgentEditSchema`). Note
  * that a version shown before the app was named `app` names it `luke`, which
  * still reads as the app (a legacy read).
  */

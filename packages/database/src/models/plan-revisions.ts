@@ -66,48 +66,6 @@ export const PLAN_REVISION = {
 } as const;
 
 /**
- * The sections every plan started with until plans started empty, each a
- * heading over one line of guidance, as they were written.
- */
-const FORMER_START_SECTIONS = [
-  [
-    "Context",
-    "Why this work exists: what happens today, who it affects, and what prompted it now.",
-  ],
-  ["Goal", "What is true once the work ships, as outcomes a user or a test could observe."],
-  [
-    "Approach",
-    "The design in plain words: the main pieces, where each lives by path, and the reason for each decision.",
-  ],
-  [
-    "Interfaces",
-    "Every type, schema, table, route, or signature the change adds or changes, written as code under its file.",
-  ],
-  ["Alternatives", "Optional: each other approach that was weighed, and why it lost."],
-  ["Hard parts", "Each tricky case, and exactly what the change does in it."],
-  ["Not doing", "What is out of scope on purpose, and why."],
-  ["Plan of attack", "Optional: the steps the work lands in, in order, and why the order matters."],
-  [
-    "Testing",
-    'The cases that prove the change, each as "When …, then …" with an exact result, then the end-to-end check.',
-  ],
-  ["Open questions", "Each question nobody could answer yet."],
-  ["Assumptions", "What the plan assumes without the developer having said it."],
-] as const;
-
-/**
- * The text a plan's first revision is read against. Note that it is the
- * template plans once started as rather than nothing, because a plan started
- * from it still holds the sections no one has written under, and read
- * against nothing they would all name its first writer; a plan started
- * empty reads the same against it, since no save writes that guidance word
- * for word.
- */
-const STARTED_TEXT = FORMER_START_SECTIONS.map(
-  ([heading, guidance]) => `## ${heading}\n\n${guidance}\n`,
-).join("\n");
-
-/**
  * Who made a save: the notetaker, a coding agent, or the developer, editing
  * a field or, with the revision they restored, restoring one.
  */
@@ -531,8 +489,8 @@ export function readLastEdit(
  * (`sectionWritersOf`); none for a plan with no history yet. The oldest read
  * is only the text the next changed where it is past the bound or the plan
  * as it stood before history, `earlier`, which no writer wrote. The plan's
- * first revision is read against `STARTED_TEXT`, where it is among those
- * read.
+ * first revision is read against the empty text every plan starts as, where
+ * it is among those read.
  */
 export function readSectionWriters(
   taskId: string,
@@ -543,7 +501,7 @@ export function readSectionWriters(
     if (first === undefined) return [];
     const fromStart =
       rows.length <= PLAN_REVISION.SECTION_HISTORY && first.actor !== PLAN_ACTOR.EARLIER;
-    const base = fromStart ? STARTED_TEXT : first.document;
+    const base = fromStart ? "" : first.document;
     const written = fromStart ? rows : rows.slice(1);
     return sectionWritersOf(
       base,

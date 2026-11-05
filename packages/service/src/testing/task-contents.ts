@@ -1,4 +1,4 @@
-import { NOTE_KIND, type PlanNote } from "@repo/features/plan-template";
+import { NOTE_KIND, type PlanNote } from "@repo/features/plan-notes";
 
 /**
  * task-contents.ts -- the notes a notetaker would take, as a test writes them.

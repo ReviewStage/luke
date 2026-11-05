@@ -12,7 +12,7 @@ import { readTask } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@repo/database/testing";
-import type { PlanNote } from "@repo/features/plan-template";
+import type { PlanNote } from "@repo/features/plan-notes";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@repo/features/task-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
