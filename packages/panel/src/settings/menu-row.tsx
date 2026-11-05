@@ -197,6 +197,8 @@ export function MenuRow({
           label={moreLabel(thing)}
           menu={menu.drawn}
           groups={groups}
+          // Note that a row's acts are the app's own words, and an act that names a person's thing is the caller's to mark `replayMasked`.
+          replayUnmasked
           {...(heading === undefined ? undefined : { heading })}
           onClose={menu.close}
         />

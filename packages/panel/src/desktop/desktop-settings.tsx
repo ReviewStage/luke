@@ -116,6 +116,7 @@ function SettingsPageRow({
           label={PAGE_ACTIONS}
           menu={menu.drawn}
           groups={[[copyLink]]}
+          replayUnmasked
           onClose={menu.close}
         />
       )}
@@ -153,14 +154,7 @@ function ListHead({
     />
   );
   if (room === SHELL_ROOM.NARROW) {
-    return (
-      <PhoneHead
-        place="settings-pages"
-        start={exit}
-        title={<ReplayUnmask>{SETTINGS_LIST}</ReplayUnmask>}
-        end={null}
-      />
-    );
+    return <PhoneHead place="settings-pages" start={exit} title={SETTINGS_LIST} end={null} />;
   }
   return (
     <>
@@ -295,8 +289,7 @@ export function DesktopSettings({
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
       ? shownWorkspace(settings.workspace)
       : undefined;
-  const named = settings.view === SETTINGS_VIEW.WORKSPACE && listed !== undefined;
-  const title = named ? listed.name : shown.title;
+  const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
   // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
@@ -421,7 +414,7 @@ export function DesktopSettings({
         {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
         <SettingsPage
           key={settings.view}
-          title={<ReplayUnmask>{named ? <ReplayMask>{title}</ReplayMask> : title}</ReplayUnmask>}
+          title={title}
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

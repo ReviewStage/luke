@@ -61,6 +61,7 @@ export async function signOutSayingFailure(onSignOut: () => Promise<void>): Prom
   } catch (cause) {
     showToast({
       words: SIGN_OUT_FAILED,
+      replayUnmasked: true,
       tone: STATUS_TONE.DANGER,
       hold: TOAST_HOLD.FAILED,
       failure: { surface: FAILURE_SURFACE.ACCOUNT_SIGN_OUT, cause },

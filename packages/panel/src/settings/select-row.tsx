@@ -76,6 +76,8 @@ export function SelectRow<Value extends string | number>({
       }))}
       placeholder={placeholder}
       noMatch={NO_MATCH}
+      // Note that a select's options are a fixed set, the app's own words.
+      replayUnmasked
       anchor={anchor}
       disabled={busy || Boolean(restBusy)}
       onPick={(id) => {

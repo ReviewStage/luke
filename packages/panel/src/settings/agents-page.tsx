@@ -217,6 +217,8 @@ function DefaultRows({
   return (
     <>
       <PickerRow
+        // Note that the models are the service's catalog, the app's own words.
+        replayUnmasked
         label="Default model"
         detail={note}
         changed={read.base !== fallback.model}

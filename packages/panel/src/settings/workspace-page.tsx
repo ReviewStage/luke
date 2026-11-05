@@ -1244,6 +1244,7 @@ function ManagedSentry({
         installation.account === undefined || sentry.installations.length === 1
           ? "Disconnect"
           : `Disconnect ${installation.account}`,
+      replayMasked: installation.account !== undefined && sentry.installations.length > 1,
       icon: <GLYPH.DISCONNECT />,
       danger: true,
       onSelect: () => {
