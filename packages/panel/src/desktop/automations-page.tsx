@@ -64,7 +64,7 @@ import {
   VisuallyHidden,
 } from "@repo/ui";
 import { ACTOR_KIND, actorName } from "@repo/ui/actor-model";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { BotIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useCallback, useState } from "react";
@@ -204,7 +204,7 @@ function OwnerCell({
         }
         name={
           <OneLine className="automation-owner-name" words={name}>
-            {name}
+            {owner === AUTOMATION_SCOPE.WORKSPACE ? <ReplayMask>{name}</ReplayMask> : name}
           </OneLine>
         }
       />
@@ -241,7 +241,7 @@ function MakerCell({
         mark={<ActorMark actor={maker} size={ACTOR_SIZE.INLINE} />}
         name={
           <OneLine className="automation-owner-name" words={name}>
-            {name}
+            <ReplayMask>{name}</ReplayMask>
           </OneLine>
         }
       />
@@ -339,6 +339,7 @@ function AutomationRow({
             {automation.name}
           </span>
         }
+        titleReplayMasked
         description={
           narrow ? (
             <>
@@ -350,6 +351,7 @@ function AutomationRow({
             trigger
           )
         }
+        descriptionReplayMasked
         meta={
           narrow ? undefined : (
             <AutomationRowMeta
@@ -561,6 +563,7 @@ function AutomationsHead({
         <PlaceMore
           thing="Automation list"
           shown={tasks.shown}
+          replayUnmasked
           groups={() => [
             [
               {
@@ -886,7 +889,7 @@ function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): Re
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
     <ReplayUnmask>
-      <NotFound thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack, phone)} />
+      <NotFound replayUnmasked thing={NOT_FOUND_THING.AUTOMATION} bar={backBar(onBack, phone)} />
     </ReplayUnmask>
   );
 }

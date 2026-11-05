@@ -349,14 +349,14 @@ function agentTabs(input: {
       : [
           {
             tab: startingTab,
-            look: look(
-              startingTab,
-              tabLook({
+            look: look(startingTab, {
+              ...tabLook({
                 kind: TAB_KIND.AGENT,
                 name: undefined,
                 agent: { model: pending?.model ?? "", status: AGENT_STATUS.STARTING },
               }),
-            ),
+              labelReplayUnmasked: true,
+            }),
             close: undefined,
           },
         ];
@@ -374,6 +374,7 @@ function agentTabs(input: {
               { draft },
               {
                 ...tabLook({ kind: TAB_KIND.DRAFT }),
+                labelReplayUnmasked: true,
                 endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
               },
             ),

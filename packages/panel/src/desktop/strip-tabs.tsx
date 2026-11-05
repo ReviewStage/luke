@@ -386,12 +386,15 @@ function ToolbarTabActions({
   groups,
   ends,
   slot,
+  replayUnmasked,
 }: {
   label: string;
   groups: TabActionGroups;
   /** What the menu draws beyond its items: the task's document menu names the task and says who created it. */
   ends: MenuEnds | undefined;
   slot: HTMLElement;
+  /** Whether its items' words are the app's own (`ActionMenu`'s): so while the tab's body hands up none of its own, whose words this module cannot vouch for. */
+  replayUnmasked: boolean;
 }): React.JSX.Element {
   const menu = useMenu(true);
   const named = moreLabel(label);
@@ -406,6 +409,7 @@ function ToolbarTabActions({
           footer={ends?.footer}
           groups={tabActionItems(groups, menu.drawn.opener)}
           onClose={menu.close}
+          replayUnmasked={replayUnmasked}
         />
       )}
     </>,
@@ -444,6 +448,8 @@ export interface TabLook {
   controls?: string | undefined;
   icon: React.JSX.Element;
   label: string;
+  /** Whether the label is the app's own word, a fixed kind's (Inbox, New agent, Pull request), which a screen recording shows as it reads, and the detail with it; a tab named for a task, an agent, a file, or a page leaves this off (`Tab`'s). */
+  labelReplayUnmasked?: boolean | undefined;
   /** Words after the label, dimmed (`Tab`'s). */
   detail?: string | undefined;
   /** The detail's status tone (`Tab`'s): attention for the Inbox's count. */
@@ -500,7 +506,13 @@ export function DoorsTab({
         ends={doors.document}
       />
       {look.selected && content.length > 0 && slot !== undefined && slot !== null ? (
-        <ToolbarTabActions label={look.label} groups={content} ends={doors.document} slot={slot} />
+        <ToolbarTabActions
+          label={look.label}
+          groups={content}
+          ends={doors.document}
+          slot={slot}
+          replayUnmasked={doors.handed === undefined}
+        />
       ) : null}
     </>
   );

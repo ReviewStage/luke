@@ -40,7 +40,7 @@ export function NotFound({
   action?: EmptyStateAction | undefined;
 }): React.JSX.Element {
   return (
-    <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action}>
+    <EmptyState icon={<SearchXIcon />} title={NOT_FOUND_TITLE} action={action} replayUnmasked>
       <ReplayUnmask>{`This ${thing} doesn't exist, or you don't have access to it.`}</ReplayUnmask>
     </EmptyState>
   );

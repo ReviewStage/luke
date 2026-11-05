@@ -1101,27 +1101,25 @@ export function SidebarTask({
           description={rename.refused ? <span>{RENAME_FAILED_NOTE}</span> : undefined}
           meta={
             rename.editing ? null : (
-              <ReplayMask>
-                <span className={SIDEBAR_ROW_TIME}>
-                  {repository === undefined ? null : (
-                    <span className={SIDEBAR_ROW_REPOSITORY}>
-                      <ReplayMask>{repository}</ReplayMask>
-                    </span>
-                  )}
-                  {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
-                  {drafted ? <DraftMark /> : null}
-                  {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
-                  {childCount === undefined ? null : (
-                    <ProgressCount
-                      done={childCount.finished}
-                      total={childCount.total}
-                      label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
-                    />
-                  )}
-                  <TaskRowStatus task={task} />
-                  <Time at={at} now={now} hint={false} />
-                </span>
-              </ReplayMask>
+              <span className={SIDEBAR_ROW_TIME}>
+                {repository === undefined ? null : (
+                  <span className={SIDEBAR_ROW_REPOSITORY}>
+                    <ReplayMask>{repository}</ReplayMask>
+                  </span>
+                )}
+                {worn === undefined ? null : <AssigneeFaceMark face={worn} heard={false} />}
+                {drafted ? <DraftMark /> : null}
+                {task.blocked === true ? <BlockedMark aria-hidden="true" /> : null}
+                {childCount === undefined ? null : (
+                  <ProgressCount
+                    done={childCount.finished}
+                    total={childCount.total}
+                    label={`${childCount.finished} of ${childCount.total} sub-tasks finished`}
+                  />
+                )}
+                <TaskRowStatus task={task} />
+                <Time at={at} now={now} hint={false} />
+              </span>
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}

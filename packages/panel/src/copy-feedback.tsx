@@ -64,7 +64,8 @@ export function copyImageThroughShell(url: string): Promise<void> {
 
 /**
  * Copies from a menu: hands the words to the shell's clipboard and says what came
- * of it in a toast reading `label` ("Plan copied"), or the failure.
+ * of it in a toast reading `label` ("Plan copied"), or the failure. `label` is the
+ * app's own words, never a name, so the toast shows in a screen recording.
  */
 export function useCopyToast(): (words: string, label: string) => void {
   const copied = useMenuCopy();
@@ -86,7 +87,12 @@ function useMenuCopy(): (copying: () => Promise<void>, label: string) => void {
     copying().then(
       () => {
         if (press !== latestMenuCopy) return;
-        show({ words: label, tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
+        show({
+          words: label,
+          tone: STATUS_TONE.COMPLETE,
+          hold: TOAST_HOLD.DONE,
+          replayUnmasked: true,
+        });
       },
       (cause: unknown) => {
         if (press !== latestMenuCopy) return;
@@ -95,6 +101,7 @@ function useMenuCopy(): (copying: () => Promise<void>, label: string) => void {
           tone: STATUS_TONE.DANGER,
           hold: TOAST_HOLD.FAILED,
           failure: { surface: FAILURE_SURFACE.COPY, cause },
+          replayUnmasked: true,
         });
       },
     );

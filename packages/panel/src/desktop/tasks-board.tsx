@@ -426,7 +426,7 @@ const TaskBoardCard = memo(function TaskBoardCard({
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   const repository = task.repository === null ? undefined : repositoryLabel(task.repository, []);
   const own = {
-    ...rowMenu("Task", actions.groups(), tasks.shown),
+    ...rowMenu("Task", actions.groups(), tasks.shown, true),
     footer: actions.footer,
     subject: taskSubject(task, repository, key),
   };
@@ -1026,6 +1026,7 @@ export function TasksBoard({
       empty={
         <EmptyState
           icon={<SquareKanbanIcon />}
+          replayUnmasked
           action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
         >
           {noneYetWords(TERM.TASK)}

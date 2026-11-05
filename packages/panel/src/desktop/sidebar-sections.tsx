@@ -74,7 +74,7 @@ import {
   workspaceSections,
 } from "@repo/ui/task-sections-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { commandAction, commandHead, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
@@ -143,7 +143,7 @@ export const NEW_SECTION = "New section";
 interface SectionAsk {
   readonly workspaceId: string;
   readonly after: ((sectionId: string) => readonly TaskSectionWrite[]) | undefined;
-  readonly moving: string | undefined;
+  readonly moving: ReactNode;
 }
 
 /** The section dialog's doors, and the card it opens. */
@@ -156,7 +156,7 @@ export interface SectionDialogs {
   askNew: (
     workspaceId: string,
     after?: (sectionId: string) => readonly TaskSectionWrite[],
-    moving?: string,
+    moving?: ReactNode,
   ) => void;
   /** Deletes a section, focus going on from `from`, the control its menu was opened from, to the section after it, or the first. */
   askDelete: (section: TaskSection, from: HTMLElement | null) => void;
@@ -191,9 +191,15 @@ function answerWrites(ask: SectionAsk, title: string, icon: TaskSectionIcon | un
 }
 
 /** What New section says moves into the section it makes: a task by its name, one agent, or how many. */
-export function movesInto(count: number, name?: string): string {
-  if (count === 1)
-    return name === undefined ? "The agent moves into it" : `“${name}” moves into it`;
+export function movesInto(count: number, name?: string): ReactNode {
+  if (count === 1) {
+    if (name === undefined) return "The agent moves into it";
+    return (
+      <>
+        “<ReplayMask>{name}</ReplayMask>” moves into it
+      </>
+    );
+  }
   return `${count} tasks move into it`;
 }
 
@@ -339,7 +345,7 @@ export function useSectionDialogs(
         </FormField>
         {ask?.moving === undefined ? null : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            <ReplayMask>{ask.moving}</ReplayMask>
+            {ask.moving}
           </Text>
         )}
       </Stack>

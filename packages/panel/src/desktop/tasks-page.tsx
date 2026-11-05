@@ -247,6 +247,7 @@ export function TasksPage({
         end={
           <PlaceMore
             thing="Task list"
+            replayUnmasked
             shown={tasks.shown}
             groups={(opener) => [
               [
@@ -298,6 +299,7 @@ export function TasksPage({
   ) : (
     <Toolbar
       title={TASKS}
+      titleReplayUnmasked
       tag={<ViewSwitch view={view} onView={choose} />}
       actions={
         <>

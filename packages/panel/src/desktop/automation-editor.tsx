@@ -154,7 +154,7 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@repo/ui/actor-model";
 import { GLYPH } from "@repo/ui/icons";
 import { inputProblem, UNREPORTED } from "@repo/ui/reported-failure";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
 import { Result } from "effect";
@@ -529,9 +529,17 @@ function OwnerRow({
       width={CHIP_WIDTH.MIN_FIELD}
       label="Owner"
       detail={
-        owner === AUTOMATION_SCOPE.WORKSPACE
-          ? `Everyone in ${workspace?.name ?? "the workspace"} sees it, runs it, and turns it off. ${changers}, owners, and admins change it.`
-          : "Only you see and change it. Owners and admins can see it and turn it off."
+        <ReplayUnmask>
+          {owner === AUTOMATION_SCOPE.WORKSPACE ? (
+            <>
+              Everyone in <ReplayMask>{workspace?.name ?? "the workspace"}</ReplayMask> sees it,
+              runs it, and turns it off. <ReplayMask>{changers}</ReplayMask>, owners, and admins
+              change it.
+            </>
+          ) : (
+            "Only you see and change it. Owners and admins can see it and turn it off."
+          )}
+        </ReplayUnmask>
       }
       value={owner}
       valueLabel={automationOwnerName(owner, workspace?.name, mine)}
@@ -573,8 +581,13 @@ function MakerRow({ maker, at }: { maker: Actor; at: number }): React.JSX.Elemen
   const theirs = actorName(maker, { sentence: true, possessive: true });
   return (
     <SettingsRow
-      label="Created by"
-      description={`Runs start as ${name}, on ${theirs} GitHub access, model keys, and integrations. Created ${dateOfText(at, now)}.`}
+      label={<ReplayUnmask>Created by</ReplayUnmask>}
+      description={
+        <ReplayUnmask>
+          Runs start as <ReplayMask>{name}</ReplayMask>, on <ReplayMask>{theirs}</ReplayMask> GitHub
+          access, model keys, and integrations. Created {dateOfText(at, now)}.
+        </ReplayUnmask>
+      }
     >
       {() => (
         <SettingsRowValue>
@@ -616,11 +629,18 @@ function ServersRow({
   if (!mine) {
     return (
       <SettingsRow
-        label={INTEGRATION_LABEL.many}
+        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
         description={
-          disabled.length === 0
-            ? "All of its creator's connected integrations."
-            : `Its creator's connected integrations, but ${andList(disabled.map(switchedOffName))} switched off.`
+          <ReplayUnmask>
+            {disabled.length === 0 ? (
+              "All of its creator's connected integrations."
+            ) : (
+              <>
+                Its creator's connected integrations, but{" "}
+                <ReplayMask>{andList(disabled.map(switchedOffName))}</ReplayMask> switched off.
+              </>
+            )}
+          </ReplayUnmask>
         }
       >
         {() => null}
@@ -656,14 +676,16 @@ function UnreadServersRow({
   if (failed) {
     return (
       <SettingsRow
-        label={INTEGRATION_LABEL.many}
+        label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
         below={() => (
-          <ErrorState
-            onRetry={onRetry}
-            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_INTEGRATIONS_READ)}
-          >
-            Your connected integrations could not be read.
-          </ErrorState>
+          <ReplayUnmask>
+            <ErrorState
+              onRetry={onRetry}
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_INTEGRATIONS_READ)}
+            >
+              Your connected integrations could not be read.
+            </ErrorState>
+          </ReplayUnmask>
         )}
       />
     );
@@ -675,7 +697,7 @@ function UnreadServersRow({
 function ServersRowSkeleton(): React.JSX.Element {
   return (
     <SettingsRow
-      label={INTEGRATION_LABEL.many}
+      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
       description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}
     >
       {() => (
@@ -710,13 +732,15 @@ function OwnServersRow({
   const shown = on.slice(0, SERVERS_CHIP_MARKS);
   return (
     <SettingsRow
-      label={INTEGRATION_LABEL.many}
+      label={<ReplayUnmask>{INTEGRATION_LABEL.many}</ReplayUnmask>}
       description={
-        connected.length === 0
-          ? "None connected yet."
-          : off.length === 0
-            ? "Every connected integration is on."
-            : `${namesSaid(off)} off.`
+        <ReplayUnmask>
+          {connected.length === 0
+            ? "None connected yet."
+            : off.length === 0
+              ? "Every connected integration is on."
+              : `${namesSaid(off)} off.`}
+        </ReplayUnmask>
       }
     >
       {() => (
@@ -729,7 +753,9 @@ function OwnServersRow({
           statuses={statuses}
           face={
             on.length === 0 ? (
-              <ChipName>None</ChipName>
+              <ChipName>
+                <ReplayUnmask>None</ReplayUnmask>
+              </ChipName>
             ) : (
               <span className="automation-servers inline-flex items-center gap-tight-gap">
                 {shown.map((provider) => (
@@ -819,7 +845,10 @@ function ScheduleRows({
       >
         {(field) =>
           field === SCHEDULE_FIELD.CRON ? (
-            <SettingsRow label="Cron" error={zoneRefused ? undefined : inputProblem(problem)}>
+            <SettingsRow
+              label={<ReplayUnmask>Cron</ReplayUnmask>}
+              error={zoneRefused ? undefined : inputProblem(problem)}
+            >
               {(control) => (
                 <span className={AUTOMATION_FIELD}>
                   <TextField
@@ -839,7 +868,11 @@ function ScheduleRows({
             </SettingsRow>
           ) : (
             <SettingsRow
-              label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
+              label={
+                <ReplayUnmask>
+                  {schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
+                </ReplayUnmask>
+              }
               error={zoneRefused ? undefined : inputProblem(problem)}
             >
               {(control) => (
@@ -1362,7 +1395,9 @@ function GitHubSettingsRows({
         <SwitchRow
           key={choice.value}
           label={choice.label}
-          detail={choice.detail}
+          detail={
+            choice.detail === undefined ? undefined : <ReplayUnmask>{choice.detail}</ReplayUnmask>
+          }
           checked={settings.senders.includes(choice.value)}
           onChange={(on) =>
             onSettings({ ...settings, senders: toggled(settings.senders, choice.value, on) })
@@ -1374,7 +1409,9 @@ function GitHubSettingsRows({
           <SwitchRow
             key={choice.value}
             label={choice.label}
-            detail={choice.detail}
+            detail={
+              choice.detail === undefined ? undefined : <ReplayUnmask>{choice.detail}</ReplayUnmask>
+            }
             checked={settings.moments.includes(choice.value)}
             onChange={(on) =>
               onSettings({ ...settings, moments: toggled(settings.moments, choice.value, on) })
@@ -1385,13 +1422,18 @@ function GitHubSettingsRows({
       <Reveal shown={PULL_REQUEST_EVENTS.has(event)}>
         <SwitchRow
           label="Skip drafts"
-          detail="A draft starts a run once it is marked ready."
+          detail={<ReplayUnmask>A draft starts a run once it is marked ready.</ReplayUnmask>}
           checked={!settings.drafts}
           onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
         />
         <SwitchRow
           label="Include forks"
-          detail="A fork's pull request is code from outside the repository, read by an agent that can push to it."
+          detail={
+            <ReplayUnmask>
+              A fork's pull request is code from outside the repository, read by an agent that can
+              push to it.
+            </ReplayUnmask>
+          }
           checked={settings.forks}
           onChange={(forks) => onSettings({ ...settings, forks })}
         />
@@ -1423,7 +1465,11 @@ function FilterRow({
   const field = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => values.join(", "));
   return (
-    <SettingsRow label={label} description={detail} error={inputProblem(problem)}>
+    <SettingsRow
+      label={<ReplayUnmask>{label}</ReplayUnmask>}
+      description={<ReplayUnmask>{detail}</ReplayUnmask>}
+      error={inputProblem(problem)}
+    >
       {(control) => (
         <span className={AUTOMATION_FIELD}>
           <TextField
@@ -1477,7 +1523,10 @@ function SentryRows({
   const hours = useRef<HTMLInputElement>(null);
   if (withheld) {
     return (
-      <SettingsRow label="Sentry isn't available" description={SENTRY_WITHHELD}>
+      <SettingsRow
+        label={<ReplayUnmask>Sentry isn't available</ReplayUnmask>}
+        description={<ReplayUnmask>{SENTRY_WITHHELD}</ReplayUnmask>}
+      >
         {() => null}
       </SettingsRow>
     );
@@ -1486,7 +1535,7 @@ function SentryRows({
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
       <SettingsRow
-        label="Sentry isn't installed"
+        label={<ReplayUnmask>Sentry isn't installed</ReplayUnmask>}
         error={
           sentry.refusal === undefined
             ? undefined
@@ -1501,14 +1550,16 @@ function SentryRows({
         }
       >
         {() => (
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            busy={sentry.installing}
-            busyLabel="Opening Sentry"
-            onClick={sentry.onInstall}
-          >
-            Install Sentry
-          </Button>
+          <ReplayUnmask>
+            <Button
+              variant={BUTTON_VARIANT.PRIMARY}
+              busy={sentry.installing}
+              busyLabel="Opening Sentry"
+              onClick={sentry.onInstall}
+            >
+              Install Sentry
+            </Button>
+          </ReplayUnmask>
         )}
       </SettingsRow>
     );
@@ -1520,14 +1571,16 @@ function SentryRows({
     <>
       {sentry.failed ? (
         <SettingsRow
-          label="Sentry"
+          label={<ReplayUnmask>Sentry</ReplayUnmask>}
           below={() => (
-            <ErrorState
-              onRetry={sentry.onRetry}
-              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_SENTRY_READ)}
-            >
-              {SENTRY_UNREAD}
-            </ErrorState>
+            <ReplayUnmask>
+              <ErrorState
+                onRetry={sentry.onRetry}
+                failure={unreadShown(FAILURE_SURFACE.AUTOMATION_SENTRY_READ)}
+              >
+                {SENTRY_UNREAD}
+              </ErrorState>
+            </ReplayUnmask>
           )}
         />
       ) : null}
@@ -1559,22 +1612,26 @@ function SentryRows({
         onValues={(environment) => filter({ environment })}
       />
       <SettingsRow
-        label="Levels"
-        description="None picked for every level."
+        label={<ReplayUnmask>Levels</ReplayUnmask>}
+        description={<ReplayUnmask>None picked for every level.</ReplayUnmask>}
         below={() => (
-          <ChoiceList
-            legend="Levels"
-            select={CHOICE_SELECT.MANY}
-            look={CHOICE_LOOK.PILL}
-            options={SENTRY_LEVELS}
-            value={trigger.filters?.level ?? []}
-            onChange={(level) => filter({ level })}
-          />
+          <ReplayUnmask>
+            <ChoiceList
+              legend="Levels"
+              select={CHOICE_SELECT.MANY}
+              look={CHOICE_LOOK.PILL}
+              options={SENTRY_LEVELS}
+              value={trigger.filters?.level ?? []}
+              onChange={(level) => filter({ level })}
+            />
+          </ReplayUnmask>
         )}
       />
       <SettingsRow
-        label="Same issue again after"
-        description={`Hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}
+        label={<ReplayUnmask>Same issue again after</ReplayUnmask>}
+        description={
+          <ReplayUnmask>{`Hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`}</ReplayUnmask>
+        }
         error={inputProblem(problems[DRAFT_FIELD.COOLDOWN])}
       >
         {(control) => (
@@ -1677,8 +1734,12 @@ function WebhookRows({
   if (automation === undefined || url === undefined) {
     return (
       <SettingsRow
-        label="Address"
-        description="Save it as a webhook to get its address and a secret to call it with."
+        label={<ReplayUnmask>Address</ReplayUnmask>}
+        description={
+          <ReplayUnmask>
+            Save it as a webhook to get its address and a secret to call it with.
+          </ReplayUnmask>
+        }
       >
         {() => null}
       </SettingsRow>
@@ -1687,13 +1748,13 @@ function WebhookRows({
   return (
     <>
       <SettingsRow
-        label="Address"
+        label={<ReplayUnmask>Address</ReplayUnmask>}
         description={
-          <>
+          <ReplayUnmask>
             POST to the address with the secret as <code>Authorization: Bearer</code>. Don't send
             secrets in the body: {PRODUCT_NAME} hands the body to the run's agent, and it shows in
             the run's transcript.
-          </>
+          </ReplayUnmask>
         }
       >
         {() => (
@@ -1703,11 +1764,13 @@ function WebhookRows({
         )}
       </SettingsRow>
       {secret === undefined ? (
-        <SettingsRow label="Secret">
+        <SettingsRow label={<ReplayUnmask>Secret</ReplayUnmask>}>
           {() => (
-            <Button variant={BUTTON_VARIANT.OUTLINE} onClick={rotation.ask}>
-              New secret
-            </Button>
+            <ReplayUnmask>
+              <Button variant={BUTTON_VARIANT.OUTLINE} onClick={rotation.ask}>
+                New secret
+              </Button>
+            </ReplayUnmask>
           )}
         </SettingsRow>
       ) : (
@@ -1774,7 +1837,9 @@ function ModelPicker({
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
       >
-        <ChipName>Choose a model</ChipName>
+        <ChipName>
+          <ReplayUnmask>Choose a model</ReplayUnmask>
+        </ChipName>
       </Chip>
       {drawn.mounted ? (
         <ModelMenu
@@ -1825,7 +1890,10 @@ function ModelRow({
         ? "It runs on your default model, which could not be read."
         : "Your default model.";
   return (
-    <SettingsRow label="Model" description={note}>
+    <SettingsRow
+      label={<ReplayUnmask>Model</ReplayUnmask>}
+      description={note === undefined ? undefined : <ReplayUnmask>{note}</ReplayUnmask>}
+    >
       {() =>
         shown !== undefined ? (
           <AgentModelChip
@@ -1907,15 +1975,17 @@ function AgentRow({
   if (agents !== undefined && "failed" in agents) {
     return (
       <SettingsRow
-        label="Agent"
-        description={detail}
+        label={<ReplayUnmask>Agent</ReplayUnmask>}
+        description={<ReplayUnmask>{detail}</ReplayUnmask>}
         below={() => (
-          <ErrorState
-            onRetry={retryAgents}
-            failure={unreadShown(FAILURE_SURFACE.AUTOMATION_AGENTS_READ)}
-          >
-            {AGENTS_UNREAD}
-          </ErrorState>
+          <ReplayUnmask>
+            <ErrorState
+              onRetry={retryAgents}
+              failure={unreadShown(FAILURE_SURFACE.AUTOMATION_AGENTS_READ)}
+            >
+              {AGENTS_UNREAD}
+            </ErrorState>
+          </ReplayUnmask>
         )}
       />
     );
@@ -1958,7 +2028,7 @@ function AgentRow({
     <PickerRow
       width={CHIP_WIDTH.MIN_FIELD}
       label="Agent"
-      detail={detail}
+      detail={<ReplayUnmask>{detail}</ReplayUnmask>}
       replayUnmasked
       value={draft.agentId ?? FIRST_RUN_ROW}
       valueLabel={
@@ -2040,14 +2110,17 @@ function RunsGroup({
   return (
     <SettingsSection title={<ReplayUnmask>{EDITOR_SECTION.WHERE_IT_RUNS}</ReplayUnmask>}>
       <SettingsRow
-        label="Repository"
+        label={<ReplayUnmask>Repository</ReplayUnmask>}
         description={
-          taskBacked
-            ? "Its task's repository."
-            : also.length === 0 ||
-                (draft.repository === null && draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB)
-              ? undefined
-              : `Runs start here, and also work in ${andList(also)}.`
+          taskBacked ? (
+            <ReplayUnmask>Its task's repository.</ReplayUnmask>
+          ) : also.length === 0 ||
+            (draft.repository === null &&
+              draft.triggerKind !== AUTOMATION_TRIGGER.GITHUB) ? undefined : (
+            <ReplayUnmask>
+              Runs start here, and also work in <ReplayMask>{andList(also)}</ReplayMask>.
+            </ReplayUnmask>
+          )
         }
         error={inputProblem(problems[DRAFT_FIELD.REPOSITORY])}
       >
@@ -2099,7 +2172,7 @@ function RunsGroup({
               />
               <SwitchRow
                 label="Archive finished runs"
-                detail="Its transcript and pull request are kept."
+                detail={<ReplayUnmask>Its transcript and pull request are kept.</ReplayUnmask>}
                 checked={draft.archiveSuccessful}
                 onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
               />
@@ -2110,7 +2183,9 @@ function RunsGroup({
       {slackOffered ? (
         <SwitchRow
           label="Send the result to me on Slack"
-          detail="The workspace's Slack bot sends each run's final message."
+          detail={
+            <ReplayUnmask>The workspace's Slack bot sends each run's final message.</ReplayUnmask>
+          }
           checked={draft.slackDelivery}
           onChange={(slackDelivery) => onDraft({ slackDelivery })}
         />

@@ -78,7 +78,7 @@ import {
   toggledFilter,
   valueCounts,
 } from "@repo/ui/tasks-page-model";
-import { type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
+import { Fragment, type ReactNode, type RefCallback, type RefObject, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { commandHead, PANEL_COMMAND } from "../command-items.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -560,11 +560,27 @@ export function TasksFilterButton({
   );
 }
 
-/** What a field's chip says of its values: up to two by name, the rest counted. */
-function chipWords(words: readonly string[]): string {
-  const named = words.slice(0, CHIP_VALUES).join(", ");
-  const more = words.length - CHIP_VALUES;
-  return more > 0 ? `${named} +${more}` : named;
+/** One value a field's chip names, and whether it names a person or a repository, which a screen recording keeps masked. */
+interface ChipValue {
+  readonly value: string | null;
+  readonly words: string;
+  readonly masked: boolean;
+}
+
+/** What a field's chip says of its values: up to two by name, a person or a repository masked, the rest counted. */
+function ChipValues({ values }: { values: readonly ChipValue[] }): React.JSX.Element {
+  const more = values.length - CHIP_VALUES;
+  return (
+    <>
+      {values.slice(0, CHIP_VALUES).map((each, at) => (
+        <Fragment key={String(each.value)}>
+          {at === 0 ? null : ", "}
+          {each.masked ? <ReplayMask>{each.words}</ReplayMask> : each.words}
+        </Fragment>
+      ))}
+      {more > 0 ? ` +${more}` : null}
+    </>
+  );
 }
 
 /** What the filter line's last place holds, after a chip for each field: its Clear. */
@@ -574,7 +590,7 @@ const FILTER_LINE = {
 
 /** One place on the filter line: a field's chip, with its words as last drawn, or the Clear after them. */
 type FilterLineEntry =
-  | { readonly key: TasksFilterField; readonly words: string; readonly masked: boolean }
+  | { readonly key: TasksFilterField; readonly values: readonly ChipValue[] }
   | { readonly key: typeof FILTER_LINE.CLEAR };
 
 /** The filter line's places: a chip for each field filtered, its values named in the menu's order, whatever order they were chosen in, and Clear after them; none while nothing is filtered. */
@@ -587,14 +603,15 @@ function filterLineEntries(
   if (fields.length === 0) return [];
   const chips = fields.map((field) => {
     const kept = filterValues(filter, field);
-    const words = fieldValues(field, tasks, filter, reader, false)
+    const values = fieldValues(field, tasks, filter, reader, false)
       .filter((each) => kept.includes(each.value))
-      .map((each) => each.words);
-    return {
-      key: field,
-      words: `${FIELD_WORDS[field]}: ${chipWords(words)}`,
-      masked: namesData(field),
-    };
+      .map((each) => ({
+        value: each.value,
+        words: each.words,
+        // Note that a field's none, No assignee or No repository, is the app's own words.
+        masked: namesData(field) && each.value !== null,
+      }));
+    return { key: field, values };
   });
   return [...chips, { key: FILTER_LINE.CLEAR }];
 }
@@ -644,7 +661,8 @@ function FilterLine({
           >
             {FIELD_ICON[value.key]}
             <ChipName>
-              {value.masked ? <ReplayMask>{value.words}</ReplayMask> : value.words}
+              {`${FIELD_WORDS[value.key]}: `}
+              <ChipValues values={value.values} />
             </ChipName>
           </Chip>
         ),

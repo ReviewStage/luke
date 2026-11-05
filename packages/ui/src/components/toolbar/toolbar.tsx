@@ -322,14 +322,22 @@ export function NotFound({
   thing,
   bar,
   action,
+  replayUnmasked = false,
 }: {
   thing: NotFoundThing;
   /** The bar the place stands under; left out only where the state stands under a bar already drawn. */
   bar?: ToolbarProps | undefined;
   action?: EmptyStateAction | undefined;
+  /** Whether its words, which name no thing, show in a screen recording (`EmptyState`'s `replayUnmasked`); its bar's title is the bar's own to mark. */
+  replayUnmasked?: boolean | undefined;
 }): React.JSX.Element {
   const state = (
-    <EmptyState icon={<NotFoundIcon />} title={NOT_FOUND_TITLE} action={action}>
+    <EmptyState
+      icon={<NotFoundIcon />}
+      title={NOT_FOUND_TITLE}
+      action={action}
+      replayUnmasked={replayUnmasked}
+    >
       {`This ${thing} doesn't exist, or you don't have access to it.`}
     </EmptyState>
   );

@@ -53,7 +53,7 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { ListIcon } from "@repo/ui/icons";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -1021,6 +1021,7 @@ function stripTabs(input: {
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab, thread: input.thread }),
+      labelReplayUnmasked: true,
       card: hungCard({ kind: TAB_KIND.PANEL, tab }),
     }),
     close: () => panel.onClose(tab),
@@ -1083,7 +1084,11 @@ function stripTabs(input: {
     });
     return {
       tab,
-      look: look(tab, { ...changesLook(tab, own), card: changesCard }),
+      look: look(tab, {
+        ...changesLook(tab, own),
+        labelReplayUnmasked: pullRequest === undefined,
+        card: changesCard,
+      }),
       close: () => panel.onClose(tab),
     };
   });
@@ -1127,6 +1132,7 @@ function stripTabs(input: {
         look: look(tab, {
           icon: drawn.owner.icon,
           label: cloudBrowserTitleOf(drawn),
+          labelReplayUnmasked: !("tab" in drawn),
           card: hungCard({
             kind: TAB_KIND.BROWSER,
             owner: drawn.owner,
@@ -1473,45 +1479,53 @@ export function ActivityList({
           </div>
         ) : (
           // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
-          <List label="Activity" density={LIST_DENSITY.DENSE}>
-            {strip.map((entry) => (
-              // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
-              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
-                <ListRow
-                  leading={entry.look.icon}
-                  title={entry.look.label}
-                  meta={
-                    entry.look.detailTone === undefined ? (
-                      entry.look.detail
-                    ) : (
-                      <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
-                        {entry.look.detail}
-                      </span>
-                    )
-                  }
-                  unread={entry.look.unread}
-                  hint={
-                    entry.look.card === undefined
-                      ? undefined
-                      : { Hint: RowHint, label: entry.look.label }
-                  }
-                  actions={
-                    <Tooltip label={`Close ${entry.look.label}`}>
-                      <IconButton
-                        icon={<CloseIcon />}
-                        label={`Close ${entry.look.label}`}
-                        onClick={entry.close}
-                      />
-                    </Tooltip>
-                  }
-                  onPress={() => {
-                    onListed(false);
-                    entry.look.onSelect();
-                  }}
-                />
-              </RowHintOptions>
-            ))}
-          </List>
+          // A row's name and what follows it show as its tab's do (`labelReplayUnmasked`), masked for a tab named for a person's thing.
+          <ReplayUnmask>
+            <List label="Activity" density={LIST_DENSITY.DENSE}>
+              {strip.map((entry) => (
+                // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
+                <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card}>
+                  <ListRow
+                    leading={entry.look.icon}
+                    title={entry.look.label}
+                    titleReplayMasked={entry.look.labelReplayUnmasked !== true}
+                    meta={
+                      entry.look.detail === undefined ? undefined : (
+                        <ReplayWords masked={entry.look.labelReplayUnmasked !== true}>
+                          {entry.look.detailTone === undefined ? (
+                            entry.look.detail
+                          ) : (
+                            <span className={ROW_COUNT} data-tone={entry.look.detailTone}>
+                              {entry.look.detail}
+                            </span>
+                          )}
+                        </ReplayWords>
+                      )
+                    }
+                    unread={entry.look.unread}
+                    hint={
+                      entry.look.card === undefined
+                        ? undefined
+                        : { Hint: RowHint, label: entry.look.label }
+                    }
+                    actions={
+                      <Tooltip label={`Close ${entry.look.label}`}>
+                        <IconButton
+                          icon={<CloseIcon />}
+                          label={`Close ${entry.look.label}`}
+                          onClick={entry.close}
+                        />
+                      </Tooltip>
+                    }
+                    onPress={() => {
+                      onListed(false);
+                      entry.look.onSelect();
+                    }}
+                  />
+                </RowHintOptions>
+              ))}
+            </List>
+          </ReplayUnmask>
         )}
         {/* Note that the offers stand in one block, so the column's gap between sections never stands between a section's label and its rows. */}
         {more.length === 0 ? null : (

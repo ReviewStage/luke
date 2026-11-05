@@ -199,48 +199,51 @@ export function PlanAgents({
     // Note that the group is pulled out by a row's inset on each side, so its marks stand on the title's edge and its fills hang past it.
     <div className="plan-agents -mx-row-inset mb-block-gap">
       {grouped ? (
-        <GroupHeader
-          heading={GROUP_HEADING.NONE}
-          label={<ReplayUnmask>{AGENTS_LIST}</ReplayUnmask>}
-          // Note that a phone's group over no agent, standing for New agent, counts none.
-          count={
-            entries.length === 0
-              ? undefined
-              : {
-                  value: entries.length,
-                  noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
-                }
-          }
-          fold={{ defaultOpen: !folded }}
-        >
-          {entries.length + starts.length === 0 ? null : (
-            <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
-              {listedOrder(entries).map((entry) => (
-                <PlanAgentRow
-                  key={entry.row.id}
-                  entry={entry}
-                  pullRequest={agents.pullRequests.get(entry.row.id)}
-                  agents={agents}
-                  held={held}
-                  tab={tab}
-                  onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
-                />
-              ))}
-              {starts.map((start) => (
-                <ListRow
-                  key={start.label}
-                  leading={start.icon ?? <GLYPH.ADD />}
-                  title={start.label}
-                  description={start.detail}
-                  disabled={start.disabled}
-                  chevron
-                  onPress={start.onSelect}
-                />
-              ))}
-            </List>
-          )}
-          {phone?.archived}
-        </GroupHeader>
+        <ReplayUnmask>
+          <GroupHeader
+            heading={GROUP_HEADING.NONE}
+            label={AGENTS_LIST}
+            // Note that a phone's group over no agent, standing for New agent, counts none.
+            count={
+              entries.length === 0
+                ? undefined
+                : {
+                    value: entries.length,
+                    noun: entries.length === 1 ? AGENTS_NOUN.one : AGENTS_NOUN.many,
+                  }
+            }
+            fold={{ defaultOpen: !folded }}
+          >
+            {entries.length + starts.length === 0 ? null : (
+              <List label={AGENTS_LIST} density={LIST_DENSITY.DENSE} moves>
+                {listedOrder(entries).map((entry) => (
+                  <PlanAgentRow
+                    key={entry.row.id}
+                    entry={entry}
+                    pullRequest={agents.pullRequests.get(entry.row.id)}
+                    agents={agents}
+                    held={held}
+                    tab={tab}
+                    onOpenPullRequest={() => onOpenPullRequest(entry.row.id)}
+                  />
+                ))}
+                {starts.map((start) => (
+                  <ListRow
+                    key={start.label}
+                    leading={start.icon ?? <GLYPH.ADD />}
+                    title={start.label}
+                    description={start.detail}
+                    descriptionReplayMasked
+                    disabled={start.disabled}
+                    chevron
+                    onPress={start.onSelect}
+                  />
+                ))}
+              </List>
+            )}
+            {phone?.archived}
+          </GroupHeader>
+        </ReplayUnmask>
       ) : null}
       {waiting === undefined ? null : (
         <List label={NEEDS_YOU.LABEL} density={LIST_DENSITY.DENSE}>

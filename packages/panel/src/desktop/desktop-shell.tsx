@@ -113,7 +113,7 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       <CollectionPage
         frame={PAGE_FRAME.TOOLBAR}
         label="Tasks"
-        toolbar={<Toolbar title="Tasks" />}
+        toolbar={<Toolbar title="Tasks" titleReplayUnmasked />}
         state={COLLECTION_STATE.LOADING}
         loadingLabel="Reading tasks"
       />
@@ -1052,6 +1052,7 @@ export function DesktopShell({
               // A workspace's address naming none of the reader's workspaces says nothing of whose it may be, its way out the reader's own Home.
               <ReplayUnmask>
                 <NotFound
+                  replayUnmasked
                   thing={NOT_FOUND_THING.WORKSPACE}
                   bar={
                     room === SHELL_ROOM.NARROW

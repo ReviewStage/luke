@@ -131,7 +131,7 @@ export function WorkspaceRuns({
   if (kept.length === 0) return <EmptyState icon={<ClockIcon />}>{NONE_SHOWN[shown]}</EmptyState>;
   return (
     <div ref={body}>
-      {/* Note that a run's row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
+      {/* Note that a run's row here names its automation in its lead, which the row measures as words and cannot mask itself, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
       <ReplayMask>
         <ListMotion root={body}>
           <List label="Runs" moves>

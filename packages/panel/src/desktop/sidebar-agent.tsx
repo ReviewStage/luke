@@ -260,29 +260,29 @@ export function SidebarAgent({
           description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
           meta={
             editing ? null : (
-              <ReplayMask>
-                <span className={SIDEBAR_ROW_TIME}>
-                  {repository === undefined ? null : (
-                    <span className={SIDEBAR_ROW_REPOSITORY}>{repository}</span>
-                  )}
-                  {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
-                  {agent.source?.kind === AGENT_SOURCE.SLACK ? (
-                    <>
-                      <ProviderMark
-                        provider={INTEGRATION_PROVIDER.SLACK}
-                        size={PROVIDER_MARK_SIZE.CAPTION}
-                      />
-                      <VisuallyHidden>{FROM_SLACK}</VisuallyHidden>
-                    </>
-                  ) : null}
-                  {starter === undefined ? null : (
-                    <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
-                  )}
-                  {drafted ? <DraftMark /> : null}
-                  {agentEndMark(agent, false)}
-                  <Time at={at} now={now} hint={false} />
-                </span>
-              </ReplayMask>
+              <span className={SIDEBAR_ROW_TIME}>
+                {repository === undefined ? null : (
+                  <span className={SIDEBAR_ROW_REPOSITORY}>
+                    <ReplayMask>{repository}</ReplayMask>
+                  </span>
+                )}
+                {/* Note that an agent started from Slack wears Slack's mark before whoever started it, as an automation's wears its tile. */}
+                {agent.source?.kind === AGENT_SOURCE.SLACK ? (
+                  <>
+                    <ProviderMark
+                      provider={INTEGRATION_PROVIDER.SLACK}
+                      size={PROVIDER_MARK_SIZE.CAPTION}
+                    />
+                    <VisuallyHidden>{FROM_SLACK}</VisuallyHidden>
+                  </>
+                ) : null}
+                {starter === undefined ? null : (
+                  <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+                )}
+                {drafted ? <DraftMark /> : null}
+                {agentEndMark(agent, false)}
+                <Time at={at} now={now} hint={false} />
+              </span>
             )
           }
           current={current ? LIST_ROW_CURRENT.PAGE : undefined}

@@ -39,7 +39,7 @@ import {
   useResizeEdge,
 } from "@repo/ui";
 import { GLYPH } from "@repo/ui/icons";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ClockIcon, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorMarkWidth, automationRunActor } from "../actor-ref.js";
@@ -177,6 +177,7 @@ export function RunRow({
         />
       }
       title={automationRunTitle(run)}
+      titleReplayMasked
       lead={
         automationName === undefined
           ? undefined
@@ -307,25 +308,22 @@ function RunsBody({
         ) : runs.runs.length === 0 ? (
           <EmptyState icon={<ClockIcon />}>{NO_RUNS_LINE}</EmptyState>
         ) : (
-          // Note that a run's row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself.
-          <ReplayMask>
-            <ListMotion root={body}>
-              <List label="Runs" moves>
-                {runs.runs.map((run) => (
-                  <RunRow
-                    key={run.id}
-                    run={run}
-                    keyHolder={mine ? undefined : CREATOR}
-                    automationId={automationId}
-                    linked={run.id === linkedRun}
-                    now={now}
-                    onOpenAgent={onOpenAgent}
-                    onOpenAutomation={onOpenSetup}
-                  />
-                ))}
-              </List>
-            </ListMotion>
-          </ReplayMask>
+          <ListMotion root={body}>
+            <List label="Runs" moves>
+              {runs.runs.map((run) => (
+                <RunRow
+                  key={run.id}
+                  run={run}
+                  keyHolder={mine ? undefined : CREATOR}
+                  automationId={automationId}
+                  linked={run.id === linkedRun}
+                  now={now}
+                  onOpenAgent={onOpenAgent}
+                  onOpenAutomation={onOpenSetup}
+                />
+              ))}
+            </List>
+          </ListMotion>
         )}
       </div>
     </ScrollArea>

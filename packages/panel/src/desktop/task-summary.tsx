@@ -27,7 +27,7 @@ import {
   usePressAway,
 } from "@repo/ui";
 import { openThread, usePlanCommentsControl } from "@repo/ui/plan-comments";
-import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { sameTab } from "@repo/ui/tab-strip-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { Schema } from "effect";
@@ -527,8 +527,10 @@ function SummaryRow({
       <ListRow
         ref={rowRef}
         leading={<span className={SUMMARY_GLYPH}>{entry.row.icon}</span>}
-        title={editing ? editor : <ReplayMask>{entry.row.label}</ReplayMask>}
-        description={detail === undefined ? undefined : <ReplayMask>{detail}</ReplayMask>}
+        title={editing ? editor : entry.row.label}
+        titleReplayMasked={entry.row.replayMasked === true}
+        description={detail}
+        descriptionReplayMasked={description === undefined && entry.row.replayMasked === true}
         meta={editing ? null : entry.endMark}
         hint={
           entry.card === undefined || editing
@@ -586,7 +588,7 @@ function AgentSummaryRow({
         entry={entry}
         onPick={onPick}
         rowRef={hold}
-        menu={rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), shown)}
+        menu={rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), shown, true)}
         more={!coarse}
         editor={
           editing && rename !== undefined ? (
@@ -651,48 +653,50 @@ function SummaryList({
         const isFolded = folded.includes(heading);
         return (
           <div key={heading} className="task-summary-section">
-            <GroupHeader
-              heading={GROUP_HEADING.NONE}
-              surface={GROUP_SURFACE.NARROW}
-              label={<ReplayUnmask>{heading}</ReplayUnmask>}
-              fold={sidebarFold(isFolded, () => toggle(heading))}
-              count={
-                entries.length === 0
-                  ? undefined
-                  : foldedCount(isFolded, entries.length, SECTION_NOUN[heading])
-              }
-            >
-              <List label={heading} density={LIST_DENSITY.DENSE}>
-                {entries.map((entry) => {
-                  const onPick = () => {
-                    onPicked?.();
-                    entry.onPick();
-                  };
-                  return entry.agent === undefined ? (
-                    <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
-                  ) : (
-                    <AgentSummaryRow
-                      key={entry.row.id}
-                      entry={entry}
-                      agent={entry.agent}
-                      agents={agents}
-                      shown={shown}
-                      onPick={onPick}
-                    />
-                  );
-                })}
-              </List>
-              {heading === AGENTS_SECTION ? (
-                <ArchivedAgents
-                  agents={agents}
-                  shown={shown}
-                  onOpen={(agentId) => {
-                    onPicked?.();
-                    onOpenAgent(agentId);
-                  }}
-                />
-              ) : null}
-            </GroupHeader>
+            <ReplayUnmask>
+              <GroupHeader
+                heading={GROUP_HEADING.NONE}
+                surface={GROUP_SURFACE.NARROW}
+                label={heading}
+                fold={sidebarFold(isFolded, () => toggle(heading))}
+                count={
+                  entries.length === 0
+                    ? undefined
+                    : foldedCount(isFolded, entries.length, SECTION_NOUN[heading])
+                }
+              >
+                <List label={heading} density={LIST_DENSITY.DENSE}>
+                  {entries.map((entry) => {
+                    const onPick = () => {
+                      onPicked?.();
+                      entry.onPick();
+                    };
+                    return entry.agent === undefined ? (
+                      <SummaryRow key={entry.row.id} entry={entry} onPick={onPick} />
+                    ) : (
+                      <AgentSummaryRow
+                        key={entry.row.id}
+                        entry={entry}
+                        agent={entry.agent}
+                        agents={agents}
+                        shown={shown}
+                        onPick={onPick}
+                      />
+                    );
+                  })}
+                </List>
+                {heading === AGENTS_SECTION ? (
+                  <ArchivedAgents
+                    agents={agents}
+                    shown={shown}
+                    onOpen={(agentId) => {
+                      onPicked?.();
+                      onOpenAgent(agentId);
+                    }}
+                  />
+                ) : null}
+              </GroupHeader>
+            </ReplayUnmask>
           </div>
         );
       })}

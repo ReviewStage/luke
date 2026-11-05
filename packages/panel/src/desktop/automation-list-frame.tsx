@@ -57,6 +57,7 @@ export function AutomationsToolbar({ children }: { children: ReactNode }): React
     <div className="automations-toolbar flex-none @container/automations-toolbar">
       <Toolbar
         title="Automations"
+        titleReplayUnmasked
         actions={<div className="automations-acts contents">{children}</div>}
       />
     </div>
@@ -105,12 +106,9 @@ export function AutomationGroupList({
         title={headed ? nameMasked ? <ReplayMask>{name}</ReplayMask> : name : undefined}
         frame={SETTINGS_SECTION_FRAME.NONE}
       >
-        {/* Note that every row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
-        <ReplayMask>
-          <List label={name} moves>
-            {children}
-          </List>
-        </ReplayMask>
+        <List label={name} moves>
+          {children}
+        </List>
       </SettingsSection>
     </ListMotion>
   );

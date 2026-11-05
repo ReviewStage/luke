@@ -87,8 +87,8 @@ export function useNewWorkspaceDialog(
       <FormField
         label="Workspace name"
         error={
-          form.refusal === undefined
-            ? undefined
+          form.refusal === undefined || form.refusal.words === NAME_ASKED
+            ? form.refusal
             : { ...form.refusal, words: <ReplayMask>{form.refusal.words}</ReplayMask> }
         }
       >

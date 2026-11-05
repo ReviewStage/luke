@@ -703,7 +703,7 @@ const TasksPageRow = memo(function TasksPageRow({
                 truncate
                 className="tasks-list-maker max-w-tasks-list-maker"
               >
-                {actorName(maker.actor)}
+                <ReplayMask>{actorName(maker.actor)}</ReplayMask>
               </Text>
             )}
             <CreatorFace task={task} onOpen={onOpen} />
@@ -857,31 +857,28 @@ function TasksListGroup({
             <QuickAddLines quick={quick} line={listQuickAddLine(properties)} />
           </Stack>
         ) : null}
-        {/* Note that a row's name is handed to its row as words, which no mark inside the row reaches, so the run is masked whole and the row unmasks its own chips. */}
         {drawn.length === 0 ? null : (
-          <ReplayMask>
-            <VirtualRows
-              scroller={place.scroller}
-              shiftedBy={place.list}
-              keys={keys}
-              estimate={ROW_ESTIMATE_PX}
-              overscan={place.finding ? keys.length : undefined}
-              anchor={VIRTUAL_ROWS_ANCHOR.START}
-              listItems
-              moves
-              holdsFocus
-              className={`tasks-list-rows ${ROWS_GRID} data-[dragging=true]:cursor-grabbing`}
-              aria-label={head.name}
-              data-row-drop-rows={ordered(group.head) ? "" : undefined}
-              onPointerDown={draggable ? drag : undefined}
-              handle={run}
-            >
-              {(index, at) => {
-                const entry = drawn[index];
-                return entry === undefined ? null : row(entry.value, at);
-              }}
-            </VirtualRows>
-          </ReplayMask>
+          <VirtualRows
+            scroller={place.scroller}
+            shiftedBy={place.list}
+            keys={keys}
+            estimate={ROW_ESTIMATE_PX}
+            overscan={place.finding ? keys.length : undefined}
+            anchor={VIRTUAL_ROWS_ANCHOR.START}
+            listItems
+            moves
+            holdsFocus
+            className={`tasks-list-rows ${ROWS_GRID} data-[dragging=true]:cursor-grabbing`}
+            aria-label={head.name}
+            data-row-drop-rows={ordered(group.head) ? "" : undefined}
+            onPointerDown={draggable ? drag : undefined}
+            handle={run}
+          >
+            {(index, at) => {
+              const entry = drawn[index];
+              return entry === undefined ? null : row(entry.value, at);
+            }}
+          </VirtualRows>
         )}
       </>
     );
@@ -1072,6 +1069,7 @@ export function TasksList({
       empty={
         <EmptyState
           icon={<ListTodoIcon />}
+          replayUnmasked
           action={newTaskAction(tasks.signedIn ? tasks.onNewTask : undefined)}
         >
           {noneYetWords(TERM.TASK)}

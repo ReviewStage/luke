@@ -178,21 +178,24 @@ function PersonSection({
   title,
   count,
   tone,
+  rowsMasked = false,
   children,
 }: {
   title: string;
   count: number;
   tone?: StatusTone | undefined;
+  /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
+  rowsMasked?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
+  const list = (
+    <List label={title} moves>
+      {children}
+    </List>
+  );
   return (
     <PersonSectionFrame label={title} title={title} count={count} tone={tone}>
-      {/* Note that every row names a person's things, so the rows stay masked in a screen recording but for the words a row unmasks itself. */}
-      <ReplayMask>
-        <List label={title} moves>
-          {children}
-        </List>
-      </ReplayMask>
+      {rowsMasked ? <ReplayMask>{list}</ReplayMask> : list}
     </PersonSectionFrame>
   );
 }
@@ -271,13 +274,14 @@ function AgentRow({
               subject.name
             )
           }
+          titleReplayMasked
           description={rename?.refused === true ? <span>{RENAME_FAILED}</span> : undefined}
           hint={editing ? undefined : { Hint: RowHint, label: subject.name }}
           meta={
             editing ? null : (
               <span className={HOME_ROW_META}>
                 <OneLine className={HOME_ROW_CONTEXT} words={task.name}>
-                  {task.name}
+                  <ReplayMask>{task.name}</ReplayMask>
                 </OneLine>
                 {agentEndMark(agent, false)}
                 {agent.at === undefined ? null : <Time at={agent.at} now={now} hint={false} />}
@@ -288,7 +292,7 @@ function AgentRow({
           menu={
             editing
               ? undefined
-              : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown)
+              : rowMenu(AGENT_THING, agentMenuGroups(rowDoors(actions.doors)), tasks.shown, true)
           }
           more={!coarse}
         />
@@ -491,10 +495,11 @@ function AutomationRow({
           </span>
         }
         title={automation.name}
+        titleReplayMasked
         meta={
           <span className={HOME_ROW_META}>
             <OneLine className={HOME_ROW_CONTEXT} words={trigger}>
-              {trigger}
+              <ReplayMask>{trigger}</ReplayMask>
             </OneLine>
             {stateEndMark(state, true)}
             {nextWords === undefined ? null : (
@@ -716,6 +721,7 @@ function PersonColumn({
     // A phone's page still leads with its way back, the drawer and the places bar out of reach.
     return (
       <NotFound
+        replayUnmasked
         thing={NOT_FOUND_THING.PERSON}
         bar={
           away === undefined
@@ -812,6 +818,7 @@ function PersonColumn({
               title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
               count={waiting.length}
               tone={you ? STATUS_TONE.ATTENTION : undefined}
+              rowsMasked
             >
               {waiting.map((listed) => (
                 <InboxItemRow

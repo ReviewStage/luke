@@ -28,7 +28,7 @@ import {
   Time,
   VisuallyHidden,
 } from "@repo/ui";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayMask, ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import {
   type ChildTaskCount,
   repositoryLabel,
@@ -216,9 +216,9 @@ export function TaskListRow({
       : (repositoryName ?? repositoryLabel(task.repository, [{ repository: task.repository }]));
   // Note that a task not listed yet offers only its list's groups, because the task's own acts read the listed task, which is not there to read.
   const own = unlisted
-    ? rowMenu("Task", menuGroups, tasks.shown)
+    ? rowMenu("Task", menuGroups, tasks.shown, true)
     : {
-        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown),
+        ...rowMenu("Task", [...menuGroups, ...actions.groups()], tasks.shown, true),
         footer: actions.footer,
         subject: taskSubject(task, repository, key),
       };
@@ -244,7 +244,9 @@ export function TaskListRow({
       name={task.name}
       said={
         spoken === "" ? undefined : (
-          <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
+          <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+            <ReplayMask>{spoken}</ReplayMask>
+          </VisuallyHidden>
         )
       }
       beside={task.blocked === true ? <BlockedMark aria-hidden="true" /> : undefined}
@@ -260,7 +262,9 @@ export function TaskListRow({
                 </ReplayUnmask>
               ),
               [TASK_ROW_CELL.KEY]: (
-                <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+                <ReplayMask>
+                  <TaskKey workspaceName={workspaceName} number={task.number} decorative />
+                </ReplayMask>
               ),
               [TASK_ROW_CELL.STATUS]: (
                 <ReplayUnmask>
@@ -283,11 +287,13 @@ export function TaskListRow({
                   />
                 ),
               [TASK_ROW_CELL.REPOSITORY]: drawn(TASK_ROW_CELL.REPOSITORY) ? (
-                <RepositoryName
-                  repository={task.repository}
-                  label={repository}
-                  pictures={tasks.pictures}
-                />
+                <ReplayWords masked={task.repository !== null}>
+                  <RepositoryName
+                    repository={task.repository}
+                    label={repository}
+                    pictures={tasks.pictures}
+                  />
+                </ReplayWords>
               ) : null,
               [TASK_ROW_CELL.AGENTS]: drawn(TASK_ROW_CELL.AGENTS) ? (
                 <TaskAgentsMark agents={task.agents} size={TASK_AGENTS_MARK_SIZE.MEDIUM} />
