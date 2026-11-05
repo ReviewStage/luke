@@ -78,7 +78,14 @@ const NATIVE_TITLE_CASES = [
     named: "is titled by Anthropic's small model on Vespin's own key",
     titleAnthropicApiKey: Redacted.make(VESPIN_TITLE_KEY),
     title: "Retry invite email on timeout",
-    asked: [{ key: VESPIN_TITLE_KEY, host: "api.anthropic.com", model: "claude-haiku-5-5" }],
+    asked: [
+      {
+        key: VESPIN_TITLE_KEY,
+        host: "api.anthropic.com",
+        model: "claude-haiku-5-5",
+        thinking: "disabled",
+      },
+    ],
   },
   {
     named: "is titled from its opening's first words on a deployment holding no title key",
@@ -88,21 +95,32 @@ const NATIVE_TITLE_CASES = [
   },
 ] as const;
 
-/** What a request asked Anthropic for: the model its body names. */
-const readRequestModel = Schema.decodeUnknownSync(
-  Schema.fromJsonString(Schema.Struct({ model: Schema.String })),
+/** What a request asked Anthropic for: the model its body names, and its thinking where it set any. */
+const readRequestBody = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      model: Schema.String,
+      thinking: Schema.optional(Schema.Struct({ type: Schema.String })),
+    }),
+  ),
 );
 
-/** Anthropic's API faked at the global fetch, answering every message with `title` and keeping the key, host, and model each request carried. */
+/** Anthropic's API faked at the global fetch, answering every message with `title` and keeping the key, host, model, and thinking each request carried. */
 function anthropicAnswering(title: string) {
-  const asked: { readonly key: string | null; readonly host: string; readonly model: string }[] =
-    [];
+  const asked: {
+    readonly key: string | null;
+    readonly host: string;
+    readonly model: string;
+    readonly thinking: string | undefined;
+  }[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
+    const body = readRequestBody(await request.text());
     asked.push({
       key: request.headers.get("x-api-key"),
       host: new URL(request.url).host,
-      model: readRequestModel(await request.text()).model,
+      model: body.model,
+      thinking: body.thinking?.type,
     });
     return Response.json({
       id: "msg_fixture",
