@@ -9,10 +9,11 @@
  */
 
 import { CALL_FAULT } from "./account-call.js";
+import { AGENT_STATUS, type AgentStatus } from "./agent-wire.js";
 import type { HostedFailure } from "./hosted-link.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
-/** The `vespin` command's exit codes, held to these five so every command means the same by each. */
+/** The `vespin` command's exit codes, held to these so every command means the same by each. */
 export const CLI_EXIT = {
   OK: 0,
   /** The service answered and refused: a missing task, a bad input, a limit. */
@@ -23,6 +24,10 @@ export const CLI_EXIT = {
   AUTH: 3,
   /** The service could not be reached, or failed on its side. */
   UNAVAILABLE: 4,
+  /** The agent's turn a command waited on ended without completing: it failed, or it was stopped (`agent wait`, `agent start --wait`). */
+  TURN_FAILED: 5,
+  /** The wait ran past its `--timeout` with the agent's turn still under way. */
+  TIMED_OUT: 6,
 } as const;
 
 export type CliExit = (typeof CLI_EXIT)[keyof typeof CLI_EXIT];
@@ -54,4 +59,18 @@ export function cliExitOfHostedFailure(failed: HostedFailure): CliExit {
   }
   if (failed.fault !== undefined) return cliExitOfFault(failed.fault);
   return failed.status === undefined ? CLI_EXIT.UNAVAILABLE : cliExitOfStatus(failed.status);
+}
+
+/**
+ * How an agent's turn stands for a command waiting on it: still under way
+ * (starting, or running), or ended, with the code its end exits with. A
+ * turn that completed is fine; one that failed or was stopped did not do
+ * what was waited on.
+ */
+export function cliExitOfAgentStatus(status: AgentStatus): CliExit | undefined {
+  if (status === AGENT_STATUS.COMPLETED) return CLI_EXIT.OK;
+  if (status === AGENT_STATUS.FAILED || status === AGENT_STATUS.CANCELED) {
+    return CLI_EXIT.TURN_FAILED;
+  }
+  return undefined;
 }

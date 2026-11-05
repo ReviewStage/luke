@@ -16,7 +16,9 @@ import { type CallCredential, fixedBearer, HOSTED_API_ERROR } from "@repo/featur
 import { CLI_EXIT, cliExitOfHostedFailure } from "@repo/features/cli-exit";
 import {
   askHosted,
+  HOSTED_DEADLINE,
   type HostedClient,
+  type HostedDeadline,
   type HostedFailure,
   type HostedProcedure,
   hostedClient,
@@ -129,10 +131,14 @@ function failureWords(failed: HostedFailure): string {
   return `Could not reach ${PRODUCT_NAME}.`;
 }
 
-/** One hosted procedure asked, its failure ended as the exit code and words it stands for. */
-export function askService<Input, Output>(procedure: HostedProcedure<Input, Output>, input: Input) {
+/** One hosted procedure asked, under the deadline its answer may take, its failure ended as the exit code and words it stands for. */
+export function askService<Input, Output>(
+  procedure: HostedProcedure<Input, Output>,
+  input: Input,
+  deadline: HostedDeadline = HOSTED_DEADLINE.USUAL,
+) {
   return Effect.mapError(
-    askHosted(procedure, input),
+    askHosted(procedure, input, deadline),
     (failed) =>
       new CommandFailed({ exit: cliExitOfHostedFailure(failed), message: failureWords(failed) }),
   );
