@@ -1052,16 +1052,16 @@ export function takenCloses(): { itemId: string; revision: number }[] {
   return sent;
 }
 
-/** The question Resolve asks, answered Resolve. */
+/** The question Resolve asks, answered by its act, Resolve item or Resolve items. */
 export async function confirmClose(): Promise<void> {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ??
     assert.fail("Resolve asks first");
   assert.strictEqual(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
-  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Resolve",
+  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+    /^Resolve items?$/u.test(button.textContent ?? ""),
   );
-  await act(async () => (resolve ?? assert.fail("the question offers Resolve")).click());
+  await act(async () => (resolve ?? assert.fail("the question offers Resolve item")).click());
   await settle();
 }
 

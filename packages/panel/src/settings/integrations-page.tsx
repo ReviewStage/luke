@@ -814,7 +814,7 @@ function IntegrationRow({
             : several
               ? `Agents lose this account. Your other ${INTEGRATION_NAME[provider]} accounts stay connected.`
               : `Agents lose ${INTEGRATION_NAME[provider]} until you connect it again.`,
-          verb: "Disconnect",
+          verb: `Disconnect ${INTEGRATION_NAME[provider]}`,
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

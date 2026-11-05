@@ -217,7 +217,7 @@ test("a teammate's agent the list read at rest but whose page reads it working i
 
   assert.deepEqual(archives, []);
   const stop = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
-    (each) => wordsOf(each) === "Stop and archive",
+    (each) => wordsOf(each) === "Stop and archive agent",
   );
   assert.ok(stop, "the archive asks first");
   await act(async () => stop.click());
@@ -469,7 +469,7 @@ test("Permanently delete stands last and alone in the row's right-click, asks fi
     document.getElementById(question.getAttribute("aria-describedby") ?? "")?.textContent,
     "“Remove the stale copy” and its transcript will be deleted. This cannot be undone. To keep it out of the way instead, archive it.",
   );
-  await act(async () => dialogAnswer("Permanently delete").click());
+  await act(async () => dialogAnswer("Permanently delete agent").click());
   await settle();
 
   assert.deepEqual(deletes, [AGENT_ID]);

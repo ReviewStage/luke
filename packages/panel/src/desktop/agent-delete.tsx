@@ -38,7 +38,7 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
   return {
     title: "Permanently delete agent?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
-    verb: PANEL_COMMAND.DELETE_AGENT.verb,
+    verb: "Permanently delete agent",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

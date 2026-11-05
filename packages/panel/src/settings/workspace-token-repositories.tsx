@@ -299,7 +299,7 @@ function TokenOwnerRow({
         question={{
           title: `Remove ${asked?.fullName ?? ""}?`,
           body: "Agents in this workspace stop reaching it until someone adds it again.",
-          verb: WORDS.REMOVE,
+          verb: "Remove repository",
           running: WORDS.REMOVING,
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

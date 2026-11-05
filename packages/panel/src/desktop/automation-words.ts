@@ -19,7 +19,7 @@ export function automationDeleteQuestion(name: string | undefined): DialogQuesti
   return {
     title: `Delete ${name ?? "this automation"}?`,
     body: "Its schedule stops and its run history goes. Agents its runs started stay.",
-    verb: "Delete",
+    verb: "Delete automation",
     running: "Deleting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

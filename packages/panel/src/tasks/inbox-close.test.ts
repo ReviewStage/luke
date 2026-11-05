@@ -116,7 +116,7 @@ test("Close asks first and closes the revision it asked about; the agent posting
   assert.deepEqual(closed, []);
 
   ask();
-  act(() => questionButton("Resolve").click());
+  act(() => questionButton("Resolve item").click());
   assert.deepEqual(
     closed.map(({ revision }) => revision),
     [2],

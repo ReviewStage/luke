@@ -1209,8 +1209,8 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
   assert.deepEqual(rowActions(memberNamed(page, "Dana")), ["Copy link"]);
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
   const askedFirst = !sent.some((request) => request.kind === ACT_KIND.WORKSPACE_MEMBER_REMOVE);
-  // The confirm repeats the menu's verb.
-  await confirm("Remove from workspace");
+  // The confirm names the kind it removes, a member.
+  await confirm("Remove member");
 
   assert.equal(askedFirst, true);
   assert.deepEqual(
@@ -1508,7 +1508,7 @@ test("a removal the account's role does not allow says so in a toast", async () 
   act(() => toasts.render(onRegistry(rendererRegistry, createElement(ToastHost))));
 
   await chooseAction(memberNamed(page, "Sam"), "Remove from workspace");
-  await confirm("Remove from workspace");
+  await confirm("Remove member");
 
   assert.deepEqual(
     [...document.querySelectorAll(".ui-toast:not([data-leaving]) .ui-toast-words")].map(
@@ -1865,7 +1865,7 @@ test("the repositories members added on their tokens stand by owner after the Ap
   await chooseAction(rowNamed(group, "acme"), "Remove relay");
   const asked = sent.some((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET);
   // The repository goes for every member's agents, so its removal asks first, in the accent.
-  act(() => button(dialog(), "Remove").click());
+  act(() => button(dialog(), "Remove repository").click());
   await settle();
 
   assert.equal(asked, false, "nothing is sent while it asks");
@@ -2471,7 +2471,7 @@ test("an installed workspace's Sentry says Connected, its ⋯ holds Disconnect, 
   const words = rowWords(row);
 
   await chooseAction(row, "Disconnect");
-  await confirm("Disconnect");
+  await confirm("Disconnect Sentry");
   const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
   for (const root of roots.splice(0)) act(() => root.unmount());
   sentry = SENTRY_INSTALLED;
@@ -2504,7 +2504,7 @@ test("an admin connects the Slack bot, which then says Connected, and disconnect
   await settle();
   const connected = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
   await chooseAction(rowNamed(githubGroup(admin.page), "Slack bot"), "Disconnect");
-  await confirm("Disconnect");
+  await confirm("Disconnect Slack bot");
   const after = rowWords(rowNamed(githubGroup(admin.page), "Slack bot"));
   for (const root of roots.splice(0)) act(() => root.unmount());
   slackBot = { configured: true, team: SLACK_TEAM };

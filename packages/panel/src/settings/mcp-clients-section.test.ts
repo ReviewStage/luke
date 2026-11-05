@@ -114,13 +114,13 @@ test("a revoke that did not finish leaves the agent standing with its Revoke and
   assert.ok(pageText().includes("Goes to an app on this computer"), pageText());
 
   await press("Revoke");
-  await press("Revoke", dialog());
+  await press("Revoke agent", dialog());
   await press("Cancel", dialog());
   assert.ok(pageText().includes("Revoking Claude Code didn't finish. Try again."), pageText());
   assert.ok(!pageText().includes("Revoked."), "a revoke that did not finish never says it landed");
 
   await press("Revoke");
-  await press("Revoke", dialog());
+  await press("Revoke agent", dialog());
   assert.ok(pageText().includes("Revoked. Its access ends within 15 minutes."), pageText());
   assert.ok(!pageText().includes("didn't finish"), pageText());
   assert.equal(

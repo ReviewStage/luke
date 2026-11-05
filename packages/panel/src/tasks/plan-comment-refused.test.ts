@@ -279,7 +279,7 @@ test("words written again after a not-sent reply is discarded go under a new key
     ...document.querySelectorAll('[role="alertdialog"] button, [role="dialog"] button'),
   ]
     .filter((each): each is HTMLButtonElement => each instanceof HTMLButtonElement)
-    .find((each) => each.textContent === "Discard");
+    .find((each) => each.textContent === "Discard comment");
   assert.ok(confirm, "Discard asks first");
   await act(async () => confirm.click());
   assert.equal(card.querySelector("[data-unsent]") === null, true, "the line goes once discarded");

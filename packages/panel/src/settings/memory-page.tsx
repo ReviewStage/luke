@@ -473,7 +473,7 @@ function forgetQuestion(asked: readonly MemorySummary[], left: number) {
   return {
     title: one ? "Forget this memory?" : `Forget ${countWords(asked.length, TERM.MEMORY)}?`,
     body: `${body}${kept}`,
-    verb: MEMORY_ACT.FORGET,
+    verb: `${MEMORY_ACT.FORGET} ${one ? TERM.MEMORY.one : TERM.MEMORY.many}`,
     running: "Forgetting",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
   };

@@ -595,7 +595,7 @@ function MemberRow({
         question={{
           title: `Remove ${member.name} from this workspace?`,
           body: "They lose its tasks, agents, and inbox until they are invited again.",
-          verb: REMOVE_MEMBER,
+          verb: "Remove member",
           running: "Removing",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
@@ -1416,7 +1416,7 @@ function ManagedSentry({
         question={{
           title: `Disconnect Sentry from ${workspace.name}?`,
           body: `Its alerts and new issues stop triggering this workspace's automations. Uninstall ${PRODUCT_NAME} in Sentry's settings to remove it there too.`,
-          verb: "Disconnect",
+          verb: "Disconnect Sentry",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}
@@ -1564,7 +1564,7 @@ function ManagedSlackBot({
         question={{
           title: `Disconnect the Slack bot from ${workspace.name}?`,
           body: `${PRODUCT_NAME} stops messaging this workspace's members in Slack. The bot stays installed in Slack until a Slack admin removes it.`,
-          verb: "Disconnect",
+          verb: "Disconnect Slack bot",
           running: "Disconnecting",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
         }}

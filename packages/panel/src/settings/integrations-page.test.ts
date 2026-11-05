@@ -527,14 +527,14 @@ test("GitHub's Disconnect is the account's GitHub disconnect, which asks first a
   refuseGitHubDisconnect = true;
   const refusedPage = await mount();
   await choose(rowNamed(refusedPage, "GitHub"), "Disconnect");
-  await confirm("Disconnect");
+  await confirm("Disconnect GitHub");
   const refusedDialog = document.querySelector('[role="alertdialog"]');
   const refusedButtons = rowButtons(rowNamed(refusedPage, "GitHub"));
   refuseGitHubDisconnect = false;
   const page = await mount();
   await choose(rowNamed(page, "GitHub"), "Disconnect");
   const askedBeforeConfirm = githubDisconnects;
-  await confirm("Disconnect");
+  await confirm("Disconnect GitHub");
 
   assert.equal(refusedDialog, null, "the refusal is the window's toast, not the dialog's");
   assert.deepEqual(refusedButtons, [], "GitHub stands connected");

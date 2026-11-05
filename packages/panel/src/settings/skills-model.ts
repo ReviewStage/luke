@@ -247,7 +247,7 @@ export function removeQuestion(
     body: shared
       ? `${everyoneIn(workspace)} loses ${skill.name}: agents they start afterwards no longer load it, and its files are deleted.`
       : "Its files are deleted, and agents started afterwards no longer load it. Installing it again takes the paste again.",
-    verb: "Remove",
+    verb: "Remove skill",
     running: "Removing",
     loss: shared ? CONFIRM_LOSS.AFFECTS_OTHERS : CONFIRM_LOSS.IRREVERSIBLE,
   };
