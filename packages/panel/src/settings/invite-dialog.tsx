@@ -41,6 +41,9 @@ import { confirmFailure } from "../failure-report.js";
 /** The roles an invitation offers, in the order the bar draws them, the default first. */
 const INVITATION_ROLES = [INVITATION_ROLE.MEMBER, INVITATION_ROLE.ADMIN] as const;
 
+/** What the field says where an address typed is none the service invites, which names none of them, since a refusal is reported. */
+const MALFORMED = "Enter only email addresses.";
+
 /** Where one typed address ends and the next begins. */
 const ADDRESS_BREAK = /[\s,;]+/;
 
@@ -97,15 +100,18 @@ export function useInviteDialog({
   // Note that the run reads the addresses it was asked with, and leaves in
   // the field only those it did not invite, so a retry sends none twice.
   const sendAll = (): Promise<ActionResult> => {
-    const malformed = addresses.find((one) => !isInvitableEmail(one));
-    if (malformed !== undefined)
-      return Promise.resolve(refused(`${malformed} isn't an email address.`));
+    if (!addresses.every(isInvitableEmail)) return Promise.resolve(refused(MALFORMED));
     return addresses.reduce<Promise<ActionResult>>(
       (before, email, index) =>
         before.then((result) =>
           result.status !== ACTION_RESULT_STATUS.ACCEPTED
             ? result
-            : act(ACT_KIND.WORKSPACE_INVITE, { workspaceId, email, role }).then(
+            : act(ACT_KIND.WORKSPACE_INVITE, {
+                workspaceId,
+                email,
+                // Note that a reader no longer the owner invites a member, whatever the bar last held.
+                role: owner ? role : INVITATION_ROLE.MEMBER,
+              }).then(
                 () => result,
                 (refusal: Error) => {
                   setTyped(addresses.slice(index).join(", "));

@@ -2107,7 +2107,7 @@ test("an address the service would refuse is said under the field and nothing is
 
   assert.equal(
     inviteDialog().querySelector('[data-slot="field-error"]')?.textContent,
-    "ada isn't an email address.",
+    "Enter only email addresses.",
   );
   assert.equal(addressField().getAttribute("aria-invalid"), "true");
   assert.deepEqual(invitedAddresses(), []);
