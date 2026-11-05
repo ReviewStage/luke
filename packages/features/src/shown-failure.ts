@@ -1,5 +1,5 @@
 /**
- * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online whose call was answered, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
+ * shown-failure.ts -- what Sentry is told of a failure the app showed a person: a log line for every one, and an issue besides for one nothing named shown online unless its call got no answer, each carrying where it was shown, its code, its cause, the ids it was about, and the app's state, never the words a person wrote.
  *
  * The panel hands every failure it shows here (`@repo/panel/failure-report`),
  * an error toast and a failure drawn in place of what could not be read
@@ -7,10 +7,10 @@
  * below: at `warn` for a refusal something named, such as a limit or a
  * refusal the service or the host worded, or for any failure shown while the
  * machine had no network or of a call that got no answer, and at `error` for
- * anything else. One nothing named, shown while online of a call that was
- * answered, becomes an issue besides, grouped by where it was shown and its
- * code rather than by its stack, since one surface shows the same failure
- * from many paths.
+ * anything else. One nothing named, shown while online and not of a call
+ * that got no answer, becomes an issue besides, grouped by where it was
+ * shown and its code rather than by its stack, since one surface shows the
+ * same failure from many paths.
  *
  * What it carries is chosen here rather than read from the failure whole:
  * names, tags, codes, HTTP statuses, faults, ids, the app's state, and the
