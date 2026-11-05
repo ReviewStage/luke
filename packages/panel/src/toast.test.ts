@@ -447,6 +447,7 @@ test("an unexpected failure toast's Copy details copies what its report sent, wi
       '.ui-toast:not([data-leaving]) button[aria-label="Copy details"]',
     ),
   ];
+  assert.equal(copies.length, 1, "the refusal's toast offers no copy");
   for (const copy of copies) await act(async () => copy.click());
 
   assert.deepEqual(copied, [
