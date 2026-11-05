@@ -33,7 +33,9 @@ import { Tooltip } from "../tooltip/hint.js";
  * video's foot of the same icon buttons, glyphs, and slider the window draws
  * everywhere, with play and pause, a frame back and a frame on, how far it
  * has run of how long, a scrubber, its speed, Expand where the place has a
- * viewer to open, and Full screen. A press on the video itself plays or
+ * viewer to open, and Full screen; a narrow bar lets the frame steps and the
+ * speed go, and the narrowest its playhead too, so Expand and Full screen
+ * always stand in reach. A press on the video itself plays or
  * pauses it, and while focus is in the player its keys are the ones video
  * sites share: Space or K plays or pauses, the left and right arrows seek
  * five seconds, comma and period step a frame back or on, pausing first,
@@ -508,12 +510,28 @@ function SpeedButton({
  * on any frame, its scrubber a thin track in the bar's ink. With a pointer
  * it fades while the video plays and comes back while the pointer or the
  * keyboard is in the frame; on a touch screen it always stands, so a first
- * tap presses rather than being spent as a hover.
+ * tap presses rather than being spent as a hover. It answers its own width
+ * (`@container/video-bar`), the frame's, never its content's, since it
+ * stands across the frame: narrow, it lets its extras go first and its
+ * playhead after them (`BAR_EXTRA`, `BAR_TIME`), so Play, the scrubber,
+ * Expand, and Full screen stay in reach on a phone-shaped video in a row of
+ * them rather than running off its edge.
  */
 const BAR =
-  "ui-video-player-bar absolute right-0 bottom-0 left-0 flex items-center gap-ui-4 bg-[linear-gradient(transparent,var(--color-veil))] px-ui-6 pt-ui-24 pb-ui-4 text-on-veil transition-opacity duration-(--ui-duration-fast) ease-motion-exit " +
+  "ui-video-player-bar @container/video-bar absolute right-0 bottom-0 left-0 flex items-center gap-ui-4 bg-[linear-gradient(transparent,var(--color-veil))] px-ui-6 pt-ui-24 pb-ui-4 text-on-veil transition-opacity duration-(--ui-duration-fast) ease-motion-exit " +
   "group-data-[playing=true]/video-frame:[@media(hover:hover)]:opacity-0 group-data-[playing=true]/video-frame:group-hover/video-frame:opacity-100 group-data-[playing=true]/video-frame:[@media(hover:hover)]:group-focus-within/video-frame:opacity-100 " +
   "[&_.ui-slider]:mx-ui-4 [&_.ui-slider]:h-ui-16 [&_.ui-slider]:accent-on-veil";
+
+/**
+ * The bar's extras, a frame back and on and the speed, which a narrow bar
+ * lets go, their keys still reaching them: off-scale, 360px, where they
+ * would leave the scrubber no room beside the rest.
+ */
+const BAR_EXTRA = "contents @max-[360px]/video-bar:hidden";
+
+/** How far the video has run of how long, which the narrowest bar lets go for the scrubber: off-scale, 200px. */
+const BAR_TIME =
+  "ui-video-player-time flex-none text-caption tabular-nums @max-[200px]/video-bar:hidden";
 
 /**
  * The frame the video and its bar stand in, on the veil while its first
@@ -565,19 +583,21 @@ function VideoBar({
         icon={playback.playing ? <PauseIcon /> : <PlayIcon />}
         onPress={onToggle}
       />
-      <BarButton
-        label={VIDEO_LABEL.PREVIOUS_FRAME}
-        icon={<PreviousFrameIcon />}
-        chord={FRAME_CHORD.PREVIOUS}
-        onPress={() => onStep(-1)}
-      />
-      <BarButton
-        label={VIDEO_LABEL.NEXT_FRAME}
-        icon={<NextFrameIcon />}
-        chord={FRAME_CHORD.NEXT}
-        onPress={() => onStep(1)}
-      />
-      <span className="ui-video-player-time flex-none text-caption tabular-nums">{time}</span>
+      <span className={BAR_EXTRA}>
+        <BarButton
+          label={VIDEO_LABEL.PREVIOUS_FRAME}
+          icon={<PreviousFrameIcon />}
+          chord={FRAME_CHORD.PREVIOUS}
+          onPress={() => onStep(-1)}
+        />
+        <BarButton
+          label={VIDEO_LABEL.NEXT_FRAME}
+          icon={<NextFrameIcon />}
+          chord={FRAME_CHORD.NEXT}
+          onPress={() => onStep(1)}
+        />
+      </span>
+      <span className={BAR_TIME}>{time}</span>
       <Slider
         label={VIDEO_LABEL.SEEK}
         value={playback.at}
@@ -587,7 +607,9 @@ function VideoBar({
         valueText={time}
         onChange={onSeek}
       />
-      <SpeedButton speed={playback.speed} onPress={onSpeed} />
+      <span className={BAR_EXTRA}>
+        <SpeedButton speed={playback.speed} onPress={onSpeed} />
+      </span>
       {onExpand === undefined || full ? null : (
         <BarButton label={VIDEO_LABEL.EXPAND} icon={<ExpandIcon />} onPress={onExpand} />
       )}
