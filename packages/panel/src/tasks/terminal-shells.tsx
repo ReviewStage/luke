@@ -295,6 +295,9 @@ function ShellRow({
           verb: END_SHELL,
           running: "Ending the shell",
           loss: CONFIRM_LOSS.IRREVERSIBLE,
+          replayUnmasked: true,
+          // Note that the title names the shell.
+          titleReplayMasked: true,
         }}
       />
     </>

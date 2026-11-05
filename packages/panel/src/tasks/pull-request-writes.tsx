@@ -366,6 +366,7 @@ const CLOSE_QUEUED_QUESTION: DialogQuestion = {
   verb: ACTION_WORDS[PULL_REQUEST_ACTION.CLOSE],
   running: "Closing",
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+  replayUnmasked: true,
 };
 
 /** The question Close asks of an open pull request whose place in the merge queue could not be read, since it may be in it. */

@@ -15,6 +15,7 @@ import {
   Tooltip,
   useMinute,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useId, useRef, useState } from "react";
 import {
   CONTEXT_LEVEL,
@@ -154,11 +155,14 @@ function ContextPopover({
       open={open}
       id={id}
       title={CONTEXT_LABEL}
+      replayUnmasked
       closeLabel="Close"
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <ContextBody context={context} brief={brief} />
+      <ReplayUnmask>
+        <ContextBody context={context} brief={brief} />
+      </ReplayUnmask>
     </PopoverPanel>
   );
 }

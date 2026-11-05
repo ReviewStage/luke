@@ -93,6 +93,7 @@ import {
 import { CircleAlertIcon, ICON_SIZE } from "@repo/ui/icons";
 import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   cloneElement,
   createContext,
@@ -1368,7 +1369,7 @@ function ServersPopover({
               servers.onOpenSettings();
             }}
           >
-            {SERVERS_SETTINGS}
+            <ReplayUnmask>{SERVERS_SETTINGS}</ReplayUnmask>
           </Button>
         </div>
       </div>

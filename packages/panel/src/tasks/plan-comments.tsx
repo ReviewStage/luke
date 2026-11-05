@@ -601,6 +601,7 @@ const DELETE_QUESTION: DialogQuestion = {
   verb: "Delete comment",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 const DELETE_THREAD_QUESTION: DialogQuestion = {
@@ -609,6 +610,7 @@ const DELETE_THREAD_QUESTION: DialogQuestion = {
   verb: "Delete thread",
   running: "Deleting",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** What discarding a send not sent asks first, since its words and files are kept nowhere else. */
@@ -618,6 +620,7 @@ const DISCARD_QUESTION: DialogQuestion = {
   verb: "Discard comment",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** What discarding several sends not sent asks first, a reply refused and those queued behind it. */
@@ -627,6 +630,7 @@ const DISCARD_MANY_QUESTION: DialogQuestion = {
   verb: "Discard comments",
   running: "Discarding",
   loss: CONFIRM_LOSS.IRREVERSIBLE,
+  replayUnmasked: true,
 };
 
 /** One comment of a thread: who wrote it and when, its words, or the field editing them, and its tools under the pointer. */

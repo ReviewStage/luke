@@ -401,6 +401,7 @@ const DEQUEUE_QUESTION: DialogQuestion = {
   verb: BOX_WORDS.DEQUEUE,
   running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
   loss: CONFIRM_LOSS.AFFECTS_OTHERS,
+  replayUnmasked: true,
 };
 
 /**

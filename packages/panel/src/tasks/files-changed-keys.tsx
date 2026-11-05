@@ -15,6 +15,7 @@ import {
   SettingsSection,
   Shortcut,
 } from "@repo/ui";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useRef } from "react";
 
 /**
@@ -55,6 +56,7 @@ export function FilesChangedKeysSheet({
       open={open}
       title={SHEET_WORDS.TITLE}
       size={DIALOG_SIZE.WIDE}
+      replayUnmasked
       initialFocus={done}
       onDismiss={onDismiss}
       onKeyDown={(event) => {
@@ -65,7 +67,7 @@ export function FilesChangedKeysSheet({
       }}
       actions={
         <Button ref={done} onClick={onDismiss}>
-          {SHEET_WORDS.DONE}
+          <ReplayUnmask>{SHEET_WORDS.DONE}</ReplayUnmask>
         </Button>
       }
     >

@@ -170,6 +170,9 @@ function closeQuestion(item: InboxItem): DialogQuestion {
     verb: `Resolve ${TERM.INBOX_ITEM.one}`,
     running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    // Note that the title names the item.
+    titleReplayMasked: true,
   };
 }
 
@@ -187,6 +190,7 @@ export function closeAllQuestion(items: readonly InboxItem[]): DialogQuestion {
     verb: `Resolve ${TERM.INBOX_ITEM.many}`,
     running: "Resolving",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
   };
 }
 

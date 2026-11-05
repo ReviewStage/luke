@@ -5,6 +5,7 @@ import { noMatchWords, readingWords, TERM } from "@repo/features/words";
 import { SHORTCUT_KEY } from "@repo/settings/shortcuts";
 import { PlusIcon, Shortcut } from "@repo/ui";
 import { CommandDialog, type CommandGroup, type CommandItem } from "@repo/ui/command";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useEffect, useState } from "react";
 import { agentName, startsOwnAgents } from "./agent-model.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
@@ -68,7 +69,7 @@ function agentItem(
   return {
     id: agent.id,
     words: name,
-    label: name,
+    label: <ReplayMask>{name}</ReplayMask>,
     icon: <AgentGlyph agent={agent} />,
     detail: <RowDetail agent={agent} last={last} />,
     hint: agentEndMark(agent, true),
@@ -85,14 +86,14 @@ function agentItem(
 /** The keys' hints along the foot, each its chord and then its word, which a reader is not read. */
 function PickerFoot(): React.JSX.Element {
   return (
-    <>
+    <ReplayUnmask>
       <span aria-hidden="true">
         <Shortcut chord={{ key: SHORTCUT_KEY.ENTER, bare: true }} /> Open terminal
       </span>
       <span aria-hidden="true">
         <Shortcut chord={{ key: SHORTCUT_KEY.ESCAPE, bare: true }} /> Close
       </span>
-    </>
+    </ReplayUnmask>
   );
 }
 
@@ -187,6 +188,7 @@ export function TerminalPicker({
       }}
       label={PICKER_QUESTION}
       placeholder={PICKER_QUESTION}
+      replayUnmasked
       groups={groups}
       selected={selected}
       onSelectedChange={setSelected}
