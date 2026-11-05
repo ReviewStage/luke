@@ -146,7 +146,7 @@ export function useInviteDialog({
         <DialogActions
           onCancel={form.dismiss}
           act={{
-            verb: addresses.length > 1 ? `Invite ${addresses.length}` : "Invite",
+            verb: "Invite",
             tone: DIALOG_TONE.PRIMARY,
             running: "Inviting",
             ...form.act,

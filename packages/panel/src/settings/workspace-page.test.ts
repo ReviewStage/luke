@@ -2117,7 +2117,7 @@ test("an address the service would refuse is said under the field and nothing is
   assert.deepEqual(invitedAddresses(), ["alan@example.com"]);
 });
 
-test("several addresses typed at once are invited in turn, each once, and the act counts them", async () => {
+test("several addresses typed at once are invited in turn, each once", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
   act(() => button(page, "Invite").click());
   await settle();
@@ -2129,11 +2129,9 @@ test("several addresses typed at once are invited in turn, each once, and the ac
     );
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  const verb = inviteAct().textContent;
   act(() => inviteAct().click());
   await settle();
 
-  assert.equal(verb, "Invite 2");
   assert.deepEqual(invitedAddresses(), ["alan@example.com", "ada@example.com"]);
   assert.deepEqual(
     invitationRows(page).map((row) => addressOf(row)?.textContent),
