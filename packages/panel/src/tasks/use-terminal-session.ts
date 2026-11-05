@@ -179,8 +179,8 @@ function returnAction(state: TerminalState): TerminalAction | undefined {
 /**
  * Where a refusal leaves the tab: a stopped sandbox's bar, the wait for an
  * agent that has not opened its sandbox, or the bar that asks again for a
- * shell or agent not found or a sandbox that did not answer, saying
- * which; nothing for an agent archived or retired, whose tab closes, as its
+ * shell or agent not found, a sandbox that did not answer, or one whose
+ * saved files are gone, saying which; nothing for an agent archived or retired, whose tab closes, as its
  * Changes tab does.
  */
 function refusedState(refused: TerminalRefusal): TerminalState | undefined {
@@ -193,6 +193,8 @@ function refusedState(refused: TerminalRefusal): TerminalState | undefined {
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.NOT_FOUND };
     case TERMINAL_REFUSAL.SANDBOX_UNANSWERED:
       return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SANDBOX };
+    case TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE:
+      return { kind: TERMINAL_STATE.UNREACHABLE, why: TERMINAL_UNREACHED.SNAPSHOT_GONE };
     case TERMINAL_REFUSAL.GONE:
       return undefined;
   }

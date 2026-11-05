@@ -47,6 +47,8 @@ export const TERMINAL_UNREACHED = {
   SERVICE: "service",
   /** The service answered, and the agent's sandbox did not: Vercel Sandbox's API, or tmux in the sandbox. */
   SANDBOX: "sandbox",
+  /** The agent's sandbox can never resume: its snapshot is gone, its saved files with it. */
+  SNAPSHOT_GONE: "snapshot-gone",
   /** The service holds no such agent or shell for this account. */
   NOT_FOUND: "not-found",
   /** The deployment serves no terminal relay. */
@@ -109,6 +111,8 @@ const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as cons
 const UNREACHED_WORDS = {
   [TERMINAL_UNREACHED.SERVICE]: "The service did not answer.",
   [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
+  [TERMINAL_UNREACHED.SNAPSHOT_GONE]:
+    "The sandbox’s saved files are gone. The agent’s next message starts a fresh one.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Could not find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",
 } as const satisfies Record<TerminalUnreached, string>;

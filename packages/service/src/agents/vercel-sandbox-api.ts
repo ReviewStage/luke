@@ -184,6 +184,11 @@ export function sessionEnding(failure: { readonly _tag: string }): boolean {
   );
 }
 
+/** Whether a call failed because the snapshot its sandbox resumes or opens from is gone: one no retry mends, the sandbox's saved files lost with it. */
+export function snapshotGone(failure: { readonly _tag: string }): boolean {
+  return failure instanceof SandboxUnavailable && failure.status === SNAPSHOT_GONE_STATUS;
+}
+
 /** A sandbox as a list or a lookup names it: its name, where it stands, the session it runs while up, and its tags. */
 export interface ListedSandbox {
   readonly name: string;

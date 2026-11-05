@@ -293,6 +293,18 @@ it.effect(
     }),
 );
 
+it.effect("a resume whose snapshot is gone is given up on at once, saying so", () =>
+  Effect.gen(function* () {
+    const peer = yield* fakeCdpPeer();
+    const { service } = browserOver(peer, { status: "stopped", resumeUnavailable: 410 });
+
+    // Note that the clock never moves, so a resume tried again would never answer.
+    const unreachable = yield* Effect.flip(service.ensure(SESSION));
+
+    assert.equal(unreachable.reason, BROWSER_UNREACHABLE.SNAPSHOT_GONE);
+  }),
+);
+
 it.effect(
   "a bridge that never comes up is given up on within one bound, its attempts' timeouts never stacked",
   () =>
