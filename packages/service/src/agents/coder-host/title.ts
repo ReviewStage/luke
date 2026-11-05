@@ -78,8 +78,10 @@ const AGENT_TITLE = {
   MAX_OUTPUT_TOKENS: 64,
   /** How long the call may take before the agent goes untitled. */
   TIMEOUT: CODER.TITLE_TIMEOUT,
-  /** The least the model is asked to think, since a title is no reasoning task. */
+  /** The least effort the model is asked for, since a title is no reasoning task. */
   EFFORT: "low",
+  /** Anthropic's word for no thinking at all: Haiku thinks by default, and its thinking would spend the few output tokens a title has before any of its words. */
+  THINKING: "disabled",
   /** The most words of its first line a title falls back to where no model names it. */
   FALLBACK_WORDS: 6,
   /** The most of each message the call reads, which is enough to tell the task from. */
@@ -331,7 +333,9 @@ function generateAgentTitle(
       system: INSTRUCTIONS,
       prompt: named,
       maxOutputTokens: AGENT_TITLE.MAX_OUTPUT_TOKENS,
-      providerOptions: { anthropic: { effort: AGENT_TITLE.EFFORT } },
+      providerOptions: {
+        anthropic: { effort: AGENT_TITLE.EFFORT, thinking: { type: AGENT_TITLE.THINKING } },
+      },
     }),
   ).pipe(
     Effect.map((answer) => tidyAgentTitle(answer.text)),
