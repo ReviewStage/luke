@@ -55,7 +55,6 @@ import {
   DELETE_WORDS,
   openingLineOf,
   RENAME_FAILED,
-  type RefusingDevice,
   SERVERS_FAILED,
   type SentLine,
   START_FAILED_AWAY,
@@ -694,8 +693,9 @@ export function useAgents(input: {
   /**
    * Whether a Start runs on the open task though it names no repository:
    * where the service says such a Start runs, as it does in the local demo
-   * alone (the account's access), and the task's agents run on a host. None
-   * everywhere else, where a task naming no repository starts nothing.
+   * alone (the account's access), on a host, which the service holds it to
+   * as the Start lands. None everywhere else, where a task naming no
+   * repository starts nothing.
    */
   startsWithoutRepository?: boolean | undefined;
   /** How a task is worked, by its id, as the task list names it; none before the list names the task. */
@@ -732,8 +732,6 @@ export function useAgents(input: {
   keywords?: readonly string[];
   /** Mints one press's key. */
   mintKey?: () => string;
-  /** The device the open task runs its agents on, which a refused Start names; none for the cloud. */
-  device?: RefusingDevice | undefined;
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
   const { act } = input.acts;
@@ -954,7 +952,7 @@ export function useAgents(input: {
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
-      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
+      return { ...startFailureNote(answer, taskId), cause: answer };
     }
     pending.current = undefined;
     landed(taskId, answer.agent);
@@ -1260,8 +1258,7 @@ export function useAgents(input: {
       ...(choice === undefined ? undefined : choiceRequest(choice)),
       ...runsOnOf(runsOn),
     });
-    if ("failure" in answer)
-      return { ...startFailureNote(answer, taskId, input.device), cause: answer };
+    if ("failure" in answer) return { ...startFailureNote(answer, taskId), cause: answer };
     withDraft(taskId, undefined);
     writer.drop((place) => place.kind === DRAFT_PLACE.NEW_AGENT && place.draftId === draftId);
     landed(taskId, answer.agent);

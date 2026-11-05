@@ -13,7 +13,6 @@ import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { agentTable } from "../../schemas/agent.js";
 import { user } from "../../schemas/auth.js";
-import { task } from "../../schemas/task.js";
 import { CONVERSATION_RUNTIME } from "../../storage-vocabulary.js";
 import { DEVICE_LAYOUT, getTestDB, startTask } from "../../testing/index.js";
 import {
@@ -172,7 +171,7 @@ it.layer(getTestDB())("the host store", (it) => {
   );
 
   it.effect(
-    "a Mac's enroll folds the account's other Macs on its machine into it, moving their agents, the tasks that run on them, and the Runs on pick, retiring their runners, and removing them, never itself or a Linux box naming the machine",
+    "a Mac's enroll folds the account's other Macs on its machine into it, moving their agents and the Runs on pick, retiring their runners, and removing them, never itself or a Linux box naming the machine",
     () =>
       Effect.gen(function* () {
         const { owner } = yield* openAccounts;
@@ -184,7 +183,7 @@ it.layer(getTestDB())("the host store", (it) => {
           platform: DEVICE_PLATFORM.LINUX,
         });
         const runsOn = { machine: AGENT_MACHINE.DEVICE, deviceId: old.id } as const;
-        const started = yield* startTask(owner, { name: "Invitations", runsOn });
+        const started = yield* startTask(owner, { name: "Invitations" });
         const { agent } = Option.getOrThrow(
           yield* createAgent(owner, {
             taskId: started.id,
@@ -215,15 +214,11 @@ it.layer(getTestDB())("the host store", (it) => {
           .select({ deviceId: agentTable.deviceId })
           .from(agentTable)
           .where(eq(agentTable.id, agent.id));
-        const [movedTask] = yield* db
-          .select({ deviceId: task.deviceId })
-          .from(task)
-          .where(eq(task.id, started.id));
 
         assert.deepEqual(fresh.folded, [
           { conversationId: agent.conversationId, runningTurnIds: [] },
         ]);
-        assert.deepEqual([movedAgent?.deviceId, movedTask?.deviceId], [fresh.id, fresh.id]);
+        assert.equal(movedAgent?.deviceId, fresh.id);
         assert.ok(
           Option.isSome(launch) && launch.value.settled,
           "the agent's runner on the folded Mac reads as gone, so it launches again on the new one",

@@ -1053,25 +1053,24 @@ const IN_THE_CLOUD: StartMachine = { asked: { machine: AGENT_MACHINE.VERCEL } };
  * Where a Start that names no place and takes over from no agent runs its
  * agent, by its starter's account: where the starter's newest agent on the
  * task runs, never a teammate's, since a device is one member's; else where
- * the starter last named a place (`runs-on-pick.ts`); else where the task
- * runs; else the cloud. Note that an automation's run reads neither of the
- * starter's own, because no member is there to have chosen for it, so it
- * runs where its task does, as it always has.
+ * the starter last named a place (`runs-on-pick.ts`); else the cloud. A
+ * task holds no place of its own. Note that an automation's run reads
+ * neither of the starter's own and runs in the cloud, because no member is
+ * there to have chosen for it, and a Mac its owner last picked may be asleep
+ * when the run fires, which would fail the run rather than start it.
  */
 const defaultPlaceOf = Effect.fnUntraced(function* (
   userId: string,
   task: Task | undefined,
   automated: boolean,
 ): Effect.fn.Return<PlaceRead, HostedRefusal, DatabaseServices> {
-  if (!automated && task !== undefined) {
+  if (automated) return { machine: AGENT_MACHINE.VERCEL };
+  if (task !== undefined) {
     const newest = yield* hostedStoreOrUnavailable(readNewestAgentPlace(userId, task.id));
     if (Option.isSome(newest)) return newest.value;
   }
-  if (!automated) {
-    const pick = yield* hostedStoreOrUnavailable(readRunsOnPick(userId));
-    if (Option.isSome(pick)) return pick.value;
-  }
-  return task?.runsOn ?? { machine: AGENT_MACHINE.VERCEL };
+  const pick = yield* hostedStoreOrUnavailable(readRunsOnPick(userId));
+  return Option.getOrElse(pick, (): PlaceRead => ({ machine: AGENT_MACHINE.VERCEL }));
 });
 
 /**

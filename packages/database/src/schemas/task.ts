@@ -135,17 +135,14 @@ export const task = pgTable(
      */
     brief: text("brief"),
     /**
-     * Where the task's coding agents run (`AGENT_MACHINE`): a sandbox,
-     * every task from before the column among them, or the device
-     * `device_id` names. It decides where each agent started on the task
-     * afterwards runs, and an agent keeps where it started.
+     * Where the task's coding agents once ran (`AGENT_MACHINE`). A task
+     * holds no place now, each agent its own (`agent.machine`), so this
+     * column is no longer read or written, and a later migration drops it.
      */
     machine: text("machine").$type<AgentMachineKind>().notNull().default(AGENT_MACHINE.VERCEL),
     /**
-     * The device a task that runs on one names, one of the member's who set
-     * it, whose agents alone run there; null for a task in the cloud, and
-     * once that device's row is gone, where a start on the task is refused
-     * until it is set again.
+     * The device the task's coding agents once ran on. No longer read or
+     * written, as `machine` is not, and dropped by a later migration.
      */
     deviceId: uuid("device_id").references(() => device.id, { onDelete: "set null" }),
     /**

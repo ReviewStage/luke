@@ -693,10 +693,12 @@ or a host), chosen as it starts and kept for its life. A start may name the
 place; a continue or fork that names another place starts a new agent
 there, which is how work moves between them. A start that names none runs where the agent it continues or forks
 runs; else where the starter's newest agent on the task runs, never a
-teammate's; else where the starter last chose to run one; else where the
-task runs; else in the cloud. A device that is not the starter's, was
-removed, or is away refuses the start by name, and nothing moves it to the
-cloud on its own.
+teammate's; else where the starter last chose to run one; else in the
+cloud. An automation's run always runs in the cloud. A task holds no place
+of its own, a sub-task none of its parent's, so New task, New sub-task among
+it, draws the Runs on chip for the agent it starts like any other start. A
+device that is not the starter's, was removed, or is away refuses the start
+by name, and nothing moves it to the cloud on its own.
 
 While Bring your own host is on, an agent's ⋯ menu offers Move to ›: Cloud
 and each of the member's own devices, but not the place the agent runs now,

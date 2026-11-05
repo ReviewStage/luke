@@ -68,7 +68,6 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: HOSTED_HTTP_STATUS.UPGRADE_REQUIRED,
   [HOSTED_API_ERROR.DEVICE_REMOVED]: HOSTED_HTTP_STATUS.CONFLICT,
-  [HOSTED_API_ERROR.RUNS_ON_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -184,8 +183,6 @@ export const HOSTED_REFUSAL = {
   HOST_UPGRADE_NEEDED: { error: HOSTED_API_ERROR.HOST_UPGRADE_NEEDED },
   /** The agent ran on a host its starter removed; nothing was sent. */
   DEVICE_REMOVED: { error: HOSTED_API_ERROR.DEVICE_REMOVED },
-  /** Where a task runs is set when it is created (`taskRunsOnRequestSchema`); a change that names another is refused, nothing written. */
-  RUNS_ON_LOCKED: { error: HOSTED_API_ERROR.RUNS_ON_LOCKED },
   /** A child task works in its parent's repository; a create that names another is refused, nothing written. */
   CHILD_REPOSITORY_LOCKED: { error: HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED },
   /** A block asked for would close a cycle among the workspace's tasks; nothing was written. */

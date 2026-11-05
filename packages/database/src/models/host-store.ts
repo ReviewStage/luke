@@ -20,8 +20,7 @@
  * One Mac stands as one host. A Mac that joins again, after a reinstall,
  * a lost record, or a second sign-in's enroll, folds the account's other
  * listed Macs on the same machine into its own row (`folded`): their
- * agents, the tasks that run on them, and the account's Runs on pick move
- * to it, their open launches are settled, and they are removed as
+ * agents and the account's Runs on pick move to it, their open launches are settled, and they are removed as
  * Settings' Remove removes a host, in the join's own transaction. Only an
  * own enroll and a host's first register fold, never a later register, so
  * two hosts already running never remove each other; the account's joins
@@ -47,7 +46,6 @@ import { agentTable } from "../schemas/agent.js";
 import { device } from "../schemas/device.js";
 import { hostPairing } from "../schemas/host-pairing.js";
 import { accountPreference } from "../schemas/preferences.js";
-import { task } from "../schemas/task.js";
 import { runningTurnIds } from "./abandoned-turns.js";
 import { settleGoneDeviceAgentLaunches } from "./device-agent-store.js";
 import {
@@ -353,23 +351,6 @@ const moveAgents = SqlSchema.findAll({
     ),
 });
 
-/**
- * The tasks that run on the devices folded, run on the one they fold into.
- * Note that a task is read by its device alone, whoever made it, because
- * the devices are the account's own and a task names a device only of the
- * member who set it.
- */
-const moveTasks = SqlSchema.void({
-  Request: FoldSchema,
-  execute: ({ from, to }) =>
-    Database.use((db) =>
-      db
-        .update(task)
-        .set({ deviceId: to })
-        .where(inArray(task.deviceId, [...from])),
-    ),
-});
-
 /** The account's Runs on pick, where it names a device folded, naming the one they fold into. */
 const movePick = SqlSchema.void({
   Request: FoldSchema,
@@ -396,8 +377,7 @@ export interface FoldedAgent {
 /**
  * Folds the account's other listed Macs on the machine its standing Mac of
  * the id runs on into that Mac, on the transaction its caller holds: their
- * agents, the tasks that run on them, and the account's Runs on pick move
- * to it, the launches still open on them are settled and their agents'
+ * agents and the account's Runs on pick move to it, the launches still open on them are settled and their agents'
  * runner bearers retired as their runner gone, so a moved agent launches
  * again on the Mac rather than reading a runner there as live, and a runner
  * left on a folded device reaches none of its tools, and they are removed as `removeHost` removes one, their
@@ -417,7 +397,6 @@ const folded = (userId: string, id: string) =>
     if (removed.length === 0) return [];
     const fold = { userId, from: removed.map((row) => row.id), to: id };
     const moved = yield* moveAgents(fold);
-    yield* moveTasks(fold);
     yield* movePick(fold);
     yield* settleGoneDeviceAgentLaunches(userId, fold.from);
     // Note that the running turns are read before the fold commits, so a turn the device begins once it does is never among them.

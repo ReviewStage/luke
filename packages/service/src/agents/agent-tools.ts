@@ -704,7 +704,7 @@ const START_AGENT_INPUT = Schema.Struct({
         "With from, another place than that agent's moves it there. " +
         "Leave it out for where the agent it starts from runs, with from; else where the " +
         "member's newest agent on the task runs; else where the member last chose to run one; " +
-        "else where its task runs; else the cloud.",
+        "else the cloud.",
     ),
   ),
   from: Schema.optionalKey(
