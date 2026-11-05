@@ -690,8 +690,8 @@ developer starts one, watches it, stops it, and chooses what it runs on.
 
 Each agent runs in the cloud or on one of its starter's own devices (a Mac
 or a host), chosen as it starts and kept for its life. A start may name the
-place; one from another agent that names another place is how an agent
-moves. A start that names none runs where the agent it continues or forks
+place; a continue or fork that names another place starts a new agent
+there, which is how work moves between them. A start that names none runs where the agent it continues or forks
 runs; else where the starter's newest agent on the task runs, never a
 teammate's; else where the starter last chose to run one; else where the
 task runs; else in the cloud. A device that is not the starter's, was
@@ -753,7 +753,9 @@ Copy copies the new document.
 - **Loading a task.** The document region shows the failure and `Try again`.
 - **Start.** The service refuses to start an agent on a task with no
   repository (`no-repository`, 409), on one the Vespin GitHub App no longer
-  reaches for the workspace (`repository-not-reachable`, 403), and answers
+  reaches for the workspace (`repository-not-reachable`, 403), on a device
+  that is not the starter's, was removed, or is away ("Where an agent runs"
+  above), and answers
   `unavailable` where the agent's session could not be started; the reason is said
   under the composer that sent it, or on the window's toast for a start from
   the terminal picker. An agent that ends `failed` or
