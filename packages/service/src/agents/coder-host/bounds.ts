@@ -99,10 +99,19 @@ export const CODER = {
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
   /**
    * The share of the context window past which eve compacted a session,
-   * read by the agent's tab as the line its context ring turns red at. It
-   * was eve's own default; no harness is told it now.
+   * read by the agent's tab as the line a Codex or eve agent's context ring
+   * turns red at, and by a replay as the room it fits into. It was eve's
+   * own default; no harness is told it now.
    */
   COMPACTION_THRESHOLD_SHARE: 0.9,
+  /**
+   * What Claude Code holds back from the window before it compacts: the
+   * output it reserves, the lesser of the model's most output and 20K, which
+   * every model we offer it outputs more than, and its 13K buffer past
+   * that. Its own constants, read from the pinned binary; no harness is told
+   * them, so a bump of `CLAUDE_CODE_PIN` checks them again.
+   */
+  CLAUDE_CODE_COMPACTION_RESERVE_TOKENS: 20_000 + 13_000,
   /** Where the agent's checkout stands in its sandbox, which is where the brain's checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing, and how a pull request is told as an agent's (`isAgentBranch`). */

@@ -2,6 +2,7 @@ import type { DatabaseServices, QueryError } from "@repo/database/core/query";
 import {
   type Agent,
   type AgentDelegation,
+  type AgentRouting,
   awaitingLinesOf,
   delegationStartsOf,
   delegationsOf,
@@ -286,19 +287,24 @@ const windowListed = (offered: readonly OfferedModel[], modelId: string) => {
 
 /**
  * The agent's context as its row holds it, against the window the catalog
- * lists for the model and window the same read says it runs on now;
- * nothing before its first step, or where the catalog lists no window for
+ * lists for the model and window the same read says it runs on now, and
+ * the line its runtime compacts at; nothing before its first step, or where the catalog lists no window for
  * the model, since a fallback window would tell a share of a window the
  * model may not have. Note that the choice is read with the page rather than taken from
  * the agent the request read, because a change of model or window during
  * the hold is what the step this page carries ran on.
  */
-const contextOf = (held: Option.Option<HeldContext>, offered: readonly OfferedModel[]) =>
-  Option.isNone(held) || !windowListed(offered, held.value.model)
+const contextOf = (
+  held: Option.Option<HeldContext>,
+  routing: Option.Option<AgentRouting>,
+  offered: readonly OfferedModel[],
+) =>
+  Option.isNone(held) || Option.isNone(routing) || !windowListed(offered, held.value.model)
     ? undefined
     : agentContextOf(
         held.value,
         contextWindowOf(offered, held.value.model, held.value.contextWindow),
+        routing.value.runtime,
       );
 
 /** What a turn whose journal is on a page says of itself: when it began, and what it ran on and spent. */
@@ -491,13 +497,11 @@ const subagentStandingsOf = (
     }));
   });
 
-/** Who pays for the agent whose own transcript a page is, as its row records it; nothing on a worker's, or for an agent from before payers were recorded. */
-const payerOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
+/** How the agent whose own transcript a page is runs, as its row records it: what answers it and who pays for it; nothing on a worker's. */
+const routingOf = (target: ConversationTarget, own: OwnAgent | undefined) =>
   own === undefined
-    ? Effect.succeed(null)
-    : Effect.map(readAgentRouting(target.userId, own.id), (routing) =>
-        Option.isNone(routing) ? null : routing.value.payer,
-      );
+    ? Effect.succeed(Option.none<AgentRouting>())
+    : readAgentRouting(target.userId, own.id);
 
 /**
  * The page with what the agent has cost: every settled turn of its
@@ -520,12 +524,12 @@ const withUsage = (
 ): TranscriptEffect<TranscriptPage, ModelCatalog> =>
   Effect.gen(function* () {
     const catalog = yield* ModelCatalog;
-    const { rows, offered, payer, held, delegations, subagentTitles, subagents, queue, launch } =
+    const { rows, offered, routing, held, delegations, subagentTitles, subagents, queue, launch } =
       yield* Effect.all(
         {
           rows: turnUsagesOf(target.userId, target.conversationId),
           offered: catalog.read.pipe(Effect.orElseSucceed((): readonly OfferedModel[] => [])),
-          payer: payerOf(target, own),
+          routing: routingOf(target, own),
           held: heldContextOf(target, own),
           delegations:
             own !== undefined && WAITING_STATUSES.has(page.status)
@@ -552,10 +556,12 @@ const withUsage = (
       page.status === AGENT_STATUS.FAILED
         ? launchUnstartedOf(turn)
         : undefined;
+    // Note that an agent from before payers were recorded has none.
+    const payer = Option.isNone(routing) ? null : routing.value.payer;
     const priced = usageOfTurns(rows, offered);
     // Note that the payer rides on the usage, because the one line that draws a price is the one that says who paid.
     const usage = priced === undefined || payer === null ? priced : { ...priced, payer };
-    const context = contextOf(held, offered);
+    const context = contextOf(held, routing, offered);
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
