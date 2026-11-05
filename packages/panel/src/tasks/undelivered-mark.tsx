@@ -1,45 +1,62 @@
+import type { Failure } from "@repo/features/failure-remedy";
 import { FAILURE_CONDITION, FAILURE_SURFACE } from "@repo/features/shown-failure";
-import { FailureNote } from "@repo/ui";
+import { MessageFailedMark } from "@repo/ui";
+import { GLYPH } from "@repo/ui/icons";
 import { createContext, type ReactNode, useContext } from "react";
 import { failureShown } from "../failure-report.js";
 
 /**
- * undelivered-mark.tsx -- the quiet mark under a line the developer sent that did not go: "Not delivered" where the agent refused it for good, "Not sent" with Retry where it was refused for now, each a `FailureNote`.
+ * undelivered-mark.tsx -- the red alert beside a line the developer sent that did not go, and the "Not delivered" its time is led by, as a chat app marks a message that did not go: refused for now, its menu offers Retry, Edit, and Delete; refused for good, it says why.
  *
- * A message to an agent whose session has ended is refused, and its box
- * closes on it (`use-agent-composer.ts`). The line stays in the transcript
- * where it went rather than vanishing, its words not drawn again in the
- * closed box, and wears this mark under its bubble, so the developer sees
- * what did not go and carries it on with Continue in new agent. A message
- * refused for now while the developer had already written on in the box
- * keeps its words on its line the same way, and its mark offers Retry,
- * which sends it again where it stands. The note stands directly under the
- * bubble, and the line marked so fades its bubble and its files
- * (`useLineMarked`, `tasks.css`'s `.is-user[data-undelivered]`). The tab hands its transcript the
- * lines so marked (`SentLineMarks`), by the id each was drawn under, and
+ * A message refused for now stays in the transcript where it went rather
+ * than coming back into the box (`use-agent-composer.ts`), its bubble faded,
+ * a red alert at its side (`MessageFailedMark`), and its time led by "Not
+ * delivered" in the danger tone (`MessageLine`'s `status`), so one glyph and
+ * one word say it without a row of buttons under every such line. The
+ * alert's menu is headed by why it did not go and offers Retry, which sends
+ * it again as the newest line, Edit, which takes its words back into the
+ * box, and Delete, each on that line alone, as a chat app's do. A message
+ * to an agent whose session has ended is refused for good, and its box
+ * closes on it: its line is marked the same way, its menu saying why with
+ * nothing to press, since Continue in new agent carries its words on. The
+ * line marked so fades its bubble and its files (`useLineMarked`,
+ * `tasks.css`'s `.is-user[data-undelivered]`). The tab hands its transcript
+ * the lines so marked (`SentLineMarks`), by the id each was drawn under, and
  * the lines still on their way, whose files are drawn going up.
  */
 
-/** What the marks say. */
+/** What a line that did not go says, on its time line and as its alert's name. */
 const UNDELIVERED_WORDS = "Not delivered";
-const UNSENT_WORDS = "Not sent";
 
-/** The lines of a transcript that did not go, by the id each was drawn under, and the Retry of one refused for now. */
+/** The acts a line refused for now offers, in its alert's menu. */
+const ACT_WORDS = { RETRY: "Retry", EDIT: "Edit", DELETE: "Delete" } as const;
+
+/** The lines of a transcript that did not go, by the id each was drawn under, why, and the acts on one refused for now. */
 interface SentLineMarks {
   /** The lines the agent refused for good. */
   readonly undelivered: ReadonlySet<string>;
-  /** The lines refused for now that keep their words, each offering Retry. */
+  /** Why the agent refused them for good, the box's own reason as it closed; none while it takes messages. */
+  readonly closed: string | undefined;
+  /** The lines refused for now, each offering Retry, Edit, and Delete. */
   readonly unsent: ReadonlySet<string>;
+  /** Why each line refused for now did not go, by its id. */
+  readonly notes: ReadonlyMap<string, Failure>;
   /** The lines on their way, whose row has not been read back yet. */
   readonly sending: ReadonlySet<string>;
   readonly retry: (id: string) => void;
+  readonly takeBack: (id: string) => void;
+  readonly drop: (id: string) => void;
 }
 
 const NO_MARKS: SentLineMarks = {
   undelivered: new Set(),
+  closed: undefined,
   unsent: new Set(),
+  notes: new Map(),
   sending: new Set(),
   retry: () => undefined,
+  takeBack: () => undefined,
+  drop: () => undefined,
 };
 
 const MarksContext = createContext<SentLineMarks>(NO_MARKS);
@@ -86,38 +103,61 @@ export function useLineSending(messageId: string): boolean {
   return useContext(MarksContext).sending.has(messageId);
 }
 
-/** Whether the line drawn under `messageId` did not go, which its mark says under it and its bubble wears faded. */
+/** Whether the line drawn under `messageId` did not go, which its mark says beside it and its bubble wears faded. */
 export function useLineMarked(messageId: string): boolean {
   const marks = useContext(MarksContext);
   return marks.undelivered.has(messageId) || marks.unsent.has(messageId);
 }
 
-/** The mark under a line that did not go; nothing under any other. */
+/** What the time under a line that did not go is led by; nothing under any other. */
+export function useLineStatus(messageId: string): string | undefined {
+  return useLineMarked(messageId) ? UNDELIVERED_WORDS : undefined;
+}
+
+/** The red alert beside a line that did not go, its menu saying why and offering what mends it; nothing beside any other. */
 export function UndeliveredMark({ messageId }: { messageId: string }): ReactNode {
   const marks = useContext(MarksContext);
   if (marks.undelivered.has(messageId)) {
     return (
-      <FailureNote
+      <MessageFailedMark
+        label={UNDELIVERED_WORDS}
+        reason={marks.closed ?? UNDELIVERED_WORDS}
+        groups={[]}
         failure={failureShown({
           surface: FAILURE_SURFACE.AGENT_SEND,
           cause: lineCause(messageId, FAILURE_CONDITION.REFUSED),
           refused: true,
         })}
-      >
-        {UNDELIVERED_WORDS}
-      </FailureNote>
+      />
     );
   }
   if (!marks.unsent.has(messageId)) return null;
   return (
-    <FailureNote
+    <MessageFailedMark
+      label={UNDELIVERED_WORDS}
+      reason={marks.notes.get(messageId)?.text ?? UNDELIVERED_WORDS}
+      groups={[
+        [
+          { label: ACT_WORDS.RETRY, icon: <GLYPH.RETRY />, onSelect: () => marks.retry(messageId) },
+          {
+            label: ACT_WORDS.EDIT,
+            icon: <GLYPH.RENAME />,
+            onSelect: () => marks.takeBack(messageId),
+          },
+        ],
+        [
+          {
+            label: ACT_WORDS.DELETE,
+            icon: <GLYPH.DELETE />,
+            danger: true,
+            onSelect: () => marks.drop(messageId),
+          },
+        ],
+      ]}
       failure={failureShown({
         surface: FAILURE_SURFACE.AGENT_SEND,
         cause: lineCause(messageId, FAILURE_CONDITION.NOT_KEPT),
       })}
-      onRetry={() => marks.retry(messageId)}
-    >
-      {UNSENT_WORDS}
-    </FailureNote>
+    />
   );
 }

@@ -31,7 +31,7 @@ const DETAILS_WHAT = "details";
  * The details of `failure` as it stands on screen, said shown once it
  * stands and anew only for another failure, or nothing until they are read.
  */
-function useFailureDetails(failure: ReportedFailure | undefined): string | undefined {
+export function useFailureDetails(failure: ReportedFailure | undefined): string | undefined {
   const [read, setRead] = useState<{
     readonly of: ReportedFailure;
     readonly details: string | undefined;
