@@ -885,7 +885,7 @@ test("in a narrow room a task opened from a list lands on its plan, its Overview
   }
 });
 
-test("a task opened from a list opens on the agent waiting on the developer rather than the tab it last showed, and one with no agent left on its Overview", () => {
+test("a task opened from a list or a chip naming it opens on its plan, even with an agent at work and another waiting on the developer", () => {
   const WAITING = "1b2c3d4e-5f60-4718-8293-a4b5c6d7e8f9";
   // The row names one agent at work and one resting, the resting one's thread waiting on the developer.
   const named = namingRow([AGENT_ID, WAITING], 2);
@@ -920,16 +920,12 @@ test("a task opened from a list opens on the agent waiting on the developer rath
 
   act(() => tab.control().onSelect(TASK.id));
   tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
-  assert.deepEqual(
-    tab.control().mainTabs.tab,
-    { agent: WAITING },
-    "the agent waiting, past the one at work",
-  );
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a list, its plan");
 
-  tab.stand({ tasks: elsewhere([row(TASK.id, 1)]), inboxWaiting: [] });
-  act(() => tab.control().onSelect(TASK.id));
-  tab.stand({ tasks: { ...OPEN, tasks: [row(TASK.id, 1)] } });
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "Overview, where New agent is");
+  tab.stand({ tasks: elsewhere([waitingRow]) });
+  act(() => tab.control().onShowMention({ kind: MENTION_KIND.TASK, taskId: TASK.id }));
+  tab.stand({ tasks: { ...OPEN, tasks: [waitingRow] } });
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.OVERVIEW, "from a chip, its plan");
 });
 
 test("in a narrow room Back to a task opens it as it stood, its panel open on the tab it showed, where a task opened from a list lands on its plan", async () => {

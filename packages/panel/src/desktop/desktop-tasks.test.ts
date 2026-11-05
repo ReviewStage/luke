@@ -542,7 +542,7 @@ test("a plan's document opens on its path, its repository as plain words, then i
   container.remove();
 });
 
-test("a sub-task's row opens the task where it was left, as a sidebar row does, never a link to its Overview", () => {
+test("a sub-task's row opens the task as a sidebar row does, never a link to its Overview", () => {
   fakeAppPlatform(QUIET_PANEL);
   fakeAppBridge({});
   fakeActPort({});
@@ -583,7 +583,7 @@ test("a sub-task's row opens the task where it was left, as a sidebar row does, 
               workspaces: [home],
               workspace: home,
               sidePanel: DOCUMENT_PANEL,
-              onResume: (taskId) => selected.push(taskId),
+              onSelect: (taskId) => selected.push(taskId),
             }),
           }),
         ),
@@ -593,7 +593,7 @@ test("a sub-task's row opens the task where it was left, as a sidebar row does, 
   const row = container.querySelector<HTMLElement>(`[data-task-id='${child.id}']`);
   act(() => row?.querySelector<HTMLButtonElement>("[data-card-press]")?.click());
 
-  assert.deepEqual(selected, [child.id], "the task opens on the tab it was left on");
+  assert.deepEqual(selected, [child.id], "the task opens through the one task door");
   assert.deepEqual(linked, [], "no link to its Overview is followed");
   act(() => root.unmount());
   container.remove();
