@@ -125,7 +125,8 @@ test("a press on the agent that showed the version opens its tab, on the page's 
   assert.deepEqual(opened, [{ kind: LINK_PLACE.AGENT, planId: TASK, agentId }]);
 });
 
-test("the preview's page is handed the window's theme when it asks, as its tab is", () => {
+test("the preview's page is handed the window's theme when it asks, with the room its tab keeps", () => {
+  document.documentElement.style.setProperty("--ui-page-inset", "24px");
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -145,5 +146,8 @@ test("the preview's page is handed the window's theme when it asks, as its tab i
       new MessageEvent("message", { data: { type: "app-page-theme-ask" }, source: framed }),
     );
   });
-  assert.equal(answer.mock.calls[0]?.[0]?.type, "app-page-theme");
+  const answered = answer.mock.calls[0]?.[0];
+  document.documentElement.style.removeProperty("--ui-page-inset");
+  assert.equal(answered?.type, "app-page-theme");
+  assert.equal(answered?.inset, "24px", "the tab's room, not the words' none");
 });
