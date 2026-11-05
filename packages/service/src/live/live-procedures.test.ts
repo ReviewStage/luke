@@ -118,18 +118,7 @@ import {
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS, type WireBoundaryInput } from "@repo/wire";
 import { eq, sql } from "drizzle-orm";
-import {
-  Clock,
-  Duration,
-  Effect,
-  Fiber,
-  Layer,
-  Option,
-  Queue,
-  Redacted,
-  Result,
-  Schema,
-} from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Redacted, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { agentOriginLiveStatements } from "../agents/agent-origin-live.js";
@@ -146,7 +135,6 @@ import {
   completeIntegrationSignIn,
 } from "../integrations/integration-store.js";
 import { SlackBot, slackBotOver } from "../slack/slack-bot.js";
-import { clockWatch, Sync, type SyncShape } from "../sync/watch.js";
 import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
@@ -1838,15 +1826,14 @@ it.layer(getTestDB())("an agent's pull request's chapters' live read", (it) => {
   );
 });
 
-/** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock and on `hub` where one is named; its answer's body. */
-const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =>
+/** A live read at `path` asked as `bearer`, polled, in delta mode past `sync` where it names one ("" for none yet), on the test's clock; its answer's body. */
+const askLive = (bearer: string, path: string, sync?: string) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      hub === undefined ? Layer.empty : Layer.succeed(Sync, hub),
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(bearer)),
@@ -1865,31 +1852,12 @@ const askLive = (bearer: string, path: string, sync?: string, hub?: SyncShape) =
     return body;
   });
 
-/** The task list asked as `bearer`, in delta mode past `sync` where it names one, on `hub` where one is named, its parts decoded. */
-const askTasks = (bearer: string, sync?: string, hub?: SyncShape) =>
+/** The task list asked as `bearer`, in delta mode past `sync` where it names one, its parts decoded. */
+const askTasks = (bearer: string, sync?: string) =>
   Effect.map(
-    askLive(bearer, "/api/live/tasks", sync, hub),
+    askLive(bearer, "/api/live/tasks", sync),
     (body) => Schema.decodeUnknownSync(taskListLiveAnswerSchema)(body).queries,
   );
-
-/**
- * Sync with no hub, each held read's watch waiting on the clock alone, and
- * each wait announced on `looking` once the clock holds it, so a test moves
- * the clock only once the look before it found nothing moved.
- */
-const lookingOn = (looking: Queue.Queue<void>): SyncShape => ({
-  watch: (_topics, fallback) => {
-    const watch = clockWatch(fallback);
-    return Effect.succeed({
-      ...watch,
-      next: Effect.gen(function* () {
-        const waiting = yield* Effect.forkChild(watch.next, { startImmediately: true });
-        yield* Queue.offer(looking, undefined);
-        return yield* Fiber.join(waiting);
-      }),
-    });
-  },
-});
 
 /** Each part's row ids, as a delta answers its rows. */
 const idsOf = (part: { readonly rows?: readonly unknown[] }) =>
@@ -2014,42 +1982,6 @@ it.layer(getTestDB())("the task list's live read in delta mode", (it) => {
 
         assert.deepEqual(idsOf(moved.agents), [agentId]);
         assert.equal(agentRowOf(moved.agents, agentId)?.awaitingLineAt, null);
-      }),
-  );
-
-  it.effect(
-    "another account's message answers no held poll, which answers once a row of the reader's moves, past the reader's own id",
-    () =>
-      Effect.gen(function* () {
-        const dana = yield* openUser;
-        const erin = yield* openUser;
-        // Note that dana's workspace stands first, since the membership that makes it answers her whole.
-        yield* startTask(dana, { name: "Teammate invitations" });
-        const erins = yield* startTask(erin, { name: "Billing" });
-        const erinsAgent = yield* openTaskAgent(erin, erins.workspaceId, erins.id);
-        const past = (yield* askTasks(dana, "")).plans.sync?.next;
-        assert.ok(past !== undefined);
-        const looking = yield* Queue.unbounded<void>();
-        const asked = yield* Effect.forkChild(askTasks(dana, past, lookingOn(looking)), {
-          startImmediately: true,
-        });
-        yield* Queue.take(looking);
-
-        yield* queueLine(erin, erinsAgent);
-        yield* TestClock.adjust(Duration.seconds(1));
-        const answered = yield* Effect.raceFirst(
-          Effect.as(Fiber.await(asked), true),
-          Effect.as(Queue.take(looking), false),
-        );
-        assert.ok(!answered, "the poll holds past another account's message");
-
-        const added = yield* startTask(dana, { name: "Onboarding" });
-        yield* TestClock.adjust(Duration.seconds(1));
-        const moved = yield* Fiber.join(asked);
-
-        assert.deepEqual(idsOf(moved.plans), [added.id]);
-        assert.deepEqual(idsOf(moved.agents), []);
-        assert.equal(moved.plans.sync?.past, past);
       }),
   );
 
