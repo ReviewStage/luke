@@ -8,7 +8,7 @@ import {
   PlusIcon,
   useMenu,
 } from "@repo/ui";
-import { ReplayUnmask } from "@repo/ui/session-replay-marks";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { UsersIcon } from "lucide-react";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -49,7 +49,11 @@ function workspaceMenuGroups(
       label: workspace.name,
       key: workspace.id,
       replayMasked: true,
-      icon: <WorkspaceTile workspace={workspace} />,
+      icon: (
+        <ReplayMask>
+          <WorkspaceTile workspace={workspace} />
+        </ReplayMask>
+      ),
       detail: sharedWords(workspace.memberCount, workspace.id === first),
       card: <WorkspaceCard workspace={workspace} personal={workspace.id === first} />,
       checked: workspace.id === listed.id,

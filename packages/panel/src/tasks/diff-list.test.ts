@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { getSharedHighlighter } from "@pierre/diffs";
 import {
   DIFF_FONT,
   DIFF_INDICATORS,
@@ -8,7 +9,6 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@repo/settings/diff-view";
-import { getSharedHighlighter } from "@pierre/diffs";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";

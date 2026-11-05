@@ -10,6 +10,7 @@ import {
   useMenu,
 } from "@repo/ui";
 import { ACTOR_KIND, type Actor, actorName, creatorActor, memberActor } from "@repo/ui/actor-model";
+import { ReplayMask } from "@repo/ui/session-replay-marks";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -95,7 +96,11 @@ function assignedToChoices(
   });
   // Note that a member is keyed by their id and Me and Anyone are not, so only a member's name is masked.
   return [
-    ...people.map((item) => (item.key === undefined ? item : { ...item, replayMasked: true })),
+    ...people.map((item) =>
+      item.key === undefined
+        ? item
+        : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
+    ),
     ...memberReadNotice(reader),
   ];
 }

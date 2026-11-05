@@ -504,8 +504,12 @@ function standingSubmenus(
     // Note that the members a task may be assigned are named by their own names, kept masked in a screen recording.
     {
       ...assigned,
+      // Note that a member's face draws their initial as words, so the glyph is masked with the name.
+      ...(assigned.icon === undefined ? {} : { icon: <ReplayMask>{assigned.icon}</ReplayMask> }),
       items: assigned.items.map((item, at) =>
-        assignees[at]?.id === NO_ASSIGNEE ? item : { ...item, replayMasked: true },
+        assignees[at]?.id === NO_ASSIGNEE
+          ? item
+          : { ...item, replayMasked: true, icon: <ReplayMask>{item.icon}</ReplayMask> },
       ),
     },
   ];

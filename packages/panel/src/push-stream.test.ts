@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/message-port";
 import { LINK_PLACE } from "@repo/features/link-grammar";
 import {
   type ActSender,
@@ -8,8 +10,6 @@ import {
 } from "@repo/host/act-port";
 import { PUSH } from "@repo/host/contract";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
 import { Context } from "effect";
 import { afterEach, it } from "vitest";
 import { openPushStream } from "./app-bridge.js";
