@@ -17,6 +17,7 @@ import {
   withoutAccessTokens,
 } from "@repo/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@repo/features/sentry-tracing";
+import { SENTRY_TUNNEL } from "@repo/features/sentry-tunnel";
 import { sendShownFailure } from "@repo/features/shown-failure";
 import { appStateNow } from "@repo/panel/use-app-state";
 import {
@@ -108,11 +109,14 @@ function accountId(): string | undefined {
  * failure the panel showed is sent as a log line, and as an issue besides
  * where nothing named it (`@repo/features/shown-failure`). Each event and log
  * line names the account signed in as it leaves, by its id alone, as
- * Sentry's user (`@repo/features/sentry-account`).
+ * Sentry's user (`@repo/features/sentry-account`). Every envelope is posted
+ * to a path on the tab's own origin, which passes it on to Sentry, because
+ * tracker blockers refuse Sentry's own host (`@repo/features/sentry-tunnel`).
  */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({
     dsn: build.dsn,
+    tunnel: SENTRY_TUNNEL.PATH,
     environment: build.environment,
     ...(build.release ? { release: build.release } : undefined),
     integrations: [
