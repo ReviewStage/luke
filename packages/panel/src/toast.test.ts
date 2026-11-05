@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   FAILURE_CONDITION,
   FAILURE_SURFACE,
@@ -9,7 +10,7 @@ import {
 } from "@repo/features/shown-failure";
 import { IDLE_TASKS_VIEW, type TasksPinParams, type TasksView } from "@repo/features/tasks-view";
 import { STATUS_TONE } from "@repo/ui";
-import { Duration } from "effect";
+import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,7 +30,7 @@ import {
   useWorkingToast,
 } from "./toast.js";
 import { pressRows, ROW_WRITE, undoLast } from "./undo-stack.js";
-import { appStateNow } from "./use-app-state.js";
+import { appStateFirstRead, appStateNow } from "./use-app-state.js";
 
 /**
  * toast.test.ts -- the window's toasts against the window they stand in: a
@@ -429,18 +430,22 @@ test("a failure toast for a hosted call that never answered reports what the hos
   );
 });
 
-test("while the app does not reach the service, a failure toast nothing named is not shown, and a refusal still is", async () => {
-  handState({}, { network: { online: true, reachable: false } });
-  appStateNow();
-  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-  assert.equal(appStateNow()?.network.reachable, false, "the window read the document");
-  mount(WINDOW.TALL);
+it.effect(
+  "while the app does not reach the service, a failure toast nothing named is not shown, and a refusal still is",
+  () =>
+    Effect.gen(function* () {
+      handState({}, { network: { online: true, reachable: false } });
+      // Note that we wait on the read itself, because it lands after a fiber's hops a busy runner can stretch past any one tick.
+      yield* Effect.orDie(appStateFirstRead);
+      assert.equal(appStateNow()?.network.reachable, false, "the window read the document");
+      mount(WINDOW.TALL);
 
-  act(() => show?.(unheardStop()));
-  act(() => show?.(refusedStart()));
+      act(() => show?.(unheardStop()));
+      act(() => show?.(refusedStart()));
 
-  assert.deepEqual(standing(), ["Messages are limited to 20,000 characters."]);
-});
+      assert.deepEqual(standing(), ["Messages are limited to 20,000 characters."]);
+    }),
+);
 
 test("an unexpected failure toast's Copy details copies what its report sent, with its issue's event id, and a refusal's toast offers no copy", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
