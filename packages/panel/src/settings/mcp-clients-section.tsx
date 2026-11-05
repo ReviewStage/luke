@@ -224,7 +224,7 @@ function ClientRow({
         confirm={confirm}
         question={{
           title: `Revoke ${name}?`,
-          body: `${name} can no longer use your ${PRODUCT_NAME} account. Access it already holds stops working within ${MCP_ACCESS_TOKEN_MINUTES} minutes. To use it again, connect it and allow it again.`,
+          body: `${name} can no longer use your ${PRODUCT_NAME} account. Access it already holds stops working within ${MCP_ACCESS_TOKEN_MINUTES} minutes.`,
           verb: "Revoke agent",
           running: "Revoking",
           loss: CONFIRM_LOSS.AFFECTS_OTHERS,
