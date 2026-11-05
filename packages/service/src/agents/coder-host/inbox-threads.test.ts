@@ -937,6 +937,8 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           "a key a message holds names that message, never a nod",
         );
         assert.equal(yield* status, INBOX_STATUS.OPEN);
+        const written = Option.getOrThrow(yield* readInboxItem(agent.userId, notice.id)).item;
+        yield* later;
 
         const key = randomUUID();
         const nodded = Option.getOrThrow(
@@ -945,6 +947,11 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         assert.deepEqual(
           [nodded.status, nodded.answeredBy?.userId, nodded.revision],
           [INBOX_STATUS.ANSWERED, teammate, notice.revision],
+        );
+        assert.equal(
+          nodded.updatedAt,
+          written.updatedAt,
+          "a nod writes nothing on the thread, so the item keeps the age of what was last written there",
         );
         assert.match(nodded.txid ?? "", /^\d+$/u, "the nod is taken in a transaction to wait for");
         assert.ok(

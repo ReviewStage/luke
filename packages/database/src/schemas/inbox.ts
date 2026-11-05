@@ -94,7 +94,7 @@ export const inboxItem = pgTable(
      * write that keeps the old instant here (`inbox-store.ts`).
      */
     settledAt: timestamptz("settled_at"),
-    /** When the item last changed, by the agent, an answer, or a message on its thread. */
+    /** When the item last changed, by the agent, an answer, or a message on its thread; a nod on a notice moves only `settledAt`. */
     updatedAt: timestamptz("updated_at").notNull(),
     /**
      * The instant every member without a read marker of their own

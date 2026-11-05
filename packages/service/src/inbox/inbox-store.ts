@@ -2172,7 +2172,11 @@ const answerItem = SqlSchema.findOneOption({
  * (`withdrawInboxAnswer`, `withdrawInboxMessage`); its id and the
  * transaction that wrote it, or nothing where the item is no open notice
  * the member reaches at the revision they were shown, so a nod on what came
- * before never settles a notice posted since.
+ * before never settles a notice posted since. Note that it moves the item's
+ * settled instant and not its last change, because a nod (which opening a
+ * notice sends) writes nothing on the thread: the row keeps the age of what
+ * was last written there, and the item neither climbs the list nor reads
+ * unread again for every other member.
  */
 const acknowledgeNotice = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -2192,7 +2196,6 @@ const acknowledgeNotice = SqlSchema.findOneOption({
           answerKey,
           answeredBy: userId,
           settledAt: now,
-          updatedAt: now,
           openAskMessageId: null,
         })
         .where(
@@ -3212,7 +3215,7 @@ export function acknowledgeInboxItem(
         if (yield* keyTaken(itemId, answerKey)) return Option.none();
         const nodded = yield* acknowledgeNotice({ userId, itemId, revision, answerKey, now });
         if (Option.isNone(nodded)) return Option.none();
-        // The member's own nod leaves the item read for them, and unread for every other member.
+        // The member's own nod leaves the item read for them.
         yield* upsertRead({ userId, itemId });
         const { txid } = nodded.value;
         return Option.map(yield* findItem({ userId, itemId }), (row) => ({
