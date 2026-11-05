@@ -5,6 +5,7 @@ import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js"
 import type { RepositorySnapshotSweepOutcome } from "../agents/repository-snapshot.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
+import { GitHubBackground } from "../github/github-rate-gate.js";
 import type { TokenPullRequestSweepOutcome } from "../github/token-pull-request-sweep.js";
 import {
   bearerMatchesSecret,
@@ -250,10 +251,13 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
     // an issue on a sweep that keeps failing, while the sweeps after it ran and the answer says which.
     const ran: MaintenanceSweepAnswer | SweepsFailed = yield* options.monitor
       .run(
-        Effect.flatMap(sweepAll(options), (answer) =>
-          Object.values(answer).some((swept) => swept === SWEEP_FAILED)
-            ? Effect.fail(new SweepsFailed({ answer }))
-            : Effect.succeed(answer),
+        // Note that no member waits on a sweep, so what it asks GitHub waits in the background lane (`github-rate-gate.ts`).
+        Effect.flatMap(
+          sweepAll(options).pipe(Effect.provideService(GitHubBackground, true)),
+          (answer) =>
+            Object.values(answer).some((swept) => swept === SWEEP_FAILED)
+              ? Effect.fail(new SweepsFailed({ answer }))
+              : Effect.succeed(answer),
         ),
       )
       .pipe(

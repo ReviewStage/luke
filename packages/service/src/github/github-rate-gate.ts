@@ -38,7 +38,10 @@
  * lanes and the spacing are the instance's alone, so each instance sends one
  * request at a time per identity: every installation shares the App's lane,
  * which is the throughput GitHub's guidance trades for staying under its
- * secondary limit.
+ * secondary limit. Work no member waits on, a webhook's deliveries and the
+ * minute sweep, says so (`GitHubBackground`) and waits in a lane of its own
+ * beside the identity's, so a member's read is never queued behind a burst
+ * of it: an identity has at most two requests out at once, one of each.
  */
 
 import { createHash } from "node:crypto";
@@ -49,7 +52,7 @@ import {
   liftGitHubRateHold,
   readGitHubRateHold,
 } from "@repo/database/models/github-rate-holds";
-import { Clock, Duration, Effect, Layer, Option, Semaphore } from "effect";
+import { Clock, Context, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -69,6 +72,11 @@ const GATE = {
 } as const;
 
 const GITHUB_API_HOST = "api.github.com";
+
+/** Whether the GitHub requests made under it are work no member waits on, which waits in a lane of its own; not unless said. */
+export const GitHubBackground = Context.Reference<boolean>("@repo/service/GitHubBackground", {
+  defaultValue: () => false,
+});
 
 /** The statuses GitHub answers a rate limit with. */
 const RATE_LIMIT_STATUS = { FORBIDDEN: 403, TOO_MANY_REQUESTS: 429 } as const;
@@ -252,6 +260,7 @@ export const githubRateGate: Layer.Layer<
     const nextWrite = new Map<string, number>();
     const writers = new Map<string, Lane>();
     const senders = new Map<string, Lane>();
+    const backgroundSenders = new Map<string, Lane>();
 
     const remembered = (identity: string, now: number, hold: Hold | undefined) =>
       Effect.sync(() => {
@@ -429,23 +438,22 @@ export const githubRateGate: Layer.Layer<
       // instance's own hold is read first, and the shared one only where
       // that holds nothing.
       const writes = MUTATIVE_METHODS.has(request.method);
-      const gated = inLane(
-        senders,
-        identity,
-        Effect.gen(function* () {
-          const now = yield* Clock.currentTimeMillis;
-          const local = holds.get(identity);
-          const held =
-            local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
-          if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
-          // Note that a write books its start only now, as it is sent, so a
-          // write that waited for its lane still starts a second after the
-          // last; one held, or given up on before this, books nothing.
-          if (writes) started(identity, yield* Clock.currentTimeMillis);
-          const response = yield* sent;
-          yield* noted(identity, response);
-          return response;
-        }),
+      const send = Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const local = holds.get(identity);
+        const held =
+          local !== undefined && now < local.until ? local : yield* sharedHold(identity, now);
+        if (held !== undefined && now < held.until) return heldAnswer(request, held.until - now);
+        // Note that a write books its start only now, as it is sent, so a
+        // write that waited for its lane still starts a second after the
+        // last; one held, or given up on before this, books nothing.
+        if (writes) started(identity, yield* Clock.currentTimeMillis);
+        const response = yield* sent;
+        yield* noted(identity, response);
+        return response;
+      });
+      const gated = Effect.flatMap(Effect.service(GitHubBackground), (background) =>
+        inLane(background ? backgroundSenders : senders, identity, send),
       );
       // Note that a write waits its turn before it takes the lane, and reads the hold after, so the wait holds no lane and misses no hold set meanwhile.
       return writes ? inTurn(identity, gated) : gated;
