@@ -291,7 +291,7 @@ export const RUN_ON_MAC_REASON_WORDS = {
   [RUN_ON_MAC_REASON.SETTINGS_OFF]: { short: "Off in Settings" },
   [RUN_ON_MAC_REASON.MAC_AWAY]: {
     short: "No Mac listening",
-    detail: `${PRODUCT_NAME} isn't open on the Mac this agent's commands run on, its task assignee's, or it stopped listening.`,
+    detail: `${PRODUCT_NAME} isn't open on the Mac this agent's commands run on, or it stopped listening.`,
   },
 } as const satisfies Record<RunOnMacReason, RunOnMacReasonWords>;
 

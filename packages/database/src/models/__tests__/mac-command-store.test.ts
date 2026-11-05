@@ -45,7 +45,6 @@ import {
   claimMacCommand,
   claimMacCommands,
   heardFromAnotherAccount,
-  heardFromAnyoneBut,
   macCommandResult,
   macCommandsLiveStatement,
   macCommandsWaiting,
@@ -388,37 +387,6 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
         assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
       }
     }),
-  );
-
-  it.effect(
-    "a session handed to a teammate who wrote in it holds no one else's words, until a third account's line",
-    () =>
-      Effect.gen(function* () {
-        const { starter, teammate, workspace } = yield* people;
-        const { owner: third } = yield* openAccounts;
-        const agent = yield* openAgent(starter, workspace);
-        const target = { userId: starter, conversationId: agent.conversationId };
-        yield* sendLine(starter, agent.conversationId, 1, {
-          kind: MESSAGE_SENDER.MEMBER,
-          userId: starter,
-        });
-        yield* sendLine(starter, agent.conversationId, 2, {
-          kind: MESSAGE_SENDER.MEMBER,
-          userId: teammate,
-        });
-        const theirs = yield* openAgent(teammate, workspace);
-        yield* sendLine(starter, agent.conversationId, 3, {
-          kind: MESSAGE_SENDER.AGENT,
-          agentId: theirs.id,
-        });
-        assert.equal(yield* heardFromAnyoneBut(target, teammate), false, "the two who worked it");
-        assert.equal(yield* heardFromAnyoneBut(target, starter), true, "kept by its owner");
-        yield* sendLine(starter, agent.conversationId, 4, {
-          kind: MESSAGE_SENDER.MEMBER,
-          userId: third,
-        });
-        assert.equal(yield* heardFromAnyoneBut(target, teammate), true, "a third member's line");
-      }),
   );
 
   it.effect(

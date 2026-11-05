@@ -22,13 +22,12 @@ import {
   isNull,
   lt,
   ne,
-  notInArray,
   notLike,
   or,
   type SQL,
   sql,
 } from "drizzle-orm";
-import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
@@ -299,11 +298,6 @@ const ForeignLineSchema = Schema.Struct({
   shown: Schema.Boolean,
 });
 
-/** That an account other than the owner's wrote a line or owns the agent that did, and other than the one the conversation is handed to where it is handed on: a member's id, or an agent's owner's. */
-function anotherAccounts(column: AnyPgColumn, userId: string, besides: string | null): SQL {
-  return besides === null ? ne(column, userId) : notInArray(column, [userId, besides]);
-}
-
 /**
  * The first line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
@@ -336,13 +330,9 @@ function anotherAccounts(column: AnyPgColumn, userId: string, besides: string | 
  * it to a turn (`writer.ts`'s `withdrawUntakenLine`).
  */
 const findForeignLine = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    besides: Schema.NullOr(Schema.String),
-  }),
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: ForeignLineSchema,
-  execute: ({ userId, conversationId, besides }) =>
+  execute: ({ userId, conversationId }) =>
     Database.use((db) =>
       db
         .select({
@@ -368,17 +358,11 @@ const findForeignLine = SqlSchema.findOneOption({
             or(
               and(
                 eq(messages.sender, MESSAGE_SENDER.MEMBER),
-                or(
-                  isNull(messages.senderUserId),
-                  anotherAccounts(messages.senderUserId, userId, besides),
-                ),
+                or(isNull(messages.senderUserId), ne(messages.senderUserId, userId)),
               ),
               and(
                 eq(messages.sender, MESSAGE_SENDER.AGENT),
-                or(
-                  isNull(sendingAgent.userId),
-                  anotherAccounts(sendingAgent.userId, userId, besides),
-                ),
+                or(isNull(sendingAgent.userId), ne(sendingAgent.userId, userId)),
               ),
               and(
                 eq(messages.sender, MESSAGE_SENDER.AUTOMATION),
@@ -483,25 +467,7 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
  * counted, because no other account wrote it.
  */
 export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
-  return Effect.map(findForeignLine({ ...target, besides: null }), Option.isSome);
-}
-
-/**
- * Whether the conversation, handed on to the account given, holds words
- * anyone but its owner and that account put into it, as
- * `heardFromAnotherAccount` counts them: what a continue of it hands its
- * new agent as outside words. Note that the owner's words are the hand-over
- * itself, which its recipient takes on as their own, and the recipient's
- * were never another's, so a session two members worked in passes to either
- * with its Mac still its own; a third member's line, another account's
- * agent's, or an automation's, GitHub's, or Slack's outside words still
- * count.
- */
-export function heardFromAnyoneBut(
-  target: ConversationTarget,
-  recipientUserId: string,
-): TaskStoreEffect<boolean> {
-  return Effect.map(findForeignLine({ ...target, besides: recipientUserId }), Option.isSome);
+  return Effect.map(findForeignLine(target), Option.isSome);
 }
 
 /**

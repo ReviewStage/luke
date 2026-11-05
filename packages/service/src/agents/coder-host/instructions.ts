@@ -593,10 +593,10 @@ function toolsOn(tools: ToolWords, machine: CoderMachine): ToolWords {
 
 /**
  * What a cloud agent is told of the developer's Mac: what `run_on_mac`
- * reaches, and whose Mac it is, its task's assignee's (`mac-command.ts`).
- * A local agent is told none of it, since it is offered no `run_on_mac`.
+ * reaches. A local agent is told none of it, since it is offered no
+ * `run_on_mac`.
  */
-const RUN_ON_MAC_WORDS = `\`${CODER_TOOL.RUN_ON_MAC}\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers. It runs on the Mac of the member your task is assigned to, or of the developer who started you where your task is assigned to no one or you work on none.`;
+const RUN_ON_MAC_WORDS = `\`${CODER_TOOL.RUN_ON_MAC}\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.`;
 
 /** Where a local agent run straight on its device runs, and what of it it reaches. */
 const DEVICE_DIRECT_WORDS =

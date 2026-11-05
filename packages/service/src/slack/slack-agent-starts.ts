@@ -102,7 +102,7 @@ import {
   type RunSlackDelivery,
 } from "@repo/database/models/automation-store";
 import { readConversationPicture } from "@repo/database/models/conversation-pictures";
-import { heardFromAnyoneBut } from "@repo/database/models/mac-command-store";
+import { heardFromAnotherAccount } from "@repo/database/models/mac-command-store";
 import { readMessageByClientId } from "@repo/database/models/message-reads";
 import {
   claimSlackThreadTurn,
@@ -632,9 +632,7 @@ function continuedReply(link: string): SlackMessageContent {
  * The ended agent continued in a new one as the member, as Continue and
  * `start_agent`'s `from` continue it: handed its work and its transcript, the
  * steps that do not fit summarized, with the member's message as its note
- * and the images it shared as the note's files. Its Mac is the member's
- * unless the source heard from an account other than its owner's and the
- * member's (`heardFromAnyoneBut`), since the member takes the session on.
+ * and the images it shared as the note's files.
  * The thread moves to it, the message is marked heard, and one line in the
  * thread links it; a refusal is said instead.
  */
@@ -648,10 +646,10 @@ const continueFromSlack = Effect.fnUntraced(function* (
   attachments: readonly AgentAttachment[],
 ) {
   const thread = threadOf(addressed);
-  const outside = yield* heardFromAnyoneBut(
-    { userId: source.userId, conversationId: source.conversationId },
-    userId,
-  );
+  const outside = yield* heardFromAnotherAccount({
+    userId: source.userId,
+    conversationId: source.conversationId,
+  });
   const environment = yield* HostedEnvironment;
   const summaryModel: SummaryModelOf = (owner, chosen, effort) =>
     productionSummaryModel(owner, chosen, effort).pipe(
@@ -667,7 +665,7 @@ const continueFromSlack = Effect.fnUntraced(function* (
       attachments,
       from: { agentId: source.id },
       summaryModel,
-      // Note that the replay hands on what the source heard, so words a third account put there stay outside words.
+      // Note that the replay hands on whatever the source heard, so words another account put there stay outside words.
       carried: slackLine(addressed, permalink, outside),
       serverWords: addressed.text,
     }),
