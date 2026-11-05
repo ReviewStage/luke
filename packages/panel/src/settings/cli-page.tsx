@@ -26,10 +26,6 @@ import {
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
-  TEXT_ELEMENT,
-  TEXT_FONT,
-  TEXT_VARIANT,
-  Text,
   TIME_LOOK,
   Time,
   useConfirmDialog,
@@ -76,7 +72,8 @@ const SECTION_TITLE = {
 
 const PAGE_LINE = {
   INSTALL_LABEL: `Install the ${PRODUCT_NAME.toLowerCase()} command`,
-  INSTALL_WORDS: `Use ${PRODUCT_NAME} from your terminal and your agents. Then run `,
+  INSTALL_HERE: "On this Mac, or with npm anywhere.",
+  INSTALL_NPM: "With npm, on Node 20 or later.",
   INSTALL: "Install",
   REINSTALL: "Reinstall",
   INSTALLING: "Installing the command-line tool",
@@ -100,15 +97,6 @@ function pageSkeleton(installs: boolean): readonly SettingsSectionSkeletonShape[
     },
     { headed: true, rows: [{ described: true, controls: [] }] },
   ];
-}
-
-/** A command set as code inside a row's words. */
-function CommandWords({ children }: { children: string }): React.JSX.Element {
-  return (
-    <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
-      {children}
-    </Text>
-  );
 }
 
 /** The install row's line once the command is installed: its version, and where the shell will not find it, that its folder needs adding. */
@@ -148,10 +136,11 @@ function InstallSection({ installs }: { installs: boolean }): React.JSX.Element 
         label={PAGE_LINE.INSTALL_LABEL}
         description={
           installed === undefined ? (
-            <>
-              {PAGE_LINE.INSTALL_WORDS}
-              <CommandWords>{CLI_COMMAND.LOGIN}</CommandWords>.
-            </>
+            installs ? (
+              PAGE_LINE.INSTALL_HERE
+            ) : (
+              PAGE_LINE.INSTALL_NPM
+            )
           ) : (
             <InstalledLine version={installed.version} onPath={installed.onPath} />
           )
