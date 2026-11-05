@@ -32,7 +32,8 @@ import type { AgentDraft } from "./use-agents.js";
  * the member's newest agent on the task runs, a teammate's newer one aside,
  * and a send left on it names no place, leaving it to the service; a place
  * picked is sent with the start; a continue's draft starts on its source's
- * place and sends a pick with the continue. With the experiment off no chip
+ * place, named as the source names it where the member's list does not, and
+ * sends a pick with the continue. With the experiment off no chip
  * stands and a send names no place, one picked before among them.
  * Synthetic throughout.
  */
@@ -188,6 +189,20 @@ test("a continue's draft starts on its source's place, and a place picked is sen
   await tab.pick("Studio");
   await tab.send();
   assert.deepEqual(tab.forks, [{ machine: AGENT_MACHINE.DEVICE, deviceId: STUDIO }]);
+});
+
+test("a continue of a teammate's agent on their own device names that device, which the member's list does not, rather than Cloud", async () => {
+  const theirs: AgentSummary = {
+    ...agent("1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d24", TEAMMATE, 4, false),
+    machine: AGENT_MACHINE.DEVICE,
+    mac: { name: "Dana's Mac mini", deviceId: "9a7d3c1e-4b2f-4e6a-8c5d-1f3b5d7e9a20" },
+  };
+  const tab = await mount({ ...DRAFT, prompt: "", fork: continueFork(theirs.id) }, [
+    ...AGENTS,
+    theirs,
+  ]);
+
+  assert.equal(tab.chip()?.getAttribute("aria-label"), "Runs on: Dana's Mac mini");
 });
 
 test("with Bring your own host off no Runs on stands, and a send names no place, one picked before among them", async () => {
