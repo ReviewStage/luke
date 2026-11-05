@@ -558,19 +558,34 @@ interface PendingStart {
   choice: ModelChoice | undefined;
 }
 
-/** Starts a new agent on the open task from one of its agents' whole transcript, with the developer's words and the files attached to them as its note where given; answers why it did not start, or nothing once it did. */
+/**
+ * Starts a new agent on the open task from one of its agents' whole
+ * transcript, with the developer's words and the files attached to them as
+ * its note where given, and where `runsOn` names, which moves the agent
+ * there (`move-agent.tsx`); answers why it did not start, or nothing once
+ * it did.
+ */
 export type AgentContinuer = (
   agentId: string,
   note?: string,
   attachments?: readonly AgentAttachment[],
+  runsOn?: AgentRunsOnRequest,
 ) => Promise<Failure | undefined>;
 
-/** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, and the note and files it carried. */
+/** A continue on its way or asked again: the task or the page's agent it was pressed on, the key the press minted, the note and files it carried, and where it moves the agent, if anywhere. */
 interface PendingContinue {
   on: string;
   key: string;
   note: string | undefined;
   attachments: readonly AgentAttachment[];
+  runsOn: AgentRunsOnRequest | undefined;
+}
+
+/** Whether two presses name the same place, or both none. */
+function samePlace(a: AgentRunsOnRequest | undefined, b: AgentRunsOnRequest | undefined): boolean {
+  const deviceOf = (place: AgentRunsOnRequest | undefined) =>
+    place !== undefined && "deviceId" in place ? place.deviceId : undefined;
+  return a?.machine === b?.machine && deviceOf(a) === deviceOf(b);
 }
 
 /** Whether two presses carry the same files, the same ones in the same order. */
@@ -947,9 +962,9 @@ export function useAgents(input: {
   };
 
   // Note that a press carries the key its agent's last press minted while the
-  // service has not answered it and the words and files are the same, so a
-  // press asked again opens the agent the first may already have started.
-  const continueAgent: AgentContinuer = async (sourceId, note, attachments = []) => {
+  // service has not answered it and the words, files, and place are the same,
+  // so a press asked again opens the agent the first may already have started.
+  const continueAgent: AgentContinuer = async (sourceId, note, attachments = [], runsOn) => {
     if (startsOn === undefined || !startsFrom) return undefined;
     const held = continues.current.get(sourceId);
     const carried = note !== undefined || attachments.length > 0 ? (note ?? "") : undefined;
@@ -957,29 +972,36 @@ export function useAgents(input: {
       held !== undefined &&
       held.on === startsOn &&
       held.note === carried &&
-      sameFiles(held.attachments, attachments)
+      sameFiles(held.attachments, attachments) &&
+      samePlace(held.runsOn, runsOn)
         ? held.key
         : mintKey();
-    continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments });
+    continues.current.set(sourceId, { on: startsOn, key, note: carried, attachments, runsOn });
     const answer = await askStart(startsOn, {
       idempotencyKey: key,
       from: { agentId: sourceId },
       ...(carried === undefined ? undefined : { note: carried }),
       ...(attachments.length === 0 ? undefined : { attachments }),
+      ...(runsOn === undefined ? undefined : { runsOn }),
     });
     if ("failure" in answer) {
       // Only a service that never answered is asked again under the same key.
       if (answer.failure !== AGENT_CALL_FAILURE.UNANSWERED) {
         continues.current.delete(sourceId);
       }
-      if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
-        failed(START_FAILED_AWAY, {
-          surface: FAILURE_SURFACE.AGENT_START,
-          cause: answer,
-          about: { agentId: sourceId },
-        });
+      const refused = continueFailureNote(answer, taskId ?? null);
+      const shown = {
+        surface: FAILURE_SURFACE.AGENT_START,
+        cause: answer,
+        about: { agentId: sourceId },
+      };
+      // Note that a move is chosen from a menu, which has no line beside it to say why, so its
+      // refusal is said in a toast wherever the developer stands.
+      if (runsOn !== undefined) failed(refused.text, shown);
+      else if ((latest.current.taskId ?? latest.current.agentId) !== startsOn) {
+        failed(START_FAILED_AWAY, shown);
       }
-      return continueFailureNote(answer, taskId ?? null);
+      return refused;
     }
     continues.current.delete(sourceId);
     landed(startsOn, answer.agent);

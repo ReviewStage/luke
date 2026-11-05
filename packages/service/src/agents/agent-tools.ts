@@ -701,6 +701,7 @@ const START_AGENT_INPUT = Schema.Struct({
       `Where the agent runs: ${IN_THE_CLOUD_WORDS} for the cloud, or ` +
         `${JSON.stringify({ machine: AGENT_MACHINE.DEVICE, deviceId: "<id>" })} for one of the ` +
         "member's own devices (a Mac or a host) by its id, which must be registered and online. " +
+        "With from, another place than that agent's moves it there. " +
         "Leave it out for where the agent it starts from runs, with from; else where the " +
         "member's newest agent on the task runs; else where the member last chose to run one; " +
         "else where its task runs; else the cloud.",

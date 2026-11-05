@@ -157,11 +157,11 @@ function offerUnready(
   }
 }
 
-/** A device's row past its name: its platform's glyph wearing one dot, its words on hover and to a reader, for every device alike; one that takes no agent is dimmed and unpicked too, its dot saying why. */
-function offerMarks(
+/** A device as a list of places draws it: its platform's glyph wearing one dot, its words on hover and to a reader, and why it takes no agent now, none where it does. */
+export function deviceMark(
   device: MacOffer,
   book: PresenceBook,
-): Pick<MenuRow, "icon" | "disabled" | "why"> {
+): { readonly icon: React.JSX.Element; readonly unready: string | undefined } {
   const unready = offerUnready(device, book);
   const standing = offerStanding(device, book);
   const tone = unready?.tone ?? STANDING_TONE[standing];
@@ -171,9 +171,16 @@ function offerMarks(
       <DeviceGlyph device={device} />
     </StatusGlyph>
   );
-  return unready === undefined
-    ? { icon }
-    : { icon, disabled: unready.words, why: MENU_ROW_WHY.MARK };
+  return { icon, unready: unready?.words };
+}
+
+/** A device's row past its name, for every device alike (`deviceMark`); one that takes no agent is dimmed and unpicked too, its dot saying why. */
+function offerMarks(
+  device: MacOffer,
+  book: PresenceBook,
+): Pick<MenuRow, "icon" | "disabled" | "why"> {
+  const { icon, unready } = deviceMark(device, book);
+  return unready === undefined ? { icon } : { icon, disabled: unready, why: MENU_ROW_WHY.MARK };
 }
 
 /** Cloud, then each device by what the list calls it, its platform's glyph wearing its standing's dot, one that takes no agent muted and unpicked. */

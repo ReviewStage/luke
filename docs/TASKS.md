@@ -698,6 +698,18 @@ task runs; else in the cloud. A device that is not the starter's, was
 removed, or is away refuses the start by name, and nothing moves it to the
 cloud on its own.
 
+While Bring your own host is on, an agent's ⋯ menu offers Move to ›: Cloud
+and each of the member's own devices, but not the place the agent runs now,
+a device that takes no agent now dimmed and saying why. It stands only
+where Continue in new agent could run: on an agent at rest, not archived,
+that the open task's tab or the agent's own page lists, on a task whose mode
+offers it a continue. A pick is that continue at the place picked: the
+source stops, a new agent named `<title> (continued)` starts there on its
+transcript, and its tab opens. A cloud agent's work comes along whole, what
+it had not committed included, on a branch of its own; from a device only
+what it pushed comes along, which each place says, and its folder stays on
+that device. A move that is refused says why in a toast.
+
 ## Copy
 
 The developer chooses `Copy plan` from the ⋯ menu, or presses ⌥⌘C on the
