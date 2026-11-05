@@ -1,5 +1,10 @@
 /**
- * task-create-relation.ts -- the relation a start makes its task in, confirmed before the start writes and written beside it in the start's own transaction.
+ * task-create-relation.ts -- a task made for a member, as every door makes one, with the relations it starts in, confirmed before it writes and written beside it in its own transaction.
+ *
+ * `createTaskAsked` is the one make: the app's New task (`plans.create`),
+ * an agent's or a member's `create_task`, and the task `start_agent` makes
+ * for an agent on no task all make theirs through it, so one rule holds
+ * for each. Each door reads its own input and answers in its own words.
  *
  * A task may start related to others (`taskCreateRequestSchema`'s
  * `relations`, or an agent's `create_task`'s one `relation`, from the new
@@ -20,6 +25,7 @@
  */
 
 import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import { recordRevision } from "@repo/database/models/plan-revisions";
 import {
   addTaskBlock,
   lockTasksForBlocks,
@@ -42,13 +48,24 @@ import {
   type TaskParentUnreached,
   type TaskStartCommitted,
 } from "@repo/database/models/task-store";
+import { GITHUB_ACCESS, type GitHubAccess } from "@repo/features/github-repositories-wire";
 import {
   TASK_CREATE_RELATION_KIND,
   type TaskBlockRelation,
   type TaskCreateRelation,
 } from "@repo/features/task-wire";
 import { Data, Effect, Option } from "effect";
+import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import {
+  recordServerEvent,
+  SERVER_EVENT,
+  type SERVER_TASK_SOURCE,
+} from "../events/server-events.js";
+import type { GitHubApp } from "../github/github-app.js";
+import { workspaceRepository } from "../github/workspace-repository.js";
+import type { HostedRefusal } from "../http/http-effect.js";
+import { taskParentOf } from "./task-parent.js";
 
 /** The other task a start's relation names is none the maker reaches in the workspace the task starts in; nothing was written. */
 class TaskRelationUnreached extends Data.TaggedError("TaskRelationUnreached") {}
@@ -267,3 +284,128 @@ export function createTaskRelated(
     ),
   );
 }
+
+/** Who a task's first plan is written by, as its history names them. */
+type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
+
+/** A task as a door asks for it: `NewTask`'s fields, the repository as named, the assignee null for no one, and the relations it starts in. */
+export type TaskCreateAsked = Omit<NewTask, "repository" | "githubAccess" | "assigneeId"> & {
+  readonly id?: string;
+  /** The repository named, null for none; left out where none is named, which a task in a tree takes from the tree. */
+  readonly repository?: string | null;
+  /** The member it is assigned to, null for no one; left out for its parent's, or no one at the top. */
+  readonly assigneeId?: string | null;
+  readonly relations: readonly TaskCreateRelation[];
+  /** Who the plan's text is written by, as its first revision names them, where the task starts with text. */
+  readonly writer?: RevisionWriter;
+};
+
+/** A task a make answered: as a start answers it, with the repository it records and how it was reached. */
+export interface TaskCreated extends TaskStartCommitted {
+  readonly repository: string | null;
+  readonly githubAccess: GitHubAccess;
+}
+
+/**
+ * Makes the task `userId` asked for in its workspace, the one make every
+ * door shares, each door holding who may ask for what first. A task made
+ * as a child of another, by `parentTaskId` or a relation as its sub-task,
+ * takes its parent's repository and, where it names no assignee, its
+ * parent's (`taskParentOf`), refused where it names another repository; one
+ * made as others' parent takes their repository, which the tree shares, and
+ * one blocking or blocked by others takes nothing of them (`relationsAsked`).
+ * The repository is confirmed through the workspace's installation, or
+ * else the member's own token. The task, its plan's first revision where
+ * it starts with text, and every relation are one write
+ * (`createTaskRelated`), so one refused makes nothing. A make under an id
+ * that made its task already answers that task, unmade, and counts none.
+ */
+export const createTaskAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  asked: TaskCreateAsked,
+  source: (typeof SERVER_TASK_SOURCE)[keyof typeof SERVER_TASK_SOURCE],
+): Effect.fn.Return<
+  TaskCreated,
+  StoreFailure | HostedRefusal | TaskAssigneeNotMember | TaskIdTaken | TaskCreateRelationRefused,
+  GitHubApp | HttpClient.HttpClient | DatabaseServices
+> {
+  const {
+    relations,
+    writer,
+    organizationId,
+    repository,
+    assigneeId: assigneeAsked,
+    ...fields
+  } = asked;
+  // A start as a sub-task of a task is a start under that parent, which `parentTaskId` names as well.
+  const parentTaskId =
+    asked.parentTaskId ??
+    relations.find((relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF)?.taskId;
+  const parent =
+    parentTaskId === undefined
+      ? undefined
+      : yield* taskParentOf(userId, organizationId, parentTaskId, repository);
+  // A task's children share its parent's repository, so a start under a parent holds them to that one.
+  const beside = yield* relationsAsked(
+    userId,
+    organizationId,
+    relations,
+    parent === undefined ? repository : parent.repository,
+  );
+  const childOf = beside.find((each) => each.kind === TASK_CREATE_RELATION_KIND.PARENT_OF);
+  // A task in a tree works in the tree's repository: its parent's as a child, and its children's as a parent.
+  const named =
+    parent !== undefined
+      ? parent.repository
+      : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
+        ? childOf.repository
+        : repository;
+  const reached =
+    named === undefined || named === null
+      ? { repository: null, githubAccess: GITHUB_ACCESS.APP }
+      : yield* Effect.map(workspaceRepository(organizationId, named, userId), (each) => ({
+          repository: each.repository.fullName,
+          githubAccess: each.access,
+        }));
+  const assigneeId = assigneeAsked === undefined ? parent?.assigneeId : assigneeAsked;
+  const started = {
+    ...fields,
+    organizationId,
+    ...reached,
+    ...(assigneeId === null || assigneeId === undefined ? undefined : { assigneeId }),
+    ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+  };
+  const text = started.text ?? "";
+  const write = createTaskRelated(userId, started, beside);
+  // The task and its plan's first revision land together, so a make run again at once makes one task.
+  const created =
+    text === "" || writer === undefined
+      ? yield* write
+      : yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+          client.withTransaction(
+            Effect.tap(write, (made) =>
+              made.made
+                ? recordRevision({
+                    taskId: made.task.task.id,
+                    writer,
+                    userId,
+                    before: "",
+                    after: text,
+                    changes: 1,
+                    savedBefore: Option.none(),
+                  })
+                : Effect.void,
+            ),
+          ),
+        );
+  if (created.made) {
+    yield* recordServerEvent(
+      SERVER_EVENT.TASK_CREATE,
+      { userId, workspaceId: organizationId },
+      {
+        source,
+      },
+    );
+  }
+  return { ...created, ...reached };
+});

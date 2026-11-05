@@ -1,6 +1,9 @@
-import type { DatabaseServices } from "@repo/database/core/query";
-import { recordRevision } from "@repo/database/models/plan-revisions";
-import { createTaskOnce, readTask } from "@repo/database/models/task-store";
+import type { DatabaseServices, StoreFailure } from "@repo/database/core/query";
+import {
+  readTask,
+  type TaskAssigneeNotMember,
+  type TaskIdTaken,
+} from "@repo/database/models/task-store";
 import { AGENT_KIND } from "@repo/features/agent-wire";
 import { githubRepositoryFullNameSchema } from "@repo/features/github-repositories-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -11,8 +14,6 @@ import {
   TASK_MODE,
   TASK_PRIORITY,
   TASK_STATUS,
-  type Task,
-  type TaskCreateRelation,
   type TaskOrigin,
   taskModeSchema,
   taskPrioritySchema,
@@ -20,16 +21,19 @@ import {
 } from "@repo/features/task-wire";
 import { describeWire } from "@repo/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
-import { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
-import { relationAsked, relationWritten } from "../tasks/task-create-relation.js";
-import { taskParentOf } from "../tasks/task-parent.js";
+import { SERVER_TASK_SOURCE } from "../events/server-events.js";
+import type { HostedRefusal } from "../http/http-effect.js";
+import {
+  createTaskAsked,
+  type TaskCreateAsked,
+  type TaskCreateRelationRefused,
+} from "../tasks/task-create-relation.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import {
   AGENT_TOOL_REFUSAL,
@@ -43,7 +47,7 @@ import {
   callerWorkspace,
   cutOnLine,
   orStoreRefusal,
-  reachedRepository,
+  repositoryRefusalWords,
   TASK_PRIORITY_WORDS,
   taskStandingOf,
   workedRepository,
@@ -310,7 +314,7 @@ function planTextOf(plan: string): string {
 }
 
 /** Who a task's first plan is written by, as its history names them: the calling coding agent, or the member calling, as the developer. */
-function revisionWriterOf(call: AgentCall): RevisionWriter {
+function revisionWriterOf(call: AgentCall): NonNullable<TaskCreateAsked["writer"]> {
   const agent = callerAgent(call.caller);
   return agent === undefined
     ? { actor: PLAN_ACTOR.DEVELOPER }
@@ -323,50 +327,53 @@ function originOf(call: AgentCall): { readonly origin?: TaskOrigin } {
   return agent === undefined ? {} : { origin: { actor: PLAN_ACTOR.AGENT, agentId: agent.id } };
 }
 
-/** Who a revision is written by, as the history keeps it. */
-type RevisionWriter = Parameters<typeof recordRevision>[0]["writer"];
-
-/** The parent a make names, confirmed (`taskParentOf`), or why it makes nothing, in words the model can act on. */
-const parentOf = (
-  userId: string,
-  workspaceId: string,
-  parentTaskId: string,
-  repository: string | null | undefined,
-) =>
-  taskParentOf(userId, workspaceId, parentTaskId, repository).pipe(
-    Effect.catchTag("TaskParentUnreached", () => Effect.succeed(CREATE_TASK_REFUSAL.NO_PARENT)),
-    Effect.catchTag("TaskParentRepositoryDiffers", () =>
-      Effect.succeed(CREATE_TASK_REFUSAL.PARENT_REPOSITORY),
-    ),
-  );
-
-/** The relation a make names other than a sub-task's, confirmed (`relationAsked`), or why it makes nothing, in words the model can act on. */
-const besideOf = (
-  userId: string,
-  workspaceId: string,
-  relation: TaskCreateRelation,
-  repository: string | null | undefined,
-) =>
-  relationAsked(userId, workspaceId, relation, repository).pipe(
-    Effect.catchTag("TaskRelationUnreached", () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED)),
-    Effect.catchTag("TaskParentRepositoryDiffers", () =>
-      Effect.succeed(CREATE_TASK_REFUSAL.CHILD_REPOSITORY),
-    ),
-  );
-
-/** Why a make took itself back, nothing written, in words the model can act on: an assignee who is no member, or a relation its rules refused (`relationWritten`). */
-const MADE_REFUSAL_OF = {
-  TaskAssigneeNotMember: () => Effect.succeed(CREATE_TASK_REFUSAL.NOT_MEMBER),
-  TaskParentHeld: () => Effect.succeed(CREATE_TASK_REFUSAL.PARENT_HELD),
-  TaskParentRepositoryDiffers: () => Effect.succeed(CREATE_TASK_REFUSAL.CHILD_REPOSITORY),
-  TaskParentCycle: () => Effect.succeed(CREATE_TASK_REFUSAL.RELATION_CYCLE),
-  TaskBlockCycle: () => Effect.succeed(CREATE_TASK_REFUSAL.RELATION_CYCLE),
-  // The other task gone out of reach since it was read, and the store's own holds, read as none to relate to.
-  TaskRelationUnreached: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
-  TaskParentUnreached: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
-  TaskBlockSelf: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
-  TaskBlockAcrossWorkspaces: () => Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED),
-} as const;
+/**
+ * Why the make made nothing (`createTaskAsked`), in words the model can act
+ * on; a store failure is left to `orStoreRefusal`. Note that a call naming a
+ * parent names no other relation, so the parent's refusals are told apart
+ * from a relation's by whether the call named one.
+ */
+const madeRefusal =
+  (parentNamed: boolean) =>
+  (
+    failure:
+      | HostedRefusal
+      | TaskAssigneeNotMember
+      | TaskIdTaken
+      | TaskCreateRelationRefused
+      | StoreFailure,
+  ): Effect.Effect<string, StoreFailure> => {
+    if (!("_tag" in failure)) return Effect.succeed(repositoryRefusalWords(failure));
+    switch (failure._tag) {
+      case "TaskAssigneeNotMember":
+        return Effect.succeed(CREATE_TASK_REFUSAL.NOT_MEMBER);
+      case "TaskParentHeld":
+        return Effect.succeed(CREATE_TASK_REFUSAL.PARENT_HELD);
+      case "TaskParentRepositoryDiffers":
+        return Effect.succeed(
+          parentNamed
+            ? CREATE_TASK_REFUSAL.PARENT_REPOSITORY
+            : CREATE_TASK_REFUSAL.CHILD_REPOSITORY,
+        );
+      case "TaskParentCycle":
+      case "TaskBlockCycle":
+        return Effect.succeed(CREATE_TASK_REFUSAL.RELATION_CYCLE);
+      case "TaskParentUnreached":
+        return Effect.succeed(
+          parentNamed ? CREATE_TASK_REFUSAL.NO_PARENT : CREATE_TASK_REFUSAL.NO_RELATED,
+        );
+      // The other task gone out of reach since it was read, and the store's own holds, read as none to relate to.
+      case "TaskRelationUnreached":
+      case "TaskBlockSelf":
+      case "TaskBlockAcrossWorkspaces":
+        return Effect.succeed(CREATE_TASK_REFUSAL.NO_RELATED);
+      // The id is drawn from the member's own key, so a task another holds under it is the store breaking.
+      case "TaskIdTaken":
+        return Effect.succeed(AGENT_TOOL_REFUSAL.STORE);
+      default:
+        return Effect.fail(failure);
+    }
+  };
 
 /** One call of `create_task`: a task made in the caller's workspace for its member, once under the call's key. */
 export function runCreateTask(
@@ -407,100 +414,51 @@ export function runCreateTask(
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       const naming = yield* workspaceNamingOf(userId, workspace.value);
-      const answer = (task: Task) => ({
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        task: {
-          id: task.id,
-          ...taskStandingOf(task, naming),
-          name: task.name,
-          repository: task.repository ?? null,
-          mention: writtenTaskMention(task, task.name, naming.step),
-        },
-      });
+      // Left out, the repository is the one the caller works in, unless the task joins a tree, whose it takes.
+      const inTree =
+        parentTaskId !== undefined || relation?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF;
+      const repository =
+        asked.success.repository !== undefined || inTree
+          ? asked.success.repository
+          : yield* workedRepository(call.caller);
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
-      if (Option.isSome(before)) return answer(before.value.task);
-      const parent =
-        parentTaskId === undefined
-          ? undefined
-          : yield* parentOf(userId, workspace.value, parentTaskId, asked.success.repository);
-      if (typeof parent === "string") return agentToolRejected(parent);
-      const beside =
-        relation === undefined
-          ? undefined
-          : yield* besideOf(userId, workspace.value, relation, asked.success.repository);
-      if (typeof beside === "string") return agentToolRejected(beside);
-      const repositoryAsked =
-        asked.success.repository === undefined
-          ? yield* workedRepository(call.caller)
-          : asked.success.repository;
-      // A task in a tree works in the tree's repository: its parent's as a child, and its child's as a parent.
-      const named =
-        parent !== undefined
-          ? parent.repository
-          : beside?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
-            ? beside.repository
-            : repositoryAsked;
-      const reached = yield* reachedRepository(workspace.value, named, userId);
-      if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
-      // A child takes its parent's assignee where the call names none; a null names no one.
-      const assignedId = assignee === undefined ? (parent?.assigneeId ?? undefined) : assigneeId;
-      const text = planTextOf(plan ?? "");
-      // The make, its plan's first revision, and its relation are one write, so a call run again at once makes one task.
-      const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
-        client.withTransaction(
-          Effect.gen(function* () {
-            const once = yield* createTaskOnce(userId, {
+      const made = Option.isSome(before)
+        ? before.value.task
+        : yield* createTaskAsked(
+            userId,
+            {
               id,
               organizationId: workspace.value,
               name,
-              repository: reached.success.repository,
-              githubAccess: reached.success.githubAccess,
-              text,
+              ...(repository === undefined ? undefined : { repository }),
               ...(brief === undefined ? undefined : { brief }),
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
-              ...(assignedId === undefined ? undefined : { assigneeId: assignedId }),
-              ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+              ...(assignee === undefined ? undefined : { assigneeId: assigneeId ?? null }),
+              ...(parentTaskId === undefined ? undefined : { parentTaskId }),
               ...(mode === undefined ? undefined : { mode }),
               ...originOf(call),
-            });
-            if (Option.isSome(once) && text !== "") {
-              yield* recordRevision({
-                taskId: id,
-                writer: revisionWriterOf(call),
-                userId,
-                before: "",
-                after: text,
-                changes: 1,
-                savedBefore: Option.none(),
-              });
-            }
-            if (Option.isSome(once) && beside !== undefined) {
-              yield* relationWritten(userId, id, beside);
-            }
-            return once;
-          }),
-        ),
-      ).pipe(
-        // An assignee who is no member of the workspace, or a relation refused, makes no task, nothing written.
-        Effect.catchTags(MADE_REFUSAL_OF),
-      );
+              text: planTextOf(plan ?? ""),
+              writer: revisionWriterOf(call),
+              relations: relation === undefined ? [] : [relation],
+            },
+            SERVER_TASK_SOURCE.AGENT,
+          ).pipe(
+            Effect.map((created) => created.task.task),
+            Effect.catch(madeRefusal(parentTaskId !== undefined)),
+          );
       if (typeof made === "string") return agentToolRejected(made);
-      if (Option.isNone(made)) {
-        // A run of the same call made it meanwhile, which this one answers.
-        const raced = yield* readTask(userId, id);
-        if (Option.isNone(raced)) return agentToolRejected(AGENT_TOOL_REFUSAL.STORE);
-        return answer(raced.value.task);
-      }
-      yield* recordServerEvent(
-        SERVER_EVENT.TASK_CREATE,
-        { userId, workspaceId: workspace.value },
-        {
-          source: SERVER_TASK_SOURCE.AGENT,
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        task: {
+          id: made.id,
+          ...taskStandingOf(made, naming),
+          name: made.name,
+          repository: made.repository ?? null,
+          mention: writtenTaskMention(made, made.name, naming.step),
         },
-      );
-      return answer(made.value);
+      };
     }),
   );
 }

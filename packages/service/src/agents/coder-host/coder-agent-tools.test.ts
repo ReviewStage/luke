@@ -170,7 +170,7 @@ import {
   type EveMessage,
 } from "../eve-host/eve-sessions.js";
 import { TASK_BLOCK_REFUSAL } from "../task-block-changes.js";
-import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
+import { NO_SECTION_DELETED, TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL, WORKSPACE_AGENTS_LIST_LIMIT } from "../workspace-agents.js";
 import { type AgentDoorSeams, type AgentToolCall, runAgentTools } from "./agent-doors.js";
@@ -3410,8 +3410,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     reason: UPDATE_TASK_REFUSAL.NO_TASK,
   });
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: theirs }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+    ...NO_SECTION_DELETED,
   });
   assert.deepEqual((await call(CODER_TOOL.LIST_TASKS, {})).sections, [
     { id: growth, title: "Growth" },
@@ -3437,8 +3436,7 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
   const stillThere = await database.run(readTask(teammates.userId, taskIds.billing));
   assert.ok(Option.isSome(stillThere), "deleting a section deletes none of its tasks");
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+    ...NO_SECTION_DELETED,
   });
 });
 

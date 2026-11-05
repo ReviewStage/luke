@@ -78,7 +78,9 @@ import {
   readTaskPlan,
   type StoredTask,
   setTaskParent,
+  type TaskAssigneeNotMember,
   type TaskHeader,
+  type TaskIdTaken,
   updateTaskCommitted,
 } from "@repo/database/models/task-store";
 import type { WorkspaceSeams } from "@repo/database/models/workspace-seams";
@@ -92,7 +94,6 @@ import {
   startRelationsOf,
   TASK_BLOCK_CHANGE,
   TASK_BLOCK_RELATION,
-  TASK_CREATE_RELATION_KIND,
   TASK_MODE,
   TASK_STATUS,
   type Task,
@@ -144,12 +145,7 @@ import {
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
-import {
-  createTaskRelated,
-  relationsAsked,
-  type TaskCreateRelationRefused,
-} from "./task-create-relation.js";
-import { type TaskParent, taskParentOf } from "./task-parent.js";
+import { createTaskAsked, type TaskCreateRelationRefused } from "./task-create-relation.js";
 import { moveTaskRelation, type TaskRelationRefused } from "./task-relation.js";
 
 export interface TasksProcedureSeams extends SandboxStopReach {
@@ -415,37 +411,6 @@ const pickKept = (userId: string, asked: TaskRunsOnRequest) =>
   );
 
 /**
- * The parent a start names, confirmed in the workspace it starts in
- * (`task-parent.ts`): one the account does not reach is not found, as any
- * task it does not reach is, and a start naming another repository than the
- * parent's is refused by name; nothing is written either way.
- */
-const parentAsked = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  organizationId: string,
-  input: {
-    readonly parentTaskId: string;
-    readonly repository?: string | null;
-  },
-): Effect.fn.Return<TaskParent, HostedRefusal, DatabaseServices> {
-  const parent = yield* taskParentOf(
-    userId,
-    organizationId,
-    input.parentTaskId,
-    input.repository,
-  ).pipe(
-    Effect.catch((failure) => {
-      if (failure._tag === "TaskParentUnreached") return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      if (failure._tag === "TaskParentRepositoryDiffers") {
-        return Effect.fail(HOSTED_REFUSAL.CHILD_REPOSITORY_LOCKED);
-      }
-      return hostedStoreOrUnavailable(Effect.fail(failure));
-    }),
-  );
-  return parent;
-});
-
-/**
  * How a start asks its task to be worked, checked before anything is
  * written: a pilot only for an account with the Pilot experiment on, refused
  * as an invalid request otherwise; agents, or none named, for anyone.
@@ -487,6 +452,21 @@ function relationRefused(
     default:
       return hostedStoreOrUnavailable(Effect.fail(failure));
   }
+}
+
+/** A make's refusal answered by name: a repository refused as its reach answered it, an assignee who is no member as invalid, an id another plan holds as not found, and a parent or a relation as `relationRefused` answers it. */
+function createRefused(
+  failure:
+    | HostedRefusal
+    | TaskAssigneeNotMember
+    | TaskIdTaken
+    | TaskCreateRelationRefused
+    | StoreFailure,
+): Effect.Effect<never, HostedRefusal> {
+  if (!("_tag" in failure)) return Effect.fail(failure);
+  if (failure._tag === "TaskAssigneeNotMember") return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  if (failure._tag === "TaskIdTaken") return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return relationRefused(failure);
 }
 
 /**
@@ -577,89 +557,35 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
       // A retry is answered above first, since its parent may be gone by now, or its device away, while its task stands.
-      const relations = startRelationsOf(input);
-      // A start as a sub-task of a plan is a start under that parent, which `parentTaskId` names as well.
-      const parentTaskId =
-        input.parentTaskId ??
-        relations.find((relation) => relation.kind === TASK_CREATE_RELATION_KIND.SUB_TASK_OF)
-          ?.taskId;
-      const parent =
-        parentTaskId === undefined
-          ? undefined
-          : yield* parentAsked(userId, organizationId, { ...input, parentTaskId });
-      // A plan's children share its parent's repository, so a start under a parent holds them to that one.
-      const beside = yield* Effect.catch(
-        relationsAsked(
-          userId,
-          organizationId,
-          relations,
-          parent === undefined ? input.repository : parent.repository,
-        ),
-        relationRefused,
-      );
-      const childOf = beside.find((asked) => asked.kind === TASK_CREATE_RELATION_KIND.PARENT_OF);
-      // A plan in a tree works in the tree's repository: its parent's as a child, and its children's as a parent.
-      const repository =
-        parent !== undefined
-          ? parent.repository
-          : childOf?.kind === TASK_CREATE_RELATION_KIND.PARENT_OF
-            ? childOf.repository
-            : input.repository;
-      const reached = yield* reachableRepository(
-        Effect.succeed(organizationId),
-        repository,
-        userId,
-      );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const assigneeId = input.assigneeId ?? parent?.assigneeId ?? undefined;
       const {
         task: stored,
         txid,
-        made,
-      } = yield* createTaskRelated(
+        made: _made,
+        ...reached
+      } = yield* createTaskAsked(
         userId,
         {
           ...(input.id === undefined ? undefined : { id: input.id }),
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
-          repository: reached.repository,
-          githubAccess: reached.githubAccess,
+          ...(input.repository === undefined ? undefined : { repository: input.repository }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
           ...(input.status === undefined ? undefined : { status: input.status }),
           ...(input.priority === undefined ? undefined : { priority: input.priority }),
-          ...(assigneeId === undefined ? undefined : { assigneeId }),
-          ...(parent === undefined ? undefined : { parentTaskId: parent.id }),
+          ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
+          ...(input.parentTaskId === undefined ? undefined : { parentTaskId: input.parentTaskId }),
           ...(input.mode === undefined ? undefined : { mode: input.mode }),
+          relations: startRelationsOf(input),
         },
-        beside,
-      ).pipe(
-        Effect.catch((failure) => {
-          switch (failure._tag) {
-            case "TaskAssigneeNotMember":
-              return Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-            case "TaskIdTaken":
-              return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-            default:
-              return relationRefused(failure);
-          }
-        }),
-      );
+        SERVER_TASK_SOURCE.SIDEBAR,
+      ).pipe(Effect.catch(createRefused));
       // A task holds no place: the place a released desktop names on the task alone runs the agent the
       // create starts, which keeps it as the member's pick once it stands, or is kept as that pick where
       // the create starts none.
       if (input.runsOn !== undefined && agent === undefined) yield* pickKept(userId, input.runsOn);
-      // A start sent again under its id made no plan, so it counts none.
-      if (made) {
-        yield* recordServerEvent(
-          SERVER_EVENT.TASK_CREATE,
-          { userId, workspaceId: organizationId },
-          {
-            source: SERVER_TASK_SOURCE.SIDEBAR,
-          },
-        );
-      }
       // The agent runs where it names, else where a released desktop named on the task alone.
       const runsOnOfAgent = agent?.runsOn ?? input.runsOn;
       const answer: TaskStartAnswer =

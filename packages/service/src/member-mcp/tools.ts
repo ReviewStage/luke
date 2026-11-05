@@ -170,9 +170,9 @@ import {
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
+  NO_SECTION_DELETED,
   runCreateSection,
   runDeleteSection,
-  TASK_SECTION_TOOL_REFUSAL,
 } from "../agents/task-section-tools.js";
 import {
   CREATE_TASK_TOOL,
@@ -353,13 +353,15 @@ const listAsMember = <R>(
 /** A read by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the read's own words where they reach none. */
 const readAsMember = <R, RRead>(
   workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
-  refusal: string,
+  refusal: string | WireRecord,
   read: (call: AgentReadCall) => Effect.Effect<WireRecord, never, RRead>,
 ) =>
   Effect.gen(function* () {
     const member = yield* AdmittedMember;
     const workspace = yield* workspaceOf(member.userId);
-    if (Option.isNone(workspace)) return agentToolRejected(refusal);
+    if (Option.isNone(workspace)) {
+      return typeof refusal === "string" ? agentToolRejected(refusal) : refusal;
+    }
     return yield* read(memberCaller(member, workspace.value));
   });
 
@@ -641,7 +643,7 @@ const listWriteAsMember = <R>(
 /** A write by id run as the member, about the workspace that holds what it names as the member reaches it; refused in the door's own words where they reach none. */
 const writeAsMember = <R, RWrite>(
   workspaceOf: (userId: string) => Effect.Effect<Option.Option<string>, StoreFailure, R>,
-  refusal: string,
+  refusal: string | WireRecord,
   write: (call: AgentCall) => Effect.Effect<WireRecord, never, RWrite>,
 ) => readAsMember(workspaceOf, refusal, (read) => Effect.flatMap(memberWriteCall(read), write));
 
@@ -780,7 +782,18 @@ const MEMBER_EDIT_PLAN_TOOL = memberMcpTool({
       (userId) => readTaskWorkspace(userId, asked.taskId),
       PLAN_EDIT_REFUSAL.NO_TASK,
       ({ caller }) =>
-        recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
+        Effect.tap(
+          recordMemberPlanNotes({ userId: callerUserId(caller), taskId: asked.taskId }, asked),
+          // Counted as the window's edit of the plan is, since it is the member's own.
+          (saved) =>
+            saved.status === ACTION_RESULT_STATUS.ACCEPTED && caller.kind === AGENT_CALLER.MEMBER
+              ? recordServerEvent(
+                  SERVER_EVENT.PLAN_EDIT,
+                  { userId: caller.userId, workspaceId: caller.workspaceId },
+                  {},
+                )
+              : Effect.void,
+        ),
     ),
 });
 
@@ -810,13 +823,14 @@ const MEMBER_DELETE_SECTION_TOOL = memberMcpTool({
     "Delete one of the member's sidebar sections, by its id as " +
     `${MEMBER_MCP_TOOL.LIST_TASKS} answered it, as their Delete section would: the tasks in it ` +
     "go back under Tasks, and none of them is deleted. Answers `accepted` with the section's " +
-    "id and title and how many tasks went back under Tasks, or `rejected` and why.",
+    "id and title and how many tasks went back under Tasks, with section null where no such " +
+    "section stands, as one already deleted, or `rejected` and why.",
   input: DELETE_SECTION_TOOL.inputSchema,
   annotations: DESTRUCTIVE,
   run: (asked) =>
     writeAsMember(
       (userId) => sectionWorkspace(userId, asked.sectionId),
-      TASK_SECTION_TOOL_REFUSAL.NO_SECTION,
+      { ...NO_SECTION_DELETED },
       (call) => runDeleteSection(call, asked),
     ),
 });

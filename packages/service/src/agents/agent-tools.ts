@@ -33,7 +33,6 @@ import { readPageById } from "@repo/database/models/plan-pages";
 import { lockTasksForBlocks } from "@repo/database/models/task-block-store";
 import { listTaskSections, writeTaskSections } from "@repo/database/models/task-section-store";
 import {
-  createTaskOnce,
   deleteTask,
   listTasks,
   readTask,
@@ -113,6 +112,7 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
+import { SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   ownAgentWorkspace,
@@ -128,6 +128,7 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import { archiveAskedStatus } from "../tasks/archive-settle.js";
+import { createTaskAsked } from "../tasks/task-create-relation.js";
 import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
@@ -1958,43 +1959,62 @@ function forwarderOf(caller: AgentCaller): ImageForwarder {
 }
 
 /**
- * The task made for the agent a caller on no task starts: untitled, so the
- * agent's title names it as it names any untitled task (`title.ts`),
- * assigned to the member the caller works for, in the repository named or
- * the caller's own, or none, in progress, and with a blank plan, since the
- * prompt is handed to the agent as its first message; marked as made by
- * `start_agent` so it finishes once its agents finished well, with no merge
- * asked (`task-finish.ts`). Note that it is made under an id drawn from the
- * call's key, as the agent is keyed by it, because a call run again must
- * find the task it made rather than make a second. None where the member no
- * longer stands in the caller's workspace.
+ * The task made for the agent a caller on no task starts, through the one
+ * make every door shares (`createTaskAsked`): untitled, so the agent's title
+ * names it as it names any untitled task (`title.ts`), assigned to the
+ * member the caller works for, in the repository named or the caller's own,
+ * or none, in progress, and with a blank plan, since the prompt is handed to
+ * the agent as its first message; marked as made by `start_agent` so it
+ * finishes once its agents finished well, with no merge asked
+ * (`task-finish.ts`). Note that it is made under an id drawn from the call's
+ * key, as the agent is keyed by it, because a call run again must find the
+ * task it made rather than make a second. The refusal's words where the
+ * repository is out of reach, or the member no longer stands in the caller's
+ * workspace.
  */
 const startTaskOf = (
   call: AgentCall,
   repository: string | null,
-): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
+): Effect.Effect<Result.Result<string, string>, StoreFailure, AgentToolServices> =>
   Effect.gen(function* () {
     const { caller } = call;
     const userId = callerUserId(caller);
     const id = calledId(userId, call.clientKey);
-    if (Option.isSome(yield* readTask(userId, id))) return id;
+    if (Option.isSome(yield* readTask(userId, id))) return Result.succeed(id);
     const workspace = yield* callerWorkspace(caller);
-    if (Option.isNone(workspace)) return undefined;
+    if (Option.isNone(workspace)) return Result.fail(START_AGENT_REFUSAL.NO_WORKSPACE);
     const calling = callerAgent(caller);
-    yield* createTaskOnce(userId, {
-      id,
-      organizationId: workspace.value,
-      repository,
-      status: TASK_STATUS.IN_PROGRESS,
-      assigneeId: userId,
-      ...(calling === undefined
-        ? undefined
-        : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
-      madeByStart: true,
-      text: "",
-    });
-    return id;
-  }).pipe(Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)));
+    const made = yield* createTaskAsked(
+      userId,
+      {
+        id,
+        organizationId: workspace.value,
+        repository,
+        status: TASK_STATUS.IN_PROGRESS,
+        assigneeId: userId,
+        ...(calling === undefined
+          ? undefined
+          : { origin: { actor: PLAN_ACTOR.AGENT, agentId: calling.id } }),
+        madeByStart: true,
+        relations: [],
+      },
+      SERVER_TASK_SOURCE.AGENT,
+    );
+    return Result.succeed(made.task.task.id);
+  }).pipe(
+    Effect.catch((failure) => {
+      if (!("_tag" in failure)) return Effect.succeed(Result.fail(startRefusalWords(failure)));
+      switch (failure._tag) {
+        case "SqlError":
+        case "SchemaError":
+        case "EffectDrizzleQueryError":
+          return Effect.fail(failure);
+        // The member gone from the workspace refuses its assignee; no parent or relation is asked, so no other refusal comes.
+        default:
+          return Effect.succeed(Result.fail(START_AGENT_REFUSAL.NO_WORKSPACE));
+      }
+    }),
+  );
 
 /**
  * The task a refused start made for its agent, deleted where no agent
@@ -2136,7 +2156,10 @@ export function runStartAgent(
       const runsOn = yield* runsOnOfStart(userId, asked.success.runsOn);
       if (Result.isFailure(runsOn)) return agentToolRejected(runsOn.failure);
       // Note that the task is made only once the call's input is read whole, so a call refused for it makes none.
-      const made = fresh ? yield* startTaskOf(call, repository) : undefined;
+      const making = fresh ? yield* startTaskOf(call, repository) : undefined;
+      if (making !== undefined && Result.isFailure(making))
+        return agentToolRejected(making.failure);
+      const made = making?.success;
       const onTask = taskId ?? made;
       const place: StartWhere | undefined =
         landing?.success.place ?? (onTask === undefined ? undefined : { taskId: onTask });
@@ -2376,7 +2399,7 @@ function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
 }
 
 /** A repository's refusal in the model's words: one the installation does not reach, GitHub not answering, or else the service down. */
-function repositoryRefusalWords(refusal: HostedRefusal): string {
+export function repositoryRefusalWords(refusal: HostedRefusal): string {
   if (refusal.error === HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE) {
     return UPDATE_TASK_REFUSAL.NOT_REACHABLE;
   }
