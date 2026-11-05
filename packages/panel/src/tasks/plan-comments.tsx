@@ -1898,7 +1898,10 @@ export function PlanCommentLayer({
   const cards = useRef(new Map<string, HTMLDivElement>());
   // The cards already stood in the margin, which move to their next place rather than land there, so a card arriving lands where it belongs.
   const settled = useRef(new Set<string>());
-  const open = doors.control.threads.filter(openThread);
+  // Note that the open threads stand in the order of their words rather than of their starting, so the keyboard meets their counts and cards top to bottom.
+  const open = doors.control.threads
+    .filter(openThread)
+    .sort((one, other) => (anchors.get(one.id) ?? 0) - (anchors.get(other.id) ?? 0));
   const marginCards = useMarginCards(
     [
       ...open.map((thread) => ({
