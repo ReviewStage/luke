@@ -52,7 +52,7 @@ import { useSteadyDoor } from "../steady-door.js";
 import { type SentLine, startsOwnAgents } from "../tasks/agent-model.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
-import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
 import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
@@ -78,7 +78,7 @@ import { usePlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { useTaskInbox } from "../tasks/use-task-inbox.js";
 import type { TaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type StartingTask, type TasksControl } from "../tasks/use-tasks-tab.js";
 import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
@@ -230,8 +230,8 @@ function TaskPageSkeleton({
   starting,
   head,
 }: {
-  /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
-  starting?: SentLine | undefined;
+  /** New task's agent start under way, the line its agent opens on and the model it names, which the column draws as the agent's tab will; none while a task is read. */
+  starting?: { readonly line: SentLine; readonly model: ComposerModel | undefined } | undefined;
   /** The side panel as it will be drawn, its panel none where it is shut. */
   drawing: SidePanelDrawing;
   /** How the summary will stand, whose room is kept. */
@@ -261,7 +261,7 @@ function TaskPageSkeleton({
                   {starting === undefined ? (
                     <AgentTabSkeleton label={TASK_LOADING_LABEL} />
                   ) : (
-                    <StartingAgentTab line={starting} />
+                    <StartingAgentTab line={starting.line} model={starting.model} />
                   )}
                 </AgentColumn>
               </Fill>
@@ -278,22 +278,26 @@ function TaskPageSkeleton({
 
 /**
  * A phone's head over a task that is not drawn yet, or cannot be: its way
- * back, as the task's own head leads (`TaskHead`), and its title a block
+ * back, as the task's own head leads (`TaskHead`), and its title its name
+ * where that is known already, as a starting task's typed name is, a block
  * while it is read, nothing where it cannot be; no ⋯, since a task not
  * drawn offers no menu.
  */
 function TaskWaitHead({
   away,
   reading,
+  name,
 }: {
   away: TaskHeadBack;
   reading: boolean;
+  /** The task's name where it is known before the task is read; none otherwise. */
+  name?: string | undefined;
 }): React.JSX.Element {
   return (
     <PhoneHead
       place="task"
       start={<PhoneBack back={away} />}
-      title={reading ? <TaskTitleSkeleton /> : null}
+      title={name ?? (reading ? <TaskTitleSkeleton /> : null)}
       end={null}
     />
   );
@@ -1366,16 +1370,18 @@ function PlanDocument({
  * column standing as the agent's tab with the developer's words as its first
  * line and no side panel beside it, since the task lands on its agent alone
  * (`useTasksTab`'s `openAgent`), so Start opens the page at once and the
- * start's answer only fills it in.
+ * start's answer only fills it in. What the start already knows stands as
+ * itself rather than a block: the name typed in a phone's head, and the
+ * model picked in the composer's chip.
  */
 function StartingTaskPage({
   tasks,
-  line,
+  starting,
   summary,
   phoneAway,
 }: {
   tasks: TasksControl;
-  line: SentLine;
+  starting: StartingTask;
   summary: SummaryPin;
   /** A phone's way back, which heads the page as the task's will be (`TaskWaitHead`); none elsewhere. */
   phoneAway: TaskHeadBack | undefined;
@@ -1389,8 +1395,18 @@ function StartingTaskPage({
       drawing={drawing}
       summary={summaryLayout}
       onColumn={setColumn}
-      starting={line}
-      head={phoneAway === undefined ? undefined : <TaskWaitHead away={phoneAway} reading />}
+      starting={{
+        line: starting.line,
+        model:
+          starting.choice === undefined
+            ? undefined
+            : { choice: starting.choice, models: tasks.agents.models ?? [] },
+      }}
+      head={
+        phoneAway === undefined ? undefined : (
+          <TaskWaitHead away={phoneAway} reading name={starting.name} />
+        )
+      }
     />
   );
 }
@@ -1430,7 +1446,7 @@ export const DesktopTasks = memo(function DesktopTasks({
     return (
       <StartingTaskPage
         tasks={tasks}
-        line={tasks.starting}
+        starting={tasks.starting}
         summary={summary}
         phoneAway={
           room === SHELL_ROOM.NARROW

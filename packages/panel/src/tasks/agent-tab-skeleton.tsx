@@ -1,5 +1,6 @@
+import type { CatalogModel, ModelChoice } from "@repo/features/models-wire";
 import { readingWords } from "@repo/features/words";
-import { ComposerFoot, Skeleton, SkeletonRegion } from "@repo/ui";
+import { CHIP_LOOK, Chip, ChipName, ComposerFoot, Skeleton, SkeletonRegion } from "@repo/ui";
 import { Message, MessageContent } from "../ai-elements/message.js";
 import { PromptInputCard } from "../ai-elements/prompt-input.js";
 import {
@@ -12,6 +13,7 @@ import {
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { ComposerFieldRoom, ComposerPlaceholder, UnloadedComposerField } from "./composer-field.js";
+import { ModelLabel } from "./model-label.js";
 
 /**
  * agent-tab-skeleton.tsx -- an agent's tab in the shape it lands in, while what it draws is on its way.
@@ -49,6 +51,13 @@ const LOG_LINE_WIDTHS = {
 
 /** How wide the model's name stands in the composer until the agent says which it is. */
 const MODEL_NAME_WIDTH = "96px";
+
+/** A model the held composer's chip draws before its agent is read: the choice, and the catalog that names it. */
+export interface ComposerModel {
+  readonly choice: ModelChoice;
+  /** The catalog as last read, which names the model; empty before the first read lands. */
+  readonly models: readonly CatalogModel[];
+}
 
 /** Does nothing with files handed to the held composer's +, which takes no press. */
 function takeNoFiles(): void {}
@@ -88,11 +97,17 @@ export function TranscriptSkeleton({
  * The composer's card in its own frame and size, drawn as the composer
  * itself, held and inert: its field unloaded and asking for a follow up as
  * the loaded one will, and its foot as the composer lays it, the + at the
- * left and the round send at the right, each taking no press, with the model
- * chip's place a block of its name beside the send. The icon presses between
+ * left and the round send at the right, each taking no press, with the model's
+ * chip beside the send where the model is known, and a block of its name
+ * where it is not. The icon presses between
  * the chip and Send are left out, as a narrow card folds them into its ⋯.
  */
-export function ComposerSkeleton(): React.JSX.Element {
+export function ComposerSkeleton({
+  model,
+}: {
+  /** The model already known, as a starting agent's is, which the chip draws as it will land; its name a block where none is. */
+  model?: ComposerModel | undefined;
+}): React.JSX.Element {
   return (
     <ComposerCard inert>
       <PromptInputCard>
@@ -108,7 +123,15 @@ export function ComposerSkeleton(): React.JSX.Element {
           }
           actions={
             <ComposerActions>
-              <Skeleton width={MODEL_NAME_WIDTH} />
+              {model === undefined ? (
+                <Skeleton width={MODEL_NAME_WIDTH} />
+              ) : (
+                <Chip look={CHIP_LOOK.TOOLBAR} chevron>
+                  <ChipName>
+                    <ModelLabel choice={model.choice} models={model.models} />
+                  </ChipName>
+                </Chip>
+              )}
             </ComposerActions>
           }
           send={{ label: BUTTON.SEND, empty: true }}

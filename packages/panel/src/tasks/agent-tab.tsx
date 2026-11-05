@@ -183,7 +183,12 @@ import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
-import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import {
+  AgentTabSkeleton,
+  type ComposerModel,
+  ComposerSkeleton,
+  TranscriptSkeleton,
+} from "./agent-tab-skeleton.js";
 import { dockedTodos, newestTodos, taskTodos, todosOfPart } from "./agent-todos.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { ConnectionNames, useServerName } from "./connection-names.js";
@@ -3041,9 +3046,17 @@ const NO_RETRY = () => undefined;
  * started on some, as the agent's own transcript will draw them, and its
  * working line saying it is starting, over the composer's card, which the
  * agent's own tab takes the place of once the start answers, its first line
- * drawn in the same place. One started on no words is briefed on the plan.
+ * drawn in the same place, and its model's chip where the start named the
+ * model. One started on no words is briefed on the plan.
  */
-export function StartingAgentTab({ line }: { line?: SentLine | undefined }): React.JSX.Element {
+export function StartingAgentTab({
+  line,
+  model,
+}: {
+  line?: SentLine | undefined;
+  /** The model the start named, which the composer's chip draws; none where the start takes the default. */
+  model?: ComposerModel | undefined;
+}): React.JSX.Element {
   const messages = useMemo(() => (line === undefined ? [] : agentLines([], [line])), [line]);
   return (
     <AgentTabFrame>
@@ -3060,7 +3073,7 @@ export function StartingAgentTab({ line }: { line?: SentLine | undefined }): Rea
         overComposer
       />
       <AgentTabFoot>
-        <ComposerSkeleton />
+        <ComposerSkeleton model={model} />
       </AgentTabFoot>
     </AgentTabFrame>
   );
