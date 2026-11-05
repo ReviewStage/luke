@@ -10,8 +10,11 @@
  * events (`contract/live.ts`) carry no agent status, so the held read is the
  * one that answers both.
  *
- * The agent's branch is read from what it published
- * (`agentPullRequests.pullRequest`): the branch it pushed, as GitHub holds it.
+ * An agent has two branches a person may mean: the one its sandbox stood on
+ * as its last turn ended (`agents.read`), pushed or not, and the one it
+ * pushed, as GitHub holds it (`agentPullRequests.pullRequest`). `view`
+ * shows both; `checkout` takes the sandbox's, else the pushed one, and
+ * refuses one GitHub does not hold yet rather than failing its fetch.
  */
 
 import { isWireUuid } from "@repo/features";
@@ -31,7 +34,7 @@ import { HOSTED_DEADLINE } from "@repo/features/hosted-link";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import { Duration, Effect, Option, Ref, Result, Schedule } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { checkoutFromOrigin, originRepository, treeIsClean } from "../git.js";
+import { checkoutFromOrigin, originHasBranch, originRepository, treeIsClean } from "../git.js";
 import { answer, CommandFailed, columns, note, readInput, streamLines } from "../output.js";
 import { askService, session } from "../session.js";
 import { resolveTaskId } from "../tasks.js";
@@ -40,12 +43,13 @@ import { resolveWorkspace } from "../workspace.js";
 /** How long after a held read answers the next is asked, so a read that answers at once never spins. */
 const FOLLOW_SPACING = Duration.seconds(1);
 
-/** What a start asks of its agent beside the task: its prompt, model and effort, and where it runs. */
+/** What a start asks of its agent beside the task: its prompt, model and effort, where it runs, and the branch its checkout is cloned at. */
 interface AgentStartChoice {
   readonly prompt?: string;
   readonly model?: string;
   readonly effort?: string;
   readonly runsOn?: AgentRunsOnRequest;
+  readonly branch?: string;
 }
 
 /** An agent as a line of a table: its id, where it stands, and its title or model. */
@@ -65,7 +69,8 @@ export function startAgent(taskId: string, choice: AgentStartChoice) {
     if (Result.isFailure(admitted)) {
       return yield* new CommandFailed({
         exit: CLI_EXIT.USAGE,
-        message: "The prompt is empty or too long, or the model and effort do not read.",
+        message:
+          "The prompt is empty or too long, the model and effort do not read, or the branch is no name git takes.",
       });
     }
     const { hosted } = yield* session;
@@ -293,6 +298,12 @@ const startCommand = Command.make(
       Flag.optional,
       Flag.withDescription("Run on one of your devices, by its name or id"),
     ),
+    branch: Flag.String("branch").pipe(
+      Flag.optional,
+      Flag.withDescription(
+        "The branch to clone the agent's checkout at, already on GitHub (default: the repository's default branch)",
+      ),
+    ),
     follow: Flag.Boolean("follow").pipe(
       Flag.withDefault(false),
       Flag.withDescription("Stream the agent's turn until it ends"),
@@ -302,7 +313,7 @@ const startCommand = Command.make(
       Flag.withDescription("Wait until the turn ends; the exit code says how"),
     ),
   },
-  ({ task, file, model, effort, cloud, on, follow, wait }) =>
+  ({ task, file, model, effort, cloud, on, branch, follow, wait }) =>
     Effect.gen(function* () {
       if (follow && wait) {
         return yield* new CommandFailed({
@@ -324,6 +335,7 @@ const startCommand = Command.make(
         ...(Option.isSome(model) ? { model: model.value } : undefined),
         ...(Option.isSome(effort) ? { effort: effort.value } : undefined),
         ...(runsOn === undefined ? undefined : { runsOn }),
+        ...(Option.isSome(branch) ? { branch: branch.value } : undefined),
       });
       if (!follow && !wait) {
         yield* answer({ json: agent, lines: startedLines(agent), ids: [agent.id] });
@@ -337,6 +349,10 @@ const startCommand = Command.make(
   Command.withDescription("Start an agent on a task, handed its plan or a prompt"),
   Command.withExamples([
     { command: "vespin agent start ACME-42", description: "An agent working the task's plan" },
+    {
+      command: "vespin agent start ACME-42 --branch fix/login --cloud",
+      description: "An agent in the cloud, on a branch already on GitHub",
+    },
     {
       command: 'echo "Add a test for the redirect" | vespin agent start ACME-42 -F - --wait',
       description: "An agent on a prompt from stdin, waited on",
@@ -384,21 +400,22 @@ const viewCommand = Command.make("view", { agent: agentArgument }, ({ agent: id 
       ],
       { concurrency: "unbounded" },
     );
-    const { pullRequest, branch } = published;
+    const { pullRequest, branch: pushedBranch } = published;
     const checks =
       pullRequest === null
         ? []
         : ((yield* askService(hosted.agentPullRequests.overviewChecks, { id })).pullRequest
             ?.checks ?? []);
     yield* answer({
-      json: { ...agent, branch, pullRequest, checks },
+      json: { ...agent, branch: agent.branch ?? null, pushedBranch, pullRequest, checks },
       lines: [
         `${agent.title ?? agent.model}`,
         ...columns([
           ["Status", agent.status],
           ["Model", `${agent.model} (${agent.effort})`],
           ["Repository", agent.repository ?? "none"],
-          ["Branch", branch ?? "none"],
+          ["Sandbox branch", agent.branch ?? "none"],
+          ["Pushed branch", pushedBranch ?? "none"],
           [
             "Pull request",
             pullRequest === null
@@ -541,13 +558,19 @@ const waitCommand = Command.make(
 const checkoutCommand = Command.make("checkout", { agent: agentArgument }, ({ agent: id }) =>
   Effect.gen(function* () {
     const { hosted } = yield* session;
-    const { repository, branch } = yield* askService(hosted.agentPullRequests.pullRequest, {
-      id,
-    });
+    const [{ agent }, published] = yield* Effect.all(
+      [
+        askService(hosted.agents.read, { id }),
+        askService(hosted.agentPullRequests.pullRequest, { id }),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const repository = agent.repository ?? published.repository;
+    const branch = agent.branch ?? published.branch;
     if (repository === null || branch === null) {
       return yield* new CommandFailed({
         exit: CLI_EXIT.REFUSED,
-        message: `The agent has pushed no branch to GitHub yet.`,
+        message: "The agent has no branch yet.",
       });
     }
     const here = yield* originRepository;
@@ -555,6 +578,12 @@ const checkoutCommand = Command.make("checkout", { agent: agentArgument }, ({ ag
       return yield* new CommandFailed({
         exit: CLI_EXIT.REFUSED,
         message: `This folder is ${here}, and the agent works in ${repository}. Run this in a checkout of ${repository}.`,
+      });
+    }
+    if (!(yield* originHasBranch(branch))) {
+      return yield* new CommandFailed({
+        exit: CLI_EXIT.REFUSED,
+        message: `The agent hasn't pushed ${branch} yet.`,
       });
     }
     if (!(yield* treeIsClean)) {

@@ -70,6 +70,18 @@ export const originRepository = Effect.gen(function* () {
   });
 });
 
+/** Whether `origin` holds a branch of this name, as `git ls-remote` reads it there now. */
+export function originHasBranch(branch: string) {
+  return Effect.map(
+    gitOrFail(
+      ["ls-remote", "--heads", ORIGIN, `refs/heads/${branch}`],
+      `Could not read ${ORIGIN}'s branches.`,
+      GIT_STDERR.SHOWN,
+    ),
+    (printed) => printed.trim().length > 0,
+  );
+}
+
 /** Whether the working tree holds no change, staged or not, nor an untracked file. */
 export const treeIsClean = Effect.map(
   gitOrFail(["status", "--porcelain"], "Could not read this checkout's status."),
