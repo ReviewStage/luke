@@ -437,6 +437,23 @@
   max-width: 100%;
 }
 
+/* The threads open by an element stand no taller than the room their side
+   of it leaves (`--ui-popover-room`, which their float measures), so a
+   card's entries scroll inside it with its reply field in view under them,
+   as an open card over the plan does, and several scroll together. */
+.page-comment-threads {
+  display: flex;
+  max-height: var(--ui-popover-room);
+  flex-direction: column;
+}
+
+.page-comment-threads .comment-card[data-open="true"] {
+  display: flex;
+  min-height: 0;
+  max-height: var(--ui-popover-room);
+  flex-direction: column;
+}
+
 /* The sheet rounds its corners without clipping what it holds (shell.css), so
    a page's white, or a file's ground in a theme of its own, would stand to a
    square corner at the rounded sheet's. A page's room, its frame or its
@@ -1589,7 +1606,7 @@
    stands at the head's inset. */
 @media (hover: hover) {
   .annotation-card
-  .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
+    .ui-disclosure-frame:has(> .annotation-card-fold > .ui-disclosure-summary:hover)::before {
     border-radius: 0;
     background: var(--ui-color-fill-hover);
   }

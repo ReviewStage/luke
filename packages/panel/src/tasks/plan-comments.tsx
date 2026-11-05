@@ -3149,16 +3149,21 @@ export function PageCommentLayer({
         onPressAway={() => onOpen(undefined)}
         holds={keepsPageCardOpen}
       >
-        <div className="page-comment-float">
-          {opened.map((thread) => (
-            <ThreadCard
-              key={thread.id}
-              thread={thread}
-              open
-              place={THREAD_PLACE.FLOAT}
-              doors={full}
-            />
-          ))}
+        {/* Note that the threads stand no taller than the room their side leaves, so each card scrolls its entries above its reply field, and several scroll together, rather than run off the room's edge. */}
+        <div className="page-comment-float page-comment-threads">
+          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+            <div className="comment-float-cards">
+              {opened.map((thread) => (
+                <ThreadCard
+                  key={thread.id}
+                  thread={thread}
+                  open
+                  place={THREAD_PLACE.FLOAT}
+                  doors={full}
+                />
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       </RectFloat>
       <RectFloat
