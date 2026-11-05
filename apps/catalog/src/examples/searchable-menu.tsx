@@ -10,6 +10,7 @@ import {
   Inline,
   MARK_PROVIDER,
   type MenuLastLine,
+  MenuNoteRow,
   type MenuRow,
   POPOVER_ALIGN,
   POPOVER_SIDE,
@@ -40,7 +41,8 @@ import { CatalogSection } from "../section";
  * rows pinned under its list, one opening a submenu of efforts, and the
  * last line under them saying who pays, Manage usage at its end; and the
  * notes said in the list's place while the rows are read and once a read
- * failed, with Retry. Each closes on Escape, a pick, a second press of its
+ * failed, with Retry, and the row a list with nothing to pick for want of
+ * a connection holds there, ending in the press that connects it. Each closes on Escape, a pick, a second press of its
  * button, and focus leaving it, and hands the focus back to its button.
  * Then a short list of what a pick may do, no field over it, whose choice
  * turns it into a search headed by that choice, led by the folded way
@@ -468,7 +470,10 @@ function SearchableMenuExample(): React.JSX.Element {
           />
         </div>
       </CatalogSection>
-      <CatalogSection id="searchable-menu-notes" title="Reading and a failed read">
+      <CatalogSection
+        id="searchable-menu-notes"
+        title="Reading, a failed read, and nothing to pick"
+      >
         <div className="catalog-popover-stage">
           <Inline gap={GAP.CONTROL}>
             <Hung
@@ -480,6 +485,20 @@ function SearchableMenuExample(): React.JSX.Element {
               }}
             />
             <Failed />
+            <Hung
+              label="Nothing to pick"
+              align={POPOVER_ALIGN.START}
+              held={{
+                rows: [],
+                note: (
+                  <MenuNoteRow
+                    glyph={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}
+                    label="GitHub"
+                    end={{ action: "Connect", onClick: () => undefined }}
+                  />
+                ),
+              }}
+            />
           </Inline>
         </div>
       </CatalogSection>

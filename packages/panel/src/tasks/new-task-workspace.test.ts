@@ -90,9 +90,9 @@ function listOf(workspace: string): RepositoriesRead {
 function chooserFor(workspaceId: string | undefined): RepositoryChooser {
   const base = tasksControl().repositories;
   if (workspaceId !== ACME.id) {
-    return { ...base, scope: workspaceId, workspaceName: PERSONAL.name };
+    return { ...base, scope: workspaceId };
   }
-  return { ...base, recent: ["acme-corp/relay"], scope: ACME.id, workspaceName: ACME.name };
+  return { ...base, recent: ["acme-corp/relay"], scope: ACME.id };
 }
 
 test("New task offers no workspace picker, and its head row's repository chip lists the listed workspace's repositories, where the plan starts", async () => {
@@ -182,12 +182,12 @@ test("the owner's workspace changing to one with no GitHub connected lets the ot
   act(() => dialog.repositoryChip().click());
   await settle();
   const offered = [...document.querySelectorAll("button")].map((button) => button.textContent);
-  const note = document.querySelector(".ui-combobox-note p")?.textContent;
+  const way = document.querySelector(".ui-menu-note-row")?.textContent;
   const after = dialog.repositoryChip().textContent;
   await dialog.create();
 
   assert.deepEqual([before, after], ["acme-corp/relay", "No repository"]);
   assert.equal(offered.includes("acme-corp/relay"), false);
-  assert.equal(note, "Personal has no GitHub connected yet.");
+  assert.equal(way, "GitHubConnect");
   assert.deepEqual(dialog.starts, [[null, PERSONAL.id]]);
 });

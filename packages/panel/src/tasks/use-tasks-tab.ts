@@ -2348,7 +2348,6 @@ export function useTasksTab(input: {
         pictures: fixture === undefined,
         scope: workspaceId,
         manages: workspace === undefined || managesWorkspace(workspace),
-        ...(workspace === undefined ? undefined : { workspaceName: workspace.name }),
         ...(workspace?.github == null ? undefined : { connected: true }),
       };
     },

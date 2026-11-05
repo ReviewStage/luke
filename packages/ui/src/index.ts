@@ -134,6 +134,7 @@ export * from "./components/saved-tick/saved-tick.js";
 export * from "./components/scroll-area/scroll-area.js";
 export * from "./components/search-field/search-field.js";
 export * from "./components/search-match/search-match.js";
+export * from "./components/searchable-menu/menu-note-row.js";
 export * from "./components/searchable-menu/searchable-menu.js";
 export * from "./components/secret-field/secret-field.js";
 export * from "./components/selection/selection-bar.js";
