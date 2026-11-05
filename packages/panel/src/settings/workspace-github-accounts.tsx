@@ -35,8 +35,8 @@ import { MenuRow } from "./menu-row.js";
  * GitHub's so it reads as one of GitHub's accounts rather than an
  * integration of its own: its picture on GitHub, its login, how many
  * repositories it holds as its one line, and a chevron folding their names
- * open under its words. An account with few enough repositories starts
- * open, and a long list shows its first lines and then Show all. A row's ⋯,
+ * open under its words. Every account starts closed, and a long list shows
+ * its first lines and then Show all. A row's ⋯,
  * where it holds acts at all, is the only way one row differs from another
  * (`workspace-token-repositories.tsx`).
  *
@@ -61,9 +61,6 @@ const WORDS = {
   READING: readingWords(TERM.REPOSITORY.many),
   NOT_READ: readFailedWords(TERM.REPOSITORY.many),
 } as const;
-
-/** The most repositories a row starts open on. */
-const OPEN_MOST = 5;
 
 /** How many repositories a long list shows before Show all. */
 const FIRST_SHOWN = 6;
@@ -127,7 +124,7 @@ function AccountMark({ login }: { login: string }): React.JSX.Element {
 /**
  * One GitHub account's row, every account's alike: its picture, its login,
  * its one line, and the names of its repositories folded open under its
- * words, open from the start where they are few and capped with Show all
+ * words, closed until its chevron is pressed and capped with Show all
  * where they are many; none to fold where `names` is empty or not yet
  * known. `actions` is its ⋯'s, drawn only where it holds one.
  */
@@ -173,7 +170,7 @@ export function GitHubOwnerRow({
         ...(count === 0
           ? {}
           : {
-              fold: { lines, label: `${login}'s repositories`, defaultOpen: count <= OPEN_MOST },
+              fold: { lines, label: `${login}'s repositories`, defaultOpen: false },
             }),
       }}
     />
