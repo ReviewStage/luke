@@ -742,7 +742,8 @@ export function DesktopShell({
   // A phone's drawer follows a finger swiping in from the screen's left edge, or back out, as a phone's own drawers do.
   const coarse = useCoarsePointer();
   useDrawerSwipe({
-    enabled: room === SHELL_ROOM.NARROW && coarse,
+    // Note that a place over the bar takes no swipe, since the bar's Tasks is the tree's way in there.
+    enabled: room === SHELL_ROOM.NARROW && coarse && !mobileBarShown(room, tasks),
     open: sidebar.overlay === SIDEBAR_OVERLAY.OPEN,
     stage: shell,
     drawer: () => shell.current?.querySelector<HTMLElement>(":scope > .desktop-sidebar") ?? null,
@@ -911,12 +912,7 @@ export function DesktopShell({
           />
         </Suspense>
         {settingsBar ? (
-          <MobileBar
-            tasks={tasks}
-            sidebar={sidebar}
-            onPressTasks={keepOverlay}
-            leave={() => onTabChange(PANEL_TAB.TASKS)}
-          />
+          <MobileBar tasks={tasks} leave={() => onTabChange(PANEL_TAB.TASKS)} />
         ) : null}
       </div>
     );
@@ -985,18 +981,23 @@ export function DesktopShell({
   );
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks);
+  // A phone's Tasks page is the sidebar's tree, pinned in the work's place rather than floating in as a drawer (`mobile-bar.tsx`).
+  const phoneTasks = barShown && boardOpen;
+  const placed = phoneTasks
+    ? { ...sidebar, collapsed: false, overlay: SIDEBAR_OVERLAY.CLOSED }
+    : sidebar;
   return (
     <div
       ref={shell}
       className="desktop-shell"
       data-room={room}
-      data-sidebar-collapsed={String(sidebar.collapsed)}
-      data-sidebar-overlay={sidebar.overlay}
+      data-sidebar-collapsed={String(placed.collapsed)}
+      data-sidebar-overlay={placed.overlay}
       data-panel-toggle={String(panelToggle && room !== SHELL_ROOM.NARROW)}
       data-mobile-bar={String(barShown)}
     >
       <DesktopSidebar
-        sidebar={sidebar}
+        sidebar={placed}
         history={history}
         tasks={tasks}
         tab={tab}
@@ -1008,7 +1009,11 @@ export function DesktopShell({
         room={room}
       />
       {room === SHELL_ROOM.NARROW ? <DrawerScrim open={drawerOver} /> : null}
-      <main className="desktop-main" inert={drawerOver} data-inbox-shown={String(inboxOpen)}>
+      <main
+        className="desktop-main"
+        inert={drawerOver || phoneTasks}
+        data-inbox-shown={String(inboxOpen)}
+      >
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
@@ -1097,7 +1102,7 @@ export function DesktopShell({
             )}
             {/* Note that a page kept stands after the page shown in its place, so a lookup of the page's first box finds the page's,
                 and the Tasks page before the Inbox, so it is the first box while it is shown. */}
-            {boardOpen || boardKept ? (
+            {(boardOpen || boardKept) && !phoneTasks ? (
               <KeptPage shown={boardOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
                 {/* The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board. */}
                 <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
@@ -1113,7 +1118,7 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
-      {barShown ? <MobileBar tasks={tasks} sidebar={sidebar} onPressTasks={keepOverlay} /> : null}
+      {barShown ? <MobileBar tasks={tasks} /> : null}
       {/* The folded sidebar peeks out while the pointer rests at the window's left edge, as Linear's does;
           a narrow room's drawer opens by its toggle alone, as a phone's does. */}
       {sidebar.collapsed &&
@@ -1128,7 +1133,7 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
       {/* A phone's every page heads itself with one row of its own (`phone-head.tsx`), its way back or its one control
-          where these stood; the drawer opens from the places bar's Tasks, or a swipe in from the screen's edge. */}
+          where these stood; off the places bar's places, the drawer opens by a swipe in from the screen's edge. */}
       {room === SHELL_ROOM.NARROW ? (
         <SidebarChord sidebar={sidebar} />
       ) : (

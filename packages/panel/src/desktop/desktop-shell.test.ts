@@ -753,14 +753,26 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
   assert.deepEqual(asked, ["inbox", "new task"]);
 });
 
-test("on a phone the bar's Tasks opens the sidebar's tree over the Inbox", async () => {
-  const overlays: string[] = [];
-  const page = await mountNarrow(
-    { inboxView: { ...tasksControl().inboxView, open: true } },
-    { onOverlay: (overlay) => overlays.push(overlay) },
-  );
+test("on a phone the bar's Tasks opens the Tasks page, which stands the sidebar's tree in the work's place", async () => {
+  const asked: string[] = [];
+  const page = await mountNarrow({
+    inboxView: { ...tasksControl().inboxView, open: true },
+    boardView: { ...tasksControl().boardView, onOpen: () => asked.push("tasks") },
+  });
   act(() => barItem(page, "Tasks").click());
-  assert.deepEqual(overlays, [SIDEBAR_OVERLAY.OPEN]);
+  assert.deepEqual(asked, ["tasks"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const tasksPage = await mountNarrow({ boardView: { ...tasksControl().boardView, open: true } });
+  const shell = tasksPage.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
+  assert.equal(
+    shell.getAttribute("data-sidebar-collapsed"),
+    "false",
+    "the tree is pinned, not a drawer",
+  );
+  assert.equal(tasksPage.querySelector("aside.desktop-sidebar")?.hasAttribute("inert"), false);
+  assert.equal(tasksPage.querySelector("main.desktop-main")?.hasAttribute("inert"), true);
 });
 
 test("on a phone the places bar stands over the Tasks page though the task left behind it holds its panel open, which is not on screen", async () => {
@@ -769,25 +781,6 @@ test("on a phone the places bar stands over the Tasks page though the task left 
     sidePanel: { ...tasksControl().sidePanel, open: true, fullScreen: true, fullScreenOnly: true },
   });
   assert.deepEqual(barItems(page).map(barName), ["Inbox", "Tasks", "Search", "New task"]);
-});
-
-test("on a phone the tree open over the Inbox is the place marked, the bar staying live over it, and the bar's Inbox puts it away", async () => {
-  const asked: string[] = [];
-  const page = await mountNarrow(
-    {
-      inboxView: {
-        ...tasksControl().inboxView,
-        open: true,
-        onOpen: () => asked.push("inbox"),
-      },
-    },
-    { overlay: SIDEBAR_OVERLAY.OPEN, onOverlay: (overlay) => asked.push(overlay) },
-  );
-  assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
-  assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
-  assert.equal(barItem(page, "Inbox").hasAttribute("inert"), false);
-  act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, [SIDEBAR_OVERLAY.CLOSED, "inbox"]);
 });
 
 /** What a reader hears an item named: its words, less what is drawn for the eye alone. */
@@ -1474,7 +1467,7 @@ function fingerSwipe(target: HTMLElement, from: number, to: number, pointerType 
   });
 }
 
-test("on a phone a finger swiped in from the screen's left edge opens the drawer over a dimmed window, and a mouse's drag does not", async () => {
+test("on a phone's task, which stands over no places bar, a finger swiped in from the screen's left edge opens the drawer over a dimmed window, and a mouse's drag does not", async () => {
   const asked: string[] = [];
   const onOverlay = (overlay: string) => asked.push(overlay);
   Object.defineProperty(window, "matchMedia", {
@@ -1486,10 +1479,11 @@ test("on a phone a finger swiped in from the screen's left edge opens the drawer
     }),
   });
   const page = await mountNarrow(
-    { boardView: { ...tasksControl().boardView, open: true } },
     {
-      onOverlay,
+      page: TASKS_PAGE.DOCUMENT,
+      region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
     },
+    { onOverlay },
   );
   const work = page.querySelector<HTMLElement>(".desktop-main");
   assert.ok(work);

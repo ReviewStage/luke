@@ -26,6 +26,16 @@
    panel's and the markdown renderer's are `@repo/panel/sources.css`'s. */
 @source "./";
 
+/* The page's root shows wherever the stage does not stand: under a phone's
+   status bar and home indicator, where app.html's `viewport-fit=cover`
+   draws the page, and past a page's ends as Safari bounces its scroll. It
+   wears the ground the stage's pages stand on, the color the browser's
+   chrome is tinted to as well (`theme-chrome.ts`), so the screen reads as
+   one page to its edges. */
+:root {
+  background: var(--ui-color-ground);
+}
+
 /* The loading frame app.html draws before the panel stands: the product's
    mark alone, in the middle of the whole screen rather than of any column,
    so it stands centered on a phone, whose notch and home indicator the
