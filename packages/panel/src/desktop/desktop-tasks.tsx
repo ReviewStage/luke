@@ -83,7 +83,13 @@ import type { MenuEntry } from "./action-menu.js";
 import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { ArchivedAgents } from "./agent-archive.js";
 import { DesktopHome } from "./desktop-home.js";
-import { AgentPane, MainTabStrip, mainTabLabel, phoneAgentStarts } from "./main-tabs.js";
+import {
+  AgentPane,
+  MainTabStrip,
+  mainTabLabel,
+  newAgentStarts,
+  phoneAgentStarts,
+} from "./main-tabs.js";
 import { PhoneBack, PhoneHead, PlaceMore, phoneBar, phoneFindGroups } from "./phone-head.js";
 import { PlanAgents } from "./plan-agents.js";
 import { PlanRelations } from "./plan-relations.js";
@@ -855,10 +861,15 @@ function PlanDocument({
         waiting={waitingOf}
         onOpenAgent={(agentId) => openAgentTab({ agent: agentId })}
         onOpenPullRequest={openPullRequestDoor}
+        // Note that New agent stands at every width, a fresh plan's one next step, as the "+" offers it.
+        starts={
+          room === SHELL_ROOM.NARROW
+            ? phoneAgentStarts(mainTabs, agents)
+            : newAgentStarts(mainTabs, agents)
+        }
         phone={
           room === SHELL_ROOM.NARROW
             ? {
-                starts: phoneAgentStarts(mainTabs, agents),
                 archived: (
                   <ArchivedAgents
                     agents={agents}

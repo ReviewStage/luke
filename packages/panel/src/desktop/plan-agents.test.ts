@@ -20,10 +20,11 @@ import { PlanAgents } from "./plan-agents.js";
  * plan-agents.test.ts -- the plan's agents list those waiting on the
  * developer first, each naming the thread it waits in, then those at work,
  * then the newest started, each saying where it runs itself; a row opens its agent, its pull request's chip opens
- * the pull request and not the agent, and a task with no agent draws no
- * list; on a phone the group ends with New agent, even on a task with no
- * agent, and the task's Inbox follows it only while something waits there
- * that no listed agent's row marks, on a task that starts no agent too.
+ * the pull request and not the agent, and a task with no agent and no start
+ * draws no list; the group ends with New agent, even on a task with no
+ * agent, and on a phone the task's Inbox follows it only while something
+ * waits there that no listed agent's row marks, on a task that starts no
+ * agent too.
  * Synthetic agents throughout.
  */
 
@@ -77,16 +78,18 @@ function waitingOn(agentId: string, count: number): ReadonlyMap<string, readonly
   return new Map([[agentId, items]]);
 }
 
-/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says, a phone's where `phone` says; every agent and pull request it opens recorded. */
+/** The group over `agents`, `NEWEST` holding a merged pull request, unfolded unless `folded` says, offering New agent where `starts` says, a phone's where `phone` says; every agent, pull request, and start it opens recorded. */
 function mount(
   agents: readonly AgentSummary[],
   {
     folded = false,
-    phone,
+    starts = false,
+    phone = false,
     waiting = new Map(),
   }: {
     folded?: boolean;
-    phone?: { starts: boolean };
+    starts?: boolean;
+    phone?: boolean;
     waiting?: ReadonlyMap<string, readonly InboxItem[]>;
   } = {},
 ) {
@@ -128,16 +131,15 @@ function mount(
         waiting,
         onOpenAgent: (agentId) => opened.agents.push(agentId),
         onOpenPullRequest: (agentId) => opened.pullRequests.push(agentId),
-        phone:
-          phone === undefined
-            ? undefined
-            : {
-                starts: phone.starts
-                  ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
-                  : [],
-                archived: null,
-                onOpenInbox: () => opened.phone.push("inbox"),
-              },
+        starts: starts
+          ? [{ label: "New agent", onSelect: () => opened.phone.push("new agent") }]
+          : [],
+        phone: !phone
+          ? undefined
+          : {
+              archived: null,
+              onOpenInbox: () => opened.phone.push("inbox"),
+            },
       }),
     ),
   );
@@ -169,7 +171,7 @@ test("the agents at work come first, then the newest, each saying where it runs,
 
 test("an agent waiting on the developer comes first, naming the thread it waits in and that it needs them, and a phone's Inbox row leaves that thread to it", () => {
   const { host } = mount([OLDEST, WORKING, NEWEST], {
-    phone: { starts: false },
+    phone: true,
     waiting: waitingOn(OLDEST.id, 1),
   });
   const rows = [...(host.querySelector('[aria-label="Agents"]')?.querySelectorAll("li") ?? [])];
@@ -192,12 +194,12 @@ test("the group starts folded unless the page says otherwise, its head counting 
   assert.equal(host.querySelector('[aria-label="Agents"]'), null);
 });
 
-test("a task with no agent draws no list", () => {
+test("a task with no agent and no start draws no list", () => {
   const { host } = mount([]);
   assert.equal(host.querySelector('[aria-label="Agents"]'), null);
 });
 
-test("on a phone the group ends with New agent even on a task with no agent, and the task's Inbox follows only while something waits there", () => {
+test("the group ends with New agent even on a task with no agent, and on a phone the task's Inbox follows only while something waits there", () => {
   const press = (host: HTMLElement, words: string) => {
     const found = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
       button.textContent?.includes(words),
@@ -205,7 +207,7 @@ test("on a phone the group ends with New agent even on a task with no agent, and
     assert.ok(found !== undefined, `the group offers ${words}`);
     act(() => found.click());
   };
-  const none = mount([], { phone: { starts: true } });
+  const none = mount([], { starts: true, phone: true });
   assert.match(none.host.querySelector('[aria-label="Agents"]')?.textContent ?? "", /New agent/u);
   assert.doesNotMatch(none.host.textContent ?? "", /need/u, "no Inbox row while nothing waits");
   press(none.host, "New agent");
@@ -214,14 +216,14 @@ test("on a phone the group ends with New agent even on a task with no agent, and
   document.body.innerHTML = "";
 
   // Note that the threads are an agent's the group does not list, an archived one's, so no row marks them.
-  const waiting = mount([OLDEST], { phone: { starts: true }, waiting: waitingOn(NEWEST.id, 2) });
+  const waiting = mount([OLDEST], { starts: true, phone: true, waiting: waitingOn(NEWEST.id, 2) });
   press(waiting.host, "2 threads need you");
   assert.deepEqual(waiting.opened.phone, ["inbox"]);
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
   // A task whose agents are all archived starts none, and its waiting threads still stand.
-  const archived = mount([], { phone: { starts: false }, waiting: waitingOn(NEWEST.id, 1) });
+  const archived = mount([], { phone: true, waiting: waitingOn(NEWEST.id, 1) });
   press(archived.host, "1 thread needs you");
   assert.deepEqual(archived.opened.phone, ["inbox"]);
 });

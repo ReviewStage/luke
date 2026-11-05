@@ -57,23 +57,22 @@ import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
  * compact rather than dense, so a task opened on its plan says what waits
  * and on which agent, with no pill or word beside the mark for the eye.
  * Those agents come first, then those at work, then the newest started; an
- * archived agent is not listed, and a task with no agent draws no group at
- * all.
+ * archived agent is not listed. New agent follows them at every width, as
+ * the strip's "+" offers it (`newAgentStarts`), so the group stands even on a
+ * task with no agent, a fresh plan's one next step; a task that starts none
+ * of its own, an archived or a pilot one, with no agent, draws no group.
  *
  * On a phone, Overview is the task's one page, with no strip, summary, or
- * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds what
- * those offer: New agent after the agents, as the strip's "+" offers it,
- * the archived agents folded under them as the summary folds them
+ * Inbox tab beside it (`task-pane-switcher.tsx`), so the group holds the rest
+ * of what those offer: the agents' read again where it never landed, the
+ * archived agents folded under them as the summary folds them
  * (`ArchivedAgents`), and, after the group, the task's Inbox counting what
  * waits on the developer that no listed agent's row marks already, such as
- * an archived agent's thread, only while something does. The group stands then
- * even on a task with no agent, for New agent.
+ * an archived agent's thread, only while something does.
  */
 
 /** A phone's additions to the group; see the module's head. */
 interface PlanAgentsPhone {
-  /** What the group offers after its agents: New agent, or the agents' read again (`phoneAgentStarts`). */
-  readonly starts: readonly MenuAction[];
   /** The archived agents' fold (`ArchivedAgents`), which draws nothing while none is archived. */
   readonly archived: React.ReactNode;
   /** Opens the window's Inbox narrowed to the task. */
@@ -196,8 +195,8 @@ function PlanAgentRow({
 /**
  * The task's agents at the head of its plan, under their group's head,
  * those waiting on the developer first, then those at work, then the
- * newest; nothing for a task with none. A
- * row's press is handed to `onOpenAgent` by its agent's id, and
+ * newest, and what `starts` offers after them; nothing for a task with
+ * neither. A row's press is handed to `onOpenAgent` by its agent's id, and
  * `onOpenPullRequest` opens an agent's pull request as its own chip does.
  */
 export function PlanAgents({
@@ -208,6 +207,7 @@ export function PlanAgents({
   waiting,
   onOpenAgent,
   onOpenPullRequest,
+  starts,
   phone,
 }: {
   agents: AgentsControl;
@@ -221,6 +221,8 @@ export function PlanAgents({
   waiting: ReadonlyMap<string, readonly InboxItem[]>;
   onOpenAgent: (agentId: string) => void;
   onOpenPullRequest: (agentId: string) => void;
+  /** What the group offers after its agents: New agent (`newAgentStarts`), and on a phone the agents' read again too (`phoneAgentStarts`). */
+  starts: readonly MenuAction[];
   /** A phone's additions; none elsewhere. */
   phone?: PlanAgentsPhone | undefined;
 }): React.JSX.Element | null {
@@ -235,7 +237,6 @@ export function PlanAgents({
     agents,
     held,
   );
-  const starts = phone?.starts ?? [];
   // Note that a phone's group stands for its archived agents too, on a task whose every agent is archived, which starts none.
   const archived = phone === undefined ? 0 : (agents.archived?.length ?? 0);
   const grouped = entries.length > 0 || starts.length > 0 || archived > 0;
@@ -254,7 +255,7 @@ export function PlanAgents({
           <GroupHeader
             heading={GROUP_HEADING.NONE}
             label={AGENTS_LIST}
-            // Note that a phone's group over no agent, standing for New agent, counts none.
+            // Note that a group over no agent, standing for New agent, counts none.
             count={
               entries.length === 0
                 ? undefined
