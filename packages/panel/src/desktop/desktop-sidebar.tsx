@@ -63,6 +63,9 @@ import {
   SkeletonRegion,
   STATUS_TONE,
   Stack,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
   UnpinIcon,
   useLeaving,
@@ -157,6 +160,8 @@ import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { childTasksFold, movedBeside, nestsOf, storedSlot, useNestedRows } from "./nested-rows.js";
 import { NewTaskInButton } from "./new-task-button.js";
 import { ADMIN_PLACE, TASKS_ROUTE } from "./pages-on-demand.js";
+import { PhoneAccount } from "./phone-account.js";
+import { PhoneHead } from "./phone-head.js";
 import { useInboxWaiting } from "./places-waiting.js";
 import { ProductIdentity } from "./product-identity.js";
 import { RowPlaced, useRowMoveKeys } from "./row-moves.js";
@@ -1743,7 +1748,9 @@ function useFirstUsableSpan(tasks: TasksControl): void {
  * It is where the developer moves between things; what they work on is the
  * column beside it. On a phone it is the places bar's Tasks (`mobile-bar.tsx`),
  * whose bar already holds New task, Search, and the Inbox, and whose phone
- * opens on the Inbox rather than Home, so it leaves those four rows to the bar.
+ * opens on the Inbox rather than Home, so it leaves those four rows to the bar,
+ * and heads itself as every phone place does, its workspaces and account
+ * behind the reader's face (`phone-account.tsx`) rather than at its head and foot.
  * The open task's row is marked, or, where the task was opened from a pin,
  * that pin's row, while the task stays open.
  * A task's actions are a right-click on it away, whether or not it is open.
@@ -2226,8 +2233,33 @@ function SidebarColumn({
       <div className="desktop-drag-strip" />
       <HistoryButtons history={history} room={room} />
       {/* The workspace heads the sidebar once one is read, as everything under it is that
-          workspace's; the app's own head stands until then. */}
-      {tasks.signedIn && tasks.workspace !== undefined ? (
+          workspace's; the app's own head stands until then. A phone heads it as it heads
+          every place, the reader's face opening their workspaces and account (`phone-account.tsx`). */}
+      {phone ? (
+        <PhoneHead
+          place="sidebar"
+          start={
+            tasks.signedIn ? (
+              <PhoneAccount
+                tasks={tasks}
+                account={account}
+                onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+                onSignOut={onSignOut}
+              />
+            ) : null
+          }
+          title={
+            <Text
+              as={TEXT_ELEMENT.H1}
+              variant={TEXT_VARIANT.TOOLBAR_TITLE}
+              className="ui-toolbar-title"
+            >
+              Tasks
+            </Text>
+          }
+          end={null}
+        />
+      ) : tasks.signedIn && tasks.workspace !== undefined ? (
         <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
       ) : (
         <ProductIdentity />
@@ -2419,14 +2451,16 @@ function SidebarColumn({
           </ScrollArea>
         </Fill>
 
-        <SidebarFoot
-          account={account}
-          updates={updates}
-          shown={overlay.inSight}
-          settingsOpen={tab === PANEL_TAB.SETTINGS}
-          onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
-          onSignOut={onSignOut}
-        />
+        {phone ? null : (
+          <SidebarFoot
+            account={account}
+            updates={updates}
+            shown={overlay.inSight}
+            settingsOpen={tab === PANEL_TAB.SETTINGS}
+            onSettings={chosen(() => onTabChange(PANEL_TAB.SETTINGS))}
+            onSignOut={onSignOut}
+          />
+        )}
       </ReplayUnmask>
       {sectionDialogs.dialog}
       {selection.dialog}

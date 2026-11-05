@@ -836,6 +836,24 @@ test("on a phone the bar's Inbox wears the count of what needs the reader, named
   );
 });
 
+test("on a phone the Inbox's head leads with the reader's face, whose menu holds their workspaces and their account", async () => {
+  const page = await mountNarrow({
+    inboxView: { ...tasksControl().inboxView, open: true },
+    workspaces: [ACME],
+    workspace: ACME,
+  });
+  const face =
+    page.querySelector<HTMLButtonElement>('.inbox-head button[aria-label="Account"]') ??
+    assert.fail("the face leads the Inbox's head");
+  act(() => face.click());
+  const labels = [...document.querySelectorAll('[role="menu"] .ui-menu-item-label')].map(
+    (each) => each.textContent,
+  );
+  for (const label of [ACME.name, "New workspace", "Settings", "Sign out"]) {
+    assert.ok(labels.includes(label), `the menu offers ${label}`);
+  }
+});
+
 test("the places bar stands only on a phone's lists: an open task, an Inbox item, an automation's editor, and a wide window keep the whole screen", async () => {
   const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
   assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");

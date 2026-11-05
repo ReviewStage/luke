@@ -643,6 +643,12 @@
   background: var(--ui-color-sidebar);
 }
 
+/* A phone's tree heads itself as every place does (`phone-account.tsx`), so its
+   head spans the column past the sidebar's inset, its corners where theirs are. */
+.desktop-sidebar > .sidebar-head {
+  margin-inline: calc(-1 * var(--column-inset));
+}
+
 /* Over the places the bar stands on, the drawer is the bar's Tasks: the
    sidebar's tree of tasks across the whole screen above the bar, the row
    the work stands in, rather than a drawer beside the work, so it reads as

@@ -85,7 +85,7 @@ const ISSUES_URL = "https://github.com/ReviewStage/vespin/issues";
 const NOBODY_SIGNED_IN: Actor = { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
 
 /** The account's face: the signed-in person's (`actor-ref.tsx`), or someone's outline while no one is signed in. */
-function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
+export function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return <ActorMark actor={NOBODY_SIGNED_IN} size={ACTOR_SIZE.ACCOUNT} />;
   }
@@ -235,7 +235,7 @@ function SidebarBuild(): React.JSX.Element | null {
 }
 
 /** Who the menu is about, over its items: the account's name, and its email muted under it. */
-function AccountHeading({
+export function AccountHeading({
   account,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
@@ -322,10 +322,30 @@ function accountMenuGroups(
 }
 
 /**
- * The foot's account button and the menu it raises. Sign out acts on the
- * press, as Settings' does, and a refusal is said in a toast
+ * The account menu's items, each wired to what it does in the window, for
+ * the foot's menu and a phone's (`phone-account.tsx`) alike. Sign out acts
+ * on the press, as Settings' does, and a refusal is said in a toast
  * (`signOutSayingFailure`).
  */
+export function useAccountMenuGroups(
+  account: AccountSnapshot,
+  onSignOut: () => Promise<void>,
+): MenuEntry[][] {
+  const { press } = useAct();
+  const openPerson = useOpenPerson();
+  const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
+  return accountMenuGroups(account.status === ACCOUNT_STATUS.SIGNED_IN, desktopApp, {
+    onProfile:
+      openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
+    onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
+    onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
+    onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
+    onSignOut: () => void signOutSayingFailure(onSignOut),
+  });
+}
+
+/** The foot's account button and the menu it raises. */
 function AccountMenu({
   account,
   shown,
@@ -335,20 +355,9 @@ function AccountMenu({
   shown: boolean;
   onSignOut: () => Promise<void>;
 }): React.JSX.Element {
-  const { press } = useAct();
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   const { drawn, close, trigger } = useMenu(shown);
-  const openPerson = useOpenPerson();
-  const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
-  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
-  const groups = accountMenuGroups(signedIn, desktopApp, {
-    onProfile:
-      openPerson === undefined || accountId === undefined ? undefined : () => openPerson(accountId),
-    onOpenChangelog: () => press(ACT_KIND.UPDATE_OPEN_CHANGELOG),
-    onOpenIssues: () => appPlatform().openGitHub(ISSUES_URL),
-    onEmail: () => press(ACT_KIND.CONTACT_EMAIL),
-    onSignOut: () => void signOutSayingFailure(onSignOut),
-  });
+  const groups = useAccountMenuGroups(account, onSignOut);
   return (
     <>
       <NavItem

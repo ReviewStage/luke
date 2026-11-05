@@ -75,6 +75,7 @@ import { OfflineMark } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, TASKS_ROUTE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PersonPageSkeleton } from "./person-frame.js";
+import { PhoneAccount } from "./phone-account.js";
 import { PhoneHead, phoneBar } from "./phone-head.js";
 import { PLACE_LIST, PLACE_PAGE, PLACE_SPLIT } from "./place-columns.js";
 import { SidePanelChord, SidePanelToggle, usePanelToggleRoom } from "./side-panel.js";
@@ -815,6 +816,20 @@ export function DesktopShell({
   );
   // New task asks over whatever stands, the tasks or a version history.
   const newTaskDialog = useMemo(() => <NewTaskDialog newTask={tasks.newTask} />, [tasks.newTask]);
+  // A phone's places lead their heads with the reader's face, their workspaces and account behind it (`phone-account.tsx`).
+  const { onSignOut } = settings;
+  const phoneAccount = useMemo(
+    () =>
+      room === SHELL_ROOM.NARROW && tasks.signedIn ? (
+        <PhoneAccount
+          tasks={tasks}
+          account={account}
+          onSettings={() => onTabChange(PANEL_TAB.SETTINGS)}
+          onSignOut={onSignOut}
+        />
+      ) : null,
+    [room, tasks, account, onTabChange, onSignOut],
+  );
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. The
   // Automations page stands in the plan's place, so it draws
@@ -1092,7 +1107,7 @@ export function DesktopShell({
             ) : null}
             {inboxOpen || inboxKept ? (
               <KeptPage shown={inboxOpen} chipCards={chipCards} mentionedAgents={mentionedAgents}>
-                <DesktopInbox tasks={tasks} room={room} />
+                <DesktopInbox tasks={tasks} room={room} phoneStart={phoneAccount} />
               </KeptPage>
             ) : null}
           </ChipCards>
