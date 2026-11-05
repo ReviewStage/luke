@@ -2745,6 +2745,7 @@ function ThreadsPane({
       <WordsDatePickerRoom>
         <PaneBar
           title={COMMENTS_FILTER_WORDS[filter]}
+          titleReplayUnmasked
           detail={listed.length}
           actions={
             <ResolvedOnly
