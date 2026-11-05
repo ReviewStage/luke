@@ -53,7 +53,7 @@ const TASK: Task = {
 };
 
 /** A Copy link button of a unit, a section's or the title's. */
-const UNIT_LINK = '.plan-unit-more button[aria-label="Copy link"]';
+const UNIT_LINK = '.plan-unit-more button[aria-label^="Copy link"]';
 
 /** The sections' Copy link buttons, the title's left out. */
 function sectionLinks(container: HTMLElement): HTMLButtonElement[] {
@@ -125,14 +125,16 @@ test("a mention of a heading the plan no longer holds is struck through, and a p
   assert.deepEqual(opened, [{ kind: MENTION_KIND.TASK, taskId: TASK_ID }]);
 });
 
-test("a section's Copy link button copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
+test("a section's Copy link button, named for its heading, copies the section's link, its bare address, as a teammate pastes it into Slack or a pull request", async () => {
   const { container } = drawn();
 
   const rollout = [...container.querySelectorAll<HTMLElement>(".plan-unit-attributed")].find(
     (unit) => unit.textContent?.startsWith("Rollout"),
   );
-  const more = rollout?.querySelector<HTMLButtonElement>(UNIT_LINK);
-  assert.ok(more, "the Rollout section has a Copy link button");
+  const more = rollout?.querySelector<HTMLButtonElement>(
+    '.plan-unit-more button[aria-label="Copy link to Rollout"]',
+  );
+  assert.ok(more, "the Rollout section has a Copy link button named for it");
   await act(async () => more.click());
 
   assert.deepEqual(copied, [`https://vespin.dev/acme/task/${TASK_ID}#rollout`]);
