@@ -15,6 +15,7 @@ import { isComposingKey } from "../../composing-key.js";
 import { motionHeld } from "../../motion-timing.js";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { trappedTab } from "../../trapped-tab.js";
 import { ANNOUNCE, announce, type Retire } from "../announcer/announcer.js";
@@ -24,6 +25,7 @@ import {
   DIALOG_FOOT,
   type DialogFoot,
   DialogFootContext,
+  DialogReplayUnmasked,
   type FootClaim,
 } from "./dialog-foot.js";
 import { useHeldFocus } from "./held-focus.js";
@@ -264,6 +266,15 @@ export type DialogProps = DialogName & {
   size?: DialogSize | undefined;
   /** The id of what the card says, where it is a question. */
   describedBy?: string | undefined;
+  /**
+   * Whether the card's own words are the app's, which a screen recording
+   * shows as they read: its title, what it holds, and its act's word, but
+   * for a title that is `titleReplayMasked`, and for any of a person's
+   * words its owner wraps in `ReplayMask` (`@repo/ui/session-replay-marks`).
+   */
+  replayUnmasked?: boolean | undefined;
+  /** Whether its title names a person's thing, kept masked in a screen recording even where the card unmasks its own words. */
+  titleReplayMasked?: boolean | undefined;
   /** Whether the dialog is at work, its controls stilled. */
   busy?: boolean | undefined;
   /** Whether its act was refused and the refusal stands; each time it turns true the card shakes. */
@@ -510,6 +521,8 @@ export function Dialog({
   title,
   labelledBy,
   describedBy,
+  replayUnmasked = false,
+  titleReplayMasked = false,
   busy = false,
   refused = false,
   holding = false,
@@ -685,7 +698,9 @@ export function Dialog({
       >
         {title === undefined ? null : (
           <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-            {title}
+            <ReplayWords unmasked={replayUnmasked} masked={titleReplayMasked}>
+              {title}
+            </ReplayWords>
           </Text>
         )}
         <div
@@ -694,12 +709,18 @@ export function Dialog({
           className={MIDDLE}
           inert={claimed !== undefined}
         >
-          <DialogFootContext.Provider value={foot}>{children}</DialogFootContext.Provider>
+          <DialogFootContext.Provider value={foot}>
+            <ReplayWords unmasked={replayUnmasked}>{children}</ReplayWords>
+          </DialogFootContext.Provider>
         </div>
         {claimed !== undefined || (actions === undefined && actionsStart === undefined) ? null : (
           <div className={DIALOG_FOOT}>
             {actionsStart}
-            <div className={DIALOG_ANSWERS}>{actions}</div>
+            <div className={DIALOG_ANSWERS}>
+              <DialogReplayUnmasked.Provider value={replayUnmasked}>
+                {actions}
+              </DialogReplayUnmasked.Provider>
+            </div>
           </div>
         )}
         <div ref={setSlot} className={DIALOG_FOOT} hidden={claimed === undefined} />

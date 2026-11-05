@@ -1,7 +1,9 @@
 import type { BaseUIEvent } from "@base-ui/react/types";
 import {
+  createContext,
   Fragment,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -15,6 +17,7 @@ import { isComposingKey } from "../../composing-key.js";
 import { cssCustomProperties } from "../../css.js";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import {
   DROPDOWN_MENU_ITEM,
   DROPDOWN_MENU_ITEM_LIT,
@@ -209,6 +212,8 @@ export interface MenuAction {
   stays?: boolean | undefined;
   /** The card hung beside the item while the pointer rests on it, as a person's in a people filter; none hangs nothing. */
   card?: React.ReactNode;
+  /** Whether its label and detail are a person's words, a repository's or a workspace's name, kept masked in a screen recording even in a menu that unmasks its own (`replayUnmasked`). */
+  replayMasked?: boolean | undefined;
 }
 
 /**
@@ -720,6 +725,29 @@ function secondLine(action: MenuAction): boolean {
 }
 
 /**
+ * Whether the menu standing round an item unmasks its words in a screen
+ * recording (`MenuProps`'s `replayUnmasked`), read by each item rather than
+ * handed down, since a menu's rows stand in portals of their own, as its
+ * submenus and its phone's sheet do, which no mark round the menu reaches.
+ */
+const MenuReplayUnmasked = createContext(false);
+
+/** An item's words, marked for a screen recording as its menu and the item ask. */
+function ItemWords({
+  masked,
+  children,
+}: {
+  masked?: boolean | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <ReplayWords unmasked={useContext(MenuReplayUnmasked)} masked={masked}>
+      {children}
+    </ReplayWords>
+  );
+}
+
+/**
  * An item's glyph, words, and end, as every row draws them; one that keeps
  * no `column` draws no glyph slot where it has no glyph.
  */
@@ -737,10 +765,14 @@ function ItemBody({
       <>
         {glyph}
         {action.tag === undefined ? (
-          <OneLine className="ui-menu-item-label min-w-0 flex-1">{action.label}</OneLine>
+          <OneLine className="ui-menu-item-label min-w-0 flex-1">
+            <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
+          </OneLine>
         ) : (
           <span className="ui-menu-item-tagged flex min-w-0 flex-1 items-center gap-ui-8">
-            <OneLine className="ui-menu-item-label min-w-0">{action.label}</OneLine>
+            <OneLine className="ui-menu-item-label min-w-0">
+              <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
+            </OneLine>
             {action.tag}
           </span>
         )}
@@ -761,10 +793,10 @@ function ItemBody({
         <OneLine
           className={cn("ui-menu-item-label min-w-0", beside ? "flex-initial" : "flex-none")}
         >
-          {action.label}
+          <ItemWords masked={action.replayMasked}>{action.label}</ItemWords>
         </OneLine>
         <OneLine className={cn("ui-menu-item-detail", beside && "min-w-0 flex-[0_1000_auto]")}>
-          {action.detail}
+          <ItemWords masked={action.replayMasked}>{action.detail}</ItemWords>
         </OneLine>
       </span>
       <ItemEnd action={action} />
@@ -1141,7 +1173,9 @@ function Submenu({
         }}
       >
         <MenuGlyph>{entry.icon}</MenuGlyph>
-        <OneLine className="ui-menu-item-label min-w-0 flex-1">{entry.label}</OneLine>
+        <OneLine className="ui-menu-item-label min-w-0 flex-1">
+          <ItemWords>{entry.label}</ItemWords>
+        </OneLine>
         {entry.hint === undefined ? null : <span className="ui-menu-item-hint">{entry.hint}</span>}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -1444,6 +1478,13 @@ interface MenuProps {
   openOn?: string | undefined;
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
+  /**
+   * Whether its items' labels and details are the app's own words, which a
+   * screen recording shows as they read, but for an item that is
+   * `replayMasked`; its subject, heading, footer, and panels are its
+   * caller's to mark (`@repo/ui/session-replay-marks`).
+   */
+  replayUnmasked?: boolean | undefined;
 }
 
 /**
@@ -2054,5 +2095,9 @@ function MenuSheet({
 export function Menu(props: MenuProps): React.JSX.Element {
   const { placement } = props.menu;
   const sheet = useMemo(() => inNarrowRoom(), [placement]);
-  return sheet ? <MenuSheet {...props} /> : <FloatingMenu {...props} />;
+  return (
+    <MenuReplayUnmasked.Provider value={props.replayUnmasked === true}>
+      {sheet ? <MenuSheet {...props} /> : <FloatingMenu {...props} />}
+    </MenuReplayUnmasked.Provider>
+  );
 }

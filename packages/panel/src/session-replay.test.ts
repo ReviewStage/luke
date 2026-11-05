@@ -55,7 +55,6 @@ test("the installed bundles still know every name the masking and the recorder r
   const recorder = readFileSync(resolve("posthog-js/dist/posthog-recorder"), "utf8");
   const names = [
     "maskTextSelector",
-    "maskTextFn",
     "maskAttributeFn",
     "maskAllInputs",
     "slimDOMOptions",
@@ -70,6 +69,8 @@ test("the installed bundles still know every name the masking and the recorder r
     "enable_recording_console_log",
   ];
   for (const name of names) assert.ok(client.includes(name) || recorder.includes(name), name);
+  // The text masking is a function the recorder calls, so it is the recorder that must know it.
+  assert.ok(recorder.includes("maskTextFn"), "maskTextFn");
   assert.ok(recorder.includes("__PosthogExtensions__.initSessionRecording"));
 });
 

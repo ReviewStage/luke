@@ -4,6 +4,7 @@ import { memo, type ReactNode, type Ref, useLayoutEffect, useRef, useState } fro
 import { cn } from "../../cn.js";
 import { SearchIcon } from "../../face/glyphs.js";
 import { searchHit } from "../../search-score.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { COMBOBOX_HEADING } from "../../shadcn/combobox.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import {
@@ -74,6 +75,8 @@ export interface CommandItem extends ComboboxOption {
   readonly keywords?: readonly string[] | undefined;
   /** Choosing it, by Return or a press. */
   readonly onSelect: () => void;
+  /** Whether its words name a person's thing, a task's title or a repository's name, kept masked in a screen recording even in a palette that unmasks its own (`replayUnmasked`). */
+  readonly replayMasked?: boolean | undefined;
 }
 
 /** A run of commands under a heading, or under none, and what is said after them. */
@@ -145,7 +148,24 @@ function matching(groups: readonly CommandGroup[], typed: string): readonly Comm
  * because the dialog draws again for each key typed and each row the arrows
  * or the pointer light, and cmdk lights a row from its own store.
  */
-const CommandRow = memo(function CommandRow({ item }: { item: CommandItem }): React.JSX.Element {
+const CommandRow = memo(function CommandRow({
+  item,
+  unmasked,
+}: {
+  item: CommandItem;
+  /** Whether the palette unmasks its own words in a screen recording. */
+  unmasked: boolean;
+}): React.JSX.Element {
+  const marked = (words: ReactNode) =>
+    words === undefined ? undefined : (
+      <ReplayWords unmasked={unmasked} masked={item.replayMasked}>
+        {words}
+      </ReplayWords>
+    );
+  const option =
+    unmasked || item.replayMasked === true
+      ? { ...item, label: marked(item.label), detail: marked(item.detail), hint: marked(item.hint) }
+      : item;
   const row = (
     <Command.Item
       asChild
@@ -154,7 +174,7 @@ const CommandRow = memo(function CommandRow({ item }: { item: CommandItem }): Re
       disabled={item.disabled === true}
       onSelect={item.onSelect}
     >
-      <ComboboxOptionItem option={item} />
+      <ComboboxOptionItem option={option} />
     </Command.Item>
   );
   if (item.card === undefined) return row;
@@ -196,6 +216,14 @@ export interface CommandDialogProps {
   /** The owner's own keys, heard before cmdk's, which a key the owner prevents never reaches. */
   onKeyDown?: ((event: React.KeyboardEvent<HTMLDivElement>) => void) | undefined;
   /**
+   * Whether its own words are the app's, which a screen recording shows as
+   * they read: its groups' headings, what its list says while empty or
+   * reading, and its rows' words, but for a row that is `replayMasked`; its
+   * band, foot, and groups' notes are its owner's to mark
+   * (`@repo/ui/session-replay-marks`).
+   */
+  replayUnmasked?: boolean | undefined;
+  /**
    * Whether the card stays drawn, hidden, while the dialog is shut, so opening it again only
    * shows it: for an owner whose props stand still while it is shut, since the hidden card
    * draws again whenever one changes.
@@ -228,6 +256,7 @@ export function CommandDialog({
   inputRef,
   onKeyDown,
   keepMounted = false,
+  replayUnmasked = false,
 }: CommandDialogProps): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
   // Note that the card stands a render after the dialog opens, because Base UI's portal makes its node first, so the field takes focus once it does.
@@ -321,9 +350,13 @@ export function CommandDialog({
           <Command.List asChild label={label}>
             <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
               {loading !== undefined && rows === 0 ? (
-                <NoteLine status>{loading}</NoteLine>
+                <NoteLine status>
+                  <ReplayWords unmasked={replayUnmasked}>{loading}</ReplayWords>
+                </NoteLine>
               ) : standing.length === 0 ? (
-                <NoteLine>{empty}</NoteLine>
+                <NoteLine>
+                  <ReplayWords unmasked={replayUnmasked}>{empty}</ReplayWords>
+                </NoteLine>
               ) : null}
               {standing.map((group) => (
                 <Command.Group
@@ -331,13 +364,13 @@ export function CommandDialog({
                   heading={
                     group.label === undefined ? undefined : (
                       <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.GROUP} className={HEADING}>
-                        {group.label}
+                        <ReplayWords unmasked={replayUnmasked}>{group.label}</ReplayWords>
                       </Text>
                     )
                   }
                 >
                   {group.items.map((item) => (
-                    <CommandRow key={item.id} item={item} />
+                    <CommandRow key={item.id} item={item} unmasked={replayUnmasked} />
                   ))}
                   {group.note === undefined ? null : <div className={NOTE}>{group.note}</div>}
                 </Command.Group>

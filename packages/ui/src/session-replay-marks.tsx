@@ -21,6 +21,18 @@
  * and the recording's controller reads them off the live page
  * (`showsInReplay`), so the masking of attribute values does not reach them.
  *
+ * Marks follow the page, not React's tree, so a mark round a caller never
+ * reaches what its component draws in a portal: a menu, a dialog, the
+ * command palette, a popover panel. And words a component is handed as a
+ * string are drawn by the component, where its caller cannot wrap them.
+ * Such a component takes a `replayUnmasked` opt-in, which unmasks the
+ * words it draws itself, and where its items or its title may name a
+ * person's thing, a `replayMasked` flag on the item (`titleReplayMasked`
+ * on a dialog), which masks them again; each draws them through
+ * `ReplayWords`. Words a caller hands as nodes are the caller's to mark,
+ * inside the portal. A tooltip and a hover card take none, since the
+ * recording leaves them out whole (`ph-no-capture`).
+ *
  * Two things reach the recording past its masking, and each is answered
  * here, once, for every surface that has one.
  *
@@ -100,6 +112,29 @@ export function ReplayMask({ children }: { children: ReactNode }): React.JSX.Ele
       {children}
     </span>
   );
+}
+
+/**
+ * Words a component draws from a string its caller handed it, marked as its
+ * caller asked: under the mask mark where the caller masked them (a menu
+ * item or a choice that names a person's thing), under the unmask mark where
+ * the caller unmasked what the component draws (`replayUnmasked`), and
+ * unmarked otherwise, so they take whatever mark stands above them. This is
+ * how a component whose words stand in a portal, which no mark around its
+ * caller reaches, or arrive as strings, which its caller cannot wrap, takes
+ * its caller's marks.
+ */
+export function ReplayWords({
+  unmasked = false,
+  masked = false,
+  children,
+}: {
+  unmasked?: boolean | undefined;
+  masked?: boolean | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  if (masked) return <ReplayMask>{children}</ReplayMask>;
+  return unmasked ? <ReplayUnmask>{children}</ReplayUnmask> : <>{children}</>;
 }
 
 /**

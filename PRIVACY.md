@@ -1,6 +1,6 @@
 # Privacy
 
-Effective date: November 4, 2026
+Effective date: November 5, 2026
 
 ## 1\. Introduction
 

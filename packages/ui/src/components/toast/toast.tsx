@@ -2,6 +2,7 @@ import { Duration } from "effect";
 import { type KeyboardEvent, type ReactNode, useRef, useState } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { AlertIcon, CircleCheckIcon, InboxIcon } from "../../icons/lucide-glyphs.js";
+import { ReplayWords } from "../../session-replay-marks.js";
 import { STATUS_TONE } from "../../status-tone.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
@@ -136,6 +137,7 @@ export function Toast({
   glyph,
   words,
   detail,
+  replayUnmasked = false,
   leaving = false,
   actions,
   countdown,
@@ -148,6 +150,8 @@ export function Toast({
   words: string;
   /** A second line under the words. */
   detail?: string | undefined;
+  /** Whether its words and detail are the app's own, which a screen recording shows as they read; a toast that quotes a person's words, a name, or a refusal's words leaves them masked. */
+  replayUnmasked?: boolean | undefined;
   /** Whether it is on its way out. */
   leaving?: boolean;
   /** Its action and dismiss, as `ToastActions` draws them; a toast with none is never pointed at. */
@@ -216,13 +220,13 @@ export function Toast({
       <span className={TOAST_TEXT} key={words}>
         <span className="ui-toast-words line-clamp-2 wrap-anywhere">
           <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.SPAN}>
-            {words}
+            <ReplayWords unmasked={replayUnmasked}>{words}</ReplayWords>
           </Text>
         </span>
         {detail === undefined ? null : (
           <span className="ui-toast-detail line-clamp-2 wrap-anywhere">
             <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-              {detail}
+              <ReplayWords unmasked={replayUnmasked}>{detail}</ReplayWords>
             </Text>
           </span>
         )}
