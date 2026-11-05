@@ -450,12 +450,16 @@ function ToolsLine({
 function RowToolsPanel({
   id,
   name,
+  provider,
   tools,
 }: {
   id: string;
   name: string;
+  provider: IntegrationProvider;
   tools: RowTools;
 }): React.JSX.Element {
+  // Note that a catalog integration's tools are named and described by the provider, which a screen recording shows; Executor's are the apps a member set up, which stay masked.
+  const toolWordsShown = provider !== INTEGRATION_PROVIDER.EXECUTOR;
   const shown = byName(tools.shown);
   const [held, setHeld] = useState<string | undefined>(undefined);
   const rows = useRef(new Map<string, HTMLElement>());
@@ -502,34 +506,32 @@ function RowToolsPanel({
         <ScrollArea ref={list}>
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the focus is the rows' own, which the box only hears bubble. */}
           <div className="integration-tools-list p-ui-4" onFocus={onRowFocus}>
-            {/* Note that a server's tools are named and described by the server, so they stay masked in a screen recording. */}
-            <ReplayMask>
-              <IntegrationToolList
-                server={name}
-                tools={shown}
-                tokens={tools.tokens}
-                current={current?.name}
-                onOpen={hold}
-                onKeyDown={onRowKey}
-                rowRef={(tool, button) => {
-                  if (button === null) rows.current.delete(tool.name);
-                  else rows.current.set(tool.name, button);
-                }}
-              />
-            </ReplayMask>
+            <IntegrationToolList
+              server={name}
+              toolWordsShown={toolWordsShown}
+              tools={shown}
+              tokens={tools.tokens}
+              current={current?.name}
+              onOpen={hold}
+              onKeyDown={onRowKey}
+              rowRef={(tool, button) => {
+                if (button === null) rows.current.delete(tool.name);
+                else rows.current.set(tool.name, button);
+              }}
+            />
           </div>
         </ScrollArea>
         {current !== undefined ? (
           // Note that a tool held is a page of its own, so it opens at its top rather than where the last was scrolled.
-          <ReplayMask key={current.name}>
-            <IntegrationToolDetail
-              server={name}
-              tool={current}
-              tokens={tools.tokens}
-              bodyRef={body}
-              onBodyKeyDown={onBodyKey}
-            />
-          </ReplayMask>
+          <IntegrationToolDetail
+            key={current.name}
+            server={name}
+            toolWordsShown={toolWordsShown}
+            tool={current}
+            tokens={tools.tokens}
+            bodyRef={body}
+            onBodyKeyDown={onBodyKey}
+          />
         ) : null}
       </div>
     </div>
@@ -811,7 +813,7 @@ function IntegrationRow({
         }}
       />
       <Reveal shown={connected && tools.expanded && tools.shown.length > 0}>
-        <RowToolsPanel id={panelId} name={name} tools={tools} />
+        <RowToolsPanel id={panelId} name={name} provider={provider} tools={tools} />
       </Reveal>
       <ConfirmDialog
         open
