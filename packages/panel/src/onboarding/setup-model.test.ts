@@ -8,7 +8,7 @@ const NEW = {
   finished: false,
   accountRead: true,
   started: false,
-  personalOnly: true,
+  invited: false,
   agent: false,
 } as const;
 
@@ -30,8 +30,13 @@ test.each([
     gate: SETUP_GATE.NONE,
   },
   {
-    case: "an account in a team's workspace",
-    account: { ...NEW, personalOnly: false },
+    case: "an account a team invited, holding its tasks, with no agent",
+    account: { ...NEW, invited: true, fresh: false },
+    gate: SETUP_GATE.OWED,
+  },
+  {
+    case: "an account a team invited, let in while its agent read is out",
+    account: { ...NEW, invited: true, fresh: false, agent: undefined },
     gate: SETUP_GATE.NONE,
   },
   { case: "an account with tasks", account: { ...NEW, fresh: false }, gate: SETUP_GATE.NONE },
@@ -42,7 +47,7 @@ test.each([
   },
   {
     case: "an account midway, its agent and team made",
-    account: { ...NEW, started: true, agent: true, personalOnly: false },
+    account: { ...NEW, started: true, agent: true, invited: true },
     gate: SETUP_GATE.OWED,
   },
   { case: "no account signed in", account: { ...NEW, id: undefined }, gate: SETUP_GATE.NONE },

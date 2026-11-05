@@ -54,6 +54,7 @@ import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contra
 import { useAttachedFiles } from "../use-attached-files.js";
 import { AgentContextRing, ContextRingIcon } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
+import type { ConnectFailure } from "./agent-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
 import { BranchChip, type PublishedDoors } from "./agent-published.js";
 import { type AgentServersControl, serversMenuPanel } from "./agent-servers.js";
@@ -188,7 +189,8 @@ import { useModifierHeld } from "./use-modifier-held.js";
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
  * calls its round button (`wording`), stands its Runs on chip after the "+" (`tools`), handed whether the card is too narrow for its words,
- * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
+ * holds Start while it cannot start (`sendable`), says why where nothing of the account's
+ * pays for the chosen model, with the press that connects one (`unpaid`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and hands the
  * MCP servers' switches its first agent starts with, which its "+" menu
@@ -468,6 +470,7 @@ export function AgentComposer({
   actions,
   beforeSend,
   sendable = true,
+  unpaid,
   onKey,
   onLeave,
   focusedByOwner = false,
@@ -529,6 +532,8 @@ export function AgentComposer({
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
+  /** Why the agent the box would start cannot run: nothing of the account's pays for the chosen model, said under the box with the press that connects its harness, while the owner holds Send; none where something pays. */
+  unpaid?: ConnectFailure | undefined;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
   onKey?: ((event: KeyboardEvent) => boolean) | undefined;
   /** What Escape in the field does where no list or dictation takes it; the field gives up the caret where none is given. */
@@ -625,6 +630,7 @@ export function AgentComposer({
     words !== undefined
       ? { reason: FAILURE_REASON.OTHER, text: words }
       : (composer.note ??
+        unpaid ??
         (lapsed === undefined
           ? undefined
           : {

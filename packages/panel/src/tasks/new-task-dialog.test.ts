@@ -630,6 +630,20 @@ test("a box with no repository holds Start and says why under the card", async (
   assert.deepEqual(card.starts, []);
 });
 
+test("a model nothing pays for holds Start and says which harness to connect before anything is sent, its press opening Settings at its row", async () => {
+  models = MODELS.map((model) => ({ ...model, credentialMissing: true }));
+  const card = await mount();
+  card.type("Dark mode toggle");
+  await card.key("Enter");
+
+  assert.equal(card.startButton().disabled, true);
+  assert.deepEqual(card.starts, []);
+  assert.match(card.note() ?? "", /until you connect a Claude plan or an Anthropic API key/u);
+  act(() => card.button("Connect Claude").click());
+  await settle();
+  assert.deepEqual(card.links, [agentKeyLink(MODEL_PROVIDER.ANTHROPIC)]);
+});
+
 test("Command-Return on an empty box starts a bare task: no planning and no agent", async () => {
   const card = await mount(undefined, undefined, { recent: [] });
   await card.key("Enter", { metaKey: true });

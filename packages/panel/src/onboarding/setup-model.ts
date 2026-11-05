@@ -3,13 +3,14 @@
  *
  * Setup stands once, in the window after sign-in, for a new account (see
  * `setupGate`), until it is finished. An account invited into a team's
- * workspace never sees it.
+ * workspace with no agent connected walks its Connect an agent step alone.
  */
 
-/** Who the account is set up for, as setup's first step asks. */
+/** Who the account is set up for, as setup's first step asks, or a team's, which invited it, and asks nothing. */
 export const SETUP_AUDIENCE = {
   ME: "me",
   TEAM: "team",
+  INVITED: "invited",
 } as const;
 
 export type SetupAudience = (typeof SETUP_AUDIENCE)[keyof typeof SETUP_AUDIENCE];
@@ -31,9 +32,20 @@ export type SetupStep = (typeof SETUP_STEP)[keyof typeof SETUP_STEP];
  * the workspace the agents will work in.
  */
 export function setupSteps(audience: SetupAudience): readonly SetupStep[] {
-  return audience === SETUP_AUDIENCE.TEAM
-    ? [SETUP_STEP.WELCOME, SETUP_STEP.TEAM, SETUP_STEP.AGENT, SETUP_STEP.GITHUB, SETUP_STEP.TOOLS]
-    : [SETUP_STEP.WELCOME, SETUP_STEP.AGENT, SETUP_STEP.GITHUB, SETUP_STEP.TOOLS];
+  switch (audience) {
+    case SETUP_AUDIENCE.TEAM:
+      return [
+        SETUP_STEP.WELCOME,
+        SETUP_STEP.TEAM,
+        SETUP_STEP.AGENT,
+        SETUP_STEP.GITHUB,
+        SETUP_STEP.TOOLS,
+      ];
+    case SETUP_AUDIENCE.INVITED:
+      return [SETUP_STEP.AGENT];
+    case SETUP_AUDIENCE.ME:
+      return [SETUP_STEP.WELCOME, SETUP_STEP.AGENT, SETUP_STEP.GITHUB, SETUP_STEP.TOOLS];
+  }
 }
 
 /** What the window does about setup: nothing, wait on what it still reads, or stand setup before the app. */
@@ -46,15 +58,17 @@ export const SETUP_GATE = {
 export type SetupGate = (typeof SETUP_GATE)[keyof typeof SETUP_GATE];
 
 /**
- * Whether the window owes setup. An account is new where it is signed in,
- * holds no task, belongs to no team's workspace, and has no agent connected,
- * since nothing runs without one, so an account that has worked before is
- * never set up again on another machine. Finished is the account's, so it
- * holds on every machine. Once setup has started on this
- * machine it stands until finished, whatever it has connected or made
- * meanwhile. Until the account's preferences are read, which say whether it
- * finished on another machine, and the agent's read answers, a new account
- * waits on them rather than glimpsing setup or the app.
+ * Whether the window owes setup. It is owed to an account signed in with no
+ * agent connected, since nothing runs without one: one that holds no task and
+ * belongs to no team's workspace, so an account that has worked before is
+ * never set up again on another machine, or one invited into a team's
+ * workspace, whose teammates' tasks it holds, which is asked for an agent
+ * alone. Finished is the account's, so it holds on every machine. Once setup
+ * has started on this machine it stands until finished, whatever it has
+ * connected or made meanwhile. Until the account's preferences are read,
+ * which say whether it finished on another machine, and the agent's read
+ * answers, a new account waits on them rather than glimpsing setup or the
+ * app; one a team invited is let in meanwhile, since most have an agent.
  */
 export function setupGate(account: {
   readonly id: string | undefined;
@@ -64,15 +78,17 @@ export function setupGate(account: {
   /** Whether the account's preferences were read, so `finished` speaks for every machine. */
   readonly accountRead: boolean;
   readonly started: boolean;
-  readonly personalOnly: boolean;
+  /** Whether the account belongs to a team's workspace. */
+  readonly invited: boolean;
   /** Whether an agent is connected; nothing while the models are still read. */
   readonly agent: boolean | undefined;
 }): SetupGate {
-  if (account.id === undefined || !account.fresh || account.finished) return SETUP_GATE.NONE;
-  if (!account.started && (!account.personalOnly || account.agent === true)) {
-    return SETUP_GATE.NONE;
+  if (account.id === undefined || account.finished) return SETUP_GATE.NONE;
+  if (account.started) return account.accountRead ? SETUP_GATE.OWED : SETUP_GATE.WAIT;
+  if (account.agent === true) return SETUP_GATE.NONE;
+  if (account.invited) {
+    return account.accountRead && account.agent === false ? SETUP_GATE.OWED : SETUP_GATE.NONE;
   }
-  if (!account.accountRead) return SETUP_GATE.WAIT;
-  if (account.started) return SETUP_GATE.OWED;
-  return account.agent === undefined ? SETUP_GATE.WAIT : SETUP_GATE.OWED;
+  if (!account.fresh) return SETUP_GATE.NONE;
+  return !account.accountRead || account.agent === undefined ? SETUP_GATE.WAIT : SETUP_GATE.OWED;
 }
