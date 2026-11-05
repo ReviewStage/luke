@@ -296,6 +296,7 @@ export function composeDesktop(
           state,
           isOnline: () => net.isOnline(),
           regained: operator.host.tasksResync(),
+          report: config.report,
         });
       }
       const updates = yield* createUpdateServiceHost({

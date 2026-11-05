@@ -19,7 +19,8 @@ import { liveSocketClient } from "./live-socket.js";
  * it as its path and query and is answered with what the socket answered,
  * while a write goes over HTTP; a 401 closes the socket and is asked again
  * over HTTP; a socket past its time takes no new asks while the ones it
- * holds are still answered; and an ask left unanswered closes its socket.
+ * holds are still answered; and an ask left unanswered closes its socket and
+ * is asked again over HTTP, so a socket's end never fails a read.
  */
 
 const SERVICE = "https://app.test";
@@ -172,7 +173,7 @@ it.effect(
 );
 
 it.effect(
-  "a socket past its time takes no new asks while one it holds is still answered, and an ask left unanswered closes its socket",
+  "a socket past its time takes no new asks while one it holds is still answered, and an ask left unanswered closes its socket and is asked again over HTTP",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -207,8 +208,11 @@ it.effect(
         const stalled = yield* poll;
         yield* newer.asked;
         yield* TestClock.adjust(ANSWER_WITHIN);
-        const failed = yield* Fiber.await(stalled);
-        assert.equal(failed._tag, "Failure", "an ask its socket never answered fails");
+        assert.deepEqual(
+          yield* Fiber.join(stalled),
+          { status: 200, text: HTTP_BODY },
+          "an ask its socket never answered is answered over HTTP",
+        );
         assert.equal(newer.state.closed, true, "a socket that stalled is closed");
       }),
     ),
