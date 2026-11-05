@@ -324,8 +324,10 @@ What follows from this everywhere else:
   Sentry*, so the button reads right on its own, as the one thing the eye
   lands on. Where the noun is a person's or a thing's own name, the act names
   its kind instead and stays short: *Remove member*, not *Remove Ada
-  Lovelace*. A verb that is already a whole phrase stays as it is (*Leave
-  Acme*, *Transfer ownership*).
+  Lovelace*. A product the app connects to, such as Sentry or GitHub, is
+  named as it is, since its name is already short and is its kind. A verb
+  that is already a whole phrase stays as it is (*Leave Acme*, *Transfer
+  ownership*).
 - A bound the developer hit is stated plainly: "That message is empty or too
   long." A poetic restatement of the same bound tells them nothing they can
   act on.
