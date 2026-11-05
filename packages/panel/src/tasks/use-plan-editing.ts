@@ -148,12 +148,18 @@ function keepLeft(left: LeftTask, now: DocumentEditor, saving: symbol, cause?: u
     if (standing !== undefined) saveLeft(left, editorKeptMine(standing));
   };
   left.toast({
+    // Note that a conflict's detail names who wrote over the section, so it stays masked.
+    replayUnmasked: !conflict,
     words: LEFT_UNSAVED.WORDS,
     ...(conflict ? { detail: conflictWords(state.by, left.place).note } : {}),
     tone: STATUS_TONE.DANGER,
     subject: taskId,
     persists: true,
-    action: { label: conflict ? LEFT_UNSAVED.KEEP_MINE : LEFT_UNSAVED.RETRY, onPress: press },
+    action: {
+      label: conflict ? LEFT_UNSAVED.KEEP_MINE : LEFT_UNSAVED.RETRY,
+      replayUnmasked: true,
+      onPress: press,
+    },
     failure: conflict
       ? {
           surface: FAILURE_SURFACE.PLAN_SAVE,

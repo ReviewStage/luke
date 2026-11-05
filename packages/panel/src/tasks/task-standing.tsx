@@ -34,6 +34,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@repo/ui";
+import { ReplayUnmask, ReplayWords } from "@repo/ui/session-replay-marks";
 import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -150,6 +151,7 @@ export function assigneeRows(
       detail: row.detail,
       terms: row.terms,
       card: row.card,
+      replayMasked: true,
     })),
   ];
 }
@@ -172,6 +174,7 @@ export function useAssigneeRows(assignee: TaskSummary["assignee"]): readonly Men
       id: value,
       label: assignee?.name ?? NO_ASSIGNEE_WORDS,
       icon: <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />,
+      replayMasked: assignee !== undefined,
     },
   ];
 }
@@ -193,6 +196,7 @@ function TaskAssigneePicker({
   const person = usePerson(assignee);
   return (
     <Picker
+      replayUnmasked
       label="Assignee"
       value={assignee?.userId ?? NO_ASSIGNEE}
       valueLabel={assignee?.name ?? NO_ASSIGNEE_WORDS}
@@ -442,23 +446,26 @@ function TaskStatusPicker({
   onPick: ((status: TaskStatus) => void) | undefined;
 }): React.JSX.Element {
   return (
-    <Picker
-      label={label}
-      value={status}
-      valueLabel={TASK_STATUS_WORDS[status]}
-      valueIcon={<TaskStatusMark status={status} />}
-      rows={STATUS_ROWS}
-      noMatch="No statuses match"
-      align={POPOVER_ALIGN.START}
-      width={CHIP_WIDTH.AUTO}
-      look={CHIP_LOOK.TOOLBAR}
-      disabled={onPick === undefined}
-      openRequest={openRequest}
-      onPick={(id) => {
-        const picked = statusOf(id);
-        if (picked !== undefined && picked !== status) onPick?.(picked);
-      }}
-    />
+    <ReplayUnmask>
+      <Picker
+        replayUnmasked
+        label={label}
+        value={status}
+        valueLabel={TASK_STATUS_WORDS[status]}
+        valueIcon={<TaskStatusMark status={status} />}
+        rows={STATUS_ROWS}
+        noMatch="No statuses match"
+        align={POPOVER_ALIGN.START}
+        width={CHIP_WIDTH.AUTO}
+        look={CHIP_LOOK.TOOLBAR}
+        disabled={onPick === undefined}
+        openRequest={openRequest}
+        onPick={(id) => {
+          const picked = statusOf(id);
+          if (picked !== undefined && picked !== status) onPick?.(picked);
+        }}
+      />
+    </ReplayUnmask>
   );
 }
 
@@ -512,26 +519,32 @@ export function TaskStandingChips({
           openRequest={statusAsks}
           onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
         />
-        <Picker
-          label="Priority"
-          value={priority}
-          valueLabel={TASK_PRIORITY_WORDS[priority]}
-          valueIcon={<TaskPriorityMark priority={priority} />}
-          rows={PRIORITY_ROWS}
-          noMatch="No priorities match"
-          align={POPOVER_ALIGN.START}
-          width={CHIP_WIDTH.AUTO}
-          look={CHIP_LOOK.TOOLBAR}
-          disabled={onSet === undefined}
-          onPick={(id) => {
-            const picked = priorityOf(id);
-            if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
-          }}
-        />
-        <TaskAssigneePicker
-          assignee={task.assignee}
-          onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
-        />
+        <ReplayUnmask>
+          <Picker
+            replayUnmasked
+            label="Priority"
+            value={priority}
+            valueLabel={TASK_PRIORITY_WORDS[priority]}
+            valueIcon={<TaskPriorityMark priority={priority} />}
+            rows={PRIORITY_ROWS}
+            noMatch="No priorities match"
+            align={POPOVER_ALIGN.START}
+            width={CHIP_WIDTH.AUTO}
+            look={CHIP_LOOK.TOOLBAR}
+            disabled={onSet === undefined}
+            onPick={(id) => {
+              const picked = priorityOf(id);
+              if (picked !== undefined && picked !== priority) onSet?.({ priority: picked });
+            }}
+          />
+        </ReplayUnmask>
+        {/* Note that the chip names the assignee where there is one, so it shows only while it says No assignee. */}
+        <ReplayWords unmasked={task.assignee === undefined}>
+          <TaskAssigneePicker
+            assignee={task.assignee}
+            onPick={onSet === undefined ? undefined : (assigneeId) => onSet({ assigneeId })}
+          />
+        </ReplayWords>
         {asked}
       </Inline>
     </div>

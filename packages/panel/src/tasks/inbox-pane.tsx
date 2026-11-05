@@ -61,6 +61,7 @@ import {
   memberActor,
   SOMEONE_REASON,
 } from "@repo/ui/actor-model";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { isWireString } from "@repo/wire";
 import { BotIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -1111,6 +1112,7 @@ function phoneItemGroups(
             {
               label: OPEN_TASK,
               detail: holder.task.name,
+              replayMasked: true,
               icon: tabLook({
                 kind: TAB_KIND.PLAN,
                 name: holder.task.name,
@@ -1124,6 +1126,7 @@ function phoneItemGroups(
             {
               label: OPEN_AUTOMATION,
               detail: holderName(holder),
+              replayMasked: true,
               icon: <ZapIcon />,
               onSelect: onOpenHolder,
             },
@@ -1132,6 +1135,7 @@ function phoneItemGroups(
   const agentItem: MenuAction = {
     label: OPEN_AGENT,
     detail: by.subject.name,
+    replayMasked: true,
     icon: <BotIcon />,
     onSelect: by.onOpen,
     ...(holder.kind === INBOX_HOLDER.TASK ? {} : { command: APP_COMMAND.OPEN_IN_TASK }),
@@ -1196,6 +1200,7 @@ function InboxItemMenu({
       <MoreButton thing={ITEM_THING} {...menu.trigger()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
+          replayUnmasked
           label={moreLabel(ITEM_THING)}
           menu={menu.drawn}
           heading={heading}
@@ -1712,7 +1717,9 @@ export function InboxPane({
               onClose={doors.onClose}
               lead={phoneItemGroups(holder, by, doors, pager, phone)}
               heading={
-                pager?.count === undefined ? undefined : `${pager.count.at} of ${pager.count.total}`
+                pager?.count === undefined ? undefined : (
+                  <ReplayUnmask>{`${pager.count.at} of ${pager.count.total}`}</ReplayUnmask>
+                )
               }
             />
           }
@@ -1724,7 +1731,9 @@ export function InboxPane({
           wrapHeading
           lead={
             onBack === undefined ? undefined : (
-              <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+              <ReplayUnmask>
+                <BackButton label="Inbox" place={INBOX_PLACE} onBack={onBack} />
+              </ReplayUnmask>
             )
           }
           title={
@@ -1741,7 +1750,9 @@ export function InboxPane({
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
               {pager === undefined ||
               (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-                <InboxPagerControls pager={pager} />
+                <ReplayUnmask>
+                  <InboxPagerControls pager={pager} />
+                </ReplayUnmask>
               )}
               <InboxItemMenu
                 key={item.id}

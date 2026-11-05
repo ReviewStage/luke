@@ -93,6 +93,7 @@ import {
 import { CircleAlertIcon, ICON_SIZE } from "@repo/ui/icons";
 import { matchIntegration, shownTools } from "@repo/ui/integration-search";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
+import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import {
   cloneElement,
   createContext,
@@ -328,7 +329,11 @@ function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
     // title would otherwise clip the reason behind a long name.
     <span className="flex min-w-0 flex-auto items-center gap-icon-gap">
       <ServerName name={INTEGRATION_NAME[row.provider]} />
-      {row.accountName !== undefined ? <AccountWords>{row.accountName}</AccountWords> : null}
+      {row.accountName !== undefined ? (
+        <AccountWords words={row.accountName}>
+          <ReplayMask>{row.accountName}</ReplayMask>
+        </AccountWords>
+      ) : null}
       {row.kind === SERVER_ROW.SIGNING_IN ? (
         <Tooltip label={row.note}>
           <span className="agent-servers-waiting flex">
@@ -341,7 +346,7 @@ function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
           hint={problemHint(row.problem, row.said)}
           className="agent-servers-problem flex-auto text-caption-inline text-attention"
         >
-          {row.problem}
+          <ReplayMask>{row.problem}</ReplayMask>
         </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
@@ -349,7 +354,7 @@ function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
           hint={wholeWordsHint(row.note)}
           className="agent-servers-problem flex-auto text-caption-inline text-muted-foreground"
         >
-          {row.note}
+          <ReplayMask>{row.note}</ReplayMask>
         </OneLine>
       ) : null}
     </span>
@@ -1011,10 +1016,12 @@ function ServersPopover({
       row,
       title: (
         <OneLine className="integration-tool-id" words={tool.name}>
-          <Highlighted text={tool.name} tokens={searchTokens(query)} />
+          <ReplayMask>
+            <Highlighted text={tool.name} tokens={searchTokens(query)} />
+          </ReplayMask>
         </OneLine>
       ),
-      meta: row.name,
+      meta: <ReplayMask>{row.name}</ReplayMask>,
       card: <ServerCard provider={row.provider} connection={row.connection} tool={tool.name} />,
       opens: true,
       onPress: () => open(row, query),
@@ -1052,53 +1059,55 @@ function ServersPopover({
         }}
         onKeyDown={onHomeKey}
       />
-      <div className={SERVERS_SCROLL_CLASS}>
-        <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
-          <div ref={moving} className="agent-servers-list p-menu-inset">
-            <ListMotion root={moving}>
-              {workspaceShown ? (
-                <MenuSection heading={WORKSPACE_WORDS.SECTION}>
-                  <List label={WORKSPACE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
-                    {workspaceRow}
-                  </List>
-                </MenuSection>
-              ) : null}
-              {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-              {rows.length > 0 && picks.length === 0 && groups.length === 0 && !workspaceShown ? (
-                <ServersNote words={SEARCH.NONE} />
-              ) : null}
-              {groups.map((group) =>
-                group.heading === undefined ? (
-                  <List key="unread" label={SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
-                    {group.rows.map(serverRow)}
-                  </List>
-                ) : (
-                  <MenuSection
-                    key={group.heading}
-                    heading={group.heading}
-                    count={
-                      group.heading === SERVER_SECTION.CONNECTED
-                        ? serversOnWords(group.rows)
-                        : undefined
-                    }
-                  >
-                    <List label={group.heading} density={LIST_DENSITY.COMPACT} moves>
-                      {group.rows.map(serverRow)}
+      <ReplayUnmask>
+        <div className={SERVERS_SCROLL_CLASS}>
+          <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
+            <div ref={moving} className="agent-servers-list p-menu-inset">
+              <ListMotion root={moving}>
+                {workspaceShown ? (
+                  <MenuSection heading={WORKSPACE_WORDS.SECTION}>
+                    <List label={WORKSPACE_WORDS.SECTION} density={LIST_DENSITY.COMPACT}>
+                      {workspaceRow}
                     </List>
                   </MenuSection>
-                ),
-              )}
-              {found.tools.length > 0 ? (
-                <MenuSection heading={SEARCH.TOOLS}>
-                  <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
-                    {found.tools.map(toolRow)}
-                  </List>
-                </MenuSection>
-              ) : null}
-            </ListMotion>
-          </div>
-        </ScrollArea>
-      </div>
+                ) : null}
+                {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
+                {rows.length > 0 && picks.length === 0 && groups.length === 0 && !workspaceShown ? (
+                  <ServersNote words={SEARCH.NONE} />
+                ) : null}
+                {groups.map((group) =>
+                  group.heading === undefined ? (
+                    <List key="unread" label={SERVERS_LABEL} density={LIST_DENSITY.COMPACT} moves>
+                      {group.rows.map(serverRow)}
+                    </List>
+                  ) : (
+                    <MenuSection
+                      key={group.heading}
+                      heading={group.heading}
+                      count={
+                        group.heading === SERVER_SECTION.CONNECTED
+                          ? serversOnWords(group.rows)
+                          : undefined
+                      }
+                    >
+                      <List label={group.heading} density={LIST_DENSITY.COMPACT} moves>
+                        {group.rows.map(serverRow)}
+                      </List>
+                    </MenuSection>
+                  ),
+                )}
+                {found.tools.length > 0 ? (
+                  <MenuSection heading={SEARCH.TOOLS}>
+                    <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
+                      {found.tools.map(toolRow)}
+                    </List>
+                  </MenuSection>
+                ) : null}
+              </ListMotion>
+            </div>
+          </ScrollArea>
+        </div>
+      </ReplayUnmask>
     </>
   );
 
@@ -1368,7 +1377,7 @@ function ServersPopover({
               servers.onOpenSettings();
             }}
           >
-            {SERVERS_SETTINGS}
+            <ReplayUnmask>{SERVERS_SETTINGS}</ReplayUnmask>
           </Button>
         </div>
       </div>

@@ -28,6 +28,7 @@ import {
   useSecond,
 } from "@repo/ui";
 import { GLYPH, ICON_SIZE } from "@repo/ui/icons";
+import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { Schema } from "effect";
 import { devicePlatformOf } from "../device-platform.js";
 import { type PresenceBook, presenceStanding, useDevicePresence } from "../device-presence.js";
@@ -378,7 +379,10 @@ export function RunsOnPlace({
       <GlyphSlot size={ICON_SIZE.SMALL}>
         {cloud ? <GLYPH.CLOUD /> : <DeviceGlyph device={device} />}
       </GlyphSlot>
-      <span>{words}</span>
+      {/* Note that a device is named as its owner named it, so only Cloud and a removed device show. */}
+      <span>
+        <ReplayWords unmasked={device === undefined}>{words}</ReplayWords>
+      </span>
     </Inline>
   );
 }

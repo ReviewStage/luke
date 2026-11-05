@@ -337,6 +337,7 @@ export function ModelMenu(props: {
 
   return (
     <SearchableMenu
+      replayUnmasked
       id={props.id}
       label="Model"
       placeholder="Search models"

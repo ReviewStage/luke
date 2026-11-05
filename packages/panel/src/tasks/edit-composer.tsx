@@ -65,6 +65,9 @@ function sendQuestion(takes: string | undefined): DialogQuestion {
     verb: "Send message",
     running: "Sending",
     loss: CONFIRM_LOSS.IRREVERSIBLE,
+    replayUnmasked: true,
+    // Note that `takes` names the members whose messages go.
+    bodyReplayMasked: takes !== undefined,
   };
 }
 

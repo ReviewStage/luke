@@ -145,6 +145,7 @@ export function useAgentQueue(agentId: string, queue: AgentQueue | undefined): A
         const words = REFUSED_WORDS[next.change];
         if (!("failure" in answer) || words === undefined) return answer;
         toast({
+          replayUnmasked: true,
           words,
           ...(answer.failure === AGENT_CALL_FAILURE.NOT_FOUND && messageId !== undefined
             ? { detail: LEFT_WORDS }

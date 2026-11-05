@@ -40,6 +40,7 @@ import {
   useMinute,
 } from "@repo/ui";
 import { inputProblem } from "@repo/ui/reported-failure";
+import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { SwitchRow } from "../settings/switch-row.js";
@@ -615,6 +616,7 @@ function DatePickerPanel({
     if (!open) return null;
     return (
       <SearchableMenu
+        replayUnmasked
         id={zoneMenuId}
         ref={(element) => {
           zoneMenu.current = element;
@@ -638,94 +640,97 @@ function DatePickerPanel({
     <PopoverPanel
       open={open}
       title={moment?.title ?? WORDS.TITLE}
+      replayUnmasked
       closeLabel={WORDS.CLOSE}
       initialFocus={from === DATE_PICKER_PAGE.ZONE ? zoneField : field}
       onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
       onLeave={leave}
       onExited={onExited}
     >
-      <Stack gap={GAP.TIGHT}>
-        {timed ? (
-          <>
-            {endField(DATE_END.START, start)}
-            {end === undefined ? null : endField(DATE_END.END, end)}
-          </>
+      <ReplayUnmask>
+        <Stack gap={GAP.TIGHT}>
+          {timed ? (
+            <>
+              {endField(DATE_END.START, start)}
+              {end === undefined ? null : endField(DATE_END.END, end)}
+            </>
+          ) : (
+            <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false}>
+              {endField(DATE_END.START, start)}
+              {end === undefined ? null : endField(DATE_END.END, end)}
+            </Inline>
+          )}
+        </Stack>
+        <Calendar
+          month={month}
+          today={today}
+          start={start.day}
+          end={end?.day}
+          onPick={(day) => {
+            update(dayPicked(latest.current, day));
+            setMonth(day.slice(0, 7));
+          }}
+          onShowMonth={setMonth}
+        />
+        <Stack gap={GAP.TIGHT}>
+          {single ? null : (
+            <>
+              <SwitchRow
+                density={SETTINGS_ROW_DENSITY.COMPACT}
+                label={WORDS.END}
+                checked={end !== undefined}
+                onChange={(on) => update(endSwitched(latest.current, on))}
+              />
+              <SwitchRow
+                density={SETTINGS_ROW_DENSITY.COMPACT}
+                label={WORDS.TIME}
+                checked={timed}
+                onChange={(on) => update(timeSwitched(latest.current, on))}
+              />
+            </>
+          )}
+          {timed ? (
+            <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
+              {(control) => (
+                <Chip
+                  ref={zoneField}
+                  look={CHIP_LOOK.FIELD}
+                  width={CHIP_WIDTH.AUTO}
+                  chevron
+                  aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
+                  aria-describedby={control["aria-describedby"]}
+                  aria-haspopup="dialog"
+                  onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
+                >
+                  <ChipName>{zonePlace(zone)}</ChipName>
+                </Chip>
+              )}
+            </SettingsRow>
+          ) : null}
+        </Stack>
+        {moment === undefined ? (
+          <div className="-mx-ui-16 mt-0 -mb-ui-8 border-t border-border px-row-inset pt-tight-gap pb-0">
+            <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+              {WORDS.CLEAR}
+            </Button>
+          </div>
         ) : (
-          <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false}>
-            {endField(DATE_END.START, start)}
-            {end === undefined ? null : endField(DATE_END.END, end)}
+          <Inline gap={GAP.CONTROL} justify={JUSTIFY.END}>
+            <DialogActions
+              onCancel={() => finish(DATE_PICKER_CLOSE.KEY)}
+              act={{
+                verb: moment.verb,
+                tone: DIALOG_TONE.PRIMARY,
+                running: moment.verb,
+                // Note that words naming no date hold the act back, as Enter in them does, so it never confirms the date they replaced.
+                onPress: () => {
+                  if (read()) finish(DATE_PICKER_CLOSE.CONFIRM);
+                },
+              }}
+            />
           </Inline>
         )}
-      </Stack>
-      <Calendar
-        month={month}
-        today={today}
-        start={start.day}
-        end={end?.day}
-        onPick={(day) => {
-          update(dayPicked(latest.current, day));
-          setMonth(day.slice(0, 7));
-        }}
-        onShowMonth={setMonth}
-      />
-      <Stack gap={GAP.TIGHT}>
-        {single ? null : (
-          <>
-            <SwitchRow
-              density={SETTINGS_ROW_DENSITY.COMPACT}
-              label={WORDS.END}
-              checked={end !== undefined}
-              onChange={(on) => update(endSwitched(latest.current, on))}
-            />
-            <SwitchRow
-              density={SETTINGS_ROW_DENSITY.COMPACT}
-              label={WORDS.TIME}
-              checked={timed}
-              onChange={(on) => update(timeSwitched(latest.current, on))}
-            />
-          </>
-        )}
-        {timed ? (
-          <SettingsRow density={SETTINGS_ROW_DENSITY.COMPACT} label={WORDS.ZONE}>
-            {(control) => (
-              <Chip
-                ref={zoneField}
-                look={CHIP_LOOK.FIELD}
-                width={CHIP_WIDTH.AUTO}
-                chevron
-                aria-label={`${WORDS.ZONE}: ${zoneLabel(zone)}`}
-                aria-describedby={control["aria-describedby"]}
-                aria-haspopup="dialog"
-                onClick={() => turnTo(DATE_PICKER_PAGE.ZONE)}
-              >
-                <ChipName>{zonePlace(zone)}</ChipName>
-              </Chip>
-            )}
-          </SettingsRow>
-        ) : null}
-      </Stack>
-      {moment === undefined ? (
-        <div className="-mx-ui-16 mt-0 -mb-ui-8 border-t border-border px-row-inset pt-tight-gap pb-0">
-          <Button variant={BUTTON_VARIANT.ROW} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
-            {WORDS.CLEAR}
-          </Button>
-        </div>
-      ) : (
-        <Inline gap={GAP.CONTROL} justify={JUSTIFY.END}>
-          <DialogActions
-            onCancel={() => finish(DATE_PICKER_CLOSE.KEY)}
-            act={{
-              verb: moment.verb,
-              tone: DIALOG_TONE.PRIMARY,
-              running: moment.verb,
-              // Note that words naming no date hold the act back, as Enter in them does, so it never confirms the date they replaced.
-              onPress: () => {
-                if (read()) finish(DATE_PICKER_CLOSE.CONFIRM);
-              },
-            }}
-          />
-        </Inline>
-      )}
+      </ReplayUnmask>
     </PopoverPanel>
   );
 }
