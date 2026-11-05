@@ -87,7 +87,11 @@ export function ExperimentalPage({
     );
   }
   if (entries.length === 0) {
-    return <EmptyState icon={<FlaskConicalIcon />}>{NO_EXPERIMENTS_LINE}</EmptyState>;
+    return (
+      <EmptyState icon={<FlaskConicalIcon />} replayUnmasked>
+        {NO_EXPERIMENTS_LINE}
+      </EmptyState>
+    );
   }
   return (
     <>

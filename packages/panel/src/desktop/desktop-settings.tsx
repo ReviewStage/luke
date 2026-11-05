@@ -289,7 +289,8 @@ export function DesktopSettings({
     settings.account.status === ACCOUNT_STATUS.SIGNED_IN && settings.workspace
       ? shownWorkspace(settings.workspace)
       : undefined;
-  const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
+  const named = settings.view === SETTINGS_VIEW.WORKSPACE && listed !== undefined;
+  const title = named ? listed.name : shown.title;
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
   // A page standing alone is headed as a phone's, whose ⋯ holds its reset.
@@ -414,7 +415,14 @@ export function DesktopSettings({
         {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
         <SettingsPage
           key={settings.view}
-          title={title}
+          // Note that a page's name shows in a screen recording and a workspace's stays masked; on a phone the bar draws the title as words, which stay masked until the bar takes a mark.
+          title={
+            onList === undefined ? (
+              <ReplayUnmask>{named ? <ReplayMask>{title}</ReplayMask> : title}</ReplayUnmask>
+            ) : (
+              title
+            )
+          }
           actions={reset}
           lead={onList === undefined ? undefined : <ListBack onList={onList} />}
           look={onList === undefined ? TOOLBAR_LOOK.WINDOW : TOOLBAR_LOOK.PHONE}

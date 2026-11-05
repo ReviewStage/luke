@@ -7,7 +7,6 @@ import {
   SearchableMenu,
 } from "@repo/ui";
 import { PlusIcon } from "@repo/ui/icons";
-import { ReplayWords } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
 
@@ -75,32 +74,29 @@ export function AddMenuButton({
       >
         {label}
       </Button>
-      {/* Note that the menu hangs in place on a desktop, under the page's unmask mark, and its rows name a person's things, so it stays masked whole unless its owner unmasks it and masks each such row. */}
       {drawn.mounted ? (
-        <ReplayWords masked={!replayUnmasked}>
-          <SearchableMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            label={label}
-            placeholder={placeholder}
-            rows={rows}
-            value={undefined}
-            note={typeof note === "function" ? note(close) : note}
-            noMatch={noMatch}
-            align={POPOVER_ALIGN.END}
-            width={POPOVER_WIDTH.NARROW}
-            replayUnmasked={replayUnmasked}
-            onPick={(id) => {
-              close();
-              onPick(id);
-            }}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && holder.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </ReplayWords>
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={label}
+          placeholder={placeholder}
+          rows={rows}
+          value={undefined}
+          note={typeof note === "function" ? note(close) : note}
+          noMatch={noMatch}
+          align={POPOVER_ALIGN.END}
+          width={POPOVER_WIDTH.NARROW}
+          replayUnmasked={replayUnmasked}
+          onPick={(id) => {
+            close();
+            onPick(id);
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && holder.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </span>
   );

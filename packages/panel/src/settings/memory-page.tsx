@@ -506,6 +506,7 @@ function NothingShown({
         icon={<SearchIcon />}
         title={PAGE_LINE.NO_MATCH}
         action={{ label: PAGE_LINE.CLEAR, onClick: onClear }}
+        replayUnmasked
       />
     );
   }

@@ -176,33 +176,30 @@ export function Picker({
           </ChipName>
         </Chip>
       </Tooltip>
-      {/* Note that the menu hangs in place on a desktop, under the page's unmask mark, and its rows may name a person's things, so it stays masked whole unless its owner unmasks it and masks each such row. */}
       {drawn.mounted ? (
-        <ReplayWords masked={!replayUnmasked}>
-          <SearchableMenu
-            leaving={drawn.leaving}
-            ref={drawn.ref}
-            id={menuId}
-            label={label}
-            placeholder={placeholder}
-            rows={rows}
-            value={value}
-            note={note}
-            noMatch={noMatch}
-            align={align}
-            width={menuWidth}
-            replayUnmasked={replayUnmasked}
-            onSearch={onSearch}
-            onPick={(id) => {
-              close();
-              onPick(id);
-            }}
-            onClose={close}
-            onLeave={(left) => {
-              if (!(left instanceof Node && row.current?.contains(left))) setOpen(false);
-            }}
-          />
-        </ReplayWords>
+        <SearchableMenu
+          leaving={drawn.leaving}
+          ref={drawn.ref}
+          id={menuId}
+          label={label}
+          placeholder={placeholder}
+          rows={rows}
+          value={value}
+          note={note}
+          noMatch={noMatch}
+          align={align}
+          width={menuWidth}
+          replayUnmasked={replayUnmasked}
+          onSearch={onSearch}
+          onPick={(id) => {
+            close();
+            onPick(id);
+          }}
+          onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && row.current?.contains(left))) setOpen(false);
+          }}
+        />
       ) : null}
     </span>
   );
