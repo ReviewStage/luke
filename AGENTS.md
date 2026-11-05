@@ -338,6 +338,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   IPC/menu callers (start, check, install) bridge into fibers on the services
   the launch handed them, on the same terms as the client's `app-state-store.ts`.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
+- **`packages/service/src/accounts/account-deletion-hooks.ts`** — Better Auth awaits each `deleteUser` hook as a promise, so the account's deletion steps run there on the services the auth route handed the request; what would end this row is a Better Auth that takes an Effect hook.
 - **`packages/service/src/member-mcp/server.ts`** — the MCP SDK's `McpServer` awaits each tool's handler as a promise, so a tool's effect runs there on the services the request's fiber handed it, the admitted member provided; what would end this row is an Effect-native MCP server that serves the 2026-07-28 revision without a session.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/hosted-store-database.ts`, and
