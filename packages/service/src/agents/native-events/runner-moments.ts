@@ -42,8 +42,11 @@ const END_DETAIL_CHARS = 1000;
  * OpenAI's codes for a refusal of a ChatGPT plan, such as
  * `subscription_sharing_unsupported_capability`, each whole: its own words,
  * never a secret, though a run that long reads as one to `redactCredentials`.
+ * Note that a code stands alone only between whitespace or quotes, or a
+ * `,` or `;` after it, as a JSON error and a turn's failure words set it,
+ * since any other character beside it could be part of a credential's value.
  */
-const PLAN_CODE_SPLIT = /((?<![\w+/=-])(?:subscription_sharing|chatpass_v2)_[a-z_]+(?![\w+/=-]))/;
+const PLAN_CODE_SPLIT = /((?<![^\s"'])(?:subscription_sharing|chatpass_v2)_[a-z_]+(?![^\s"',;]))/;
 
 /** What a picture in a tool's answer is kept as: the bytes went to the model once, and a transcript carries every byte it holds into each read. */
 export const PICTURE_STAND_IN = "[image]";
