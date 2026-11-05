@@ -51,8 +51,8 @@ import { parsedUrl } from "./parsed-url.js";
  * - the Admin place, an admin's alone, which reads every workspace's
  *   accounts, so its workspace is only the one the link was copied in:
  *   `/admin`, a section of it, `/admin/<cost|reliability|workspaces|users>`,
- *   an account's page, `/admin/user/<userId>`, and a day's,
- *   `/admin/day/<YYYY-MM-DD>`.
+ *   an account's page, `/admin/user/<userId>`, a workspace's,
+ *   `/admin/workspace/<workspaceId>`, and a day's, `/admin/day/<YYYY-MM-DD>`.
  *
  * A place of the account's own, which no workspace holds, is linked under
  * no workspace (`ACCOUNT_PLACE`): a box's pairing, `/connect/<code>`, by the
@@ -143,7 +143,7 @@ export const LINK_PLACE = {
   AUTOMATION_RUN: "automation-run",
   SETTINGS: "settings",
   PERSON: "person",
-  /** The Admin place: its Overview, a section, an account's page, or a day's. */
+  /** The Admin place: its Overview, a section, an account's page, a workspace's, or a day's. */
   ADMIN: "admin",
 } as const;
 
@@ -194,6 +194,7 @@ const STEP = {
   PERSON: "person",
   ADMIN: "admin",
   USER: "user",
+  WORKSPACE: "workspace",
   DAY: "day",
 } as const;
 
@@ -443,6 +444,7 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.ADMIN),
     section: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(ADMIN_LINK_SECTION))),
     userId: EffectSchema.optionalKey(idSchema),
+    workspaceId: EffectSchema.optionalKey(idSchema),
     day: EffectSchema.optionalKey(
       EffectSchema.String.check(
         EffectSchema.isPattern(DAY_KEY),
@@ -630,13 +632,15 @@ function inboxFields(step: string | undefined, rest: readonly string[]) {
     : undefined;
 }
 
-/** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
+/** The Admin place's fields past its step: its Overview, a section, an account's page, a workspace's, or a day's. */
 function adminFields(step: string | undefined, rest: readonly string[]) {
   if (step === undefined) return { kind: LINK_PLACE.ADMIN };
   const [id, ...more] = rest;
   if (more.length > 0) return undefined;
   if (step === STEP.USER)
     return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, userId: id };
+  if (step === STEP.WORKSPACE)
+    return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, workspaceId: id };
   if (step === STEP.DAY) return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, day: id };
   return id === undefined && ADMIN_LINK_SECTIONS.has(step)
     ? { kind: LINK_PLACE.ADMIN, section: step }
@@ -709,6 +713,7 @@ function placePath(place: LinkPlace): readonly string[] {
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
     case LINK_PLACE.ADMIN:
       if (place.userId !== undefined) return [STEP.ADMIN, STEP.USER, place.userId];
+      if (place.workspaceId !== undefined) return [STEP.ADMIN, STEP.WORKSPACE, place.workspaceId];
       if (place.day !== undefined) return [STEP.ADMIN, STEP.DAY, place.day];
       return place.section === undefined ? [STEP.ADMIN] : [STEP.ADMIN, place.section];
   }

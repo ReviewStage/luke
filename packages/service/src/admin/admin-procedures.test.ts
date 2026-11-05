@@ -20,6 +20,7 @@ import type {
   AdminMetrics,
   AdminReliability,
   AdminUserDetail,
+  AdminWorkspaceDetail,
   AdminWorkspaceList,
 } from "@repo/features/admin-answer-wire";
 import type { AdminCost } from "@repo/features/admin-cost-wire";
@@ -55,6 +56,7 @@ const COST = answerOf<AdminCost>({ generatedAt: 2 });
 const RELIABILITY = answerOf<AdminReliability>({ generatedAt: 3 });
 const WORKSPACES = answerOf<AdminWorkspaceList>({ generatedAt: 4 });
 const USER = answerOf<AdminUserDetail>({ generatedAt: 5 });
+const WORKSPACE = answerOf<AdminWorkspaceDetail>({ generatedAt: 6 });
 
 /** No signed-in browser session. */
 const SIGNED_OUT = null;
@@ -109,6 +111,7 @@ function seams(asked: string[], viewer: AdminViewer | null = ADMIN): AdminProced
       ),
     readWorkspaces: (_now, scope, kind, search) =>
       record(`workspaces ${scope} ${kind} ${search}`, WORKSPACES),
+    readWorkspace: (id) => record(`workspace ${id}`, id === "workspace-2" ? WORKSPACE : undefined),
     readReliability: (_now, scope, windowDays) =>
       record(`reliability ${scope} ${windowDays}`, RELIABILITY),
     writeFavorite: (adminId, userId, favorite) =>
@@ -302,12 +305,17 @@ it.effect(
         yield* send(handed, request("/api/admin/user?id=%20user-2%20&window=90")),
         read(USER),
       );
+      assert.deepEqual(
+        yield* send(handed, request("/api/admin/workspace?id=%20workspace-2%20")),
+        read(WORKSPACE),
+      );
       assert.deepEqual(asked, [
         "metrics non-admins 30",
         "cost all 7",
         "reliability non-admins 7",
         "workspaces non-admins all north",
         "user user-2 90",
+        "workspace workspace-2",
       ]);
     }),
 );
@@ -351,6 +359,7 @@ it.effect("each read refuses its own malformed query before its seam is touched"
       ["/api/admin/user", refused(400, ADMIN_ERROR.MISSING_USER_ID)],
       ["/api/admin/user?id=%20", refused(400, ADMIN_ERROR.MISSING_USER_ID)],
       ["/api/admin/user?id=user-2&window=12", refused(400, ADMIN_ERROR.INVALID_WINDOW)],
+      ["/api/admin/workspace", refused(400, ADMIN_ERROR.MISSING_WORKSPACE_ID)],
       ["/api/admin/day", refused(400, ADMIN_ERROR.INVALID_DAY)],
       ["/api/admin/day?date=2026-02-30", refused(400, ADMIN_ERROR.INVALID_DAY)],
     ];
@@ -361,14 +370,18 @@ it.effect("each read refuses its own malformed query before its seam is touched"
   }),
 );
 
-it.effect("an account no user row carries is a 404, after the read", () =>
+it.effect("an account or a workspace no row carries is a 404, after the read", () =>
   Effect.gen(function* () {
     const asked: string[] = [];
     assert.deepEqual(
       yield* send(seams(asked), request("/api/admin/user?id=gone")),
       refused(404, ADMIN_ERROR.USER_NOT_FOUND),
     );
-    assert.deepEqual(asked, ["user gone 30"]);
+    assert.deepEqual(
+      yield* send(seams(asked), request("/api/admin/workspace?id=gone")),
+      refused(404, ADMIN_ERROR.WORKSPACE_NOT_FOUND),
+    );
+    assert.deepEqual(asked, ["user gone 30", "workspace gone"]);
   }),
 );
 

@@ -2523,10 +2523,10 @@ export function CommentFocusScope({
   );
 }
 
-/** Which of the plan's threads the Comments tab lists. */
-const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
+/** Which of the threads a list of them shows: the plan's Comments tab, or a page's comments pane. */
+export const COMMENTS_FILTER = { OPEN: "open", RESOLVED: "resolved" } as const;
 
-type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
+export type CommentsFilter = (typeof COMMENTS_FILTER)[keyof typeof COMMENTS_FILTER];
 
 /** The Comments tab's filter, kept on this Mac, one for every plan. */
 const KEPT = {
@@ -2605,35 +2605,47 @@ const NO_COMMENTS = {
   },
 } as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
+/** Where a thread stands in a list: by when it was started, so a row leaving keeps its place among the others as it fades. */
+function listedRank(card: DrawnCard): number {
+  return card.thread?.createdAt ?? Number.POSITIVE_INFINITY;
+}
+
+/** No measure of a row a list lays out, which the margin's slots take and a list's need not. */
+const NO_SLOT = () => undefined;
+
 /**
  * The threads a list draws, each whole, under what is drawn over them: why
  * they could not be read, that there are none, or stand-in cards while they
- * are read. The Comments tab and a page's comments both list theirs so.
+ * are read. A thread arrives and leaves the list as a card arrives in and
+ * leaves the plan's margin, fading in its row, so one resolved fades out of
+ * Open where it stood. The Comments tab and a page's comments both list
+ * theirs so.
  */
 function ThreadList({
   control,
   listed,
   empty,
   doors,
-  lead,
   onShowWords,
 }: {
   control: PlanCommentsControl;
   listed: readonly PlanCommentThread[];
   empty: { readonly title: string; readonly line: string | undefined };
   doors: ThreadDoors;
-  /** What stands over the threads, a thread being started say; nothing is said of an empty list under it. */
-  lead?: ReactNode;
   /** What a thread's quote shows when pressed; none where it is only words. */
   onShowWords: (thread: PlanCommentThread) => (() => void) | undefined;
 }): React.JSX.Element {
-  const none = !control.failed && listed.length === 0 && control.read && lead === undefined;
+  const held = useMarginCards(
+    listed.map((thread) => ({ id: thread.id, thread, pending: undefined, top: 0, open: true })),
+    true,
+  );
+  const rows = [...held.drawn].sort((a, b) => listedRank(a) - listedRank(b));
+  const none = !control.failed && rows.length === 0 && control.read;
   return (
     <div
       className="comments-list box-border px-ui-16 pt-ui-16 pb-ui-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
       data-empty={none ? "" : undefined}
     >
-      {lead === undefined ? null : <CommentsRow>{lead}</CommentsRow>}
       {control.failed ? (
         <ErrorState
           failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
@@ -2642,40 +2654,110 @@ function ThreadList({
         >
           The comments could not be read.
         </ErrorState>
-      ) : listed.length === 0 ? (
-        control.read ? (
-          lead === undefined ? (
-            <EmptyState icon={<CommentsIcon />} title={empty.title}>
-              {empty.line}
-            </EmptyState>
-          ) : null
-        ) : (
-          <CommentsSkeleton />
-        )
+      ) : none ? (
+        <EmptyState icon={<CommentsIcon />} title={empty.title}>
+          {empty.line}
+        </EmptyState>
+      ) : !control.read ? (
+        <CommentsSkeleton />
       ) : (
-        listed.map((thread) => (
-          <CommentsRow key={thread.id}>
-            {/* Note that every thread stands whole here, its replies and its field, its quote the way to what it is on. */}
-            <ThreadCard
-              thread={thread}
-              open
-              place={THREAD_PLACE.LIST}
-              quote
-              doors={doors}
-              onShowWords={onShowWords(thread)}
-            />
-          </CommentsRow>
-        ))
+        rows.map((card) =>
+          card.thread === undefined ? null : (
+            <MarginSlot
+              key={card.id}
+              card={card}
+              moves={false}
+              slotRef={NO_SLOT}
+              onGone={held.gone}
+              flows
+            >
+              <CommentsRow>
+                {/* Note that every thread stands whole here, its replies and its field, its quote the way to what it is on. */}
+                <ThreadCard
+                  thread={card.thread}
+                  open
+                  place={THREAD_PLACE.LIST}
+                  quote
+                  doors={doors}
+                  onShowWords={onShowWords(card.thread)}
+                />
+              </CommentsRow>
+            </MarginSlot>
+          ),
+        )
       )}
     </div>
   );
 }
 
 /**
+ * A list of threads under its head, as the plan's Comments tab and a page's
+ * comments pane both stand: the head naming the threads listed, open or
+ * resolved, and how many, with the toggle between the two; under it the
+ * threads, whole, scrolling. Note that the list is drawn afresh as the
+ * filter turns, so the threads of the one let go do not fade out under the
+ * other's.
+ */
+function ThreadsPane({
+  control,
+  doors,
+  filter,
+  onFilter,
+  empty,
+  list,
+  className,
+  onShowWords,
+}: {
+  control: PlanCommentsControl;
+  doors: ThreadDoors;
+  filter: CommentsFilter;
+  onFilter: (filter: CommentsFilter) => void;
+  /** What the list says when it holds nothing, by its filter. */
+  empty: Record<CommentsFilter, { readonly title: string; readonly line: string | undefined }>;
+  list: RefObject<HTMLDivElement | null>;
+  className: string;
+  onShowWords: (thread: PlanCommentThread) => (() => void) | undefined;
+}): React.JSX.Element {
+  const listed = control.threads.filter((thread) =>
+    filter === COMMENTS_FILTER.OPEN ? openThread(thread) : !openThread(thread),
+  );
+  return (
+    <Fill className={className}>
+      <WordsDatePickerRoom>
+        <PaneBar
+          title={COMMENTS_FILTER_WORDS[filter]}
+          detail={listed.length}
+          actions={
+            <ResolvedOnly
+              shown={filter === COMMENTS_FILTER.RESOLVED}
+              onShown={(shown) => {
+                onFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
+                // Note that the other list starts at its top, not where the one it replaces was scrolled to.
+                if (list.current !== null) list.current.scrollTop = 0;
+              }}
+            />
+          }
+        />
+        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+          <ThreadList
+            key={filter}
+            control={control}
+            listed={listed}
+            empty={empty[filter]}
+            doors={doors}
+            onShowWords={onShowWords}
+          />
+        </ScrollArea>
+      </WordsDatePickerRoom>
+    </Fill>
+  );
+}
+
+/**
  * The side panel's Comments tab: the plan's threads, open or resolved, each
- * under the section it is on and its quote. An open thread's press shows the
- * plan and opens it beside its words; a resolved one opens where it is
- * listed, with Reopen, which brings it back beside its words.
+ * whole under its quote. An open thread's quote shows the plan and opens it
+ * beside its words; a resolved one's says its words alone, and its Reopen
+ * brings it back beside them.
  */
 export function PlanCommentsTab({
   doors,
@@ -2714,45 +2796,24 @@ export function PlanCommentsTab({
       row.getBoundingClientRect().top - element.getBoundingClientRect().top - REVEAL_ROOM;
   });
   if (control === undefined) return null;
-  const open = control.threads.filter(openThread);
-  const resolved = control.threads.filter((thread) => !openThread(thread));
-  const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
-  const full = { ...doors, control };
   return (
-    <Fill className="comments-tab relative h-full">
-      <WordsDatePickerRoom>
-        <PaneBar
-          title={COMMENTS_FILTER_WORDS[filter]}
-          detail={listed.length}
-          actions={
-            <ResolvedOnly
-              shown={filter === COMMENTS_FILTER.RESOLVED}
-              onShown={(shown) => {
-                setFilter(shown ? COMMENTS_FILTER.RESOLVED : COMMENTS_FILTER.OPEN);
-                // Note that the other list starts at its top, not where the one it replaces was scrolled to.
-                if (list.current !== null) list.current.scrollTop = 0;
-              }}
-            />
-          }
-        />
-        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          <ThreadList
-            control={control}
-            listed={listed}
-            empty={NO_COMMENTS[filter]}
-            doors={full}
-            onShowWords={(thread) =>
-              openThread(thread)
-                ? () => {
-                    onShowDocument();
-                    reveal(thread.id);
-                  }
-                : undefined
+    <ThreadsPane
+      control={control}
+      doors={{ ...doors, control }}
+      filter={filter}
+      onFilter={setFilter}
+      empty={NO_COMMENTS}
+      list={list}
+      className="comments-tab relative h-full"
+      onShowWords={(thread) =>
+        openThread(thread)
+          ? () => {
+              onShowDocument();
+              reveal(thread.id);
             }
-          />
-        </ScrollArea>
-      </WordsDatePickerRoom>
-    </Fill>
+          : undefined
+      }
+    />
   );
 }
 
@@ -2791,19 +2852,20 @@ export function withQuote(text: string, words: string): string {
   ]);
 }
 
-/** What a page's comments column says over a list holding nothing. */
+/** What a page's comments pane says over a list holding nothing, by its filter. */
 const NO_PAGE_COMMENTS = {
-  title: "No comments",
-  line: "Press Comment, then an element of the page, to start a thread with the agent that wrote it.",
-} as const;
+  [COMMENTS_FILTER.OPEN]: {
+    title: "No comments",
+    line: "Press Comment, then an element of the page, to start a thread with the agent that wrote it.",
+  },
+  [COMMENTS_FILTER.RESOLVED]: NO_COMMENTS[COMMENTS_FILTER.RESOLVED],
+} as const satisfies Record<CommentsFilter, { title: string; line: string | undefined }>;
 
 /** What commenting on a page says and offers. */
 export const PAGE_COMMENT_WORDS = {
   COMMENT: "Comment on the page",
   PICKING: "Press an element of the page to comment on it",
   WHOLE_PAGE: "Whole page",
-  SHOW_RESOLVED: "Show resolved",
-  HIDE_RESOLVED: "Hide resolved",
 } as const;
 
 /** What a page's comments hold or keep open, and what keeps a card standing by the page open as it is pressed: its own boxes, a pin, and a menu or a question one of them opened. */
@@ -2820,136 +2882,68 @@ export function ownWordsIn(text: string): boolean {
   );
 }
 
-/** Where a thread stands in a page's column: open ones before resolved ones, each by when it was started. */
-function listedRank(thread: PlanCommentThread | undefined): number {
-  if (thread === undefined) return Number.POSITIVE_INFINITY;
-  return (openThread(thread) ? 0 : Number.MAX_SAFE_INTEGER / 2) + thread.createdAt;
-}
-
-/** No measure of a row a list lays out, which the margin's slots take and a list's need not. */
-const NO_SLOT = () => undefined;
-
 /**
- * A page's comments in a column beside it, as the plan's margin draws its
- * own: each thread's card at rest, open ones first and the resolved under a
- * quiet press at their foot; a card pressed opens where it stands, raised,
- * with its field, its element outlined on the page, and a press anywhere
- * but a card, or in the page, closes it, as a press away closes a plan's.
- * A thread opened from its pin on the page opens here while the column
- * stands, brought into the column's view. A thread arrives and leaves the
- * column as a card arrives in and leaves the plan's margin, fading in its
- * slot.
+ * A page's comments in the pane beside it, as the plan's Comments tab lists
+ * the plan's: open or resolved under the same head, each thread whole under
+ * its quote. A quote pressed outlines its element on the page, scrolled into
+ * the frame's view, until a press anywhere but a thread or the page's pins
+ * lets it go. A thread opened from its pin on the page is brought into the
+ * pane's view, under Open.
  */
 export function PageComments({
   control,
   doors,
   open,
+  filter,
+  onFilter,
   onOpen,
 }: {
   /** The page's threads, as `usePlanComments` holds them for the page. */
   control: PlanCommentsControl;
   doors: Omit<ThreadDoors, "control">;
-  /** The threads open, by their ids. */
+  /** The threads whose element is outlined, by their ids. */
   open: readonly string[] | undefined;
-  /** Opens the thread, or closes the one open where none is handed. */
+  /** Which threads the pane lists, kept by its tab so the pane shut and opened again lists the same. */
+  filter: CommentsFilter;
+  onFilter: (filter: CommentsFilter) => void;
+  /** Outlines the thread's element, or lets the one outlined go where none is handed. */
   onOpen: (thread: PlanCommentThread | undefined) => void;
 }): React.JSX.Element {
-  const [resolvedShown, setResolvedShown] = useState(false);
-  const opened = control.threads.filter(openThread);
-  const resolved = control.threads.filter((thread) => !openThread(thread));
-  const listed = resolvedShown ? [...opened, ...resolved] : opened;
-  const full = { ...doors, control };
-  const none = !control.failed && control.read && control.threads.length === 0;
   const list = useRef<HTMLDivElement>(null);
-  // Note that a row leaving keeps its place among the others as it fades, as it stood when last drawn: open ones first, each group by when it was started.
-  const held = useMarginCards(
-    listed.map((thread) => ({
-      id: thread.id,
-      thread,
-      pending: undefined,
-      top: 0,
-      open: open?.includes(thread.id) === true,
-    })),
-    true,
-  );
-  const rows = {
-    drawn: [...held.drawn].sort((a, b) => listedRank(a.thread) - listedRank(b.thread)),
-    gone: held.gone,
-  };
   usePressAway(NO_LAYER, () => undefined, {
     onPressAway: open === undefined ? undefined : () => onOpen(undefined),
     holds: keepsPageCardOpen,
   });
-  // The card opened from its pin is brought into the column's view, the column alone moving.
+  // The thread opened from its pin is listed and brought into the pane's view, the pane alone moving.
   const first = open?.[0];
+  const opened = control.threads.find((thread) => thread.id === first);
+  const openedFilter =
+    opened === undefined
+      ? undefined
+      : openThread(opened)
+        ? COMMENTS_FILTER.OPEN
+        : COMMENTS_FILTER.RESOLVED;
+  useEffect(() => {
+    if (openedFilter !== undefined) onFilter(openedFilter);
+  }, [first, openedFilter, onFilter]);
   useLayoutEffect(() => {
     const card = list.current?.querySelector<HTMLElement>(`.comment-card[data-thread="${first}"]`);
     if (first === undefined || list.current === null || card === null || card === undefined) return;
     centerWithin(list.current, card);
-  }, [first]);
+  }, [first, filter]);
   return (
-    <Fill className="page-comments relative h-full">
-      <WordsDatePickerRoom>
-        <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          <div
-            className="comments-list box-border px-ui-16 pt-ui-16 pb-ui-24 data-empty:flex data-empty:min-h-full data-empty:flex-col"
-            data-empty={none ? "" : undefined}
-          >
-            {control.failed ? (
-              <ErrorState
-                failure={unreadShown(FAILURE_SURFACE.PLAN_COMMENTS_READ)}
-                placement={ERROR_STATE_PLACEMENT.CENTERED}
-                onRetry={control.onRetry}
-              >
-                The comments could not be read.
-              </ErrorState>
-            ) : none ? (
-              <EmptyState icon={<CommentsIcon />} title={NO_PAGE_COMMENTS.title}>
-                {NO_PAGE_COMMENTS.line}
-              </EmptyState>
-            ) : !control.read ? (
-              <CommentsSkeleton />
-            ) : (
-              rows.drawn.map((card) =>
-                card.thread === undefined ? null : (
-                  <MarginSlot
-                    key={card.id}
-                    card={card}
-                    moves={false}
-                    slotRef={NO_SLOT}
-                    onGone={rows.gone}
-                    flows
-                  >
-                    <CommentsRow>
-                      <ThreadCard
-                        thread={card.thread}
-                        open={open?.includes(card.id) === true}
-                        place={THREAD_PLACE.MARGIN}
-                        doors={full}
-                        onOpen={() => card.thread !== undefined && onOpen(card.thread)}
-                        onClose={() => onOpen(undefined)}
-                      />
-                    </CommentsRow>
-                  </MarginSlot>
-                ),
-              )
-            )}
-            {resolved.length === 0 ? null : (
-              <CommentsRow>
-                <TextButton
-                  tone={TEXT_BUTTON_TONE.QUIET}
-                  onClick={() => setResolvedShown(!resolvedShown)}
-                >
-                  {resolvedShown
-                    ? PAGE_COMMENT_WORDS.HIDE_RESOLVED
-                    : `${PAGE_COMMENT_WORDS.SHOW_RESOLVED} (${resolved.length})`}
-                </TextButton>
-              </CommentsRow>
-            )}
-          </div>
-        </ScrollArea>
-      </WordsDatePickerRoom>
-    </Fill>
+    <ThreadsPane
+      control={control}
+      doors={{ ...doors, control }}
+      filter={filter}
+      onFilter={onFilter}
+      empty={NO_PAGE_COMMENTS}
+      list={list}
+      className="page-comments relative h-full"
+      onShowWords={(thread) =>
+        thread.page?.element === undefined ? undefined : () => onOpen(thread)
+      }
+    />
   );
 }
 
@@ -3149,16 +3143,21 @@ export function PageCommentLayer({
         onPressAway={() => onOpen(undefined)}
         holds={keepsPageCardOpen}
       >
-        <div className="page-comment-float">
-          {opened.map((thread) => (
-            <ThreadCard
-              key={thread.id}
-              thread={thread}
-              open
-              place={THREAD_PLACE.FLOAT}
-              doors={full}
-            />
-          ))}
+        {/* Note that the threads stand no taller than the room their side leaves, so each card scrolls its entries above its reply field, and several scroll together, rather than run off the room's edge. */}
+        <div className="page-comment-float page-comment-threads">
+          <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+            <div className="comment-float-cards">
+              {opened.map((thread) => (
+                <ThreadCard
+                  key={thread.id}
+                  thread={thread}
+                  open
+                  place={THREAD_PLACE.FLOAT}
+                  doors={full}
+                />
+              ))}
+            </div>
+          </ScrollArea>
         </div>
       </RectFloat>
       <RectFloat

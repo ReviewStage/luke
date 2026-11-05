@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import {
   deleteAccount,
+  readAccountAccess,
   readAccountPreferences,
-  readAccountRole,
   writeAccountPreferences,
 } from "@repo/database/models/account-store";
 import { user } from "@repo/database/schemas/auth";
@@ -109,7 +109,7 @@ const openAccounts = Effect.gen(function* () {
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
-    readRole: readAccountRole,
+    readAccess: readAccountAccess,
     accountFastOffer,
     writePreferences: writeAccountPreferences,
   });

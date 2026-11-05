@@ -201,7 +201,7 @@ import { useModifierHeld } from "./use-modifier-held.js";
 const EDITOR_LOAD_FAILED = "The message box could not be loaded.";
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
-const PLACEHOLDER = {
+export const PLACEHOLDER = {
   FIRST: "Ask to make changes",
   FOLLOW_UP: "Send a follow up",
 } as const;
@@ -215,7 +215,7 @@ export interface ComposerWords {
 }
 
 /** The buttons' names, which are their tooltips too. */
-const BUTTON = {
+export const BUTTON = {
   SEND: "Send",
   STOP: "Stop",
   STOPPING: "Stopping",

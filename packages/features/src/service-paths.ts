@@ -51,6 +51,14 @@ export const HOSTED_SERVICE_PATH = {
    * both bodies.
    */
   DICTATION: "/api/dictation",
+  /**
+   * The member's grant of support access, under which a maintainer may sign
+   * in as the account from the web for an hour at a time: grant it for seven
+   * days (POST), or revoke it, ending any such sign-in under way (DELETE).
+   * Both run under the caller's own session. `account-wire.ts` declares the
+   * answer.
+   */
+  ACCOUNT_SUPPORT_ACCESS: "/api/account/support-access",
   /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
   ACCOUNT_INTEGRATIONS: "/api/account/integrations",
   /**

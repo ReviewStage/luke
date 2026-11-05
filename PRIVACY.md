@@ -112,7 +112,9 @@ While you are signed in, the Mac app and the web app record how you use
 Vespin's window, such as the screens you visit and where you click, never your
 screen or other apps. Text you type and other content that may be sensitive is
 masked before a recording leaves your device. Recordings are linked to your
-account.
+account. While a maintainer is signed in as your account with your support
+access (section 4), their use of the web app is counted and recorded the same
+way, under your account.
 
 ### Error and performance data
 
@@ -170,8 +172,11 @@ laws:
 Our operators can read what the Service stores. Vespin's maintainers also have
 an admin page showing each account's name, email, activity counts, workspaces
 and members, agents' status and models, and which providers and integrations
-are connected. It never shows a task's title, plan, prompt, message, pull
-request title, key, or an error's own words.
+are connected. A maintainer may sign in to the web app as your account only
+while you have granted support access from Settings. A grant lasts seven days
+and you can revoke it at any time, which also ends any such sign-in under way;
+each sign-in lasts up to an hour. While signed in as you, a maintainer sees and
+can do what you can in the web app.
 
 We do not use your code or conversations to train AI models.
 

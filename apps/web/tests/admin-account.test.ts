@@ -62,6 +62,7 @@ function detail(overrides: Partial<AdminUserDetail["account"]> = {}): AdminUserD
       admin: true,
       createdAt: Date.UTC(2026, 0, 5),
       signInMethods: ["github", "google"],
+      supportAccessUntil: null,
       ...overrides,
     },
     actions: {
@@ -240,6 +241,7 @@ async function openAccount(response: Response | undefined): Promise<Opened> {
           account: undefined,
           onSignOut: async () => undefined,
           onBack: () => backs.push(backs.length),
+          onOpenWorkspace: () => undefined,
           frame: (content) => content,
         }),
       ),

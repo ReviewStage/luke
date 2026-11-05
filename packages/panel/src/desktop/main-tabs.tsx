@@ -52,7 +52,6 @@ import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
   AddTabButton,
-  AddTabSkeleton,
   type DocumentMenu,
   DoorsTab,
   type HeldTranscripts,
@@ -60,7 +59,6 @@ import {
   type TabDoors,
   type TabLook,
   type TabPin,
-  TabSkeleton,
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
@@ -521,21 +519,6 @@ function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 /**
- * The column's strip while the task is read: one tab's block where the
- * first tab will stand and the "+"'s after it, in the strip's own row, so
- * the row holds still, and a narrow room wraps it under the toolbar's
- * actions, as the strip that replaces it is.
- */
-export function MainTabStripSkeleton(): React.JSX.Element {
-  return (
-    <MainTabsRow>
-      <TabSkeleton />
-      <AddTabSkeleton />
-    </MainTabsRow>
-  );
-}
-
-/**
  * The column's strip across its toolbar: Overview, the agents' and the draft's, then the "+", which stands apart from the strip so it is never
  * dragged nor dropped before. ⌘W closes the chosen tab while the column
  * holds the window's focus (`keys`).
@@ -680,10 +663,6 @@ export function MainTabStrip({
       {agents.listFailed && agents.agents === undefined ? (
         <RetryButton label={RETRY_AGENTS} onRetry={agents.onRetryList} />
       ) : null}
-      {/* While the agents are read, one tab-shaped block stands where their
-          tabs will, as it stood while the task was read, so the row holds
-          still until they land. */}
-      {agents.agents === undefined && !agents.listFailed ? <TabSkeleton /> : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"

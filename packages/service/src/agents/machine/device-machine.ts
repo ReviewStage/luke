@@ -17,9 +17,10 @@
  * environment and first lines sealed together under the deployment's key
  * ring (`sealMacLaunchSecrets`) and opened again only by the Mac's claim,
  * which clears the row's copy. `writeLine`, `writeFiles`, and `kill` queue a
- * message, files, or stop line; a runner whose launch line its Mac settled
- * has ended, and a write to it answers `NOT_FOUND_STATUS`, so a message
- * relaunches it. `runnerExit` reads the exit code the Mac settled the
+ * message, files, or stop line, files in as many lines as their size takes
+ * (`DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES`); a runner whose launch line
+ * its Mac settled has ended, and a write to it answers `NOT_FOUND_STATUS`,
+ * so a message relaunches it. `runnerExit` reads the exit code the Mac settled the
  * launch line with.
  *
  * Note that every line of one agent is queued under its runner lease, which
@@ -184,6 +185,28 @@ function unavailable(): SandboxUnavailable {
 /** The account's topic, which every write to its agents' lines and requests notifies (`deviceAgentLineSync`, `deviceAgentRequestSync`): a Mac's claim, answer, or settle among them. */
 function deviceTopics(userId: string): readonly SyncTopic[] {
   return [[TOPIC.ACCOUNT, userId]];
+}
+
+/**
+ * The files given split into files lines, in their order, each holding at
+ * most `DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES` of paths and bytes; a file
+ * is never split, so one larger goes in a line alone.
+ */
+function filesLines(files: readonly SandboxFile[]): readonly (readonly SandboxFile[])[] {
+  const lines: SandboxFile[][] = [];
+  let bytes = 0;
+  for (const file of files) {
+    const size = Buffer.byteLength(file.path) + file.contents.byteLength;
+    const line = lines.at(-1);
+    if (line === undefined || bytes + size > DEVICE_AGENT_BOUNDS.MAX_FILES_LINE_BYTES) {
+      lines.push([file]);
+      bytes = size;
+    } else {
+      line.push(file);
+      bytes += size;
+    }
+  }
+  return lines;
 }
 
 /** A line's payload as the row holds it: a JSON object. */
@@ -435,23 +458,30 @@ function deviceMachineOver(
     discard: () => Effect.void,
 
     // Note that files go to an away Mac no more than the message naming them does, so a message
-    // refused while it is away leaves nothing behind for it to write when it is back.
+    // refused while it is away leaves nothing behind for it to write when it is back. They go in
+    // as many lines as their size takes, because the Mac's claim of one answers 4.5 MB at most;
+    // each is queued in turn, so a line queued after them, as a launch, is delivered after them all.
     writeFiles: (place, files: readonly SandboxFile[]) =>
       Effect.flatMap(pinOfPlace(place), (pin) =>
         Effect.andThen(
           refuseAway(pin),
-          queued(pin, {
-            kind: DEVICE_AGENT_LINE_KIND.FILES,
-            payload: objectOf(
-              encodeFilesPayload({
-                files: files.map((file) => ({
-                  path: file.path,
-                  mode: file.mode,
-                  contents: file.contents,
-                })),
+          Effect.forEach(
+            filesLines(files),
+            (line) =>
+              queued(pin, {
+                kind: DEVICE_AGENT_LINE_KIND.FILES,
+                payload: objectOf(
+                  encodeFilesPayload({
+                    files: line.map((file) => ({
+                      path: file.path,
+                      mode: file.mode,
+                      contents: file.contents,
+                    })),
+                  }),
+                ),
               }),
-            ),
-          }),
+            { discard: true },
+          ),
         ),
       ),
 

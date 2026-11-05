@@ -1152,7 +1152,7 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
     { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-thread-line]");
-  assert.match(head?.textContent ?? "", /^Thread message/u);
+  assert.match(head?.textContent ?? "", /^wrote in/u);
   assert.equal(
     head?.querySelector("[data-mention-ref] .ui-inline-ref-label")?.textContent,
     'Ship " (key fake): the invites?',
@@ -1160,7 +1160,7 @@ test("a teammate's message on a thread is headed by who sent it, what they did a
   );
   assert.match(
     container.querySelector("[data-message-id]")?.textContent ?? "",
-    /^Ada Lovelace\s*Thread message.*Which PRs first\?/u,
+    /^Ada Lovelace\s*wrote in.*Which PRs first\?/u,
     "who sent it heads the line, over its words",
   );
   assert.equal(
@@ -1196,7 +1196,7 @@ test("a comment that reached the agent is headed as a comment on the page it is 
     { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED, name: "Ada Lovelace" },
   );
   const head = container.querySelector<HTMLElement>("[data-comment-line]");
-  assert.match(head?.textContent ?? "", /^Comment on.*Invite funnel/u);
+  assert.match(head?.textContent ?? "", /^commented on.*Invite funnel/u);
   const content = container.querySelector(".message-content")?.textContent ?? "";
   assert.match(content, /Expired 9\s*Can this row say how many were sent again\?/u);
   assert.doesNotMatch(content, /read_page/u, "the instructions stay the agent's");
@@ -1290,10 +1290,7 @@ test("a check line is headed by how many of its checks failed on the pull reques
   );
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
-  assert.equal(
-    cardHead(card).getAttribute("aria-label"),
-    "github-actions[bot] 2 of 3 checks failed on #42",
-  );
+  assert.equal(cardHead(card).getAttribute("aria-label"), "2 of 3 checks failed on #42");
   act(() => cardHead(card).click());
   const rows = [...card.querySelectorAll("li")].map((row) => row.textContent ?? "");
   assert.deepEqual(
@@ -1314,7 +1311,7 @@ test("a check line whose checks were skipped rather than passed says so, and hol
   const card = container.querySelector<HTMLElement>("[data-github-line]");
   assert.ok(card, "the line draws as GitHub's card");
   const head = cardHead(card);
-  assert.equal(head.getAttribute("aria-label"), "github-actions[bot] 1 check skipped on #42");
+  assert.equal(head.getAttribute("aria-label"), "1 check skipped on #42");
   act(() => head.click());
   assert.match(card.textContent ?? "", /deploy.*Skipped/u);
 });
@@ -1337,7 +1334,7 @@ test.each([
       failing: false,
       checks: [{ name: "lint", conclusion: "success" }],
     }),
-    head: "github-actions[bot] 1 check passed on #42",
+    head: "1 check passed on #42",
   },
 ])("$held draws its card's head alone, with nothing to open", ({ line, head }) => {
   const card = agentMessageDrawn(line).querySelector<HTMLElement>("[data-github-line]");

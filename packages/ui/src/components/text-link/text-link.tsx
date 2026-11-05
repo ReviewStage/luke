@@ -123,6 +123,9 @@ export const TEXT_LINK_MARK_CLASS = linkClass(
   true,
 );
 
+/** A mark before a link's words, set on their line a glyph's gap before them. */
+const LEAD = "ui-text-link-lead me-icon-gap inline-flex align-[-0.1em]";
+
 /** The last letter of a link's words and the ↗ after it, which no line breaks between, since a drawn glyph is a place a line may break. */
 const OUT_HELD = "ui-text-link-out-held whitespace-nowrap";
 
@@ -169,6 +172,7 @@ export function TextLink({
   current,
   external = false,
   newTab = false,
+  lead,
   onClick,
   children,
   ...hint
@@ -187,11 +191,18 @@ export function TextLink({
   external?: boolean;
   /** Whether it opens in a new tab. */
   newTab?: boolean;
+  /** A mark drawn before its words, inside the link, such as the brand of the site it opens. */
+  lead?: React.JSX.Element | undefined;
   /** Called as the press leaves, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const words = external ? outWords(children) : children;
+  const words = (
+    <>
+      {lead === undefined ? null : <span className={LEAD}>{lead}</span>}
+      {external ? outWords(children) : children}
+    </>
+  );
   const face = {
     "data-look": look,
     "data-variant": variant,

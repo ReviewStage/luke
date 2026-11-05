@@ -136,6 +136,8 @@ export type ToastNotice = {
   readonly subject?: string;
   /** Whether its words and detail are the app's own, which a screen recording shows as they read; one that quotes a name, a person's words, or a refusal's words leaves this off. */
   readonly replayUnmasked?: boolean | undefined;
+  /** What the developer sending it away, by its × or Escape, tells whoever showed it, so a question they set aside can be asked again. */
+  readonly onDismiss?: () => void;
 } & ToastSaying &
   (
     | { readonly hold: Duration.Duration; readonly action?: never; readonly persists?: never }
@@ -541,7 +543,11 @@ function ToastCard({
   const { id, notice, leaving } = shown;
   const { action, details } = notice;
   const hold = holdOf(notice);
-  const dismiss = () => step({ kind: TOAST_STEP.DISMISS, id });
+  const dismiss = () => {
+    step({ kind: TOAST_STEP.DISMISS, id });
+    // Note that a toast on its way out still draws its controls, so only the first dismissal is told.
+    if (!leaving) notice.onDismiss?.();
+  };
   const copy: ToastCopy | undefined =
     details === undefined
       ? undefined

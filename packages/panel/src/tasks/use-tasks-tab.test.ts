@@ -3243,6 +3243,7 @@ test("New task's agent start opens its page at once on the words as its agent's 
     },
   );
   const prompt = "Make the sidebar keep its folds.";
+  const choice = { model: "anthropic/claude-opus-5.5", effort: "high" };
   act(() => tab.control().onNewTask());
   let note: Promise<Failure | undefined> = Promise.resolve(undefined);
   act(() => {
@@ -3251,14 +3252,15 @@ test("New task's agent start opens its page at once on the words as its agent's 
         idempotencyKey: AGENT_KEY,
         prompt,
         attachments: [],
-        choice: undefined,
+        choice,
         disabledServers: [],
       },
     });
   });
 
   assert.equal(tab.control().newTask.open, false, "the dialog closes as Start is pressed");
-  assert.equal(tab.control().starting?.text, prompt, "the page stands on the words at once");
+  assert.equal(tab.control().starting?.line.text, prompt, "the page stands on the words at once");
+  assert.deepEqual(tab.control().starting?.choice, choice, "and on the model picked");
 
   await act(async () => {
     answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });

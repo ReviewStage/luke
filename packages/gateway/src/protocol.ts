@@ -15,8 +15,10 @@ export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
   /** The panel's Tasks tab shows: the task list read now, and the active task's document with it. */
   TASKS_REFRESH: "tasks.refresh",
-  /** The Mac woke, unlocked, or found its network again: a task list already followed is sealed and followed again now, once however many of those land together. */
+  /** The Mac woke or unlocked: a task list already followed is sealed and followed again now, once however many of those land together. */
   TASKS_RESYNC: "tasks.resync",
+  /** The app reaches the service again (`networkConnected` turned true): every read a window holds is asked again now, and a task list already followed is sealed and followed again, whatever resync came lately. */
+  TASKS_REGAINED: "tasks.regained",
   /** The windows have said that the changes made offline the service refused when they were sent again are seen: their count is cleared. */
   TASKS_OFFLINE_REFUSED_CLEAR: "tasks.offlineRefusedClear",
   /** One task made the active one and its saved document read, replacing whichever was active. */

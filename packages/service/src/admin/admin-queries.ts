@@ -36,6 +36,7 @@ import {
 } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { standingSupportAccess } from "../auth/auth-policy.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { meaningfulActions, utcDay } from "./admin-activity-queries.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDayHostedSource } from "./admin-day.js";
@@ -304,6 +305,7 @@ export function readAdminMetricsSource(input: {
 const AccountRowSchema = Schema.Struct({
   ...ACCOUNT_FACE_FIELDS,
   createdAt: InstantColumnSchema,
+  supportAccessUntil: Schema.NullOr(InstantColumnSchema),
 });
 
 const findAccount = SqlSchema.findOneOption({
@@ -315,6 +317,7 @@ const findAccount = SqlSchema.findOneOption({
         .select({
           ...ACCOUNT_FACE_COLUMNS,
           createdAt: user.createdAt,
+          supportAccessUntil: user.supportAccessUntil,
         })
         .from(user)
         .where(eq(user.id, userId))
@@ -649,6 +652,7 @@ export function readAdminUserSource(input: {
         admin: isAdminRole(row.role),
         createdAt: row.createdAt.getTime(),
         signInMethods: signInMethods.map((linked) => linked.providerId),
+        supportAccessUntil: standingSupportAccess(row.supportAccessUntil, input.now),
       },
       actionsByDay,
       usage: {

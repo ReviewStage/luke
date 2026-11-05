@@ -784,15 +784,29 @@ interface AppNotificationsSlice {
 }
 
 /**
- * Whether this machine has a network, as its platform last answered
- * (`client/network-watch.ts`): online until a probe says otherwise. An
- * answer of offline is a reliable one; online says nothing of whether the
- * service itself answers.
+ * Whether this machine can reach the service (`client/network-watch.ts`):
+ * whether it has a network, as its platform last answered, and whether the
+ * service answers its calls (`@repo/features`'s `ServiceReach`). Each is
+ * true until something says otherwise. An answer of offline is a reliable one; online says
+ * nothing of whether the service itself answers, which is what `reachable`
+ * says, so `networkConnected` reads the two together.
  */
 interface AppNetworkSlice {
   online: boolean;
+  /** Whether the service answers: false once a call ends with no answer, a transport fault or its deadline, after the service answered nothing for longer than a held read waits; true again at its next answer, with any status. */
+  reachable: boolean;
   /** How many changes made offline the service refused as they were sent again, until a window clears the count; none where none was. */
   offlineRefused?: number;
+}
+
+/**
+ * Whether the app can reach the service now: the platform says this machine
+ * has a network, and the service answers its calls. The one
+ * reading of the `network` slice every surface that asks "are we connected?"
+ * goes by.
+ */
+export function networkConnected(network: Pick<AppNetworkSlice, "online" | "reachable">): boolean {
+  return network.online && network.reachable;
 }
 
 /**

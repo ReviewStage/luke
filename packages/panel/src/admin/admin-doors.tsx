@@ -4,6 +4,7 @@ import type {
   AdminReliability,
   AdminUserDetail,
   AdminUserList,
+  AdminWorkspaceDetail,
   AdminWorkspaceList,
 } from "@repo/features/admin-answer-wire";
 import type { AdminCost } from "@repo/features/admin-cost-wire";
@@ -13,6 +14,7 @@ import type {
   AdminUserQuery,
   AdminUsersQuery,
   AdminWindowedQuery,
+  AdminWorkspaceQuery,
   AdminWorkspacesQuery,
 } from "@repo/features/admin-wire";
 import { createContext, useContext } from "react";
@@ -56,6 +58,10 @@ export interface AdminReads {
     query: AdminWorkspacesQuery,
     signal: AbortSignal,
   ) => Promise<AdminWorkspaceList>;
+  readonly workspace: (
+    query: AdminWorkspaceQuery,
+    signal: AbortSignal,
+  ) => Promise<AdminWorkspaceDetail>;
   readonly favorite: (id: string, favorite: boolean, signal: AbortSignal) => Promise<boolean>;
 }
 
@@ -82,6 +88,8 @@ interface AdminGate {
 interface AdminAddress {
   /** The address an account's page is shared at, or none where the mount keeps no address of its own. */
   readonly accountHref: (id: string) => string | undefined;
+  /** The address a workspace's page is shared at, on the same terms. */
+  readonly workspaceHref: (id: string) => string | undefined;
   /** The search the mount's address holds, read as a screen opens. */
   readonly search: () => string;
   /** Keeps a typed search where the mount keeps it, in place rather than as a step of its own. */
