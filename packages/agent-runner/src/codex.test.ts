@@ -319,45 +319,6 @@ it.effect(
 );
 
 it.effect(
-  "every turn's sandbox is workspace-write, approval never, over the checkout's Git directory and the folders the machine grants",
-  () =>
-    Effect.gen(function* () {
-      const folder = mkdtempSync(join(tmpdir(), "agent-folder-"));
-      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
-      const checkout = join(folder, "repository");
-      mkdirSync(checkout, { recursive: true });
-      const service = fakeService("sleep 600");
-      const { spawned, write, run } = yield* launch([STOPPED], service);
-      yield* write({ ...CONFIG, cwd: checkout, writableRoots: [folder] });
-      yield* write(message("Run sleep 600.", LINE.FIRST));
-      yield* service.seen;
-      yield* write({ type: INPUT_LINE.STOP });
-
-      assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
-      const [process] = spawned;
-      assert.deepEqual(process?.unexpected, []);
-      const overrides = (process?.args ?? []).filter((_, index, args) => args[index - 1] === "-c");
-      const roots = [join(checkout, ".git"), folder];
-      assert.equal(received(process, "thread/start")[0]?.sandbox, "workspace-write");
-      assert.equal(received(process, "thread/start")[0]?.approvalPolicy, "never");
-      const turn = received(process, "turn/start")[0];
-      assert.equal(turn?.approvalPolicy, "never");
-      assert.deepEqual(turn?.sandboxPolicy, {
-        type: "workspaceWrite",
-        writableRoots: roots,
-        networkAccess: true,
-        excludeTmpdirEnvVar: false,
-        excludeSlashTmp: false,
-      });
-      assert.ok(
-        overrides.includes(
-          `sandbox_workspace_write.writable_roots=[${roots.map((root) => JSON.stringify(root)).join(", ")}]`,
-        ),
-      );
-    }),
-);
-
-it.effect(
   "starts app-server with the plan's provider, runs a fast version on the fast tier, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
@@ -426,9 +387,7 @@ it.effect(
         "mcp_servers.linear.startup_timeout_sec=20.0",
         "mcp_servers.linear.tool_timeout_sec=600.0",
         'approval_policy="never"',
-        'sandbox_mode="workspace-write"',
-        "sandbox_workspace_write.network_access=true",
-        `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
+        'sandbox_mode="danger-full-access"',
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
         'shell_environment_policy.exclude=["APP_RUNNER_TOKEN", "APP_CODEX_TOKEN"]',
@@ -447,7 +406,7 @@ it.effect(
           cwd: CONFIG.cwd,
           model: CONFIG.model,
           approvalPolicy: "never",
-          sandbox: "workspace-write",
+          sandbox: "danger-full-access",
           developerInstructions: CONFIG.developerInstructions,
         },
       ]);
@@ -457,6 +416,9 @@ it.effect(
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
       assert.equal(start?.serviceTier, "fast");
+      // Every turn names its sandbox, none of Codex's own, so a thread started under another runs under this one.
+      assert.equal(start?.approvalPolicy, "never");
+      assert.deepEqual(start?.sandboxPolicy, { type: "dangerFullAccess" });
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },
@@ -567,7 +529,7 @@ it.effect(
           cwd: CONFIG.cwd,
           model: CONFIG.model,
           approvalPolicy: "never",
-          sandbox: "workspace-write",
+          sandbox: "danger-full-access",
           developerInstructions: CONFIG.developerInstructions,
           threadId: THREAD,
           excludeTurns: true,
@@ -873,7 +835,7 @@ it.effect(
 );
 
 it.effect(
-  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, and never asks the service",
+  "in a sandbox, the token command answers the launch's placeholder whenever app-server runs it, a 401's included, never asks the service, and no event carries the placeholder",
   () =>
     Effect.gen(function* () {
       const placeholder = "plan-placeholder-for-tests";
@@ -883,8 +845,14 @@ it.effect(
         url === TOKEN_URL ? route.respond(url, init) : service.respond(url, init),
       );
       const sentToOpenAi: string[] = [];
+      // A command reads app-server's environment, which no sandbox of Codex's keeps from it, and the agent says what it found.
+      const printed = {
+        method: "item/agentMessage/delta",
+        params: { threadId: THREAD, turnId: "turn", itemId: "item", delta: `found ${placeholder}` },
+      };
       const turn: Exchange = {
         ...RESUMED_TURN,
+        reply: [printed, ...RESUMED_TURN.reply],
         beforeReply: (process) =>
           Effect.gen(function* () {
             sentToOpenAi.push(yield* runTokenCommand(process, http));

@@ -31,9 +31,10 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * The environment the runner reads. The bearer authenticates it to the service, its
  * events and its MCP server alike; in a sandbox it is a placeholder, which the
  * sandbox's firewall swaps for the bearer on the service's host, and the runner
- * presents it as it would the bearer. The plan token is never read by the runner
- * itself: the CLI it launches inherits it, and the command sandbox denies it,
- * with the bearer, to every command the agent runs. An Anthropic API key
+ * presents it as it would the bearer, handing it to neither the CLI nor a
+ * command Codex runs. The plan token is never read by the runner itself: the
+ * CLI it launches inherits it, as does every command the CLI runs, since no
+ * command sandbox stands between them. An Anthropic API key
  * stands in its place for an agent the account's key pays for. In a sandbox
  * either is a placeholder minted for the launch, which the sandbox's firewall
  * swaps for the real one on Anthropic's API, so neither enters the sandbox;
@@ -79,8 +80,10 @@ export const RUNNER_PLACE = {
   /**
    * A machine its member runs our host on, a Linux box or a Mac, with
    * nobody signed in at it, where each launch runs straight on the box as
-   * the host's own user, with full access to what that user reaches, and no
-   * harness runs a sandbox of its own or asks an approval: Claude Code under
+   * the host's own user, with full access to what that user reaches, beside
+   * the box's other processes, which the runner tells its agent's from by
+   * descent (`host-processes.ts`). No harness runs a sandbox of its own or
+   * asks an approval there, as in the cloud's sandbox: Claude Code under
    * `bypassPermissions`, and Codex in `danger-full-access` with approval
    * `never`.
    */
@@ -275,8 +278,13 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   mcpUrl: Schema.String,
   /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
   integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
-  /** The hosts a command the agent runs may reach, besides nothing else. */
-  allowedDomains: Schema.Array(Schema.String),
+  /**
+   * Read by no runner since Claude Code's command sandbox went: written empty
+   * for a host whose release bundles a runner from before, which refuses a
+   * config without it, and dropped once the service's host version floor
+   * (`HOST_VERSION.FLOOR`) passes that release.
+   */
+  allowedDomains: Schema.optionalKey(Schema.Array(Schema.String)),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
   installedSkills: Schema.optionalKey(
     Schema.String,
@@ -290,9 +298,7 @@ export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
  * the image carries (P17); `CODEX_HOME`, where Codex keeps its threads, comes
  * from the launch's environment and must exist before the runner starts.
  * `threadId` is the thread to resume, where this launch continues one; a new
- * thread's id reaches the service in its `thread/started` notification. Commands
- * Codex runs reach the network (`workspace-write` with network on), so there
- * are no allowed domains to name.
+ * thread's id reaches the service in its `thread/started` notification.
  */
 export const CodexConfigSchema = Schema.Struct({
   harness: Schema.Literal(RUNNER_HARNESS.CODEX),
@@ -337,12 +343,6 @@ export const CodexConfigSchema = Schema.Struct({
   tokenUrl: Schema.String,
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
   installedSkills: Schema.optionalKey(Schema.String),
-  /**
-   * The folders the agent's machine lets its commands write beside the
-   * checkout and its Git directory, absolute: a local agent's own folder on
-   * its Mac; none in a sandbox, whose checkout is all it writes.
-   */
-  writableRoots: Schema.optionalKey(Schema.Array(Schema.String)),
   /** Whether the launch stays warm once the agent's turn is over (`RUNNER_WARM`), posting IDLE rather than ending; it ends there where absent. */
   warm: Schema.optionalKey(Schema.Boolean),
 });

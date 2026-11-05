@@ -21,9 +21,8 @@ export const AGENT_USER = "agent";
 /**
  * Where an agent saves a file the service reads back, a screenshot it shows or a
  * page it posts: a folder each launch makes `agent`'s and world-readable,
- * which Claude Code's command sandbox may write, since the service reads a file as
- * the sandbox's default user and the CLI's own temp folder
- * (`/tmp/claude-<uid>`) is private to `agent`.
+ * since the service reads a file as the sandbox's default user, who reads no
+ * folder private to `agent`.
  */
 export const SHARED_FILES_DIRECTORY = "/tmp/shared";
 

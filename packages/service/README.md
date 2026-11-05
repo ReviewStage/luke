@@ -1348,10 +1348,20 @@ it on for agents, otherwise the account's own API key for the model's
 provider, and a Start with neither is refused; an agent recorded with the
 older Mac sign-in payer launches on the account's saved credential as one
 would. Each is opened from its sealed row under
-`PROVIDER_KEY_ENCRYPTION_KEYS` into the runner's environment alone, and a
-Codex agent on a ChatGPT plan asks the service for its token as it needs one
-(`src/agents/native-events/runner-token-app.ts`). The deployment holds no
-model key of its own. The calls beside an account's agents run on its own
+`PROVIDER_KEY_ENCRYPTION_KEYS`. In a sandbox it is set at the sandbox's
+firewall as a placeholder swap (`src/agents/sandbox-firewall.ts`), as the
+runner's bearer is, the runner's environment holding only the placeholder
+minted for the launch, and the sweep renews a ChatGPT plan's token there; on
+a host it is in the runner's environment, and a Codex agent on a ChatGPT plan
+asks the service for its token as it needs one
+(`src/agents/native-events/runner-token-app.ts`). Neither harness runs a
+command sandbox of its own, in a sandbox or on a host, so in a sandbox the
+firewall is what keeps a credential from the agent's commands: they can read
+the placeholders, each good only through that sandbox's firewall, and never
+the value it swaps in; on a host a Claude Code agent's commands can read its
+credential. Codex's commands inherit neither the bearer nor its credential's
+variable (`shell_environment_policy`). The deployment holds no model key of
+its own. The calls beside an account's agents run on its own
 key too, through `ownKeyOf` (`src/agents/coder-host/account-keys.ts`), the
 provider they prefer first and the other where it saved only that, and never
 on Vespin's: an agent's title on the provider's small model (Haiku, or

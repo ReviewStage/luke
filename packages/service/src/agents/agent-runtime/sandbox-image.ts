@@ -75,15 +75,6 @@ const INSTALL_GTK =
 const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90dpkg-lock-timeout; fi >/dev/null; fi`;
 
 /**
- * Installs bubblewrap and socat, which Claude Code's command sandbox runs
- * each command under on Linux, `$SUDO` as `STAGE_HEAD` set it.
- */
-const INSTALL_BUBBLEWRAP = [
-  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y bubblewrap socat; else $SUDO apt-get install -y --no-install-recommends bubblewrap socat; fi",
-  "bwrap --version",
-];
-
-/**
  * The Claude Agent SDK and the `claude` binary it carries, as the runner
  * pins them (`@repo/agent-runner/pins`): the pair the Claude Code probe
  * proved in a sandbox, installed as root in a directory only root writes, so
@@ -246,7 +237,6 @@ const SYSTEM_STAGE = stage([
   `ls -d ${PLAYWRIGHT_PIN.BROWSERS}/chromium-* >/dev/null || { echo 'Playwright put no Chromium in ${PLAYWRIGHT_PIN.BROWSERS}' >&2; exit 1; }`,
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
-  ...INSTALL_BUBBLEWRAP,
   ...CREATE_AGENT_USER,
   ...MAKE_RUNNER_DIRECTORY,
   ...KEEP_SUDO_ENVIRONMENT,

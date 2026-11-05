@@ -128,11 +128,12 @@ function redacted(value: Json, secrets: readonly string[]): Json {
 /**
  * A batch as the text the service is sent, with every secret the launch holds taken
  * out. Note that we scrub every event, the SDK's included, because a tool's
- * output or a CLI's error is text the runner never wrote; the command sandbox
- * keeps both secrets from the agent's commands, and this is the second fence.
- * Note too that the bearer is scrubbed where it is a sandbox's placeholder for
- * it, because whoever read the placeholder in the transcript could present it
- * from inside the sandbox, a Terminal's shell among them, and act as the agent.
+ * output or a CLI's error is text the runner never wrote, and a command the
+ * agent runs may print a credential it can read: on a host the credential
+ * itself, and in a sandbox its placeholder.
+ * Note too that a sandbox's placeholders are scrubbed, because whoever read
+ * one in the transcript could present it from inside the sandbox, a
+ * Terminal's shell among them, and act as the agent or spend its credential.
  * Note too that we scrub the strings themselves, before they are spelled as
  * JSON, so no escape can hide a secret or be cut in half by its removal.
  */

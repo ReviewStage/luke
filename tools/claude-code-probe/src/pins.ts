@@ -31,8 +31,7 @@ export const PROBE_SANDBOX = {
  * Every capability dropped: inheritable, ambient, and the bounding set. The
  * sandbox's default user holds the full capability set without sudo, which
  * reads another user's `/proc/<pid>/environ` and `/etc/shadow`; with these
- * dropped it reads neither, and bubblewrap no longer refuses to start
- * ("Unexpected capabilities but not setuid"). Found by P16's Codex probe.
+ * dropped it reads neither. Found by P16's Codex probe.
  */
 export const DROP_CAPABILITIES = [
   "--inh-caps=-all",
@@ -77,30 +76,24 @@ export function isRepositoryName(text: string): boolean {
   return REPOSITORY_NAME.test(text) && name !== "." && name !== ".." && !name.endsWith(".git");
 }
 
-/** The variable the CLI reads its plan token from, set in its own process alone. */
+/** The variable the CLI reads its plan token from, which holds the launch's placeholder. */
 export const CLAUDE_TOKEN_VARIABLE = "CLAUDE_CODE_OAUTH_TOKEN";
+
+/** Anthropic's API, where the sandbox's firewall sets the plan's token in the placeholder's place, as the service's launch has it do (`claude-code-sessions.ts`). */
+export const ANTHROPIC_API = {
+  HOST: "api.anthropic.com",
+  MESSAGES: "https://api.anthropic.com/v1/messages",
+  VERSION: "2023-06-01",
+} as const;
 
 /** The probe's default model, by the CLI's own alias, so a pin bump never names a retired model. */
 export const DEFAULT_MODEL = "sonnet";
 
 /**
- * Every variable a command the agent runs must not see. Note that we deny
- * rather than mask, because no command the agent runs has a reason to reach
- * Anthropic, so there is nothing for the proxy to inject.
- */
-const DENIED_VARIABLES = [
-  CLAUDE_TOKEN_VARIABLE,
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
-] as const;
-
-/**
  * The options the driver hands `query()` beside the prompt stream, the
- * model, the working directory, and `resume`: the plan's own (P05), with the
- * SDK's command sandbox on and failing closed. Sandboxed commands reach
- * GitHub, through the firewall's credential, and npm; Anthropic is not on
- * the list.
+ * model, the working directory, and `resume`: the plan's own (P05), with no
+ * command sandbox, as the runner runs it (`runner.ts`): the sandbox is the
+ * boundary, and its firewall holds the token.
  */
 export const QUERY_OPTIONS = {
   systemPrompt: { type: "preset", preset: "claude_code" },
@@ -108,15 +101,7 @@ export const QUERY_OPTIONS = {
   permissionMode: "bypassPermissions",
   allowDangerouslySkipPermissions: true,
   includePartialMessages: true,
-  sandbox: {
-    enabled: true,
-    failIfUnavailable: true,
-    autoAllowBashIfSandboxed: true,
-    allowUnsandboxedCommands: false,
-    enableWeakerNestedSandbox: true,
-    network: { allowedDomains: ["github.com", "*.github.com", "registry.npmjs.org"] },
-    credentials: { envVars: DENIED_VARIABLES.map((name) => ({ name, mode: "deny" })) },
-  },
+  sandbox: { enabled: false },
 } as const;
 
 /** The marker a leak check's one line of JSON follows, in a command's output or a tool's result. */

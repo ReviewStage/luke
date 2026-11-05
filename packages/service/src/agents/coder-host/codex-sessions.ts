@@ -358,9 +358,6 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: layout.installedSkills,
-        ...(layout.writableRoots.length === 0
-          ? undefined
-          : { writableRoots: layout.writableRoots }),
         // The runner stays warm past the agent's turn, for the sweep to retire (`retireWarmRunner`).
         warm: true,
       };

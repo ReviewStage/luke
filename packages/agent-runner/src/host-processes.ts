@@ -8,8 +8,9 @@
  * one in the runner's own process group where the runner leads one, as the
  * host starts it (`@repo/host`'s `compose-local-agents.ts`), so a server
  * that detached from its shell and was handed to init or `launchd` still
- * counts. The runner itself, the harness it spawned, and the harness's
- * command-sandbox bridge are not the agent's, as in the cloud.
+ * counts. The runner itself, the harness it spawned, and the bridge the
+ * harness starts as its own child for Claude Code's command sandbox are not
+ * the agent's.
  *
  * Linux's `/proc` is read where it stands, each process's `stat` naming its
  * parent and group; a Mac, which has none, is asked through `ps` for every
@@ -33,7 +34,7 @@ const PS_ARGS = ["-A", "-o", "pid=,ppid=,pgid=,command="] as const;
 /** How long `ps` has before its answer is taken as none. */
 const PS_TIMEOUT_MS = 5_000;
 
-/** The program and the listening address of Claude Code's command-sandbox bridge, as `processes.ts` tells it. */
+/** The program and the listening address of the bridge Claude Code's command sandbox starts, on a socket under `/tmp`, as its command line spells them. */
 const HARNESS_BRIDGE = {
   PROGRAM: "socat",
   LISTEN: /^UNIX-LISTEN:\/tmp\/claude-http-[0-9a-f]+\.sock(,|$)/,
