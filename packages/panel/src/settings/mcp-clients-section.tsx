@@ -1,6 +1,13 @@
 import { signedInAccountId } from "@repo/credentials/snapshot";
 import { LIVE_READ } from "@repo/features/live-wire";
 import { MCP_ACCESS_TOKEN_MINUTES, type McpClient } from "@repo/features/mcp-client-wire";
+import {
+  cursorInstallUrl,
+  MCP_ADD_COMMAND,
+  MCP_COMMAND_AGENT,
+  MCP_SERVER_NAME,
+  shellLine,
+} from "@repo/features/mcp-connect";
 import { MODEL_PROVIDER } from "@repo/features/models-wire";
 import { oauthRedirectDestination } from "@repo/features/oauth-consent";
 import { PRODUCT_NAME } from "@repo/features/product-name";
@@ -87,7 +94,7 @@ const SECTION_TITLE = {
 } as const;
 
 /** The name each agent knows the server by in a command that adds it. */
-const SERVER_NAME = PRODUCT_NAME.toLowerCase();
+const SERVER_NAME = MCP_SERVER_NAME;
 
 const PAGE_LINE = {
   READ_FAILED: "The connected agents could not be read.",
@@ -128,12 +135,6 @@ interface ConnectStep {
   readonly install?: { readonly label: string; readonly url: (serverUrl: string) => string };
 }
 
-/** Cursor's install link for a remote server: its name and its config, `{ url }`, in base64 (cursor.com/docs/mcp/install-links). */
-function cursorInstallUrl(serverUrl: string): string {
-  const config = btoa(JSON.stringify({ url: serverUrl }));
-  return `https://cursor.com/en/install-mcp?name=${SERVER_NAME}&config=${encodeURIComponent(config)}`;
-}
-
 /** Each agent's one step. */
 const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
   [CONNECT_AGENT.CLAUDE_CODE]: {
@@ -141,14 +142,14 @@ const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
     mark: <HarnessMark provider={MODEL_PROVIDER.ANTHROPIC} />,
     label: "Run this in a terminal",
     words: `Then type /mcp in Claude Code, choose ${SERVER_NAME}, and sign in.`,
-    command: (serverUrl) => `claude mcp add --transport http ${SERVER_NAME} ${serverUrl}`,
+    command: (serverUrl) => shellLine(MCP_ADD_COMMAND[MCP_COMMAND_AGENT.CLAUDE_CODE](serverUrl)),
   },
   [CONNECT_AGENT.CODEX]: {
     name: "Codex",
     mark: <HarnessMark provider={MODEL_PROVIDER.OPENAI} />,
     label: "Run this in a terminal",
     words: `It opens your browser to sign in. If it doesn't, run codex mcp login ${SERVER_NAME}.`,
-    command: (serverUrl) => `codex mcp add ${SERVER_NAME} --url ${serverUrl}`,
+    command: (serverUrl) => shellLine(MCP_ADD_COMMAND[MCP_COMMAND_AGENT.CODEX](serverUrl)),
   },
   [CONNECT_AGENT.CURSOR]: {
     name: "Cursor",
@@ -162,8 +163,7 @@ const CONNECT_STEPS: Readonly<Record<ConnectAgent, ConnectStep>> = {
     mark: <ProviderMark provider={MARK_PROVIDER.VS_CODE} />,
     label: "Run this in a terminal",
     words: `Then start ${SERVER_NAME} from VS Code's MCP servers and sign in.`,
-    command: (serverUrl) =>
-      `code --add-mcp '${JSON.stringify({ name: SERVER_NAME, type: "http", url: serverUrl })}'`,
+    command: (serverUrl) => shellLine(MCP_ADD_COMMAND[MCP_COMMAND_AGENT.VS_CODE](serverUrl)),
   },
   [CONNECT_AGENT.CLAUDE]: {
     name: "Claude",
