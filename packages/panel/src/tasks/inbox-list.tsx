@@ -1027,7 +1027,7 @@ function ListHead({
       {head.tab === true ? (
         <PaneBar title={title} actions={options} />
       ) : (
-        <Toolbar title={title} actions={options} end={TOOLBAR_INSET.COLUMN} />
+        <Toolbar title={title} titleReplayUnmasked actions={options} end={TOOLBAR_INSET.COLUMN} />
       )}
       {search}
       {view === undefined && head.task === undefined ? null : (
