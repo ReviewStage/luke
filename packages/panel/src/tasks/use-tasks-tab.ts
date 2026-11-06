@@ -1496,6 +1496,10 @@ export function useTasksTab(input: {
   const [founding, setFounding] = useState<{ accountId: string | undefined } | undefined>(
     undefined,
   );
+  // A sign-out, or another account, puts the cards away for good, so the same account signing in again does not find them open.
+  if (founding !== undefined && (!signedIn || founding.accountId !== input.accountId)) {
+    setFounding(undefined);
+  }
   const page = tasksPage(tasks);
   // The open task's plan is held whenever a task is open, so a task held lately draws its plan in
   // its first frame, and one never held reads; a name being typed draws over it as over the list.
@@ -3672,7 +3676,8 @@ export function useTasksTab(input: {
     onChooseWorkspace: guard(switchWorkspace),
     newWorkspace: {
       open: signedIn && founding !== undefined && founding.accountId === input.accountId,
-      onOpen: () => setFounding({ accountId: input.accountId }),
+      // Note that the cards take the window in the page's place, so a page holding unsaved work asks first, as leaving it does.
+      onOpen: guard(() => setFounding({ accountId: input.accountId })),
       onClose: () => setFounding(undefined),
     },
     onOpenWorkspaceSettings: () =>
