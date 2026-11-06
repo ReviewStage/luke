@@ -994,6 +994,33 @@
     background: transparent;
   }
 
+  /* Under the Pinned line (`docs/DESIGN.md`), the room beside the words is
+     narrower than the ball, so the hero stacks as a phone's does: the words,
+     then the ball under them, as wide as the column and no taller than it
+     stands beside the words. A container query keeps no state, so the line
+     has its enter width alone, without the leave width a script would hold. */
+  /* off-scale: 1120px, the Pinned line */
+  @container (width < 1120px) {
+    .ui-landing-hero {
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+    }
+
+    .ui-landing-hero-words {
+      padding: 96px var(--ui-landing-gutter) 0;
+    }
+
+    .ui-landing-hero-art {
+      position: relative;
+      top: auto;
+      right: auto;
+      width: auto;
+      height: min(580px, 100cqw - 2 * var(--ui-landing-gutter));
+      margin: 24px var(--ui-landing-gutter) 40px;
+    }
+  }
+
   /* Under 640px of room the page keeps to one column: the ball under the
      words, each stage under its heading, and the phone nearer the window. */
   /* off-scale: 640px, a phone's landing */
