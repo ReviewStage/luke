@@ -118,7 +118,7 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   type ActedResult,
-  type ActHandle,
+  askAct,
   askKept,
   firstRefusal,
   KEPT,
@@ -1355,7 +1355,6 @@ function readInboxItemHome(
 }
 
 export function useTasksTab(input: {
-  acts: Pick<ActHandle, "act">;
   /** The tasks main holds, the account's; a fixture run's own stand in for them. */
   tasks: TasksView;
   run: { readonly fixtureMode: boolean; readonly profile: string };
@@ -1393,9 +1392,12 @@ export function useTasksTab(input: {
   const { guard } = leaveGuard;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation, and
   // none invalidates a query, since what each changes comes back through app state.
-  const { act } = input.acts;
   const queryClient = useQueryClient();
   const { mutateAsync: sendSelect } = useMutation(actMutation(ACT_KIND.TASKS_SELECT));
+  const { mutateAsync: sendGitHubConnect } = useMutation(actMutation(ACT_KIND.GITHUB_CONNECT));
+  const { mutateAsync: sendGitHubDisconnect } = useMutation(
+    actMutation(ACT_KIND.GITHUB_DISCONNECT),
+  );
   const { mutateAsync: sendClose } = useMutation(actMutation(ACT_KIND.TASKS_CLOSE));
   const { mutateAsync: sendDelete } = useMutation(actMutation(ACT_KIND.TASKS_DELETE));
   const { mutateAsync: sendTaskRename } = useMutation(actMutation(ROW_WRITE.TASK_RENAME.kind));
@@ -1611,7 +1613,6 @@ export function useTasksTab(input: {
   );
   // A fixture's task lists its agents at the act door: none, but where an agent profile stages one (`tasks-fixture.ts`).
   const agents = useAgents({
-    acts: input.acts,
     taskId: viewed.activeTaskId,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
@@ -2495,7 +2496,8 @@ export function useTasksTab(input: {
     kind: typeof ACT_KIND.GITHUB_CONNECT | typeof ACT_KIND.GITHUB_DISCONNECT,
   ): Promise<boolean> => {
     if (fixture !== undefined) return Promise.resolve(false);
-    return act(kind).then(
+    const send = kind === ACT_KIND.GITHUB_CONNECT ? sendGitHubConnect : sendGitHubDisconnect;
+    return send().then(
       () => true,
       (refused: Error) => {
         toast({
@@ -2704,10 +2706,10 @@ export function useTasksTab(input: {
   // A fixture's task reads its staged history through the same acts, and holds it on its staged document (`tasks-fixture.ts`).
   const historySource = useMemo(
     (): PlanHistorySource => ({
-      readPage: (taskId, before) => act(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
+      readPage: (taskId, before) => askAct(ACT_KIND.TASKS_REVISIONS, { taskId, before }),
       restore: (taskId, seq) => sendRestore({ taskId, seq }),
     }),
-    [act, sendRestore],
+    [sendRestore],
   );
   const historyTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   // The open task's history is held while its version history is shown, and main keeps it a while after, so one opened again lists its versions in its first frame.

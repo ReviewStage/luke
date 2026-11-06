@@ -195,9 +195,6 @@ async function mountPage(): Promise<{
     const [view, setView] = useState(viewOf(TASKS));
     restand = setView;
     const control = useTasksTab({
-      acts: {
-        act: () => Promise.reject(new Error("unasked")),
-      },
       tasks: view,
       run: { fixtureMode: false, profile: RUN_PROFILE.IDLE },
       signedIn: true,

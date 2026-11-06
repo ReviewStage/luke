@@ -7,7 +7,7 @@ import { linksToPicture } from "@repo/ui/github-html";
 import { PICTURE_STATE, type PictureRead, usePicture } from "@repo/ui/picture-read";
 import { useQueries } from "@tanstack/react-query";
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { PictureBlock } from "../picture-block.js";
 import { type PictureReader, pictureQuery } from "../picture-query.js";
@@ -58,11 +58,10 @@ const EntryViewerContext = createContext<EntryViewerDoor | undefined>(undefined)
 
 /** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
 export function useGitHubImageRead(): PictureReader {
-  const { act } = useAct();
   return useCallback(
     (owner: string, address: string) =>
-      act(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
-    [act],
+      askAct(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
+    [],
   );
 }
 

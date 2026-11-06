@@ -40,8 +40,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOfferedModels } from "../account-choices.js";
 import {
   type ActedResult,
-  type ActHandle,
   type AgentActAnswer,
+  askAct,
   sendAct,
   unreachedAs,
 } from "../act.js";
@@ -715,7 +715,6 @@ export interface ModelsRead {
 }
 
 export function useAgents(input: {
-  acts: Pick<ActHandle, "act">;
   /** The open task, or none. */
   taskId: string | undefined;
   /**
@@ -763,7 +762,6 @@ export function useAgents(input: {
 }): AgentsControl {
   const { taskId, agentId, repository } = input;
   // Note that the reads below stay on `act` until they move to queries; every write is a mutation.
-  const { act } = input.acts;
   const queryClient = useQueryClient();
   const { mutateAsync: sendStart, isPending: starting } = useMutation(
     actMutation(ACT_KIND.AGENTS_START),
@@ -1569,8 +1567,8 @@ export function useAgents(input: {
   const steadyContinueAgent = useSteadyDoor(continueAgent);
 
   const readInboxImage = useCallback<InboxImageReader>(
-    (params) => act(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
-    [act],
+    (params) => askAct(ACT_KIND.AGENTS_INBOX_ATTACHMENT, params),
+    [],
   );
 
   // Handed back steady, so a part drawn from the agents holds while they do (`memo`).
