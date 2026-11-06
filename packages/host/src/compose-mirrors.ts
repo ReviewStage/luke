@@ -50,8 +50,11 @@ import type { RunMode } from "./run-mode.js";
  * `~/.vespin/mirrors/<agentId>/repository`. The first ensure makes it a
  * worktree of this Mac's shared clone of the repository, detached at the
  * header's `base` (`MirrorPlatform`'s scripts), and answers as soon as the
- * worktree stands. From then on the mirror holds one tunnel of the `MIRROR`
- * kind open (`@repo/features/sandbox-tunnel-wire`) with one channel on it,
+ * worktree stands; while it has none, its tunnel asks the service to wake a
+ * stopped sandbox to build it (`SANDBOX_TUNNEL.QUERY.WAKE`), and once it
+ * stands it never asks again, so a stopped sandbox stays stopped and the
+ * mirror waits for it. From then on the mirror holds one tunnel of the
+ * `MIRROR` kind open (`@repo/features/sandbox-tunnel-wire`) with one channel on it,
  * whose messages are the mirror's own (`@repo/features/sandbox-mirror-wire`):
  * each manifest is matched against the mirror's own files, every file whose
  * hash differs asked for and every file the manifest lacks deleted, and each
@@ -60,9 +63,9 @@ import type { RunMode } from "./run-mode.js";
  *
  * There is one recovery path, which is to reconnect and match: no cursor,
  * no change log, nothing stored between connections. Any socket that drops,
- * is refused, closes as idle, finds the sandbox not running (a tunnel never
- * wakes one), or fails a step, is opened again on `RECONNECT`, backing off to
- * every 30 seconds, for as long as the mirror stands; the next manifest
+ * is refused, closes as idle, finds the sandbox not running, or fails a
+ * step, is opened again on `RECONNECT`, backing off to every 30 seconds,
+ * for as long as the mirror stands; the next manifest
  * brings the mirror back in step. Every mirror on disk is kept so from the
  * host's start. A mirror is taken away, its worktree removed from the shared
  * clone and its folder deleted, when the task list shows its agent archived,
@@ -154,12 +157,13 @@ interface Mirror {
   readonly made: Deferred.Deferred<string, MirrorGone>;
 }
 
-/** The mirror tunnel's address for an agent. */
-function tunnelAddress(socketOrigin: string, agentId: string): string {
+/** The mirror tunnel's address for an agent, asking to wake a stopped sandbox where `wake` says so. */
+function tunnelAddress(socketOrigin: string, agentId: string, wake: boolean): string {
   const query = new URLSearchParams({
     [SANDBOX_TUNNEL.QUERY.AGENT]: agentId,
     [SANDBOX_TUNNEL.QUERY.KIND]: TUNNEL_KIND.MIRROR,
   });
+  if (wake) query.set(SANDBOX_TUNNEL.QUERY.WAKE, SANDBOX_TUNNEL.WAKE_ASKED);
   return `${socketOrigin}${SANDBOX_TUNNEL.PATH}?${query}`;
 }
 
@@ -290,7 +294,8 @@ export function composeMirrors(
       Effect.scoped(
         Effect.gen(function* () {
           if (socketOrigin === undefined) return yield* Effect.fail(new MirrorDropped());
-          const address = tunnelAddress(socketOrigin, agentId);
+          // Note that only a mirror with no worktree yet asks to wake the sandbox, once it stands it never does.
+          const address = tunnelAddress(socketOrigin, agentId, !(yield* worktreeStands(agentId)));
           const opening = yield* openedUnderCredential(account.credential, openSocket, address);
           if (!("socket" in opening)) return yield* Effect.fail(new MirrorDropped());
           const { socket } = opening;

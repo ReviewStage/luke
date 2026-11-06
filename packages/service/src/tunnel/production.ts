@@ -54,6 +54,7 @@ export const tunnelDependencies: Effect.Effect<TunnelDependencies, never, Tunnel
           }),
         ),
       open: (sessionId) => sandbox.open(sessionId),
+      resume: (sessionId) => sandbox.resume(sessionId),
       connect: (shell) => connectPty(shell, client),
       hold: (conversationId, heldUntil) =>
         run(holdSandbox(conversationId, heldUntil)).pipe(
