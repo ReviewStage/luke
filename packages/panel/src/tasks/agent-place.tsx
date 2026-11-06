@@ -11,9 +11,11 @@ import {
   HoverCard,
   HoverCardHead,
   HoverCardNote,
+  HoverCardRow,
   HoverCardRule,
   STATUS_TONE,
   StaticChip,
+  StatusGlyph,
   Tooltip,
   useSecond,
   VisuallyHidden,
@@ -37,10 +39,10 @@ import { DeviceGlyph, RUNS_ON_WORDS } from "./runs-on.js";
  * takes no press (`StaticChip`); a rest on it, or a tap under a finger,
  * hangs a card saying where the agent runs and whether the
  * device is online, and a reader hears "Runs on:" before its words. An
- * agent in a sandbox says "Cloud" beside the cloud glyph, and its card says
- * in a sentence under a rule whose Mac its `run_on_mac` runs shell commands
- * on, the task's assignee's or else its starter's, "your Mac" for the
- * reader's own, and how that Mac stands: listening, offline, or off in this
+ * agent in a sandbox says "Cloud" beside the cloud glyph, and its card names
+ * under a rule the Mac its `run_on_mac` runs shell commands on, the task's
+ * assignee's or else its starter's, "Your Mac" for the reader's own, its
+ * glyph wearing a dot for how it stands: online, offline, or off in this
  * Mac's Settings (`run-on-mac.ts`), read only while the card shows.
  *
  * While a device has not beaten lately, asleep or with the app closed,
@@ -71,9 +73,6 @@ function macWords(name: string, standing: DeviceStanding | undefined): string {
     : `${name} · Can't check status`;
 }
 
-/** What the card says of a Mac that listens, after naming it. */
-const RUN_ON_MAC_LISTENING = "which is listening";
-
 /** What the card says under its head of the agent, in the cloud or on a device. */
 const SHARED_NOTE = {
   CLOUD: "This agent runs in a cloud sandbox. Set when it was started.",
@@ -81,12 +80,14 @@ const SHARED_NOTE = {
 } as const;
 
 /**
- * Whose Mac the agent's `run_on_mac` runs on and how it stands, a sentence
- * under a rule in the card: "run_on_mac runs shell commands on your Mac,
- * which is listening."; nothing while it is read, or for an agent offered
- * none.
+ * Whose Mac the agent's `run_on_mac` runs on, a row under a rule in the
+ * card drawn as the Runs on menu draws a device: the Mac's glyph wearing
+ * its standing's dot, green while it listens and gray while it is offline
+ * or off in Settings, and the words "run_on_mac · Your Mac". Note that the
+ * Mac is named by its owner, since any of their Macs that listens runs the
+ * commands. Nothing while it is read, or for an agent offered none.
  */
-function RunOnMacNote({
+function RunOnMacRow({
   agentId,
   readerId,
 }: {
@@ -95,17 +96,21 @@ function RunOnMacNote({
 }): React.JSX.Element | null {
   const { standing, reason } = useRunOnMac(agentId, (userId) => userId === readerId);
   if (standing === undefined) return null;
-  const owner = actorName(personActor(standing.owner, undefined, readerId), {
-    sentence: true,
-    possessive: true,
-  });
-  const stands = reason === undefined ? RUN_ON_MAC_LISTENING : RUN_ON_MAC_REASON_WORDS[reason];
+  const owner = actorName(personActor(standing.owner, undefined, readerId), { possessive: true });
   return (
     <>
       <HoverCardRule />
-      <HoverCardNote>
-        {`${AGENT_TOOL.RUN_ON_MAC} runs shell commands on ${owner} Mac, ${stands}.`}
-      </HoverCardNote>
+      <HoverCardRow
+        glyph={
+          <StatusGlyph
+            tone={reason === undefined ? STATUS_TONE.COMPLETE : STATUS_TONE.NEUTRAL}
+            label={reason === undefined ? RUNS_ON_WORDS.ONLINE : RUN_ON_MAC_REASON_WORDS[reason]}
+          >
+            <DeviceGlyph device={undefined} />
+          </StatusGlyph>
+        }
+        label={`${AGENT_TOOL.RUN_ON_MAC} · ${owner} Mac`}
+      />
     </>
   );
 }
@@ -128,7 +133,7 @@ export function AgentPlace({
         words={RUNS_ON_WORDS.CLOUD}
         sub={undefined}
         note={SHARED_NOTE.CLOUD}
-        more={<RunOnMacNote agentId={agent.id} readerId={readerId} />}
+        more={<RunOnMacRow agentId={agent.id} readerId={readerId} />}
         narrow={narrow}
       />
     );

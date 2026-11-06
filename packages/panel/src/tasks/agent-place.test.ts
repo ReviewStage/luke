@@ -125,28 +125,34 @@ test("an agent in the cloud says Cloud, whatever the beats say", async () => {
   assert.equal(await placeOf({}, undefined), "Runs on: Cloud");
 });
 
-/** What the cloud chip's card says of its `run_on_mac`, once rested on. */
-async function runOnMacNoteOf(runOnMac: RunOnMacStanding): Promise<string | null | undefined> {
+/** The `run_on_mac` row the cloud chip's card ends with, once rested on: its words and what its dot says. */
+async function runOnMacRowOf(runOnMac: RunOnMacStanding): Promise<readonly (string | null)[]> {
   await placeOf({}, undefined, runOnMac);
   restOn(document.querySelector(".ui-chip") ?? assert.fail("the chip stands"));
   await settle();
-  return [...document.querySelectorAll(".ui-hover-card-note")].at(-1)?.textContent;
+  const row =
+    [...document.querySelectorAll(".ui-hover-card-row")].at(-1) ??
+    assert.fail("the card names a Mac");
+  return [
+    row.querySelector(".ui-hover-card-row-label")?.textContent ?? null,
+    row.querySelector('[role="img"]')?.getAttribute("aria-label") ?? null,
+  ];
 }
 
-test("a cloud agent's card names whose Mac its run_on_mac runs on, and that it listens", async () => {
-  assert.equal(
-    await runOnMacNoteOf({ on: true, owner: { userId: READER, name: "Ada Lovelace" } }),
-    "run_on_mac runs shell commands on your Mac, which is listening.",
+test("a cloud agent's card names the reader's own Mac its run_on_mac runs on, online", async () => {
+  assert.deepEqual(
+    await runOnMacRowOf({ on: true, owner: { userId: READER, name: "Ada Lovelace" } }),
+    ["run_on_mac · Your Mac", "Online"],
   );
 });
 
-test("a cloud agent's card says a teammate's Mac is offline where none of theirs listens", async () => {
-  assert.equal(
-    await runOnMacNoteOf({
+test("a cloud agent's card names a teammate's Mac, offline where none of theirs listens", async () => {
+  assert.deepEqual(
+    await runOnMacRowOf({
       on: false,
       reason: RUN_ON_MAC_OFF.MAC_AWAY,
       owner: { userId: "user-charles", name: "Charles Pan" },
     }),
-    "run_on_mac runs shell commands on Charles Pan’s Mac, which is offline.",
+    ["run_on_mac · Charles Pan’s Mac", "Offline"],
   );
 });
