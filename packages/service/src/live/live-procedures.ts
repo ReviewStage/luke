@@ -209,14 +209,11 @@ import { accountMiddleware, hosted } from "../orpc/base.js";
 import { SlackBot } from "../slack/slack-bot.js";
 import {
   accountPreferencesLive,
-  agentBrowserTabsLive,
   agentInboxLive,
-  agentPagesLive,
   agentTranscriptLive,
   automationRunsLive,
   automationsLive,
   automationWorkspaceRunsLive,
-  DESCRIPTION_THREADS,
   inboxItemsLive,
   inboxLive,
   installedSkillsLive,
@@ -224,12 +221,7 @@ import {
   macCommandsLive,
   pullRequestChaptersLive,
   sidebarLive,
-  taskBrowserTabsLive,
-  taskCommentsLive,
-  taskHistoryLive,
   taskInboxLive,
-  taskPagesLive,
-  taskRecordLive,
   tasksLive,
   workspaceIntegrationsLive,
   workspaceInvitationsLive,
@@ -249,7 +241,12 @@ import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { agentOriginRead } from "./reads/agent-origin.js";
+import { agentBrowserTabsRead, taskBrowserTabsRead } from "./reads/browser-tabs.js";
 import { hostsRead } from "./reads/hosts.js";
+import { agentPagesRead, taskPagesRead } from "./reads/pages.js";
+import { taskCommentsRead } from "./reads/task-comments.js";
+import { taskHistoryRead } from "./reads/task-history.js";
+import { taskRecordRead } from "./reads/task-record.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
 
 export interface LiveProcedureSeams {
@@ -969,71 +966,14 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         input,
       );
     }),
-    taskRecord: signedIn.taskRecord.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskRecordLive, { userId: context.userId, taskId }, input);
-    }),
-    taskPages: signedIn.taskPages.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskPagesLive, { userId: context.userId, taskId }, input);
-    }),
-    agentPages: signedIn.agentPages.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(agentPagesLive, { userId: context.userId, agentId }, input);
-    }),
+    taskRecord: signedIn.taskRecord.effect(answerBoundRead(taskRecordRead)),
+    taskPages: signedIn.taskPages.effect(answerBoundRead(taskPagesRead)),
+    agentPages: signedIn.agentPages.effect(answerBoundRead(agentPagesRead)),
     agentOrigin: signedIn.agentOrigin.effect(answerBoundRead(agentOriginRead)),
-    taskHistory: signedIn.taskHistory.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(taskHistoryLive, { userId: context.userId, taskId }, input);
-    }),
-    taskComments: signedIn.taskComments.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const pageId = input.page === undefined ? DESCRIPTION_THREADS : yield* pathUuid(input.page);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        taskCommentsLive,
-        { userId: context.userId, taskId, pageId },
-        input,
-      );
-    }),
-    taskBrowserTabs: signedIn.taskBrowserTabs.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTaskHeader(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        taskBrowserTabsLive,
-        { userId: context.userId, taskId },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
-    agentBrowserTabs: signedIn.agentBrowserTabs.effect(function* ({ input, context }) {
-      yield* sameUser(input, context.userId);
-      const agentId = yield* pathUuid(input.id);
-      const agent = yield* hostedStoreOrUnavailable(readVisibleAgent(context.userId, agentId));
-      if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return yield* liveQueryParts(
-        agentBrowserTabsLive,
-        { userId: context.userId, agentId },
-        input,
-        LIVE_POLL_HOLD.WATCHED_LOOK,
-      );
-    }),
+    taskHistory: signedIn.taskHistory.effect(answerBoundRead(taskHistoryRead)),
+    taskComments: signedIn.taskComments.effect(answerBoundRead(taskCommentsRead)),
+    taskBrowserTabs: signedIn.taskBrowserTabs.effect(answerBoundRead(taskBrowserTabsRead)),
+    agentBrowserTabs: signedIn.agentBrowserTabs.effect(answerBoundRead(agentBrowserTabsRead)),
     macCommands: signedIn.macCommands.effect(function* ({ input, context }) {
       yield* sameUser(input, context.userId);
       return yield* liveQueryParts(

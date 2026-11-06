@@ -33,7 +33,15 @@ import {
   type LiveReadParams,
   ORDER,
 } from "@repo/features/live-read";
-import { asc, desc, type SQL, type SQLWrapper } from "drizzle-orm";
+import {
+  asc,
+  type Column,
+  desc,
+  type GetColumnData,
+  type SQL,
+  type SQLWrapper,
+  sql,
+} from "drizzle-orm";
 import { Duration, type Effect, Option, type Schema } from "effect";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
@@ -102,6 +110,13 @@ interface Orderable {
 interface LivePartColumns<Columns extends LiveColumns, Instants extends LiveColumns> {
   readonly columns: Columns;
   readonly instants?: Instants;
+}
+
+/** A column read across an outer join, which answers null where the join finds no row, typed so. */
+export function outerJoined<Joined extends Column>(
+  column: Joined,
+): SQL<GetColumnData<Joined> | null> {
+  return sql<GetColumnData<Joined> | null>`${column}`;
 }
 
 /**

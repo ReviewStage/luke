@@ -88,6 +88,7 @@
     "./schemas/auth": "./src/schemas/auth.js",
     "./schemas/automation": "./src/schemas/automation.js",
     "./schemas/agent": "./src/schemas/agent.js",
+    "./schemas/agent-browser-tab": "./src/schemas/agent-browser-tab.js",
     "./schemas/agent-queue": "./src/schemas/agent-queue.js",
     "./schemas/runner-line": "./src/schemas/runner-line.js",
     "./schemas/favorite": "./src/schemas/favorite.js",
