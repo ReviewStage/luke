@@ -228,7 +228,7 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/review-options` }))
     .input(idParams)
     .output(EffectSchema.flip(agentReviewOptionsAnswerSchema)),
-  /** Which of our own tools one agent is offered, and whether its `run_on_mac` would run now, as its MCP popover reads them. */
+  /** Whether one agent's `run_on_mac` would run now, as its MCP popover reads it. */
   workspaceTools: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/workspace-tools` }))
     .input(idParams)

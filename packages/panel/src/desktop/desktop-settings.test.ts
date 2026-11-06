@@ -610,7 +610,7 @@ function fieldNamed(page: HTMLElement, label: string): HTMLInputElement | null {
 }
 
 const SIDEBAR_SEARCH = "Search settings";
-const PAGE_SEARCH = "Search integrations and tools";
+const PAGE_SEARCH = "Search integrations";
 
 /** Presses the sidebar's result named `name` under the Integrations page's heading. */
 function openIntegrationResult(page: HTMLElement, name: string): void {

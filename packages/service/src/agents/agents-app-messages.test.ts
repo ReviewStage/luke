@@ -30,7 +30,6 @@ import { task as taskTable } from "@repo/database/schemas/task";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
 import { HOSTED_API_ERROR } from "@repo/features";
-import { AGENT_TOOL } from "@repo/features/agent-tools";
 import {
   AGENT_ARCHIVER,
   AGENT_ATTACHMENT_TYPE,
@@ -69,7 +68,7 @@ import {
   taskDeleteAnswerSchema,
   taskListAnswerSchema,
 } from "@repo/features/task-wire";
-import { workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
+import { RUN_ON_MAC_OFF, workspaceToolsAnswerSchema } from "@repo/features/workspace-tools-wire";
 import { sentLineId } from "@repo/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option, Queue, Result } from "effect";
@@ -1341,7 +1340,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's Vespin tools read for its starter, and as not found for a member who reaches the agent but not its task",
+    "an agent's run_on_mac standing reads for its starter, and as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -1362,7 +1361,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         );
         const teammate = yield* ask(request(AGENT_WORKSPACE_TOOLS, other, { id: agent.id }));
 
-        assert.ok(read.tools.includes(AGENT_TOOL.RUN_ON_MAC));
+        assert.deepEqual(read.runOnMac, { on: false, reason: RUN_ON_MAC_OFF.MAC_AWAY });
         assert.deepEqual(
           teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),

@@ -2,7 +2,6 @@ import attachmentViewer from "@repo/panel/styles/attachment-viewer.css?raw";
 import base from "@repo/panel/styles/base.css?raw";
 import desktop from "@repo/panel/styles/desktop.css?raw";
 import entry from "@repo/panel/styles/index.css?raw";
-import settings from "@repo/panel/styles/settings.css?raw";
 import shell from "@repo/panel/styles/shell.css?raw";
 import tasks from "@repo/panel/styles/tasks.css?raw";
 import utilities from "@repo/panel/testing/tailwind.css?inline";
@@ -50,7 +49,6 @@ const UTILITIES = "tailwind.css";
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@repo/ui/tokens.css": tokens,
-  "./settings.css": settings,
   "./base.css": base,
   "@repo/ui/styles.css": ui,
   "./tasks.css": tasks,

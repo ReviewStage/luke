@@ -129,7 +129,7 @@ import type { SandboxStopReach } from "./session-sandboxes.js";
 import { AgentSandbox, SHELL_REFUSAL, type ShellRefusal } from "./terminal/agent-sandbox.js";
 import { reachedAgentSession, sandboxOrUpstream } from "./terminal/sandbox-reach.js";
 import { listedPage } from "./workspace-agents.js";
-import { offeredWorkspaceTools, runOnMacStanding } from "./workspace-tools.js";
+import { runOnMacStanding } from "./workspace-tools.js";
 
 export interface AgentsProcedureSeams extends PublishedReach, SandboxStopReach {
   resolveUserId: UserIdResolver;
@@ -298,17 +298,14 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       ...(started.txid === undefined ? undefined : { txid: started.txid }),
     },
   });
-  // Which of our own tools the agent is offered, as the catalog offers them, and whether its `run_on_mac` would run now.
+  // Whether the agent's `run_on_mac` would run now.
   const workspaceToolsOf = (userId: string, agentId: string) =>
     Effect.gen(function* () {
       const { agent, target } = yield* reachedAgentById(userId, agentId);
       // A member who reaches the agent but not its task reads it as not found, since its transcript is the task's to show.
       const visible = yield* hostedStoreOrUnavailable(readVisibleAgentWorkspace(userId, agent.id));
       if (Option.isNone(visible)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return {
-        tools: yield* offeredWorkspaceTools(agent),
-        runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)),
-      };
+      return { runOnMac: yield* hostedStoreOrUnavailable(runOnMacStanding(target)) };
     });
   return {
     /**
