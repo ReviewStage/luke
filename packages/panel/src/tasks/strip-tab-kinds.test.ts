@@ -63,6 +63,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Overview",
       look: { kind: "overview" },
       surface: PRODUCT_SURFACE.TASK,
+      of: TASK,
       link: undefined,
     },
     {
@@ -72,6 +73,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Inbox",
       look: { kind: "panel", tab: SIDE_PANEL_TAB.INBOX, plan: KNOWN.plan },
       surface: PRODUCT_SURFACE.INBOX,
+      of: TASK,
       link: undefined,
     },
     {
@@ -81,6 +83,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Agent",
       look: { kind: "agent", name: "Ada", agent: { model: "claude-opus-5-5" } },
       surface: PRODUCT_SURFACE.AGENT,
+      of: AGENT,
       link: undefined,
     },
     {
@@ -90,6 +93,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Agent",
       look: { kind: "draft" },
       surface: PRODUCT_SURFACE.AGENT,
+      of: undefined,
       link: undefined,
     },
     {
@@ -99,6 +103,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "New agent",
       look: { kind: "draft" },
       surface: PRODUCT_SURFACE.AGENT,
+      of: "draft-1",
       link: undefined,
     },
     {
@@ -108,6 +113,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Worker",
       look: { kind: "subagent", name: "Subagent", model: undefined, state: "rest" },
       surface: PRODUCT_SURFACE.SUBAGENT,
+      of: CALL,
       link: { kind: LINK_PLACE.WORKER, agentId: AGENT, callId: CALL },
     },
     {
@@ -117,6 +123,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "main.ts",
       look: { kind: "file", path: "src/app/main.ts" },
       surface: PRODUCT_SURFACE.FILES,
+      of: "src/app/main.ts",
       link: undefined,
     },
     {
@@ -126,7 +133,18 @@ describe("a strip tab's kind answers", () => {
       untitled: "Pull request",
       look: { kind: "changes", pullRequest: undefined },
       surface: PRODUCT_SURFACE.PULL_REQUEST,
+      of: AGENT,
       link: { kind: LINK_PLACE.CHANGES, agentId: AGENT },
+    },
+    {
+      kind: "changes on another pull request, by its number",
+      tab: changesTab(AGENT, 34),
+      title: "#7 Fix refresh",
+      untitled: "Pull request",
+      look: { kind: "changes", pullRequest: undefined },
+      surface: PRODUCT_SURFACE.PULL_REQUEST,
+      of: undefined,
+      link: undefined,
     },
     {
       kind: "terminal",
@@ -135,6 +153,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Cloud 1",
       look: { kind: "terminal", title: "Cloud 1" },
       surface: PRODUCT_SURFACE.TERMINAL,
+      of: "shell-1",
       link: undefined,
     },
     {
@@ -144,6 +163,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Local 1",
       look: { kind: "local", title: "Local 1" },
       surface: PRODUCT_SURFACE.TERMINAL,
+      of: "shell-2",
       link: undefined,
     },
     {
@@ -153,6 +173,7 @@ describe("a strip tab's kind answers", () => {
       untitled: "Page",
       look: { kind: "page", title: "Page" },
       surface: PRODUCT_SURFACE.PAGE,
+      of: PAGE,
       link: { kind: LINK_PLACE.PAGE, planId: TASK, pageId: PAGE },
     },
     {
@@ -162,15 +183,19 @@ describe("a strip tab's kind answers", () => {
       untitled: "Browser",
       look: { kind: "browser", title: undefined },
       surface: PRODUCT_SURFACE.BROWSER,
+      of: "browser-1",
       link: undefined,
     },
   ])(
     "$kind: its title, look, surface, and link",
-    ({ tab, title, untitled, look, surface, link }) => {
+    ({ tab, title, untitled, look, surface, of, link }) => {
       assert.equal(stripTabTitle(tab, NAMES), title);
       assert.equal(untitledStripTab(tab), untitled);
       assert.deepEqual(stripTabLook(tab, KNOWN), look);
-      assert.equal(stripTabSurface(tab, TASK).surface, surface);
+      const shown = stripTabSurface(tab, TASK);
+      assert.equal(shown.surface, surface);
+      // Note that a transcript's and a numbered Changes tab's key is minted on first ask, so no row can name it.
+      if (of !== undefined) assert.equal(shown.of, of);
       assert.deepEqual(stripTabLink(tab, HOLDER), link);
     },
   );
