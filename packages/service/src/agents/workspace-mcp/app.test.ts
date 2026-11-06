@@ -319,7 +319,7 @@ function post(
 
 /** Turns Plans on for an agent's starter, whose agents are offered the plan's tools only then. */
 const plansOn = (userId: string) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: true } });
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
 
 /** The tools a native agent is served: every tool of ours the eve agent is offered that its harness has no equal of. */
 const SERVED_TOOLS = [
@@ -593,7 +593,7 @@ it.layer(getTestDB())("Vespin's MCP server", (it) => {
         const fetch = yield* standing;
         const agent = yield* agentWithBearer;
         yield* writeAccountPreferences(agent.userId, {
-          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.PLANS]: true },
+          experiments: { [EXPERIMENT.MEMORY]: true, [EXPERIMENT.DESCRIPTIONS]: true },
         });
         const client = yield* connected(fetch, agent.bearer);
 

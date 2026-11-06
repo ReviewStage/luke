@@ -96,7 +96,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]:
     "Could not open a tab in that agent's browser on this system.",
   [TASKS_ACT_KIND.TASKS_COLOR_CODE]: "Could not color that code on this system.",
-  [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
+  [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that description's history on this system.",
   [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
   [TASKS_ACT_KIND.TASKS_RESTORE]: "Could not restore that version on this system.",
   [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: "Could not read that page's source on this system.",

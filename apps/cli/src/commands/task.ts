@@ -220,16 +220,16 @@ const createCommand = Command.make(
     file: Flag.String("file").pipe(
       Flag.withAlias("F"),
       Flag.optional,
-      Flag.withDescription("The plan, as Markdown, from a file or - for stdin"),
+      Flag.withDescription("The description, as Markdown, from a file or - for stdin"),
     ),
     start: Flag.Boolean("start").pipe(
       Flag.withDefault(false),
-      Flag.withDescription("Start an agent on the new task, handed its plan"),
+      Flag.withDescription("Start an agent on the new task, handed its description"),
     ),
     prompt: Flag.String("prompt").pipe(
       Flag.optional,
       Flag.withDescription(
-        "Start an agent with this prompt in the plan's place, from a file or - for stdin",
+        "Start an agent with this prompt in the description's place, from a file or - for stdin",
       ),
     ),
   },
@@ -250,7 +250,7 @@ const createCommand = Command.make(
         return yield* new CommandFailed({
           exit: CLI_EXIT.USAGE,
           message:
-            "An agent needs something to work from: give the task a plan with -F, or the agent a prompt with --prompt.",
+            "An agent needs something to work from: give the task a description with -F, or the agent a prompt with --prompt.",
         });
       }
       const repository = Option.isSome(repo) ? repo.value : yield* originRepository;
@@ -308,8 +308,8 @@ const createCommand = Command.make(
   Command.withExamples([
     { command: 'vespin task create "Fix the login redirect"', description: "A new task, no agent" },
     {
-      command: 'vespin task create "Fix the login redirect" -F plan.md --start',
-      description: "A task with a plan, and an agent working it",
+      command: 'vespin task create "Fix the login redirect" -F description.md --start',
+      description: "A task with a description, and an agent working it",
     },
     {
       command:

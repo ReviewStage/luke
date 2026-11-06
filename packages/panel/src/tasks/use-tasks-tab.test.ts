@@ -108,9 +108,9 @@ import {
 } from "./use-tasks-tab.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -307,7 +307,7 @@ function mount(
   act(() => {
     root.render(
       windowRouter().provide(
-        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface),
+        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)), surface),
       ),
     );
   });
@@ -570,7 +570,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     {},
     {
       settings: appSettingsWire(
-        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.PLANS) }),
+        settingsView({ openNewTask: false, experiments: experimentsOn(EXPERIMENT.DESCRIPTIONS) }),
       ),
     },
   );
@@ -582,7 +582,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
         Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent } }),
       [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
     },
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -624,7 +624,7 @@ test("with Open a task once it starts off, New task starts the task and its agen
     { tab: { agent: AGENT_ID }, panel: false },
     "the task opens on its agent alone, no plan laid over it in a narrow room",
   );
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 /** A line of a file of the task's repository, as a place names it to open. */
@@ -1251,7 +1251,7 @@ test("a Vespin link to a page an agent on no task showed opens that agent's page
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1280,7 +1280,7 @@ test("a Vespin link to a page of the task, as Open in browser lands on, opens th
   const tab = mount(
     { shown: true, tasks: withAgents([RUNNING_AGENT]) },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -1588,7 +1588,7 @@ test("a task's Inbox door and its link narrow the Inbox to the task, an agent's 
   const tab = mount(
     { shown: true, tasks: TWO_WORKSPACES },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   const narrowed = inboxTaskNow();
@@ -1766,7 +1766,7 @@ test("a task whose plan the host holds opens on its plan in its first frame agai
 
 test("a version history opened on a held task lists its versions in its first frame, with no page read", async () => {
   const versions = [revisionLine(2), revisionLine(1)];
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     [LIVE_READ.HISTORY]: { [TASK.id]: { rows: { revisions: versions } } },
   });
   const tab = mount({ shown: true, tasks: OPEN });
@@ -1882,7 +1882,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   fakeActs({
     act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." }),
   });
-  handState(experimentsOn(EXPERIMENT.PLANS));
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   // Note that the open task's pages are held through the window's act port and laid on the document, as the host lays them.
   const reads = handHostReads({});
   const asked = holdPages(reads.deliverPages, () => ({ rows: [page] }));
@@ -1890,7 +1890,7 @@ test("a tab its strip no longer draws, its page gone since, is passed over for t
   const tab = mount(
     { shown: true, tasks: OPEN },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
   assert.deepEqual(asked, [{ taskId: TASK.id }]);
@@ -2517,7 +2517,7 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   act(() =>
     chipRoot.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         createElement(RepositoryChip, {
           value: null,
           chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2713,13 +2713,13 @@ test("an agent profile opens its task on the agent it stages, beside the agent's
   const file = mount({ ...run, profile: RUN_PROFILE.AGENT_FILE });
   const terminal = mount({ ...run, profile: RUN_PROFILE.AGENT_TERMINAL });
   // Note that the page profile's page is held on the open task's pages, as its fixture run's document lays it (`fixtureAppState`).
-  handState(experimentsOn(EXPERIMENT.PLANS), {
+  handState(experimentsOn(EXPERIMENT.DESCRIPTIONS), {
     run: { ...stateWith({}, {}).run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PAGE },
   });
   const page = mount(
     { ...run, profile: RUN_PROFILE.AGENT_PAGE },
     {},
-    registryWith(experimentsOn(EXPERIMENT.PLANS)),
+    registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
   );
   await settle();
 
@@ -3702,7 +3702,7 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
  */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   fakeActPort({});
-  return registryWith(experimentsOn(EXPERIMENT.PLANS), [
+  return registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS), [
     [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
     [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
   ]);

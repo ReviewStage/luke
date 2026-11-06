@@ -19,7 +19,7 @@ import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope } from "./plan-comments.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plan-slash-menu.test.ts -- the `/` menu in the plan's open text: opened by

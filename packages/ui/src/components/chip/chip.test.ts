@@ -20,7 +20,7 @@ declare global {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const FILTERS = ["All", "Plans", "Files"] as const;
+const FILTERS = ["All", "Tasks", "Files"] as const;
 
 const roots: Root[] = [];
 
@@ -83,7 +83,7 @@ function pressed(): string[] {
 
 test("a row of filter chips announces the first as pressed and the rest as not", () => {
   render(createElement(Filters));
-  assert.equal(chip("Plans").getAttribute("aria-pressed"), "false");
+  assert.equal(chip("Tasks").getAttribute("aria-pressed"), "false");
   assert.deepEqual(pressed(), ["All"]);
 });
 
@@ -91,8 +91,8 @@ test("pressing a filter chip makes it the one pressed", () => {
   render(createElement(Filters));
   act(() => chip("Files").click());
   assert.deepEqual(pressed(), ["Files"]);
-  act(() => chip("Plans").click());
-  assert.deepEqual(pressed(), ["Plans"]);
+  act(() => chip("Tasks").click());
+  assert.deepEqual(pressed(), ["Tasks"]);
 });
 
 test("a chip drawn as its mark alone is still named by its words", () => {

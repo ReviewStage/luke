@@ -78,7 +78,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.PLANS));
+  handCapabilities(DESKTOP_CAPABILITIES, experimentsOn(EXPERIMENT.DESCRIPTIONS));
 });
 
 afterEach(() => {
@@ -167,7 +167,7 @@ async function mountEveryTab(
   act(() =>
     root.render(
       onRegistry(
-        registryWith(experimentsOn(EXPERIMENT.PLANS)),
+        registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS)),
         // Only the tabs' bars are asked about, so no bundle lands under them.
         onSideBundles(
           unlandedBundles(),
@@ -323,7 +323,7 @@ test("the topbar's ⋯ offers the task's own document menu, which pins the task,
   assert.ok(topbar, "the topbar stands over the details");
   const fromDetails = taskMore(topbar);
   assert.deepEqual(fromDetails, [
-    "Copy plan",
+    "Copy description",
     "Copy link",
     "Rename",
     "Version history",
@@ -341,7 +341,7 @@ test("the topbar's ⋯ offers the task's own document menu, which pins the task,
   assert.deepEqual(taskMore(bars(agent).task), fromDetails, "the same menu over an agent's tab");
   const agentMore = pressBarMore(bars(agent).main);
   assert.ok(
-    !agentMore.includes("Copy plan") && !agentMore.includes("Version history"),
+    !agentMore.includes("Copy description") && !agentMore.includes("Version history"),
     "the agents' bar's ⋯ offers none of the task's items",
   );
 });

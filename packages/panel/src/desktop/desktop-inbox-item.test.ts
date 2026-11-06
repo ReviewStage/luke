@@ -129,9 +129,9 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 // Note that each case starts with the document handing Plans on, whatever an earlier case handed.
-beforeEach(() => handState(experimentsOn(EXPERIMENT.PLANS)));
+beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -1228,7 +1228,7 @@ test("in the window's Inbox an @ in the box of a task's item offers that plan's 
   await settle();
 
   const offered = [
-    ...pane.querySelectorAll('.mention-menu [aria-label="Plan"] .ui-combobox-option-label'),
+    ...pane.querySelectorAll('.mention-menu [aria-label="Description"] .ui-combobox-option-label'),
   ].map((name) => name.textContent);
   assert.deepEqual(offered, ["Thresholds"]);
 });

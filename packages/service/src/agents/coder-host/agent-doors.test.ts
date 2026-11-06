@@ -80,7 +80,7 @@ const ON_CLAUDE_CODE = {
 
 /** The member's Plans turned on or off, which their agents' plan tools stand on. */
 const plansFor = (userId: string, on: boolean) =>
-  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } });
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: on } });
 
 /** An agent of the member's on the task named, with the brief given, its member's Plans on. */
 const agentOn = (

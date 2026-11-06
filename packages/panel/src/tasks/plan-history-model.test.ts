@@ -119,7 +119,7 @@ test("a revision names its writer as the developer knows them, and says what it 
         changes: 0,
       }),
     ),
-    "The plan before its history began",
+    "The description before its history began",
   );
   const restoredAt = NOW - 5 * HOUR;
   assert.equal(

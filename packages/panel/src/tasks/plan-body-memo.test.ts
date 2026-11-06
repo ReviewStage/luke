@@ -15,7 +15,7 @@ import { PlanBody } from "./plan-body.js";
 import type { PlanEditDoor } from "./use-plan-editing.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * plan-body-memo.test.ts -- a section's byline moves its edit time on with

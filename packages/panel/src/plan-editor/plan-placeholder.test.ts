@@ -64,7 +64,7 @@ function newLine(editor: Editor): void {
 test("an empty plan reads Write the plan", () => {
   const editor = mounted("");
 
-  assert.equal(said(editor), "Write the plan");
+  assert.equal(said(editor), "Write the description");
 });
 
 test("an empty line under the caret says how to open the `/` menu", () => {

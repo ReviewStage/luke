@@ -48,7 +48,7 @@ const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox 
 /** An account with one agent on Claude Code on a task, admitted as the MCP door admits it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openGithubUser();
-  yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: true } });
+  yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
   const task = yield* startTask(userId, { name: "Teammate invitations", repository: "acme/relay" });
   const started = yield* createAgent(userId, {
     taskId: task.id,
@@ -195,7 +195,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         assert.ok(!changed.includes("## This turn is spoken"), changed);
 
         // With Plans off a save hands nothing, and the plan is never what a turn reads.
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: false } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: false } });
         yield* TestClock.adjust("1 minute");
         yield* saveNotes(binding, [added("Approach", "- Only admins withdraw invites.")]);
         assert.equal(yield* typedAt(nextTurn), undefined);
@@ -204,7 +204,7 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
         yield* TestClock.adjust("1 minute");
         yield* ranTurn(admitted, nextTurn, yield* Clock.currentTimeMillis);
         yield* TestClock.adjust("1 minute");
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: true } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.DESCRIPTIONS]: true } });
         const back = (yield* typedAt(randomUUID())) ?? "";
         assert.ok(back.includes("Only admins withdraw invites."), back);
       }),

@@ -180,7 +180,7 @@ function Disclosures(): React.JSX.Element {
             <Disclosure look={DISCLOSURE_LOOK.CARD} defaultOpen>
               <DisclosureSummary look={DISCLOSURE_SUMMARY.HEAD}>
                 <DisclosureChevron />
-                <span>Plan · Fix token refresh on wake</span>
+                <span>Description · Fix token refresh on wake</span>
               </DisclosureSummary>
               <DisclosureBody inset={DISCLOSURE_BODY.CARD}>
                 <Text>Refresh the token before the first request after the Mac wakes.</Text>

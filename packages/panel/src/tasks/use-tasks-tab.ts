@@ -1142,7 +1142,7 @@ type AgentPinAsked =
 const NO_TASK_AGENT_PINS: readonly TaskAgentPin[] = [];
 
 /** What the toast says once Copy plan has put the plan on the clipboard. */
-const TASK_COPIED_NOTE = "Plan copied";
+const TASK_COPIED_NOTE = "Description copied";
 
 /** Whether a task New task starts opens, as Settings › Profile › Tasks says; until the first document arrives it does. */
 const OPENS_NEW_TASK = Atom.map(
@@ -1868,7 +1868,7 @@ export function useTasksTab(input: {
   const openTaskId = tasks.activeTaskId;
   const boundFor = asked !== undefined && asked.over === openTaskId ? asked.taskId : openTaskId;
   // The version history is the task's, so another task, or none, leaves it, and so does Plans turned off, whose it is.
-  const plansOn = experimentOn(experiments, EXPERIMENT.PLANS);
+  const plansOn = experimentOn(experiments, EXPERIMENT.DESCRIPTIONS);
   if (historyFor !== undefined && (historyFor.taskId !== boundFor || !plansOn)) {
     setHistoryFor(undefined);
   }

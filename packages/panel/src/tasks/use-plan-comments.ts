@@ -49,7 +49,7 @@ const COMMENT_NOTE = {
   NOT_POSTED: "The comment could not be posted.",
   NOT_CHANGED: "The comment could not be changed.",
   TOO_MANY: "This thread holds as many comments as it can.",
-  NO_WORDS: "The words this comment was on are no longer in the plan.",
+  NO_WORDS: "The words this comment was on are no longer in the description.",
   NOT_YOURS: "Only its writer can change this comment.",
   GONE: "This comment is no longer in the thread.",
   AGENT_AWAY: "That agent isn't running, so it couldn't take the thread.",

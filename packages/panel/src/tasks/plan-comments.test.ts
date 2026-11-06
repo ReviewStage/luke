@@ -48,7 +48,7 @@ import { COMMENTS_FILTER, CommentFocusScope, PageComments } from "./plan-comment
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * A plan's comments on its own page: each open thread's words marked where
@@ -203,7 +203,7 @@ function drawn(
     ...(view === "list" && agents !== undefined ? { agents } : undefined),
   });
   // Note that every page draws on a registry of its own, so the editor bundle installed for one is read afresh and no draft another left is held.
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   const treeOf = (value: PlanCommentsControl) =>
     createElement(
       PlanCommentsProvider,
@@ -1948,7 +1948,7 @@ test("a thread resolved fades out of a page's column where its row stood, out of
     document.body.append(container);
     const root = createRoot(container);
     roots.push(root);
-    const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+    const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
     const draw = (threads: readonly PlanCommentThread[]) =>
       act(() =>
         root.render(

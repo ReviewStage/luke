@@ -1519,7 +1519,7 @@ function taskCommandRows(
   const renamed = rename?.taskId === task.id ? rename.begin : undefined;
   const commands: readonly { item: PanelCommand; run: () => void }[] = [
     ...(renamed === undefined ? [] : [{ item: PANEL_COMMAND.RENAME_TASK, run: renamed }]),
-    ...(experimentOn(experiments, EXPERIMENT.PLANS)
+    ...(experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)
       ? [{ item: PANEL_COMMAND.VERSION_HISTORY, run: () => tasks.history.onOpen(task.id) }]
       : []),
     {

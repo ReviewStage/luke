@@ -43,7 +43,7 @@ import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -950,7 +950,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
 
   openMenu(mountPlanTab(tasks));
   assert.deepEqual(itemChords(), [
-    ["Copy plan", "⌥⌘C"],
+    ["Copy description", "⌥⌘C"],
     ["Version history", "⌥⇧⌘H"],
     ["Mark as unread", "U"],
     ["Pin", "P"],
@@ -997,7 +997,7 @@ test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version histo
   openMenu(mountPlanTab(tasks, registryWith({})));
   const offered = menuItems().map(itemLabel);
   assert.deepEqual(
-    ["Copy plan", "Version history"].filter((item) => offered.includes(item)),
+    ["Copy description", "Version history"].filter((item) => offered.includes(item)),
     [],
   );
   assert.equal(appCommandOffered(APP_COMMAND.COPY_CONTENT), false);

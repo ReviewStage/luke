@@ -403,7 +403,7 @@ test("the account's activity by meaningful actions leads the page", async () => 
   expect(activity.textContent).toContain("Active days · 7 days72 the week before");
   expect(activity.textContent).toContain("Last activeOct 14first active Jan 7");
   expect(activity.textContent).toContain("14 in the last 7 days, against 4 before");
-  for (const kind of ["Tasks created", "Plan revisions", "Agents started"]) {
+  for (const kind of ["Tasks created", "Description revisions", "Agents started"]) {
     expect(activity.textContent).toContain(kind);
   }
   expect(

@@ -100,7 +100,7 @@ function draw(element: React.ReactElement): { rerender: (next: React.ReactElemen
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const registry = registryWith(experimentsOn(EXPERIMENT.PLANS));
+  const registry = registryWith(experimentsOn(EXPERIMENT.DESCRIPTIONS));
   act(() => root.render(onRegistry(registry, element)));
   return { rerender: (next) => act(() => root.render(onRegistry(registry, next))) };
 }

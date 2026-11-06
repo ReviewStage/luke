@@ -67,7 +67,7 @@ test("a failed save keeps the words, says why, and waits to be tried again or ty
   });
   assert.deepEqual(tooLong.state, {
     kind: DOCUMENT_EDITOR_STATE.FAILED,
-    note: "Not saved: the plan is too long.",
+    note: "Not saved: the description is too long.",
   });
   assert.equal(pendingSave(unanswered), undefined);
   assert.equal(editorCloses(editorCloseAsked(unanswered)), false);
@@ -204,7 +204,7 @@ test("Keep mine whose merge runs past the bound says so and holds the editor ope
 
   assert.deepEqual(kept.state, {
     kind: DOCUMENT_EDITOR_STATE.FAILED,
-    note: "Not saved: the plan is too long.",
+    note: "Not saved: the description is too long.",
   });
   assert.ok(kept.draft.includes("Send the invite now."));
   assert.equal(editorCloses(kept), false);

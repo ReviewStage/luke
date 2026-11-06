@@ -274,7 +274,7 @@ const taskArgument = Argument.String("task").pipe(
 const promptFlag = Flag.String("file").pipe(
   Flag.withAlias("F"),
   Flag.optional,
-  Flag.withDescription("The prompt, from a file or - for stdin (default: the task's plan)"),
+  Flag.withDescription("The prompt, from a file or - for stdin (default: the task's description)"),
 );
 
 const startCommand = Command.make(
@@ -346,9 +346,12 @@ const startCommand = Command.make(
       if (wait) yield* endedWith(exit);
     }),
 ).pipe(
-  Command.withDescription("Start an agent on a task, handed its plan or a prompt"),
+  Command.withDescription("Start an agent on a task, handed its description or a prompt"),
   Command.withExamples([
-    { command: "vespin agent start ACME-42", description: "An agent working the task's plan" },
+    {
+      command: "vespin agent start ACME-42",
+      description: "An agent working the task's description",
+    },
     {
       command: "vespin agent start ACME-42 --branch fix/login --cloud",
       description: "An agent in the cloud, on a branch already on GitHub",

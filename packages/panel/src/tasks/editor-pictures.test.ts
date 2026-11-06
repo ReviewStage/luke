@@ -25,7 +25,7 @@ import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
-beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.PLANS)));
+beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 /**
  * editor-pictures.test.ts -- a picture laid into the plan's editor is drawn
@@ -203,7 +203,7 @@ test("a keep that failed says why with Retry and Remove, and Remove takes the pi
   const failed = container.querySelector(".picture-block[data-upload='failed'] [role='alert']");
   assert.equal(
     failed?.textContent,
-    "This plan already holds as many pictures as it can.RetryRemove",
+    "This description already holds as many pictures as it can.RetryRemove",
   );
   const [retry, remove] = [...(failed?.querySelectorAll("button") ?? [])];
   assert.equal(retry?.textContent, "Retry");
