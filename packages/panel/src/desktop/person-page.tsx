@@ -75,7 +75,6 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { useInboxRowDrafts } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
   copyLinkItem,
@@ -91,15 +90,10 @@ import { stateEndMark } from "../state-glyph.js";
 import { RENAME_FAILED } from "../tasks/agent-model.js";
 import { AgentCard, listedRowSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
-import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
-import {
-  INBOX_HOLDER,
-  type InboxListed,
-  NEEDS_YOU,
-  waitsOnReaderNow,
-} from "../tasks/inbox-model.js";
+import { InboxItemRows } from "../tasks/inbox-item-rows.js";
+import { InboxListSkeleton } from "../tasks/inbox-list.js";
+import { INBOX_HOLDER, NEEDS_YOU, waitsOnReaderNow } from "../tasks/inbox-model.js";
 import { readAgentById } from "../tasks/use-agents.js";
-import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
@@ -190,7 +184,6 @@ function PersonSection({
   count,
   tone,
   density = LIST_DENSITY.REGULAR,
-  rowsMasked = false,
   run,
   children,
 }: {
@@ -199,8 +192,6 @@ function PersonSection({
   tone?: StatusTone | undefined;
   /** How tightly its rows stand. */
   density?: ListDensity;
-  /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
-  rowsMasked?: boolean | undefined;
   /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
   run?: ListRun | undefined;
   /** Its rows, where it draws every one. */
@@ -213,7 +204,7 @@ function PersonSection({
   );
   return (
     <PersonSectionFrame label={title} title={title} count={count} tone={tone}>
-      {rowsMasked ? <ReplayMask>{list}</ReplayMask> : list}
+      {list}
     </PersonSectionFrame>
   );
 }
@@ -760,10 +751,10 @@ function PersonColumn({
   // A task's row is unread as its sidebar row is, so its weight and its menu's Mark as read agree with the sidebar's.
   const unread = useUnreadTasks({ staged });
   const you = userId === tasks.me;
+  const waitingTitle = you ? NEEDS_YOU.LABEL : "Waiting on their answer";
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
   const { automations } = theirAutomations;
   const read = useWaitingItems(tasks);
-  const drafts = useInboxRowDrafts();
   // An item is theirs where it waits on them (`inboxWaitsOn`), on a task its assignee or else its agent's starter, by the task's row from a service that names neither.
   // On the reader's own page it must also wait on them now as the sidebar's Inbox row counts it (`waitsOnReaderNow`), so one with a reminder still ahead is left out until it comes due.
   const waiting = read.items.filter(
@@ -774,8 +765,6 @@ function PersonColumn({
           : undefined)) === userId &&
       (!you || waitsOnReaderNow(item, tasks.me, now)),
   );
-  const { inboxView } = tasks;
-  const openItem = (listed: InboxListed) => inboxView.onOpenItem(choiceOf(listed));
   // Nobody the workspace's members or those who left name, as a link to someone outside it opens, is not found here; until both are read, nobody is.
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
@@ -878,25 +867,20 @@ function PersonColumn({
             </SectionSkeleton>
           ) : null}
           {waiting.length === 0 ? null : (
-            <PersonSection
-              title={you ? NEEDS_YOU.LABEL : "Waiting on their answer"}
+            <PersonSectionFrame
+              label={waitingTitle}
+              title={waitingTitle}
               count={waiting.length}
               tone={you ? STATUS_TONE.ATTENTION : undefined}
-              rowsMasked
             >
-              {waiting.map((listed) => (
-                <InboxItemRow
-                  key={listed.item.id}
-                  listed={listed}
-                  chosen={false}
-                  {...inboxRowDraft(drafts.get(listed.item.id), listed.item, false)}
-                  models={tasks.agents.models}
-                  readerId={tasks.me}
-                  needsYouShown={you}
-                  onChoose={openItem}
-                />
-              ))}
-            </PersonSection>
+              <InboxItemRows
+                label={waitingTitle}
+                listed={waiting}
+                tasks={tasks}
+                needsYouShown={you}
+                moves
+              />
+            </PersonSectionFrame>
           )}
           <PersonTasks
             title={you ? "Assigned to you" : "Assigned"}
