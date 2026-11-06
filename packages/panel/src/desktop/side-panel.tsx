@@ -466,8 +466,8 @@ const NO_SUBAGENTS: readonly string[] = [];
 export const ADD_SECTION = {
   PULL_REQUESTS: "Pull requests",
   PAGES: "Pages",
-  CLOUD: "Cloud",
-  LOCAL: "Local",
+  CLOUD: "Cloud Terminal",
+  LOCAL: "Local Terminal",
   BROWSER: "Browser",
 } as const;
 

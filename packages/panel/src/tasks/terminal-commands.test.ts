@@ -253,7 +253,7 @@ test("a Start the picker pressed that the service refused says why on the toast,
   assert.ok(said.includes("Choose a repository"), "and offers the remedy");
 });
 
-test("the panel's + lists each agent's terminal under Cloud, and a pick opens a new one in that agent's sandbox", async () => {
+test("the panel's + lists each agent's terminal under Cloud Terminal, and a pick opens a new one in that agent's sandbox", async () => {
   const task = await mount({
     agents: [WORKING, DONE],
     side: SIDE_PANEL_TAB.COMMENTS,
@@ -267,7 +267,9 @@ test("the panel's + lists each agent's terminal under Cloud, and a pick opens a 
   await settle();
   const rows = [
     ...document.querySelectorAll<HTMLElement>('.ui-searchable-menu [role="option"]'),
-  ].filter((row) => row.closest('[role="group"]')?.textContent?.startsWith("Cloud") === true);
+  ].filter(
+    (row) => row.closest('[role="group"]')?.textContent?.startsWith("Cloud Terminal") === true,
+  );
   assert.deepEqual(
     rows.map((row) => [
       row.querySelector(".ui-combobox-option-label")?.textContent,
@@ -387,7 +389,7 @@ test("on a platform that runs no terminals, neither ⌘J nor New terminal stands
   assert.ok(onDesktop.includes("Show terminal"), "the desktop offers it");
   assert.equal(without.includes("Show terminal"), false);
   assert.equal(
-    groups.some((group) => group.startsWith("Cloud")),
+    groups.some((group) => group.startsWith("Cloud Terminal")),
     false,
   );
 });

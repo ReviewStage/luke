@@ -758,7 +758,7 @@ test("the panel beside an agent's page offers the pages the agent showed on itse
     [...document.querySelectorAll(".ui-searchable-menu [role='group']")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["Pages", "Cloud", "Local", "Browser"],
+    ["Pages", "Cloud Terminal", "Local Terminal", "Browser"],
   );
   const row =
     [...document.querySelectorAll<HTMLElement>(".ui-searchable-menu [role='option']")].find(
@@ -946,7 +946,7 @@ test("its last tab closed shuts the panel, and its toggle then asks for its + at
     ),
     headings,
   );
-  assert.deepEqual(headings, ["Pull requests", "Cloud", "Local", "Browser"]);
+  assert.deepEqual(headings, ["Pull requests", "Cloud Terminal", "Local Terminal", "Browser"]);
   const changes = rows.find((each) => (each.textContent ?? "").includes("#2911"));
   assert.ok(changes, "the + offers the agent's pull request");
   act(() => changes.click());
