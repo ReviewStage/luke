@@ -11,6 +11,11 @@ import * as Atom from "effect/reactivity/Atom";
  * the window's for its life, and nothing before the first read.
  */
 
+/** The shell the agent's Terminal tab shows, which it shows again when drawn again, or nothing before it has found one. */
+export const shellShown = Atom.family((_agentId: string) =>
+  Atom.keepAlive(Atom.make<string | undefined>(undefined)),
+);
+
 /** The last list of the agent's shells, with where its sandbox stood, or nothing before the window first read it. */
 export const sandboxRead = Atom.family((_agentId: string) =>
   Atom.keepAlive(Atom.make<TerminalsAnswer | undefined>(undefined)),

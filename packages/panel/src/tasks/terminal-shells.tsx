@@ -48,7 +48,7 @@ import { renameWrite } from "../rename-write.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import type { PaneOver } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
-import type { TerminalSession } from "./use-terminal-session.js";
+import type { TerminalTabSession } from "./use-terminal-session.js";
 
 /**
  * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one in the agent's sandbox, the one shown marked, and the agent at the foot.
@@ -182,7 +182,7 @@ function ListedShells({
   surfaceOpen,
 }: {
   listed: TerminalsAnswer;
-  session: TerminalSession;
+  session: TerminalTabSession;
   surfaceOpen: boolean;
 }): React.JSX.Element {
   if (listed.terminals.length === 0)
@@ -217,7 +217,7 @@ function ShellRow({
   shown: boolean;
   /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
-  session: Pick<TerminalSession, "onChoose" | "rename" | "kill">;
+  session: Pick<TerminalTabSession, "onChoose" | "rename" | "kill">;
 }): React.JSX.Element {
   const renameMutation = useMutation(session.rename.options);
   const killing = useMutation(session.kill);
@@ -330,7 +330,7 @@ export function TerminalShells({
 }: {
   subject: AgentSubject;
   models: readonly CatalogModel[] | undefined;
-  session: TerminalSession;
+  session: TerminalTabSession;
   onOpenAgent: () => void;
   /** What the list floating over the screen is handed (`file-view.tsx`); none draws it beside the screen. */
   over: PaneOver | undefined;

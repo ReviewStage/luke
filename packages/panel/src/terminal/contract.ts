@@ -1,5 +1,5 @@
 /**
- * contract.ts -- what a Terminal tab and the terminal bundle say to each other: the one mount call, and the handle a tab writes a shell's output through.
+ * contract.ts -- what a terminal session and the terminal bundle say to each other: the one call that makes a screen, and the handle a session writes a shell's output through and shows the screen by.
  *
  * A Terminal tab's screen is drawn by xterm.js (`@xterm/xterm`) and its
  * addons, which are too large for the bundle every window parses, so they
@@ -16,16 +16,20 @@
  */
 
 /** A terminal's size in character cells, as a shell is told it. */
-interface TerminalSize {
+export interface TerminalSize {
   readonly cols: number;
   readonly rows: number;
 }
 
-/** What the tab hands the terminal when it mounts it. */
+/** What the session hands the terminal when it makes it. */
 export interface TerminalProps {
   /** What the user typed or pasted, as the shell is to read it. */
   readonly onInput: (data: string) => void;
-  /** The size the terminal fits its box at, each time that changes. */
+  /**
+   * The size the terminal fits its box at: first once it has been fitted to
+   * a box with room, then each time that changes. A box with no room, as a
+   * hidden tab's, is never fitted to.
+   */
   readonly onResize: (size: TerminalSize) => void;
   /** A link in the output pressed with ⌘ held, as a terminal on a Mac opens one. */
   readonly onLink: (url: string) => void;
@@ -59,23 +63,30 @@ export interface TerminalFind {
   readonly selection: () => string;
 }
 
-/** The terminal as mounted. */
+/**
+ * One terminal's screen, made once for a terminal's whole life and shown in
+ * whichever box its tab draws, as a terminal keeps its screen while its tab
+ * is hidden. Out of a box it goes on drawing what its shell prints, so its
+ * scrollback and its acks keep up.
+ */
 export interface TerminalHandle {
   /**
    * Draws a shell's output, calling `written` once it is on the screen, which
    * is what a sender holding back on unacknowledged output waits for.
    */
   readonly write: (data: string | Uint8Array, written: () => void) => void;
-  /** The size the terminal stands at now, which a shell attaching is told first. */
-  readonly size: () => TerminalSize;
+  /** Shows the screen in `host`, fitted to it, until `detach`. */
+  readonly attach: (host: HTMLElement) => void;
+  /** Takes the screen out of its box, keeping everything it holds. */
+  readonly detach: () => void;
+  /** Dims the output, as while no shell is connected. */
+  readonly dim: (dimmed: boolean) => void;
   readonly focus: () => void;
-  /** Clears the screen and its scrollback, as another shell is about to draw on it. */
-  readonly reset: () => void;
   readonly find: TerminalFind;
-  readonly unmount: () => void;
+  readonly dispose: () => void;
 }
 
 /** What the terminal bundle's entry exports, which the panel imports the first time it is needed (`../bundle-loader.ts`). */
 export interface TerminalModule {
-  readonly mount: (host: HTMLElement, props: TerminalProps) => TerminalHandle;
+  readonly create: (props: TerminalProps) => TerminalHandle;
 }

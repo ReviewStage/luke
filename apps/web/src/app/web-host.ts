@@ -244,6 +244,7 @@ const pageTerminalPorts: TerminalPortSeam<WebSender> = {
     return {
       post: (message) => port1.postMessage(message),
       onMessage: (listener) => port1.addEventListener("message", (event) => listener(event.data)),
+      onClose: (then) => port1.addEventListener("close", then, { once: true }),
       close: () => port1.close(),
     };
   },
