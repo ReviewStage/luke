@@ -20,7 +20,7 @@ import {
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@repo/ui/accounts-sort";
 import { matchesTokens, searchTokens } from "@repo/ui/search-tokens";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ACCOUNTS_TABLE_MIN_WIDTH,
   AccountsTable,
@@ -105,6 +105,11 @@ function UsersSections({
   onOpenAccount: (id: string) => void;
   onToggleFavorite: (id: string, favorite: boolean) => void;
 }): React.JSX.Element {
+  // Note that the star's column is rebuilt only when its press changes, so the table keeps its columns as TanStack Table asks.
+  const favorite = useMemo(
+    () => ({ starred: (row: AdminUserListRow) => row.favorite, onToggle: onToggleFavorite }),
+    [onToggleFavorite],
+  );
   const roster = {
     windowDays: list?.windowDays ?? windowDays,
     minWidth: ACCOUNTS_TABLE_MIN_WIDTH.ROSTER,
@@ -112,7 +117,7 @@ function UsersSections({
     detailColumns: ROSTER_DETAIL_COLUMNS,
     trailingColumns: ROSTER_TRAILING_COLUMNS,
     sortable: true,
-    favorite: { starred: (row: AdminUserListRow) => row.favorite, onToggle: onToggleFavorite },
+    favorite,
   };
   // Note that a miss may lie past a truncated roster's rows, so its note stays.
   const truncatedTo =

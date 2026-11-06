@@ -1,6 +1,7 @@
+import { useCallback, useRef } from "react";
 import { REPLAY_LEFT_OUT } from "../../session-replay-marks.js";
 import { useMotionHeld } from "../../use-motion-held.js";
-import { useBeat } from "../time/time-clock.js";
+import { useOnBeat } from "../time/time-clock.js";
 
 /**
  * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
@@ -8,12 +9,16 @@ import { useBeat } from "../time/time-clock.js";
  * Every place that says an agent is working draws this mark. It stands inside
  * the 16px icon seat: eight 3px cells lapped round a 3×3 grid, 2px apart.
  * Each pixel steps to the next cell on the one 200ms beat every mark shares
- * (`useBeat`), lapping the eight cells in 1.6s, so the motion is stepped
+ * (`useOnBeat`), lapping the eight cells in 1.6s, so the motion is stepped
  * frames of `transform` alone, never lays anything out, and costs the window
- * a frame only when a pixel moves, where a CSS animation would tick it every
- * vsync. Reduced motion and a capture run hold it (`useMotionHeld`) on its
- * resting frame, chosen to show the chase mid-lap rather than its first, so a
- * still mark always lights four cells and reads as working. The screen
+ * a frame only when a pixel moves. Note that the beat writes the pixels'
+ * `transform`s straight onto them rather than rendering the mark again, so a
+ * step runs no React; and that it is no CSS animation, because Chromium's
+ * compositor runs a stepped loop on every vsync, which measured dearer than
+ * the beat and is twice as dear again at 120Hz. Reduced motion and a capture
+ * run hold it (`useMotionHeld`) on its resting frame, chosen to show the
+ * chase mid-lap rather than its first, so a still mark always lights four
+ * cells and reads as working. The screen
  * recording leaves it out (`REPLAY_LEFT_OUT`), because each step rewrites
  * four of its attributes, which the recorder would otherwise take down and
  * send twenty times a second for every mark on screen. The mark itself
@@ -77,16 +82,27 @@ function cellTransform(index: number): string {
   return `translate(${column * PITCH}px, ${row * PITCH}px)`;
 }
 
-/** The moving pixels, `beat` cells on from where they rest. */
-function WorkingDots({ beat }: { readonly beat: number }): React.JSX.Element {
+/** The moving pixels, on their resting cells until a beat moves them. */
+function WorkingDots({
+  dotRefs,
+}: {
+  readonly dotRefs?: React.RefObject<(SVGRectElement | null)[]>;
+}): React.JSX.Element {
   return (
     <>
-      {WORKING_DOTS.map(({ dot, restsOn, tail }) => (
+      {WORKING_DOTS.map(({ dot, restsOn, tail }, index) => (
         <rect
           key={dot}
+          ref={
+            dotRefs === undefined
+              ? undefined
+              : (rect) => {
+                  dotRefs.current[index] = rect;
+                }
+          }
           className={tail ? "ui-working-mark-dot opacity-60" : "ui-working-mark-dot"}
           data-dot={dot}
-          style={{ transform: cellTransform(restsOn + beat) }}
+          style={{ transform: cellTransform(restsOn) }}
           {...cellAt(0, 0)}
           width={CELL}
           height={CELL}
@@ -97,9 +113,17 @@ function WorkingDots({ beat }: { readonly beat: number }): React.JSX.Element {
   );
 }
 
-/** The moving pixels stepping on the shared beat. */
+/** The moving pixels stepping on the shared beat, each beat writing their `transform`s itself. */
 function LappingDots(): React.JSX.Element {
-  return <WorkingDots beat={useBeat()} />;
+  const dotRefs = useRef<(SVGRectElement | null)[]>([]);
+  const step = useCallback((beat: number) => {
+    WORKING_DOTS.forEach(({ restsOn }, index) => {
+      const rect = dotRefs.current[index];
+      if (rect) rect.style.transform = cellTransform(restsOn + beat);
+    });
+  }, []);
+  useOnBeat(step);
+  return <WorkingDots dotRefs={dotRefs} />;
 }
 
 /** The mark, hidden from a reader, since the seat it stands in says it. */
@@ -124,7 +148,7 @@ export function WorkingMark(): React.JSX.Element {
           rx={CELL / 4}
         />
       ))}
-      {held ? <WorkingDots beat={0} /> : <LappingDots />}
+      {held ? <WorkingDots /> : <LappingDots />}
     </svg>
   );
 }

@@ -109,7 +109,7 @@ export interface CodexSessionsOptions extends RunnerSessionsOptions {
   readonly tokenUrl: string;
 }
 
-/** Where the image keeps Codex (`agent-runtime/sandbox-image.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
+/** Where the image keeps Codex (`apps/web/agent-image/Dockerfile`), and the `CODEX_HOME` a sandbox makes in `agent`'s home. */
 const CODEX_PATH = { EXECUTABLE: CODEX_PIN.LINK, HOME: CODEX_PIN.HOME } as const;
 
 const CODEX_HOME_ENV = "CODEX_HOME";

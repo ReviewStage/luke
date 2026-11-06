@@ -23,15 +23,18 @@ import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
  * reaches. A value longer than the block stays one line and scrolls sideways
  * within it, its end fading under the Copy (`copy-field.css`), rather than
  * wrapping or widening the row. It stands at a picker's width beside a row's
- * words (`COPY_FIELD_WIDTH.CONTROL`), or as wide as the row it is laid under
- * (`COPY_FIELD_WIDTH.FULL`), as a command a person reads whole does. It is
+ * words (`COPY_FIELD_WIDTH.CONTROL`), as wide as the row it is laid under
+ * (`COPY_FIELD_WIDTH.FULL`), as a command a person reads whole does, or
+ * hugging a short value under a step's words (`COPY_FIELD_WIDTH.HUG`), as the
+ * buttons beside it hug theirs, up to the row's width. It is
  * drawn in the Tailwind theme's utilities.
  */
 
-/** How wide a copy field stands: a control beside a row's words, or the row's whole width under them. */
+/** How wide a copy field stands: a control beside a row's words, the row's whole width under them, or its value's own. */
 export const COPY_FIELD_WIDTH = {
   CONTROL: "control",
   FULL: "full",
+  HUG: "hug",
 } as const;
 
 export type CopyFieldWidth = (typeof COPY_FIELD_WIDTH)[keyof typeof COPY_FIELD_WIDTH];
@@ -52,6 +55,7 @@ const BLOCK =
 const BLOCK_WIDTH = {
   [COPY_FIELD_WIDTH.CONTROL]: "w-copy-field max-w-full",
   [COPY_FIELD_WIDTH.FULL]: "w-full min-w-0",
+  [COPY_FIELD_WIDTH.HUG]: "w-fit max-w-full",
 } as const satisfies Record<CopyFieldWidth, string>;
 
 /** The value on one line, scrolling sideways with no bar, and selectable. */

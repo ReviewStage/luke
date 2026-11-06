@@ -125,6 +125,33 @@ export class LoopbackListener extends Context.Service<LoopbackListener, ListenOn
 ) {}
 
 /**
+ * Where this Mac keeps cloud agents' mirrors (`compose-mirrors.ts`), and the
+ * git scripts a mirror's worktree is made, listed, and taken away with, each
+ * run with `/bin/sh`. It arrives rather than being built here, because the
+ * folder is under the member's own home and the scripts are built beside the
+ * local agents' (`@repo/host/node`'s `open-on-mac.ts`), which a host in a
+ * browser could not load. Only the mirrors concern asks for it.
+ */
+export interface MirrorPlatformSeam {
+  /** The folder each mirror's own folder stands in, named by its agent's id: `~/.vespin/mirrors`. */
+  readonly folder: string;
+  /** The script that makes a mirror's worktree, detached at `base`, of the repository's shared clone. */
+  readonly worktreeScript: (input: {
+    readonly repository: string;
+    readonly worktree: string;
+    readonly base: string;
+  }) => string;
+  /** The script that prints the mirror's own files by git's rules, each path ended by a NUL. */
+  readonly listScript: (worktree: string) => string;
+  /** The script that takes the mirror's worktree out of the shared clone. */
+  readonly removeScript: (worktree: string) => string;
+}
+
+export class MirrorPlatform extends Context.Service<MirrorPlatform, MirrorPlatformSeam>()(
+  "@repo/host/MirrorPlatform",
+) {}
+
+/**
  * How the account's sign-in asks the developer's consent: each trip the
  * session manager words — the sign-in and the session hand-off — is stood up
  * by `open`. It arrives rather than being built here, because the only

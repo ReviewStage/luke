@@ -13,12 +13,11 @@ import { webmBytes } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { Base64 } from "effect/encoding";
 import {
+  lookNamedOnly,
   PICTURE_LOOK_REFUSAL,
   PICTURE_LOOK_STATUS,
-  pictureLookModelOutput,
   pictureNotLooked,
   runLookAtPicture,
-  storedPictureLookOutput,
 } from "./picture-look.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 
@@ -72,26 +71,19 @@ const look = (call: PlanDocumentBinding, address: string) =>
   runLookAtPicture(call, unparsedWire({ address }));
 
 it.layer(getTestDB())("look_at_picture", (it) => {
-  it.effect(
-    "a member's look hands the model the picture as an image, and the conversation keeps only that it looked",
-    () =>
-      Effect.gen(function* () {
-        const { owner, planId: taskId, address } = yield* openPicturedTasks;
-        const base64 = Base64.encode(PICTURE.bytes);
+  it.effect("a member's look answers the picture, its type and its bytes", () =>
+    Effect.gen(function* () {
+      const { owner, planId: taskId, address } = yield* openPicturedTasks;
+      const base64 = Base64.encode(PICTURE.bytes);
 
-        const answered = yield* look(lookCall(owner, taskId), address);
-        const shown = pictureLookModelOutput(unparsedWire({ ...answered }));
-        const kept = storedPictureLookOutput(unparsedWire({ ...answered }));
+      const answered = yield* look(lookCall(owner, taskId), address);
 
-        assert.deepEqual(shown, {
-          type: "content",
-          value: [
-            { type: "text", text: "The picture you asked to see:" },
-            { type: "file", data: { type: "data", data: base64 }, mediaType: PICTURE_TYPE.PNG },
-          ],
-        });
-        assert.deepEqual(kept, { status: PICTURE_LOOK_STATUS.LOOKED });
-      }),
+      assert.deepEqual(answered, {
+        status: PICTURE_LOOK_STATUS.LOOKED,
+        mediaType: PICTURE_TYPE.PNG,
+        image: base64,
+      });
+    }),
   );
 
   it.effect(
@@ -127,9 +119,6 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           pictureNotLooked(PICTURE_LOOK_REFUSAL.ELSEWHERE),
           pictureNotLooked(PICTURE_LOOK_REFUSAL.UNREADABLE),
         ]);
-        // A refusal is the model's to read, so the conversation keeps it whole.
-        const refused = unparsedWire({ ...answers[0] });
-        assert.deepEqual(storedPictureLookOutput(refused), refused);
       }),
   );
 
@@ -165,10 +154,8 @@ it.layer(getTestDB())("look_at_picture", (it) => {
         const address = planAttachmentAddress({ taskId, attachmentId: kept.id }, "acme");
 
         const answered = yield* look(lookCall(owner, taskId), address);
-        const shown = pictureLookModelOutput(unparsedWire({ ...answered }));
 
         assert.deepEqual(answered, pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO));
-        assert.deepEqual(shown, { type: "json", value: answered });
       }),
   );
 
@@ -183,12 +170,9 @@ it.layer(getTestDB())("look_at_picture", (it) => {
           image: base64,
         });
 
-        const shown = pictureLookModelOutput(forged);
+        const shown = lookNamedOnly(forged);
 
-        assert.deepEqual(shown, {
-          type: "json",
-          value: pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO),
-        });
+        assert.deepEqual(shown, pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO));
         assert.ok(!JSON.stringify(shown).includes(base64));
       }),
   );

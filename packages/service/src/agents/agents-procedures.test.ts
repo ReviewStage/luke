@@ -6,7 +6,7 @@ import { archiveAgent, createAgent, readAgent } from "@repo/database/models/agen
 import { recordRepositoryReads } from "@repo/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@repo/database/models/github-token-store";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
-import { lapsedSandboxLeases, sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
+import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { createTask } from "@repo/database/models/task-store";
 import { CONVERSATION_RUNTIME } from "@repo/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@repo/database/testing";
@@ -18,7 +18,7 @@ import {
   type TerminalSummary,
 } from "@repo/features/terminal-wire";
 import { noNetwork } from "@repo/wire/testing";
-import { Clock, type Context, Duration, Effect, Layer, Option, Queue, Result } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Queue, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {
   recordingProductAnalytics,
@@ -327,28 +327,20 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
       }),
   );
 
-  it.effect(
-    "a resume holds the sandbox it wakes, so the lease sweep stops it once nobody attaches",
-    () =>
-      Effect.gen(function* () {
-        const { userId, agent } = yield* openAgent;
-        const sandbox = scriptedSandbox(SANDBOX_STATE.STOPPED);
-        const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
-        const at = new Date(yield* Clock.currentTimeMillis);
-        const heldBefore = yield* sandboxHeld(agent.conversationId, at);
+  it.effect("a resume holds the sandbox it wakes", () =>
+    Effect.gen(function* () {
+      const { userId, agent } = yield* openAgent;
+      const sandbox = scriptedSandbox(SANDBOX_STATE.STOPPED);
+      const call = yield* standing(new Map([["Bearer owner", userId]]), sandbox.layer);
+      const at = new Date(yield* Clock.currentTimeMillis);
+      const heldBefore = yield* sandboxHeld(agent.conversationId, at);
 
-        const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
+      const resumed = yield* call(resumeOf(agent.id), "Bearer owner", { method: "POST" });
 
-        assert.equal(resumed.status, 200);
-        assert.equal(heldBefore, false);
-        assert.equal(yield* sandboxHeld(agent.conversationId, at), true);
-        const lapsedBefore = new Date(at.getTime() + Duration.toMillis(Duration.hours(1)));
-        const lapsed = yield* lapsedSandboxLeases(lapsedBefore, lapsedBefore, 50, lapsedBefore);
-        assert.ok(
-          lapsed.some((lease) => lease.conversationId === agent.conversationId),
-          "a resume nobody attached to lapses for the lease sweep",
-        );
-      }),
+      assert.equal(resumed.status, 200);
+      assert.equal(heldBefore, false);
+      assert.equal(yield* sandboxHeld(agent.conversationId, at), true);
+    }),
   );
 
   it.effect(

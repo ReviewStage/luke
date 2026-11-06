@@ -6,8 +6,8 @@ import { pushLive } from "./live-push.js";
 
 /**
  * A read the service keeps leaving unanswered is read again after waits that
- * double from two seconds, rather than every two seconds for as long as a
- * window holds it.
+ * double from two seconds up to a minute, rather than every two seconds for
+ * as long as a window holds it.
  */
 
 it.effect("a read the service keeps leaving unanswered is read again after doubling waits", () =>
@@ -24,9 +24,9 @@ it.effect("a read the service keeps leaving unanswered is read again after doubl
         publish: () => Effect.void,
       }),
     );
-    yield* TestClock.adjust(Duration.seconds(60));
+    yield* TestClock.adjust(Duration.seconds(183));
     yield* Fiber.interrupt(following);
-    // Waits of 2, 4, 8, and 16 seconds, the next 32 running past the minute.
-    assert.deepEqual(asked, [0, 2_000, 6_000, 14_000, 30_000]);
+    // Waits of 2, 4, 8, 16, and 32 seconds, then a minute each.
+    assert.deepEqual(asked, [0, 2_000, 6_000, 14_000, 30_000, 62_000, 122_000, 182_000]);
   }),
 );

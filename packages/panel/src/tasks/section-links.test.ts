@@ -16,6 +16,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { readExperiments } from "../testing/app-state.js";
+import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { PlanBody, type SectionLinks } from "./plan-body.js";
@@ -99,7 +100,7 @@ function drawn(links: Partial<SectionLinks> = {}) {
     reveal: undefined,
     ...links,
   };
-  act(() => root.render(createElement(PlanBody, { task: TASK, sectionLinks })));
+  act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK, sectionLinks }))));
   return { container, opened };
 }
 
@@ -159,7 +160,7 @@ test("an ask to show a section scrolls the document to it, and an ask for one it
   const root = roots[0];
   assert.ok(root);
   const render = (sectionLinks: SectionLinks) =>
-    act(() => root.render(createElement(PlanBody, { task: TASK, sectionLinks })));
+    act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK, sectionLinks }))));
   const onOpen = () => undefined;
 
   const revealed: number[] = [];
@@ -194,7 +195,7 @@ test("off a plan's own page a mention stays its words", () => {
   const root = createRoot(container);
   roots.push(root);
 
-  act(() => root.render(createElement(PlanBody, { task: TASK })));
+  act(() => root.render(withQueryClient(createElement(PlanBody, { task: TASK }))));
 
   assert.equal(container.querySelector("[data-mention-ref]"), null);
   assert.equal(container.querySelector(".plan-unit-more"), null);
@@ -218,14 +219,16 @@ test("a section whose heading is formatted is copied as a link that is drawn as 
 
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task,
-        sectionLinks: {
-          workspace: WORKSPACE,
-          onOpen: (mention) => opened.push(mention),
-          reveal: undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(PlanBody, {
+          task,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: (mention) => opened.push(mention),
+            reveal: undefined,
+          },
+        }),
+      ),
     ),
   );
   const chip = chipNamed(container, "Rollout draft");
@@ -245,13 +248,15 @@ function drawnEditable(): HTMLElement {
   roots.push(root);
   act(() =>
     root.render(
-      onSideBundles(
-        unlandedBundles(),
-        createElement(PlanBody, {
-          task: TASK,
-          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-          sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
-        }),
+      withQueryClient(
+        onSideBundles(
+          unlandedBundles(),
+          createElement(PlanBody, {
+            task: TASK,
+            onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+            sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
+          }),
+        ),
       ),
     ),
   );
@@ -316,15 +321,17 @@ function drawnFiles(
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task,
-        sectionLinks: {
-          workspace: WORKSPACE,
-          onOpen: () => undefined,
-          onOpenFile,
-          reveal: undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(PlanBody, {
+          task,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: () => undefined,
+            onOpenFile,
+            reveal: undefined,
+          },
+        }),
+      ),
     ),
   );
   return container;
@@ -385,14 +392,16 @@ test("a heading the plan bears twice: a mention of the second opens the second, 
   const opened: Mention[] = [];
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task,
-        sectionLinks: {
-          workspace: WORKSPACE,
-          onOpen: (mention) => opened.push(mention),
-          reveal: undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(PlanBody, {
+          task,
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: (mention) => opened.push(mention),
+            reveal: undefined,
+          },
+        }),
+      ),
     ),
   );
 
@@ -429,16 +438,18 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
   roots.push(root);
   act(() =>
     root.render(
-      createElement(PlanBody, {
-        task: FILES_TASK,
-        onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
-        sectionLinks: {
-          workspace: WORKSPACE,
-          onOpen: () => undefined,
-          onOpenFile: () => undefined,
-          reveal: undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(PlanBody, {
+          task: FILES_TASK,
+          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          sectionLinks: {
+            workspace: WORKSPACE,
+            onOpen: () => undefined,
+            onOpenFile: () => undefined,
+            reveal: undefined,
+          },
+        }),
+      ),
     ),
   );
   const folder = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")].find(
@@ -467,7 +478,7 @@ function drawnTitled() {
       sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
     });
   }
-  act(() => root.render(createElement(TitledPlan)));
+  act(() => root.render(withQueryClient(createElement(TitledPlan))));
   const block = container.querySelector<HTMLElement>('[role="group"][aria-label="Title"]');
   const more = container.querySelector<HTMLButtonElement>(TITLE_LINK);
   assert.ok(block, "the title is a block");

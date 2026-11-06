@@ -7,7 +7,6 @@ import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@repo/settings/settings-views";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,12 +14,7 @@ import { afterEach, beforeEach, onTestFinished, test } from "vitest";
 import type { AdminView } from "./admin/routing.js";
 import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
-import {
-  installWindowHistory,
-  throughHistory,
-  useWindowHistory,
-  type WindowHistoryLists,
-} from "./navigation-history.js";
+import { throughHistory, useWindowHistory, type WindowHistoryLists } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import { chooseInboxTask, leaveInboxTask } from "./tasks/use-inbox-task.js";
@@ -37,6 +31,7 @@ import { deliveryOf, handState, registryWith, stateWith } from "./testing/app-st
 import { onRegistry } from "./testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "./testing/document-task.js";
 import { tasksControl } from "./testing/tasks-control.js";
+import { type TestWindowRouter, windowRouter } from "./testing/window-router.js";
 
 /**
  * navigation-history-narrow.test.ts -- on a stage as narrow as a phone's,
@@ -274,13 +269,8 @@ function unmountAll(): void {
 
 afterEach(unmountAll);
 
-/** The window standing as `start` says in a room, its history held in memory, or in the history given, and its addresses written from its Copy link, as the root wires them. */
-function mount(
-  room: ShellRoom,
-  start: Standing,
-  held: Parameters<typeof installWindowHistory>[0] = memoryHistory(),
-) {
-  installWindowHistory(held);
+/** The window standing as `start` says in a room, under a router over a memory history, or over the history given, and its addresses written from its Copy link, as the root wires them. */
+function mount(room: ShellRoom, start: Standing, held: TestWindowRouter = windowRouter()) {
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
   let standing = start;
@@ -326,7 +316,9 @@ function mount(
   const root = createRoot(container);
   roots.push(root);
   act(() =>
-    root.render(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Probe))),
+    root.render(
+      held.provide(onRegistry(registryWith(experimentsOn(EXPERIMENT.PLANS)), createElement(Probe))),
+    ),
   );
   return {
     history: () => history ?? assert.fail("the window's history stands"),
@@ -341,11 +333,11 @@ function mount(
         window.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
         press();
       }),
-    /** The address of every step held, oldest first, and the one standing. */
-    addresses: () => held.current().entries.map((entry) => entry.address),
-    standingAddress: () => held.current().entries[held.current().at]?.address,
+    /** The address of every entry the router's history holds, oldest first, and the one standing. */
+    addresses: () => held.addresses(),
+    standingAddress: () => held.history.location.href,
     /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
-    moveHistory: (delta: number) => act(() => held.go(delta)),
+    moveHistory: (delta: number) => act(() => held.history.go(delta)),
     held,
   };
 }
@@ -843,7 +835,7 @@ test("on a narrow stage Back from an automation with unsaved work to another aut
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "the draft's automation stands");
   window.moveHistory(-1);
   assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
-  assert.equal(window.held.current().at, 1, "the history stands back on it");
+  assert.equal(window.held.at(), 1, "the history stands back on it");
 });
 
 test("on a narrow stage another thing a link opens in the side panel standing over the plan is a step of its own, which Back shows again", () => {
@@ -877,7 +869,7 @@ test("on a narrow stage a task's way out steps back past its own panes to the pa
   act(() => window.history().onLeave());
   assert.equal(window.at().inbox.open, true, "the way out lands on the Inbox at once");
   assert.deepEqual(window.addresses(), steps, "and pushes nothing");
-  assert.equal(window.held.current().at, 0);
+  assert.equal(window.held.at(), 0);
 
   act(() => window.history().onForward());
   assert.equal(window.at().inbox.open, false, "Forward opens the task again");

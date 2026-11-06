@@ -68,8 +68,16 @@ function subject(options: { taken?: number[] } = {}) {
       sent: TerminalSocketFrame[];
       inbound: Queue.Queue<TerminalSocketArrival, Cause.Done>;
     }[] = [];
+    /** What the concern last told the windows of how forwarding stands. */
+    const told: { last?: unknown } = {};
     const composer = yield* composePortForwards({
-      kernel: { runMode: { sendsNetwork: true }, hostedServiceBaseUrl: "https://tryapp.test" },
+      kernel: {
+        runMode: { sendsNetwork: true },
+        hostedServiceBaseUrl: "https://tryapp.test",
+        emit: (_kind, payload) => {
+          told.last = payload;
+        },
+      },
       account: {
         capabilitiesActive: () => true,
         credential: accountBearer({
@@ -112,6 +120,8 @@ function subject(options: { taken?: number[] } = {}) {
     };
     return {
       call,
+      /** How forwarding stands, as the windows were last told. */
+      told: () => told.last,
       composer,
       listeners,
       tunnels,
@@ -138,13 +148,14 @@ function readFrame(frame: TerminalSocketFrame) {
 
 it.effect("a port taken on this Mac is listened on at the next free one", () =>
   Effect.gen(function* () {
-    const { call, serve } = yield* subject({ taken: [3000] });
+    const { call, serve, told } = yield* subject({ taken: [3000] });
     serve(AGENT_ID, [3000, 5173]);
 
     yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
     yield* settle;
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: AGENT_ID }), {
+    assert.deepEqual(told(), {
+      agentId: AGENT_ID,
       on: true,
       running: true,
       ports: [
@@ -157,7 +168,7 @@ it.effect("a port taken on this Mac is listened on at the next free one", () =>
 
 it.effect("the forwarded ports follow each read, for one agent at a time", () =>
   Effect.gen(function* () {
-    const { call, serve, listeners } = yield* subject();
+    const { call, serve, listeners, told } = yield* subject();
     serve(AGENT_ID, [3000, 5173]);
     serve(OTHER_AGENT_ID, [8080]);
 
@@ -178,15 +189,17 @@ it.effect("the forwarded ports follow each read, for one agent at a time", () =>
     });
     yield* settle;
     assert.deepEqual([...listeners.keys()], [8080]);
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: AGENT_ID }), {
-      on: false,
-      running: false,
-      ports: [],
+    assert.deepEqual(told(), {
+      agentId: OTHER_AGENT_ID,
+      on: true,
+      running: true,
+      ports: [{ port: 8080, localPort: 8080, state: PORT_FORWARD_STATE.LISTENING }],
     });
     assert.deepEqual(other, { on: true, running: false, ports: [] });
 
     yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: OTHER_AGENT_ID, on: false });
     assert.deepEqual([...listeners.keys()], []);
+    assert.equal(told(), null);
   }),
 );
 
@@ -194,7 +207,7 @@ it.effect(
   "each connection is a channel on its port's tunnel, and a closed tunnel opens again on the next connection",
   () =>
     Effect.gen(function* () {
-      const { call, serve, connect, tunnels } = yield* subject();
+      const { call, serve, connect, tunnels, told } = yield* subject();
       serve(AGENT_ID, [3000]);
       yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true });
       yield* settle;
@@ -213,11 +226,7 @@ it.effect(
         { type: TUNNEL_FRAME.OPEN, channel: 0 },
         { type: TUNNEL_FRAME.DATA, channel: 0, data: "GET / HTTP/1.1" },
       ]);
-      const [forwarded] = (
-        (yield* call(GATEWAY_METHOD.PORT_FORWARDS_READ, { agentId: AGENT_ID })) as {
-          ports: unknown[];
-        }
-      ).ports;
+      const [forwarded] = (told() as { ports: unknown[] }).ports;
       assert.deepEqual(forwarded, {
         port: 3000,
         localPort: 3000,

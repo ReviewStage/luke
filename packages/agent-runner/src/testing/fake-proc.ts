@@ -10,33 +10,27 @@ import { Effect } from "effect";
 /** A `/proc` that cannot be read, which reads as a process of the agent's running. */
 export const UNREAD_PROC = "/nonexistent/agent-proc";
 
-/** The whole capability set, as the sandbox's own processes hold it. */
-const FULL_SET = "000001ffffffffff";
-/** The emptied set the runner and everything under it run with. */
-const EMPTIED = "0000000000000000";
+/** The users a sandbox's processes run as: the agent's, which the runner runs as, and the sandbox's own default user. */
+const UID = { AGENT: 1002, SANDBOX: 1000 } as const;
 
-/** One process: its pid, its parent's, whether its bounding set is emptied, its session, its own where none is given, and its command line, where one is written. */
+/** One process: its pid, its parent's, whether it runs as the agent's user, and its command line, where one is written. */
 export interface FakeProcess {
   readonly pid: number;
   readonly parent: number;
-  readonly emptied: boolean;
-  readonly session?: number;
+  readonly agents: boolean;
   readonly argv?: readonly string[];
 }
 
-function statusFile({ pid, parent, emptied, session = pid }: FakeProcess): string {
+function statusFile({ pid, parent, agents }: FakeProcess): string {
+  const uid = agents ? UID.AGENT : UID.SANDBOX;
   return [
     "Name:\tprocess",
     "State:\tS (sleeping)",
     `Pid:\t${pid}`,
     `PPid:\t${parent}`,
-    "Uid:\t0\t0\t0\t0",
-    `NSsid:\t${session}`,
-    "CapInh:\t0000000000000000",
-    "CapPrm:\t0000000000000000",
-    "CapEff:\t0000000000000000",
-    `CapBnd:\t${emptied ? EMPTIED : FULL_SET}`,
-    "CapAmb:\t0000000000000000",
+    `Uid:\t${uid}\t${uid}\t${uid}\t${uid}`,
+    `NSsid:\t${pid}`,
+    "CapBnd:\t000001ffffffffff",
     "",
   ].join("\n");
 }

@@ -47,6 +47,8 @@ export interface HeldFetch<Key, Rows> {
   readonly retry: (key: Key) => Effect.Effect<void>;
   /** Asks again every key a window holds that `named` picks, as a wake naming it asks; answers at once, each ask landing on its own. */
   readonly wake: (named: (key: Key) => boolean) => Effect.Effect<void>;
+  /** Asks again every key a window holds that `named` picks, as `retry` asks one; answers once each of those asks has landed. */
+  readonly reread: (named: (key: Key) => boolean) => Effect.Effect<void>;
   /** Lays `rows` as `key`'s answer where its read is followed, as a write whose own answer is the whole read does; nothing where it is not. */
   readonly answered: (key: Key, rows: Rows) => Effect.Effect<void>;
   /** Follows every held key anew, as the account gate opening asks. */
@@ -112,18 +114,20 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
               return landed(loop.waiting);
             }),
           );
-          const ask = Effect.gen(function* () {
+          // Note that each Try again this ask took is answered however it ends, an interruption as the key is let go among them, so none waits for good.
+          const ask = Effect.suspend(() => {
             const landing = loop.waiting;
             loop.waiting = [];
             loop.asking = true;
             loop.overtaken = false;
-            const rows = yield* options.fetch(key, answers.rows());
-            loop.asking = false;
-            // Note that an answer asked before a write that answered the read whole is older than what that write laid.
-            if (loop.overtaken) loop.overtaken = false;
-            else if (Option.isSome(rows)) answers.answered(rows.value);
-            else answers.unanswered();
-            yield* landed(landing);
+            return Effect.gen(function* () {
+              const rows = yield* options.fetch(key, answers.rows());
+              loop.asking = false;
+              // Note that an answer asked before a write that answered the read whole is older than what that write laid.
+              if (loop.overtaken) loop.overtaken = false;
+              else if (Option.isSome(rows)) answers.answered(rows.value);
+              else answers.unanswered();
+            }).pipe(Effect.ensuring(landed(landing)));
           });
           const ticks: Stream.Stream<unknown> =
             options.every === undefined
@@ -144,14 +148,24 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
       follow,
       tell: options.tell,
     });
+    /** The keys a window holds that `named` picks. */
+    const heldKeys = (named: (key: Key) => boolean) =>
+      [...MutableHashMap.keys(loops)].filter((key) => slice.held(key) && named(key));
     const wake = (named: (key: Key) => boolean) =>
-      Effect.suspend(() =>
-        Effect.forEach(
-          [...MutableHashMap.keys(loops)].filter((key) => slice.held(key) && named(key)),
-          askAgain,
-          { discard: true },
-        ),
-      );
+      Effect.suspend(() => Effect.forEach(heldKeys(named), askAgain, { discard: true }));
+    /** `key` asked again, telling it unread meanwhile where it had failed, answering once that ask has landed. */
+    const retry = (key: Key) =>
+      Effect.suspend(() => {
+        const loop = Option.getOrUndefined(MutableHashMap.get(loops, key));
+        if (loop === undefined) return Effect.void;
+        return Effect.gen(function* () {
+          const asked = yield* Deferred.make<void>();
+          loop.waiting.push(asked);
+          loop.answers.retried();
+          yield* Queue.offer(loop.again, undefined);
+          yield* Deferred.await(asked);
+        });
+      });
     yield* Effect.forkScoped(Stream.runForEach(yield* options.focus.heard, () => wake(() => true)));
     return {
       hold: (key) =>
@@ -161,19 +175,12 @@ export function heldFetch<Slice extends SliceKeyed, Key>(options: {
           yield* slice.hold(key);
           if (again) yield* askAgain(key);
         }),
-      retry: (key) =>
-        Effect.suspend(() => {
-          const loop = Option.getOrUndefined(MutableHashMap.get(loops, key));
-          if (loop === undefined) return Effect.void;
-          return Effect.gen(function* () {
-            const asked = yield* Deferred.make<void>();
-            loop.waiting.push(asked);
-            loop.answers.retried();
-            yield* Queue.offer(loop.again, undefined);
-            yield* Deferred.await(asked);
-          });
-        }),
+      retry,
       wake,
+      reread: (named) =>
+        Effect.suspend(() =>
+          Effect.forEach(heldKeys(named), retry, { concurrency: "unbounded", discard: true }),
+        ),
       answered: (key, rows) =>
         Effect.sync(() => {
           const loop = Option.getOrUndefined(MutableHashMap.get(loops, key));

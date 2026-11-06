@@ -19,7 +19,10 @@
  * held mounted through its own exit". The motion takes it out of the layout
  * at once, laid over the place it held, out of reach of the pointer and the
  * keyboard, and slides it out on the exit's tokens; it is let go once that
- * has played. What leaves goes first, so what it moved glides after it. An
+ * has played. What leaves goes first, so what it moved glides after it. A
+ * row whose run places it itself (`VirtualRows`) keeps its room until it is
+ * let go, so the motion reads that commit too, and the rows that close over
+ * it glide then. An
  * entry listed again before its exit finished, an Undo, stands again and
  * comes back the way it went. A row arriving rides the pair every arriving
  * element rides, opacity over `--ui-duration-quick` and its travel on
@@ -473,6 +476,7 @@ function playExits(
   before: Snapshot,
   exit: KeyframeAnimationOptions | undefined,
   way: ListMotionWay,
+  replay: () => void,
 ): void {
   if (exit === undefined) {
     for (const each of leaving) each.onLeft();
@@ -511,7 +515,11 @@ function playExits(
       ],
       { ...exit, fill: "forwards" },
     );
-    out.onfinish = onLeft;
+    // Note that the motion reads the commit that lets the entry go, because a row a run places itself (`VirtualRows`) keeps its room until then, and what closes over it glides there.
+    out.onfinish = () => {
+      onLeft();
+      replay();
+    };
     exits.set(element, out);
   }
 }
@@ -722,7 +730,7 @@ class ListMotionPlayer extends Component<
       ? tokenTiming(root, MOTION_TOKEN.DURATION_EXIT, MOTION_TOKEN.EASE_EXIT)
       : undefined;
     const { way } = this.props;
-    playExits(root, leaving, before, exit, way);
+    playExits(root, leaving, before, exit, way, this.props.leaves.replay);
     const shape = engine
       ? tokenTiming(root, MOTION_TOKEN.DURATION_SHAPE, MOTION_TOKEN.SPRING)
       : undefined;

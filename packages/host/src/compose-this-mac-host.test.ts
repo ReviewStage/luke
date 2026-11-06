@@ -426,20 +426,23 @@ it.effect.each([
     record: { deviceId: KEPT_ID, deviceSecret: OLD_SECRET, serviceOrigin: SERVICE },
     experiments: BRING_YOUR_OWN_HOST_ON,
   },
-] as const)("nothing is enrolled, installed, or stopped where $case", ({ record, experiments }) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const stateRoot = yield* recorded(record);
-      const on = yield* thisMac(stateRoot, { experiments });
-      const off = yield* thisMac(stateRoot, {
-        experiments: { ...experiments, [EXPERIMENT.BRING_YOUR_OWN_HOST]: false },
-        loaded: true,
-      });
-      yield* nudged(Duration.minutes(1));
+] as const)(
+  "nothing is enrolled, installed, stopped, or uninstalled where $case, even turned off",
+  ({ record, experiments }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const stateRoot = yield* recorded(record);
+        const on = yield* thisMac(stateRoot, { experiments });
+        const off = yield* thisMac(stateRoot, {
+          experiments: { ...experiments, [EXPERIMENT.BRING_YOUR_OWN_HOST]: false },
+          loaded: true,
+        });
+        yield* nudged(Duration.minutes(1));
+        assert.deepEqual(yield* on.turn(false), { failure: "unanswered" });
 
-      // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
-      assert.equal(on.asked.length + off.asked.length, 0);
-      assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
-    }).pipe(Effect.provide(FILES)),
-  ),
+        // Note that the length is asserted rather than the list, which an assertion would narrow to an empty one.
+        assert.equal(on.asked.length + off.asked.length, 0);
+        assert.deepEqual(Option.getOrUndefined(yield* readHostDevice(stateRoot)), record);
+      }).pipe(Effect.provide(FILES)),
+    ),
 );

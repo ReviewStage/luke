@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { act, cloneElement, createElement, Fragment, useState } from "react";
+import { act, cloneElement, createElement, createRef, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import { useRovingKeys } from "../roving-keys/roving-keys.js";
+import { VIRTUAL_ROWS_ANCHOR, VirtualRows } from "../virtual-rows/virtual-rows.js";
 import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -824,6 +825,7 @@ function standInResizeObserver(): () => void {
       observe(): void {
         watching.add(this.#callback);
       }
+      unobserve(): void {}
       disconnect(): void {
         watching.delete(this.#callback);
       }
@@ -898,4 +900,33 @@ test("a regular row's description says it is cut short once its words run past i
   act(() => resized());
   const description = container.querySelector(".ui-list-row-description");
   expect(description?.getAttribute("data-overflow")).toBe("true");
+});
+
+test("a row a run draws stands where the run places it, at the top level and nested alike", () => {
+  const keys = ["top", "nested"];
+  const scroller = createRef<HTMLDivElement>();
+  const container = draw(
+    createElement(
+      "div",
+      { ref: scroller },
+      createElement(VirtualRows, {
+        scroller,
+        keys,
+        estimate: 40,
+        anchor: VIRTUAL_ROWS_ANCHOR.START,
+        listItems: true,
+        children: (index: number, place) =>
+          createElement(ListRow, {
+            title: keys[index] ?? "",
+            depth: index,
+            onPress: ignore,
+            place,
+          }),
+      }),
+    ),
+  );
+  const rows = [...container.querySelectorAll<HTMLElement>("li[data-row-key]")];
+  expect(rows.map((row) => row.dataset.rowKey)).toEqual(keys);
+  // Note that the run places each row out of the flow and writes its top itself, so a row the flow stands is drawn below its own place.
+  expect(rows.map((row) => row.style.position)).toEqual(["absolute", "absolute"]);
 });

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import {
   GITHUB_ACCESS,
+  type GitHubAccess,
   type GitHubRepository,
   type WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
@@ -19,12 +20,22 @@ import { GitHubSetup } from "./setup-github.js";
 
 /**
  * Setup's GitHub step drawn again, as Back draws it, over a workspace that
- * reaches its repository on a member's token: the token's card stands
- * checked. And the token's picker, which adds several repositories in one
+ * reaches its repositories through a route: that route's card stands
+ * checked, the App's naming the owners reached. And the token's picker, which adds several repositories in one
  * open menu. Synthetic throughout.
  */
 
 const WORKSPACE = "workspace-acme";
+
+/** The reader's saved GitHub token, as the host holds it. */
+const TOKEN = {
+  login: "octo",
+  hint: "ghp_…wxyz",
+  status: GITHUB_TOKEN_STATUS.VERIFIED,
+  statusAt: 1,
+  addedAt: 1,
+  expiresAt: null,
+};
 
 const roots: Root[] = [];
 
@@ -45,63 +56,56 @@ async function settle(): Promise<void> {
   });
 }
 
-test("a workspace reached on the token draws the token's card checked", async () => {
-  holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
-    repositories: {
-      installed: false,
-      repositories: [
-        {
-          owner: "octo",
-          name: "tools",
-          fullName: "octo/tools",
-          defaultBranch: "main",
-          private: true,
-          updatedAt: 1,
-          access: GITHUB_ACCESS.TOKEN,
-        },
-      ],
-      installationUrl: "https://github.com/apps/luke/installations/new",
-    },
-  }));
-  const container = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
+test.each([
+  { access: GITHUB_ACCESS.TOKEN, card: "Personal access token", says: "Add repositories" },
+  {
+    access: GITHUB_ACCESS.APP,
+    card: "GitHub App",
+    says: "2 repositories on octo and acme through the GitHub App",
+  },
+])(
+  "a workspace reached through $access draws that route's card checked, saying $says",
+  async ({ access, card, says }) => {
+    holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
+      repositories: {
+        installed: access === GITHUB_ACCESS.APP,
+        repositories: [reached("octo/tools", 2, access), reached("acme/web", 1, access)],
+        installationUrl: "https://github.com/apps/luke/installations/new",
+      },
+    }));
+    holdGitHubToken(() => ({ rows: { token: TOKEN } }));
+    const container = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(GitHubSetup, { workspaceId: WORKSPACE, onReached: () => undefined }),
+        ),
       ),
-    ),
-  );
-  await settle();
-  const checked =
-    container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
-    assert.fail("the step checks a route");
+    );
+    await settle();
+    const checked =
+      container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+      assert.fail("the step checks a route");
 
-  assert.equal(
-    checked.textContent?.includes("Personal access token"),
-    true,
-    checked.textContent ?? "",
-  );
-});
+    assert.equal(checked.textContent?.includes(card), true, checked.textContent ?? "");
+    assert.equal(container.textContent?.includes(says), true, container.textContent ?? "");
+  },
+);
 
-/** A repository as the workspace's listing answers it, on the token. */
-function onToken(fullName: string, updatedAt: number): GitHubRepository {
+/** A repository as the workspace's listing answers it, reached through `access`. */
+function reached(fullName: string, updatedAt: number, access: GitHubAccess): GitHubRepository {
   const [owner = "", name = ""] = fullName.split("/");
-  return {
-    owner,
-    name,
-    fullName,
-    defaultBranch: "main",
-    private: true,
-    updatedAt,
-    access: GITHUB_ACCESS.TOKEN,
-  };
+  return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt, access };
 }
 
 test("the token's picker adds several repositories in one open menu, checking each, and keeps standing once the workspace reaches them, its chip naming them, and taking them all back after Back keeps the token's card", async () => {
-  const reach = [onToken("octo/tools", 2), onToken("octo/notes", 1)];
+  const reach = [
+    reached("octo/tools", 2, GITHUB_ACCESS.TOKEN),
+    reached("octo/notes", 1, GITHUB_ACCESS.TOKEN),
+  ];
   let added: WorkspaceTokenRepository[] = [];
   const reads = handHostReads({ tokenRepositories: { [WORKSPACE]: { rows: [] } } });
   const lists = holdRepositoryLists(reads.deliverRepositoryLists, () => ({
@@ -112,18 +116,7 @@ test("the token's picker adds several repositories in one open menu, checking ea
       installationUrl: "https://github.com/apps/luke/installations/new",
     },
   }));
-  holdGitHubToken(() => ({
-    rows: {
-      token: {
-        login: "octo",
-        hint: "ghp_…wxyz",
-        status: GITHUB_TOKEN_STATUS.VERIFIED,
-        statusAt: 1,
-        addedAt: 1,
-        expiresAt: null,
-      },
-    },
-  }));
+  holdGitHubToken(() => ({ rows: { token: TOKEN } }));
   fakeActPort({
     ...fakeActPortCalls(),
     [ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: ({ repository, added: adding }) => {

@@ -9,6 +9,7 @@ import {
   type Virtualizer,
 } from "@tanstack/react-virtual";
 import {
+  type CSSProperties,
   type FocusEvent,
   Fragment,
   type PointerEventHandler,
@@ -21,34 +22,34 @@ import {
   useRef,
   useState,
 } from "react";
-import { cssCustomProperties } from "../../css.js";
-import { askScroll } from "../../scroll-asked.js";
 import { motionRows } from "../list-motion/list-motion.js";
 
 /**
  * virtual-rows.tsx -- a long run of rows in a scroller of the caller's, drawing only those near the view, anchored to its last.
  *
  * A row is drawn while it stands within the view or `overscan` rows of it,
- * and the rest are the room they would take: a spacer before the first
- * drawn and after the last, the block's own padding, so the rows drawn stand in the flow as they
- * would with every row drawn, and the scroller's own scroll bar spans the
- * whole run. Each row is measured as it is drawn and as it resizes, its
- * height kept by its key, so a row scrolled out and back is placed by what
- * it measured rather than by `estimate`. Note that a row is never measured
- * while it is not laid out, in a tab kept in the tree but not shown, because
- * a height read there is none, and keeping it would draw every row at once
- * the next time the tab is shown; nor is the view, whose rows stay drawn
- * there rather than leave and be drawn again as it comes back.
+ * placed as TanStack Virtual's docs place a row: absolutely, inside a block
+ * as tall as every row would stand (`containerRef`), the virtualizer
+ * writing each row's top and the block's height itself
+ * (`directDomUpdates`), by `top` rather than a transform, so a row's own
+ * transform stays the list's to move it by (`ListMotion`). The scroller's
+ * own scroll bar spans the whole run. Each row is measured as it is drawn
+ * and as it resizes, so a row scrolled out and back is placed by what it
+ * measured rather than by `estimate`. Note that a row is never measured
+ * while it is not laid out, in a tab kept in the tree but not shown,
+ * because a height read there is none: the run keeps what each row last
+ * measured by its key and answers that, as the docs ask of a
+ * `measureElement` of one's own (`useCachedMeasurements`); nor is the view,
+ * whose rows stay drawn there rather than leave and be drawn again as it
+ * comes back.
  *
- * The run is anchored to its end (`anchorTo: "end"`): rows put before the
- * first leave the row the reader is on where it stood, and rows growing or
- * shrinking above the view move the scroll by as much, so a reader keeps
- * their place as older rows land and are measured. A row measured again, a
- * fold opened in it, moves the scroll only where the whole row stands above
- * the view, so nothing the reader sees moves. Following the newest row is
- * the caller's, whose scroller this is: while the caller says it holds the
- * end (`pinned`), the run puts the scroller back there after its own
- * writes. The run opens on its last rows.
+ * The run is anchored to its end (`anchorTo: "end"`), as the docs' chat
+ * guide anchors a log: rows put before the first leave the row the reader
+ * is on where it stood, a row growing at the end keeps a reader at the end
+ * there, and a row appended follows on to it where the reader stood within
+ * `scrollEndThreshold` of the end (`followOnAppend`). The run opens on its
+ * last rows (`scrollToEnd()` once mounted), and its caller asks whether it
+ * stands at its end and takes it there through its handle.
  *
  * A run read from its top, as a list of items is, is anchored to its start
  * instead (`VIRTUAL_ROWS_ANCHOR.START`): it opens wherever its scroller
@@ -83,20 +84,15 @@ import { motionRows } from "../list-motion/list-motion.js";
  *
  * Where it is asked to (`holdsFocus`), as a list walked by the keyboard
  * is, a row holding the keyboard stays drawn wherever the run is scrolled,
- * with every row between it and the view, so the keyboard is never dropped
- * by a scroll and ↑↓ go on from the row it is in. Note that the rows
- * between are drawn rather than left out, because the run lays its rows out
- * in the flow, which a gap among them would break; and that a log, whose
- * rows run to thousands, holds nothing, so a scroll away from a press in
- * one of its messages draws no more than the view.
+ * as the docs' sticky example keeps its sticky rows (`rangeExtractor`), so
+ * the keyboard is never dropped by a scroll and ↑↓ go on from the row it is
+ * in. Note that a log, whose rows run to thousands, holds nothing, so a
+ * scroll away from a press in one of its messages draws no more than the
+ * view.
  *
- * The virtualizer is TanStack Virtual's: headless, so the rows are the
- * caller's own elements in the caller's own scroller, and the scroll logic
- * the caller already keeps is left as it was.
+ * The virtualizer is TanStack Virtual's, used as its docs show: headless,
+ * so the rows are the caller's own elements in the caller's own scroller.
  */
-
-/** The attribute the run's block wears, naming how many rows it holds and the key of its last, which changes exactly when a row lands at its end or its start. */
-export const VIRTUAL_ROWS_ATTRIBUTE = "data-virtual-rows";
 
 /** The attribute each drawn row wears naming its key. */
 export const VIRTUAL_ROW_KEY_ATTRIBUTE = "data-row-key";
@@ -113,6 +109,8 @@ export interface VirtualRowsHandle {
   readonly rowElement: (key: string) => HTMLElement | undefined;
   /** The keys of the rows drawn now, in order. */
   readonly drawnKeys: () => readonly string[];
+  /** Scrolls to the end of the scroller (`scrollToEnd()`). */
+  readonly scrollToEnd: () => void;
 }
 
 /** A list's runs, each held while it stands, and the bringing in of a row whichever run lists it. */
@@ -132,6 +130,12 @@ interface Bringing {
 /** How many rows past each edge of the view are drawn, so a short scroll shows rows already laid out. */
 const DEFAULT_OVERSCAN = 4;
 
+/** How near its end, in pixels, a run anchored to its end counts as standing there, so a row appended follows on to it: the docs' chat guide's. */
+const END_THRESHOLD_PX = 80;
+
+/** Where a row stands in its block, as the docs place one: absolutely, across the block, its top the virtualizer's to write. */
+const ROW_STYLE: CSSProperties = { position: "absolute", insetInline: 0 };
+
 /** Which end of a run keeps the reader's place: its last row, as a log's, or its first, as a list read from its top. */
 export const VIRTUAL_ROWS_ANCHOR = {
   START: "start",
@@ -143,24 +147,11 @@ export type VirtualRowsAnchor = (typeof VIRTUAL_ROWS_ANCHOR)[keyof typeof VIRTUA
 /** What a row the caller draws as its own list item wears (`listItems`): what measures it, and what tells a reader and the run where it stands. */
 export interface VirtualRowPlace {
   readonly ref: (element: HTMLElement | null) => void;
+  readonly style: CSSProperties;
   readonly "data-index": number;
   readonly "data-row-key": string;
   readonly "aria-setsize": number;
   readonly "aria-posinset": number;
-}
-
-/** The height a row's own measure keeps: what it measures where it is laid out, else what it measured last. */
-function heightKept(
-  element: HTMLElement,
-  entry: ResizeObserverEntry | undefined,
-  instance: Virtualizer<HTMLElement, HTMLElement>,
-): number {
-  if (element.getClientRects().length > 0) return measureElement(element, entry, instance);
-  const index = instance.indexFromElement(element);
-  return (
-    instance.itemSizeCache.get(instance.options.getItemKey(index)) ??
-    instance.options.estimateSize(index)
-  );
 }
 
 /**
@@ -262,7 +253,6 @@ export function useVirtualRuns(): VirtualRuns {
 
 export function VirtualRows({
   scroller,
-  pinned,
   keys,
   estimate,
   gap = 0,
@@ -273,6 +263,7 @@ export function VirtualRows({
   moves = false,
   holdsFocus = false,
   shiftedBy,
+  onAtEnd,
   className,
   rowClassName,
   handle,
@@ -283,13 +274,11 @@ export function VirtualRows({
 }: {
   /** The element that scrolls, which the rows stand in. */
   scroller: RefObject<HTMLElement | null>;
-  /** Whether the caller holds the scroller at its end right now, where the run then leaves it. */
-  pinned?: (() => boolean) | undefined;
   /** Each row's key, in order: what its height is kept by. */
   keys: readonly string[];
   /** The height a row is taken to have before it is measured, in pixels. */
   estimate: number;
-  /** The room between two rows, in pixels, which the stylesheet sets as the run's `--ui-virtual-gap`. */
+  /** The room between two rows, in pixels. */
   gap?: number;
   overscan?: number | undefined;
   /** Which end keeps the reader's place: the last row, as a log's, unless said. */
@@ -304,6 +293,8 @@ export function VirtualRows({
   holdsFocus?: boolean;
   /** A box whose resizing moves where the run stands in its scroller, as the list holding it among other runs. */
   shiftedBy?: RefObject<HTMLElement | null> | undefined;
+  /** Hears whether the scroller stands at its end (`isAtEnd()`) each time the virtualizer's state changes, a scroll's start and end among it. */
+  onAtEnd?: ((atEnd: boolean) => void) | undefined;
   className?: string | undefined;
   /** The class each row wears beside its own, or the class the row at an index wears; the caller's own where its rows are list items. */
   rowClassName?: string | ((index: number) => string) | undefined;
@@ -318,9 +309,6 @@ export function VirtualRows({
   children: (index: number, place: VirtualRowPlace) => ReactNode;
 }): ReactNode {
   const block = useRef<HTMLElement | null>(null);
-  const holdBlock = useCallback((element: HTMLElement | null) => {
-    block.current = element;
-  }, []);
   const [margin, setMargin] = useState(0);
   const latestKeys = useRef(keys);
   latestKeys.current = keys;
@@ -334,15 +322,25 @@ export function VirtualRows({
     const drawn = defaultRangeExtractor(range);
     const key = focused.current;
     const at = key === undefined ? -1 : latestKeys.current.indexOf(key);
-    const first = drawn[0];
-    const last = drawn.at(-1);
-    if (at < 0 || first === undefined || last === undefined || (at >= first && at <= last)) {
-      return drawn;
-    }
-    // Note that the rows between are drawn with it, since the run lays its rows out in the flow.
-    const from = Math.min(at, first);
-    return Array.from({ length: Math.max(at, last) - from + 1 }, (_, step) => from + step);
+    if (at < 0 || drawn.includes(at)) return drawn;
+    return [...drawn, at].sort((a, b) => a - b);
   }, []);
+  // What each row last measured where it was laid out, by its key, answered while it is not (`useCachedMeasurements`).
+  const heights = useRef(new Map<string, number>());
+  const measured = useCallback(
+    (
+      element: HTMLElement,
+      entry: ResizeObserverEntry | undefined,
+      instance: Virtualizer<HTMLElement, HTMLElement>,
+    ): number => {
+      const key = element.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? "";
+      if (element.getClientRects().length === 0) return heights.current.get(key) ?? estimate;
+      const height = measureElement(element, entry, instance);
+      heights.current.set(key, height);
+      return height;
+    },
+    [estimate],
+  );
   const virtualizer = useVirtualizer<HTMLElement, HTMLElement>({
     count: keys.length,
     getScrollElement: () => scroller.current,
@@ -353,30 +351,46 @@ export function VirtualRows({
     rangeExtractor,
     scrollMargin: margin,
     anchorTo: fromEnd ? "end" : "start",
-    // Note that a run anchored to its end opens on its last rows, where its scroller opens, and one anchored to its start wherever its scroller stands, which it never scrolls to take.
-    initialOffset: () =>
-      fromEnd
-        ? Math.max(0, margin + keys.length * (estimate + gap) - windowRect().height)
-        : (scroller.current?.scrollTop ?? 0),
-    measureElement: heightKept,
+    followOnAppend: fromEnd,
+    scrollEndThreshold: END_THRESHOLD_PX,
+    // Note that the run opens wherever its scroller stands, kept as the reader left it, since several runs may share it; one anchored to its end then takes it there.
+    initialOffset: () => scroller.current?.scrollTop ?? 0,
+    measureElement: measured,
     observeElementRect: sizeWhileShown,
     initialRect: windowRect(),
-    // Note that keeping to the last row is the caller's, never the run's: a row growing at the end moves nothing the caller did not ask to follow.
-    scrollEndThreshold: -1,
+    onChange: (instance) => onAtEnd?.(instance.isAtEnd()),
     useFlushSync: false,
+    directDomUpdates: true,
+    directDomUpdatesMode: "position",
   });
+  // A run anchored to its end opens there once the virtualizer holds its scroller, and only once, so a page kept hidden and shown again leaves it where the reader left it.
+  const opened = useRef(false);
+  useLayoutEffect(() => {
+    if (!fromEnd || opened.current || virtualizer.scrollElement === null) return;
+    opened.current = true;
+    virtualizer.scrollToEnd();
+  });
+  const holdBlock = useCallback(
+    (element: HTMLElement | null) => {
+      block.current = element;
+      virtualizer.containerRef(element);
+    },
+    [virtualizer],
+  );
   // How often the scroller, or the box that moves the run, has been sized anew, which can move what stands above the rows.
   const [sized, setSized] = useState(0);
+  // Note that the run draws again as it first finds its scroller, because the scroller is the caller's, whose ref is set only after the run's own layout effects, and the virtualizer takes it as it draws.
   useEffect(() => {
     const box = scroller.current;
     if (box === null) return;
+    setSized((count) => count + 1);
     const heard = new ResizeObserver(() => setSized((count) => count + 1));
     heard.observe(box);
     const shifting = shiftedBy?.current;
     if (shifting !== undefined && shifting !== null) heard.observe(shifting);
     return () => heard.disconnect();
   }, [scroller, shiftedBy]);
-  // The rows' block stands below whatever the scroller draws above it, its padding among it.
+  // The rows' block stands below whatever the scroller draws above it, its padding among it (`scrollMargin`).
   // Note that it is read only as the rows or the scroller's size change, never on a scroll's
   // draw, because reading where the block stands lays the whole log out again mid-frame.
   useLayoutEffect(() => {
@@ -386,15 +400,6 @@ export function VirtualRows({
     const at = Math.round(offsetWithin(element, box));
     setMargin((was) => (was === at ? was : at));
   }, [keys, sized, scroller]);
-  // Note that a run held at its end goes back there after the virtualizer's own writes, because
-  // as it first takes the scroller it scrolls to its guess (`initialOffset`), which a log
-  // already at its end hears as the reader scrolling up.
-  useLayoutEffect(() => {
-    const box = scroller.current;
-    if (box === null || pinned?.() !== true) return;
-    const end = box.scrollHeight - box.clientHeight;
-    if (box.scrollTop < end) box.scrollTop = end;
-  });
   const bringing = useRef<Bringing | undefined>(undefined);
   const rowElement = useCallback(
     (key: string) =>
@@ -410,8 +415,6 @@ export function VirtualRows({
         const index = latestKeys.current.indexOf(key);
         if (index === -1) return false;
         bringing.current = { key, drawn: then };
-        const box = scroller.current;
-        if (box !== null) askScroll(box);
         virtualizer.scrollToIndex(index, { align: "center" });
         return true;
       },
@@ -421,6 +424,7 @@ export function VirtualRows({
           const key = row.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE);
           return key === null ? [] : [key];
         }),
+      scrollToEnd: () => virtualizer.scrollToEnd(),
     }),
     [virtualizer, rowElement],
   );
@@ -446,6 +450,7 @@ export function VirtualRows({
     }
     const place: VirtualRowPlace = {
       ref: virtualizer.measureElement,
+      style: ROW_STYLE,
       "data-index": item.index,
       [VIRTUAL_ROW_KEY_ATTRIBUTE]: String(item.key),
       "aria-setsize": keys.length,
@@ -457,12 +462,9 @@ export function VirtualRows({
   useLayoutEffect(() => {
     const listed = new Set<VirtualItem["key"]>(keys);
     for (const key of places.current.keys()) if (!listed.has(key)) places.current.delete(key);
+    for (const key of heights.current.keys()) if (!listed.has(key)) heights.current.delete(key);
   }, [keys]);
   const items: VirtualItem[] = virtualizer.getVirtualItems();
-  const first = items[0];
-  const last = items.at(-1);
-  const before = first === undefined ? 0 : first.start - margin;
-  const after = last === undefined ? 0 : virtualizer.getTotalSize() - (last.end - margin);
   const own = listItems || options ? "ui-virtual-rows ui-virtual-items" : "ui-virtual-rows";
   const run = {
     ref: holdBlock,
@@ -470,14 +472,7 @@ export function VirtualRows({
     "aria-label": label,
     onPointerDown,
     "data-row-drop-rows": dropRows,
-    ...{ [VIRTUAL_ROWS_ATTRIBUTE]: `${keys.length}:${keys.at(-1) ?? ""}:${keys[0] ?? ""}` },
     ...(moves ? motionRows() : {}),
-    // Note that the spacers are the block's own padding rather than properties its rows inherit, because a property the rows inherit is read again for every element in them each time the drawn rows move.
-    style: {
-      ...cssCustomProperties({ "--ui-virtual-gap": `${gap}px` }),
-      paddingBlockStart: `${Math.max(0, before)}px`,
-      paddingBlockEnd: `${Math.max(0, after)}px`,
-    },
     // Note that the row holding the keyboard is kept as it takes it and let go as it loses it, a row taking it from another being kept in its place.
     ...(holdsFocus
       ? {
@@ -521,6 +516,7 @@ export function VirtualRows({
           <div
             key={item.key}
             ref={place.ref}
+            style={place.style}
             data-index={item.index}
             role="listitem"
             aria-setsize={place["aria-setsize"]}

@@ -568,13 +568,12 @@ export const MAC_COMMAND_ACT_KIND = {
 
 /**
  * A coding agent's cloud ports forwarded to this Mac's localhost
- * (`@repo/features/port-forward-acts`), for one agent at a time: how its
- * forwarding stands, read, and turned on or off, answered by the platform
- * shell, whose host listens on the Mac's loopback. What a forwarded
+ * (`@repo/features/port-forward-acts`), for one agent at a time: its
+ * forwarding turned on or off, how it stands kept in app state
+ * (`portForwarding`), answered by the platform shell, whose host listens on the Mac's loopback. What a forwarded
  * connection carries never travels on an act.
  */
 export const PORT_FORWARD_ACT_KIND = {
-  PORT_FORWARD_READ: "portForward.read",
   PORT_FORWARD_SET: "portForward.set",
 } as const;
 
@@ -798,8 +797,7 @@ export type ActUse = (typeof ACT_USE)[keyof typeof ACT_USE];
  * host follows the list from the account gate opening and only a press asks
  * it again; `AGENTS_CHANGES`, `TASKS_TREE`, and `TERMINAL_LIST` are
  * FETCHes, though each answers what stands now, because each is asked again
- * whenever it is shown and nothing keeps it, as is `PORT_FORWARD_READ`, asked
- * every few seconds while forwarding is shown, as is `AGENTS_MESSAGES`, Copy
+ * whenever it is shown and nothing keeps it, as is `AGENTS_MESSAGES`, Copy
  * transcript's read on its press; `AGENTS_TRANSCRIPT_OLDER` is a WRITE,
  * because it lays an older page on the held transcript and answers only
  * whether it landed, or why it was not read; and `HOSTS_PAIRING_READ` is a FETCH, read once as a
@@ -934,7 +932,6 @@ export const PORT_ACT_USE = {
 
   MAC_TERMINAL_LOCAL_AGENT: ACT_USE.WRITE,
 
-  PORT_FORWARD_READ: ACT_USE.FETCH,
   PORT_FORWARD_SET: ACT_USE.WRITE,
 
   SETTING_UPDATE: ACT_USE.WRITE,

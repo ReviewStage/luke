@@ -1,8 +1,10 @@
 import type { AgentPartView } from "@repo/features/agent-view";
 import { ACT_KIND } from "@repo/host/acts";
 import type { WireValue } from "@repo/wire";
+import { queryOptions, skipToken, type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
+import { QUERY_ROOT } from "../query-keys.js";
 import type { AgentPartCut } from "./agent-model.js";
 
 /**
@@ -20,7 +22,8 @@ import type { AgentPartCut } from "./agent-model.js";
 
 /** Where a transcript's cut parts are read whole: an agent's, or a worker's under its delegation call. */
 export interface WholePartDoor {
-  readonly read: (messageId: string, index: number) => Promise<AgentPartView>;
+  readonly agentId: string;
+  readonly callId?: string | undefined;
 }
 
 const WholePartsContext = createContext<WholePartDoor | undefined>(undefined);
@@ -30,18 +33,32 @@ export const WholePartsProvider = WholePartsContext.Provider;
 
 /** The door to an agent's parts, or a worker's where `callId` names the delegation that started it. */
 export function useWholePartDoor(agentId: string, callId?: string): WholePartDoor {
-  const { act } = useAct();
-  const read = useCallback(
-    (messageId: string, index: number) =>
-      act(ACT_KIND.AGENTS_PART, {
-        agentId,
-        messageId,
-        index,
-        ...(callId === undefined ? undefined : { callId }),
-      }),
-    [act, agentId, callId],
-  );
-  return useMemo(() => ({ read }), [read]);
+  return useMemo(() => ({ agentId, callId }), [agentId, callId]);
+}
+
+/**
+ * A cut part read whole, as of the size its page said: a part at one size
+ * never changes, so a read is held for the window's life, and one that grew
+ * is a read of its own. A failed read is answered at once and stays at its
+ * two ends.
+ */
+function wholePartQueryOptions(door: WholePartDoor | undefined, cut: AgentPartCut) {
+  const { messageId, index, bytes } = cut;
+  return queryOptions({
+    queryKey: [QUERY_ROOT.AGENT_PART, door?.agentId, door?.callId ?? null, messageId, index, bytes],
+    queryFn:
+      door === undefined
+        ? skipToken
+        : () =>
+            askAct(ACT_KIND.AGENTS_PART, {
+              agentId: door.agentId,
+              messageId,
+              index,
+              ...(door.callId === undefined ? undefined : { callId: door.callId }),
+            }),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
 }
 
 /** Where a cut part's whole read stands: not asked, under way, read, or failed, which leaves it at its ends. */
@@ -54,11 +71,6 @@ export const WHOLE_PART = {
 
 type WholePartState = (typeof WHOLE_PART)[keyof typeof WHOLE_PART];
 
-/** A cut part's read, as of the size it was read at. */
-type WholePartRead =
-  | { readonly bytes: number; readonly state: Exclude<WholePartState, typeof WHOLE_PART.WHOLE> }
-  | { readonly bytes: number; readonly state: typeof WHOLE_PART.WHOLE; readonly part: WireValue };
-
 /** A cut part as its fold draws it: where its whole read stands, its two ends and size, and what asks for it whole. */
 export interface CutBody {
   readonly state: Exclude<WholePartState, typeof WHOLE_PART.WHOLE>;
@@ -67,6 +79,24 @@ export interface CutBody {
   readonly tail: string;
   /** Asks for the part whole, once: what its fold calls as it opens. */
   readonly onOpen: () => void;
+}
+
+/** Where a cut part's whole read stands: a part no door reaches, or whose read fails or answers another part than the one cut, stays at its ends. */
+function wholePartRead(
+  opened: boolean,
+  reachable: boolean,
+  whole: UseQueryResult<AgentPartView>,
+  isCutPart: (part: WireValue) => boolean,
+):
+  | { readonly state: Exclude<WholePartState, typeof WHOLE_PART.WHOLE> }
+  | { readonly state: typeof WHOLE_PART.WHOLE; readonly part: WireValue } {
+  if (!opened) return { state: WHOLE_PART.CUT };
+  if (!reachable || whole.isError) return { state: WHOLE_PART.FAILED };
+  if (whole.isPending) return { state: WHOLE_PART.READING };
+  const answer = whole.data;
+  return "part" in answer && isCutPart(answer.part)
+    ? { state: WHOLE_PART.WHOLE, part: answer.part }
+    : { state: WHOLE_PART.FAILED };
 }
 
 /**
@@ -81,28 +111,16 @@ export function useWholePart(
   isCutPart: (part: WireValue) => boolean,
 ): { readonly part: WireValue } | { readonly body: CutBody } {
   const door = useContext(WholePartsContext);
-  const [held, setHeld] = useState<WholePartRead>({ bytes: cut.bytes, state: WHOLE_PART.CUT });
-  const read: WholePartRead =
-    held.bytes === cut.bytes ? held : { bytes: cut.bytes, state: WHOLE_PART.CUT };
-  const { messageId, index, bytes } = cut;
-  const unasked = read.state === WHOLE_PART.CUT;
-  const onOpen = useCallback(() => {
-    if (!unasked) return;
-    if (door === undefined) {
-      setHeld({ bytes, state: WHOLE_PART.FAILED });
-      return;
-    }
-    setHeld({ bytes, state: WHOLE_PART.READING });
-    door.read(messageId, index).then(
-      (answer) =>
-        setHeld(
-          "part" in answer && isCutPart(answer.part)
-            ? { bytes, state: WHOLE_PART.WHOLE, part: answer.part }
-            : { bytes, state: WHOLE_PART.FAILED },
-        ),
-      () => setHeld({ bytes, state: WHOLE_PART.FAILED }),
-    );
-  }, [door, messageId, index, bytes, unasked, isCutPart]);
+  const { bytes } = cut;
+  // Note that the fold opened at one size is not opened at another, so a part that grew is drawn cut again.
+  const [openedAt, setOpenedAt] = useState<number>();
+  const opened = openedAt === bytes;
+  const whole = useQuery({
+    ...wholePartQueryOptions(door, cut),
+    enabled: opened,
+  });
+  const onOpen = useCallback(() => setOpenedAt(bytes), [bytes]);
+  const read = wholePartRead(opened, door !== undefined, whole, isCutPart);
   if (read.state === WHOLE_PART.WHOLE) return { part: read.part };
   return { body: { state: read.state, bytes, head: cut.head, tail: cut.tail, onOpen } };
 }

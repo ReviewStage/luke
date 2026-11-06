@@ -10,8 +10,8 @@
  * copy (`RECORDING_CURSOR_FILE`) before it records a flow. Both send input a
  * page hears as a person's, so the one source follows either.
  *
- * Self-contained, since the sandbox image (`agent-runtime/sandbox-image.ts`)
- * reaches it.
+ * Self-contained, since the image's build (`apps/web/scripts/agent-image.ts`)
+ * writes it into the image.
  */
 
 import { BRAND_PALETTE } from "@repo/brand";

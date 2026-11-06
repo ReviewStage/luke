@@ -7,7 +7,6 @@ import { IDLE_TASKS_VIEW } from "@repo/features/tasks-view";
 import { type AppStateSnapshot, NO_ACCESS, RUN_PROFILE } from "@repo/host/app-state";
 import { type AppBridge, bridgeEntries } from "@repo/host/bridge";
 import { PUSH_METHOD } from "@repo/host/contract";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,13 +19,13 @@ import "./desktop/automations-page.js";
 import "./desktop/desktop-admin.js";
 import "./desktop/desktop-settings.js";
 import "./desktop/person-page.js";
-import { installWindowHistory } from "./navigation-history.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { loadTasksFixture } from "./tasks/tasks-fixture-loader.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { stateWith } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
+import { windowRouter } from "./testing/window-router.js";
 import { appStateFirstRead } from "./use-app-state.js";
 
 /**
@@ -55,7 +54,6 @@ beforeEach(() => {
     applySessionReplay: () => undefined,
     adminDashboard: () => ({ href: "https://app.test/admin" }),
   });
-  installWindowHistory(memoryHistory());
   // Every act main would answer is refused, as a fixture run's service reads go empty-handed.
   fakeActPortAnswering(() => Promise.reject(refusedOnPort("Not here.")));
 });
@@ -116,7 +114,9 @@ function drawWindow(profile: string): Effect.Effect<void> {
     yield* Effect.orDie(appStateFirstRead);
     yield* Effect.promise(loadTasksFixture);
     root = createRoot(document.body.appendChild(document.createElement("div")));
-    act(() => root?.render(onRegistry(rendererRegistry, createElement(App))));
+    act(() =>
+      root?.render(windowRouter().provide(onRegistry(rendererRegistry, createElement(App)))),
+    );
     yield* Effect.promise(settle);
   });
 }

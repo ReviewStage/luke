@@ -33,7 +33,6 @@ import {
   TASKS_READ,
   type TasksView,
 } from "@repo/features/tasks-view";
-import { INVITATION_ROLE } from "@repo/features/workspace-invitation-wire";
 import { WORKSPACE_ROLE } from "@repo/features/workspace-wire";
 import { ACT_KIND } from "@repo/host/acts";
 import {
@@ -48,7 +47,6 @@ import { EXPERIMENT } from "@repo/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { appSettingsWire, experimentsOn, settingsView } from "@repo/settings/testing";
 import { timeRuntime } from "@repo/ui";
-import { memoryHistory } from "@repo/ui/history-adapter";
 import { isAgentTab, isDraftTab } from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, SETTLED_STATUS, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Clock, Context, Duration, Effect, Option, Schema } from "effect";
@@ -59,11 +57,7 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type ActHandle, KEPT, type Kept } from "../act.js";
-import {
-  installWindowHistory,
-  useWindowHistory,
-  type WindowHistoryLists,
-} from "../navigation-history.js";
+import { useWindowHistory, type WindowHistoryLists } from "../navigation-history.js";
 import {
   installPanelSpanRecorder,
   PANEL_SPAN,
@@ -94,6 +88,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { listedAgent } from "../testing/tasks-control.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
+import { windowRouter } from "../testing/window-router.js";
 import { ToastHost } from "../toast.js";
 import { FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
@@ -225,7 +220,6 @@ function mount(
   let windowHistory: WindowHistoryLists | undefined;
   if (standing.history) {
     fakeAppPlatform(QUIET_PANEL);
-    installWindowHistory(memoryHistory());
   }
   /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
   function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
@@ -311,7 +305,11 @@ function mount(
   roots.push(root);
   // A fresh registry reads the document handed here, its plans among it, rather than one an earlier test handed.
   act(() => {
-    root.render(onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface));
+    root.render(
+      windowRouter().provide(
+        onRegistry(registry ?? registryWith(experimentsOn(EXPERIMENT.PLANS)), surface),
+      ),
+    );
   });
   return {
     told,
@@ -441,9 +439,6 @@ const readWorkspaceNamed = Schema.decodeUnknownOption(
 
 /** A pin's payload, read back as the act's own schema admits it. */
 const readPin = Schema.decodeUnknownOption(Schema.Struct({ pinned: Schema.Boolean }));
-
-/** A create's payload, read back as the act's own schema admits it. */
-const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.String }));
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
@@ -2551,72 +2546,16 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   );
 });
 
-test("a workspace made is asked for by its name and listed at once, and a refusal answers why", async () => {
-  let refuse = false;
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    {
-      [ACT_KIND.WORKSPACE_CREATE]: () =>
-        refuse
-          ? Promise.reject(new Error("Could not make that workspace on this system."))
-          : Promise.resolve(PLATFORM),
-    },
-  );
+test("New workspace's cards opened before a sign-out stay put away when the account signs in again", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
 
-  const made = await tab.control().onCreateWorkspace("Platform");
-  await settle();
-  tab.stand({ tasks: { ...TWO_WORKSPACES, workspaces: [PERSONAL, ACME, PLATFORM] } });
-  refuse = true;
-  const refused = await tab.control().onCreateWorkspace("Platform");
+  act(() => tab.control().newWorkspace.onOpen());
+  const opened = tab.control().newWorkspace.open;
+  tab.stand({ signedIn: false });
+  tab.stand({ signedIn: true });
 
-  assert.equal(made, undefined);
-  assert.equal(refused, "Could not make that workspace on this system.");
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.WORKSPACE_CREATE)
-      .map((asked) => Option.getOrUndefined(readCreate(asked.payload))?.name),
-    ["Platform", "Platform"],
-  );
-  assert.equal(tab.control().workspace?.id, PLATFORM.id);
-});
-
-test("a workspace made with a photo and addresses has them set on it, and one refused leaves the rest standing and says why in a toast", async () => {
-  const tab = mount(
-    { shown: true, tasks: TWO_WORKSPACES },
-    {
-      [ACT_KIND.WORKSPACE_CREATE]: () => Promise.resolve(PLATFORM),
-      [ACT_KIND.WORKSPACE_PHOTO_SET]: () => Promise.reject(new Error("That photo is too large.")),
-      [ACT_KIND.WORKSPACE_INVITE]: () =>
-        Promise.resolve({
-          id: "invitation-dana",
-          email: "dana@acme.dev",
-          role: INVITATION_ROLE.MEMBER,
-          expiresAt: "2026-11-12T00:00:00.000Z",
-          acceptUrl: "https://vespin.dev/invite/dana",
-        }),
-    },
-  );
-
-  const made = await tab.control().onCreateWorkspace("Platform", {
-    photo: "data:image/webp;base64,UklG",
-    invite: ["dana@acme.dev"],
-  });
-  await settle();
-
-  assert.equal(made, undefined);
-  assert.deepEqual(
-    tab.payloads
-      .filter(
-        (asked) =>
-          asked.kind === ACT_KIND.WORKSPACE_PHOTO_SET || asked.kind === ACT_KIND.WORKSPACE_INVITE,
-      )
-      .map((asked) => asked.payload),
-    [
-      { workspaceId: PLATFORM.id, photo: "data:image/webp;base64,UklG" },
-      { workspaceId: PLATFORM.id, email: "dana@acme.dev", role: INVITATION_ROLE.MEMBER },
-    ],
-  );
-  assert.match(newestToastSays() ?? "", /That photo is too large\./u);
+  assert.equal(opened, true);
+  assert.equal(tab.control().newWorkspace.open, false);
 });
 
 test("Workspace settings opens Settings on the listed workspace's page", () => {

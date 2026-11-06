@@ -33,7 +33,7 @@ import {
   setupSteps,
 } from "./setup-model.js";
 import { TeamForm, useTeamForm } from "./setup-team.js";
-import { ToolRows } from "./setup-tools.js";
+import { TOOLS_PURPOSE, ToolRows } from "./setup-tools.js";
 
 /**
  * setup-steps.tsx -- a new account's setup, alone in the window after sign-in: who it is for, a team's workspace where there is one, an agent, GitHub, and the tools, one card each.
@@ -279,7 +279,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
         }
       >
         {forming ? (
-          <TeamForm form={teamForm} />
+          <TeamForm form={teamForm} disabled={teamForm.busy} />
         ) : (
           <>
             <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
@@ -327,6 +327,7 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
     <AuthPage
       mark={<ProductMark />}
       title="Connect your tools"
+      description={TOOLS_PURPOSE}
       foot={foot(true, "Finish")}
       exit={exit}
     >

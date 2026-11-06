@@ -20,9 +20,10 @@
  * claim.
  *
  * A row sealed by the retired third-party Sign in with ChatGPT can no longer
- * renew: a seal the ring opens that holds no device-code login's
- * credentials is removed as it is opened, without asking OpenAI anything,
- * so the plan reads as not connected and the account connects again.
+ * renew: a seal the ring opens that names no flow, or `third_party`, is
+ * removed as it is opened, without asking OpenAI anything, so the plan reads
+ * as not connected and the account connects again. A seal of any other flow
+ * reads as unreadable and is kept.
  *
  * A login is kept only once its ID token checks out against OpenAI's
  * published keys (`verifyCodexDeviceIdToken`): signed by OpenAI for Codex's
@@ -63,12 +64,15 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /**
  * The flow a seal names: Codex's device-code login, the one way a plan is
- * connected. A seal that names none, or the retired third-party sign-in's
- * `third_party`, holds credentials that can no longer renew. Note that it
- * is still written, because a deployment from before the retirement reads a
- * seal without it as the third party's.
+ * connected, or the retired third-party sign-in, whose seals, and those from
+ * before flows were named, can no longer renew. Note that the device-code
+ * flow is still written, because a deployment from before the retirement
+ * reads a seal without it as the third party's.
  */
-const CODEX_DEVICE_FLOW = "codex_device";
+const CHATGPT_FLOW = {
+  CODEX_DEVICE: "codex_device",
+  RETIRED_THIRD_PARTY: "third_party",
+} as const;
 
 /** OpenAI's authorization server and where its published keys and revocation endpoint are read from. */
 export const CHATGPT_OAUTH = {
@@ -138,7 +142,7 @@ const HTTP_STATUS = { OK: 200, BAD_REQUEST: 400, SERVER_ERROR: 500 } as const;
  * reads.
  */
 const SealedCredentialsSchema = Schema.Struct({
-  flow: Schema.Literal(CODEX_DEVICE_FLOW),
+  flow: Schema.Literal(CHATGPT_FLOW.CODEX_DEVICE),
   clientId: Schema.String,
   accountId: Schema.String,
   accessToken: Schema.String,
@@ -151,6 +155,11 @@ const SealedCredentialsSchema = Schema.Struct({
 type SealedCredentials = typeof SealedCredentialsSchema.Type;
 
 const SealedCredentialsJson = Schema.fromJsonString(SealedCredentialsSchema);
+
+/** The retired third-party sign-in's seal, as far as it is told apart: it names no flow, or `third_party`. */
+const RetiredSealJson = Schema.fromJsonString(
+  Schema.Struct({ flow: Schema.optionalKey(Schema.Literal(CHATGPT_FLOW.RETIRED_THIRD_PARTY)) }),
+);
 
 /**
  * The token endpoint's answer to a renewal of a Codex device-code
@@ -334,10 +343,14 @@ function sealCredentials(ring: KeyRing, userId: string, credentials: SealedCrede
   return sealProviderKey(ring, { userId, ...OWNER_KIND }, Redacted.make(json));
 }
 
-/** A seal the ring opens that holds no device-code login's credentials, as the retired third-party sign-in's do. */
+/** A seal the ring opens that the retired third-party sign-in wrote. */
 const RETIRED = "retired";
 
-/** What a row seals: its credentials; `RETIRED`; or nothing where the ring cannot open it. */
+/**
+ * What a row seals: its credentials; `RETIRED`; or nothing where the ring
+ * cannot open it or it holds neither, as a seal of a flow this release does
+ * not know would, which is kept rather than removed.
+ */
 function openCredentials(
   ring: KeyRing,
   userId: string,
@@ -345,10 +358,10 @@ function openCredentials(
 ): SealedCredentials | typeof RETIRED | undefined {
   const opened = openProviderKey(ring, { userId, ...OWNER_KIND }, row);
   if (Result.isFailure(opened)) return undefined;
-  return Option.getOrElse(
-    Schema.decodeUnknownOption(SealedCredentialsJson)(Redacted.value(opened.success)),
-    () => RETIRED,
-  );
+  const json = Redacted.value(opened.success);
+  const credentials = Schema.decodeUnknownOption(SealedCredentialsJson)(json);
+  if (Option.isSome(credentials)) return credentials.value;
+  return Option.isSome(Schema.decodeUnknownOption(RetiredSealJson)(json)) ? RETIRED : undefined;
 }
 
 /** Whether a ChatGPT plan's row is sealed by the retired third-party sign-in, so it can no longer renew and reads as not connected. */
@@ -395,7 +408,7 @@ export function sealCodexDeviceCredentials(
   tokens: CodexDeviceTokens,
 ) {
   const sealed = sealCredentials(ring, userId, {
-    flow: CODEX_DEVICE_FLOW,
+    flow: CHATGPT_FLOW.CODEX_DEVICE,
     clientId: CODEX_DEVICE_OAUTH.CLIENT_ID,
     accountId: tokens.accountId,
     accessToken: tokens.accessToken,

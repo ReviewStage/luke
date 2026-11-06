@@ -2,7 +2,7 @@
  * sandbox-browser.ts -- the commands that keep a Chromium running in an agent's sandbox, and the bridge that carries its DevTools protocol over a PTY's stdio.
  *
  * The browser is the full Chromium Playwright installs in the image
- * (`agent-runtime/sandbox-image.ts`), run headful on an Xvfb display of its own,
+ * (`apps/web/agent-image/Dockerfile`), run headful on an Xvfb display of its own,
  * so a site sees an ordinary browser rather than a headless one. Its
  * DevTools port is bound to the sandbox's loopback alone and is never
  * exposed: Vercel Sandbox's exposed ports are public, so the service reaches
@@ -16,17 +16,14 @@
  * otherwise Xvfb is started where it is not running, the profile's
  * singleton locks a stopped sandbox left behind are cleared, and Chromium is
  * started detached in a session of its own, so it outlives the command, and
- * waited for until its DevTools answers. Everything it starts runs with
- * every capability dropped (`sandbox-capabilities.ts`), since the pages the
- * browser loads are no one's we vouch for, which would make it read as
- * the agent's own work; it is told apart by its sessions' leaders instead
- * (`@repo/agent-runner/pins`'s `SANDBOX_BROWSER_PIN`), so it never holds a
- * sandbox up through a pause. Every value the script reads
+ * waited for until its DevTools answers. Everything it starts runs as the
+ * sandbox's default user, apart from the agent's own user, so the runner
+ * never reads it as the agent's work (`@repo/agent-runner/pins`'s
+ * `SANDBOX_BROWSER_PIN`), and it never holds a sandbox up through a pause. Every value the script reads
  * is a constant of this module, handed to it as a positional argument.
  */
 
 import { PLAYWRIGHT_PIN, SANDBOX_BROWSER_PIN } from "@repo/agent-runner/pins";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { LINK_SANDBOX_STATE_FOLDER, SANDBOX_STATE_FOLDER } from "../sandbox-state-folder.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
@@ -59,7 +56,7 @@ export const BROWSER_START_OUTPUT = { ATTACHED: "attached", STARTED: "started" }
 const CHROMIUM_FLAGS = [
   "--no-first-run",
   "--no-default-browser-check",
-  // Note that Chromium's own sandbox needs user namespaces or a setuid helper, neither of which a capability-less user has; the Vercel Sandbox is the boundary, as it is for Playwright's own launches.
+  // Note that Chromium's own sandbox needs user namespaces or a setuid helper, which the sandbox's user does not count on; the Vercel Sandbox is the boundary, as it is for Playwright's own launches.
   "--no-sandbox",
   "--disable-gpu",
   "--disable-dev-shm-usage",
@@ -166,10 +163,8 @@ export const BRIDGE_WORD = { KEY: "bridge", READY: "ready", ERROR: "error" } as 
 /** Makes sure the browser runs, starting it where it does not; read its run with `browserStartOf`. */
 export function startBrowser(): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
+    command: "bash",
     args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "bash",
       "-c",
       START_SCRIPT,
       "agent-browser",
@@ -183,18 +178,11 @@ export function startBrowser(): CommandAsk {
   };
 }
 
-/** The bridge, as the PTY's start frame runs it: Node with no capabilities, its source inline. */
+/** The bridge, as the PTY's start frame runs it: Node, its source inline. */
 export function browserBridge(): CommandAsk {
   return {
-    command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [
-      ...WITHOUT_CAPABILITIES.ARGS,
-      "node",
-      "--no-warnings",
-      "-e",
-      BRIDGE_SOURCE,
-      String(SANDBOX_BROWSER.DEVTOOLS_PORT),
-    ],
+    command: "node",
+    args: ["--no-warnings", "-e", BRIDGE_SOURCE, String(SANDBOX_BROWSER.DEVTOOLS_PORT)],
   };
 }
 

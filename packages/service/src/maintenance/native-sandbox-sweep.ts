@@ -1,48 +1,34 @@
 /**
- * native-sandbox-sweep.ts -- the scheduled sweep's stop of a native agent's sandbox whose run ended and which no Terminal holds.
+ * native-sandbox-sweep.ts -- the scheduled sweep's settle of a native agent's turn whose runner died mid-turn.
  *
  * A native harness's sandbox (Claude Code's or Codex's, which we open
  * ourselves, `coder-host/runner-sessions.ts`) is stopped when its runner
- * ends: the events route calls `runnerEnded` on the runner's END. A stop
- * that failed there is logged and not retried, so the sandbox would idle
- * until its timeout. This sweep retries it: it pages through the project's
- * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as we name a
- * native sandbox and carrying an agent's tag, reads a window of them that
- * moves along the list from one sweep to the next, and stops each whose
- * conversation is native, whose newest turn ended longer ago than a short
- * grace (which leaves the END's own stop to go first), whose agent's runner
- * lease no call holds (a message relaunching the agent holds it, as the
- * END's stop does), and on which no developer's Terminal holds a lease.
- * eve's sandboxes are never looked at past their name, and a run still
- * going, or waiting on a wakeup (whose turn stays running), keeps its
- * sandbox, as does a runner still up after its run ended, a newer launch a
- * message started since, whose own END stops it. The stop is as the END's:
- * the repository's credential taken off the firewall, then the session stopped, its filesystem kept for a later resume; where the
- * credential would not come off, the sandbox is left for the next sweep. One
- * a Terminal holds keeps running with the credentials only its exited runner
- * sent taken off, where its launch is still kept at the firewall: a runner a
- * halt or a Stop's force ended, one that died without its END, or a launch
- * that failed, which no END's own let-go took them off for; the policy is
- * written again without them, the agent's repository credential minted
- * afresh for the shell.
+ * ends: the events route calls `runnerEnded` on the runner's END, and one
+ * whose stop failed there, or whose runner died without its END, stops on
+ * Vercel's own timeout. This sweep pages through the project's running
+ * sandboxes, from the oldest and the newest on alternate minutes, keeps the
+ * ones named as we name a native sandbox and carrying an agent's tag, and
+ * reads a window of them that moves along the list from one sweep to the
+ * next.
  *
  * A runner that exited while its run's turn still runs died without its END
  * (it drains its END to us before it exits): the sweep settles that turn
  * as failed (`settleRunnerLostTurns`), so the agent offers Continue rather
- * than running for a day, and its sandbox is stopped once the grace passes,
- * as any ended run's is. The turn keeps how the runner ended, its exit code
+ * than running for a day. The turn keeps how the runner ended, its exit code
  * and the redacted tail of its stderr, after the fixed sentence, and the
  * settle is logged as an error under the agent's ids and reported as an
- * issue, each with the exit code alone. Nothing is relaunched.
+ * issue, each with the exit code alone. Every credential then comes off its
+ * firewall, as at any turn's end, since the sandbox stops on its timeout with
+ * its policy saved. Nothing is relaunched or stopped.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
- * list, a set number of sandboxes read against the store, taken from a
- * window that moves along the list from one sweep to the next, and a set
- * number of stops. What is asked of Vercel is a page, a name, a session, and
- * a dead runner's stderr; what is logged of a failure is its status, and of a
- * dead runner its exit. Note that the stderr is kept in the turn's row
- * alone, never a log line or a report, because those reach Sentry, where a
- * short secret the redaction cannot recognize would outlive the turn.
+ * list, and a set number of sandboxes read against the store, taken from a
+ * window that moves along the list from one sweep to the next. What is asked
+ * of Vercel is a page, a name, a session, and a dead runner's stderr; what is
+ * logged of a failure is its status, and of a dead runner its exit. Note that
+ * the stderr is kept in the turn's row alone, never a log line or a report,
+ * because those reach Sentry, where a short secret the redaction cannot
+ * recognize would outlive the turn.
  */
 
 import type { DatabaseServices, QueryError } from "@repo/database/core/query";
@@ -56,16 +42,13 @@ import {
   readNativeRunStanding,
   readNativeRunStandings,
 } from "@repo/database/models/agent-store";
-import { sandboxHeld } from "@repo/database/models/sandbox-terminal-lease";
 import { type StoreWriter, storeWriter } from "@repo/database/models/writer";
 import { redactCredentials } from "@repo/features/credential-redaction";
 import { TURN_FAILURE } from "@repo/features/turn-run";
-import { Cause, Data, Duration, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
+import { Cause, Data, Effect, ErrorReporter, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { firewallSourcesAfterLaunch } from "../agents/coder-host/checkout.js";
 import { holdingRunnerIfFree } from "../agents/coder-host/runner-lease.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { describeFailure } from "../agents/machine/agent-machine.js";
 import {
   runnerTag,
   SANDBOX_NAME,
@@ -73,7 +56,7 @@ import {
   taggedRunner,
 } from "../agents/machine/vercel-machine.js";
 import { FAILURE_CHARS } from "../agents/native-events/runner-moments.js";
-import { type FirewallSession, sandboxFirewall } from "../agents/sandbox-firewall.js";
+import { sandboxFirewall } from "../agents/sandbox-firewall.js";
 import {
   COMMAND_GONE,
   type CommandExit,
@@ -84,52 +67,26 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
-import type { GitHubApp } from "../github/github-app.js";
-import {
-  listOrderAt,
-  listRunningSandboxes,
-  type StopBudget,
-  stopWithinBudget,
-  windowAt,
-} from "./sandbox-sweep-list.js";
+import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
 
 export const NATIVE_SANDBOX_SWEEP = {
-  /** How long after its run's newest turn ended a sandbox waits for the END's own stop before the sweep stops it. */
-  GRACE: Duration.minutes(2),
   /** The most pages of running sandboxes one sweep reads, each the API's widest. */
   MAX_PAGES: 4,
   /** The most native sandboxes one sweep reads against the store; the rest wait for a later sweep's window. */
   MAX_SANDBOXES: 40,
-  /** The most sandboxes one sweep stops. */
-  MAX_STOPS: 10,
   CONCURRENCY: 5,
 } as const;
 
-/** What one sweep of the running native sandboxes came to: sandboxes stopped, ones a Terminal holds, ones whose stop Vercel did not confirm, ones left for the next minute past the bound, and ones whose runner died mid-turn, its turn settled failed. */
+/** What one sweep of the running native sandboxes came to: the ones whose runner died mid-turn, its turn settled failed. */
 export interface NativeSandboxSweepOutcome {
-  stopped: number;
-  held: number;
-  failed: number;
-  deferred: number;
   lost: number;
 }
 
-const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
-  stopped: 0,
-  held: 0,
-  failed: 0,
-  deferred: 0,
-  lost: 0,
-};
+const NOTHING_SWEPT: NativeSandboxSweepOutcome = { lost: 0 };
 
 const SANDBOX_ENDING = {
-  STOPPED: "stopped",
-  HELD: "held",
-  FAILED: "failed",
-  /** Its run goes on, or ended within the grace, or it is no native agent's the store knows. */
+  /** Its runner still runs, or its run ended, or a call holds its agent's runner lease, or it is no native agent's the store knows. */
   LEFT: "left",
-  /** Stoppable, but past the sweep's bound of stops. */
-  DEFERRED: "deferred",
   /** Its runner exited while its run's turn still ran, which the sweep settled failed. */
   LOST: "lost",
 } as const;
@@ -157,39 +114,6 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
   if (agentId === undefined || sessionId === undefined) return undefined;
   return { sessionId, running: sandbox.currentSessionId, agentId };
 }
-
-/** Where a listed sandbox's runner stands, read afresh. */
-const RUNNER_STANDING = {
-  /** The sandbox is gone, down, or in another session; Vercel not answering counts as this. */
-  MOVED_ON: "moved_on",
-  /** Its runner still runs: a newer launch a message started since. */
-  RUNNING: "running",
-  /** Its runner exited, or none is tagged in its session. */
-  EXITED: "exited",
-} as const;
-
-type RunnerStanding = (typeof RUNNER_STANDING)[keyof typeof RUNNER_STANDING];
-
-const runnerStanding = (
-  api: VercelSandboxApi,
-  sandbox: NativeSandbox,
-): Effect.Effect<RunnerStanding> =>
-  Effect.gen(function* () {
-    const [fresh] = yield* api.listTagged(sandbox.sessionId);
-    if (
-      fresh === undefined ||
-      fresh.status !== SANDBOX_STATUS.RUNNING ||
-      fresh.currentSessionId !== sandbox.running
-    ) {
-      return RUNNER_STANDING.MOVED_ON;
-    }
-    const runner = taggedRunner(fresh);
-    if (runner === undefined || runner.sandboxSessionId !== sandbox.running) {
-      return RUNNER_STANDING.EXITED;
-    }
-    const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
-    return exit === null ? RUNNER_STANDING.RUNNING : RUNNER_STANDING.EXITED;
-  }).pipe(Effect.orElseSucceed((): RunnerStanding => RUNNER_STANDING.MOVED_ON));
 
 /** A runner that exited: its command, and its exit code, or gone where Vercel no longer knows the command. */
 interface ExitedRunner {
@@ -327,95 +251,18 @@ const goingOf = (standing: Option.Option<NativeRunStanding>): Option.Option<stri
     ? Option.some(standing.value.conversationId)
     : Option.none();
 
-/** The run where it ended longer ago than the grace: its conversation and its starter. */
-const endedOf = (
-  standing: Option.Option<NativeRunStanding>,
-  now: Date,
-): Option.Option<NativeRunStanding> => {
-  if (Option.isNone(standing)) return Option.none();
-  const { endedAt } = standing.value;
-  const endedBefore = now.getTime() - Duration.toMillis(NATIVE_SANDBOX_SWEEP.GRACE);
-  return endedAt === null || endedAt.getTime() > endedBefore ? Option.none() : standing;
-};
-
 /** Whether the run of the sandbox's agent still has a turn queued or running, read from the store again. */
 const runGoesOn = (sandbox: NativeSandbox) =>
   Effect.map(readNativeRunStanding(sandbox.agentId), goingOf);
 
-/** The run of the sandbox's agent where it ended past the grace, read from the store again. */
-const runEnded = (sandbox: NativeSandbox, now: Date) =>
-  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) => endedOf(standing, now));
-
 /**
- * The credentials only a runner sends taken off a sandbox a Terminal keeps up
- * past its runner's exit, where its launch is still kept, so a sweep that
- * finds it let go reads the store alone: the launch let go, and the policy
- * written without it, the agent's repository credential minted afresh for
- * the shell where it can be minted, and nothing beside it where it cannot.
- * One that would not come off is said and taken off at a later sweep's
- * read.
- */
-const runnerCredentialsWithdrawn = (
-  api: VercelSandboxApi,
-  session: FirewallSession,
-  agentId: string,
-) =>
-  Effect.gen(function* () {
-    const firewall = sandboxFirewall(api);
-    const launch = yield* firewall.launchOf(session);
-    if (launch === undefined) return;
-    const sources = yield* firewallSourcesAfterLaunch(session.userId, launch.agentId ?? agentId);
-    yield* firewall.endLaunch(session, sources);
-  }).pipe(
-    Effect.catch((failure) =>
-      Effect.logWarning(
-        `an exited runner's credentials stayed on a held sandbox: ${describeFailure(failure)}`,
-      ),
-    ),
-  );
-
-/**
- * An ended sandbox stopped under its agent's runner lease, and left where
- * another call holds the lease, as a message that resumed the sandbox holds
- * it through its relaunch, before any runner is tagged in it. Once the lease
- * is held, the runner and the run's end are read again, so a launch that
- * finished meanwhile keeps the sandbox, and the Terminal's hold is read last.
- */
-const stoppedUnderLease = (
-  api: VercelSandboxApi,
-  sandbox: NativeSandbox,
-  now: Date,
-  budget: StopBudget,
-) =>
-  Effect.map(
-    holdingRunnerIfFree(
-      sandbox.agentId,
-      Effect.gen(function* () {
-        const runner = yield* runnerStanding(api, sandbox);
-        if (runner !== RUNNER_STANDING.EXITED) return SANDBOX_ENDING.LEFT;
-        const ended = yield* runEnded(sandbox, now);
-        if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
-        if (yield* sandboxHeld(ended.value.conversationId, now)) {
-          yield* runnerCredentialsWithdrawn(
-            api,
-            { userId: ended.value.userId, sandboxSessionId: sandbox.running },
-            sandbox.agentId,
-          );
-          return SANDBOX_ENDING.HELD;
-        }
-        return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
-      }),
-    ),
-    Option.getOrElse((): SandboxEnding => SANDBOX_ENDING.LEFT),
-  );
-
-/**
- * One running native sandbox dealt with: stopped where its run ended past
- * the grace, no newer runner runs in it, no call holds its agent's runner
- * lease, and no Terminal holds it, and left otherwise. The run's end is read
- * again under the runner lease, and the Terminal's last, so a message or a
- * Terminal that came since keeps the sandbox; what lands between that read
- * and the stop is the same narrow window the run's own END stop has.
+ * One running native sandbox dealt with: its run's open turns settled
+ * failed where its runner exited while the run still goes on, and every
+ * credential taken off its firewall, and left otherwise. The run and the
+ * runner are read again under the agent's runner lease, held through the
+ * clear, so a message relaunching the runner keeps its turn and the
+ * credentials its launch sets; a lease another call holds leaves the
+ * sandbox for a later sweep.
  */
 const endSandbox = (
   api: VercelSandboxApi,
@@ -423,38 +270,55 @@ const endSandbox = (
   sandbox: NativeSandbox,
   standing: Option.Option<NativeRunStanding>,
   now: Date,
-  budget: StopBudget,
 ): Effect.Effect<
   SandboxEnding,
   QueryError | Schema.SchemaError,
-  DatabaseServices | HttpClient.HttpClient | GitHubApp
+  DatabaseServices | HttpClient.HttpClient
 > =>
   Effect.gen(function* () {
     const going = goingOf(standing);
-    if (Option.isSome(going)) {
-      const exited = yield* exitedRunner(api, sandbox);
-      if (exited === undefined) return SANDBOX_ENDING.LEFT;
-      // The turns open once the runner was seen gone, so a turn queued since is not failed for it.
-      const lostTurns = new Set(yield* runningTurnIds(going.value));
-      const stderr = yield* lostRunnerStderr(api, sandbox, exited.commandId);
-      // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
-      if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
-      if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
-        return SANDBOX_ENDING.LEFT;
-      }
-      yield* settledLostRunner(writer, sandbox, going.value, lostTurns, { ...exited, stderr }, now);
-      return SANDBOX_ENDING.LOST;
-    }
-    if (Option.isNone(endedOf(standing, now))) return SANDBOX_ENDING.LEFT;
-    if ((yield* runnerStanding(api, sandbox)) !== RUNNER_STANDING.EXITED) {
-      return SANDBOX_ENDING.LEFT;
-    }
-    return yield* stoppedUnderLease(api, sandbox, now, budget);
+    if (Option.isNone(going)) return SANDBOX_ENDING.LEFT;
+    const exited = yield* exitedRunner(api, sandbox);
+    if (exited === undefined) return SANDBOX_ENDING.LEFT;
+    // The turns open once the runner was seen gone, so a turn queued since is not failed for it.
+    const lostTurns = new Set(yield* runningTurnIds(going.value));
+    const stderr = yield* lostRunnerStderr(api, sandbox, exited.commandId);
+    const settled = holdingRunnerIfFree(
+      sandbox.agentId,
+      Effect.gen(function* () {
+        // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
+        if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
+        if ((yield* exitedRunner(api, sandbox))?.commandId !== exited.commandId) {
+          return SANDBOX_ENDING.LEFT;
+        }
+        yield* settledLostRunner(
+          writer,
+          sandbox,
+          going.value,
+          lostTurns,
+          { ...exited, stderr },
+          now,
+        );
+        // Note that the credentials come off as at any turn's end, because the sandbox then stops on its
+        // timeout with its policy saved, and a later resume would wear them again.
+        yield* sandboxFirewall(api)
+          .clear(sandbox.running)
+          .pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning(
+                `a lost runner's credentials stayed on its sandbox: ${failure.message}`,
+              ),
+            ),
+          );
+        return SANDBOX_ENDING.LOST;
+      }),
+    );
+    return Option.getOrElse(yield* settled, (): SandboxEnding => SANDBOX_ENDING.LEFT);
   });
 
 /**
- * Stops the running native sandboxes whose run ended and which no Terminal
- * holds, a sweep's worth, `CONCURRENCY` at a time. A list Vercel did not
+ * Settles the turns of the running native sandboxes whose runner died
+ * mid-turn, a sweep's worth, `CONCURRENCY` at a time. A list Vercel did not
  * answer sweeps nothing this minute rather than failing the sweeps after it.
  */
 export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSandboxes")(
@@ -463,7 +327,7 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
   ): Effect.fn.Return<
     NativeSandboxSweepOutcome,
     QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp
+    DatabaseServices | HttpClient.HttpClient
   > {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
     const listed = yield* Effect.result(
@@ -473,10 +337,9 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
       yield* Effect.logWarning(`the running sandboxes were not listed: ${listed.failure.message}`);
       return NOTHING_SWEPT;
     }
-    const budget: StopBudget = { remaining: NATIVE_SANDBOX_SWEEP.MAX_STOPS };
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const window = windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now);
-    // The window's runs are read once for the lot; a sandbox reads its own again only just before it settles or stops.
+    // The window's runs are read once for the lot; a sandbox reads its own again only just before it settles.
     const standings = yield* readNativeRunStandings(window.map((sandbox) => sandbox.agentId));
     const endings = yield* Effect.forEach(
       window,
@@ -487,17 +350,9 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
           sandbox,
           Option.fromUndefinedOr(standings.get(sandbox.agentId)),
           now,
-          budget,
         ),
       { concurrency: NATIVE_SANDBOX_SWEEP.CONCURRENCY },
     );
-    const count = (ending: SandboxEnding) => endings.filter((each) => each === ending).length;
-    return {
-      stopped: count(SANDBOX_ENDING.STOPPED),
-      held: count(SANDBOX_ENDING.HELD),
-      failed: count(SANDBOX_ENDING.FAILED),
-      deferred: count(SANDBOX_ENDING.DEFERRED),
-      lost: count(SANDBOX_ENDING.LOST),
-    };
+    return { lost: endings.filter((each) => each === SANDBOX_ENDING.LOST).length };
   },
 );
