@@ -237,8 +237,8 @@ export function App(): React.JSX.Element {
 }
 
 function AppWindow(): React.JSX.Element {
-  // Note that `act`, `press`, and `tell` stay for the tasks' own acts (`useTasksTab`) and the reads below, which the task-surface and read leaves move.
-  const { act, press, tell } = useAct();
+  // Note that `act` stays for the tasks' reads (`useTasksTab`) and the reads below, which the act-port reads leaf moves.
+  const { act } = useAct();
   const { mutateAsync: updateSetting } = useMutation(actMutation(ACT_KIND.SETTING_UPDATE));
   const { mutateAsync: sendSignOut } = useMutation(actMutation(ACT_KIND.ACCOUNT_SIGN_OUT));
   const { mutateAsync: sendDeleteAccount } = useMutation(actMutation(ACT_KIND.ACCOUNT_DELETE));
@@ -419,7 +419,7 @@ function AppWindow(): React.JSX.Element {
     onClose: () => leaveRouted.current(),
   });
   const tasks = useTasksTab({
-    acts: { act, press, tell },
+    acts: { act },
     tasks: planning ?? IDLE_TASKS_VIEW,
     run: run ?? IDLE_RUN,
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
