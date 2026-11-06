@@ -113,19 +113,24 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`; each task and item it opens recorded. */
+/** Home over Acme with `items` waiting on `RETRIES`, read by Dean, with `overrides`, their feed refused where `refused` says; each task and item it opens recorded. */
 function mount(
   overrides: Partial<TasksControl> = {},
   items: readonly InboxItem[] = [RETRY_429],
   room: ShellRoom = SHELL_ROOM.WIDE,
+  refused = false,
 ) {
   const opened: { tasks: string[]; items: InboxChoice[] } = { tasks: [], items: [] };
-  handInboxItems({
-    rows: {
-      [INBOX_SCOPE_KIND.PLAN]: items.length === 0 ? {} : { [RETRIES.id]: items },
-      [INBOX_SCOPE_KIND.AGENT]: {},
-    },
-  });
+  handInboxItems(
+    refused
+      ? { failed: true }
+      : {
+          rows: {
+            [INBOX_SCOPE_KIND.PLAN]: items.length === 0 ? {} : { [RETRIES.id]: items },
+            [INBOX_SCOPE_KIND.AGENT]: {},
+          },
+        },
+  );
   const holding: Pick<TasksControl, "inbox" | "inboxTasks"> =
     items.length === 0
       ? { inbox: [], inboxTasks: [] }
@@ -246,10 +251,15 @@ test("↓ and ↑ walk from the Inbox's rows into Recent's as one list", async (
   assert.ok(document.activeElement === first, "↑ goes back to the Inbox's item");
 });
 
-test("nothing waiting draws no Inbox section, and a list that could not be read says so under Recent", async () => {
+test("nothing waiting draws no Inbox section, but an Inbox that could not be read says so, and a list that could not be read says so under Recent", async () => {
   const quiet = mount({}, []);
   await settle();
   assert.deepEqual(Object.keys(sections(quiet.page)), ["Recent"]);
+  act(() => root?.unmount());
+
+  const unread = mount({}, [RETRY_429], SHELL_ROOM.WIDE, true);
+  await settle();
+  assert.match(unread.page.textContent ?? "", /Some inbox items could not be read\./u);
   act(() => root?.unmount());
 
   const refused = mount({ listRead: false, listFailed: true }, []);
