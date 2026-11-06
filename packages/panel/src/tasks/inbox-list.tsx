@@ -1130,7 +1130,16 @@ function ListHead({
         <PaneBar mark={all} title={heading} titleReplayUnmasked actions={actions} />
       ) : (
         <Toolbar
-          lead={all ?? head.lead}
+          lead={
+            all === null || head.lead === undefined ? (
+              (all ?? head.lead)
+            ) : (
+              <>
+                {head.lead}
+                {all}
+              </>
+            )
+          }
           title={barTitle}
           titleReplayUnmasked
           actions={actions}
@@ -1317,7 +1326,7 @@ export interface InboxListHead {
   readonly link?: MenuAction | undefined;
   /** The task the window's Inbox is narrowed to, which a chip over the list names and clears; none where it lists every task's items. */
   readonly task?: InboxTaskHead | undefined;
-  /** What leads the head's title: an agent's card's way back to its transcript (`agent-threads.tsx`); none on the window's Inbox. */
+  /** What leads the head's title, before select-all while rows are chosen: an agent's card's way back to its transcript (`agent-threads.tsx`); none on the window's Inbox. */
   readonly lead?: React.ReactNode | undefined;
 }
 

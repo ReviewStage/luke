@@ -790,6 +790,16 @@ function DescriptionDocument({
     else agentThreads.onOpen(item.agentId, item.id);
   });
   const tabAgent = tab === undefined ? undefined : agentOfTab(tab);
+  // The column's agent whose card shows its threads in its transcript's place, which main is told is not on screen.
+  const threadsAgent =
+    phone || tabAgent === undefined || agentThreads.shown(tabAgent) === undefined
+      ? undefined
+      : tabAgent;
+  const { onThreadsShown } = tasks;
+  useEffect(() => {
+    onThreadsShown(threadsAgent);
+    return () => onThreadsShown(undefined);
+  }, [threadsAgent, onThreadsShown]);
   // Note that the dock stands, quiet, while the agent's threads are all settled, the one way into them from its card.
   const { open: boardOpen, settled: boardSettled } = inbox.board;
   const threads = useMemo(() => {
@@ -1161,7 +1171,7 @@ function DescriptionDocument({
   // fills the window over this column; shut, it hands them back.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The agent's threads, where its card shows them in its transcript's place.
-  const threadsShown = phone || tabAgent === undefined ? undefined : agentThreads.shown(tabAgent);
+  const threadsShown = threadsAgent === undefined ? undefined : agentThreads.shown(threadsAgent);
   const agentThreadsView =
     tabAgent === undefined || threadsShown === undefined ? undefined : (
       <AgentThreads

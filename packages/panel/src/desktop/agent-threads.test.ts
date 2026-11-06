@@ -107,8 +107,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The task's page on the agent's tab, wide enough for the list and the thread side by side; and where it leaves for the window's Inbox. */
-async function mount(): Promise<{ container: HTMLElement; inboxes: unknown[] }> {
+/** The task's page on the agent's tab, wide enough for the list and the thread side by side; where it leaves for the window's Inbox; and which agent it says shows its threads, the latest last. */
+async function mount(): Promise<{
+  container: HTMLElement;
+  inboxes: unknown[];
+  covered: (string | undefined)[];
+}> {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: () => ({
@@ -127,6 +131,7 @@ async function mount(): Promise<{ container: HTMLElement; inboxes: unknown[] }> 
     { messages: [], cursor: "1:0", status: AGENT_STATUS.COMPLETED, title: null },
   ]);
   const inboxes: unknown[] = [];
+  const covered: (string | undefined)[] = [];
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: TASK.id,
@@ -139,6 +144,7 @@ async function mount(): Promise<{ container: HTMLElement; inboxes: unknown[] }> 
     },
     agents: agentsControl({ agents: [AGENT], agentIds: [AGENT.id, OTHER_AGENT] }),
     onShowInbox: (choice) => inboxes.push(choice),
+    onThreadsShown: (agentId) => covered.push(agentId),
   });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
@@ -155,11 +161,11 @@ async function mount(): Promise<{ container: HTMLElement; inboxes: unknown[] }> 
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
   await settleQueries();
-  return { container, inboxes };
+  return { container, inboxes, covered };
 }
 
 test("the dock opens the agent's threads in its card on the oldest waiting, its own alone, and Escape gives the transcript back", async () => {
-  const { container, inboxes } = await mount();
+  const { container, inboxes, covered } = await mount();
   const transcript = container.querySelector<HTMLElement>(".desktop-agent");
   const dock =
     container.querySelector<HTMLElement>(
@@ -172,6 +178,7 @@ test("the dock opens the agent's threads in its card on the oldest waiting, its 
     container.querySelector<HTMLElement>(".agent-threads") ??
     assert.fail("the card shows the agent's threads");
   assert.equal(transcript?.hidden, true, "the transcript stands hidden beneath them");
+  assert.equal(covered.at(-1), AGENT.id, "main is told the transcript is out of sight");
   const list = threads.querySelector("nav")?.textContent ?? "";
   assert.match(list, /Invite TTL/u);
   assert.match(list, /Which SMTP host\?/u);
@@ -187,4 +194,5 @@ test("the dock opens the agent's threads in its card on the oldest waiting, its 
   });
   assert.equal(container.querySelector(".agent-threads"), null);
   assert.equal(container.querySelector<HTMLElement>(".desktop-agent")?.hidden, false);
+  assert.equal(covered.at(-1), undefined, "and in sight again");
 });
