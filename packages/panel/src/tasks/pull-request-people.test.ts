@@ -218,6 +218,8 @@ test("a pull request's card says who opened it and lists its reviewers by where 
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: AgentChangesPeople) => {
+    // Note that each draw's window holds the members anew, so the host lays them for it.
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const drawn = await draw(card(people));
     const row = drawn.querySelector(".ui-hover-card-row");
     const named = [
@@ -258,6 +260,7 @@ test("a pull request's tab card says who opened it and its reviewers once its ta
 test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
   const names = async (readChanges: () => Promise<AgentChangesAnswerView>) => {
     fakeActPort(answeringChanges(readChanges));
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const tab = await draw(
       createElement(ChangesTabReading, {
         agentId: AGENT.id,

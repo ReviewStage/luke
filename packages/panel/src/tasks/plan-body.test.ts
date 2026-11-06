@@ -287,7 +287,7 @@ test("an edit the service names no member for, or read without an account id, is
     "Dean Stratakos now",
   );
   const former = await draw(editedAs({ ...unnamed, by: LEE }), { readerId: DEAN.userId });
-  assert.equal(editedLines(former)[1], "Lee Park (former member) now");
+  await vi.waitFor(() => assert.equal(editedLines(former)[1], "Lee Park (former member) now"));
   const mark = former.querySelector(".plan-unit-byline .actor-mark");
   assert.equal(mark?.querySelector("img")?.getAttribute("src"), LEE_PICTURE);
 });
