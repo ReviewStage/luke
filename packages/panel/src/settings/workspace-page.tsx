@@ -1,6 +1,5 @@
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_HOME } from "@repo/features/link-home";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import type {
   WorkspaceSentry,
@@ -88,7 +87,7 @@ import { inputProblem } from "@repo/ui/reported-failure";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { VIRTUAL_ROWS_ANCHOR, VirtualRows } from "@repo/ui/virtual-rows";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { useAccountPreferences } from "../account-choices.js";
 import { actMutation, pressMutation } from "../act-mutations.js";
@@ -99,9 +98,18 @@ import { useFormDialog } from "../desktop/use-form-dialog.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { confirmFailure, refusedShown, unreadShown } from "../failure-report.js";
+import {
+  automationsQuery,
+  slackChannelsQuery,
+  workspaceIntegrationsQuery,
+  workspaceIntegrationsRetryMutation,
+  workspaceInvitationsQuery,
+  workspaceInvitationsRetryMutation,
+  workspaceMembersQuery,
+  workspaceMembersRetryMutation,
+} from "../live-reads.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { PHOTO_ACCEPT, photoOfFile } from "../workspace-photo.js";
 import { useInviteDialog } from "./invite-dialog.js";
@@ -430,14 +438,15 @@ function removes(reader: Workspace["role"], role: WorkspaceMember["role"]): bool
  * them again.
  */
 function useMembersRead(workspace: Workspace) {
-  const { rows, status, retry } = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspace.id);
+  const members = useQuery(workspaceMembersQuery(workspace.id));
+  const { mutate } = useMutation(workspaceMembersRetryMutation());
   const read: ListRead<WorkspaceMember> =
-    rows !== undefined
-      ? { items: rows.members }
-      : status === HOST_READ_STATUS.FAILED
+    members.data !== undefined
+      ? { items: members.data.members }
+      : members.isError
         ? { failed: READ_FAILED.MEMBERS }
         : undefined;
-  return { read, retry };
+  return { read, retry: () => mutate({ workspaceId: workspace.id }) };
 }
 
 /**
@@ -604,7 +613,7 @@ function MemberRow({
  * service does not say whose they are, which the dialog says without names.
  */
 function useOwnAutomations(workspaceId: string, asked: boolean): readonly string[] | undefined {
-  const { rows } = useHostRead(LIVE_READ.AUTOMATIONS, asked ? workspaceId : undefined);
+  const rows = useQuery(automationsQuery(asked ? workspaceId : undefined)).data;
   if (rows === undefined || rows.some((each) => each.mine === undefined)) return undefined;
   return rows.filter((each) => each.mine === true).map((each) => each.name);
 }
@@ -979,11 +988,9 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
     pressMutation(ACT_KIND.WORKSPACE_INVITATION_CANCEL),
   );
   const copy = useCopyToast();
-  const {
-    rows: pending,
-    status,
-    retry,
-  } = useHostRead(LIVE_READ.WORKSPACE_INVITATIONS, workspaceId);
+  const invitations = useQuery(workspaceInvitationsQuery(workspaceId));
+  const retry = useMutation(workspaceInvitationsRetryMutation());
+  const pending = invitations.data;
 
   const cancel = (invitationId: string) =>
     sendWorkspaceInvitationCancel({ workspaceId, invitationId });
@@ -1004,11 +1011,11 @@ function Invitations({ workspaceId }: { workspaceId: string }): React.JSX.Elemen
 
   return (
     <>
-      {status === HOST_READ_STATUS.FAILED ? (
+      {invitations.isError ? (
         <ReadFailed
           line={READ_FAILED.INVITATIONS}
           surface={FAILURE_SURFACE.WORKSPACE_INVITATIONS_READ}
-          onRetry={retry}
+          onRetry={() => retry.mutate({ workspaceId })}
         />
       ) : pending === undefined ? (
         <SettingsRowsSkeleton
@@ -1363,17 +1370,18 @@ function ManagedSentry({
  * the service, so an install finished in the browser draws as it lands.
  */
 function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const read = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspace.id);
-  if (read.rows === undefined) {
-    return read.status === HOST_READ_STATUS.FAILED ? (
+  const read = useQuery(workspaceIntegrationsQuery(workspace.id));
+  const retry = useMutation(workspaceIntegrationsRetryMutation());
+  if (read.data === undefined) {
+    return read.isError ? (
       <ReadFailed
         line={READ_FAILED.SENTRY}
         surface={FAILURE_SURFACE.WORKSPACE_SENTRY_READ}
-        onRetry={read.retry}
+        onRetry={() => retry.mutate({ workspaceId: workspace.id })}
       />
     ) : null;
   }
-  const { sentry } = read.rows;
+  const { sentry } = read.data;
   if (!sentry.configured) return null;
   if (managesWorkspace(workspace)) {
     return <ManagedSentry workspace={workspace} sentry={sentry} />;
@@ -1549,7 +1557,7 @@ function ManagedSlackBotRows({
   workspace: Workspace;
   slack: WorkspaceSlack;
 }): React.JSX.Element {
-  const channels = useHostRead(LIVE_READ.SLACK_CHANNELS, workspace.id);
+  const channels = useQuery(slackChannelsQuery(workspace.id));
   return (
     <SettingsRowsFold
       label={SLACK_BOT_FOLD}
@@ -1557,14 +1565,14 @@ function ManagedSlackBotRows({
         <ManagedSlackBot
           workspace={workspace}
           slack={slack}
-          channels={channels.rows}
+          channels={channels.data}
           chevron={chevron}
         />
       )}
       rows={
         slack.team === undefined ? undefined : (
           <>
-            <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.rows} />
+            <SlackBotChannelRows workspace={workspace} slack={slack} channels={channels.data} />
             <SlackNotificationsRow workspaceId={workspace.id} />
           </>
         )
@@ -1612,17 +1620,18 @@ function SlackBotRows({
  * drawn as the host holds the workspace's integrations, as Sentry's is.
  */
 function WorkspaceSlackBotRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
-  const read = useHostRead(LIVE_READ.WORKSPACE_INTEGRATIONS, workspace.id);
-  if (read.rows === undefined) {
-    return read.status === HOST_READ_STATUS.FAILED ? (
+  const read = useQuery(workspaceIntegrationsQuery(workspace.id));
+  const retry = useMutation(workspaceIntegrationsRetryMutation());
+  if (read.data === undefined) {
+    return read.isError ? (
       <ReadFailed
         line={READ_FAILED.SLACK_BOT}
         surface={FAILURE_SURFACE.WORKSPACE_SLACK_BOT_READ}
-        onRetry={read.retry}
+        onRetry={() => retry.mutate({ workspaceId: workspace.id })}
       />
     ) : null;
   }
-  const { slack } = read.rows;
+  const { slack } = read.data;
   if (!slack.configured) return null;
   return <SlackBotRows workspace={workspace} slack={slack} />;
 }

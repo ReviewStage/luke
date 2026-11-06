@@ -1103,6 +1103,15 @@ test("a row's Assignee chip sends the member picked, and No assignee assigns it 
   const page = await mountPage([deans(39), ...TASKS.filter((each) => each.number !== 39)]);
 
   act(() => rowChip(page, "ACME-40", "Assignee").click());
+  // Note that the members are offered once their read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll(".ui-menu-item-label")].some(
+        (label) => label.textContent === "Dean Stratakos",
+      ),
+      true,
+    ),
+  );
   choose("Dean Stratakos");
   act(() => rowChip(page, "ACME-39", "Assignee").click());
   choose("No assignee");
@@ -1423,11 +1432,13 @@ test("the Filter's Assignee says the members could not be read, with Retry, in t
     failed.every(([label]) => label !== "Dean Stratakos"),
     "no member is listed while they could not be read",
   );
-  assert.ok(
-    searchedRows()
-      .map(searchedWords)
-      .some(([label]) => label === "Dean Stratakos"),
-    "the members are listed once read again, in the menu that stayed",
+  await vi.waitFor(() =>
+    assert.ok(
+      searchedRows()
+        .map(searchedWords)
+        .some(([label]) => label === "Dean Stratakos"),
+      "the members are listed once read again, in the menu that stayed",
+    ),
   );
   assert.equal(retry(), undefined);
 });

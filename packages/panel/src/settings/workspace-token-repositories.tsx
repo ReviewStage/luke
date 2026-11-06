@@ -4,7 +4,6 @@ import {
   GITHUB_ACCESS,
   type WorkspaceTokenRepository,
 } from "@repo/features/github-repositories-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { noMatchWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
@@ -31,15 +30,21 @@ import { ReplayMask } from "@repo/ui/session-replay-marks";
 import { repositoryParts } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useId, useRef, useState } from "react";
 import { actMutation, pressMutation } from "../act-mutations.js";
 import { confirmFailure, unreadShown } from "../failure-report.js";
-import { githubTokenQuery } from "../live-reads.js";
+import {
+  githubTokenQuery,
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+  tokenRepositoriesQuery,
+  tokenRepositoriesRetryMutation,
+} from "../live-reads.js";
 import { useRepositoryPictures } from "../repository-pictures.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
-import { HOST_READ_STATUS, type HostReadStatus, useHostRead } from "../use-host-read.js";
 import { AddMenuButton } from "./add-menu-button.js";
 import { GitHubOwnerRow, repositoryCount } from "./workspace-github-accounts.js";
 
@@ -107,12 +112,13 @@ export interface TokenRepositories {
   readonly remove: (repository: string) => void;
 }
 
-/** Where the list stands, by where the host's read of it stands. */
-const TOKEN_REPOSITORIES_READ_OF = {
-  [HOST_READ_STATUS.LOADING]: TOKEN_REPOSITORIES_READ.READING,
-  [HOST_READ_STATUS.FAILED]: TOKEN_REPOSITORIES_READ.FAILED,
-  [HOST_READ_STATUS.READY]: TOKEN_REPOSITORIES_READ.READY,
-} as const satisfies Record<HostReadStatus, TokenRepositoriesRead>;
+/** Where the list stands, by where its query stands: read once it holds rows, refused where it failed before it ever had. */
+function tokenRepositoriesReadOf(
+  read: UseQueryResult<readonly WorkspaceTokenRepository[]>,
+): TokenRepositoriesRead {
+  if (read.data !== undefined) return TOKEN_REPOSITORIES_READ.READY;
+  return read.isError ? TOKEN_REPOSITORIES_READ.FAILED : TOKEN_REPOSITORIES_READ.READING;
+}
 
 /** No token repositories, while none is read. */
 const NONE_LISTED: readonly WorkspaceTokenRepository[] = [];
@@ -130,7 +136,8 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
   const { mutate: removeTokenRepository } = useMutation(
     pressMutation(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET),
   );
-  const { rows, status, retry } = useHostRead(LIVE_READ.TOKEN_REPOSITORIES, workspaceId);
+  const read = useQuery(tokenRepositoriesQuery(workspaceId));
+  const { mutate: retry } = useMutation(tokenRepositoriesRetryMutation());
   const change = useCallback(
     (repository: string, added: boolean) =>
       changeTokenRepository({ workspaceId, repository, added }).then(
@@ -149,9 +156,9 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
     [removeTokenRepository, workspaceId],
   );
   return {
-    read: TOKEN_REPOSITORIES_READ_OF[status],
-    listed: rows ?? NONE_LISTED,
-    retry,
+    read: tokenRepositoriesReadOf(read),
+    listed: read.data ?? NONE_LISTED,
+    retry: () => retry({ workspaceId }),
     change,
     remove,
   };
@@ -165,16 +172,16 @@ type Candidates =
 
 /** What the picker offers, from the workspace's repositories as the host holds them, less those already listed. */
 function candidatesOf(
-  list: { readonly rows: GitHubRepositoriesAnswer | undefined; readonly status: HostReadStatus },
+  list: UseQueryResult<GitHubRepositoriesAnswer>,
   listed: readonly { readonly fullName: string }[],
   pictures: boolean,
 ): Candidates {
-  if (list.rows === undefined) {
-    return list.status === HOST_READ_STATUS.FAILED ? { kind: "failed" } : { kind: "reading" };
+  if (list.data === undefined) {
+    return list.isError ? { kind: "failed" } : { kind: "reading" };
   }
   const added = new Set(listed.map((one) => one.fullName.toLowerCase()));
   // A service older than `addable` lists the token's repositories among the picker's own.
-  const { addable, repositories } = list.rows;
+  const { addable, repositories } = list.data;
   const offered = addable ?? repositories.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
   const rows = offered
     .filter((one) => !added.has(one.fullName.toLowerCase()))
@@ -210,9 +217,10 @@ function AddRepositoryMenu({
 }): React.JSX.Element {
   // Note that the workspace's repositories are held by the host while the picker stands (`LIVE_READ.REPOSITORY_LISTS`).
   const pictures = useRepositoryPictures();
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const { mutate: retry } = useMutation(repositoryListsRetryMutation());
   const read = () => {
-    if (list.status === HOST_READ_STATUS.FAILED) list.retry();
+    if (list.isError) retry(repositoryScope(workspaceId));
   };
   const candidates = candidatesOf(list, repositories.listed, pictures);
   const rows = candidates.kind === "read" ? candidates.rows : [];
@@ -296,7 +304,8 @@ export function TokenRepositoryPicker({
   onRefused: (refusal: string | undefined) => void;
 }): React.JSX.Element {
   const pictures = useRepositoryPictures();
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const { mutate: retry } = useMutation(repositoryListsRetryMutation());
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   const menuId = useId();
@@ -307,7 +316,7 @@ export function TokenRepositoryPicker({
   const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
   const isOn = (fullName: string) =>
     pending.get(fullName.toLowerCase()) ?? listed.has(fullName.toLowerCase());
-  const offered = pickerRepositories(list.rows);
+  const offered = pickerRepositories(list.data);
   const picked = (offered ?? []).map((one) => one.fullName).filter(isOn);
   const rows: MenuRow[] = (offered ?? []).map((one) => {
     const row = repositoryMenuRow(one.fullName, pictures);
@@ -316,7 +325,7 @@ export function TokenRepositoryPicker({
   });
   const note =
     offered === undefined
-      ? list.status === HOST_READ_STATUS.FAILED
+      ? list.isError
         ? WORDS.NOT_READ
         : WORDS.READING
       : rows.length === 0
@@ -356,7 +365,7 @@ export function TokenRepositoryPicker({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => {
-          if (!open && list.status === HOST_READ_STATUS.FAILED) list.retry();
+          if (!open && list.isError) retry(repositoryScope(workspaceId));
           setOpen(!open);
         }}
       >

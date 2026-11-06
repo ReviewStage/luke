@@ -74,7 +74,8 @@ test("a maintainer signed in as the member reads whom they view as, and Stop end
 
   assert.match(view.textContent ?? "", /Viewing as Ada Lovelace \(ada@example\.test\)/u);
   act(() => stopButton(view)?.click());
-  assert.deepEqual(stopped, [MEMBER.id]);
+  // Note that the stop reaches its call a few steps after the press, as its mutation sends it.
+  await vi.waitFor(() => assert.deepEqual(stopped, [MEMBER.id]));
 });
 
 test.each([

@@ -27,7 +27,7 @@ import { ACTION_RESULT_STATUS } from "@repo/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -56,7 +56,7 @@ import { DesktopShell } from "./desktop-shell.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+const _accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -66,7 +66,6 @@ const SETTINGS: SettingsPanelProps = {
     provider: "github",
   },
   onSignOut: () => Promise.resolve(),
-  onDeleteAccount: accepted,
   view: SETTINGS_VIEW.ACCOUNT,
   onViewChange: ignore,
   microphone: {
@@ -1310,7 +1309,10 @@ test("Admin stands in the plan's place beside the sidebar, its row marked, with 
   const page = mount(false, { adminView: { ...tasksControl().adminView, open: true } });
   await settle();
   assert.ok(page.querySelector("aside.desktop-sidebar"), "the sidebar stays");
-  assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page");
+  // Note that the account's access lands through the app-state query, so its row is read once drawn.
+  await vi.waitFor(() =>
+    assert.equal(placeRow(page, "Admin")?.getAttribute("aria-current"), "page"),
+  );
   const main = page.querySelector(".desktop-main") ?? assert.fail("the work column");
   assert.ok(main.querySelector("section[aria-label=Admin]"), "Admin stands in the plan's place");
   assert.deepEqual(

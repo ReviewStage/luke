@@ -10,7 +10,7 @@ import {
 } from "@repo/ui";
 import { PICTURE_STATE, type PictureState, usePicture } from "@repo/ui/picture-read";
 import { useCallback, useEffect, useId, useState } from "react";
-import { useAct } from "../act.js";
+import { askAct } from "../act.js";
 import { pictureUnread } from "../failure-report.js";
 import { pictureQuery } from "../picture-query.js";
 
@@ -87,11 +87,10 @@ function rawAddress(repository: string, sha: string, path: string): string {
 
 /** Reads a picture of the agent's repository through the service. */
 function useImageRead() {
-  const { act } = useAct();
   return useCallback(
     (agentId: string, address: string) =>
-      act(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId, src: address }),
-    [act],
+      askAct(ACT_KIND.AGENTS_GITHUB_IMAGE, { agentId, src: address }),
+    [],
   );
 }
 

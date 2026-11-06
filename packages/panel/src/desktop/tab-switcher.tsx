@@ -61,12 +61,12 @@ import {
   TAB_WORDS,
 } from "@repo/ui/tab-strip-model";
 import { TASKS_PAGE } from "@repo/ui/tasks-model";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { HouseIcon, InboxIcon, ListTodoIcon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
 import { liveStepTitle, memberName, NAMED_STEP, stepTitle } from "../history-titles.js";
@@ -372,7 +372,8 @@ export function TabSwitcher({
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.DESKTOP_APP) }).data ===
     true;
   const answers = available && desktop;
-  const { act } = useAct();
+  // Note that a still is the window's own action, sent on its mutation; nothing the service holds.
+  const { mutateAsync: sendCapture } = useMutation(actMutation(ACT_KIND.WINDOW_CAPTURE));
   const [state, setState] = useState<SwitcherState>(SWITCHER_LET_GO);
   // Counts the stills kept, so one landing while the cards show is drawn at once.
   const [, setStillsKept] = useState(0);
@@ -425,7 +426,7 @@ export function TabSwitcher({
   const takeStill = (stop: Stop) => {
     const area = areaOf(WORK_AREA);
     if (area === undefined) return;
-    act(ACT_KIND.WINDOW_CAPTURE, area).then(
+    sendCapture(area).then(
       (src) => {
         if (src !== null) keep(stop, src);
       },

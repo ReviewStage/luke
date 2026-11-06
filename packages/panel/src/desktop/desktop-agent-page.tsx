@@ -8,7 +8,6 @@ import {
 import { dictationKeywords } from "@repo/features/dictation-keywords";
 import { INTEGRATION_PROVIDER } from "@repo/features/integration-wire";
 import { LINK_PLACE, type ReadLink } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { MentionLines } from "@repo/features/mention-link";
 import type { PagePlace } from "@repo/features/page-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -37,8 +36,8 @@ import {
 import { pullRequestAgentOf, repositoryPullRequestOf } from "@repo/ui/pull-request-link";
 import { type StripTab, sameTab } from "@repo/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -46,6 +45,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
+import { agentOriginQuery } from "../live-reads.js";
 import { MemberDirectory } from "../member-directory.js";
 import { HERE } from "../route.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
@@ -77,7 +77,6 @@ import {
 import { type PinHolder, PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, useToast } from "../toast.js";
-import { useHostRead } from "../use-host-read.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -423,7 +422,6 @@ export function DesktopAgentPage({
     APP_COMMAND.EXIT_AGENT_PAGE,
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
-  const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -443,7 +441,6 @@ export function DesktopAgentPage({
     [liveAgents, agentId],
   );
   const agents = useAgents({
-    acts: { act },
     taskId: undefined,
     agentId,
     repository: null,
@@ -461,10 +458,7 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   // The run that started an automation's agent, held while its page stands; an agent the list names no automation of has none, and asks nothing.
-  const run = useHostRead(
-    LIVE_READ.AGENT_ORIGINS,
-    agent?.automationName === undefined ? undefined : agentId,
-  );
+  const run = useQuery(agentOriginQuery(agent?.automationName === undefined ? undefined : agentId));
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -511,7 +505,7 @@ export function DesktopAgentPage({
     agentIds: agent === undefined ? agents.agentIds : [agent.id],
     models: agents.models ?? tasks.agents.models,
     keywords,
-    origin: run.rows ?? undefined,
+    origin: run.data ?? undefined,
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   });
   const tab = useMemo(() => ({ agent: agentId }), [agentId]);

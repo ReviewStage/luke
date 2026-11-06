@@ -31,7 +31,6 @@ import {
   type AutomationCallFailure,
   type AutomationChangeParams,
   type AutomationCreateParams,
-  type AutomationDeletedView,
   type AutomationView,
 } from "@repo/features/automation-view";
 import {
@@ -157,6 +156,7 @@ import { inputProblem, UNREPORTED } from "@repo/ui/reported-failure";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Result } from "effect";
 import { HistoryIcon, PlayIcon, SaveIcon, ZapIcon } from "lucide-react";
 import {
@@ -200,6 +200,7 @@ import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { PhoneHead, phoneFindGroups } from "./phone-head.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
+import { AUTOMATION_DELETE_MUTATION, WEBHOOK_SECRET_MUTATION } from "./use-automations.js";
 import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
@@ -280,9 +281,6 @@ export interface AutomationWrites {
   create(params: AutomationCreateParams): Promise<AutomationView>;
   change(params: AutomationChangeParams): Promise<AutomationView>;
   toggle(automationId: string, enabled: boolean): Promise<AutomationView>;
-  remove(automationId: string): Promise<AutomationDeletedView>;
-  /** Mints a webhook's secret again, answering it once for this page to show. */
-  newWebhookSecret(automationId: string): Promise<AutomationView>;
 }
 
 /** The kinds of schedule as the picker offers them, in its order. */
@@ -1720,12 +1718,13 @@ function WebhookRows({
   secret: string | undefined;
   onSecret: (secret: string | undefined) => void;
 }): React.JSX.Element {
+  const minting = useMutation(WEBHOOK_SECRET_MUTATION);
   const rotation = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
       if (automation === undefined) return Promise.resolve(ACCEPTED);
       onSecret(undefined);
-      return writes.newWebhookSecret(automation.id).then((answer): ActionResult => {
+      return minting.mutateAsync(automation.id).then((answer): ActionResult => {
         if ("failure" in answer) {
           return {
             status: ACTION_RESULT_STATUS.REJECTED,
@@ -2793,11 +2792,12 @@ export function AutomationEditor({
     automation === undefined
       ? Promise.resolve<AutomationView>({ failure: AUTOMATION_CALL_FAILURE.NOT_FOUND })
       : writes.toggle(automation.id, enabled);
+  const removing = useMutation(AUTOMATION_DELETE_MUTATION);
   const deletion = useConfirmDialog(
     { subject: automation !== undefined, surfaceOpen: true },
     () => {
       if (automation === undefined) return Promise.resolve(ACCEPTED);
-      return writes.remove(automation.id).then((answer): ActionResult => {
+      return removing.mutateAsync(automation.id).then((answer): ActionResult => {
         if ("failure" in answer) {
           return {
             status: ACTION_RESULT_STATUS.REJECTED,

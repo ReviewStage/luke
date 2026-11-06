@@ -10,7 +10,7 @@ import {
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { handHostReads, holdPullRequestParts } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { useAgentPullRequest, useListedPullRequests } from "./use-agent-pull-request.js";
@@ -60,11 +60,8 @@ test("a tab draws the pull request the task list carries over a held read that f
   }
   root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () => root?.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-
-  assert.deepEqual(held, PUBLISHED);
+  // Note that what the read found reaches the hook once it lands in its query.
+  await vi.waitFor(() => assert.deepEqual(held, PUBLISHED));
 });
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

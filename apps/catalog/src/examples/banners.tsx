@@ -125,11 +125,16 @@ function Banners(): React.JSX.Element {
         <Stack gap={GAP.FIELD}>
           <ViewingAsBanner
             member={{ name: "Ada Lovelace", email: "ada@example.com" }}
-            onStop={() => Promise.resolve("The sign-in could not be stopped.")}
+            stop={{
+              run: () => undefined,
+              busy: false,
+              refusal: "The sign-in could not be stopped.",
+              failed: false,
+            }}
           />
           <ViewingAsBanner
             member={{ email: "ada@example.com" }}
-            onStop={() => Promise.resolve(undefined)}
+            stop={{ run: () => undefined, busy: false, refusal: undefined, failed: false }}
           />
         </Stack>
       </CatalogSection>

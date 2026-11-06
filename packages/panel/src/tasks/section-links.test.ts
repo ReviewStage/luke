@@ -20,6 +20,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { onSideBundles, unlandedBundles } from "../testing/side-bundles.js";
 import { PlanBody, type SectionLinks } from "./plan-body.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -253,7 +254,9 @@ function drawnEditable(): HTMLElement {
           unlandedBundles(),
           createElement(PlanBody, {
             task: TASK,
-            onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+            edit: planEditMutation(TASK.id, () =>
+              Promise.reject(new Error("Nothing is saved in this test.")),
+            ),
             sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },
           }),
         ),
@@ -441,7 +444,9 @@ test("a click on a folder's chip in a plan that can be edited opens no editor", 
       withQueryClient(
         createElement(PlanBody, {
           task: FILES_TASK,
-          onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+          edit: planEditMutation(FILES_TASK.id, () =>
+            Promise.reject(new Error("Nothing is saved in this test.")),
+          ),
           sectionLinks: {
             workspace: WORKSPACE,
             onOpen: () => undefined,
@@ -472,7 +477,9 @@ function drawnTitled() {
     const [asks, setAsks] = useState(0);
     return createElement(PlanBody, {
       task: TASK,
-      onEdit: () => Promise.reject(new Error("Nothing is saved in this test.")),
+      edit: planEditMutation(TASK.id, () =>
+        Promise.reject(new Error("Nothing is saved in this test.")),
+      ),
       onRename: () => Promise.resolve(true),
       rename: { asks, asked: undefined, onBegin: () => setAsks((count) => count + 1) },
       sectionLinks: { workspace: WORKSPACE, onOpen: () => undefined, reveal: undefined },

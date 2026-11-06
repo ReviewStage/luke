@@ -1114,7 +1114,8 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   roots.push(root);
   await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(Probe))));
-  await settle();
+  // Note that the feed draws once its rows reach its query.
+  await vi.waitFor(() => assert.equal(control?.drawn, true));
   assert.equal(control?.draftOf(older).note, "Reply later", "the feed drawing first drops nothing");
 
   await act(async () =>
@@ -1123,8 +1124,9 @@ test("a draft on an item the account's feed leaves out stands while the feed dra
       [INBOX_SCOPE_KIND.AGENT]: { [INVITES.agent.id]: { rows: [mine] } },
     }),
   );
-  await settle();
-  assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone");
+  await vi.waitFor(() =>
+    assert.equal(control?.draftOf(older).note, "", "the agent's own read says the item is gone"),
+  );
 });
 
 test("another item landing in the inbox leaves the answer being written on one as it was", async () => {

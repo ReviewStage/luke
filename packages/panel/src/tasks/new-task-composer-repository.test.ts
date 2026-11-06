@@ -148,11 +148,13 @@ async function mount(
 
 test("with no recent task, the chip stands on the first repository the read lists", async () => {
   const { container } = await mount(TOKEN_LISTING);
-  const chip =
-    container.querySelector<HTMLButtonElement>(".ui-chip") ??
-    assert.fail("the card draws the repository chip");
-
-  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  // Note that the chip stands on the repository once the read that lists it reaches its query.
+  await vi.waitFor(() => {
+    const chip =
+      container.querySelector<HTMLButtonElement>(".ui-chip") ??
+      assert.fail("the card draws the repository chip");
+    assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  });
 });
 
 test("a repository the picker lists on a member's token, on an owner the workspace's App is not on, stays picked", async () => {
@@ -174,7 +176,13 @@ test("a repository the picker lists on a member's token, on an owner the workspa
 
 test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
-  restOn(container.querySelector(".ui-chip") ?? assert.fail("the card draws the repository chip"));
+  const chip = await vi.waitFor(() => {
+    const drawn =
+      container.querySelector(".ui-chip") ?? assert.fail("the card draws the repository chip");
+    assert.equal(drawn.textContent?.includes("octo/tools"), true);
+    return drawn;
+  });
+  restOn(chip);
   const card = document.querySelector("[data-repository-card]");
 
   assert.equal(card?.querySelector(".ui-hover-card-name")?.textContent, "tools");
@@ -183,11 +191,13 @@ test("the repository chip hangs the repository's card while the pointer rests on
 
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {
   const { container } = await mount(TOKEN_LISTING, "octo/tools");
-  const chip =
-    container.querySelector<HTMLButtonElement>(".ui-chip") ??
-    assert.fail("the card draws the repository chip");
-
-  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  // Note that the chip stands on the repository once the read that lists it reaches its query.
+  await vi.waitFor(() => {
+    const chip =
+      container.querySelector<HTMLButtonElement>(".ui-chip") ??
+      assert.fail("the card draws the repository chip");
+    assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  });
 });
 
 test("a preset the workspace's GitHub does not reach is not started on while the host's read is out", async () => {
@@ -240,11 +250,13 @@ test("a preset survives a read made before the workspace resolved and stands onc
   );
   scope.id = ACME.id;
   await redraw();
-  const chip =
-    container.querySelector<HTMLButtonElement>(".ui-chip") ??
-    assert.fail("the card draws the repository chip");
-
-  assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  // Note that the chip stands on the repository once the read that lists it reaches its query.
+  await vi.waitFor(() => {
+    const chip =
+      container.querySelector<HTMLButtonElement>(".ui-chip") ??
+      assert.fail("the card draws the repository chip");
+    assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+  });
 });
 
 test("a recent default a read does not list is let go, so a later read listing it does not bring it back", async () => {
@@ -266,10 +278,12 @@ test("a recent default a read does not list is let go, so a later read listing i
     { id: ACME.id },
     ["octo/tools"],
   );
-  await comeForward();
   const chip =
     container.querySelector<HTMLButtonElement>(".ui-chip") ??
     assert.fail("the card draws the repository chip");
+  // Note that the first read, which lists nothing, reaches the chip before the window comes forward.
+  await vi.waitFor(() => assert.equal(chip.textContent, "No repository"));
+  await comeForward();
 
   assert.equal(reads, 2);
   assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");

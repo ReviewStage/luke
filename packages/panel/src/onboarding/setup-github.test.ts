@@ -86,12 +86,15 @@ test.each([
       ),
     );
     await settle();
-    const checked =
-      container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
-      assert.fail("the step checks a route");
 
-    assert.equal(checked.textContent?.includes(card), true, checked.textContent ?? "");
-    assert.equal(container.textContent?.includes(says), true, container.textContent ?? "");
+    // Note that the step checks a route once the repositories it reaches reach their query.
+    await vi.waitFor(() => {
+      const checked =
+        container.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+        assert.fail("the step checks a route");
+      assert.equal(checked.textContent?.includes(card), true, checked.textContent ?? "");
+      assert.equal(container.textContent?.includes(says), true, container.textContent ?? "");
+    });
   },
 );
 

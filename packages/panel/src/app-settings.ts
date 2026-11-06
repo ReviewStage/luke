@@ -15,7 +15,6 @@ import type {
 } from "@repo/settings/settings-controls";
 import type { SettingsView } from "@repo/settings/settings-views";
 import { fixtureUpdate } from "@repo/settings/update-row";
-import type { ActionResult } from "@repo/wire";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
@@ -30,7 +29,6 @@ export interface SettingsDoors {
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   onSignOut: () => Promise<void>;
-  onDeleteAccount: () => Promise<ActionResult>;
   onRequestMicrophone: () => void | Promise<void>;
   workspace: WorkspaceSettingsControl;
 }
@@ -110,7 +108,6 @@ export function useSettingsPanel(doors: SettingsDoors): SettingsPanelProps | und
     return {
       account,
       onSignOut: doors.onSignOut,
-      onDeleteAccount: doors.onDeleteAccount,
       view: doors.view,
       onViewChange: doors.onViewChange,
       microphone,

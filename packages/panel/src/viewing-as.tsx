@@ -1,5 +1,6 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
 import { ViewingAsBanner } from "@repo/ui";
+import { useMutation } from "@tanstack/react-query";
 import { useLayoutEffect, useRef } from "react";
 import { appPlatform } from "./app-platform.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
@@ -40,6 +41,8 @@ function ViewingAsStrip({
   member: { name?: string | undefined; email: string };
   onStop: () => Promise<string | undefined>;
 }): React.JSX.Element {
+  // Note that the stop answers the service's words where it refused, rather than throwing them.
+  const stopping = useMutation({ mutationFn: onStop });
   const strip = useRef<HTMLDivElement>(null);
   // Note that the height is measured as it changes, because the strip wraps
   // onto a second line where the window is narrow.
@@ -58,7 +61,15 @@ function ViewingAsStrip({
   }, []);
   return (
     <div ref={strip} className="viewing-as">
-      <ViewingAsBanner member={member} onStop={onStop} />
+      <ViewingAsBanner
+        member={member}
+        stop={{
+          run: () => stopping.mutate(),
+          busy: stopping.isPending,
+          refusal: stopping.data,
+          failed: stopping.isError,
+        }}
+      />
     </div>
   );
 }

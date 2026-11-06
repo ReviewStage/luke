@@ -6,7 +6,6 @@ import { queryOptions, skipToken, type UseQueryResult, useQuery } from "@tanstac
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ActedResult, askAct, askKept, type Kept } from "../act.js";
 import { QUERY_ROOT } from "../query-keys.js";
-import { HOST_READ_STATUS, type HostRead } from "../use-host-read.js";
 import { useRegained } from "../use-regained.js";
 import { revisionOfSave } from "./plan-history-model.js";
 
@@ -67,6 +66,13 @@ export interface ViewedVersion {
   /** Whether it is the newest revision, which is the plan as it stands and has nothing to restore. */
   readonly current: boolean;
   readonly read: VersionRead;
+}
+
+/** The history as main holds it for the version history: its rows once read, whether its read failed, and Try again. */
+export interface HeldHistory {
+  readonly rows: PlanRevisionsAnswer | undefined;
+  readonly failed: boolean;
+  readonly onRetry: () => void;
 }
 
 /** Where the history's older pages are read from, and a version is restored: main's acts, or a test's own. */
@@ -250,7 +256,7 @@ function versionRead(version: UseQueryResult<TasksRevisionAnswer>): VersionRead 
 export function usePlanHistory(input: {
   source: PlanHistorySource;
   taskId: string | undefined;
-  history: HostRead<PlanRevisionsAnswer>;
+  history: HeldHistory;
   editedAt: number | undefined;
   name: string | undefined;
   shown: boolean;
@@ -275,7 +281,7 @@ export function usePlanHistory(input: {
   const chosen = reading && version?.taskId === taskId ? version : undefined;
   if (version !== undefined && chosen === undefined) setVersion(undefined);
   const heldRows = reading ? history.rows : undefined;
-  const heldFailed = reading && history.status === HOST_READ_STATUS.FAILED;
+  const heldFailed = reading && history.failed;
   const held = useMemo(() => listOf(heldRows, heldFailed), [heldRows, heldFailed]);
   const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
   // Until one is chosen, the plan as it stands is, whichever revision that is now.
@@ -353,7 +359,7 @@ export function usePlanHistory(input: {
     },
     [taskId, newest, chosen, read.kind, readAgain],
   );
-  const onRetry = history.retry;
+  const onRetry = history.onRetry;
   // Note that the sections stay open, since they are drawn from the very version this reads again.
   const onRetryVersion = useCallback(() => void readAgain(), [readAgain]);
   // A version whose read failed, or is still out and may have been sent while the connection was gone, is read again as the app reaches the service again, as its Try again reads it.

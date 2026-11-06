@@ -12,7 +12,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { useExpiredServerToasts } from "./expired-server-toasts.js";
 import { rendererRegistry } from "./renderer-runtime.js";
 import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
@@ -136,7 +136,7 @@ test("each expired server stands in a toast of its own until its Reconnect has i
   standing = { ...standing, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.CONNECTED };
   act(() => integrations.lay());
   await settle();
-  assert.deepEqual(said(), ["Linear's sign-in expired"]);
+  await vi.waitFor(() => assert.deepEqual(said(), ["Linear's sign-in expired"]));
 });
 
 test("a reconnect that could not begin says so in the server's toast, with Retry", async () => {

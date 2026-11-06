@@ -21,6 +21,7 @@ import { withQueryClient } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope } from "./plan-comments.js";
+import { planEditMutation } from "./plan-edit-mutation.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -121,7 +122,7 @@ async function opened() {
             children: createElement(PlanBody, {
               task: PLAN,
               sectionLinks: PAGE_LINKS,
-              onEdit: () => Promise.resolve({ saved: true } as const),
+              edit: planEditMutation(PLAN.id, () => Promise.resolve({ saved: true } as const)),
             }),
           }),
         ),

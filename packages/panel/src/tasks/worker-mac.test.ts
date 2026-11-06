@@ -6,7 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, settleQueries } from "../testing/copy-feedback.js";
 import { agentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
 
@@ -90,6 +90,7 @@ async function workerTabFor(reader: string): Promise<string> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await settleQueries();
   // The place's words, the owner's disc left out of them.
   const place = container.querySelector(".actor-words") ?? assert.fail("the row says whose Mac");
   const disc = place.querySelector(".actor-mark") ?? assert.fail("by the owner's disc");

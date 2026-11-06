@@ -35,7 +35,7 @@ import { GLYPH } from "@repo/ui/icons";
 import type { MarkdownTaskToggler } from "@repo/ui/markdown";
 import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
 import {
   Fragment,
@@ -88,12 +88,17 @@ import {
   useTextRoom,
   useWordsKeptOnClose,
 } from "./plan-document-editor.js";
+import {
+  type PlanEditMutation,
+  type PlanEditSend,
+  planEditMutation,
+} from "./plan-edit-mutation.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { UNIT_ATTRIBUTED_CLASS, UNIT_BYLINE_CLASS, UNIT_MORE_CLASS } from "./plan-unit-look.js";
 import { TaskPath, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
-import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
+import { EDITOR_PLACE, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 import { useTaskMaker } from "./use-task-origin.js";
 import {
@@ -606,8 +611,8 @@ function useMentionChips(
   }, [opensFiles, agentOf, pullRequestOf, taskId, workspace, repository, anchorKey]);
 }
 
-/** The door of a document nothing is edited through: every edit answered as unanswered. */
-const NO_EDIT: PlanEditDoor = () =>
+/** How a document nothing is edited through sends a write: every one answered as unanswered. */
+const NO_EDIT: PlanEditSend = () =>
   Promise.reject(new Error("This description cannot be edited here."));
 
 /** Where a title's draft goes when nothing else names the task: nowhere. */
@@ -679,7 +684,7 @@ function queuedWrite(writes: PlanWrites, write: () => Promise<Kept> | Kept): Pro
  */
 function savedOver(
   writes: PlanWrites,
-  save: PlanEditDoor,
+  save: PlanEditSend,
   drawn: DrawnPlan,
   edit: { readonly base: string; readonly value: string },
   kept: string | undefined,
@@ -1002,13 +1007,13 @@ export interface TitleRename {
 /**
  * The task's document: its name as the title over its text. `onShowHistory` opens the plan's version history from the
  * byline's "Edited", on the plan as it stands, and from a section's, on the
- * revision of the save it names. With `onEdit`, the text is edited whole in
+ * revision of the save it names. With `edit`, the text is edited whole in
  * place, and with `onRename` the title too, its words drawn as the task's
  * name through `onDraftName` as they are typed, and with `rename` the title's ⋯
  * offers Rename through the open task's door; without them the document is
  * drawn read-only. A date chip in an editable plan's words at rest opens
  * its picker where it stands, and a date changed there saves the plan
- * through `onEdit` with the date written anew (`SectionDates`), as a task
+ * through `edit` with the date written anew (`SectionDates`), as a task
  * item's box ticks it. An editable plan opens its text from a press on the
  * panel's empty room, as a document editor's page does (`useTextRoom`): at
  * the end under its last line, or anywhere where it has no text yet, and on
@@ -1023,7 +1028,7 @@ export interface TitleRename {
 export const PlanBody = memo(function PlanBody({
   task,
   onShowHistory,
-  onEdit,
+  edit,
   onRename,
   onDraftName = NO_DRAFT,
   rename,
@@ -1038,7 +1043,8 @@ export const PlanBody = memo(function PlanBody({
 }: {
   task: Task;
   onShowHistory?: ShowHistory;
-  onEdit?: PlanEditDoor | undefined;
+  /** The writes to the plan's words, each place writing them holding its own mutation over them (`planEditMutation`); none where nothing is edited. */
+  edit?: PlanEditMutation | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
   onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
@@ -1065,7 +1071,7 @@ export const PlanBody = memo(function PlanBody({
   // While Plans is off the task's head stands alone: its path, title, chips, who created it, and what `head` holds, with none of the document under it.
   const documented =
     useQuery({ ...appStateQuery, select: selectExperiment(EXPERIMENT.DESCRIPTIONS) }).data === true;
-  const editable = onEdit !== undefined && documented;
+  const editable = edit !== undefined && documented;
   const text = editable ? task.document.body : undefined;
   const editReader = useEditReader(reader);
   // Note that what each section is drawn from is held steady across draws,
@@ -1082,7 +1088,8 @@ export const PlanBody = memo(function PlanBody({
     () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents }),
     [editReader, sectionEdits, steadyAgents],
   );
-  const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT, place);
+  const planWrites = edit ?? planEditMutation(task.id, NO_EDIT);
+  const editing = usePlanEditing(task.id, text, planWrites, place);
   const showHistory = useSteadyDoor(onShowHistory);
   const marks = useMemo<SectionMarks>(
     () => ({
@@ -1214,6 +1221,9 @@ export const PlanBody = memo(function PlanBody({
     [toast],
   );
   // The plan as drawn last, which a tick waiting its turn and a date read as the picker closes are written over.
+  // Note that a tick and a date save on a mutation of this plan's writes, which runs in their order behind the editor's.
+  const { mutateAsync: saveWrite } = useMutation(planWrites);
+  const onEdit = edit === undefined ? undefined : saveWrite;
   const latestPlan = useRef({ cut, id: task.id, body: task.document.body, onEdit });
   latestPlan.current = { cut, id: task.id, body: task.document.body, onEdit };
   // Note that ticks are sent one at a time, in the order pressed, each over
@@ -1341,7 +1351,7 @@ export const PlanBody = memo(function PlanBody({
       />
     ),
   );
-  const titled = onEdit !== undefined && onRename !== undefined;
+  const titled = edit !== undefined && onRename !== undefined;
   const titleMenu =
     !titleActions || linked === undefined ? null : (
       <TitleLink

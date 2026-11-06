@@ -237,6 +237,14 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+  // Note that the reads the host lays reach their queries a tick after they land, so the page is read once none still stands out, bar one the test holds.
+  await vi.waitFor(() => {
+    const text = document.body.textContent ?? "";
+    assert.equal(
+      text.includes("Checking…") || (!holdReads && text.includes("Reading the integrations")),
+      false,
+    );
+  });
 }
 
 /**
@@ -471,7 +479,7 @@ test("a read that never answered says so, and Retry reads it again", async () =>
   );
   await settle();
   assert.equal(integrations.retries(), 1);
-  assert.match(page.textContent ?? "", /No integrations available/u);
+  await vi.waitFor(() => assert.match(page.textContent ?? "", /No integrations available/u));
 });
 
 test("GitHub, granted by the account's own GitHub, offers Connect, which connects it in place and waits on the browser, a disconnected read not failing it, and a Cancel ending it here alone", async () => {
@@ -541,7 +549,7 @@ test("GitHub's Disconnect is the account's GitHub disconnect, which asks first a
   assert.deepEqual(refusedButtons, [], "GitHub stands connected");
   assert.equal(askedBeforeConfirm, 1, "the second Disconnect asked before it disconnected");
   assert.equal(githubDisconnects, 2);
-  assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect"]);
+  await vi.waitFor(() => assert.deepEqual(rowButtons(rowNamed(page, "GitHub")), ["Connect"]));
 });
 
 test("GitHub connected but refused by its server shows Reconnect on the row, and keeps the rest of its ⋯", async () => {
@@ -666,8 +674,13 @@ test("a connection whose tools could not be read says so in the attention tint, 
   act(() => retry?.click());
   await settle();
 
+  await vi.waitFor(() =>
+    assert.equal(
+      rowNamed(page, "Linear").querySelector(".ui-settings-row-state")?.textContent,
+      "Connected · 1 tool",
+    ),
+  );
   const mended = rowNamed(page, "Linear");
-  assert.equal(mended.querySelector(".ui-settings-row-state")?.textContent, "Connected · 1 tool");
   assert.deepEqual(rowButtons(mended), []);
 });
 
@@ -735,7 +748,7 @@ test("a Cancel that lands after the sign-in finished leaves the provider connect
   touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
 
   await pressOnGranola(page, "Cancel");
-  assert.equal(granolaRow(page).line, "Connected · 1 tool");
+  await vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool"));
 });
 
 test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retry", async () => {
@@ -745,10 +758,12 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   signInFailures = [{ provider: GRANOLA, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED }];
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "You canceled connecting Granola. · Retry",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "You canceled connecting Granola. · Retry",
+      buttons: ["Retry"],
+    }),
+  );
   // The service names a failure once; the next read leaves the line as it stood.
   await readMoves();
   assert.equal(granolaRow(page).line, "You canceled connecting Granola. · Retry");
@@ -767,10 +782,12 @@ test("a sign-in Connect refused says so, then Connect's own line quoted under it
     },
   ];
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "Granola could not be connected. · Retry\nGranola's sign-in said: “client_assertion aud must be the authorization server issuer”",
+      buttons: ["Retry"],
+    }),
+  );
 
   await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
@@ -784,10 +801,12 @@ test("a sign-in the browser came back from without a grant says it could not con
 
   touched.set(GRANOLA, INTEGRATION_STATUS.DISCONNECTED);
   await readMoves();
-  assert.deepEqual(granolaRow(page), {
-    line: "Granola could not be connected: the sign-in came back without access. · Retry",
-    buttons: ["Retry"],
-  });
+  await vi.waitFor(() =>
+    assert.deepEqual(granolaRow(page), {
+      line: "Granola could not be connected: the sign-in came back without access. · Retry",
+      buttons: ["Retry"],
+    }),
+  );
 
   await pressOnGranola(page, "Retry");
   assert.deepEqual(granolaRow(page), WAITING);
@@ -811,7 +830,9 @@ it.effect(
 
       touched.set(GRANOLA, INTEGRATION_STATUS.CONNECTED);
       yield* Effect.promise(readMoves);
-      assert.equal(granolaRow(page).line, "Connected · 1 tool");
+      yield* Effect.promise(() =>
+        vi.waitFor(() => assert.equal(granolaRow(page).line, "Connected · 1 tool")),
+      );
     }),
 );
 
@@ -1459,7 +1480,7 @@ test("an account renamed from its row's ⋯ is named in place: Escape keeps its 
   await settle();
   assert.equal(field(), null);
   assert.deepEqual(renames(), [{ provider: notion, connection: "notion", label: "Work" }]);
-  assert.ok(rowOf("Work"), "the row says the new name");
+  await vi.waitFor(() => rowOf("Work"));
 });
 
 test("a refused rename says the account could not be renamed and what to do, in the one failure sentence", async () => {
@@ -1527,11 +1548,12 @@ test("an added account whose first sign-in Connect refused keeps its row with th
     },
   ];
   await readMoves();
-  const added =
+  const addedRow = () =>
     [...page.querySelectorAll(".ui-settings-row")].find(
       (row) => nameOf(row.querySelector('[id$="label"]')) === "Notion · Account 3",
     ) ?? assert.fail("the refused account keeps its row");
-  assert.match(stateLines(added) ?? "", /access_denied/u);
+  await vi.waitFor(() => assert.match(stateLines(addedRow()) ?? "", /access_denied/u));
+  const added = addedRow();
 
   sent = [];
   act(() =>
@@ -1614,11 +1636,13 @@ test("an added account whose first sign-in is canceled leaves its row, so the ne
   );
   await settle();
 
-  assert.equal(
-    [...page.querySelectorAll('[id$="label"]')].some(
-      (name) => nameOf(name) === "Notion · Account 2",
+  await vi.waitFor(() =>
+    assert.equal(
+      [...page.querySelectorAll('[id$="label"]')].some(
+        (name) => nameOf(name) === "Notion · Account 2",
+      ),
+      false,
     ),
-    false,
   );
 });
 
@@ -1651,7 +1675,9 @@ test("a canceled sign-in that held a provider's last place frees it at once, off
   );
   await settle();
 
-  assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account"));
+  await vi.waitFor(() =>
+    assert.ok(menuOf(rowOf("Workspace 1")).items.includes("Add another account")),
+  );
 });
 
 test("Reopen on an added account still waiting on its first sign-in reopens that account, never adds another", async () => {
@@ -1747,10 +1773,12 @@ test("with motion held still, an integration that connects takes its place and n
     touched.set(INTEGRATION_PROVIDER.MERCURY, INTEGRATION_STATUS.CONNECTED);
     await readMoves();
 
-    assert.deepEqual(sections(page), [
-      ["Connected", ["Mercury"]],
-      ["Not connected", ["Granola", "Linear"]],
-    ]);
+    await vi.waitFor(() =>
+      assert.deepEqual(sections(page), [
+        ["Connected", ["Mercury"]],
+        ["Not connected", ["Granola", "Linear"]],
+      ]),
+    );
     assert.deepEqual(
       motions.played.map((each) => each.keyframes),
       [],

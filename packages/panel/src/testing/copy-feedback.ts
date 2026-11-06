@@ -9,10 +9,17 @@
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { AppStateSnapshot } from "@repo/host/app-state";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { createContext, createElement, type ReactElement, type ReactNode, useContext } from "react";
-import { afterEach, beforeEach } from "vitest";
+import {
+  act,
+  createContext,
+  createElement,
+  type ReactElement,
+  type ReactNode,
+  useContext,
+} from "react";
+import { afterEach, beforeEach, vi } from "vitest";
 import { LiveReadSubscription } from "../live-reads.js";
 import { AppStateSubscription, appStateQuery } from "../use-app-state.js";
 
@@ -89,6 +96,18 @@ export function onRegistry(
   return createElement(RegistryContext.Provider, { value: registry }, withQueryClient(element));
 }
 
+/**
+ * Waits until no write of the test's client is out, and the answers its
+ * callers read have landed, as a plan's saves sent while it was left do:
+ * for a teardown that disposes the atoms those answers write into.
+ */
+export async function settledWrites(): Promise<void> {
+  await vi.waitFor(() => {
+    if (testQueryClient.isMutating() > 0) throw new Error("A write is still out.");
+  });
+  for (let tick = 0; tick < 6; tick += 1) await Promise.resolve();
+}
+
 /** The test's own Query client, for a case that looks at or changes what it keeps from outside a component, as code outside one takes the client it is handed. */
 export function testQueryClientNow(): QueryClient {
   return testQueryClient;
@@ -112,4 +131,42 @@ export function writeAppState(document: AppStateSnapshot): void {
 export function holdAppStateForFile(document: AppStateSnapshot): void {
   heldForFile = document;
   writeAppState(document);
+}
+
+/** The platform's own `setTimeout`, as this module loads before any test fakes it, which the notify queue runs on. */
+const PLATFORM_SET_TIMEOUT = globalThis.setTimeout;
+
+/** How many rounds of TanStack Query's notifications a settle waits out, since a notification drawn may lay a read that notifies in turn. */
+const NOTIFY_ROUNDS = 3;
+
+/**
+ * Waits until every notification TanStack Query has queued has reached the
+ * surfaces observing it, round after round, `between` running after each:
+ * what a live read laid on the document is drawn one notify tick later, so a
+ * test that acts step after step on what each page or push left settles
+ * here rather than racing it. Note that the wait joins the notify manager's
+ * own queue (`notifyManager.schedule`) rather than a timer of its own, so it
+ * holds whatever that queue's scheduler is, and that a test faking
+ * `setTimeout` waits on nothing here, since the queue runs on its faked
+ * clock; one faking `Date` alone still waits.
+ */
+export async function settleQueries(between?: () => Promise<void>): Promise<void> {
+  if (globalThis.setTimeout !== PLATFORM_SET_TIMEOUT) return;
+  for (let round = 0; round < NOTIFY_ROUNDS; round += 1) {
+    const notified = Promise.withResolvers<void>();
+    notifyManager.schedule(() => notified.resolve());
+    await act(() => notified.promise);
+    await between?.();
+  }
+}
+
+/**
+ * Starts the test's Query client afresh partway through a test, as each
+ * test's own starts: for a case that draws several worlds in turn, each of
+ * which must read only the reads its own world laid, never one the last
+ * world's surface left cached.
+ */
+export function startQueriesAfresh(): void {
+  testQueryClient.clear();
+  testQueryClient = freshQueryClient();
 }

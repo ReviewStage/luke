@@ -9,6 +9,7 @@ import {
   useConfirmDialog,
 } from "@repo/ui";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { commandAction, PANEL_COMMAND } from "../command-items.js";
 import { confirmFailure } from "../failure-report.js";
 import { agentName } from "../tasks/agent-model.js";
@@ -60,7 +61,7 @@ export interface AgentDelete {
  */
 export function useAgentDelete(
   agent: Pick<AgentSummary, "id" | "title" | "automationName" | "model" | "archivedAt">,
-  agents: Pick<AgentsControl, "onDelete" | "models">,
+  agents: Pick<AgentsControl, "deleteAgent" | "models">,
   input: { readonly shown: boolean; readonly onDeleted?: (() => void) | undefined },
 ): AgentDelete {
   const { shown, onDeleted } = input;
@@ -68,10 +69,11 @@ export function useAgentDelete(
     surface: FAILURE_SURFACE.AGENT_DELETE,
     about: { agentId: agent.id },
   });
+  const deleting = useMutation(agents.deleteAgent);
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
     () =>
-      agents.onDelete(agent.id).then((result) => {
+      deleting.mutateAsync(agent.id).then((result) => {
         if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onDeleted?.();
         return heard(result);
       }),

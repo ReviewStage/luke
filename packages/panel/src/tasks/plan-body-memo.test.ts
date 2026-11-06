@@ -12,7 +12,7 @@ import { readExperiments } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
-import type { PlanEditDoor } from "./use-plan-editing.js";
+import { type PlanEditSend, planEditMutation } from "./plan-edit-mutation.js";
 
 // Note that the plan's document, comments, and history stand only while the account has Plans on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
@@ -58,7 +58,7 @@ function taskWith(body: string, by: typeof DEAN, at: number): Task {
   };
 }
 
-const NEVER_SAVED: PlanEditDoor = () => new Promise(() => undefined);
+const NEVER_SAVED: PlanEditSend = () => new Promise(() => undefined);
 
 /**
  * Draws `task` on Dean's page as the task's own page hands it over: every
@@ -80,7 +80,7 @@ function draw(task: Task): void {
         createElement(PlanBody, {
           task,
           reader: { readerId: DEAN.userId },
-          onEdit: (request) => NEVER_SAVED(request),
+          edit: planEditMutation(task.id, NEVER_SAVED),
           onShowHistory: () => undefined,
           sectionLinks: { workspace: "acme", onOpen: () => undefined, reveal: undefined },
         }),
