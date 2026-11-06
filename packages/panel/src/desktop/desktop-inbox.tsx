@@ -605,7 +605,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                   columns={columns.shown}
                   rows={columns.rows}
                   head={{
-                    shown: tasks.shown,
+                    // Note that a panel filling the window covers the list, so H and E stand down under it.
+                    shown: tasks.shown && !sidePanel.fullScreen,
                     // Note that a task's items are listed whole, so its Inbox offers no view's menu.
                     view: narrowedTask === undefined ? choices : undefined,
                     search,

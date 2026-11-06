@@ -3611,6 +3611,7 @@ it.effect(
         }),
       );
       yield* settled;
+      assert.equal(pool.queued().length, 2, "the close waits behind the mark");
       assert.deepEqual(
         yield* call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
           clientKey: "close-1",
