@@ -730,6 +730,27 @@ test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, 
   assert.deepEqual(tabs, []);
 });
 
+test("the Tasks row pressed while the Board stands leaves nothing, the Board being the router's place it opens", async () => {
+  const tabs: PanelTab[] = [];
+  const opened: string[] = [];
+  const page = mount(
+    false,
+    {
+      boardView: { ...tasksControl().boardView, open: true, onOpen: () => opened.push("board") },
+    },
+    PANEL_TAB.TASKS,
+    (tab) => tabs.push(tab),
+  );
+  await settle();
+  const row = placeRow(page, "Tasks");
+  assert.ok(row);
+  act(() => row.click());
+
+  // Note that leaving would stand the window's state over the Board, which opening the Board standing does not undo.
+  assert.deepEqual(tabs, []);
+  assert.deepEqual(opened, ["board"]);
+});
+
 test("a press on the Automations row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   const told: SidebarCollapse["overlay"][] = [];
   const page = mount(false, {}, PANEL_TAB.TASKS, ignore, {

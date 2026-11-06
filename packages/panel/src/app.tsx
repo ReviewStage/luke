@@ -425,7 +425,9 @@ function AppWindow(): React.JSX.Element {
     boardView,
     personView,
   });
-  listedSlug.current = tasks.workspaces.find((each) => each.id === tasks.workspace?.id)?.slug;
+  // Note that a workspace an older service named no slug for is named in its address by its id (`workspace-routes.ts`).
+  listedSlug.current =
+    tasks.workspace === undefined ? undefined : (tasks.workspace.slug ?? tasks.workspace.id);
   // An account leaving, signed out, deleted, or switched, takes the window's place with it, so the
   // next account lands on Home rather than on the Settings page the last one left from. Note that
   // the leave passes the guard, because the unsaved work it would ask about was the account's that left.
@@ -699,10 +701,10 @@ function AppWindow(): React.JSX.Element {
   );
 
   // A person pressed anywhere in the window opens their page on the Plans tab, in the workspace the place named them in.
-  const openPerson = useSteadyDoor((userId: string, name?: string, workspaceId?: string) => {
-    changeTab(PANEL_TAB.TASKS);
-    tasks.personView.onOpen(userId, name, workspaceId);
-  });
+  // Note that a person's page is the router's place, whose navigation stands it from wherever the window stands, Settings among them.
+  const openPerson = useSteadyDoor((userId: string, name?: string, workspaceId?: string) =>
+    tasks.personView.onOpen(userId, name, workspaceId),
+  );
   const preloadPerson = useSteadyDoor((userId: string, workspaceId?: string) =>
     tasks.personView.onPreload(userId, workspaceId),
   );

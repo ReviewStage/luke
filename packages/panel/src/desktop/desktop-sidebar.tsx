@@ -1898,10 +1898,8 @@ function SidebarColumn({
     leaveRouted();
     tasks.inboxView.onOpen();
   };
-  const openBoard = () => {
-    leaveRouted();
-    tasks.boardView.onOpen();
-  };
+  // Note that the Board is the router's place, which its navigation stands from wherever the window stands, as Admin's does.
+  const openBoard = () => tasks.boardView.onOpen();
   const openAutomations = () => {
     leaveRouted();
     tasks.automationsView.onOpen();
