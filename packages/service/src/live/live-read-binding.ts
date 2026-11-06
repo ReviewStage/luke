@@ -29,11 +29,12 @@ import type { SyncTable } from "@repo/database/sync/sync-table";
 import {
   type AnyLiveRead,
   type AnyLiveRows,
+  LIVE_PARAM,
   type LiveReadParams,
   ORDER,
 } from "@repo/features/live-read";
 import { asc, desc, type SQL, type SQLWrapper } from "drizzle-orm";
-import { type Effect, Option, type Schema } from "effect";
+import { Duration, type Effect, Option, type Schema } from "effect";
 import type { HostedRefusal } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
 import {
@@ -42,6 +43,9 @@ import {
   type LiveReadName,
   type LiveTopics,
 } from "../sync/live-query.js";
+
+/** How often a held poll looks at a read a surface watches closely, such as a Mac's commands or an agent's browser tabs. */
+export const WATCHED_LOOK = Duration.seconds(1);
 
 /** A selection's columns: each a column or a typed expression, under the key its row names it by. */
 type LiveColumns = Readonly<Record<string, SQLWrapper>>;
@@ -137,8 +141,29 @@ interface LiveReadRequest<Read extends AnyLiveRead> {
   readonly params: LiveReadParams<Read>;
 }
 
+/** The params a bound read's service binds itself (`LIVE_PARAM.SERVED`), each as text. */
+type ServedParams<Read extends AnyLiveRead> = Readonly<{
+  [Key in keyof Read["params"] & string as Read["params"][Key] extends typeof LIVE_PARAM.SERVED
+    ? Key
+    : never]: string;
+}>;
+
+/** How the service answers a bound read beside its statements: who it admits, the params it binds itself, how often a held poll looks, and the fields beside its rows. */
+interface LiveReadAnswering<Read extends AnyLiveRead> {
+  /** Whether the caller, already the account the read names, may read it; refused otherwise. */
+  admit?(params: LiveReadParams<Read>): Effect.Effect<void, HostedRefusal, WebServices>;
+  /** The params it binds itself, given those its query bound; required where it declares one. */
+  serve?(
+    params: Omit<LiveReadParams<Read>, keyof ServedParams<Read>>,
+  ): Effect.Effect<ServedParams<Read>, HostedRefusal, WebServices>;
+  /** How often a held poll looks at it; every three seconds where it names none, every second for a read a surface watches closely (`WATCHED_LOOK`). */
+  readonly look?: Duration.Duration;
+  /** What the answer carries beside its statements. */
+  beside?(asked: LiveReadRequest<Read>): Effect.Effect<BesideOf<Read>, HostedRefusal, WebServices>;
+}
+
 /** How a declared read is answered by the service. */
-export interface LiveReadBinding<Read extends AnyLiveRead> {
+export interface LiveReadBinding<Read extends AnyLiveRead> extends LiveReadAnswering<Read> {
   /** The synced tables its statements read. */
   readonly reads: readonly SyncTable[];
   /** The topics a write to its rows notifies, for the params bound, or how to look them up. */
@@ -147,18 +172,13 @@ export interface LiveReadBinding<Read extends AnyLiveRead> {
   statements(params: LiveReadParams<Read>): {
     readonly [Part in keyof Read["parts"]]: Option.Option<LiveStatement>;
   };
-  /** Whether the caller, already the account the read names, may read it; refused otherwise. */
-  admit?(params: LiveReadParams<Read>): Effect.Effect<void, HostedRefusal, WebServices>;
-  /** What the answer carries beside its statements. */
-  beside?(asked: LiveReadRequest<Read>): Effect.Effect<BesideOf<Read>, HostedRefusal, WebServices>;
 }
 
 /** A declared read bound: the live read Sync wakes, beside its declaration and how its caller is admitted and its answer completed. */
 export interface BoundLiveRead<Read extends AnyLiveRead = AnyLiveRead>
-  extends LiveQuery<keyof Read["params"] & string, keyof Read["parts"] & string> {
+  extends LiveQuery<keyof Read["params"] & string, keyof Read["parts"] & string>,
+    LiveReadAnswering<Read> {
   readonly declaration: Read;
-  admit?(params: LiveReadParams<Read>): Effect.Effect<void, HostedRefusal, WebServices>;
-  beside?(asked: LiveReadRequest<Read>): Effect.Effect<BesideOf<Read>, HostedRefusal, WebServices>;
 }
 
 /** Any bound read, as the registry holds it beside the definitions. */
@@ -189,10 +209,15 @@ export function bindLiveRead<Read extends AnyLiveRead & { readonly name: LiveRea
       Option.all(binding.statements(bound)) as Option.Option<Readonly<Record<Part, LiveStatement>>>,
     mode: read.mode,
   });
+  const served = Object.values(read.params).includes(LIVE_PARAM.SERVED);
+  if (served && binding.serve === undefined)
+    throw new Error(`the live read ${read.name} serves a param it binds nowhere`);
   return {
     ...query,
     declaration: read,
     ...(binding.admit === undefined ? undefined : { admit: binding.admit }),
+    ...(binding.serve === undefined ? undefined : { serve: binding.serve }),
+    ...(binding.look === undefined ? undefined : { look: binding.look }),
     ...(binding.beside === undefined ? undefined : { beside: binding.beside }),
   };
 }

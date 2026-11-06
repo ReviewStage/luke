@@ -247,7 +247,7 @@ import {
 } from "../sync/live-query.js";
 import { NO_TOPICS } from "../sync/watch.js";
 import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
-import type { BoundLiveRead } from "./live-read-binding.js";
+import { type BoundLiveRead, WATCHED_LOOK } from "./live-read-binding.js";
 import { type LiveSealer, NO_ROWS_DIGEST, pollSealer } from "./poll-sealer.js";
 import { hostsRead } from "./reads/hosts.js";
 import { countAnswerBytes, countAnswerWait } from "./transcript-metrics.js";
@@ -276,7 +276,7 @@ export interface LiveProcedureSeams {
  */
 const LIVE_POLL_HOLD = {
   LOOK: Duration.seconds(3),
-  WATCHED_LOOK: Duration.seconds(1),
+  WATCHED_LOOK,
   HOLD: Duration.seconds(25),
 } as const;
 
@@ -854,14 +854,16 @@ function answerBoundRead<Read extends AnyLiveRead>(read: BoundLiveRead<Read>) {
       if (param === LIVE_PARAM.USER) {
         yield* sameUser({ [LIVE_USER_QUERY]: asked[key] }, context.userId);
         params[key] = context.userId;
-      } else {
+      } else if (param !== LIVE_PARAM.SERVED) {
         params[key] = asked[key] ?? "";
       }
     }
-    // SAFETY: every param the declaration names is bound above, and no other.
-    const bound = params as LiveReadParams<Read>;
+    // SAFETY: every param the query names is bound above, and the binding serves the rest (`bindLiveRead` holds it to).
+    const served = read.serve === undefined ? undefined : yield* read.serve(params as never);
+    // SAFETY: every param the declaration names is bound above or served, and no other.
+    const bound = { ...params, ...served } as LiveReadParams<Read>;
     if (read.admit !== undefined) yield* read.admit(bound);
-    const sealed = yield* liveQueryParts(read, bound, asked);
+    const sealed = yield* liveQueryParts(read, bound, asked, read.look);
     const beside =
       read.beside === undefined
         ? undefined
