@@ -384,6 +384,14 @@ function newest(items: readonly InboxItem[]): number {
   return Math.max(...items.map((each) => each.updatedAt));
 }
 
+/** Whether the item is a question: open, its thread holding an ask still open; a notice is not. */
+function asking(item: InboxItem): boolean {
+  return (
+    item.status === INBOX_STATUS.OPEN &&
+    (item.thread ?? []).some((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)
+  );
+}
+
 /** Every task holding items as main's read of the account names it, the latest changed first. */
 const HOLDINGS: readonly AppInboxTaskHolding[] = [...INBOXES]
   .map(([taskId, items]) => ({
