@@ -1,8 +1,7 @@
 /**
- * eve-sessions.ts -- the one interface every caller reaches a coding agent's sessions through, and the words its calls answer in.
+ * agent-sessions.ts -- the one interface every caller reaches a coding agent's sessions through, and the words its calls answer in.
  *
- * The interface and its outcomes were eve's session routes' first, and keep
- * their names; every implementation now is a native harness's
+ * Every implementation is a native harness's
  * (`../coder-host/runtime-sessions.ts` routes each conversation to its own).
  */
 
@@ -10,16 +9,31 @@ import { failureKind } from "@repo/runtime/effect";
 import type { UserContent } from "ai";
 import { Data, type Effect, Schema as EffectSchema } from "effect";
 import type * as HttpClientError from "effect/http/HttpClientError";
-import type { EVE_HOST_TURN, EveHostTurn } from "./bounds.js";
+import { RUN_TURN_ORIGIN, type RunTurnOrigin, TURN_TRIGGER, type TurnTrigger } from "../../core.js";
+
+/** What kind of turn a message opens. */
+export const SESSION_TURN = {
+  TYPED: "typed",
+} as const;
+
+export type SessionTurn = (typeof SESSION_TURN)[keyof typeof SESSION_TURN];
+
+/** The run stream's origin and trigger for each kind of turn a native runner's events record. */
+export const SESSION_TURN_KIND = {
+  [SESSION_TURN.TYPED]: {
+    origin: RUN_TURN_ORIGIN.TYPED,
+    trigger: TURN_TRIGGER.ASK,
+  },
+} as const satisfies Record<
+  SessionTurn,
+  { readonly origin: RunTurnOrigin; readonly trigger: TurnTrigger }
+>;
 
 /** A typed turn: the account's own words, the one kind a route's client may send. */
-export type EveTypedTurn = typeof EVE_HOST_TURN.TYPED;
-
-const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_turn" } as const;
-const EVE_RESET_STATUS = { RESET: "reset", NO_ACTIVE_SESSION: "no_active_session" } as const;
+export type TypedTurn = typeof SESSION_TURN.TYPED;
 
 /** The session's runtime was not reached, or never answered whole; the client's own error says which, for the operator. */
-export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
+export class SessionUnreachable extends Data.TaggedError("SessionUnreachable")<{
   readonly cause: HttpClientError.HttpClientError;
 }> {}
 
@@ -29,14 +43,14 @@ export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
  * is not written, because it names the request's address and can describe
  * the body it sent, and the platform's error beneath it is not either.
  */
-export function describeUnreachable(failure: EveUnreachable): string {
+export function describeUnreachable(failure: SessionUnreachable): string {
   const kind = failureKind(failure.cause);
   const status = failure.cause.response?.status;
   return status === undefined ? kind : `${kind} ${status}`;
 }
 
 /** How a session answered a call: what it accepted, a session that no longer runs, one still coming up, or an answer this build cannot read as any. */
-export const EVE_SEND_OUTCOME = {
+export const SESSION_SEND_OUTCOME = {
   ACCEPTED: "accepted",
   /** The session does not run: unknown, or ended; the conversation needs a new one. */
   RETIRED: "retired",
@@ -85,7 +99,7 @@ export type KeyRefusal = (typeof KEY_REFUSAL)[keyof typeof KEY_REFUSAL];
  */
 export const RUNTIME_REFUSAL = {
   NOT_HERE: "not_here",
-  /** The agent's session ended for good, as one that ran on eve did; nothing reaches it again, and only a new agent goes on from its work. */
+  /** The agent's session ended for good, as one on the retired runtime has; nothing reaches it again, and only a new agent goes on from its work. */
   ENDED: "ended",
   /** The agent's device is a host its account removed; no message reaches it again. */
   DEVICE_REMOVED: "device_removed",
@@ -100,8 +114,8 @@ export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUS
  * API key's, or the runtime's refusal where that is why. The one shape a failed open or send
  * has, here and as the native relay reads it off the wire.
  */
-export const EveFailedSchema = EffectSchema.Struct({
-  outcome: EffectSchema.Literal(EVE_SEND_OUTCOME.FAILED),
+const SessionFailedSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literal(SESSION_SEND_OUTCOME.FAILED),
   status: EffectSchema.Number,
   planRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PLAN_REFUSAL))),
   /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
@@ -110,55 +124,55 @@ export const EveFailedSchema = EffectSchema.Struct({
   runtimeRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(RUNTIME_REFUSAL))),
 });
 
-export type EveFailed = typeof EveFailedSchema.Type;
+export type SessionFailed = typeof SessionFailedSchema.Type;
 
-type EveOpened =
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.ACCEPTED; readonly sessionId: string }
-  | EveFailed;
+type SessionOpened =
+  | { readonly outcome: typeof SESSION_SEND_OUTCOME.ACCEPTED; readonly sessionId: string }
+  | SessionFailed;
 
-type EveSent =
+type SessionSent =
   | {
-      readonly outcome: typeof EVE_SEND_OUTCOME.ACCEPTED;
+      readonly outcome: typeof SESSION_SEND_OUTCOME.ACCEPTED;
       readonly sessionId: string;
       readonly deliveryId: string;
     }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.RETIRED }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
-  | EveFailed;
+  | { readonly outcome: typeof SESSION_SEND_OUTCOME.RETIRED }
+  | { readonly outcome: typeof SESSION_SEND_OUTCOME.NOT_READY }
+  | SessionFailed;
 
 /** How a session answered a cancel: a turn canceled, none under way, or a failure. */
-export const EVE_CANCEL_OUTCOME = {
-  ACCEPTED: EVE_CANCEL_STATUS.ACCEPTED,
-  NO_ACTIVE_TURN: EVE_CANCEL_STATUS.NO_ACTIVE_TURN,
+export const SESSION_CANCEL_OUTCOME = {
+  ACCEPTED: "accepted",
+  NO_ACTIVE_TURN: "no_active_turn",
   FAILED: "failed",
 } as const;
 
-type EveCanceled =
-  | { readonly outcome: typeof EVE_CANCEL_OUTCOME.ACCEPTED }
-  | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
+type SessionCanceled =
+  | { readonly outcome: typeof SESSION_CANCEL_OUTCOME.ACCEPTED }
+  | { readonly outcome: typeof SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | {
-      readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED;
+      readonly outcome: typeof SESSION_CANCEL_OUTCOME.FAILED;
       readonly status: number;
       readonly runtimeRefusal?: RuntimeRefusal;
     };
 
 /** How a session answered a reset: retired now, one that no longer ran, or a failure. */
-export const EVE_RESET_OUTCOME = {
-  RESET: EVE_RESET_STATUS.RESET,
-  NO_ACTIVE_SESSION: EVE_RESET_STATUS.NO_ACTIVE_SESSION,
+export const SESSION_RESET_OUTCOME = {
+  RESET: "reset",
+  NO_ACTIVE_SESSION: "no_active_session",
   FAILED: "failed",
 } as const;
 
-type EveReset =
-  | { readonly outcome: typeof EVE_RESET_OUTCOME.RESET }
-  | { readonly outcome: typeof EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }
+type SessionReset =
+  | { readonly outcome: typeof SESSION_RESET_OUTCOME.RESET }
+  | { readonly outcome: typeof SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION }
   | {
-      readonly outcome: typeof EVE_RESET_OUTCOME.FAILED;
+      readonly outcome: typeof SESSION_RESET_OUTCOME.FAILED;
       readonly status: number;
       readonly runtimeRefusal?: RuntimeRefusal;
     };
 
-export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
+export interface SessionMessage<Turn extends SessionTurn = SessionTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
@@ -182,14 +196,16 @@ export interface EveMessage<Turn extends EveHostTurn = EveHostTurn> {
  * client composed for one kind alone would pass for one that sends any
  * kind, and the narrowing would hold nothing.
  */
-export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
+export interface AgentSessions<Turn extends SessionTurn = SessionTurn> {
   /** Opens a session over the conversation with its first message; the answer names the session, whose first turn is the message's. */
-  readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
+  readonly open: (
+    message: SessionMessage<Turn>,
+  ) => Effect.Effect<SessionOpened, SessionUnreachable>;
   /** Hands a message to the session the conversation runs in; the answer names the delivery its turn's events will carry. */
   readonly send: (
     sessionId: string,
-    message: EveMessage<Turn>,
-  ) => Effect.Effect<EveSent, EveUnreachable>;
+    message: SessionMessage<Turn>,
+  ) => Effect.Effect<SessionSent, SessionUnreachable>;
   /**
    * Cancels exactly the turn named, by the runtime's own id for it. A turn
    * no longer under way answers `no_active_turn` and the session's next turn
@@ -197,11 +213,11 @@ export interface AgentSessions<Turn extends EveHostTurn = EveHostTurn> {
    * turn under way, because between a caller's read and the answer that
    * turn can be the one queued after the one the caller meant.
    */
-  cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCanceled, EveUnreachable>;
+  cancel(sessionId: string, turnId: string): Effect.Effect<SessionCanceled, SessionUnreachable>;
   /**
    * Retires the session for good: a turn under way is canceled and the
    * session takes nothing again; a session that no longer runs answers
    * `no_active_session`.
    */
-  reset(sessionId: string): Effect.Effect<EveReset, EveUnreachable>;
+  reset(sessionId: string): Effect.Effect<SessionReset, SessionUnreachable>;
 }

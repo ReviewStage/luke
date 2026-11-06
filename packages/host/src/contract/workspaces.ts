@@ -24,91 +24,179 @@ import {
 } from "@repo/features/tasks-view";
 import { workspaceInvitationSchema } from "@repo/features/workspace-invitation-wire";
 import { workspaceMemberSchema, workspaceSchema } from "@repo/features/workspace-wire";
+import { ACT } from "@repo/sync";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
+import { contractOf, declaredActs, hostAct } from "./declared-act.js";
 import { WORKSPACE_ACT_KIND } from "./kinds.js";
 
 /**
- * workspaces.ts -- the panel's asks of the host about the account's workspaces, as procedures.
+ * workspaces.ts -- the panel's asks of the host about the account's workspaces: its plain acts declared, and the procedures of the holds and the opened addresses beside them.
  *
- * Each output is its value's schema flipped, so oRPC's output check encodes
- * the row's value into what crosses the port; a write that answers nothing
- * the panel reads answers `void`.
+ * Only a panel draws a workspace, so every act is the panel's alone. Each
+ * plain act answers the value the panel reads, or is refused: a write the
+ * account's role does not allow, an address already invited, or a slug
+ * refused, each in words that say so, and anything else, the closed gate
+ * among it, in the act's own sentence (`compose-tasks.ts`'s
+ * `workspaceAnswered`). A write that answers nothing the panel reads answers
+ * `void`. A connection's handler answers the install address the service
+ * named, which its procedure, written by hand, opens (`act-port/workspace-procedures.ts`),
+ * answering the window nothing. Each hold, and its Try again, stays a
+ * procedure of its own.
  */
 
-const answersWorkspace = EffectSchema.flip(workspaceSchema);
-const answersInvitations = EffectSchema.flip(EffectSchema.Array(workspaceInvitationSchema));
-const answersMembers = EffectSchema.flip(EffectSchema.Array(workspaceMemberSchema));
-const answersTokenRepositories = EffectSchema.flip(
-  EffectSchema.Array(workspaceTokenRepositorySchema),
-);
+const members = EffectSchema.Array(workspaceMemberSchema);
+
+/** The workspaces' plain acts, each answered by the tasks' composer. */
+export const WORKSPACE_ACTS = declaredActs({
+  WORKSPACE_CREATE: hostAct({
+    input: tasksWorkspaceCreateParamsSchema,
+    output: workspaceSchema,
+    refusal: "Could not make that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_RENAME: hostAct({
+    input: tasksWorkspaceRenameParamsSchema,
+    output: workspaceSchema,
+    refusal: "Could not rename that workspace on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_INVITE: hostAct({
+    input: tasksWorkspaceInviteParamsSchema,
+    output: workspaceInvitationSchema,
+    refusal: "Could not invite that address on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_INVITATION_CANCEL: hostAct({
+    input: tasksWorkspaceInvitationCancelParamsSchema,
+    output: EffectSchema.Array(workspaceInvitationSchema),
+    refusal: "Could not cancel that invitation on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_GITHUB_CONNECT: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: EffectSchema.String,
+    portOutput: EffectSchema.Void,
+    refusal: "Could not connect GitHub to that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    byHand: true,
+  }),
+  WORKSPACE_SENTRY_INSTALL: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: EffectSchema.String,
+    portOutput: EffectSchema.Void,
+    refusal: "Could not install Sentry for that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+    byHand: true,
+  }),
+  WORKSPACE_GITHUB_DISCONNECT: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: EffectSchema.Void,
+    refusal: "Could not disconnect GitHub from that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_SENTRY_DISCONNECT: hostAct({
+    input: tasksWorkspaceSentryDisconnectParamsSchema,
+    output: workspaceSentryAnswerSchema,
+    refusal: "Could not disconnect Sentry from that workspace on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_SLACK_BOT_CONNECT: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: workspaceSlackBotAnswerSchema,
+    refusal: "Could not connect the Slack bot to that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_SLACK_BOT_DISCONNECT: hostAct({
+    input: tasksWorkspaceParamsSchema,
+    output: workspaceSlackBotAnswerSchema,
+    refusal: "Could not disconnect the Slack bot from that workspace on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_SLACK_BOT_NOTIFICATIONS: hostAct({
+    input: tasksWorkspaceSlackBotNotificationsParamsSchema,
+    output: workspaceSlackBotAnswerSchema,
+    refusal: "Could not change your Slack notifications on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_SLACK_BOT_REPOSITORY: hostAct({
+    input: tasksWorkspaceSlackBotRepositoryParamsSchema,
+    output: workspaceSlackBotAnswerSchema,
+    refusal: "Could not change the Slack bot's default repository on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_SLACK_BOT_CHANNEL: hostAct({
+    input: tasksWorkspaceSlackBotChannelParamsSchema,
+    output: workspaceSlackBotAnswerSchema,
+    refusal: "Could not change that Slack channel on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_MEMBER_REMOVE: hostAct({
+    input: tasksWorkspaceMemberRemoveParamsSchema,
+    output: members,
+    refusal: "Could not remove that member on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_MEMBER_ROLE: hostAct({
+    input: tasksWorkspaceMemberRoleParamsSchema,
+    output: members,
+    refusal: "Could not change that member's role on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_TRANSFER: hostAct({
+    input: tasksWorkspaceTransferParamsSchema,
+    output: members,
+    refusal: "Could not transfer that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_LEAVE: hostAct({
+    input: tasksWorkspaceLeaveParamsSchema,
+    output: EffectSchema.Void,
+    refusal: "Could not leave that workspace on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_PHOTO_SET: hostAct({
+    input: tasksWorkspacePhotoSetParamsSchema,
+    output: workspaceSchema,
+    refusal: "Could not change that workspace's photo on this system.",
+    panelOnly: true,
+    door: ACT.REMOTE_WORK,
+  }),
+  WORKSPACE_SLUG_SET: hostAct({
+    input: tasksWorkspaceSlugSetParamsSchema,
+    output: workspaceSchema,
+    refusal: "Could not change that workspace's link on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+  WORKSPACE_TOKEN_REPOSITORY_SET: hostAct({
+    input: tasksWorkspaceTokenRepositorySetParamsSchema,
+    output: EffectSchema.Array(workspaceTokenRepositorySchema),
+    refusal: "Could not change that workspace's repositories on this system.",
+    panelOnly: true,
+    door: ACT.ROW_WRITE,
+  }),
+});
 
 export const workspaceActsContract = {
-  [WORKSPACE_ACT_KIND.WORKSPACE_CREATE]: actProcedure(
-    "Could not make that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceCreateParamsSchema))
-    .output(answersWorkspace),
-  [WORKSPACE_ACT_KIND.WORKSPACE_RENAME]: actProcedure(
-    "Could not rename that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceRenameParamsSchema))
-    .output(answersWorkspace),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITE]: actProcedure(
-    "Could not invite that address on this system.",
-  )
-    .input(exactInput(tasksWorkspaceInviteParamsSchema))
-    .output(EffectSchema.flip(workspaceInvitationSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_INVITATION_CANCEL]: actProcedure(
-    "Could not cancel that invitation on this system.",
-  )
-    .input(exactInput(tasksWorkspaceInvitationCancelParamsSchema))
-    .output(answersInvitations),
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT]: actProcedure(
-    "Could not connect GitHub to that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_DISCONNECT]: actProcedure(
-    "Could not disconnect GitHub from that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]: actProcedure(
-    "Could not install Sentry for that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]: actProcedure(
-    "Could not disconnect Sentry from that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceSentryDisconnectParamsSchema))
-    .output(EffectSchema.flip(workspaceSentryAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CONNECT]: actProcedure(
-    "Could not connect the Slack bot to that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_DISCONNECT]: actProcedure(
-    "Could not disconnect the Slack bot from that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_NOTIFICATIONS]: actProcedure(
-    "Could not change your Slack notifications on this system.",
-  )
-    .input(exactInput(tasksWorkspaceSlackBotNotificationsParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_REPOSITORY]: actProcedure(
-    "Could not change the Slack bot's default repository on this system.",
-  )
-    .input(exactInput(tasksWorkspaceSlackBotRepositoryParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLACK_BOT_CHANNEL]: actProcedure(
-    "Could not change that Slack channel on this system.",
-  )
-    .input(exactInput(tasksWorkspaceSlackBotChannelParamsSchema))
-    .output(EffectSchema.flip(workspaceSlackBotAnswerSchema)),
+  ...contractOf(WORKSPACE_ACTS),
   // Note that the hold's stream carries nothing: the held people reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_FOLLOW]: actProcedure(
     "Could not follow that workspace's members on this system.",
@@ -153,36 +241,6 @@ export const workspaceActsContract = {
   )
     .input(exactInput(workspacePeopleFollowSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_REMOVE]: actProcedure(
-    "Could not remove that member on this system.",
-  )
-    .input(exactInput(tasksWorkspaceMemberRemoveParamsSchema))
-    .output(answersMembers),
-  [WORKSPACE_ACT_KIND.WORKSPACE_MEMBER_ROLE]: actProcedure(
-    "Could not change that member's role on this system.",
-  )
-    .input(exactInput(tasksWorkspaceMemberRoleParamsSchema))
-    .output(answersMembers),
-  [WORKSPACE_ACT_KIND.WORKSPACE_TRANSFER]: actProcedure(
-    "Could not transfer that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceTransferParamsSchema))
-    .output(answersMembers),
-  [WORKSPACE_ACT_KIND.WORKSPACE_LEAVE]: actProcedure(
-    "Could not leave that workspace on this system.",
-  )
-    .input(exactInput(tasksWorkspaceLeaveParamsSchema))
-    .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_PHOTO_SET]: actProcedure(
-    "Could not change that workspace's photo on this system.",
-  )
-    .input(exactInput(tasksWorkspacePhotoSetParamsSchema))
-    .output(answersWorkspace),
-  [WORKSPACE_ACT_KIND.WORKSPACE_SLUG_SET]: actProcedure(
-    "Could not change that workspace's link on this system.",
-  )
-    .input(exactInput(tasksWorkspaceSlugSetParamsSchema))
-    .output(answersWorkspace),
   // Note that the hold's stream carries nothing: the held repositories reach the panel on app state, and the stream is the window's hold on them.
   [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_FOLLOW]: actProcedure(
     "Could not follow that workspace's repositories on this system.",
@@ -194,9 +252,4 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksWorkspaceTokenRepositoriesParamsSchema))
     .output(EffectSchema.Void),
-  [WORKSPACE_ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET]: actProcedure(
-    "Could not change that workspace's repositories on this system.",
-  )
-    .input(exactInput(tasksWorkspaceTokenRepositorySetParamsSchema))
-    .output(answersTokenRepositories),
 };

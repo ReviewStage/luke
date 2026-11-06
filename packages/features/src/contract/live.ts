@@ -52,9 +52,11 @@ import {
   automationsLiveAnswerSchema,
   automationWorkspaceRunsLiveAnswerSchema,
 } from "../automation-live.js";
-import { hostsLiveAnswerSchema } from "../host-live.js";
+import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
+import { HOSTS_READ } from "../host-live.js";
 import { installedSkillsLiveAnswerSchema } from "../installed-skill-live.js";
 import { integrationStatusesLiveAnswerSchema } from "../integration-live.js";
+import { liveProcedure } from "../live-read.js";
 import {
   ACCOUNT_INBOX_ITEMS,
   accountInboxItemsLiveAnswerSchema,
@@ -70,7 +72,6 @@ import {
   taskRecordLiveAnswerSchema,
 } from "../live-wire.js";
 import { workspaceMemoriesLiveAnswerSchema } from "../memory-live.js";
-import { taskCommentsLiveAnswerSchema } from "../description-comment-live.js";
 import { pullRequestChaptersLiveAnswerSchema } from "../pull-request-chapters-live.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
@@ -303,10 +304,7 @@ export const liveContract = {
     )
     .input(liveWorkspaceSchema)
     .output(EffectSchema.flip(workspaceInvitationsLiveAnswerSchema)),
-  hosts: hostedProcedure
-    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_HOSTS }))
-    .input(liveReadSchema)
-    .output(EffectSchema.flip(hostsLiveAnswerSchema)),
+  [HOSTS_READ.name]: liveProcedure(HOSTS_READ),
   workspaceMemories: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMORIES }))
     .input(liveWorkspaceSchema)

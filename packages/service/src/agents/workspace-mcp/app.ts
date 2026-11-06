@@ -21,7 +21,7 @@
  * Beside it stands one server per integration the agent is handed, at
  * `WORKSPACE_INTEGRATION_MCP_PATH/<connection>` (`notion-2` for a member's second
  * Notion account), on the same bearer and the same JSON-RPC: its
- * `initialize` tells the client what eve tells the model of the connection,
+ * `initialize` tells the client what the model is told of the connection,
  * which account it is among them, as its `instructions`; its
  * `tools/list` is the provider's own tools, and its `tools/call` forwards to
  * the provider on the member's own grant and answers the provider's result
@@ -32,8 +32,9 @@
  *
  * A protocol fault, a body that is no JSON-RPC, an unknown method, or a
  * tool the registry does not hold, is a JSON-RPC error. A tool's own
- * refusal, or a door that failed, is the tool's result marked `isError`,
- * which the agent reads as it reads any tool's answer.
+ * refusal, a call refused at its gate (`../tool-catalog/catalog.ts`'s
+ * `callTool`), or a door that failed, is the tool's result marked
+ * `isError`, which the agent reads as it reads any tool's answer.
  */
 
 import { RENAMED_TOOL, WORKSPACE_MCP_SERVER } from "@repo/features/agent-tools";
@@ -70,16 +71,13 @@ import {
 import type { McpToolSchema } from "../../integrations/mcp-tools.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
-import type { AdmittedConversation } from "../eve-host/conversation.js";
+import type { AdmittedConversation } from "../sessions/admitted-conversation.js";
 import {
-  type CatalogTool,
+  callTool,
   isServedTool,
   type McpContent,
   offeredTools,
-  refusedByDoor,
-  TOOL_CATALOG,
   type WorkspaceMcpServices,
-  type WorkspaceMcpToolResult,
 } from "../tool-catalog/catalog.js";
 import { standingOf } from "../tool-catalog/gates.js";
 import { admitRunnerBearer, presentedBearer } from "./bearer.js";
@@ -221,14 +219,6 @@ interface McpToolCallResult {
   readonly isError: boolean;
 }
 
-/** A door's result as MCP's tool result: as the tool shows it (a picture as an image), else its JSON as one text block, marked an error where the door refused. */
-function toolResult(tool: CatalogTool, result: WorkspaceMcpToolResult): McpToolCallResult {
-  return {
-    content: tool.content?.(result) ?? [{ type: "text", text: JSON.stringify(result) }],
-    isError: refusedByDoor(result),
-  };
-}
-
 /**
  * A call to a tool since renamed, answered as the tool's own refusal that
  * names the tool in its place rather than as an unknown tool, because an
@@ -251,8 +241,8 @@ function renamedToolResult(name: string, renamed: string): McpToolCallResult {
  * What each listed tool declares to Claude Code: the most of its result it
  * takes whole, the pinned CLI's (2.1.304) own ceiling, where past 50,000
  * characters it would save the result to a file and hand the model a path
- * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). Eve
- * hands its model the whole result of a tool of ours, which each door bounds.
+ * (code.claude.com/docs/en/mcp, "Raise the limit for a specific tool"). So
+ * the model is handed the whole result of a tool of ours, which each door bounds.
  */
 const TOOL_META = { "anthropic/maxResultSizeChars": 500_000 } as const;
 
@@ -302,7 +292,7 @@ interface McpServer {
   ) => Effect.Effect<RpcAnswer, never, WorkspaceMcpServices>;
 }
 
-/** One `tools/call` run through the tool's door as the admitted conversation, under the key its input is held (`call-key.ts`). */
+/** One `tools/call` run through the catalog as the admitted conversation (`callTool`), under the key its input is held (`call-key.ts`). */
 function callWorkspaceTool(
   doors: WorkspaceMcpDoors,
   admitted: AdmittedConversation,
@@ -316,8 +306,7 @@ function callWorkspaceTool(
   const renamed = RENAMED_TOOL.get(name);
   if (renamed !== undefined)
     return Effect.succeed(Result.succeed(renamedToolResult(name, renamed)));
-  const tool = isServedTool(name) ? TOOL_CATALOG.get(name) : undefined;
-  if (tool === undefined) {
+  if (!isServedTool(name)) {
     return Effect.succeed(rpcFailure(JSON_RPC_ERROR.INVALID_PARAMS, `Unknown tool: ${name}`));
   }
   const input = fieldOf(params, "arguments") ?? {};
@@ -328,10 +317,10 @@ function callWorkspaceTool(
       callKey: workspaceMcpCallKey(admitted, name, input),
       seams,
     };
-    return tool.run(admitted, input, context);
+    return callTool(admitted, name, input, context);
   }).pipe(
     Effect.provide(doors.browser),
-    Effect.map((result) => Result.succeed(toolResult(tool, result))),
+    Effect.map(({ content, isError }) => Result.succeed({ content, isError })),
     Effect.catchCause((cause) =>
       Effect.as(
         Effect.logWarning(`${PRODUCT_NAME} MCP tool ${name} failed: ${failureKind(cause)}`),

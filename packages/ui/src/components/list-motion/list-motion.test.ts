@@ -11,7 +11,8 @@ import { LIST_MOTION_WAY, ListMotion, motionKey, motionRows, useLeaving } from "
  * a row leaving slides out where it stood and is let go once that has
  * played, a row listed again before it had gone stands again and comes back
  * the same way, a row moved from one list to another glides across rather
- * than leaving and arriving, a change landing while rows still move adds
+ * than leaving and arriving, a row in a list a transform around it draws
+ * smaller glides as far as its layout moved it, a change landing while rows still move adds
  * onto what they play rather than stopping it, a row arriving while the
  * lists are still read only fades in, nothing plays where no motion is
  * to play, a row out of the reader's sight plays nothing, so a change
@@ -201,6 +202,28 @@ test("a row arriving fades in and slides in from the leading edge, and the row i
     [{ transform: `translate(0px, ${-ROW}px)` }, { transform: "none" }],
   ]);
   expect(motionsOf(rowOf("A"))).toEqual([]);
+});
+
+test("a row pushed down in a list a transform around it draws at half its size glides as far as its layout moved it, not as far as it is drawn", () => {
+  const show = draw([["A", "B"]]);
+  const box = document.querySelector("ul")?.parentElement;
+  if (!(box instanceof HTMLElement)) throw new Error("no list box");
+  Object.defineProperty(box, "offsetWidth", { configurable: true, value: COLUMN });
+  Object.defineProperty(box, "offsetHeight", { configurable: true, value: 4 * ROW });
+  const drawnAsLaidOut = vi.mocked(HTMLElement.prototype.getBoundingClientRect);
+  const laidOut = drawnAsLaidOut.getMockImplementation();
+  if (laidOut === undefined) throw new Error("no layout given");
+  drawnAsLaidOut.mockImplementation(function (this: HTMLElement) {
+    if (this === box) return new DOMRect(0, 0, COLUMN / 2, (4 * ROW) / 2);
+    const { x, y, width, height } = laidOut.call(this);
+    return new DOMRect(x / 2, y / 2, width / 2, height / 2);
+  });
+
+  show([["A", "N", "B"]]);
+
+  expect(motionsOf(rowOf("B"))).toEqual([
+    [{ transform: `translate(0px, ${-ROW}px)` }, { transform: "none" }],
+  ]);
 });
 
 test("a list drawn as another scene plays nothing, and what the last scene drew goes at once", () => {

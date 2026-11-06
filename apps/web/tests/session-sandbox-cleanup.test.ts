@@ -10,7 +10,7 @@ import { getTestDB } from "@repo/database/testing";
 import { Effect } from "effect";
 
 /**
- * The queue of eve sessions whose Vercel Sandboxes are still to be deleted,
+ * The queue of agents' sessions whose Vercel Sandboxes are still to be deleted,
  * over a real dialect: what lets go of a session queues it in its own
  * transaction, the purge and an account's deletion, and the sweep works the
  * queue against a Vercel Sandbox that answers from a script, dequeuing a

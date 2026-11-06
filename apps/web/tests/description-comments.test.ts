@@ -4,8 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@repo/database/core/query";
 import { writeAccountPreferences } from "@repo/database/models/account-store";
 import { archiveAgent, createAgent } from "@repo/database/models/agent-store";
-import { writePage } from "@repo/database/models/task-pages";
 import { claimRuntimeSession } from "@repo/database/models/recorded-session";
+import { writePage } from "@repo/database/models/task-pages";
 import { createTask, saveDescriptionText } from "@repo/database/models/task-store";
 import { user } from "@repo/database/schemas/auth";
 import { messages } from "@repo/database/schemas/storage";
@@ -17,7 +17,6 @@ import {
   openWorkspace,
 } from "@repo/database/testing";
 import { AGENT_PAYER, MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@repo/features/agent-wire";
-import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import {
   DESCRIPTION_COMMENT_ACTION,
   DESCRIPTION_COMMENT_ACTOR,
@@ -34,13 +33,14 @@ import {
   descriptionCommentThreadAnswerSchema,
 } from "@repo/features/description-comment-wire";
 import type { DescriptionEditRequest } from "@repo/features/description-edit";
+import { PAGE_SHOWER, taskPageOwner } from "@repo/features/page-wire";
 import { CODER } from "@repo/service/agents/coder-host/bounds";
+import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
 import {
   type AgentSessions,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-} from "@repo/service/agents/eve-host/eve-sessions";
-import { sessionSandboxesLayer } from "@repo/service/agents/session-sandboxes";
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+} from "@repo/service/agents/sessions/agent-sessions";
 import { recordingProductAnalytics, SERVER_EVENT } from "@repo/service/events/server-events";
 import { type AfterResponse, keptAfterResponse } from "@repo/service/http/after-response";
 import { HOSTED_HTTP_STATUS } from "@repo/service/http/http";
@@ -115,16 +115,16 @@ const resolveUserId = (incoming: Request) =>
     Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
   );
 
-/** Every message the fake eve was asked to open a session with, in order. */
-const opened: EveMessage[] = [];
+/** Every message the fake agent sessions were asked to open a session with, in order. */
+const opened: SessionMessage[] = [];
 
-/** eve as the routes reach it under the member's bearer: every open accepted and written down, no other call made. */
-const fakeEve = (): AgentSessions => ({
+/** The agent sessions as the routes reach them under the member's bearer: every open accepted and written down, no other call made. */
+const fakeAgentSessions = (): AgentSessions => ({
   open: (message) =>
     Effect.sync(() => {
       opened.push(message);
       return {
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        outcome: SESSION_SEND_OUTCOME.ACCEPTED,
         sessionId: `wrun_01M${String(opened.length).padStart(22, "0")}`,
       };
     }),
@@ -132,7 +132,7 @@ const fakeEve = (): AgentSessions => ({
     Effect.sync(() => {
       opened.push(message);
       return {
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        outcome: SESSION_SEND_OUTCOME.ACCEPTED,
         sessionId,
         deliveryId: `delivery-${opened.length}`,
       };
@@ -162,7 +162,7 @@ const servicesOver = (clock: Clock.Clock, after: Layer.Layer<AfterResponse> | un
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       ANALYTICS.layer,
-      scriptedHarnessLayer(fakeEve),
+      scriptedHarnessLayer(fakeAgentSessions),
     );
   });
 
@@ -459,7 +459,7 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
 
         const [message] = opened.slice(before);
         assert.ok(message, "the agent was handed the thread");
-        // Note that the message is read as eve was handed it, its words wherever its parts hold them.
+        // Note that the message is read as the agent's session was handed it, its words wherever its parts hold them.
         const words = JSON.stringify(message.message);
         assert.ok(words.includes("Charles Pan sent you a comment thread"));
         assert.ok(words.includes(thread.id));
@@ -736,7 +736,7 @@ it.layer(getTestDB())("a description's comment thread sent to an agent", (it) =>
           ),
         );
 
-        assert.equal(opened.length, before, "eve was asked nothing");
+        assert.equal(opened.length, before, "the agent's session was asked nothing");
         assert.deepEqual(
           replied.entries.map((entry) => [entry.kind, entry.writer?.actor, entry.asked?.actor]),
           [

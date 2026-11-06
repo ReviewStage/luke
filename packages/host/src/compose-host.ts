@@ -63,6 +63,7 @@ import {
   type HostConcern,
   type HostPlatformConcern,
   isPlatformConcern,
+  NOT_ON_THIS_PLATFORM,
   unavailableConcern,
 } from "./host-concerns.js";
 import { KEPT_CONTENT_CHARACTERS, keptContent } from "./kept-content.js";
@@ -365,6 +366,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
                 })),
                 (snapshot) => experimentOn(snapshot.experiments, experiment),
               ),
+            settingsTold: settings.told,
             hostListed: (deviceId) =>
               Effect.map(agentClient.hosts(), (answer) =>
                 "failure" in answer
@@ -377,7 +379,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
             }),
           }),
         )
-      : unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST);
+      : {
+          ...unavailableConcern(HOST_PLATFORM_CONCERN.THIS_MAC_HOST),
+          // Note that a host without This Mac refuses its set, which the act draws as unanswered, as the Gateway's refusal of its method was.
+          acts: { HOSTS_THIS_MAC_SET: () => Effect.fail(new Error(NOT_ON_THIS_PLATFORM)) },
+        };
     const terminals: TerminalsComposer =
       openSocket !== undefined
         ? yield* served(
@@ -435,6 +441,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         cipher: tokenCipher,
         accountId: signedInId,
         queued: pool.queued,
+        queueMoves: pool.queueMoves,
       }).pipe(Scope.provide(scope), Effect.provideContext(fileSystemContext));
       entities = { store, scope };
       // Note that the writes kept waiting are laid back before any read draws, so the first answer draws under them.
@@ -572,7 +579,16 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const assembly: HostAssembly = {
       gateway: service.gateway,
       // Note that each declared act is answered by the one composer whose domain it is, so the table is spread rather than folded.
-      acts: { ...agents.acts },
+      acts: {
+        ...account.acts,
+        ...agents.acts,
+        ...settings.acts,
+        ...thisMacHost.acts,
+        ...automations.acts,
+        ...installedSkills.acts,
+        ...integrations.acts,
+        ...tasks.acts,
+      },
       nodes: kernel.nodes,
       concerns: new Set(Object.values(HOST_CONCERN).filter(running)),
       startOrder: HOST_START_ORDER.filter(running).map((name) => concerns[name]),

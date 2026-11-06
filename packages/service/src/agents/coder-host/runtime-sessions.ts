@@ -1,5 +1,5 @@
 /**
- * runtime-sessions.ts -- a coding agent's sessions answered by the native harness its conversation runs on, and an agent left on eve refused as ended.
+ * runtime-sessions.ts -- a coding agent's sessions answered by the native harness its conversation runs on, and an agent left on the retired runtime refused as ended.
  *
  * Every place that reaches a coding agent's session holds one
  * `AgentSessions`: the composer, an Inbox answer, another agent's message, a GitHub
@@ -45,20 +45,20 @@ import {
   localAgentRefused,
   planLimitReached,
 } from "../../http/http-effect.js";
-import type { EveHostTurn } from "../eve-host/bounds.js";
 import {
   type AgentSessions,
-  EVE_CANCEL_OUTCOME,
-  EVE_RESET_OUTCOME,
-  EVE_SEND_OUTCOME,
-  type EveMessage,
   KEY_REFUSAL,
   type KeyRefusal,
   PLAN_REFUSAL,
   type PlanRefusal,
   RUNTIME_REFUSAL,
   type RuntimeRefusal,
-} from "../eve-host/eve-sessions.js";
+  SESSION_CANCEL_OUTCOME,
+  SESSION_RESET_OUTCOME,
+  SESSION_SEND_OUTCOME,
+  type SessionMessage,
+  type SessionTurn,
+} from "../sessions/agent-sessions.js";
 import { agentLogIds } from "./agent-log.js";
 import { harnessOf, type NativeRuntime, nativeRuntimeOfSession } from "./native-runtime.js";
 
@@ -84,8 +84,8 @@ export const RUNNER_CHECKOUT = {
 
 export type RunnerCheckout = (typeof RUNNER_CHECKOUT)[keyof typeof RUNNER_CHECKOUT];
 
-/** A native harness's sessions: eve's interface, the agent's model and effort as they stand handed to a running runner, and its repositories as they stand checked out in the place it runs in. */
-export interface NativeSessions<Turn extends EveHostTurn = EveHostTurn>
+/** A native harness's sessions: the `AgentSessions` interface, the agent's model and effort as they stand handed to a running runner, and its repositories as they stand checked out in the place it runs in. */
+export interface NativeSessions<Turn extends SessionTurn = SessionTurn>
   extends AgentSessions<Turn> {
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
   /** The agent's credential set afresh for every repository it works in and each one the running place does not hold cloned there (`runner-sessions.ts`); not live where no place runs. */
@@ -105,10 +105,10 @@ export interface NativeAgentSessionsService {
   readonly sessions: (
     runtime: NativeRuntime,
     account: string,
-  ) => Option.Option<Effect.Effect<NativeSessions<EveHostTurn>>>;
+  ) => Option.Option<Effect.Effect<NativeSessions<SessionTurn>>>;
 }
 
-/** The native harnesses a function can launch and write to: the harnesses in the web functions that ship the runner, a relay to them in the eve app. */
+/** The native harnesses a function can launch and write to: the harnesses in the web functions that ship the runner. */
 export class NativeAgentSessions extends Context.Service<
   NativeAgentSessions,
   NativeAgentSessionsService
@@ -116,29 +116,29 @@ export class NativeAgentSessions extends Context.Service<
 
 /** What a call to a native conversation answers where this function cannot reach its harness. */
 const NOT_HERE = {
-  outcome: EVE_SEND_OUTCOME.FAILED,
+  outcome: SESSION_SEND_OUTCOME.FAILED,
   status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   runtimeRefusal: RUNTIME_REFUSAL.NOT_HERE,
 } as const;
 
 /** What an open or a send to an agent whose session ended for good answers: nothing reaches it again. */
 const ENDED = {
-  outcome: EVE_SEND_OUTCOME.FAILED,
+  outcome: SESSION_SEND_OUTCOME.FAILED,
   status: HOSTED_HTTP_STATUS.CONFLICT,
   runtimeRefusal: RUNTIME_REFUSAL.ENDED,
 } as const;
 
 /** What a call answers where the conversation's runtime could not be read. */
 const UNREAD = {
-  outcome: EVE_SEND_OUTCOME.FAILED,
+  outcome: SESSION_SEND_OUTCOME.FAILED,
   status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
 } as const;
 
 /** What a cancel of a session no harness minted answers: it ended for good, so no turn of it is under way. */
-const NO_TURN = { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
+const NO_TURN = { outcome: SESSION_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
 
 /** What a retire of a session no harness minted answers: it ended for good, so it holds nothing to let go of. */
-const NO_SESSION = { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+const NO_SESSION = { outcome: SESSION_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
 
 /** Where the calls of a conversation on no harness, or of one that is no coding agent's, go: nowhere, since its session ended for good. */
 const ENDED_ROUTE = { ended: true } as const;
@@ -151,13 +151,13 @@ type Route = { readonly runtime: NativeRuntime; readonly starter: string } | typ
  * runtime its conversation runs on, as above. The caller reads the
  * conversation's agent as it reads it everywhere, through its workspace.
  */
-export const routedSessions = <Turn extends EveHostTurn>(
+export const routedSessions = <Turn extends SessionTurn>(
   account: string,
 ): Effect.Effect<AgentSessions<Turn>, never, DatabaseServices> =>
   Effect.map(sessionsRouter, (route) => route<Turn>(account));
 
 /** The sessions of each account a composer acts for, as `routedSessions` reads them. */
-export type SessionsRouter = <Turn extends EveHostTurn>(account: string) => AgentSessions<Turn>;
+export type SessionsRouter = <Turn extends SessionTurn>(account: string) => AgentSessions<Turn>;
 
 /**
  * `routedSessions` over the calling fiber's store and native harnesses,
@@ -168,11 +168,11 @@ export const sessionsRouter: Effect.Effect<SessionsRouter, never, DatabaseServic
   function* () {
     const store = yield* Effect.context<DatabaseServices>();
     const native = yield* Effect.serviceOption(NativeAgentSessions);
-    return <Turn extends EveHostTurn>(account: string) => routed<Turn>(account, store, native);
+    return <Turn extends SessionTurn>(account: string) => routed<Turn>(account, store, native);
   },
 );
 
-function routed<Turn extends EveHostTurn>(
+function routed<Turn extends SessionTurn>(
   account: string,
   store: Context.Context<DatabaseServices>,
   native: Option.Option<NativeAgentSessionsService>,
@@ -204,7 +204,7 @@ function routed<Turn extends EveHostTurn>(
     );
 
   /** The session a native open answered claimed as the conversation's record; a claim that fails is logged, and the next message finds the session by its tag all the same. */
-  const claimed = (starter: string, message: EveMessage<Turn>, sessionId: string) =>
+  const claimed = (starter: string, message: SessionMessage<Turn>, sessionId: string) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       yield* claimRuntimeSession(
@@ -230,7 +230,7 @@ function routed<Turn extends EveHostTurn>(
         const reached = harness(route.runtime, route.starter);
         if (Option.isNone(reached)) return NOT_HERE;
         const opened = yield* (yield* reached.value).open(message);
-        if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
+        if (opened.outcome === SESSION_SEND_OUTCOME.ACCEPTED) {
           yield* claimed(route.starter, message, opened.sessionId);
         }
         return opened;
@@ -252,7 +252,7 @@ function routed<Turn extends EveHostTurn>(
       if (runtime === undefined) return Effect.succeed(NO_TURN);
       const reached = harness(runtime, account);
       if (Option.isNone(reached)) {
-        return Effect.succeed({ ...NOT_HERE, outcome: EVE_CANCEL_OUTCOME.FAILED });
+        return Effect.succeed({ ...NOT_HERE, outcome: SESSION_CANCEL_OUTCOME.FAILED });
       }
       return Effect.flatMap(reached.value, (each) => each.cancel(sessionId, turnId));
     },
@@ -262,7 +262,7 @@ function routed<Turn extends EveHostTurn>(
       if (runtime === undefined) return Effect.succeed(NO_SESSION);
       const reached = harness(runtime, account);
       if (Option.isNone(reached)) {
-        return Effect.succeed({ ...NOT_HERE, outcome: EVE_RESET_OUTCOME.FAILED });
+        return Effect.succeed({ ...NOT_HERE, outcome: SESSION_RESET_OUTCOME.FAILED });
       }
       return Effect.flatMap(reached.value, (each) => each.reset(sessionId));
     },
@@ -382,7 +382,7 @@ export const runnerHalted = (
  * or whose provider is asked again later, and never turned to another
  * payer; the starter's API key gone or unreadable, said by name, which only
  * saving it again mends; an agent's device away, refused as a Start on it
- * is; or the service down, as every other failure of eve's or a harness's
+ * is; or the service down, as every other failure of a harness's
  * reads.
  */
 export function failedCallRefusal(failed: {

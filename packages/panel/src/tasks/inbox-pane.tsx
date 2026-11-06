@@ -1593,6 +1593,7 @@ export function InboxPane({
   mentions,
   phone,
   newThread,
+  within,
 }: {
   /** What holds the item: its task, or the automation that started its agent with no task. */
   holder: InboxHolder;
@@ -1618,6 +1619,14 @@ export function InboxPane({
   phone?: InboxPanePhone | undefined;
   /** What the box's checkbox starts a new thread with instead of a reply; none where the page offers none. */
   newThread?: InboxNewThread | undefined;
+  /**
+   * Whether the pane stands inside the room of what holds the item, an
+   * agent's card in its task's column (`agent-threads.tsx`): its bar names
+   * neither the task nor the agent, which the card's tab and the task's
+   * topbar already name, holding the item's title alone, in a bar title's
+   * type, once its heading has scrolled away.
+   */
+  within?: boolean | undefined;
 }): React.JSX.Element {
   const connected = useConnected();
   const now = useMinute();
@@ -1760,7 +1769,10 @@ export function InboxPane({
       ) : (
         <Toolbar
           place="inbox-item"
-          start={TOOLBAR_INSET.COLUMN}
+          // Note that a bar inside the item's holder's room that leads with no way back starts on the title it picks up, words rather than crumbs.
+          start={
+            within === true && onBack === undefined ? TOOLBAR_INSET.PAGE : TOOLBAR_INSET.COLUMN
+          }
           wrapHeading
           lead={
             onBack === undefined ? undefined : (
@@ -1770,14 +1782,18 @@ export function InboxPane({
             )
           }
           title={
-            <Crumbs
-              holder={holder}
-              by={by}
-              doors={doors}
-              title={cardTitle(item.title)}
-              titleShown={headingAway}
-            />
+            within === true ? undefined : (
+              <Crumbs
+                holder={holder}
+                by={by}
+                doors={doors}
+                title={cardTitle(item.title)}
+                titleShown={headingAway}
+              />
+            )
           }
+          pickUp={within === true ? { name: cardTitle(item.title), shown: headingAway } : undefined}
+          quiet={within === true}
           actions={
             <>
               {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}

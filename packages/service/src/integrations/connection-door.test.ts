@@ -381,7 +381,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
   );
 
   it.effect(
-    "a connection switched off but mentioned to the agent is handed to the native turn that starts next, and to that turn alone, as an eve turn takes its mentions",
+    "a connection switched off but mentioned to the agent is handed to the native turn that starts next, and to that turn alone",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;

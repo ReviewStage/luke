@@ -28,22 +28,22 @@ import { CODER } from "./bounds.js";
  * replay-summary.ts -- how much of another agent's transcript a new agent's first message holds, and the summary we write of the steps that do not fit.
  *
  * The replay is sized against the new agent's own context: the share of its
- * model's window eve compacts at, less its instructions, its brief and note,
+ * model's window the retired runtime compacted at, less its instructions, its brief and note,
  * and room for its first steps, each told in a token of two bytes
- * (`BYTES_PER_TOKEN`), not eve's own four, since a replay is mostly tool
+ * (`BYTES_PER_TOKEN`), not a step's estimate of four, since a replay is mostly tool
  * JSON and a model reads that in more, shorter tokens. A source that never
  * compacted, run on the same window, fits whole, since every step it
  * replays fit in that window once; one that compacted, or whose raw steps
  * far outgrow the context it last measured, replays verbatim no more than
  * that context (`measuredBoundBytes`), since its raw rows hold everything
- * eve folded away. Past the bound the newest steps are kept and the oldest
+ * a compaction folded away. Past the bound the newest steps are kept and the oldest
  * summarized, as a compaction would: one call per chunk of them on the new
  * agent's own model at its lowest effort, a few at a time, then one call
  * combining the chunks' summaries, the whole held to a timeout. A summary
  * that cannot be written in time, or at all, leaves the newest steps that
  * fit alone, and never fails the Start. Once fitted, the whole first prompt
  * is told against the window again, and steps, then the summary, are
- * dropped until it fits (`withinWindow`), so no Start hands eve a prompt
+ * dropped until it fits (`withinWindow`), so no Start hands the new agent's harness a prompt
  * its model must refuse.
  */
 
@@ -70,20 +70,20 @@ export const REPLAY_FIT = {
 
 /**
  * The bytes a token of replay text stands for. Note that we count two,
- * not eve's four, because a replay is mostly tool calls' JSON, which reads
+ * not a step's estimate of four, because a replay is mostly tool calls' JSON, which reads
  * at about 2.2 bytes a token: a continue of 3.03 MB was refused at
  * 1,368,155 tokens, 1.77 times what four bytes a token told. Two holds
  * prose and JSON alike under the window, prose with room to spare.
  */
 const BYTES_PER_TOKEN = 2;
 
-/** The bytes a token stands for in eve's own estimate, which a step's recorded instructions are told in. */
+/** The bytes a token stands for in the retired runtime's estimate, which a step's recorded instructions are told in. */
 const EVE_BYTES_PER_TOKEN = 4;
 
 /** The most bytes one UTF-16 code unit of a string takes in UTF-8, which cuts a string to a byte bound by its length. */
 const UTF8_BYTES_PER_UNIT = 3;
 
-/** How far a source's raw steps may outgrow the context it last measured before they are taken to hold what eve folded away. */
+/** How far a source's raw steps may outgrow the context it last measured before they are taken to hold what a compaction folded away. */
 const RAW_PAST_MEASURED = 2;
 
 /** Room for the summary's marker and the line saying what was left out, past its words. */
@@ -152,12 +152,12 @@ export function replayTokens(bytes: number): number {
   return Math.ceil(bytes / BYTES_PER_TOKEN);
 }
 
-/** Tokens eve estimated at four bytes each, told again at two, as the replay beside them is. */
+/** Tokens the retired runtime estimated at four bytes each, told again at two, as the replay beside them is. */
 export function fromEveEstimate(tokens: number): number {
   return replayTokens(tokens * EVE_BYTES_PER_TOKEN);
 }
 
-/** The context a source last measured: the tokens its newest step read, and whether eve had compacted its conversation. */
+/** The context a source last measured: the tokens its newest step read, and whether its conversation had been compacted. */
 export interface MeasuredContext {
   readonly inputTokens: number;
   readonly compacted: boolean;
@@ -165,7 +165,7 @@ export interface MeasuredContext {
 
 /**
  * The bytes the replay's steps and summary may take: the share of the
- * window eve compacts at, less the instructions, the first message's own
+ * window the retired runtime compacted at, less the instructions, the first message's own
  * words, and the headroom, in tokens of two bytes; none where nothing is
  * left.
  */
@@ -182,9 +182,9 @@ export function replayBudgetBytes(
 
 /**
  * The most bytes of a source's steps replayed verbatim, by the context it
- * last measured: that context, where eve compacted the source or its raw
+ * last measured: that context, where the source was compacted or its raw
  * steps outgrow that context `RAW_PAST_MEASURED` times over, because its
- * rows then hold what eve had folded into a summary and its model no longer
+ * rows then hold what a compaction had folded into a summary and its model no longer
  * read; no bound past the window's otherwise, or where it never measured one.
  */
 export function measuredBoundBytes(
@@ -198,7 +198,7 @@ export function measuredBoundBytes(
 
 /**
  * The bytes the first message's files take beside its words: a text file's
- * own, since eve is handed it inlined, and an image's or a PDF's counted at
+ * own, since the harness is handed it inlined, and an image's or a PDF's counted at
  * `REPLAY_FIT.FILE_TOKENS`, since its bytes tell nothing of its tokens.
  */
 export function filesBytes(files: readonly AgentAttachment[]): number {

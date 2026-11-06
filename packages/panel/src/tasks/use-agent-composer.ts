@@ -43,7 +43,7 @@ import { type FailedLine, failedLinesAtom, failedLinesOf } from "./failed-lines.
  * finished turns its status back and starts the transcript reading again.
  *
  * Messages go one at a time, in the order they were sent: the service writes
- * a line and hands it to eve under the conversation's lock, so two sends out
+ * a line and hands it to the agent's session under the conversation's lock, so two sends out
  * at once would take it in either order, and a line sent while one is out
  * waits for its answer here, under the agent's key (`../send-queue.ts`).
  *

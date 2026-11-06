@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { accountPreferencesLiveStatement } from "@repo/database/models/account-store";
 import { browserTabsLiveStatement } from "@repo/database/models/agent-browser-tabs";
 import { ownFailedRunsLiveStatement } from "@repo/database/models/automation-store";
-import { hostsLiveStatement } from "@repo/database/models/host-store";
 import { installedSkillsLiveStatement } from "@repo/database/models/installed-skill-store";
 import { sentryInstallationsLiveStatement } from "@repo/database/models/integration-installation-store";
 import { macCommandsLiveStatement } from "@repo/database/models/mac-command-store";
@@ -18,6 +17,7 @@ import {
 import { taskSectionsLiveStatements } from "@repo/database/models/task-section-store";
 import { workspacesLiveStatements } from "@repo/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@repo/database/testing";
+import { LIVE_PARAM } from "@repo/features/live-read";
 import { MAC_COMMAND_KIND } from "@repo/features/mac-command-wire";
 import { Effect, Option } from "effect";
 import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
@@ -30,6 +30,7 @@ import {
   taskInboxLiveStatements,
 } from "../inbox/inbox-store.js";
 import { integrationStatusesLiveStatement } from "../integrations/integration-store.js";
+import { BOUND_READS } from "../sync/live-queries.js";
 import { taskCommentsLiveStatements } from "../tasks/description-comments-live.js";
 import { taskHistoryLiveStatements } from "../tasks/task-history-live.js";
 import { agentPagesLiveStatements, taskPagesLiveStatements } from "../tasks/task-pages-live.js";
@@ -43,6 +44,23 @@ import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
  */
 
 const USER_ID = "user-live-statements";
+
+/** Every bound read's statements (`../live-read-binding.ts`), by its read and part, each param the reader or a fresh id. */
+function boundStatements() {
+  return Object.fromEntries(
+    BOUND_READS.flatMap((query) => {
+      const params = Object.fromEntries(
+        Object.entries(query.declaration.params).map(([key, param]) => [
+          key,
+          param === LIVE_PARAM.USER ? USER_ID : randomUUID(),
+        ]),
+      );
+      return Object.entries(Option.getOrThrow(query.statements(params))).map(
+        ([part, statement]) => [`${query.name}.${part}`, statement],
+      );
+    }),
+  );
+}
 
 /** Every live statement the endpoints answer, by the part it answers. */
 function liveStatements() {
@@ -128,7 +146,7 @@ function liveStatements() {
     "workspace-integrations.slackChannelRepositories": Option.getOrThrow(
       slackChannelRepositoriesLiveStatement(USER_ID, randomUUID()),
     ),
-    "hosts.hosts": Option.getOrThrow(hostsLiveStatement(USER_ID)),
+    ...boundStatements(),
     ...Object.fromEntries(
       Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
         ([part, query]) => [`sidebar.${part}`, query],

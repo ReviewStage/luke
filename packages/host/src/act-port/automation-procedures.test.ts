@@ -1,27 +1,23 @@
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
-import { AUTOMATION_CALL_FAILURE, AUTOMATION_FOLLOW } from "@repo/features/automation-view";
+import { AUTOMATION_FOLLOW } from "@repo/features/automation-view";
+import { AUTOMATION_ACTION, AUTOMATION_TRIGGER } from "@repo/features/automation-wire";
+import type { WireBoundaryInput } from "@repo/wire";
 import { Effect } from "effect";
-import {
-  type ActPortClient,
-  AUTOMATION_ACT_KIND,
-  type PortActPayload,
-  type PortActResult,
-} from "../contract/index.js";
+import { AUTOMATION_ACT_KIND } from "../contract/index.js";
+import { hostActPort } from "../testing/host-act-port.js";
 import { automationProcedures } from "./automation-procedures.js";
 import type { ActSender } from "./base.js";
-import type { AutomationProceduresDependencies } from "./index.js";
-import { settledAct, type TestActPort, testActPort } from "./testing.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The Automations pages' acts, through the act port as a window calls them:
- * only a panel of this build's own renderer asks; any other
- * window, and a frame this build does not trust, are refused in each
- * kind's own words before the host is asked; and a panel's ask reaches the
- * host with its payload as the panel sent it. A hold's stream has the
- * host hold what it names from its first stream to its last, and carries
- * nothing, since what it holds reaches the panel on app state.
+ * only a panel of this build's own renderer asks; any other window, and a
+ * frame this build does not trust, are refused in each kind's own words
+ * before the service is asked. A hold's stream has the host hold what it
+ * names from its first stream to its last, and carries nothing, since what
+ * it holds reaches the panel on app state.
  */
 
 // The platform's handle on the window that asked, which no procedure here reads.
@@ -36,140 +32,86 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-/** A window's client of the act port serving `procedures`, standing as `actor`, trusted or not. */
-function windowClient(
-  procedures: Parameters<typeof testActPort<unknown>>[0],
-  actor: ActSender,
-  trusted = true,
-): ActPortClient {
-  const port = testActPort<unknown>(procedures);
-  ports.push(port);
-  return port.as(actor, { trusted });
-}
-
 const AUTOMATION_ID = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
-const RUN_KEY = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+const WORKSPACE_ID = "workspace-1";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
+  [AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE]: "Could not make the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE]: "Could not change the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE]: "Could not delete the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_RUN]: "Could not run the automation on this system.",
   [AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]:
     "Could not make a new webhook secret on this system.",
+  [AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY]: "Could not read the automations again on this system.",
 } as const;
 
-type Kind = keyof typeof REFUSAL;
-
-/** One call of each kind, with the payload a panel sends and the host ask it reaches. */
-const ACTS: readonly {
-  kind: Kind;
-  host: string;
-  payload: PortActPayload<Kind>;
-  call: (client: ActPortClient) => Promise<PortActResult<Kind>>;
+/** One ask of each kind, with a payload its schema takes. */
+const ASKS: readonly {
+  readonly kind: keyof typeof REFUSAL;
+  readonly payload: WireBoundaryInput;
 }[] = [
   {
-    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE,
-    host: "change",
-    payload: { automationId: AUTOMATION_ID, change: { enabled: false } },
-    call: (client) =>
-      client[AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE]({
-        automationId: AUTOMATION_ID,
-        change: { enabled: false },
-      }),
+    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_CREATE,
+    payload: {
+      workspaceId: WORKSPACE_ID,
+      repositories: ["acme/web"],
+      name: "Triage new issues",
+      trigger: { kind: AUTOMATION_TRIGGER.SCHEDULE, cron: "0 9 * * 1-5", timezone: "UTC" },
+      action: { kind: AUTOMATION_ACTION.AGENT, prompt: "Triage the issues opened today." },
+    },
   },
   {
-    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE,
-    host: "delete",
-    payload: { automationId: AUTOMATION_ID },
-    call: (client) =>
-      client[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE]({ automationId: AUTOMATION_ID }),
+    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_CHANGE,
+    payload: { automationId: AUTOMATION_ID, change: { enabled: false } },
   },
+  { kind: AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE, payload: { automationId: AUTOMATION_ID } },
   {
     kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RUN,
-    host: "run",
-    payload: { automationId: AUTOMATION_ID, idempotencyKey: RUN_KEY },
-    call: (client) =>
-      client[AUTOMATION_ACT_KIND.AUTOMATIONS_RUN]({
-        automationId: AUTOMATION_ID,
-        idempotencyKey: RUN_KEY,
-      }),
+    payload: {
+      automationId: AUTOMATION_ID,
+      idempotencyKey: "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    },
   },
   {
     kind: AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET,
-    host: "new secret",
     payload: { automationId: AUTOMATION_ID },
-    call: (client) =>
-      client[AUTOMATION_ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]({ automationId: AUTOMATION_ID }),
+  },
+  {
+    kind: AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY,
+    payload: { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID },
   },
 ];
 
-type HostAsk = AutomationProceduresDependencies["host"];
+it.effect(
+  "a window that is not a panel, and a frame this build does not trust, are refused every automation act in the kind's own words, and the service is not asked",
+  () =>
+    Effect.gen(function* () {
+      const { port, requests } = yield* hostActPort();
+      const retries = testActPort(
+        automationProcedures({
+          host: {
+            automationsFollow: () => Effect.void,
+            automationsUnfollow: () => Effect.void,
+            automationsRetry: () => Effect.void,
+          },
+        }),
+      );
+      ports.push(retries);
+      const refused = [];
+      for (const ask of ASKS) {
+        const served = ask.kind === AUTOMATION_ACT_KIND.AUTOMATIONS_RETRY ? retries : port;
+        refused.push(yield* served.perform(ask, OTHER_WINDOW));
+        refused.push(yield* served.perform(ask, PANEL, { trusted: false }));
+      }
 
-/** The params any one of the host's automation asks takes. */
-type AutomationParams = Parameters<HostAsk[keyof HostAsk]>[0];
-
-/** A window's act port over a host that answers every automation ask unanswered, and what it was asked. */
-function windowPort(actor: typeof PANEL, trusted = true) {
-  const asked: unknown[] = [];
-  const unanswered = (name: string) => (params: AutomationParams) =>
-    Effect.sync(() => {
-      asked.push([name, params]);
-      return { failure: AUTOMATION_CALL_FAILURE.UNANSWERED };
-    });
-  const host: HostAsk = {
-    automationCreate: unanswered("create"),
-    automationChange: unanswered("change"),
-    automationDelete: unanswered("delete"),
-    automationRun: unanswered("run"),
-    automationNewWebhookSecret: unanswered("new secret"),
-    automationsFollow: () => Effect.void,
-    automationsUnfollow: () => Effect.void,
-    automationsRetry: () => Effect.void,
-  };
-  const client = windowClient(automationProcedures({ host }), actor, trusted);
-  return { client, asked };
-}
-
-it("a window that is not a panel is refused every automation act in the kind's own words, and the host is not asked", async () => {
-  const { client, asked } = windowPort(OTHER_WINDOW);
-  for (const act of ACTS) {
-    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a frame this build does not trust is refused every automation act, even as a panel, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL, false);
-  for (const act of ACTS) {
-    assert.deepEqual(await settledAct(act.call(client)), { refused: REFUSAL[act.kind] });
-  }
-  assert.deepEqual(asked, []);
-});
-
-it("a panel's ask reaches the host with its payload, and the host's answer is the panel's", async () => {
-  const { client, asked } = windowPort(PANEL);
-  for (const act of ACTS) {
-    assert.deepEqual(await settledAct(act.call(client)), {
-      answer: { failure: AUTOMATION_CALL_FAILURE.UNANSWERED },
-    });
-  }
-  assert.deepEqual(
-    asked,
-    ACTS.map((act) => [act.host, act.payload]),
-  );
-});
-
-it("a payload carrying a key its kind does not name is refused in the kind's own words, and the host is not asked", async () => {
-  const { client, asked } = windowPort(PANEL);
-  // A payload held in a binding, as a window built it, so the compiler leaves its extra key be.
-  const payload = { automationId: AUTOMATION_ID, extra: true };
-
-  assert.deepEqual(await settledAct(client[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE](payload)), {
-    refused: REFUSAL[AUTOMATION_ACT_KIND.AUTOMATIONS_DELETE],
-  });
-  assert.deepEqual(asked, []);
-});
+      assert.deepEqual(
+        refused,
+        ASKS.flatMap((ask) => [{ refused: REFUSAL[ask.kind] }, { refused: REFUSAL[ask.kind] }]),
+      );
+      assert.deepEqual(requests, []);
+    }),
+);
 
 /** Turns the event loop until `ready` holds, as a page waits on its port. */
 async function until(ready: () => boolean): Promise<void> {
@@ -178,16 +120,18 @@ async function until(ready: () => boolean): Promise<void> {
 
 it("a panel's hold on a list follows it at the host once for every stream of it, hears nothing down the hold, and lets it go once its last stream closes", async () => {
   const asked: string[] = [];
-  const follows: Pick<HostAsk, "automationsFollow" | "automationsUnfollow"> = {
-    automationsFollow: () => Effect.sync(() => void asked.push("follow")),
-    automationsUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
-  };
-  // SAFETY: the hold reaches the follow asks alone.
-  const host = follows as HostAsk;
-  const port = testActPort(automationProcedures({ host }));
+  const port = testActPort(
+    automationProcedures({
+      host: {
+        automationsFollow: () => Effect.sync(() => void asked.push("follow")),
+        automationsUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+        automationsRetry: () => Effect.void,
+      },
+    }),
+  );
   ports.push(port);
   const client = port.as(PANEL);
-  const scope = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: "workspace-1" } as const;
+  const scope = { kind: AUTOMATION_FOLLOW.WORKSPACE, id: WORKSPACE_ID } as const;
 
   const one = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);
   const two = await client[AUTOMATION_ACT_KIND.AUTOMATIONS_FOLLOW](scope);

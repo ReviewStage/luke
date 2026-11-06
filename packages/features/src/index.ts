@@ -88,7 +88,9 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_CALL_FAILURE,
   MAC_COMMAND_NOT_CLAIMED,
+  type MacCommandCallFailure,
 } from "./mac-command-client.js";
 export {
   HostedMcpClientsClient,
@@ -124,9 +126,7 @@ export {
 export {
   HostedTerminalClient,
   type HostedTerminalClientOptions,
-  TERMINAL_UNANSWERED,
   type TerminalRelayAsk,
-  type TerminalUnanswered,
   terminalRelayAddress,
 } from "./terminal-client.js";
 export {

@@ -122,6 +122,8 @@ interface Main {
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.resume` answers in place of the sandbox, where the service refuses it. */
   resumeRefused: TerminalRefusal | undefined;
+  /** Whether a sandbox the service said it resumed still refuses a shell as stopped. */
+  staysStopped: boolean;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -143,14 +145,18 @@ beforeEach(() => {
   const answer = (request: TerminalAct): PortActResult<TerminalKind> => {
     switch (request.kind) {
       case ACT_KIND.TERMINAL_CREATE:
-        if (main.createRefused !== undefined) return { refused: main.createRefused };
+        if (main.createRefused !== undefined) return { failure: main.createRefused };
         // Note that each shell made has an id of its own, as the service mints one per shell, the first of them MADE.
         made += 1;
         return { terminal: shell(made === 1 ? MADE : crypto.randomUUID()) };
       case ACT_KIND.TERMINAL_KILL:
         return { sandbox: SANDBOX_STATE.RUNNING, terminals: [] };
       case ACT_KIND.TERMINAL_RESUME:
-        if (main.resumeRefused !== undefined) return { refused: main.resumeRefused };
+        if (main.resumeRefused !== undefined) return { failure: main.resumeRefused };
+        // A resumed sandbox runs, so a shell is made in it.
+        if (!main.staysStopped && main.createRefused === TERMINAL_REFUSAL.SANDBOX_STOPPED) {
+          main.createRefused = undefined;
+        }
         return { sandbox: SANDBOX_STATE.RUNNING };
       default:
         return undefined;
@@ -161,6 +167,7 @@ beforeEach(() => {
     down: new Set(),
     createRefused: undefined,
     resumeRefused: undefined,
+    staysStopped: false,
     post: (terminalId) => {
       const { port1: port } = new MessageChannel();
       const posted: TerminalPortInbound[] = [];
@@ -378,18 +385,42 @@ test("closing the tab ends its shell in the sandbox, its port closed and its ter
   assert.deepEqual(kept(), []);
 });
 
-test("a stopped sandbox shows its bar and resumes only on its action, or Return, then starts a shell", async () => {
+test("a tab shown over a stopped sandbox resumes it, saying it is connecting, and one that stops while the tab is hidden waits until it is shown", async () => {
   main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
   const tab = await mount();
-  assert.equal(tab.standing(), "· sandbox stopped");
-  assert.equal(tab.bar(), "Sandbox stopped.");
-  assert.match(tab.action()?.textContent ?? "", /^Resume sandbox/);
-  // Typing anything but Return resumes nothing.
-  await tab.type("x", 88);
-  assert.deepEqual(tab.kinds(), ["terminal.create"]);
-  main.createRefused = undefined;
-  await tab.type("Enter", 13);
+  await settle();
   assert.deepEqual(tab.kinds(), [
+    "terminal.create",
+    "terminal.resume",
+    "terminal.create",
+    "terminal.attach",
+  ]);
+  assert.equal(tab.standing(), "· connecting…");
+  assert.equal(tab.bar(), undefined);
+  const port = main.post(MADE);
+  port.say({ type: "state", state: "attached" });
+  await tab.render(false);
+  port.say({ type: "state", state: "stopped" });
+  await settle();
+  const before = main.sent.length;
+  assert.deepEqual(tab.kinds(before), [], "a hidden tab wakes nothing");
+  await tab.render(true);
+  await settle();
+  assert.deepEqual(tab.kinds(before), ["terminal.resume", "terminal.attach"]);
+});
+
+test("a sandbox still stopped after the tab resumed it says it did not answer, and its action resumes it again", async () => {
+  main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
+  main.staysStopped = true;
+  const tab = await mount();
+  await settle();
+  assert.deepEqual(tab.kinds(), ["terminal.create", "terminal.resume", "terminal.create"]);
+  assert.equal(tab.bar(), "The agent’s sandbox didn’t answer.");
+  main.staysStopped = false;
+  const before = main.sent.length;
+  await act(async () => tab.action()?.click());
+  await settle();
+  assert.deepEqual(tab.kinds(before), [
     "terminal.create",
     "terminal.resume",
     "terminal.create",
@@ -401,7 +432,6 @@ test("a resume whose snapshot is gone says the sandbox shut down and how to star
   main.createRefused = TERMINAL_REFUSAL.SANDBOX_STOPPED;
   main.resumeRefused = TERMINAL_REFUSAL.SANDBOX_SNAPSHOT_GONE;
   const tab = await mount();
-  await act(async () => tab.action()?.click());
   await settle();
   assert.equal(
     tab.bar(),

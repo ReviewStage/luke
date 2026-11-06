@@ -213,11 +213,10 @@ export function runRecall(
  * A coding agent's memory call: the workspace the agent reaches tasks in and
  * its starter, read from the service's record of the agent as every agent
  * tool reads them (`callerWorkspace`), then the call itself. An agent whose
- * workspace cannot be read for its starter now keeps and recalls nothing, and
- * neither does one whose starter has Memory off (`EXPERIMENT.MEMORY`): eve
- * and our MCP server (`tool-catalog/catalog.ts`) list neither tool to such an
- * agent, but a harness may still call a tool it was not listed, or Memory
- * may go off mid-run, so the refusal stands here as well.
+ * workspace cannot be read for its starter now keeps and recalls nothing.
+ * Note that one whose starter has Memory off (`EXPERIMENT.MEMORY`) never
+ * reaches here, because the catalog refuses its call at the `MEMORY` gate
+ * (`tool-catalog/catalog.ts`'s `callTool`).
  */
 function agentMemory(
   call: AgentCall,
@@ -227,7 +226,6 @@ function agentMemory(
   return orUnavailable(
     Effect.gen(function* () {
       const userId = callerUserId(call.caller);
-      if (!(yield* memoryOnFor(userId))) return rejected(MEMORY_REFUSAL.OFF);
       // A refusal reads the calling agent's turn; a member's call is their own words, and has none.
       const agent = callerAgent(call.caller);
       const refused =

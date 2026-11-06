@@ -167,7 +167,7 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
  * A tool's answer as the transcript settles its call: an error the harness
  * flagged is a refusal carrying the text, and any other answer is available.
  * Our own tool's answer is read as the JSON it answers, so its status word
- * counts as the eve relay counts it; any other tool's is kept as `output`,
+ * counts as the retired runtime's relay counted it; any other tool's is kept as `output`,
  * the text the model read or what the harness reported of the call.
  */
 export function toolAnswerSettlement(

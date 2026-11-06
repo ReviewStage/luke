@@ -73,8 +73,8 @@
   --spacing-menu-glyph: var(--ui-menu-glyph);
   --spacing-list-gap: var(--ui-list-gap);
 
-  /* The panel's work column (`@repo/panel`: a transcript's opening line, a
-     tool's page, the find bar, the version history):
+  /* The panel's work column (`@repo/panel`: a transcript's opening line,
+     the find bar, the version history):
      the profile's spacing roles it reads beside the ones above, and its own
      glyphs, measures, and motions. */
   --spacing-ring-reach: var(--ui-focus-ring-reach);
@@ -85,8 +85,6 @@
   --font-weight-ui-regular: var(--ui-weight-regular);
   --font-weight-ui-medium: var(--ui-weight-medium);
   --font-weight-ui-semibold: var(--ui-weight-semibold);
-  --leading-tool-description: 1.5; /* off-scale: a tool's description, a step looser than a caption */
-  --shadow-tool-default: inset 0 0 0 1px var(--ui-color-border-strong);
   --grid-template-columns-version-track: 100% 100%;
   --grid-template-rows-version-track: minmax(0, 1fr);
   --animate-edit-composer-in:
@@ -1162,7 +1160,7 @@
     var(--ui-stage-height) -
     320px,
     400px
-  ); /* off-scale: a list a server's page tall */
+  ); /* off-scale: the MCP servers popover's list */
   --color-chart-1: var(--ui-color-chart-1);
   --color-chart-2: var(--ui-color-chart-2);
   --color-chart-3: var(--ui-color-chart-3);

@@ -19,7 +19,7 @@ import {
 import { controlsAgent, reachedAgentById } from "../agent-reach.js";
 import { type SandboxUnavailable, snapshotGone } from "../vercel-sandbox-api.js";
 
-/** The agent a sandbox route reaches: its conversation, the eve session its sandbox is tagged with, and the machine it runs on. */
+/** The agent a sandbox route reaches: its conversation, the session its sandbox is tagged with, and the machine it runs on. */
 interface ReachedAgentSession {
   readonly conversationId: string;
   readonly sessionId: string | undefined;
@@ -28,7 +28,7 @@ interface ReachedAgentSession {
 
 /**
  * The agent the path names, still standing: its conversation, which a
- * sandbox's lease is held on, and the eve session its sandbox is tagged
+ * sandbox's lease is held on, and the session its sandbox is tagged
  * with, or none where the agent has not run yet. An archived agent
  * is gone, as its tab is, and one on its starter's own GitHub token gives its
  * sandbox to its starter alone.

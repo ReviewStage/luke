@@ -119,7 +119,6 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { Highlighted } from "../search-field.js";
 import { appStateQuery, selectExperiment } from "../use-app-state.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
-import { SERVER_PAGE_HEAD_CLASS } from "./agent-servers.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -329,6 +328,13 @@ const PICK_DATE_KEY = "pick-date";
 
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
+
+/**
+ * A narrowed list's crumb: back, folded to its glyph, its glyph and name,
+ * over a hairline, at the search field's height.
+ */
+const CRUMB_CLASS =
+  "mention-menu-crumb flex h-pane-bar flex-none items-center gap-icon-gap border-b border-border pr-list-inset pl-item-gap [--ui-fold:folded]";
 
 /** What a server's row says beside its name. */
 const SERVER_DETAIL = MCP_SERVER_LABEL.one;
@@ -1290,12 +1296,12 @@ interface Crumb {
   readonly back: (() => void) | undefined;
 }
 
-/** A narrowed list's crumb: back, the kind's glyph or a folder's, and the kind's name or the folder's path, as an MCP server's page stands under its own. */
+/** A narrowed list's crumb: back, the kind's glyph or a folder's, and the kind's name or the folder's path. */
 function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
   const { kind, folder, back } = crumb;
   return (
     // Note that a press on the crumb keeps the caret in the editor, where the keys are read.
-    <KeepFocus className={`${SERVER_PAGE_HEAD_CLASS} mention-menu-crumb [--ui-fold:folded]`}>
+    <KeepFocus className={CRUMB_CLASS}>
       {back === undefined ? null : (
         <BackButton
           label={folder === undefined ? BACK_LABEL.WIDEN : BACK_LABEL.UP}

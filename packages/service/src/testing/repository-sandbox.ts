@@ -1,7 +1,7 @@
 /**
- * repository-sandbox.ts -- a sandbox double at eve's boundary, for the tests that run an agent's checkout of the task's repository.
+ * repository-sandbox.ts -- a sandbox double at the agent machine's boundary, for the tests that run an agent's checkout of the task's repository.
  *
- * The double stands where eve's `ctx.getSandbox()` hands the shell a live
+ * The double stands where the agent machine (`agents/machine/vercel-machine.ts`) hands the shell a live
  * Vercel Sandbox: it answers each run from the contract the shell hands the
  * sandbox (`REPOSITORY_SANDBOX_CONTRACT`), keeping the one thing a sandbox
  * keeps between calls, which repository stands checked out, and writing

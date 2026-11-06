@@ -12,8 +12,10 @@ import type { TaskAgentLine, TaskAgentsSummary, TaskPullRequestLine } from "./ta
  * An agent's failure stops being the task's once another agent is started
  * on it after the failure, as a newer CI run decides a commit's check.
  *
- * Note that a question waiting on the reader is no status here, because the
- * Tasks page's badge and the sidebar's Inbox count already say how many wait.
+ * Note that a thread waiting on the reader is no status here, because a
+ * task's row says how many wait in a count of its own, standing before this
+ * status: the sidebar's task row and the Tasks page's row and card alike
+ * (`@repo/panel`'s `WaitingCount`).
  */
 
 /** Where a task's agents stand, most pressing first. */

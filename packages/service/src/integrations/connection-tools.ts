@@ -1,9 +1,9 @@
 /**
  * connection-tools.ts -- the names a connection's calls are stored under, in every agent's transcript.
  *
- * eve offers a model a connection's tools through two tools of its own:
- * `connection_search` lists them and `connection_execute` runs one. A run of
- * a remote tool is also told as a call of its own, nested under the
+ * The retired runtime offered a model a connection's tools through two tools of its own:
+ * `connection_search` listed them and `connection_execute` ran one. A run of
+ * a remote tool was also told as a call of its own, nested under the
  * `connection_execute` that made it and named `<connection>__<tool>`
  * (`linear__list_issues`, `notion-2__notion-fetch` for a second Notion
  * account), with its own result, before the wrapper's
@@ -11,7 +11,7 @@
  * and a remote server names its tools itself, so a nested call of one
  * integration's tool is stored under that integration's one fixed name
  * (the wire's `INTEGRATION_REMOTE_TOOL`, `linear_remote` for Linear), whose
- * input is an envelope of the remote tool's name, the input eve validated
+ * input is an envelope of the remote tool's name, the input the call carried
  * for it, the call it ran under, and, for an account past the provider's
  * first, which account it was (`integrationRemoteCallSchema`), which the
  * desktop reads back to draw the row. A native agent's call of a tool on an
@@ -37,13 +37,13 @@ import type { Tool } from "ai";
 import { Schema } from "effect";
 import { type UnparsedWireValue, wireValidatedTool } from "../core.js";
 
-/** How eve qualifies a remote tool's name: the connection, two underscores, and the tool. */
+/** How a remote tool's name is qualified: the connection, two underscores, and the tool. */
 const QUALIFIED_SEPARATOR = "__";
 
 /** Whether a name is one the envelope keeps a remote tool's own name as. */
 const isRemoteToolWord = Schema.is(integrationRemoteCallSchema.fields.remoteTool);
 
-/** A call's input as the row keeps it: one JSON object, whose fields eve's or the remote server's own schema already read. */
+/** A call's input as the row keeps it: one JSON object, whose fields the remote server's own schema already read. */
 const OBJECT_INPUT = verbatimJsonSchema(WireValueSchema, {
   type: "object",
   additionalProperties: true,
@@ -52,8 +52,11 @@ const OBJECT_INPUT = verbatimJsonSchema(WireValueSchema, {
 /** The connection calls as stored rows are held to them, for every agent's tool set. */
 export function connectionToolEntries(): ReadonlyArray<readonly [string, Tool]> {
   return [
-    [CONNECTION_TOOL.SEARCH, wireValidatedTool("eve's own connection_search tool", OBJECT_INPUT)],
-    [CONNECTION_TOOL.EXECUTE, wireValidatedTool("eve's own connection_execute tool", OBJECT_INPUT)],
+    [CONNECTION_TOOL.SEARCH, wireValidatedTool("the stored connection_search tool", OBJECT_INPUT)],
+    [
+      CONNECTION_TOOL.EXECUTE,
+      wireValidatedTool("the stored connection_execute tool", OBJECT_INPUT),
+    ],
     ...INTEGRATION_PROVIDER_LIST.map(
       (provider) =>
         [
@@ -67,7 +70,7 @@ export function connectionToolEntries(): ReadonlyArray<readonly [string, Tool]> 
   ];
 }
 
-/** Whether a name is eve's qualified name for a remote tool, of whatever connection. */
+/** Whether a name is the retired runtime's qualified name for a remote tool, of whatever connection. */
 export function isRemoteToolName(name: string): boolean {
   return name.includes(QUALIFIED_SEPARATOR);
 }
@@ -88,7 +91,7 @@ function remoteToolIn(connection: string, remoteTool: string): RemoteTool | unde
   return { ...account, connection, remoteTool };
 }
 
-/** The integration and account whose connection eve qualified a remote tool's name with, and the tool's own name. */
+/** The integration and account whose connection the retired runtime qualified a remote tool's name with, and the tool's own name. */
 function remoteToolOf(toolName: string): RemoteTool | undefined {
   const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
   if (separator < 0) return undefined;
@@ -134,7 +137,7 @@ export function storedRemoteCall(
 
 /**
  * A native agent's call of a tool on an integration's own MCP server
- * (`../agents/workspace-mcp/app.ts`), as the record keeps it: as eve's nested
+ * (`../agents/workspace-mcp/app.ts`), as the record keeps it: as the retired runtime's nested
  * call of the same tool is kept, under the integration's fixed name and its
  * envelope, the call standing as its own parent, since no
  * `connection_execute` wraps it; nothing for a server that is no

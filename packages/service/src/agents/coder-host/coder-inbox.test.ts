@@ -118,7 +118,7 @@ const SETTINGS = {
   },
 };
 
-/** A tool's input as eve hands it over. */
+/** A tool's input as a harness hands it over. */
 const input = (value: WireBoundaryInput) => unparsedWire(value);
 
 /** A sandbox door no post with words alone opens: one that fails if it is. */

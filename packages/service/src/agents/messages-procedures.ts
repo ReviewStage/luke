@@ -409,7 +409,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { userId } = context;
       // The queue is its starter's own messages to come, so the starter alone changes it; a teammate reads it.
       if (agent.userId !== userId) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-      const eve: QueueSessions = routedSessions;
+      const agentSessions: QueueSessions = routedSessions;
       const body = input.body;
       /** A store's answer for the account's agent, its absence answered as no such agent. */
       const found = <A>(effect: Effect.Effect<Option.Option<A>, StoreFailure, DatabaseServices>) =>
@@ -466,7 +466,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           );
           if (Option.isNone(claimed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
           const message = claimed.value;
-          yield* sendQueued(eve, agent, message).pipe(
+          yield* sendQueued(agentSessions, agent, message).pipe(
             Effect.tapError(() =>
               hostedStoreOrUnavailable(releaseQueuedMessage(agent.id, message)),
             ),
@@ -489,7 +489,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
         ? yield* claimNext(agent)
         : Option.none<QueuedMessageRow>();
       if (Option.isSome(claimed)) {
-        yield* afterResponse("agent-queue", sendClaimed(eve, agent, claimed.value));
+        yield* afterResponse("agent-queue", sendClaimed(agentSessions, agent, claimed.value));
       }
       const queue = yield* found(readAgentQueue(userId, agent.id));
       return { queue: wireQueue(queue, yield* DateTime.nowAsDate) };

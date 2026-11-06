@@ -8,8 +8,8 @@ import { ROOT_TASKS, TEST_TASK, turboInvocation, WORKSPACE_TASKS } from "./lib/t
 // machine share. The checks are independent of one another, so they run at
 // once. `discarded-effect` builds a program of its own rather than reading
 // typecheck's, which is why it is a check beside it rather than a step after
-// it. No build runs here: Vercel builds web and the eve services on every
-// deploy and the release workflow builds the desktop app, and knip and
+// it. No build runs here: Vercel builds web on every deploy and the
+// release workflow builds the desktop app, and knip and
 // biome's formatter are for running by hand (`pnpm knip`, `pnpm format`) or
 // on commit (lint-staged), never a check.
 //

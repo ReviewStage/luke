@@ -6,6 +6,7 @@ import type { AppSettings, SettingsUpdateResult } from "@repo/settings/wire";
 import { ACTION_RESULT_STATUS } from "@repo/wire";
 import { Effect, Option } from "effect";
 import { type ActPortClient, SETTINGS_ACT_KIND } from "../contract/index.js";
+import { ActReporter } from "../host-acts.js";
 import type { ActSender } from "./base.js";
 import type { ClientSettingSideEffects, SettingsProceduresDependencies } from "./index.js";
 import { settingsProcedures } from "./settings-procedures.js";
@@ -13,10 +14,10 @@ import { settledAct, type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The settings writes, through the act port as a window calls them: a write
- * reaches the host under the asking window's reporter with the value its
- * field's own guard admitted; and a frame this build does not trust, a sender that is
- * no window of the platform's, or a value its field refuses is refused in
- * the kind's own words, before the host is asked.
+ * reaches its handler under the asking window's reporter with the value its
+ * field's own guard admitted; and a sender that is no window of the
+ * platform's, or a value its field refuses, or a reporter the window names
+ * itself, is refused in the kind's own words, before the host is asked.
  */
 
 const WINDOW = Symbol("window");
@@ -49,7 +50,6 @@ afterEach(() => {
  */
 function windowPort(
   options: {
-    trusted?: boolean;
     sideEffects?: ClientSettingSideEffects;
     reporterOf?: SettingsProceduresDependencies["reporterOf"];
     settings?: AppSettings;
@@ -61,35 +61,35 @@ function windowPort(
     status: ACTION_RESULT_STATUS.ACCEPTED,
     settings: held,
   });
-  const host: SettingsProceduresDependencies["host"] = {
-    settingsSnapshot: () => Effect.sync(() => Option.some(held)),
-    updateSetting: (field, value, reporter) =>
-      Effect.sync(() => {
+  const acts: SettingsProceduresDependencies["acts"] = {
+    SETTING_UPDATE: ({ field, value }) =>
+      Effect.map(Effect.service(ActReporter), (reporter) => {
         writes.push([field, value, reporter]);
         held = { ...held, stored: { ...held.stored, [field]: value } };
         return accepted();
       }),
-    resetSettings: (scope, _kept, reporter) =>
-      Effect.sync(() => {
+    SETTINGS_RESET: ({ scope }) =>
+      Effect.map(Effect.service(ActReporter), (reporter) => {
         writes.push([scope, reporter]);
         return accepted();
       }),
-    setExperiment: (experiment, on, reporter) =>
-      Effect.sync(() => {
+    EXPERIMENT_SET: ({ experiment, on }) =>
+      Effect.map(Effect.service(ActReporter), (reporter) => {
         writes.push([experiment, on, reporter]);
         return accepted();
       }),
   };
   port = testActPort(
     settingsProcedures({
-      host,
+      host: { settingsSnapshot: () => Effect.sync(() => Option.some(held)) },
+      acts,
       reporterOf:
         options.reporterOf ?? ((actor) => (actor.sender === WINDOW ? "panel" : undefined)),
       lastSettings: () => held,
       sideEffects: options.sideEffects ?? NO_SIDE_EFFECTS,
     }),
   );
-  const client = port.as(PANEL, { trusted: options.trusted ?? true });
+  const client = port.as(PANEL, { trusted: true });
   return { client, writes, stored: () => held.stored };
 }
 
@@ -119,7 +119,7 @@ async function everyKindRefused(client: ActPortClient) {
   };
 }
 
-it("a write reaches the host as its field's guard reads it, under the asking window's reporter", async () => {
+it("a write reaches its handler as its field's guard reads it, under the asking window's reporter", async () => {
   const { client, writes } = windowPort();
 
   await client[SETTINGS_ACT_KIND.SETTING_UPDATE]({ field: "theme", value: THEME.DARK });
@@ -150,13 +150,6 @@ it("the settings a write answers cross whole, a stored field this build does not
   );
 });
 
-it("a frame this build does not trust is refused every settings write in the kind's own words, and the host is not asked", async () => {
-  const { client, writes } = windowPort({ trusted: false });
-
-  assert.deepEqual(await everyKindRefused(client), REFUSAL);
-  assert.deepEqual(writes, []);
-});
-
 it("a sender that is no window of the platform's is refused every settings write in the kind's own words, and the host is not asked", async () => {
   const { client, writes } = windowPort({ reporterOf: () => undefined });
 
@@ -178,21 +171,5 @@ it("a value its field's guard refuses, or a key the payload does not take, is re
     REFUSAL[SETTINGS_ACT_KIND.SETTING_UPDATE],
   );
   assert.equal(await refusal(update(extra)), REFUSAL[SETTINGS_ACT_KIND.SETTING_UPDATE]);
-  assert.deepEqual(writes, []);
-});
-
-it("a reset or an experiment switch carrying a key its payload does not take is refused in the kind's own words, and the host is not asked", async () => {
-  const { client, writes } = windowPort();
-  const reset = { scope: SETTINGS_RESET_SCOPE.APPEARANCE, kept: [], unexpected: true } as const;
-  const experiment = { experiment: "memory", on: true, unexpected: true } as const;
-
-  assert.equal(
-    await refusal(client[SETTINGS_ACT_KIND.SETTINGS_RESET](reset)),
-    REFUSAL[SETTINGS_ACT_KIND.SETTINGS_RESET],
-  );
-  assert.equal(
-    await refusal(client[SETTINGS_ACT_KIND.EXPERIMENT_SET](experiment)),
-    REFUSAL[SETTINGS_ACT_KIND.EXPERIMENT_SET],
-  );
   assert.deepEqual(writes, []);
 });

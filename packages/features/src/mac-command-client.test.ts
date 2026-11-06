@@ -3,8 +3,7 @@
  *
  * The live read names the kinds this Mac runs and the account it is for,
  * and reads a refused session as signed out; a claim answers the command
- * granted or nothing; a result is posted as the service reads it, and is
- * taken or not.
+ * granted; a result is posted as the service reads it.
  *
  * Synthetic bearers, ids, and commands throughout.
  */
@@ -15,7 +14,7 @@ import { fakeCloudApi, HTTP_STATUS } from "@repo/wire/testing";
 import { Effect } from "effect";
 import { accountBearer } from "./account-call.js";
 import { LIVE_SIGNED_OUT } from "./live-wire.js";
-import { HostedMacCommandClient, MAC_COMMAND_NOT_CLAIMED } from "./mac-command-client.js";
+import { HostedMacCommandClient } from "./mac-command-client.js";
 import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -48,21 +47,15 @@ function client(): HostedMacCommandClient {
   });
 }
 
-it.effect("a result is posted as the service reads it, and is taken or not", () =>
+it.effect("a result is posted as the service reads it", () =>
   Effect.gen(function* () {
     const taken = fakeCloudApi({ "POST /api/mac-commands": { answer: () => ({ settled: true }) } });
 
-    assert.equal(yield* Effect.provide(client().settle(COMMAND_ID, RESULT), taken.layer), true);
+    assert.deepEqual(yield* Effect.provide(client().settle(COMMAND_ID, RESULT), taken.layer), {
+      settled: true,
+    });
     const [posted] = taken.requests();
     assert.deepEqual(JSON.parse(posted?.body ?? ""), { id: COMMAND_ID, result: RESULT });
-
-    const unknown = fakeCloudApi({
-      "POST /api/mac-commands": {
-        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-        status: HTTP_STATUS.NOT_FOUND,
-      },
-    });
-    assert.equal(yield* Effect.provide(client().settle(COMMAND_ID, RESULT), unknown.layer), false);
   }),
 );
 
@@ -98,25 +91,15 @@ it.effect(
 );
 
 it.effect(
-  "a claim answers the command granted to this Mac, and not claimed where the service refused it",
+  "a claim asks for the command by its id and answers the command granted to this Mac",
   () =>
     Effect.gen(function* () {
       const granted = fakeCloudApi({
         "POST /api/mac-commands/claim": { answer: () => ({ command: COMMAND }) },
       });
-      assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), COMMAND);
-      assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
-
-      const taken = fakeCloudApi({
-        "POST /api/mac-commands/claim": {
-          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-          status: HTTP_STATUS.NOT_FOUND,
-        },
+      assert.deepEqual(yield* Effect.provide(client().claim(COMMAND_ID), granted.layer), {
+        command: COMMAND,
       });
-      assert.deepEqual(
-        yield* Effect.provide(client().claim(COMMAND_ID), taken.layer),
-        MAC_COMMAND_NOT_CLAIMED,
-        "a refused claim is told apart from one never answered",
-      );
+      assert.deepEqual(JSON.parse(granted.requests()[0]?.body ?? ""), { id: COMMAND_ID });
     }),
 );

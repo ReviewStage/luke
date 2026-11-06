@@ -26,7 +26,11 @@ export const endedAt = (agent: Agent, status: RunStatus, at: number, said?: stri
     const target = { userId: agent.userId, conversationId: agent.conversationId };
     const turnId = randomUUID();
     const turn = { conversationId: sessionKey(agent.conversationId), turnId };
-    yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+    yield* writer.enqueueTurn(target, {
+      turnId,
+      origin: TURN_ORIGIN.TYPED,
+      runtimeTurnId: "turn_0",
+    });
     yield* writer.consume(target, {
       ...turn,
       kind: RUN_EVENT.TURN_STARTED,

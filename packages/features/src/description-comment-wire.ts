@@ -261,6 +261,13 @@ const descriptionCommentDescriptionStartSchema = EffectSchema.Struct({
   attachments: descriptionCommentFilesSchema,
 });
 
+/** The threads a comment sending a page's review names along with its own, by their ids; no more than a page holds. */
+const reviewAlongSchema = EffectSchema.optionalKey(
+  EffectSchema.Array(wireUuidSchema).check(
+    EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_THREADS_PER_DESCRIPTION),
+  ),
+);
+
 /**
  * A thread started on one of the task's pages (the same POST): its first
  * comment, the page and the version the member was reading, and the element
@@ -271,10 +278,11 @@ const descriptionCommentDescriptionStartSchema = EffectSchema.Struct({
  * thread's id as a start on the description does.
  *
  * A member may gather several comments on a page into a review before any
- * agent hears them: each but the last is started held, posted for every
- * member to read but handed to no one, and the last names the held ones
- * along with it, so each agent in any of them is handed them all in one
- * message rather than one message a comment.
+ * agent hears them, new threads and replies alike: each but the last is
+ * started or replied held, posted for every member to read but handed to no
+ * one, and the last names the threads of the held ones along with it, so
+ * each agent in any of them is handed them all in one message rather than
+ * one message a comment.
  */
 const descriptionCommentPageStartSchema = EffectSchema.Struct({
   id: EffectSchema.optionalKey(chosenIdSchema),
@@ -295,12 +303,8 @@ const descriptionCommentPageStartSchema = EffectSchema.Struct({
   attachments: descriptionCommentFilesSchema,
   /** Whether the thread is held in a review: posted, but handed to no agent until the start that sends the review names it along. */
   held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
-  /** The threads of the same page this member started held in the review this start sends, by their ids, handed over together with this one; no more than a page holds. */
-  along: EffectSchema.optionalKey(
-    EffectSchema.Array(wireUuidSchema).check(
-      EffectSchema.isMaxLength(DESCRIPTION_COMMENT_BOUNDS.MAX_THREADS_PER_DESCRIPTION),
-    ),
-  ),
+  /** The threads of the same page holding comments this member held in the review this start sends, started or replied to, by their ids, handed over together with this one; no more than a page holds. */
+  along: reviewAlongSchema,
 });
 
 /** A thread started on the description's words. */
@@ -335,6 +339,10 @@ export const descriptionCommentActionRequestSchema = EffectSchema.Union([
     clientKey: descriptionCommentClientKeySchema,
     words: descriptionCommentWordsSchema,
     attachments: descriptionCommentFilesSchema,
+    /** Whether the reply is held in a review of the page its thread is on, as a start may be: posted, but handed to no agent until the comment sending the review names its thread along. */
+    held: EffectSchema.optionalKey(EffectSchema.Literal(true)),
+    /** The threads of the same page holding comments this member held in the review this reply sends, by their ids, handed over together with this one, as a start's are. */
+    along: reviewAlongSchema,
   }),
   EffectSchema.Struct({
     action: EffectSchema.Literal(DESCRIPTION_COMMENT_ACTION.EDIT),

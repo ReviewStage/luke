@@ -90,7 +90,7 @@ import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 export interface AccountProcedureSeams {
   resolveUserId: UserIdResolver;
-  /** The eve sessions the account's standing conversations run in, which the delete retires first. */
+  /** The sessions the account's standing conversations run in, which the delete retires first. */
   standingSessions: (userId: string) => AccountSeamEffect<readonly StandingSession[]>;
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;

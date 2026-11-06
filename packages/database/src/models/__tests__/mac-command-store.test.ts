@@ -510,7 +510,7 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           "a webhook's run whose send was refused",
         );
 
-        // An eve agent's opening from before the Start wrote it, untagged, as its relay wrote it.
+        // An agent's opening from before the Start wrote it, untagged, as the retired runtime's relay wrote it.
         const started = yield* openAgent(starter, workspace, "Triage what came in.");
         const db = yield* Database;
         yield* db

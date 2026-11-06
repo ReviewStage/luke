@@ -5,9 +5,10 @@ import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { accountBearer, CALL_FAULT } from "./account-call.js";
 import { FAILURE_FACT } from "./failure-facts.js";
-import { hostedCall } from "./hosted-call.js";
+import { HOSTS_READ } from "./host-live.js";
+import { askLiveRead, hostedCall } from "./hosted-call.js";
 import { type HostedClient, hostedClient } from "./hosted-link.js";
-import { LIVE_SIGNED_OUT } from "./live-wire.js";
+import { LIVE_POLL, LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -15,8 +16,8 @@ import { HOSTED_API_ERROR } from "./service-wire.js";
  * hosted-call.test.ts -- how one hosted call's answer or failure reads as its domain's: one row per behavior of the translation.
  *
  * `mcpClients.list` declares only the refusals any procedure may answer;
- * `models.list` still declares every refusal, so it stands for a procedure
- * that declares one carrying fields.
+ * `pullRequestChapters.read` refuses a repository out of reach, so it
+ * stands for a procedure that declares a refusal carrying fields.
  */
 
 const BASE_URL = "https://app.test";
@@ -68,7 +69,7 @@ it.effect.each<Row>([
     behavior: "a declared refusal is its slug with the fields it carries",
     status: HTTP_STATUS.FORBIDDEN,
     body: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached: UNREACHED },
-    call: (hosted) => hostedCall(hosted.models.list, undefined),
+    call: (hosted) => hostedCall(hosted.pullRequestChapters.read, { id: "agent-1", number: "7" }),
     expected: { failure: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, unreached: UNREACHED },
   },
   {
@@ -78,7 +79,11 @@ it.effect.each<Row>([
     call: (hosted) => hostedCall(hosted.mcpClients.list, undefined),
     expected: {
       failure: "unanswered",
-      cause: { _tag: FAILURE_FACT.HOSTED_UNANSWERED, code: HOSTED_API_ERROR.NOT_FOUND },
+      cause: {
+        _tag: FAILURE_FACT.HOSTED_UNANSWERED,
+        status: HTTP_STATUS.NOT_FOUND,
+        code: HOSTED_API_ERROR.NOT_FOUND,
+      },
     },
   },
   {
@@ -131,4 +136,36 @@ it.effect.each<Row>([
 
     assert.deepEqual(untraced(answer), expected);
   }),
+);
+
+it.effect(
+  "a declared live read polled past where its rows stood asks for them inline past it, as its params name it",
+  () =>
+    Effect.gen(function* () {
+      const sealed = { capability: "cap-1", queryFingerprint: "fp-1", expiresAt: 1, digest: "d2" };
+      const recording = recordingHttpClient(() =>
+        jsonResponse({
+          url: `${BASE_URL}/poll`,
+          queries: { hosts: { ...sealed, rows: "[]" } },
+          installScriptUrl: `${BASE_URL}/install.sh`,
+        }),
+      );
+      const hosted = hostedClient({ baseUrl: BASE_URL, credential: account("token-1") });
+
+      const answer = yield* Effect.provide(
+        askLiveRead(hosted.live, HOSTS_READ, { [LIVE_USER_QUERY]: "user-1" }, { after: "d1" }),
+        recording.layer,
+      );
+
+      assert.deepEqual(answer, {
+        url: `${BASE_URL}/poll`,
+        queries: { hosts: { ...sealed, rows: [] } },
+        installScriptUrl: `${BASE_URL}/install.sh`,
+      });
+      assert.deepEqual([...(recording.requests[0]?.searchParams.entries() ?? [])].toSorted(), [
+        [LIVE_POLL.AFTER, "d1"],
+        [LIVE_POLL.QUERY, LIVE_POLL.ON],
+        [LIVE_USER_QUERY, "user-1"],
+      ]);
+    }),
 );

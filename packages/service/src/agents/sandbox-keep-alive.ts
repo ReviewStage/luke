@@ -3,13 +3,12 @@
  *
  * A sandbox opens with a short timeout (`CODER.SANDBOX_TIMEOUT_MS`), so one
  * nothing stopped bills its memory for that long and no longer. Whatever
- * shows it in use keeps it alive: an eve step of the agent or its worker
- * starting, a native runner's events landing, a developer's terminal or
+ * shows it in use keeps it alive: a native runner's events landing, a developer's terminal or
  * watched browser. Each is due at most every `CODER.SANDBOX_KEEP_ALIVE_EVERY`
  * (`keepAliveDue`), and each due one extends the running session so it ends
  * the timeout from now (`keepAliveExtension`, which `session-sandboxes.ts`'s
- * `keepAliveFor` applies). The rule reads instants alone, so the eve roots'
- * sandbox policy reads it without the service it is applied through.
+ * `keepAliveFor` applies). The rule reads instants alone, so a caller
+ * reads it without the service it is applied through.
  */
 
 import { Duration } from "effect";

@@ -11,7 +11,7 @@
  */
 
 import type { ACT, DeclaredHandler } from "@repo/sync";
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 import type {
   ActInput,
   ActOutput,
@@ -28,6 +28,16 @@ import type {
 export class ActRefused extends Data.TaggedError("ActRefused")<{
   readonly sentence?: string;
 }> {}
+
+/**
+ * The opaque reporter naming the window that asked an act, for a handler
+ * whose change event is not echoed back to that window; none where the
+ * port asked under no window of its own. Only a procedure written by hand
+ * provides it, since the window's input never carries it.
+ */
+export const ActReporter = Context.Reference<string | undefined>("@repo/host/ActReporter", {
+  defaultValue: () => undefined,
+});
 
 /** An act's handler: its input, read whole by the port, answered. `ActRefused` is refused as it says; any other failure is drawn as the act declares. */
 export type ActHandler<Declaration extends AnyHostActDeclaration> = (

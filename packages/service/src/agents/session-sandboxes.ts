@@ -7,9 +7,9 @@
  * not running has nothing to keep alive, and a stopped one is never resumed
  * here.
  *
- * eve opens one persistent Vercel Sandbox per top-level session, tagged with
- * the session's id, and a worker shares its parent's; a stopped sandbox
- * keeps its checkout in snapshots until Vercel lets them expire. Once we
+ * An agent's session has one persistent Vercel Sandbox (`agent-sandbox-open.ts`),
+ * tagged with the session's id; a stopped sandbox keeps its checkout in
+ * snapshots until Vercel lets them expire. Once we
  * let go of a session for good, its retire's reset, the purge of a deleted
  * task's conversations, or an account's deletion queues it
  * (`session-sandbox-cleanup.ts`), and the scheduled sweep takes the queue a
@@ -25,8 +25,8 @@
  * failure is its status.
  *
  * Credentials are the deployment's own: the function's Vercel OIDC token,
- * which names this project and its team, as eve's own sandboxes are made
- * with (`vercel-sandbox-api.ts`). A deployment without one answers every
+ * which names this project and its team, as the agents' own sandboxes are
+ * made with (`vercel-sandbox-api.ts`). A deployment without one answers every
  * delete as unavailable, and the queue waits for a deployment that has one.
  */
 
@@ -81,7 +81,7 @@ export interface SessionSandboxesService {
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /**
    * Stops every running sandbox tagged with the session, keeping its
-   * filesystem for a later resume; answers how many were stopped. Every credential at its firewall comes off first, its record with it
+   * filesystem for a later resume; answers how many were stopped. The launch kept for its firewall goes first
    * (`sandbox-firewall.ts`).
    */
   readonly stopFor: (
@@ -131,8 +131,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          // The credentials come off first, as at a launch's end and in the sweeps, because a stopped
-          // sandbox keeps its policy and a later resume (a Terminal's among them) would wear it again.
+          // The kept launch goes first, as ahead of every other stop, so no renewal writes to it again.
           const session = { name: sandbox.name, sessionId: running };
           yield* sandboxFirewall(api).clear(session);
           yield* Effect.flatMap(api.session(session), (held) => held.stop());

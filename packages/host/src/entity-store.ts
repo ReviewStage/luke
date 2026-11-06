@@ -22,8 +22,8 @@
  * shapes it was kept at, so a file of another account, of another build's
  * shapes, or one that will not open, is deleted and read as none, and every
  * read reads whole. A store saves lists that moved at most every
- * `SAVE_EVERY`, the writes waiting for the service within `QUEUE_LOOK_EVERY`
- * of their moving, and both once more as it closes; a sign-out forgets it,
+ * `SAVE_EVERY`, the writes waiting for the service `QUEUE_SETTLE` after
+ * they move, and both once more as it closes; a sign-out forgets it,
  * which deletes the file. Rows
  * kept where none of them moved but where they stand (`keepUnmoved`), as the
  * task list's sync id moving alone, are written only beside the next save of
@@ -59,11 +59,12 @@ import {
   Duration,
   Effect,
   Path,
+  Queue,
   Result,
-  Schedule,
   Schema,
   type Scope,
   Semaphore,
+  Stream,
 } from "effect";
 import { Base64 } from "effect/encoding";
 import * as FileSystem from "effect/FileSystem";
@@ -82,8 +83,12 @@ export const ENTITY_STORE_FILE_NAME = "entities.sealed";
  */
 const SAVE_EVERY = Duration.seconds(30);
 
-/** How often a store looks whether the writes waiting for the service moved, which it writes at once, since they are what a crash would lose. */
-const QUEUE_LOOK_EVERY = Duration.seconds(2);
+/**
+ * How long a store waits once the writes waiting for the service moved
+ * before it writes them, so a burst of them is written once. Note that it is
+ * short, since they are what a crash would lose.
+ */
+const QUEUE_SETTLE = Duration.millis(500);
 
 /** The reads whose rows are kept on disk, and the only ones: a read not named here stays in memory. */
 export const KEPT_READ = {
@@ -203,6 +208,8 @@ export interface EntityStoreOptions {
   readonly accountId: string;
   /** The row writes waiting for the service now, oldest first, which every save keeps beside the lists. */
   readonly queued?: () => readonly QueuedEntry[];
+  /** Each moving of `queued`, which has the store write them `QUEUE_SETTLE` later. */
+  readonly queueMoves?: Stream.Stream<void>;
 }
 
 /** The SHA-256, in hex, of every kept row shape's JSON Schema, which a build that changes any of them changes. */
@@ -331,7 +338,43 @@ export function openEntityStore(
           );
         }),
       );
-    yield* Effect.forkScoped(Effect.repeat(save(false), Schedule.spaced(QUEUE_LOOK_EVERY)));
+    /** Wakes the saver to look again, a burst of wakes waking it once. */
+    const wake = yield* Queue.sliding<void>(1);
+    const woken = Effect.asVoid(Queue.offer(wake, undefined));
+    /**
+     * The saver: once the writes waiting moved, a save `QUEUE_SETTLE` later;
+     * once lists moved, one when `SAVE_EVERY` has passed since the last save,
+     * sooner where the writes waiting move meanwhile; otherwise asleep until
+     * woken. Note that it ends once the store is forgotten, since nothing it
+     * would save is kept.
+     */
+    const saver = Effect.gen(function* () {
+      while (!forgotten) {
+        if (JSON.stringify(queued()) !== savedQueue) {
+          yield* Effect.sleep(QUEUE_SETTLE);
+        } else if (dirty) {
+          const left = savedAt + Duration.toMillis(SAVE_EVERY) - (yield* Clock.currentTimeMillis);
+          if (left > 0) {
+            yield* Effect.raceFirst(Effect.sleep(Duration.millis(left)), Queue.take(wake));
+            continue;
+          }
+        } else {
+          yield* Queue.take(wake);
+          continue;
+        }
+        yield* Queue.clear(wake);
+        yield* save(false);
+      }
+    });
+    if (options.queueMoves !== undefined) {
+      yield* Effect.forkScoped(
+        Stream.runForEach(options.queueMoves, () => woken),
+        {
+          startImmediately: true,
+        },
+      );
+    }
+    yield* Effect.forkScoped(saver, { startImmediately: true });
     yield* Effect.addFinalizer(() => save(true));
     /** `read`'s rows laid among those kept, the workspaces' leaving with them every read kept per workspace of one they no longer name. */
     const laid = <Read extends KeptRead>(kept: Read, rows: KeptRows[Read]) => {
@@ -342,10 +385,13 @@ export function openEntityStore(
       stored: (read) => stored[read],
       queue,
       keep: (kept, rows) =>
-        Effect.sync(() => {
-          laid(kept, rows);
-          dirty = true;
-        }),
+        Effect.andThen(
+          Effect.sync(() => {
+            laid(kept, rows);
+            dirty = true;
+          }),
+          woken,
+        ),
       keepUnmoved: (kept, rows) =>
         Effect.sync(() => {
           laid(kept, rows);
@@ -358,21 +404,22 @@ export function openEntityStore(
         workspaceId: string,
         rows: KeptRows[Read][string],
       ) =>
-        Effect.sync(() => {
+        Effect.suspend(() => {
           // Note that a late answer for a workspace the kept list no longer names is not kept, so a workspace left never comes back with it.
           const listed = reads[KEPT_READ.WORKSPACES];
           if (listed !== undefined && !listed.some((workspace) => workspace.id === workspaceId)) {
-            return;
+            return Effect.void;
           }
           const byWorkspace = { ...byWorkspaceOf<Read>(reads, kept), [workspaceId]: rows };
           // SAFETY: the read `kept` names is set to a record of its own rows, each workspace's `KeptRows[Read][string]`.
           reads = { ...reads, [kept]: byWorkspace } as Partial<KeptRows>;
           dirty = true;
+          return woken;
         }),
       forget: lock.withPermits(1)(
         Effect.suspend(() => {
           forgotten = true;
-          return Effect.provideContext(removed(directory), services);
+          return Effect.andThen(woken, Effect.provideContext(removed(directory), services));
         }),
       ),
     };

@@ -1,4 +1,4 @@
-import { Column, is, type SQL, type SQLWrapper, sql } from "drizzle-orm";
+import { Column, type GetColumnData, is, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { Option, Schema } from "effect";
 
 /**
@@ -21,10 +21,25 @@ import { Option, Schema } from "effect";
 type LiveParameter = string | number | boolean | null;
 
 /** A Drizzle select a live statement is rendered from: the rows it is typed to answer, and the SQL and values it renders to. */
-export interface LiveSelect {
-  readonly _: { readonly result: readonly unknown[] };
+export interface LiveSelect<Row = unknown> {
+  readonly _: { readonly result: readonly Row[] };
   toSQL(): { readonly sql: string; readonly params: readonly unknown[] };
 }
+
+/** What a live column answers: a column's data, null where it is nullable, or a typed expression's own type. */
+type LiveValue<Wrapper> = Wrapper extends Column
+  ? GetColumnData<Wrapper>
+  : Wrapper extends SQLWrapper<infer Value>
+    ? Value
+    : unknown;
+
+/** What an instant answers as epoch milliseconds: a number, or null where its column is nullable. */
+type LiveInstant<Wrapper> = null extends LiveValue<Wrapper> ? number | null : number;
+
+/** A live read's selection, each column under its key typed as it answers. */
+export type LiveSelection<Columns, Instants> = {
+  readonly [Key in keyof Columns]: SQL.Aliased<LiveValue<Columns[Key]>>;
+} & { readonly [Key in keyof Instants]: SQL.Aliased<LiveInstant<Instants[Key]>> };
 
 /** A live statement: its SQL and the values its placeholders name, in order. */
 export interface LiveStatement {
@@ -47,20 +62,21 @@ function epochMillis(column: SQLWrapper): SQL<number> {
 /**
  * The columns of a live read, each under its own key, and the `instants`
  * as epoch milliseconds under theirs, so each column of a row is named by
- * the key the wire reads it under.
+ * the key the wire reads it under, typed as the column answers, so a
+ * statement's rows keep the types a reader's schema is held to.
  */
 export function liveSelection<
   const Columns extends Readonly<Record<string, SQLWrapper>>,
   const Instants extends Readonly<Record<string, SQLWrapper>> = Readonly<Record<never, SQLWrapper>>,
->(columns: Columns, instants?: Instants): Record<keyof Columns | keyof Instants, SQL.Aliased> {
+>(columns: Columns, instants?: Instants): LiveSelection<Columns, Instants> {
   const aliased = [
     ...Object.entries(columns).map(([key, column]) => [key, sql`${column}`.as(key)] as const),
     ...Object.entries(instants ?? {}).map(
       ([key, column]) => [key, epochMillis(column).as(key)] as const,
     ),
   ];
-  // SAFETY: every key of `columns` and of `instants` is written above, and no other.
-  return Object.fromEntries(aliased) as Record<keyof Columns | keyof Instants, SQL.Aliased>;
+  // SAFETY: every key of `columns` and of `instants` is written above, and no other, each answering as its column or its instant does.
+  return Object.fromEntries(aliased) as LiveSelection<Columns, Instants>;
 }
 
 /** How many rows a group holds, as a number rather than the `bigint` Postgres would answer as text. */

@@ -111,7 +111,8 @@ export interface ActPortDependencies {
   /** Every declared act's handler, which the port answers directly (`HostAssembly`'s). */
   readonly acts: HostActTable;
   readonly agentInbox: AgentInboxProceduresDependencies;
-  readonly agents: AgentProceduresDependencies;
+  /** The agents' holds and notices; the acts they note are answered from `acts`. */
+  readonly agents: Omit<AgentProceduresDependencies, "acts">;
   readonly automations: AutomationProceduresDependencies;
   readonly chapters: ChaptersProceduresDependencies;
   readonly installedSkills: InstalledSkillProceduresDependencies;
@@ -144,7 +145,7 @@ export function createActPortHandler<Sender>(
     ...accountAskProcedures(dependencies.accountAsks),
     ...declaredActProcedures(HOST_ACTS, dependencies.acts),
     ...agentInboxProcedures(dependencies.agentInbox),
-    ...agentProcedures(dependencies.agents),
+    ...agentProcedures({ ...dependencies.agents, acts: dependencies.acts }),
     ...automationProcedures(dependencies.automations),
     ...chaptersProcedures(dependencies.chapters),
     ...installedSkillProcedures(dependencies.installedSkills),
@@ -152,7 +153,7 @@ export function createActPortHandler<Sender>(
     ...macCommandProcedures(dependencies.macCommands),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
-    ...workspaceProcedures(dependencies.workspaces),
+    ...workspaceProcedures(dependencies.workspaces, dependencies.acts),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });
 }

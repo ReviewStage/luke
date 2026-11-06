@@ -235,7 +235,7 @@ const tabsPath = (taskId: string) => `/api/plans/${taskId}/browser-tabs`;
 
 const agentTabsPath = (agentId: string) => `/api/agents/${agentId}/browser-tabs`;
 
-/** The eve session a coding agent's sandbox is tagged with once it first ran. */
+/** The session a coding agent's sandbox is tagged with once it first ran. */
 const SESSION = "wrun_open_tab_fixture";
 
 /** A member's open of a tab at the address in the agent's browser. */

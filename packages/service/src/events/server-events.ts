@@ -240,7 +240,7 @@ export const SERVER_TASK_FINISHER = {
 } as const;
 
 /**
- * Why a coding agent's Start failed after its agent was made: eve or the
+ * Why a coding agent's Start failed after its agent was made: the
  * runtime could not be reached, the agent's first line could not be written,
  * the runtime refused the open, or the request was cut short before the
  * session opened.
@@ -331,6 +331,8 @@ export type ServerTaskFinishStatus = typeof TASK_STATUS.DONE | typeof TASK_STATU
 export type ServerAgentStartFailure = Values<typeof SERVER_AGENT_START_FAILURE>;
 
 export type ServerAgentStarter = Values<typeof SERVER_AGENT_STARTER>;
+
+export type ServerAgentStartKind = Values<typeof SERVER_AGENT_START_KIND>;
 
 export type ServerSkillAction = Values<typeof SERVER_SKILL_ACTION>;
 

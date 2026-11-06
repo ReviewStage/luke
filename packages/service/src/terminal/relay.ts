@@ -27,9 +27,8 @@
  * through the lease so two windows mint one token between them; a renewal
  * that fails gives its claim back, is logged, and is tried again at the
  * next check. A member's own token, which never ages, is set at every check
- * instead, so another window's close never leaves this one without it, and
- * is taken off as the connection closes unless a turn of the agent is under
- * way, which keeps it until the turn ends. The shell is said to be attached
+ * instead, and stays on the firewall past the connection's close, until the
+ * sandbox stops or the next write replaces it. The shell is said to be attached
  * once the first renewal has ended, so a command typed at once finds the
  * token set, and what was typed before waits for it, up to a bound past
  * which the shell attaches at once.
@@ -101,7 +100,7 @@ export interface RelayAsk {
   readonly rows: number;
 }
 
-/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the eve session its sandbox is tagged with, none before it ran. */
+/** The agent a connection reached: whose agent it is, its conversation, whose lease it holds, and the session its sandbox is tagged with, none before it ran. */
 export interface RelayAgent {
   /** The account whose agent it is, under which the launch at its sandbox's firewall is kept. */
   readonly userId: string;
@@ -109,10 +108,8 @@ export interface RelayAgent {
   readonly sessionId: string | undefined;
   /** A fresh credential for the agent's repository: a token minted under the deployment's GitHub App, or its starter's own. */
   readonly repositoryCredential: Effect.Effect<RepositoryCredential, unknown>;
-  /** Whether the agent's credential is its starter's own GitHub token, set at every check and taken off at the close rather than renewed. */
+  /** Whether the agent's credential is its starter's own GitHub token, set at every check rather than renewed. */
   readonly memberToken: boolean;
-  /** Whether a turn of the agent is under way, which keeps a member's token standing as a connection closes. */
-  readonly turnUnderWay: Effect.Effect<boolean, unknown>;
 }
 
 /** What the relay stands on: the deployment's in production, a script's in a test. */
@@ -128,7 +125,7 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
-  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  /** Keeps the running sandbox the session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
   /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
@@ -186,20 +183,6 @@ function setCredential(
 ): Effect.Effect<void, unknown> {
   return Effect.flatMap(agent.repositoryCredential, (credential) =>
     deps.sandbox.setCredential(session, credential),
-  );
-}
-
-/** A member's token taken off the firewall as the connection closes, unless a turn of the agent still uses it; a withdrawal that fails is logged. */
-function withdrawCredential(
-  deps: RelayDependencies,
-  agent: RelayAgent,
-  session: FirewallSession,
-): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    if (yield* agent.turnUnderWay) return;
-    yield* deps.sandbox.withdrawCredential(session);
-  }).pipe(
-    Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not taken off")),
   );
 }
 
@@ -344,15 +327,11 @@ export function relayTerminal(
     const held = yield* Ref.make<number | undefined>(0);
     const overheld = yield* Deferred.make<void>();
     const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held, overheld));
-    // Note that the withdrawal is added ahead of the renewal's fork, so the scope ends the renewal first.
     const session: FirewallSession = {
       userId: agent.userId,
       name: sandbox.sandboxName,
       sandboxSessionId: sandbox.sandboxSessionId,
     };
-    if (agent.memberToken) {
-      yield* Effect.addFinalizer(() => withdrawCredential(deps, agent, session));
-    }
     const firstRenewed = yield* Deferred.make<void>();
     yield* Effect.forkScoped(
       Effect.repeat(
