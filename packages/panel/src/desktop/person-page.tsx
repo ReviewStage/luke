@@ -20,7 +20,9 @@ import {
   Fill,
   GAP,
   InlineEdit,
+  LIST_DENSITY,
   List,
+  type ListDensity,
   ListRow,
   type ListRun,
   MoreButton,
@@ -91,7 +93,7 @@ import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { HOME_ROW_CONTEXT, HOME_ROW_META, HOME_ROW_PICTURE } from "../tasks/home-row.js";
 import { InboxItemRow, InboxListSkeleton, inboxRowDraft } from "../tasks/inbox-list.js";
 import { INBOX_HOLDER, type InboxListed, NEEDS_YOU } from "../tasks/inbox-model.js";
-import { agentEndMark } from "../tasks/tab-look.js";
+import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { readAgentById } from "../tasks/use-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -100,6 +102,7 @@ import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, rowMenu } from "./action-menu.js";
 import { agentMenuGroups, rowDoors, useAgentActions } from "./agent-actions.js";
+import { SUMMARY_GLYPH } from "./agent-archive.js";
 import { STANDING_GLYPH } from "./automation-runs-panel.js";
 import { automationNextText } from "./automation-words.js";
 import {
@@ -182,6 +185,7 @@ function PersonSection({
   title,
   count,
   tone,
+  density = LIST_DENSITY.REGULAR,
   rowsMasked = false,
   run,
   children,
@@ -189,6 +193,8 @@ function PersonSection({
   title: string;
   count: number;
   tone?: StatusTone | undefined;
+  /** How tightly its rows stand. */
+  density?: ListDensity;
   /** Whether its rows are drawn by a component this page leaves unmarked, an Inbox item's, so they stay masked in a screen recording but for the words a row unmasks itself. */
   rowsMasked?: boolean | undefined;
   /** The run its rows are drawn in, drawing only those near the view, in place of `children`. */
@@ -197,7 +203,7 @@ function PersonSection({
   children?: ReactNode;
 }): React.JSX.Element {
   const list = (
-    <List label={title} moves run={run}>
+    <List label={title} density={density} moves run={run}>
       {children}
     </List>
   );
@@ -218,8 +224,11 @@ const AGENT_THING = "Agent";
 const AUTOMATION_THING = "Automation";
 
 /**
- * One of their agents as a row: its tile, its name, the task it works on,
- * and when it last moved; a press opens its tab, and its ⋯, right-click,
+ * One of their agents as a row, as the task's own agents stand at the head
+ * of its description (`plan-agents.tsx`): its harness's mark wearing where
+ * it stands (`AgentGlyph`), which gives way to the working mark while it
+ * works, and its name on one dense line; then the task it works on, its
+ * failed mark once its turn failed, and when it last moved; a press opens its tab, and its ⋯, right-click,
  * long press and menu key offer the agent's one menu over the doors a row has
  * (`agent-actions.tsx`), as a task's summary offers it: Copy link, Rename,
  * which turns the row into its name's field, Archive, asking first while a
@@ -269,8 +278,8 @@ function AgentRow({
           motionKey={agent.id}
           place={place}
           leading={
-            <span className={HOME_ROW_PICTURE}>
-              <ActorMark actor={subject.tile} />
+            <span className={SUMMARY_GLYPH}>
+              <AgentGlyph agent={agent} />
             </span>
           }
           title={
@@ -322,8 +331,8 @@ function agentKey({ agent }: PersonAgent): string {
   return agent.id;
 }
 
-/** The height an agent's row is taken to have before it is measured, in pixels: a regular `ListRow`'s, one line. */
-const AGENT_ROW_ESTIMATE_PX = 40;
+/** The height an agent's row is taken to have before it is measured, in pixels: a dense `ListRow`'s, a control's height. */
+const AGENT_ROW_ESTIMATE_PX = 30;
 
 /** The room between two agents' rows, in pixels: a list's (`--ui-list-gap`). */
 const AGENT_ROW_GAP_PX = 2;
@@ -354,6 +363,7 @@ function PersonAgentsSection({
     <PersonSection
       title={title}
       count={agents.length}
+      density={LIST_DENSITY.DENSE}
       run={{
         scroller,
         shiftedBy,
