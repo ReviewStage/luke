@@ -914,7 +914,7 @@ project's directory:
 ```
 vercel link
 vercel connect create mcp.executor.sh --name executor          # Executor; corrected below
-vercel connect create mcp.linear.app --name linear             # Linear; prints the connector UID
+vercel connect create linear --name vespin                     # Linear, Connect's managed connector; scoped below
 vercel connect create mcp.notion.com --name notion             # Notion
 vercel connect create mcp.sentry.dev --name sentry             # Sentry
 vercel connect create mcp.stripe.com --name stripe             # Stripe; asks for its scope below
@@ -938,14 +938,20 @@ rest by their server's address. Vercel's MCP server accepts only the clients
 Vercel has reviewed, which is why it is created through Connect's own Vercel
 target rather than by address. A connector created this way asks for no
 scopes, and the provider grants its own default, which is enough for
-Linear, Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
+Notion, Sentry, Granola, and Vercel. Mercury grants a write scope,
 and a refresh token (`offline_access`), only when asked; Y Combinator's
 server asks for `mcp:access` and Stripe's for `mcp`; and PostHog's and
 Supabase's granular scopes are better asked for in full than left to a
 default. Those five connectors
 ask for every scope their server publishes (`scopes_supported` in its
 `/.well-known/oauth-protected-resource`), set on the connector's
-`data.userAuthorization.scopes`. Resend's resource publishes none, and its
+`data.userAuthorization.scopes`, less the ones that administer the account
+rather than work in it: PostHog's `access_control:write`,
+`organization:write`, `account:write`, `user:write`, `integration:write`, and
+`llm_provider_key:read`, and Supabase's `secrets:read`, which would hand an
+agent a project's API keys, its service role key among them. A token keeps
+the scopes it was granted, so a narrowed connector reaches a member only
+when they connect again. Resend's resource publishes none, and its
 authorization server (`https://api.resend.com`) publishes `full_access`
 beside the narrower `emails:send`, so its connector asks for `full_access`
 alone:
@@ -980,6 +986,21 @@ client ID metadata document support; should the client Connect registers
 fail there, a public client is registered by hand at
 `https://access.stripe.com/mcp/oauth2/register` and the connector PATCHed to
 it, as Granola's is below.
+
+**Linear's connector.** Linear is Connect's managed Linear connector,
+created by its catalog name, which registers a Linear OAuth application
+named Vespin in the team's Linear workspace and is what Linear's consent page
+names. Its tokens are Linear API tokens, which Linear's MCP server takes as
+its own. Its user scopes are `read` and `write` alone, the two that server
+publishes, and never `admin`, which would let an agent administer the
+member's Linear workspace; `write` covers `issues:create` and
+`comments:create`. They are set on the connector's `data.userScopes`, and its
+`data.appScopes` (the application acting as itself) serve no integration:
+
+```
+# ~/linear-scopes.json: {"data":{"userScopes":["read","write"]}}
+vercel api "/v2/connect/connectors/<connector-id>?teamId=<team-id>" -X PATCH --input ~/linear-scopes.json
+```
 
 **Neon's connector.** Neon's registration endpoint refuses a client that
 does not name its `response_types`, which Connect's registration leaves
