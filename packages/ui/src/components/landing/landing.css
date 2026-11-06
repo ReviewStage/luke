@@ -457,12 +457,15 @@
     background: var(--ui-color-border-strong);
   }
 
+  /* The phone's bezel, corners, and island are shares of its own width
+     (its holder is the container they measure), so it keeps one shape at
+     any size the devices draw it at. */
   .ui-landing-phone {
     position: relative;
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 393 / 852;
-    padding: 9px;
+    padding: 3.5cqw;
     border-radius: var(--ui-display-phone-radius);
     background: var(--ui-color-sidebar);
     box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
@@ -481,11 +484,11 @@
 
   .ui-landing-phone-island {
     position: absolute;
-    top: 20px;
+    top: 7.9cqw;
     left: 50%;
-    width: 76px;
-    height: 22px;
-    margin-left: -38px;
+    width: 30cqw;
+    height: 8.7cqw;
+    margin-left: -15cqw;
     border-radius: var(--ui-display-island-radius);
     background: var(--ui-color-sidebar);
   }
@@ -940,29 +943,34 @@
     border-left: 1px solid var(--ui-color-border);
   }
 
-  /* The devices: the Mac window, with the phone standing over its corner. */
+  /* The devices: the Mac window and the phone side by side, one picture
+     scaled as a whole to the stage at every width. The phone stands nine
+     tenths of the window's height, so its app draws at nearly the window's
+     density, the two reading as one set rather than two scales; they share
+     the stage's middle, a gap apart, and the stage is only as tall as they
+     are. The shares follow from that: a 16:10 window's height, nine tenths
+     of it, and the phone's 393:852 make the phone 0.26 of the window's
+     width, so with a gap of 0.05 the window takes 1 / 1.31 of the row. */
   .ui-landing-stage[data-scene="devices"] {
-    height: 620px;
-    padding: 0;
+    padding: 64px 6%;
   }
 
   .ui-landing-devices {
-    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3.8%;
   }
 
   .ui-landing-devices-window {
-    position: absolute;
-    top: 64px;
-    left: 5%;
-    width: 66%;
+    flex: 0 0 76.4%;
+    min-width: 0;
   }
 
   .ui-landing-devices-phone {
-    position: absolute;
-    top: 44px;
-    right: 8%;
-    z-index: 2;
-    width: 254px;
+    flex: 0 0 19.8%;
+    min-width: 0;
+    container-type: inline-size;
   }
 
   /* The phone's Inbox: its bar under the status bar's room, its search, its
@@ -995,7 +1003,7 @@
   }
 
   /* Under 640px of room the page keeps to one column: the ball under the
-     words, each stage under its heading, and the phone nearer the window. A
+     words, and each stage under its heading. A
      window scaled to the column draws its words too small to read, so a
      stage that holds one alone shows the one moment that sells it instead:
      the desktop app as it is, laid out at 1280 by 800, cut to that moment's
@@ -1113,35 +1121,7 @@
     }
 
     .ui-landing-stage[data-scene="devices"] {
-      height: 420px;
-    }
-
-    .ui-landing-devices-window {
-      top: 30px;
-      left: 4%;
-      width: 86%;
-    }
-
-    .ui-landing-devices-phone {
-      top: 120px;
-      right: 5%;
-      width: 150px;
-    }
-
-    .ui-landing-phone {
-      padding: 6px;
-      border-radius: var(--ui-display-phone-radius-narrow);
-    }
-
-    .ui-landing-phone-fit {
-      border-radius: var(--ui-display-phone-screen-radius-narrow);
-    }
-
-    .ui-landing-phone-island {
-      top: 12px;
-      width: 44px;
-      height: 13px;
-      margin-left: -22px;
+      padding: 28px 5%;
     }
 
     .ui-landing-close {
