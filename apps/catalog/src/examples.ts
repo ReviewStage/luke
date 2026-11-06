@@ -125,6 +125,7 @@ import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SOCIAL_SIGN_IN_EXAMPLE } from "./examples/social-sign-in";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { STEPS_EXAMPLE } from "./examples/steps";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TAB_NOTICES_EXAMPLE } from "./examples/tab-notices";
@@ -284,6 +285,7 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
+  STEPS_EXAMPLE,
   LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,

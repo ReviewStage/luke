@@ -39,6 +39,7 @@ export function SecretField({
   autoFocus,
   onEnter,
   onEscape,
+  onPasted,
   ref,
 }: {
   label: ReactNode;
@@ -58,6 +59,8 @@ export function SecretField({
   autoFocus?: boolean | undefined;
   onEnter?: (() => void) | undefined;
   onEscape?: (() => void) | undefined;
+  /** What a paste does once it lands, handed what the field then holds: a secret is pasted far more than typed, so a form may save on it. */
+  onPasted?: ((value: string) => void) | undefined;
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
   const [shown, setShown] = useState(false);
@@ -84,6 +87,7 @@ export function SecretField({
             onChange={onChange}
             onEnter={onEnter}
             onEscape={onEscape}
+            onPasted={onPasted}
           />
           <Tooltip label={toggle}>
             <IconButton

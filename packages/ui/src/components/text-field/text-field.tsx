@@ -291,6 +291,11 @@ function submitting(event: KeyboardEvent, key: TextAreaSubmit): boolean {
   return key === TEXT_AREA_SUBMIT.ENTER ? !event.shiftKey : event.metaKey || event.ctrlKey;
 }
 
+/** Whether an input event is a paste landing, rather than typing or a drop. */
+function pastedInput(event: Event): boolean {
+  return "inputType" in event && event.inputType === "insertFromPaste";
+}
+
 /** One line of text, answering Enter with `onEnter` where it is given. */
 export function TextField({
   autoComplete,
@@ -298,6 +303,7 @@ export function TextField({
   inputMode,
   selectOnFocus = false,
   onEnter,
+  onPasted,
   size = TEXT_FIELD_SIZE.CONTROL,
   ground = TEXT_FIELD_GROUND.INPUT,
   ref,
@@ -314,6 +320,8 @@ export function TextField({
     selectOnFocus?: boolean | undefined;
     /** What an Enter does, pressed while no input method is composing. */
     onEnter?: (() => void) | undefined;
+    /** What a paste does once it has landed, handed the words the field then holds, after `onChange` heard them. */
+    onPasted?: ((value: string) => void) | undefined;
     /** How large it stands; a control where none is named. */
     size?: TextFieldSize | undefined;
     /** The ground its well is filled with; the input's where none is named. */
@@ -339,7 +347,13 @@ export function TextField({
       {...entryAttributes(props)}
       value={props.value ?? ""}
       onChange={(event) => {
-        if (props.type !== TEXT_FIELD_TYPE.NUMBER) return props.onChange(event.target.value);
+        if (props.type !== TEXT_FIELD_TYPE.NUMBER) {
+          props.onChange(event.target.value);
+          // Note that a paste is told by the input it made, so a paste and typing reach the same `onChange` first.
+          if (onPasted !== undefined && pastedInput(event.nativeEvent))
+            onPasted(event.target.value);
+          return;
+        }
         // Note that a half-typed number reads as nothing, and React leaves its text standing, as it compares loosely.
         const typed = event.target.valueAsNumber;
         props.onChange(Number.isFinite(typed) ? typed : undefined);

@@ -514,8 +514,8 @@ test("replacing the account's own Anthropic key moves the models the host holds,
     ).click(),
   );
   const label =
-    [...document.querySelectorAll("label")].find((each) => each.textContent === "New key") ??
-    assert.fail("no New key field");
+    [...document.querySelectorAll("label")].find((each) => each.textContent === "Paste the key") ??
+    assert.fail("no key field");
   const field = label.control instanceof HTMLInputElement ? label.control : assert.fail();
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
