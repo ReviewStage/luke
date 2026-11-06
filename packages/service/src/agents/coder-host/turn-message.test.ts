@@ -21,7 +21,7 @@ import type { AdmittedConversation } from "../eve-host/conversation.js";
 import { runAgentEditPlan } from "./agent-doors.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
-import { handedAfterCompaction, type TurnHanded } from "./turn-context.js";
+import { handedAfterCompaction, type TurnHanded, taskWithLead } from "./turn-context.js";
 import { coderTurnMessage } from "./turn-message.js";
 
 /**
@@ -148,7 +148,8 @@ it.layer(getTestDB())("a coding agent's turn message", (it) => {
             (message) => {
               handed = message.handed;
               const text = message.text ?? "";
-              return text.includes("[saved document]") ? text : undefined;
+              // Note that the task is read as handed by its lead, since with Plans off it is handed without its document.
+              return text.includes(taskWithLead("")) ? text : undefined;
             },
           );
         const agentNotes = (notes: Parameters<typeof saveNotes>[1]) =>
