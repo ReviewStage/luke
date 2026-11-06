@@ -220,7 +220,7 @@ export function usePageReview(
   };
 }
 
-/** One held comment in the panel: what it is on, its words, and Remove. */
+/** One held comment in the panel: its words, which open with the quote of the element it is on, or Whole page over them, and Remove. */
 function HeldRow({
   comment,
   words,
@@ -233,13 +233,11 @@ function HeldRow({
 }): React.JSX.Element {
   return (
     <li className="page-review-row flex min-w-0 flex-col gap-tight-gap">
-      <QuietWords>
-        {comment.element === undefined ? (
+      {comment.element === undefined ? (
+        <QuietWords>
           <ReplayUnmask>{PAGE_REVIEW_WORDS.WHOLE_PAGE}</ReplayUnmask>
-        ) : (
-          comment.element.quote
-        )}
-      </QuietWords>
+        </QuietWords>
+      ) : null}
       {words}
       <div>
         <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onRemove}>
