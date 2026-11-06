@@ -38,7 +38,6 @@ interface Recorded {
   sandboxed: number[];
   native: number[];
   wakeups: number[];
-  withdrawnLines: number[];
   automated: number[];
   pictures: number[];
   syncLog: number[];
@@ -55,7 +54,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     sandboxed: [],
     native: [],
     wakeups: [],
-    withdrawnLines: [],
     automated: [],
     pictures: [],
     syncLog: [],
@@ -100,11 +98,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.wakeups.push(now);
         return { delivered: 1, failed: 0 };
-      }),
-    purgeWithdrawnLines: (now) =>
-      Effect.sync(() => {
-        recorded.withdrawnLines.push(now);
-        return 2;
       }),
     sweepAutomations: (now) =>
       Effect.sync(() => {
@@ -159,7 +152,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
@@ -187,7 +179,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
@@ -202,7 +193,6 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       sandboxed: [],
       native: [],
       wakeups: [],
-      withdrawnLines: [],
       automated: [],
       pictures: [],
       syncLog: [],
@@ -237,7 +227,6 @@ it.effect(
         sandboxed: [instant],
         native: [instant],
         wakeups: [instant],
-        withdrawnLines: [instant],
         automated: [instant],
         pictures: [instant],
         syncLog: [instant],

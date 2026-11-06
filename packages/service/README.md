@@ -2631,8 +2631,6 @@ the rest still run, and any failure fails the cron's check-in. In order:
   settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
-- `withdrawnLines`: withdrawn lines no turn took within an agent's turn
-  bound deleted.
 - `automations`: the automations whose schedule is due fired
   ("Automations" below), at most twenty-five a sweep, and the runs still
   queued from the last hour acted on, at most twelve a sweep and four at

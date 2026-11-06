@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@repo/database/core/query";
-import { purgeWithdrawnLines, sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
+import { sweepAbandonedTurns } from "@repo/database/models/abandoned-turns";
 import { purgeUnsavedAttachments } from "@repo/database/models/description-attachments";
 import { hostedStore } from "@repo/database/models/hosted-store";
 import { dropStaleFirewalls } from "@repo/database/models/sandbox-firewall-store";
@@ -87,7 +87,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(sessionsFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAgentQueues: () => sweepAgentQueues(sessionsFor).pipe(Effect.provideContext(startContext)),
-    purgeWithdrawnLines: (now) => purgeWithdrawnLines(now),
     sweepAutomations: (now) =>
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
