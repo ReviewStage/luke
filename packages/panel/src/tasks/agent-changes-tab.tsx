@@ -12,7 +12,6 @@ import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@repo/features/task-wir
 import { REFRESH_FAILED_WORDS } from "@repo/features/words";
 import { ACT_KIND } from "@repo/host/acts";
 import {
-  ANNOUNCE,
   BUTTON_SIZE,
   Button,
   Checkbox,
@@ -32,15 +31,10 @@ import {
   SpinnerRegion,
   Stack,
   TabNotice,
-  TEXT_ELEMENT,
-  TEXT_VARIANT,
-  Text,
   TextButton,
   Tooltip,
-  useAnnounce,
 } from "@repo/ui";
 import {
-  CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   CodeIcon,
@@ -178,8 +172,7 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
  * while its lines scroll by; a file with no hunks says why under its header.
- * Its bar leads with how many of the files the member marked viewed
- * (`ViewedCount`), then the pull request's files on GitHub, the diff
+ * Its bar holds the pull request's files on GitHub, the diff
  * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
  * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
  * saved, and the changes read again), and the tree's toggle, which shows
@@ -272,68 +265,6 @@ export function useAgentRead<A extends object>(
   });
 
   return { answer, out, ask };
-}
-
-/**
- * How many of the files drawn the member marked viewed, leading the bar as
- * stage-cli's Files tab counts them: "3 / 12 files viewed" by the same marks
- * the headers' boxes, V, and the tree draw, so a box ticked counts at once
- * and one GitHub refuses counts again as it goes back; "All 12 files viewed"
- * with a check, quietly in the palette's green, once every one is; and only
- * how many files there are while no marks are read (no sign-in, a read
- * refused, or still reading), rather than a count the marks cannot vouch
- * for. A read that stopped short of every file is never all viewed, since
- * the files it left out are not. It is words, not a control, and a change is
- * read out politely.
- */
-function ViewedCount({
-  files,
-  viewed,
-  truncated,
-}: {
-  files: readonly AgentChangedFile[];
-  /** Whether a file is marked viewed; none while the marks are not read. */
-  viewed: ((path: string) => boolean) | undefined;
-  /** Whether the read stopped short of every file of the pull request. */
-  truncated: boolean;
-}): React.JSX.Element {
-  const { words, complete } = viewedOf(files, viewed, truncated);
-  useAnnounce(ANNOUNCE.POLITE, words);
-  return (
-    // A check and the palette's green once every file is viewed; quiet, cut short at its end where the bar is narrow.
-    <p
-      className="files-viewed m-0 flex min-w-0 flex-initial items-center gap-tight-gap whitespace-nowrap text-muted-foreground data-complete:text-complete [&>svg]:size-control-icon [&>svg]:flex-none"
-      data-complete={complete ? "" : undefined}
-    >
-      {complete ? <CheckIcon aria-hidden="true" /> : null}
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.INHERIT}
-        truncate
-        className="files-viewed-words"
-      >
-        {words}
-      </Text>
-    </p>
-  );
-}
-
-/** How many of the files are viewed, in the bar's words (`ViewedCount`), and whether every one is. */
-function viewedOf(
-  files: readonly AgentChangedFile[],
-  viewed: ((path: string) => boolean) | undefined,
-  truncated: boolean,
-): { readonly words: string; readonly complete: boolean } {
-  const count = files.length;
-  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
-  const complete = seen === count && !truncated;
-  const words =
-    seen === undefined
-      ? LIST_WORDS.filesOf(count)
-      : complete
-        ? LIST_WORDS.allViewed(count)
-        : LIST_WORDS.viewedOf(seen, count);
-  return { words, complete };
 }
 
 /** What the bar's ⋯ says. */
@@ -1826,9 +1757,8 @@ export interface FileReveal {
  * A bar of the host's that draws the view's tools in place of its own
  * (`FileViewBar`), as a chapter's header does: its diff settings and Collapse
  * all, drawn into `tools`, and the tree's toggle, drawn into `end`, at the
- * bar's very end past its ⋯, as every tab's bar stands it; the view's count of files
- * viewed, its pull request on GitHub, and its ⋯ over the whole pull request
- * left to the host, and no strip standing in the closed tree's place.
+ * bar's very end past its ⋯, as every tab's bar stands it; the view's pull
+ * request on GitHub and its ⋯ over the whole pull request left to the host, and no strip standing in the closed tree's place.
  */
 export interface ChangesBarHost {
   /** The box in the host's bar the tools are drawn into; none until it is drawn. */
@@ -1947,8 +1877,8 @@ export function AgentChangesTab({
   };
   const changesMenu = useChangesMenu({ pullRequest });
   const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
-  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files;
-  // a host's own bar says its count, and offers nothing that acts on the whole pull request.
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown;
+  // a host's own bar offers nothing that acts on the whole pull request.
   const phone = usePhoneRoom();
   const url = pullRequest?.url;
   useTabActions(
@@ -1956,11 +1886,7 @@ export function AgentChangesTab({
       ? host === undefined
         ? [
             [
-              paneToggleAction(
-                room,
-                undefined,
-                viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
-              ),
+              paneToggleAction(room),
               {
                 ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
                 label: OPEN_FILES_ON_GITHUB,
@@ -2047,13 +1973,6 @@ export function AgentChangesTab({
         </>
       ) : (
         <FileViewBar
-          lead={
-            <ViewedCount
-              files={changed.files}
-              viewed={list.viewed}
-              truncated={pullRequest.truncated}
-            />
-          }
           github={{
             href: `${pullRequest.url}/files`,
             open: (url) => appPlatform().openGitHub(url),
