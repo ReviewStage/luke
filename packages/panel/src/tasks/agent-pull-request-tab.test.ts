@@ -4254,6 +4254,8 @@ test("a numbered pull request nothing published shows how its checks went on its
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
   const open = await draw(merging(MERGE_STATE.CLEAN));
+  // Note that Close asks first until the read says the pull request is out of the merge queue.
+  await vi.waitFor(() => assert.equal(mergeShown(open)?.press, "Squash and merge"));
   await pressAction(open, "Close pull request");
   act(() => root?.unmount());
   root = undefined;
@@ -4263,7 +4265,7 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
         Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.CLOSED } }),
     }),
   );
-  assert.deepEqual(offered(closed), ["Reopen pull request"]);
+  await vi.waitFor(() => assert.deepEqual(offered(closed), ["Reopen pull request"]));
   await pressAction(closed, "Reopen pull request");
 
   assert.deepEqual(changes, [
@@ -4294,6 +4296,8 @@ test("the pill is named by the words it draws, so a change out reads as the scre
 test("Close acts at once on an open pull request and a draft, a toast offering Reopen, which sends the reopen and goes", async () => {
   const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
   const tab = await draw(merging(MERGE_STATE.CLEAN));
+  // Note that Close asks first until the read says the pull request is out of the merge queue.
+  await vi.waitFor(() => assert.equal(mergeShown(tab)?.press, "Squash and merge"));
   await pressAction(tab, "Close pull request");
 
   assert.equal(question(), false, "closing is not asked about");
@@ -4330,6 +4334,8 @@ test("Close acts at once on an open pull request and a draft, a toast offering R
 test("a Close GitHub would not take offers no Reopen", async () => {
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not allowed." };
   const tab = await draw(merging(MERGE_STATE.CLEAN));
+  // Note that Close asks first until the read says the pull request is out of the merge queue.
+  await vi.waitFor(() => assert.equal(mergeShown(tab)?.press, "Squash and merge"));
   await pressAction(tab, "Close pull request");
 
   assert.equal(newestToastSays(), undefined);
@@ -4390,6 +4396,8 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
       autoMerge: { method: null },
     }),
   );
+  // Note that the pill says Queued once the pull request's read reaches its query.
+  await vi.waitFor(() => assert.equal(standing(tab), "Queued #2"));
   const pill = pillOf(tab) ?? assert.fail("the pill stands");
   assert.deepEqual(
     [standing(tab), pill.getAttribute("data-tone"), pill.getAttribute("aria-label")],
@@ -4400,7 +4408,11 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
     "queued",
   );
   assert.deepEqual(offered(tab), ["Close pull request"]);
-  assert.equal(mergeControl(tab)?.querySelector(".merge-chip"), null, "no chip says it again");
+  assert.equal(
+    mergeControl(tab)?.querySelector(".merge-chip") === null,
+    true,
+    "no chip says it again",
+  );
   assert.deepEqual(
     mergePresses(tab).map((each) => each.textContent),
     ["Remove from queue"],
@@ -4409,7 +4421,10 @@ test("an open pull request GitHub holds in its merge queue says Queued and its p
   root = undefined;
 
   const open = await draw(merging(MERGE_STATE.CLEAN));
-  assert.equal(standing(open), "Open", "out of the queue the pill says where it stands");
+  // Note that the queued read the draw before held stands in the cache until this draw's read lands.
+  await vi.waitFor(() =>
+    assert.equal(standing(open), "Open", "out of the queue the pill says where it stands"),
+  );
   assert.deepEqual(offered(open), ["Convert to draft", "Close pull request"]);
 });
 
