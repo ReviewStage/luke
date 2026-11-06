@@ -46,8 +46,6 @@ function openActPort(actor: ActSender): void {
         providerKeySave: noKeys,
         providerKeyRemove: noKeys,
         providerKeyForAgents: noKeys,
-        chatGptSignIn: noKeys,
-        chatGptSignInCancel: () => Effect.void,
         chatGptDeviceStart: unanswered,
         chatGptDeviceWait: unanswered,
         chatGptDeviceCancel: unanswered,

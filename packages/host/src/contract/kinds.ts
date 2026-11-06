@@ -41,15 +41,6 @@ export const ACCOUNT_ASK_ACT_KIND = {
   /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
   PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
   /**
-   * Settings › Coding agents › Codex: Sign in with ChatGPT for our hosted
-   * runtime, run by the host through the developer's browser, and the one
-   * waiting withdrawn. Nothing crosses from the renderer but the press, and
-   * the answer is the keys as the service then holds them: the sign-in's
-   * tokens go from the host to the service and never reach a window.
-   */
-  CHATGPT_SIGN_IN: "chatGpt.signIn",
-  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
-  /**
    * Settings › Agents › Codex › Connect: Codex's device-code login, run by
    * the service, begun, waited on while the host asks after it on its
    * interval, and withdrawn. Nothing crosses from the renderer but the
@@ -811,8 +802,6 @@ export const PORT_ACT_USE = {
   PROVIDER_KEYS_SAVE: ACT_USE.WRITE,
   PROVIDER_KEYS_REMOVE: ACT_USE.WRITE,
   PROVIDER_KEYS_FOR_AGENTS: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN: ACT_USE.WRITE,
-  CHATGPT_SIGN_IN_CANCEL: ACT_USE.WRITE,
   CHATGPT_DEVICE_START: ACT_USE.WRITE,
   CHATGPT_DEVICE_WAIT: ACT_USE.WRITE,
   CHATGPT_DEVICE_CANCEL: ACT_USE.WRITE,

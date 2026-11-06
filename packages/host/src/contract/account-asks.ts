@@ -4,7 +4,6 @@ import {
   chatGptDevicePollAnswerViewSchema,
   chatGptDeviceStartAnswerViewSchema,
   chatGptDeviceWaitParamsSchema,
-  chatGptSignInAnswerViewSchema,
   dictationTranscribeAnswerViewSchema,
   dictationTranscribeParamsSchema,
   githubTokenAnswerViewSchema,
@@ -56,16 +55,6 @@ export const accountAskActsContract = {
   )
     .input(exactInput(providerKeyForAgentsParamsSchema))
     .output(EffectSchema.flip(providerKeysAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: actProcedure(
-    "Couldn't continue with ChatGPT on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.flip(chatGptSignInAnswerViewSchema)),
-  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]: actProcedure(
-    "Couldn't stop waiting for ChatGPT on this system.",
-  )
-    .input(exactInput(EffectSchema.Undefined))
-    .output(EffectSchema.Void),
   [ACCOUNT_ASK_ACT_KIND.CHATGPT_DEVICE_START]: actProcedure(
     "Couldn't start connecting Codex on this system.",
   )
