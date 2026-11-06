@@ -4,7 +4,6 @@ import { Cause, Clock, Data, Effect, type Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
 import { GitHubBackground } from "../github/github-rate-gate.js";
-import type { TokenPullRequestSweepOutcome } from "../github/token-pull-request-sweep.js";
 import {
   bearerMatchesSecret,
   errorResponse,
@@ -46,8 +45,6 @@ interface MaintenanceSweeps {
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
   /** Deletes the descriptions' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
-  /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
-  sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
   /** Hands on the coding agents' queues standing unpaused whose agent idles, a sweep's worth, answering how many it looked at. */
   sweepAgentQueues: (now: number) => SweepRead<number>;
   /** Deletes the hosts' pairings whose code lapsed, a sweep's worth, and the hosts approved whose boxes never collected their secret, answering how many pairings went. */
@@ -90,7 +87,6 @@ interface MaintenanceSweepAnswer {
   automations: Swept<AutomationSweepOutcome>;
   /** Pictures pasted into descriptions that no save named, deleted. */
   purgedPictures: Swept<number>;
-  tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
   /** How many coding agents' queues standing unpaused the sweep looked at, each handed on where its agent idled. */
   agentQueues: Swept<number>;
   /** Hosts' pairings whose code lapsed, deleted. */
@@ -146,10 +142,6 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     withdrawnLines: yield* isolated("purgeWithdrawnLines", sweeps.purgeWithdrawnLines(now)),
     automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
     purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
-    tokenPullRequests: yield* isolated(
-      "sweepTokenPullRequests",
-      sweeps.sweepTokenPullRequests(now),
-    ),
     agentQueues: yield* isolated("sweepAgentQueues", sweeps.sweepAgentQueues(now)),
     hostPairings: yield* isolated("sweepHostPairings", sweeps.sweepHostPairings(now)),
     syncLog: yield* isolated("pruneSyncLog", sweeps.pruneSyncLog(now)),

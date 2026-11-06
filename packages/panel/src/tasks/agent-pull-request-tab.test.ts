@@ -6427,7 +6427,14 @@ test("a pending comment edited and saved untouched sends its Markdown back byte 
     "PRRC_start",
   );
 
+  // Note that the card folded closed opens for its ⋯'s Edit, so the field it opens is in view.
+  act(() =>
+    (card.querySelector<HTMLElement>(".annotation-card-fold > summary") ?? assert.fail()).click(),
+  );
+  await settle();
+  assert.equal(card.querySelector(".pull-request-thread-comment") === null, true, "folded closed");
   pendingAct(card, "Edit");
+  await settle();
   assert.ok(card.querySelector("pre > code.language-suggestion"), "the edit opens on its Markdown");
   act(() => commentOffer(card, "Save").click());
   await settle();

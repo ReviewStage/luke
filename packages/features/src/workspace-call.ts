@@ -1,3 +1,11 @@
+import { githubContract } from "./contract/github.js";
+import { workspaceGithubContract } from "./contract/workspace-github.js";
+import { workspaceInvitationsContract } from "./contract/workspace-invitations.js";
+import { workspaceSentryContract } from "./contract/workspace-sentry.js";
+import { workspaceSlackBotContract } from "./contract/workspace-slack-bot.js";
+import { workspacesContract } from "./contract/workspaces.js";
+import { failureSetOf } from "./hosted-failure.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 import type { TaskCallResult } from "./task-client.js";
 
 /**
@@ -5,26 +13,32 @@ import type { TaskCallResult } from "./task-client.js";
  *
  * Its own module, apart from the client, so the tasks view, which the
  * window reads, takes the words without taking the client and the account
- * call behind it into the window's bundle.
+ * call behind it into the window's bundle. The words are derived from the
+ * refusals the workspace procedures declare (`hosted-failure.ts`), each
+ * spelled as its slug but the slug's, which shipped without their
+ * `workspace-` prefix.
  */
 
-/** Why a workspace call did not happen. */
-export const WORKSPACE_CALL_FAILURE = {
-  /** The call never reached an answer: no credential, the network, a refusal not named here, a shape not read. */
-  UNANSWERED: "unanswered",
-  /** The account's role in the workspace does not allow it: connecting or disconnecting GitHub or removing a member takes an owner or admin, and an owner neither leaves nor is removed. */
-  NOT_PERMITTED: "not-permitted",
-  /** The workspace is not one the account is a member of. */
-  NOT_FOUND: "not-found",
-  /** The address is already a member of the workspace, or already holds a pending invitation to it. */
-  ALREADY_INVITED: "already-invited",
-  /** A slug the owner chose is spelled other than a slug may be. */
-  SLUG_MALFORMED: "slug-malformed",
-  /** A slug the owner chose is one our own pages, or an account's first workspace, stand under. */
-  SLUG_RESERVED: "slug-reserved",
-  /** A slug the owner chose is another workspace's. */
-  SLUG_TAKEN: "slug-taken",
+/** The failures a workspace call shipped under a spelling other than its refusal's slug. */
+export const WORKSPACE_RENAMES = {
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: "slug-malformed",
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: "slug-reserved",
+  [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: "slug-taken",
 } as const;
+
+/** The procedures a workspace call asks: every workspace group's, and the GitHub group's two over a workspace's token repositories. */
+export const WORKSPACE_CALLS = {
+  workspaces: workspacesContract,
+  workspaceInvitations: workspaceInvitationsContract,
+  workspaceGithub: workspaceGithubContract,
+  workspaceSentry: workspaceSentryContract,
+  workspaceSlackBot: workspaceSlackBotContract,
+  tokenRepositories: githubContract.tokenRepositories,
+  setTokenRepository: githubContract.setTokenRepository,
+};
+
+/** Why a workspace call did not happen: a refusal one of its procedures declares, or no answer (`unanswered`). */
+export const WORKSPACE_CALL_FAILURE = failureSetOf(WORKSPACE_CALLS, { as: WORKSPACE_RENAMES });
 
 export type WorkspaceCallFailure =
   (typeof WORKSPACE_CALL_FAILURE)[keyof typeof WORKSPACE_CALL_FAILURE];

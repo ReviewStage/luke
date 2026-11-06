@@ -1158,6 +1158,8 @@ test("while the Automations pages are still loading their frame stands the list 
 test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands, and on a phone its list stands headed as it will be, by the way out and its title", async () => {
   const closed: string[] = [];
   const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  // The history's chunk is held on its way for the whole case, so its frame stands by construction rather than by timing.
+  routed().router.routesById["/version-history"].lazy(() => Promise.withResolvers<never>().promise);
   handState({});
   const page = mount(false, { history });
   // The router goes to the history, whose frame stands while its chunk is read.

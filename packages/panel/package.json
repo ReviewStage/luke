@@ -53,7 +53,6 @@
     "./styles/base.css": "./src/styles/base.css",
     "./styles/desktop.css": "./src/styles/desktop.css",
     "./styles/index.css": "./src/styles/index.css",
-    "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./styles/tasks.css": "./src/styles/tasks.css",
     "./tasks/microphone-choice": "./src/tasks/microphone-choice.js",

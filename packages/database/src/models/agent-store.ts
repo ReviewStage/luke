@@ -2563,10 +2563,9 @@ export interface AgentDeleteGuard<R> {
 }
 
 /**
- * Deletes the agent for good: its row, which takes its pins, its inbox, and
- * its pull request polls with it and leaves what else named it naming no
- * one; and its conversation stamped deleted, so
- * the purge takes its transcript seven days on, as a task's delete does
+ * Deletes the agent for good: its row, which takes its pins and its inbox
+ * with it and leaves what else named it naming no one; and its
+ * conversation stamped deleted, so the purge takes its transcript seven days on, as a task's delete does
  * for each of its agents. Answers the transaction its row went in, as a
  * task's delete does; none where the account reaches no such agent.
  *

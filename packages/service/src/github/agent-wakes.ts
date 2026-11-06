@@ -377,12 +377,12 @@ function instantOf(written: string | null, fallback: number): number {
 }
 
 /** The author's GitHub id a wake keeps, where GitHub named one. */
-export function githubIdOf(author: { readonly id?: number | undefined }): Pick<AgentWake, "byId"> {
+function githubIdOf(author: { readonly id?: number | undefined }): Pick<AgentWake, "byId"> {
   return author.id === undefined ? {} : { byId: String(author.id) };
 }
 
 /** The avatar a wake keeps of who caused it, where GitHub named one on its own avatar host. */
-export function githubAvatarOf(author: {
+function githubAvatarOf(author: {
   readonly avatar_url?: string | undefined;
 }): Pick<AgentWake, "byAvatar"> {
   const avatar = githubAvatarUrl(author.avatar_url);
@@ -390,7 +390,7 @@ export function githubAvatarOf(author: {
 }
 
 /** The logo of the App whose checks a wake tells of, where GitHub named its id. */
-export function appAvatarOf(
+function appAvatarOf(
   app: { readonly id?: number | undefined } | null | undefined,
 ): Pick<AgentWake, "byAvatar"> {
   return app?.id === undefined ? {} : { byAvatar: githubAppAvatarUrl(app.id) };
@@ -960,17 +960,14 @@ export function agentIsWoken(
 /** The services a wake's reads and sends run on. */
 type WakeServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** How the checks on a commit are read for the agent told of a wake. */
-export type HeadChecksRead = (
-  told: OwnedAgent,
-  sha: string | undefined,
-) => Effect.Effect<Option.Option<HeadChecks>, never, WakeServices>;
-
 /**
  * The checks on the commit given, read on the pull-request token of the
  * agent given; none where the read fails, which is logged by its kind alone.
  */
-export const headChecksFor: HeadChecksRead = (told, sha) => {
+function headChecksFor(
+  told: OwnedAgent,
+  sha: string | undefined,
+): Effect.Effect<Option.Option<HeadChecks>, never, WakeServices> {
   if (!hasRepository(told.agent) || sha === undefined) return Effect.succeed(Option.none());
   const { repository } = told.on;
   return agentPullRequestReach(told.userId, told.agent, repository).pipe(
@@ -986,11 +983,11 @@ export const headChecksFor: HeadChecksRead = (told, sha) => {
       ),
     ),
   );
-};
+}
 
 /**
- * The checks on the wake's commit its line carries, read with `read` for
- * the agent given where one is told: for every check finished, those read
+ * The checks on the wake's commit its line carries, read for the agent
+ * given where one is told: for every check finished, those read
  * where every one finished and there is at least one; for a failed check,
  * those read within `FAILED_CHECKS_GRACE` that name a failed check, none
  * past it, which is logged; none for any other wake.
@@ -998,17 +995,16 @@ export const headChecksFor: HeadChecksRead = (told, sha) => {
 function checksOfWake(
   wake: AgentWake,
   told: OwnedAgent | undefined,
-  read: HeadChecksRead,
 ): Effect.Effect<Option.Option<HeadChecks>, never, WakeServices> {
   if (told === undefined) return Effect.succeed(Option.none());
   switch (wake.kind) {
     case AGENT_WAKE.CHECKS_COMPLETED:
       return Effect.map(
-        read(told, wake.sha),
+        headChecksFor(told, wake.sha),
         Option.filter((checks) => checks.any && !checks.pending),
       );
     case AGENT_WAKE.CHECK_FAILED:
-      return read(told, wake.sha).pipe(
+      return headChecksFor(told, wake.sha).pipe(
         Effect.timeoutOption(FAILED_CHECKS_GRACE),
         Effect.flatMap(
           Option.match({
@@ -1068,9 +1064,8 @@ function agentsOf(wake: AgentWake) {
  * through the sessions `sessionsFor` answers for its owner, under the
  * delivery's id; answers how many were told. Every check finished is told only where
  * they all did, to the agents standing on that head, under its own key
- * (`checksCompletedKey`). A check line's checks are read with `readChecks`,
- * on the token of the first agent told unless a caller that tells several
- * wakes of one head reads them once for all of them. A send refused is
+ * (`checksCompletedKey`). A check line's checks are read on the token of
+ * the first agent told (`headChecksFor`). A send refused is
  * logged by its kind alone, and the delivery is still answered, as the
  * webhook answers any.
  */
@@ -1079,7 +1074,6 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
   wake: AgentWake,
   deliveryId: string,
   appLogin: string | undefined,
-  readChecks: HeadChecksRead = headChecksFor,
 ): Effect.fn.Return<number, never, WakeServices> {
   // A delivery with no id has no key to be told once under, so it tells nobody.
   if (deliveryId === "") return 0;
@@ -1097,7 +1091,7 @@ export const wakeAgents = /* @__PURE__ */ Effect.fn("web/githubWakeAgents")(func
       : admitted;
     // Read once for every agent told, since each is told the same review, or the same checks.
     const inline = yield* inlineCommentsOf(wake, woken[0]);
-    const checks = yield* checksOfWake(wake, woken[0], readChecks);
+    const checks = yield* checksOfWake(wake, woken[0]);
     if (checksCompleted && Option.isNone(checks)) return [];
     const clientKey =
       checksCompleted && Option.isSome(checks)

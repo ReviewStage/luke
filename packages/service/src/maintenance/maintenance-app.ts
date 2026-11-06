@@ -17,7 +17,6 @@ import type { SessionsForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { sweepTokenPullRequests } from "../github/token-pull-request-sweep.js";
 import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
@@ -93,12 +92,6 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepAutomations(sessionsFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
-    sweepTokenPullRequests: (now) =>
-      sweepTokenPullRequests(
-        sessionsFor,
-        environment.providerKeyEncryptionKeys,
-        new Date(now),
-      ).pipe(Effect.provideContext(startContext)),
     sweepHostPairings: (now) => sweepHostPairings(new Date(now)),
     pruneSyncLog: (now) => pruneSyncLog(new Date(now)),
     purgeStaleFirewalls: (now) => dropStaleFirewalls(new Date(now - FIREWALL_RECORD_KEEP_MS)),

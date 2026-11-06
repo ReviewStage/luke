@@ -507,56 +507,17 @@ export type IntegrationToolsProblemReason =
   (typeof INTEGRATION_TOOLS_PROBLEM)[keyof typeof INTEGRATION_TOOLS_PROBLEM];
 
 /**
- * The hints an MCP server gives of what one of its tools does, the spec's
- * `ToolAnnotations`: whether it only reads, whether a write it makes
- * destroys, whether calling it again changes nothing more, and whether it
- * reaches past the server's own world. Each stands only where the server
- * sent it, so an absent hint is never read as its spec default.
- */
-export const integrationToolAnnotationsSchema = EffectSchema.Struct({
-  readOnlyHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  destructiveHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  idempotentHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-  openWorldHint: EffectSchema.optionalKey(EffectSchema.Boolean),
-});
-
-export type IntegrationToolAnnotations = typeof integrationToolAnnotationsSchema.Type;
-
-/**
- * One argument a tool takes, as its server's input schema declares it, for a
- * person to read: its name, its type in a few words (`string`, `string[]`,
- * `string | null`, `enum`, `object`), whether a call must give it, and, where
- * the schema says, what it is, the values it may take, and its default, each
- * value written as the JSON it is unless it is a string.
- */
-const integrationToolParameterSchema = EffectSchema.Struct({
-  name: EffectSchema.String,
-  type: EffectSchema.String,
-  required: EffectSchema.Boolean,
-  description: EffectSchema.optionalKey(EffectSchema.String),
-  values: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.String)),
-  default: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type IntegrationToolParameter = typeof integrationToolParameterSchema.Type;
-
-/**
  * The tools one provider's server offers the account's agents (GET): each
- * one's name, the title a person reads where its server gave one, what it
- * does as its server wrote it, the hints its server annotated it with where
- * it sent any, and the arguments it takes where its server's input schema
- * was readable; or why the server listed none, with the server's own
- * one-line message where it sent one.
+ * one's name, which a mention of it carries, and what it does as its server
+ * wrote it, which a released desktop still requires; or why the server
+ * listed none, with the server's own one-line message where it sent one.
  */
 export const integrationToolsAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     tools: EffectSchema.Array(
       EffectSchema.Struct({
         name: EffectSchema.String,
-        title: EffectSchema.optionalKey(EffectSchema.String),
         description: EffectSchema.String,
-        annotations: EffectSchema.optionalKey(integrationToolAnnotationsSchema),
-        parameters: EffectSchema.optionalKey(EffectSchema.Array(integrationToolParameterSchema)),
       }),
     ),
   }),

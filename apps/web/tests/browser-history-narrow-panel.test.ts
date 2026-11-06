@@ -2,7 +2,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { RUN_PROFILE } from "@repo/host/app-state";
-import { appStateFirstRead } from "@repo/panel/use-app-state";
 import { Effect } from "effect";
 import { act } from "react";
 import { afterEach, vi } from "vitest";
@@ -63,7 +62,6 @@ it.effect(
       openAt("/app");
       // The profile opens the fixture's task on its agent, its Pull request tab pushed over it.
       installPanelDoors(RUN_PROFILE.AGENT_PULL_REQUEST);
-      yield* appStateFirstRead;
       yield* Effect.promise(async () => {
         await drawPanel();
         // The profile opens its Pull request tab over the agent, which the way back shuts.

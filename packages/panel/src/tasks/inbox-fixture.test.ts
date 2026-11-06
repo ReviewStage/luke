@@ -22,7 +22,7 @@ import { afterEach } from "vitest";
 import { rendererRegistry } from "../renderer-runtime.js";
 import { fakeActPortAnswering, refusedOnPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { appStateFirstRead } from "../use-app-state.js";
+import { readAppState } from "../testing/copy-feedback.js";
 import { loadedTasksFixture, loadTasksFixture } from "./tasks-fixture-loader.js";
 
 /**
@@ -60,7 +60,7 @@ function standFixtureRun(profile: string): Effect.Effect<void> {
     fakeActPortAnswering(() => Promise.reject(refusedOnPort("Not here.")));
     const { run, account, access, tasks } = fixtureRun(profile);
     handState({}, { run, account, access, tasks });
-    yield* Effect.orDie(appStateFirstRead);
+    yield* Effect.promise(readAppState);
     yield* Effect.promise(loadTasksFixture);
   });
 }

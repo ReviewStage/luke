@@ -358,7 +358,8 @@ function firewallSessionOf(place: OpenedPlace, userId: string): FirewallSession 
  * alone, because every process in the sandbox reaches out through that
  * firewall, a Terminal's shell and a page in the agent's browser among them,
  * and only one that reads the placeholder, the runner's own user, may act
- * as the agent. A renewed credential is held the same way.
+ * as the agent. A renewed credential is held the same way, and the sweep
+ * renews its swap.
  */
 function heldAtFirewall(credentials: readonly RunnerCredential[]): DeliveredCredentials {
   const env: Record<string, string> = {};

@@ -7,16 +7,9 @@
  * back. A server may answer a request with one JSON body or with an event
  * stream whose `data:` lines carry it; both are read. The account's bearer
  * travels on every request and nowhere else, and the session is ended once
- * the list is read. What the list keeps of each tool is its name, the title
- * a person reads where the server gave one (the tool's own `title`, else its
- * annotations' `title`, the spec's order), its description whole (bounded,
- * for a person to read it all where a list opens it), the hints the server
- * annotated it with (`readOnlyHint` and its kin), where it sent any it
- * spelled as the spec does, and the arguments its input schema declares
- * (`mcp-tool-parameters.ts`): nothing the model would be handed, only what a
- * person picking servers reads. A tool whose title, hints, or input schema
- * is malformed is kept without them, so one server's slip never costs the
- * developer its whole list.
+ * the list is read. What the list keeps of each tool is its name, which a
+ * mention of it carries, and its description, bounded, which a released
+ * desktop still reads: nothing the model would be handed.
  *
  * The same session serves a native agent's integration servers
  * (`connection-door.ts`): `listMcpToolSchemas` reads each tool with the
@@ -33,16 +26,10 @@
  * developer how to mend a connection, and it reaches their window.
  */
 
-import {
-  type IntegrationToolAnnotations,
-  type IntegrationToolParameter,
-  integrationToolAnnotationsSchema,
-} from "@repo/features/integration-wire";
 import { PRODUCT_NAME } from "@repo/features/product-name";
 import {
   isRecord,
   isWireString,
-  type UnparsedWireValue,
   type WireRecord,
   WireRecordShapeSchema,
   type WireValue,
@@ -51,7 +38,6 @@ import {
 import { Data, Duration, Effect, Option, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import { toolParameters } from "./mcp-tool-parameters.js";
 
 /** The protocol revision the session is opened under. */
 const PROTOCOL_VERSION = "2025-06-18";
@@ -84,11 +70,8 @@ const CALL_TIMEOUT = Duration.minutes(5);
 /** How long ending the session may take, after which it is let go: the list is already read. */
 const END_TIMEOUT = Duration.seconds(2);
 
-/** The most of a description a tool keeps, enough for any a server writes for a person to read whole. */
+/** The most of a description a tool keeps. */
 const DESCRIPTION_MAX_CHARS = 8000;
-
-/** The most of a title a tool keeps. */
-const TITLE_MAX_CHARS = 200;
 
 /** The most of a server's error message a failure keeps. */
 const MESSAGE_MAX_CHARS = 200;
@@ -152,16 +135,10 @@ export class McpToolsFailure extends Data.TaggedError("McpToolsFailure")<{
 /** The JSON-RPC error code an MCP server answers an unauthorized request with. */
 const RPC_UNAUTHORIZED = -32001;
 
-/** One tool, as a person picking servers reads it. */
+/** One tool, as a mention of it names it. */
 export interface McpTool {
   readonly name: string;
-  /** The title its server gave it for a person to read, where it gave one. */
-  readonly title?: string;
   readonly description: string;
-  /** The hints its server sent, where it sent any. */
-  readonly annotations?: IntegrationToolAnnotations;
-  /** The arguments its input schema declares, where that schema was readable. */
-  readonly parameters?: readonly IntegrationToolParameter[];
 }
 
 const RpcError = Schema.Struct({
@@ -269,24 +246,6 @@ function bounded(text: string | undefined, max: number): string {
 function firstLine(text: string | undefined, max: number): string {
   const line = (text ?? "").trim().split(/\r?\n/)[0] ?? "";
   return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
-}
-
-const decodeAnnotations = Schema.decodeUnknownOption(integrationToolAnnotationsSchema);
-
-/** The hints a tool keeps of those its server sent: none where it sent none at all, or spelled them as the spec does not. */
-function keptAnnotations(sent: UnparsedWireValue): IntegrationToolAnnotations | undefined {
-  const read = Option.getOrUndefined(decodeAnnotations(sent));
-  return read === undefined || Object.keys(read).length === 0 ? undefined : read;
-}
-
-/**
- * The title a tool keeps: its own `title`, else its annotations' `title`,
- * the spec's order, bounded; none where neither is words.
- */
-function keptTitle(own: UnparsedWireValue, annotations: UnparsedWireValue): string | undefined {
-  const fromAnnotations = isRecord(annotations) ? annotations.title : undefined;
-  const title = [own, fromAnnotations].filter(isWireString).find((each) => each.trim() !== "");
-  return title === undefined ? undefined : bounded(title, TITLE_MAX_CHARS);
 }
 
 const unreachable = new McpToolsFailure({ reason: MCP_TOOLS_FAILURE.UNREACHABLE });
@@ -476,25 +435,19 @@ function toolSchema(tool: ListedTool): McpToolSchema {
 
 /**
  * The tools the server at `url` lists for the bearer `token`, in its order,
- * as a person picking servers reads them; why not as `inMcpSession` says.
+ * as a mention of one names it; why not as `inMcpSession` says.
  */
 export const listMcpTools = /* @__PURE__ */ Effect.fn("web/listMcpTools")(function* (
   url: string,
   token: string,
 ): Effect.fn.Return<readonly McpTool[], McpToolsFailure, HttpClient.HttpClient> {
   const listed = yield* inMcpSession(url, token, READ_TIMEOUT, listedTools);
-  return listed.map((tool): McpTool => {
-    const title = keptTitle(tool.title, tool.annotations);
-    const annotations = keptAnnotations(tool.annotations);
-    const parameters = toolParameters(tool.inputSchema);
-    return {
+  return listed.map(
+    (tool): McpTool => ({
       name: tool.name,
-      ...(title !== undefined ? { title } : undefined),
       description: bounded(tool.description, DESCRIPTION_MAX_CHARS),
-      ...(annotations !== undefined ? { annotations } : undefined),
-      ...(parameters !== undefined ? { parameters } : undefined),
-    };
-  });
+    }),
+  );
 });
 
 /** The tools the server at `url` lists for the bearer `token`, in its order, each with the schemas it declared; why not as `inMcpSession` says. */

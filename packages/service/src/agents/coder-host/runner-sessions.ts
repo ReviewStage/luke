@@ -26,8 +26,8 @@
  * the runner's bearer and records its digest on the agent's row, and starts
  * the runner with the harness's credential and the bearer in its
  * environment and nowhere else: never in its argv, its config line, a file,
- * or a record. A credential held at the place's firewall (`HarnessLaunch`'s
- * `held`, or one of its `credentials` its machine holds there) is kept there with the launch's swaps before
+ * or a record. A credential held at the place's firewall (one of
+ * `HarnessLaunch`'s `credentials` its machine holds there) is kept there with the launch's swaps before
  * the runner starts, its placeholder in the environment in its place, and
  * sent with every write to the place's firewall while the launch stands
  * (`../sandbox-firewall.ts`); it stays there, with every other credential,
@@ -188,12 +188,7 @@ import {
 import { deploymentLifecycle } from "../machine/agent-machines.js";
 import { extraCheckoutPaths } from "../repository-sandbox-contract.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
-import {
-  type FirewallEntry,
-  LAUNCH_SWAP,
-  type LaunchSwapKind,
-  type LaunchSwaps,
-} from "../sandbox-firewall.js";
+import { LAUNCH_SWAP } from "../sandbox-firewall.js";
 import {
   COMMAND_GONE,
   NOT_FOUND_STATUS,
@@ -252,14 +247,6 @@ export interface HarnessLaunch {
   readonly env: Readonly<Record<string, string>>;
   /** The harness's credentials, which its machine hands over beside the bearer (`AgentMachineService`'s `deliverCredentials`). */
   readonly credentials?: readonly RunnerCredential[];
-  /** The credential held at the place's firewall rather than handed to the command: the variables carrying the launch's placeholder, the swap kept for the launch before the runner starts, and what a fingerprint reads in the placeholder's place. */
-  readonly held?: {
-    readonly env: Readonly<Record<string, string>>;
-    readonly kind: LaunchSwapKind;
-    readonly entry: FirewallEntry;
-    /** The real credential, digested into the fingerprint so a warm runner on a changed key relaunches. */
-    readonly fingerprint: Redacted.Redacted;
-  };
 }
 
 /** The lines a message to a running runner goes behind. */
@@ -354,14 +341,6 @@ function runnerBearer(bearer: string, host: string): RunnerCredential {
     scheme: BEARER_PREFIX,
     slot: LAUNCH_SWAP.RUNNER,
   };
-}
-
-/** The swaps a launch holds at its place's firewall: its harness's credential's where it holds one there, then those its machine keeps for what it delivered; none on a machine with no firewall of ours. */
-function launchSwaps(credential: HarnessLaunch, delivered: LaunchSwaps): LaunchSwaps {
-  const swaps = new Map<LaunchSwapKind, FirewallEntry>();
-  if (credential.held !== undefined) swaps.set(credential.held.kind, credential.held.entry);
-  for (const [kind, entry] of delivered) swaps.set(kind, entry);
-  return swaps;
 }
 
 /** How a file written for the agent is kept: readable by every user, written by none but the API's. */
@@ -524,22 +503,11 @@ function launchFingerprint(
     one.localeCompare(other),
   );
   const names = integrations.map((each) => each.name).sort();
-  const { held } = credential;
-  const slots = [
-    ...(held === undefined
-      ? []
-      : [
-          {
-            slot: held.kind,
-            credential: Redacted.value(held.fingerprint),
-          },
-        ]),
-    ...declared.filter(isHeld).map((each) => ({
-      slot: each.slot,
-      credential: Redacted.value(each.value),
-    })),
-  ];
-  // Note that one slot is digested alone, as the one a launch could hold before credentials were declared.
+  const slots = declared.filter(isHeld).map((each) => ({
+    slot: each.slot,
+    credential: Redacted.value(each.value),
+  }));
+  // Note that one slot is digested alone, under the key it was digested by, as the one a launch could hold before credentials were declared.
   const swapped = slots.length === 0 ? undefined : slots.length === 1 ? slots[0] : slots;
   return createHash("sha256")
     .update(JSON.stringify({ env, names, held: swapped }))
@@ -803,7 +771,7 @@ export const runnerSessions = <
     /**
      * One launch of the runner in the running place: its swaps kept at the
      * place's firewall where its machine holds them there (`runnerBearer`,
-     * `HarnessLaunch`'s `held`), ahead of every write that composes the
+     * `HarnessLaunch`'s `credentials`), ahead of every write that composes the
      * place's policy; then a fresh bearer recorded, the launch's record
      * written, its config read, the caller's own steps (`alongside`) run,
      * and the place's whole policy written, the repository's credential
@@ -843,7 +811,8 @@ export const runnerSessions = <
           ...(credential.credentials ?? []),
           runnerBearer(bearer, serviceHost),
         ]);
-        const swaps = launchSwaps(credential, delivered.swaps);
+        // The swaps its machine keeps for what it delivered; none on a machine with no firewall of ours.
+        const { swaps } = delivered;
         // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
         if (swaps.size > 0) {
           yield* machine.firewall.keepLaunch(place.running, agent.userId, {
@@ -937,7 +906,6 @@ export const runnerSessions = <
         } = yield* machine.launchRunner(place.running, {
           env: {
             ...credential.env,
-            ...credential.held?.env,
             ...delivered.env,
           },
           userId,

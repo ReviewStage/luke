@@ -1,7 +1,13 @@
 import { BROWSER_LIVE_PORT_CHANNEL } from "@repo/features/browser-live-acts";
 import { eventWithoutAccessTokens, withoutAccessTokens } from "@repo/features/sentry-breadcrumbs";
 import { TERMINAL_PORT_CHANNEL } from "@repo/features/terminal-acts";
-import { ACT_PORT, actPortForwarder, bridgeEntries, type PreloadBridge } from "@repo/host/bridge";
+import {
+  ACT_PORT,
+  actPortForwarder,
+  BRIDGE,
+  bridgeEntries,
+  type PreloadBridge,
+} from "@repo/host/bridge";
 import type { UnparsedWireValue } from "@repo/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
@@ -11,6 +17,8 @@ Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAcc
 const bridge: Record<string, CallableFunction> = {};
 
 for (const [method, definition] of bridgeEntries()) {
+  // The network is said by the preload itself, below, never by the page.
+  if (method === "reportOnline") continue;
   if (definition.kind === "invoke") {
     bridge[method] = async (...args: UnparsedWireValue[]) => {
       // SAFETY: Electron returns a structured-clone value, which the manifest result guard parses below.
@@ -34,6 +42,15 @@ function exposedBridge(): PreloadBridge {
 }
 
 contextBridge.exposeInMainWorld("appBridge", exposedBridge());
+
+// Main hears of no change of the machine's network, so each window says
+// Chromium's answer as its page loads and whenever it moves.
+function reportOnline(): void {
+  ipcRenderer.send(BRIDGE.reportOnline.channel, navigator.onLine);
+}
+reportOnline();
+window.addEventListener("online", reportOnline);
+window.addEventListener("offline", reportOnline);
 
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads
