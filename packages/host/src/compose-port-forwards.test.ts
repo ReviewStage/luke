@@ -6,7 +6,7 @@ import { TUNNEL_CLOSE, TUNNEL_FRAME } from "@repo/features/sandbox-tunnel-wire";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@repo/gateway";
 import type { WireRecord } from "@repo/wire";
 import { noNetwork } from "@repo/wire/testing";
-import { type Cause, Effect, Queue, Stream } from "effect";
+import { type Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect";
 import { Base64 } from "effect/encoding";
 import { TestClock } from "effect/testing";
 import {
@@ -56,7 +56,7 @@ const scriptedConnection = Effect.gen(function* () {
 });
 
 /** The composer over the scripted service, loopback, and relay. */
-function subject(options: { taken?: number[] } = {}) {
+function subject(options: { taken?: number[]; started?: Effect.Effect<void> } = {}) {
   return Effect.gen(function* () {
     const ports = new Map<string, number[]>([[AGENT_ID, []]]);
     const taken = new Set(options.taken);
@@ -88,7 +88,7 @@ function subject(options: { taken?: number[] } = {}) {
       },
       client: {
         list: (agentId) => Effect.sync(() => ({ running: true, ports: ports.get(agentId) ?? [] })),
-        startForwarding: () => Effect.succeed({ started: false }),
+        startForwarding: () => Effect.as(options.started ?? Effect.void, { started: false }),
       },
       openSocket: (url) =>
         Effect.gen(function* () {
@@ -163,6 +163,26 @@ it.effect("a port taken on this Mac is listened on at the next free one", () =>
         { port: 5173, localPort: 5173, state: PORT_FORWARD_STATE.LISTENING },
       ],
     });
+  }),
+);
+
+it.effect("turning forwarding off while it is starting leaves it off", () =>
+  Effect.gen(function* () {
+    const starting = yield* Deferred.make<void>();
+    const { call, serve, listeners, told } = yield* subject({ started: Deferred.await(starting) });
+    serve(AGENT_ID, [3000]);
+
+    const on = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: true }),
+    );
+    yield* settle;
+    yield* call(GATEWAY_METHOD.PORT_FORWARDS_SET, { agentId: AGENT_ID, on: false });
+    yield* Deferred.succeed(starting, undefined);
+    yield* Fiber.join(on);
+    yield* settle;
+
+    assert.deepEqual([...listeners.keys()], []);
+    assert.equal(told(), undefined);
   }),
 );
 
