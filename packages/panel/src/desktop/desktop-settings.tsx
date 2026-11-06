@@ -236,7 +236,7 @@ function ListHead({
   );
 }
 
-/** A group of pages under its head, which folds them: the listed workspace's tile and name over its own group, the group's words otherwise. */
+/** A group of pages under its head, which stands still rather than folding, since the list is short enough to show whole: the listed workspace's tile and name over its own group, the group's words otherwise. */
 function PageGroup({
   group,
   listed,
@@ -266,7 +266,6 @@ function PageGroup({
             </ReplayMask>
           )
         }
-        fold={{ defaultOpen: true }}
       >
         {children}
       </GroupHeader>
