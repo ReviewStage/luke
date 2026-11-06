@@ -29,7 +29,6 @@ import {
   handInboxItems,
   handMembers,
   handState,
-  holdGitHubToken,
   holdRepositoryLists,
 } from "../testing/app-state.js";
 import { composerEditor, editorBundleLanded, installEditorLayout } from "../testing/composer.js";
@@ -258,7 +257,7 @@ test("while the task list is read, Home greets the reader over the composer, ask
   assert.deepEqual(sections(page), {});
 });
 
-test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and sending one with no token saved to save one", async () => {
+test("a workspace that reaches no repository says so over Home's composer, telling a member whom to ask and sending one with no token known to be saved to save one", async () => {
   holdRepositoryLists(handHostReads({}).deliverRepositoryLists, () => ({
     repositories: {
       installed: false,
@@ -266,7 +265,6 @@ test("a workspace that reaches no repository says so over Home's composer, telli
       installationUrl: "https://github.com/apps/vespin/installations/new",
     },
   }));
-  holdGitHubToken(() => ({ rows: { token: null } }));
   handMembers(() => ({
     rows: {
       members: [
@@ -300,7 +298,7 @@ test("a workspace that reaches no repository says so over Home's composer, telli
     notice(),
     "This workspace has no repositories yetAsk AAda Lovelace to connect GitHub, or add one with your own GitHub token.Add with your token",
   );
-  // Note that the workspace's Add repository stands only once a token is saved, so a member with none saves one first.
+  // Note that the workspace's Add repository stands only once a token is known to be saved, so a member whose token read is still out saves one first.
   const add = [...page.querySelectorAll<HTMLButtonElement>(".new-task-notices button")].find(
     (each) => each.textContent === "Add with your token",
   );

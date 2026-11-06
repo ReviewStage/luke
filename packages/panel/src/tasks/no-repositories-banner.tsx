@@ -45,8 +45,9 @@ import {
  * Settings on the workspace's GitHub repositories, where all of it is done,
  * but a member's with no token known to be saved, which opens the token's
  * row on Account instead, since the workspace's Add repository stands only
- * once a token is saved (`AddTokenRepository`). Nothing stands until a workspace is chosen, nor
- * while the listing is still read or could not be, which the chip says.
+ * once a token is saved (`AddTokenRepository`). Nothing stands until a
+ * workspace is chosen, nor while the listing is still read or could not be,
+ * which the chip says.
  */
 
 /** What the card says, worded once. */
