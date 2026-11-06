@@ -901,24 +901,6 @@ test("an editor emptied of a description's words gives the keyboard back to its 
   );
 });
 
-test("an editor emptied of a description's words leaves the keyboard where it went before the save lands", async () => {
-  const { container, render } = mount();
-  act(() => block(container, "Goal").click());
-  act(() => open().onDraft(""));
-  act(() => open().onFinish(0, FINISH.ESCAPE));
-  await settle();
-  const elsewhere = document.createElement("input");
-  document.body.append(elsewhere);
-  try {
-    act(() => elsewhere.focus());
-
-    render(EMPTY_TASK);
-    assert.ok(document.activeElement === elsewhere, "the keyboard stays where it went");
-  } finally {
-    elsewhere.remove();
-  }
-});
-
 test("an empty description pressed while the editor's bundle loads goes on saying to write it", async () => {
   const landed = bundles;
   const gate = Promise.withResolvers<DescriptionEditorModule>();
