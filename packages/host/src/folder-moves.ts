@@ -26,7 +26,13 @@ export const folderMoves = (
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const again = Stream.suspend(() => folderMoves(folder));
+      /** The folder followed again where it stands as wished, and nothing more where it does not, so a refused watch never lays itself again at once. */
+      const againWhere = (wished: boolean) =>
+        Stream.unwrap(
+          Effect.map(standing(fileSystem, folder), (stands) =>
+            stands === wished ? Stream.suspend(() => folderMoves(folder)) : Stream.empty,
+          ),
+        );
       if (!(yield* standing(fileSystem, folder))) {
         const parent = path.dirname(folder);
         if (parent === folder) return Stream.never;
@@ -36,7 +42,7 @@ export const folderMoves = (
           Stream.takeUntil((stands) => stands),
           Stream.filter((stands) => stands),
           Stream.as(undefined),
-          Stream.concat(again),
+          Stream.concat(againWhere(true)),
         );
       }
       // Note that a move that finds the folder gone is its last pulse here, and it is waited for again from above.
@@ -45,11 +51,7 @@ export const folderMoves = (
         Stream.takeUntil((stands) => !stands),
         Stream.as(undefined),
         Stream.ignore,
-        Stream.concat(
-          Stream.unwrap(
-            Effect.map(standing(fileSystem, folder), (stands) => (stands ? Stream.empty : again)),
-          ),
-        ),
+        Stream.concat(againWhere(false)),
       );
     }),
   );
