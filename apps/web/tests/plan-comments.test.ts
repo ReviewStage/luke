@@ -95,13 +95,17 @@ interface Answered {
   readonly body: string;
 }
 
+/** The account's Plans turned on or off, which its agents are handed a plan's comment threads by. */
+const plansFor = (userId: string, on: boolean) =>
+  writeAccountPreferences(userId, { experiments: { [EXPERIMENT.PLANS]: on } });
+
 /** An account with Plans on, whose agents are handed a plan's comment threads only then. */
 const openAccount = (name: string) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const id = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id, name, email: `${id}@app.test` });
-    yield* writeAccountPreferences(id, { experiments: { [EXPERIMENT.PLANS]: true } });
+    yield* plansFor(id, true);
     return id;
   });
 
@@ -489,7 +493,7 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a reply in a plan's thread reaches the agent an earlier comment mentioned, with no mention of its own, and none once it is archived",
+    "a reply in a plan's thread reaches the agent an earlier comment mentioned, with no mention of its own, none while its starter has Plans off, said back as not sent, and none once it is archived",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
@@ -522,6 +526,16 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
         assert.ok(message, "the agent in the thread was handed the reply");
         assert.ok(JSON.stringify(message.message).includes("And withdrawing by email?"));
 
+        // An agent whose starter has Plans off is told nothing of the plan's comments.
+        yield* plansFor(owner, false);
+        const planless = readEither(planCommentThreadAnswerSchema)(
+          unparsedWire(JSON.parse((yield* reply("And by link?")).body)),
+        );
+        assert.ok(Result.isSuccess(planless) && "thread" in planless.success);
+        assert.deepEqual(planless.success.unsent, [{ actor: PLAN_COMMENT_ACTOR.AGENT, agentId }]);
+        assert.equal(opened.length, before + 1, "the agent with Plans off was handed nothing");
+        yield* plansFor(owner, true);
+
         yield* archiveAgent(owner, agentId, true);
         yield* reply("Never mind.");
         assert.equal(opened.length, before + 1, "the archived agent was handed nothing");
@@ -529,11 +543,13 @@ it.layer(getTestDB())("a plan's comment thread sent to an agent", (it) => {
   );
 
   it.effect(
-    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, and one whose agent was archived is said back as not sent",
+    "a comment on a page is answered first, then hands the thread to the agent that showed it, mentioned or not, naming the page and its version, Plans on or off, and one whose agent was archived is said back as not sent",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, taskId } = yield* openSharedTask;
         const agentId = yield* startAgent(owner, taskId);
+        // Note that a page's threads are no plan's, so its starter's Plans off keeps none of them from the agent.
+        yield* plansFor(owner, false);
         const page = Option.getOrThrow(
           yield* writePage(
             owner,
