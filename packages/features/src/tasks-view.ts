@@ -9,18 +9,6 @@ import {
   type TasklessAgent,
   tasklessAgentSchema,
 } from "./agent-wire.js";
-import { failureFactsSchema } from "./failure-facts.js";
-import {
-  githubRepositoryFullNameSchema,
-  workspaceTokenRepositoriesAnswerSchema,
-} from "./github-repositories-wire.js";
-import {
-  pagePlaceSchema,
-  pageVersionNumberSchema,
-  taskPageVersionAnswerSchema,
-} from "./page-wire.js";
-import { pictureDataUrlSchema } from "./picture-wire.js";
-import { pinPositionSchema } from "./pin-order.js";
 import { descriptionAttachmentTypeSchema } from "./description-attachment-wire.js";
 import {
   descriptionCommentActionRequestSchema,
@@ -32,6 +20,19 @@ import {
   descriptionEditConflictSchema,
   descriptionEditRequestSchema,
 } from "./description-edit.js";
+import { failureFactsSchema } from "./failure-facts.js";
+import { githubConnectionSchema } from "./github-connection-view.js";
+import {
+  githubRepositoryFullNameSchema,
+  workspaceTokenRepositoriesAnswerSchema,
+} from "./github-repositories-wire.js";
+import {
+  pagePlaceSchema,
+  pageVersionNumberSchema,
+  taskPageVersionAnswerSchema,
+} from "./page-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
+import { pinPositionSchema } from "./pin-order.js";
 import { readMarkSchema } from "./read-mark.js";
 import {
   workspaceSentryAnswerSchema,
@@ -46,10 +47,10 @@ import {
 } from "./slack-bot-wire.js";
 import { taskSectionsAnswerSchema, taskSectionWriteSchema } from "./task-section-wire.js";
 import {
-  listedPullRequestSchema,
   descriptionRevisionAnswerSchema,
   descriptionRevisionSeqSchema,
   descriptionRevisionsAnswerSchema,
+  listedPullRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   type Task,
@@ -160,18 +161,6 @@ export type CodeToken = typeof codeTokenSchema.Type;
 export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
 
 export type CodeLines = typeof codeLinesSchema.Type;
-
-/**
- * Whether the account has a GitHub account linked, and its login where the
- * service holds one: the view's copy of the connection the service answers.
- * Note that it is declared here rather than in `github-connection-wire.ts`,
- * which takes it from here, because the window reads this module and that
- * one's claim vocabulary has no business in the window's bundle.
- */
-export const githubConnectionSchema = EffectSchema.Struct({
-  connected: EffectSchema.Boolean,
-  login: EffectSchema.NullOr(EffectSchema.String),
-});
 
 export const tasksViewSchema = EffectSchema.Struct({
   /** The account's tasks, newest started first, as the last list read answered. */
