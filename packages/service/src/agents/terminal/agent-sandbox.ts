@@ -41,7 +41,6 @@ import {
   type RepositoryCredential,
   sandboxFirewall,
 } from "../sandbox-firewall.js";
-import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
   deploymentOidcToken,
   type InteractiveShell,
@@ -268,8 +267,6 @@ function agentSandboxOver(
       Effect.gen(function* () {
         const { sandbox, state } = yield* standing(sessionId);
         if (sandbox === undefined || state === SANDBOX_STATE.RUNNING) return state;
-        // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.
-        yield* capSandboxTimeout(api, sandbox);
         return stateOf(yield* api.resume(sandbox.name));
       }),
   };

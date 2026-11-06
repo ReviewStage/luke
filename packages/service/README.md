@@ -2573,7 +2573,7 @@ a 60-second duration (`MAINTENANCE_SWEEP.MAX_DURATION_SECONDS` in
 only on production deployments.
 
 The sweep ends what no request will. `MaintenanceSweeps`
-(`src/maintenance/maintenance-sweep.ts`) runs eighteen sweeps in turn and
+(`src/maintenance/maintenance-sweep.ts`) runs seventeen sweeps in turn and
 answers what each did; one that fails is logged and answered as failed while
 the rest still run, and any failure fails the cron's check-in. In order:
 
@@ -2589,10 +2589,9 @@ the rest still run, and any failure fails the cron's check-in. In order:
 - `deviceLeases` and `deviceWarmRunners`: launches taken back from Macs
   that stopped beating within their lease, and local runners left warm past
   their device's window.
-- `sandboxes`, `terminals`, `nativeSandboxes`, `eveSandboxes`, and
-  `sandboxRetention`: the Vercel Sandboxes queued for deletion deleted, and
-  agents' sandboxes stopped once no run and no terminal holds them, their
-  snapshot retention bounded.
+- `sandboxes` and `nativeSandboxes`: the Vercel Sandboxes queued for
+  deletion deleted, and native agents' turns whose runner died mid-turn
+  settled as failed. An idle sandbox stops on Vercel's own timeout.
 - `nativeWakeups`: native agents' due wakeups delivered, each as a message
   from the service.
 - `withdrawnLines`: withdrawn lines no turn took within an agent's turn
@@ -2606,9 +2605,7 @@ the rest still run, and any failure fails the cron's check-in. In order:
   GitHub token, which no webhook reaches, read on that token, their reviews,
   comments, and checks among them, and the agent woken with what changed
   (`src/github/token-pull-request-sweep.ts`).
-- `imageTemplates` and `repositorySnapshots`: the native agents' image
-  template moved on, and workspaces' repository snapshots past their age
-  deleted.
+- `imageTemplates`: the native agents' image template moved on.
 - `agentQueues`: unpaused queues of idle agents handed on.
 - `hostPairings`: lapsed host pairings, and approved hosts that never
   collected their secret, deleted.

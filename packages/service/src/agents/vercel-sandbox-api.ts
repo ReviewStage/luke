@@ -196,6 +196,8 @@ export interface ListedSandbox {
   readonly createdAt?: number | undefined;
   /** The timeout each session of the sandbox opens with, which Vercel reapplies at every resume. */
   readonly timeout?: number | undefined;
+  /** When its running session ends, in epoch milliseconds, which an extension moves on. */
+  readonly expiresAt?: number | undefined;
   /** How many of its snapshots Vercel keeps and for how long; null where none was set, which keeps every one. */
   readonly keepLastSnapshots?: SnapshotRetention | null | undefined;
 }
@@ -206,7 +208,7 @@ export interface ListedSandbox {
  * `count` kept, each for `expiration` milliseconds, and the rest deleted
  * at once where `deleteEvicted`, which Vercel defaults to true.
  */
-export interface SnapshotRetention {
+interface SnapshotRetention {
   readonly count: number;
   readonly expiration?: number | undefined;
   readonly deleteEvicted?: boolean | undefined;
@@ -330,7 +332,7 @@ export interface SandboxFile {
  * started (when it was created where Vercel names no start), and how long
  * from then it may run, which an extension lengthens.
  */
-export interface SessionLifetime {
+interface SessionLifetime {
   readonly status: string;
   readonly startedAt: number;
   readonly timeoutMs: number;
@@ -525,6 +527,7 @@ const ListedSandboxSchema = Schema.Struct({
   currentSnapshotId: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
   timeout: Schema.optional(Schema.Number),
+  expiresAt: Schema.optional(Schema.Number),
   keepLastSnapshots: Schema.optional(
     Schema.NullOr(
       Schema.Struct({

@@ -95,14 +95,6 @@ export const NATIVE_TEMPLATE = {
   SWEEP_PERIOD: Duration.minutes(1),
 } as const;
 
-/**
- * What every template's name started with before the product's rename,
- * listed by the sweep alone, which deletes each such template once it is
- * `SWEEP_AFTER` old, as it does another key's. Note that it can go a day
- * after the rename deployed, once no template under it is left to delete.
- */
-const TEMPLATE_NAME_PREFIX_BEFORE_RENAME = "luke-native-template-";
-
 /** The template's tags beside its key: where its build runs, and how the build ended. */
 const TEMPLATE_TAG = {
   KEY: "agentTemplate",
@@ -457,12 +449,10 @@ export const sweepTemplates = (
   Effect.gen(function* () {
     const current = (yield* sweepCurrent(api, build)).state;
     const now = yield* Clock.currentTimeMillis;
-    const prefixes = [NATIVE_TEMPLATE.NAME_PREFIX, TEMPLATE_NAME_PREFIX_BEFORE_RENAME];
-    const listed = (yield* Effect.forEach(prefixes, (prefix) =>
-      Effect.map(api.listNamed(prefix), (named) =>
-        named.filter((sandbox) => sandbox.name.startsWith(prefix)),
-      ),
-    )).flat();
+    const prefix = NATIVE_TEMPLATE.NAME_PREFIX;
+    const listed = (yield* api.listNamed(prefix)).filter((sandbox) =>
+      sandbox.name.startsWith(prefix),
+    );
     let deleted = 0;
     for (const sandbox of listed) {
       if (sandbox.name === build.name) continue;
