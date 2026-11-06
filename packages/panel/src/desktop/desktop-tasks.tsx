@@ -66,7 +66,7 @@ import {
   type TitleRename,
 } from "../tasks/description-body.js";
 import { CommentFocusScope } from "../tasks/description-comments.js";
-import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
+import { keyedItem, NO_ITEMS, waitingByAgent } from "../tasks/inbox-model.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
@@ -790,10 +790,16 @@ function DescriptionDocument({
     else agentThreads.onOpen(item.agentId, item.id);
   });
   const tabAgent = tab === undefined ? undefined : agentOfTab(tab);
+  // Note that the dock stands, quiet, while the agent's threads are all settled, the one way into them from its card.
+  const { open: boardOpen, settled: boardSettled } = inbox.board;
   const threads = useMemo(() => {
-    const waiting = tabAgent === undefined ? undefined : waitingOf.get(tabAgent);
-    return waiting === undefined ? undefined : { waiting, onOpen: openWaitingThread };
-  }, [tabAgent, waitingOf, openWaitingThread]);
+    if (tabAgent === undefined) return undefined;
+    const posted = [...boardOpen, ...boardSettled]
+      .filter((item) => item.agentId === tabAgent)
+      .toSorted((a, b) => b.updatedAt - a.updatedAt);
+    const waiting = waitingOf.get(tabAgent) ?? NO_ITEMS;
+    return posted.length === 0 ? undefined : { waiting, posted, onOpen: openWaitingThread };
+  }, [tabAgent, boardOpen, boardSettled, waitingOf, openWaitingThread]);
   const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
   const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
   // The task's own menu, as the task's page holds it keyed by the task
