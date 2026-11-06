@@ -131,19 +131,14 @@ way, under your account.
 ### Error and performance data
 
 The Mac app, the web app, and the Service send Sentry error reports, crash
-reports, reports of the errors Vespin shows you, and performance traces for a
-sample of launches and page loads. They use Sentry's default data collection,
+reports, reports of the errors Vespin shows you, and performance traces and
+profiles for a sample of launches and page loads. They use Sentry's default data collection,
 so reports may include error messages, stack traces, request addresses and
 headers, device details, and your IP address. Sentry replaces values whose
 names look like credentials, and Vespin removes query parameter values and
 token-shaped parts of addresses. Reports name your account by its id only. The
 Service does not send Sentry what was sent to or returned by a model, though an
 error's own words can quote what an agent was working on.
-
-For about one launch in twenty, the Mac app also sends Sentry performance
-profiles of its windows for as long as they are open: which of the app's own
-functions were running, by name and file, sampled many times a second. A
-profile holds no words you or an agent wrote.
 
 ### Feedback
 
