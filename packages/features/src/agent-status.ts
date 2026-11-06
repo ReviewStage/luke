@@ -87,7 +87,7 @@ export interface StatusStanding {
   readonly createdAt: number;
   readonly now: number;
   readonly awaitingLineAt?: number | undefined;
-  /** Whether the agent was started blank, handed neither the plan nor a prompt, so no first turn is on its way; unsaid reads as not. */
+  /** Whether the agent was started blank, handed neither the description nor a prompt, so no first turn is on its way; unsaid reads as not. */
   readonly blank?: boolean | undefined;
 }
 

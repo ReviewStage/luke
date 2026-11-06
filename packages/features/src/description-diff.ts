@@ -1,7 +1,7 @@
 import { diffArrays } from "diff";
 
 /**
- * description-diff.ts -- where one unit of the plan differs from its newer words, word by word.
+ * description-diff.ts -- where one unit of the description differs from its newer words, word by word.
  *
  * The version history's version view compares a unit's words whole word by
  * whole word (`wordChanges`), since a reader compares words rather than

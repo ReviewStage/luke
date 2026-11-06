@@ -12,7 +12,7 @@ import { WEBM_TYPE, webmDimensions } from "./video-signature.js";
  * photo is; the service keeps its bytes and serves them under the type they
  * were sniffed to be. A WebM an agent recorded of what it did is kept the
  * same way, as it is, never re-encoded, and played where a picture would be
- * drawn. A plan's pictures (`description-attachment-wire.ts`) are one use; nothing
+ * drawn. A description's pictures (`description-attachment-wire.ts`) are one use; nothing
  * here names what a picture belongs to. The bytes must be the image or the
  * video the label names, because every reader draws or plays them as one.
  * Note that `PICTURE_TYPE` stays the image types alone, because a reader

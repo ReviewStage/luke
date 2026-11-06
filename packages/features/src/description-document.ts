@@ -5,23 +5,23 @@ import {
 } from "./task-wire.js";
 
 /**
- * description-document.ts -- a plan kept as one free Markdown document: its sections, and who last changed each.
+ * description-document.ts -- a description kept as one free Markdown document: its sections, and who last changed each.
  *
- * A plan is one Markdown text the developer and the app both write, started
+ * A description is one Markdown text the developer and the app both write, started
  * from the account's own template (`docs/TASKS.md`). The text has no title line,
- * since the plan's name is its own, and its assumptions are a section like
+ * since the description's name is its own, and its assumptions are a section like
  * any other. A section is a `#` or `##` heading and everything up to the
  * next one, a deeper heading standing inside its section, and a heading
  * inside a code fence being no heading at all; what stands before the first
  * heading is a section of its own with no heading. A section is known by its
  * heading's words, so the window can say who wrote each section. Who last
- * changed each is read off the plan's revisions, each against the one before
+ * changed each is read off the description's revisions, each against the one before
  * it, and a heading renamed with nothing beneath it changed is the same
  * section under its new words, still naming the save that last changed them.
  */
 
 /**
- * Who last changed one section of a plan that is one document, and when: the
+ * Who last changed one section of a description that is one document, and when: the
  * section's heading, the writer (`DESCRIPTION_ACTOR`), the coding agent's id where
  * an agent wrote the revision, and the revision's latest save.
  */
@@ -246,7 +246,7 @@ function withSectionWriters(
   return written.slice(-DESCRIPTION_SECTION_BOUNDS.MAX_SECTIONS);
 }
 
-/** One revision of a plan as its sections' writers are read off it: its text, and who wrote it, when. */
+/** One revision of a description as its sections' writers are read off it: its text, and who wrote it, when. */
 export interface SectionRevision {
   readonly text: string;
   readonly who: DescriptionSectionWriterWho;
@@ -255,7 +255,7 @@ export interface SectionRevision {
 }
 
 /**
- * Who last changed each section of a plan, read off its revisions, oldest
+ * Who last changed each section of a description, read off its revisions, oldest
  * first, each against the text before it, the first against `base`: the
  * newest revision that changed a section names its writer on it. Note that a
  * revision is one writer's saves joined, and keeps only the text they left,

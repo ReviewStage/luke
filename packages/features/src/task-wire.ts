@@ -32,7 +32,7 @@ import { trimmedText } from "./text-schema.js";
  * the list stays on the wire because a desktop through v0.11.0 requires it.
  * The text is written by the task's notetaker and its coding agents through
  * notes, and by the developer whole. The service keeps every save as a
- * revision of the plan under the writer who made it, and a task carries its
+ * revision of the description under the writer who made it, and a task carries its
  * newest as `lastEdit`, which is what the window's "Edited by" line reads,
  * and who last changed each section as `sectionEdits`, by heading.
  * A task may name the GitHub repository it is about, `owner/name` as
@@ -70,7 +70,7 @@ import { trimmedText } from "./text-schema.js";
 export const TASK_BOUNDS = {
   /** The most characters a task's name may spell. */
   MAX_NAME_CHARS: 200,
-  /** A document body past this is not a plan a coding agent can take in one prompt. */
+  /** A document body past this is not a description a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
   MAX_ASSUMPTION_CHARS: 2_000,
@@ -186,7 +186,7 @@ const descriptionAssumptionSchema = EffectSchema.Struct({
 
 /** The one saved document of a task, replaced whole by every save. */
 const descriptionDocumentSchema = EffectSchema.Struct({
-  /** The plan's whole text, as written. */
+  /** The description's whole text, as written. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(descriptionAssumptionSchema).check(
     EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ASSUMPTIONS),
@@ -326,7 +326,7 @@ function relationsEachOnce(request: {
  * refused, and the service refuses it without a repository, as it refuses
  * an agent's Start on a task with none, before anything is written. A
  * brief is the developer's own words about the task, which the app is handed
- * beside the plan to plan from; one left out, or nothing but whitespace,
+ * beside the description to plan from; one left out, or nothing but whitespace,
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
@@ -594,9 +594,9 @@ export const TASK_LIST_ARCHIVED = {
 } as const;
 
 /**
- * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * Who wrote a revision of a description: the developer, the notetaker on a call
  * (whom the developer knows by the app's name), a coding agent, or, for the one
- * revision a plan from before history starts with, nobody the service can
+ * revision a description from before history starts with, nobody the service can
  * name.
  */
 export const DESCRIPTION_ACTOR = {
@@ -899,7 +899,7 @@ export const descriptionEditorSchema = memberRefSchema;
 
 export type DescriptionEditor = typeof descriptionEditorSchema.Type;
 
-/** The newest revision of a plan, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
+/** The newest revision of a description, as its "Edited by" line reads it, and as a conflict over the developer's edit names who wrote the text it met. */
 export const descriptionLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(DESCRIPTION_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
@@ -916,16 +916,16 @@ export const descriptionLastEditSchema = EffectSchema.Struct({
 
 export type DescriptionLastEdit = typeof descriptionLastEditSchema.Type;
 
-/** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
+/** Bounds on the sections of a description that is one document, as the window reads who last changed each. */
 export const DESCRIPTION_SECTION_BOUNDS = {
   /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
   MAX_HEADING_CHARS: 1_000,
-  /** The most sections a plan names a last save for. */
+  /** The most sections a description names a last save for. */
   MAX_SECTIONS: 500,
 } as const;
 
 /**
- * The revision that last changed one section of a plan that is one document,
+ * The revision that last changed one section of a description that is one document,
  * as the section's "Edited by" line reads it: the section is known by its
  * heading's words, and a heading renamed with nothing beneath it changed
  * keeps the revision that last changed them.
@@ -1058,13 +1058,13 @@ export const taskDeleteAnswerSchema = EffectSchema.Struct({
 /** How a coding agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "an agent";
 
-/** How a plan's history is read: the newest revisions first, a page at a time. */
+/** How a description's history is read: the newest revisions first, a page at a time. */
 export const DESCRIPTION_HISTORY_BOUNDS = {
   /** The most revisions one read of the history carries. */
   PAGE: 50,
 } as const;
 
-/** A revision's number within its plan, from one. */
+/** A revision's number within its description, from one. */
 export const descriptionRevisionSeqSchema = EffectSchema.Int.check(
   EffectSchema.isGreaterThanOrEqualTo(1),
 );
@@ -1091,7 +1091,7 @@ const descriptionRevisionLineSchema = EffectSchema.Struct({
 export type DescriptionRevisionLine = typeof descriptionRevisionLineSchema.Type;
 
 /**
- * A page of a plan's history (GET `/api/plans/{id}/revisions`), the newest
+ * A page of a description's history (GET `/api/plans/{id}/revisions`), the newest
  * first, before the revision the `before` query names where it names one;
  * `earlier` is what the next older page is read before, absent on the oldest.
  */
@@ -1105,7 +1105,7 @@ export const descriptionRevisionsAnswerSchema = EffectSchema.Struct({
 export type DescriptionRevisionsAnswer = typeof descriptionRevisionsAnswerSchema.Type;
 
 /**
- * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
+ * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the description
  * as it stood after the revision and as it stood before it, null for the
  * first, each formatted under the task's name as it stands now, so a rename
  * since is no difference between them.

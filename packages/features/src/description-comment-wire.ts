@@ -7,11 +7,11 @@ import { TASK_BOUNDS } from "./task-wire.js";
 import { filledText } from "./text-schema.js";
 
 /**
- * description-comment-wire.ts -- comments on a task's plan on the wire: a thread anchored to words of the plan, its comments and what happened to it, and what a member sends to start, answer, resolve, and reopen one.
+ * description-comment-wire.ts -- comments on a task's description on the wire: a thread anchored to words of the description, its comments and what happened to it, and what a member sends to start, answer, resolve, and reopen one.
  *
- * A thread is anchored to a stretch of the plan's text: words a member
+ * A thread is anchored to a stretch of the description's text: words a member
  * selected, or a whole block (a paragraph, a list, a heading) they commented
- * beside. The service keeps the anchor as offsets into the plan's Markdown
+ * beside. The service keeps the anchor as offsets into the description's Markdown
  * beside the thread, never in the text itself, and moves it with its words
  * on every save (`description-comment-anchor.ts`); a thread whose words were
  * deleted keeps its quote and stands with no anchor, which the window says
@@ -23,7 +23,7 @@ import { filledText } from "./text-schema.js";
  * A comment may carry files under its words, in the coding agent's file
  * shape: pictures, PDFs, and text files. The service keeps them in the
  * shared attachment table, owned by the comment, and an entry names each by
- * its id, its name, and its type; their bytes are read apart, as a plan's
+ * its id, its name, and its type; their bytes are read apart, as a description's
  * picture's are, at `descriptionAttachmentPath`.
  *
  * A thread may instead be on one of the task's pages (`page-wire.ts`): on
@@ -32,7 +32,7 @@ import { filledText } from "./text-schema.js";
  * version, and the element by its path in it, its quote the element's words
  * as the frame read them, or the version's title for the whole page. A page
  * thread is the task's like any other and is answered, resolved, and
- * reopened the same way, but is read apart from the plan's: the plan's read
+ * reopened the same way, but is read apart from the description's: the description's read
  * holds no page thread, and a page's read holds that page's alone.
  *
  * Every member of the plan's workspace reads and writes every thread, and
@@ -46,7 +46,7 @@ export const DESCRIPTION_COMMENT_BOUNDS = {
   MAX_WORDS_CHARS: 8_000,
   /** The longest quote a thread keeps of the words it was anchored to. */
   MAX_QUOTE_CHARS: 2_000,
-  /** The most threads one plan may hold, resolved ones among them. */
+  /** The most threads one description may hold, resolved ones among them. */
   MAX_THREADS_PER_DESCRIPTION: 500,
   /** The most comments one thread may hold, and the most lines of what happened to it it says. */
   MAX_ENTRIES_PER_THREAD: 200,
@@ -60,7 +60,7 @@ export const DESCRIPTION_COMMENT_BOUNDS = {
   MAX_SECTION_CHARS: 200,
 } as const;
 
-/** What a thread is anchored to: words a member selected or a whole block they commented beside, on the plan; an element they picked or the whole of a page, on a page. */
+/** What a thread is anchored to: words a member selected or a whole block they commented beside, on the description; an element they picked or the whole of a page, on a page. */
 export const DESCRIPTION_COMMENT_SCOPE = {
   WORDS: "words",
   BLOCK: "block",
@@ -71,7 +71,7 @@ export const DESCRIPTION_COMMENT_SCOPE = {
 export type DescriptionCommentScope =
   (typeof DESCRIPTION_COMMENT_SCOPE)[keyof typeof DESCRIPTION_COMMENT_SCOPE];
 
-/** Whether a thread still stands in the margin, or was resolved into the plan's history. */
+/** Whether a thread still stands in the margin, or was resolved into the description's history. */
 export const DESCRIPTION_COMMENT_STATUS = {
   OPEN: "open",
   RESOLVED: "resolved",
@@ -120,7 +120,7 @@ const descriptionCommentClientKeySchema = filledText(
   DESCRIPTION_COMMENT_BOUNDS.MAX_CLIENT_KEY_CHARS,
 );
 
-/** Where a thread's words stand in the plan's text: offsets into its Markdown. */
+/** Where a thread's words stand in the description's text: offsets into its Markdown. */
 const descriptionCommentSpanSchema = EffectSchema.Struct({
   from: countedNumber,
   to: countedNumber,
@@ -205,9 +205,9 @@ const descriptionCommentThreadSchema = EffectSchema.Struct({
   scope: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),
   /** The words the thread was anchored to, as they stood when it was started or last moved; on a page, its element's words, or the version's title for the whole page. */
   quote: EffectSchema.String,
-  /** Where the words stand in the plan's text now; absent once every one of them was deleted, and on a page. */
+  /** Where the words stand in the description's text now; absent once every one of them was deleted, and on a page. */
   anchor: EffectSchema.optionalKey(descriptionCommentSpanSchema),
-  /** The page the thread is on; absent for a thread on the plan. */
+  /** The page the thread is on; absent for a thread on the description. */
   page: EffectSchema.optionalKey(descriptionCommentPageSchema),
   /** The heading of the section the words stand, or last stood, in; empty before the first heading. */
   section: EffectSchema.String,
@@ -222,15 +222,15 @@ const descriptionCommentThreadSchema = EffectSchema.Struct({
 
 export type DescriptionCommentThread = typeof descriptionCommentThreadSchema.Type;
 
-/** Where a reader of a plan's comments starts: before anything. */
+/** Where a reader of a description's comments starts: before anything. */
 export const DESCRIPTION_COMMENTS_CURSOR_START = "0";
 
-/** Where a reader of a plan's comments stands, as the service last handed it back. */
+/** Where a reader of a description's comments stands, as the service last handed it back. */
 export const descriptionCommentsCursorSchema = filledText(
   DESCRIPTION_COMMENT_BOUNDS.MAX_CURSOR_CHARS,
 );
 
-/** A plan's comments as they stand (GET `/api/plans/{id}/comments`): every thread, oldest first, and the cursor to read on from. */
+/** A description's comments as they stand (GET `/api/plans/{id}/comments`): every thread, oldest first, and the cursor to read on from. */
 export const descriptionCommentsAnswerSchema = EffectSchema.Struct({
   threads: EffectSchema.Array(descriptionCommentThreadSchema),
   cursor: EffectSchema.String,
@@ -238,12 +238,12 @@ export const descriptionCommentsAnswerSchema = EffectSchema.Struct({
 
 export type DescriptionCommentsAnswer = typeof descriptionCommentsAnswerSchema.Type;
 
-/** A plan's text as a thread's anchor is measured in. */
+/** A description's text as a thread's anchor is measured in. */
 const ANCHOR_TEXT = EffectSchema.String.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BODY_CHARS));
 
 /**
  * A thread started (POST `/api/plans/{id}/comments`): its first comment, the
- * words it is anchored to, and the plan's text the anchor is measured in,
+ * words it is anchored to, and the description's text the anchor is measured in,
  * which the service carries over to the text as it stands, so a thread
  * started in an editor with words not yet saved lands on the same words. The
  * comment may carry files under its words, and the start may name the
@@ -268,7 +268,7 @@ const descriptionCommentDescriptionStartSchema = EffectSchema.Struct({
  * where they did, by its path, its words or those selected, and the heading
  * of the section it stands in. The service takes the page's
  * title as the quote of a thread on the whole page. It may name the
- * thread's id as a start on the plan does.
+ * thread's id as a start on the description does.
  *
  * A member may gather several comments on a page into a review before any
  * agent hears them: each but the last is started held, posted for every
@@ -303,13 +303,13 @@ const descriptionCommentPageStartSchema = EffectSchema.Struct({
   ),
 });
 
-/** A thread started on the plan's words. */
+/** A thread started on the description's words. */
 export type DescriptionCommentStartRequest = typeof descriptionCommentDescriptionStartSchema.Type;
 
-/** A thread started on a page of the plan's task. */
+/** A thread started on a page of the description's task. */
 export type DescriptionCommentPageStart = typeof descriptionCommentPageStartSchema.Type;
 
-/** A thread started (POST `/api/plans/{id}/comments`): on the plan's words, or on one of its task's pages. */
+/** A thread started (POST `/api/plans/{id}/comments`): on the description's words, or on one of its task's pages. */
 export const descriptionCommentStartRequestSchema = EffectSchema.Union([
   descriptionCommentDescriptionStartSchema,
   descriptionCommentPageStartSchema,
@@ -325,7 +325,7 @@ export const DESCRIPTION_COMMENT_ACTION = {
   RESOLVE: "resolve",
   REOPEN: "reopen",
   DELETE_THREAD: "delete-thread",
-  /** Sends the thread to the app or one of the task's coding agents, to read with the plan and answer in the thread. */
+  /** Sends the thread to the app or one of the task's coding agents, to read with the description and answer in the thread. */
   ASK: "ask",
 } as const;
 
@@ -365,15 +365,15 @@ export interface DescriptionCommentAskRequest {
 
 /** Why a write to a thread took nothing, answered in band. */
 export const DESCRIPTION_COMMENT_REFUSAL = {
-  /** The plan already holds `DESCRIPTION_COMMENT_BOUNDS.MAX_THREADS_PER_DESCRIPTION` threads, or the thread its bound of comments. */
+  /** The description already holds `DESCRIPTION_COMMENT_BOUNDS.MAX_THREADS_PER_DESCRIPTION` threads, or the thread its bound of comments. */
   TOO_MANY: "too-many",
-  /** The anchor names no words of the text it was measured in, or none of them stand in the plan now. */
+  /** The anchor names no words of the text it was measured in, or none of them stand in the description now. */
   NO_WORDS: "no-words",
   /** The comment is someone else's, which only its writer edits or deletes. */
   NOT_YOURS: "not-yours",
   /** The comment named is not one of the thread's. */
   NO_ENTRY: "no-entry",
-  /** The key the reply was sent under already wrote to another thread of the plan. */
+  /** The key the reply was sent under already wrote to another thread of the description. */
   KEY_TAKEN: "key-taken",
 } as const;
 
@@ -417,7 +417,7 @@ export const descriptionCommentAnchorsSchema = EffectSchema.Struct({
 
 export type DescriptionCommentAnchors = typeof descriptionCommentAnchorsSchema.Type;
 
-/** The tools the app and every coding agent on the task read and answer the plan's comments with, by the name the model calls each. */
+/** The tools the app and every coding agent on the task read and answer the description's comments with, by the name the model calls each. */
 export const DESCRIPTION_COMMENT_TOOL = {
   READ: "read_comments",
   REPLY: "reply_to_comment",

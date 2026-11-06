@@ -15,9 +15,9 @@ import { pageVersionNumberSchema } from "./page-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
- * description-comment-live.ts -- one subject of a task's comments, its plan's own threads or one page's, followed over the service's held poll: the statements the service answers, the rows they deliver, and the threads as the held read answers them.
+ * description-comment-live.ts -- one subject of a task's comments, its description's own threads or one page's, followed over the service's held poll: the statements the service answers, the rows they deliver, and the threads as the held read answers them.
  *
- * A read follows one subject, as the held read does: the plan's threads
+ * A read follows one subject, as the held read does: the description's threads
  * with no page named, or one page's threads on every version, resolved ones
  * among them, never the task's whole, since nothing bounds how many pages
  * a task has. It is three statements, the threads, their entries with the
@@ -41,7 +41,7 @@ export const taskCommentsLiveAnswerSchema = EffectSchema.Struct({
 
 export type TaskCommentsLiveAnswer = typeof taskCommentsLiveAnswerSchema.Type;
 
-/** One thread as its row delivers it: its anchor null once its words were deleted and on a page, and its page, version, and element null on the plan. */
+/** One thread as its row delivers it: its anchor null once its words were deleted and on a page, and its page, version, and element null on the description. */
 const threadLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   scope: EffectSchema.Literals(Object.values(DESCRIPTION_COMMENT_SCOPE)),

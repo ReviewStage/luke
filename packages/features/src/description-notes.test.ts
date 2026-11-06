@@ -94,7 +94,7 @@ test("a note naming a field rather than a heading is passed over, and a correcti
   });
 });
 
-/** A plan's text holding a mention the developer placed. */
+/** A description's text holding a mention the developer placed. */
 const MENTIONED = "## Rollout\n\n- Ship as [@Goal](luke://plan/pl_1#Goal) says, store first.\n";
 
 test("a correction that drops a mention the developer placed is not taken", () => {
@@ -183,7 +183,7 @@ test("a correction that drops one of two copies of a mention is not taken", () =
   assert.deepEqual(applyNotesToText(text, [note]).missed, note);
 });
 
-test("a correction that drops a mention past the plan's twentieth is not taken", () => {
+test("a correction that drops a mention past the description's twentieth is not taken", () => {
   const many = Array.from({ length: 21 }, (_, at) => `- see [@f${at}](luke://file/f${at}.ts)`).join(
     "\n",
   );
@@ -259,7 +259,7 @@ test("a batch with one note naming what the text does not hold exactly once take
   const cases: readonly { text: string; note: DescriptionNote }[] = [
     {
       text: DOCUMENT,
-      note: { kind: NOTE_KIND.REPLACE, find: "a phrase the plan never held", text: "x" },
+      note: { kind: NOTE_KIND.REPLACE, find: "a phrase the description never held", text: "x" },
     },
     { text: DOCUMENT, note: { kind: NOTE_KIND.REPLACE, find: "## Rollout", text: "" } },
     { text: twice, note: add("Goal", "- Lands nowhere.") },
@@ -303,14 +303,14 @@ test("an agent's deletion is journaled as a strike, and a long replaced text is 
   ]);
 });
 
-/** A picture's address in a plan's text, under the plan's own address. */
+/** A picture's address in a description's text, under the plan's own address. */
 const PICTURE_ADDRESS =
   "https://vespin.dev/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b/files/9d2e4c61-7a3b-4f0e-8b1a-2c6d4e8f0a13";
 
-/** A picture's line as the plan's text writes it: alt text, address, and caption. */
+/** A picture's line as the description's text writes it: alt text, address, and caption. */
 const PICTURE_LINE = `![Members page with two pending invites](${PICTURE_ADDRESS} "Pending invites sit in the list")`;
 
-/** A plan's text holding a picture on its own line, between two points. */
+/** A description's text holding a picture on its own line, between two points. */
 const PICTURED = [
   "## Approach",
   "",
@@ -322,7 +322,7 @@ const PICTURED = [
   "",
 ].join("\n");
 
-test("a correction that drops a picture the plan held is not taken", () => {
+test("a correction that drops a picture the description held is not taken", () => {
   const note: DescriptionNote = {
     kind: NOTE_KIND.REPLACE,
     find: `invites.\n\n${PICTURE_LINE}`,

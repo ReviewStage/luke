@@ -16,7 +16,7 @@
 export const ACTIVITY_FEATURE = {
   /** A coding agent started (`agent.created_at`), by hand, by the app, or by an automation. */
   AGENTS_STARTED: "agentsStarted",
-  /** A plan revision written by the developer, or by the retired notetaker on their behalf before agents wrote plans. */
+  /** A description revision written by the developer, or by the retired notetaker on their behalf before agents wrote descriptions. */
   DESCRIPTION_REVISIONS: "descriptionRevisions",
   /** An inbox item the developer answered (`inbox_item.settled_at`, answered). */
   INBOX_ANSWERED: "inboxAnswered",
@@ -101,7 +101,7 @@ export type FunnelStep = (typeof FUNNEL_STEP)[keyof typeof FUNNEL_STEP];
  * leaves nothing to count.
  */
 export const REACH_FEATURE = {
-  /** Created a task or wrote a plan revision as the developer. */
+  /** Created a task or wrote a description revision as the developer. */
   TASKS: "tasks",
   AGENTS: "agents",
   /** Answered an inbox item. */
@@ -116,7 +116,7 @@ export type ReachFeature = (typeof REACH_FEATURE)[keyof typeof REACH_FEATURE];
 
 /** What the retention grid counts an account as retained by. */
 export const RETENTION_BASIS = {
-  /** A task created, a plan revision written as the developer, or an agent started. */
+  /** A task created, a description revision written as the developer, or an agent started. */
   MEANINGFUL: "meaningful",
   /** Any metered hosted-tier call, the grid's basis before the Overview was rebuilt; retired, since only dictation still meters one. */
   HOSTED_CALL: "hostedCall",
@@ -132,7 +132,7 @@ export type RetentionBasis = (typeof RETENTION_BASIS)[keyof typeof RETENTION_BAS
 export const MEANINGFUL_ACTION = {
   /** A task created (`task.created_at`). */
   TASKS_CREATED: "tasksCreated",
-  /** A plan revision written as the developer, under their user id. */
+  /** A description revision written as the developer, under their user id. */
   DESCRIPTION_REVISIONS: "descriptionRevisions",
   /** A coding agent started (`agent.created_at`), however it was started. */
   AGENTS_STARTED: "agentsStarted",
