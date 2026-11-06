@@ -408,7 +408,7 @@ export function agentEntries(
 function inboxEntry(waiting: number, onPick: () => void): AddEntry {
   return {
     row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) },
-    endMark: waitingMark(waiting),
+    endMark: waiting === 0 ? undefined : <WaitingCount count={waiting} />,
     onPick,
   };
 }

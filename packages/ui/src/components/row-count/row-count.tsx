@@ -1,11 +1,13 @@
 import type { StatusTone } from "../../status-tone.js";
+import { CountFigure } from "../count-figure/count-figure.js";
 import { VisuallyHidden } from "../visually-hidden/visually-hidden.js";
 
 /**
  * row-count.tsx -- a count at a row's or a tab's end, in the caption's size and even figures: a tally in the muted ink, or what waits on the reader in the attention tone, as the sidebar's Inbox row counts it.
  *
  * The figure is what the eye reads; `noun` follows it for a reader alone,
- * so "3" is heard as "3 need you". A count of none is not drawn, so a row
+ * so "3" is heard as "3 need you". A number is drawn as every count's
+ * figure is (`CountFigure`), "99+" past 99. A count of none is not drawn, so a row
  * with nothing waiting reads as it would with no count at all. Its ink is
  * its status tone's (`tokens/status-tone.css`), read from `data-tone`, and
  * the muted ink where it names none.
@@ -30,7 +32,7 @@ export function RowCount({
       className="ui-row-count flex-none text-caption-inline text-muted-foreground tabular-nums data-[tone]:text-tone-ink"
       data-tone={tone}
     >
-      {value}
+      {typeof value === "number" ? <CountFigure value={value} /> : value}
       {noun === undefined ? null : <VisuallyHidden> {noun}</VisuallyHidden>}
     </span>
   );
