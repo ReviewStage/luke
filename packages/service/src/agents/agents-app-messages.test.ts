@@ -1384,7 +1384,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's run_on_mac standing names its starter's Mac for its starter, and reads as not found for a member who reaches the agent but not its task",
+    "an agent's run_on_mac standing names its starter's Mac for its starter, says nothing for an agent on a device, and reads as not found for a member who reaches the agent but not its task",
     () =>
       Effect.gen(function* () {
         const agentSessions = fakeAgentSessions();
@@ -1412,6 +1412,21 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           reason: RUN_ON_MAC_OFF.MAC_AWAY,
           owner: { userId: owner, name: "Test User" },
         });
+        // An agent on a device is offered no run_on_mac, so it is answered nothing.
+        yield* Database.use((db) =>
+          db
+            .update(agentTable)
+            .set({ machine: AGENT_MACHINE.DEVICE })
+            .where(eq(agentTable.id, agent.id)),
+        );
+        assert.deepEqual(
+          readAnswer(
+            workspaceToolsAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(AGENT_WORKSPACE_TOOLS, owner, { id: agent.id })),
+          ),
+          {},
+        );
         assert.deepEqual(
           teammate,
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
