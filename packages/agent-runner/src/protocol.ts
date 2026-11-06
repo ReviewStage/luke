@@ -428,6 +428,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   warm: Schema.optionalKey(Schema.Boolean),
   /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
   trace: Schema.optionalKey(RunnerTraceSchema),
+  /** How long a warm launch stays warm before it ends itself (`RUNNER_WARM`); `RUNNER_WARM.IDLE_CAP_MS` where absent. */
+  warmForMs: Schema.optionalKey(Schema.Number),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -489,6 +491,8 @@ export const CodexConfigSchema = Schema.Struct({
   warm: Schema.optionalKey(Schema.Boolean),
   /** Where the launch's startup is traced in Sentry (`RunnerTrace`); none where it is not, as on a host, and in a config written before it. */
   trace: Schema.optionalKey(RunnerTraceSchema),
+  /** How long a warm launch stays warm before it ends itself (`RUNNER_WARM`); `RUNNER_WARM.IDLE_CAP_MS` where absent. */
+  warmForMs: Schema.optionalKey(Schema.Number),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
@@ -554,10 +558,11 @@ const ModelLineSchema = Schema.Struct({
 /**
  * End the launch if it is warm: its turn over, nothing in flight, no
  * message of the service's unanswered, and no turn of the CLI's own begun since.
- * The service writes it once a warm launch has idled past its window
- * (`coder-host/runner-sessions.ts`'s `retireWarmRunner`), and a launch in
- * any other state skips it, so a message the service wrote ahead of it on the same
- * stdin always wins.
+ * The service writes it where a warm launch's host waits to switch release
+ * (`coder-host/runner-sessions.ts`'s `retireWarmRunner`), as a host does to
+ * its own warm launches while it waits (`@repo/host`'s
+ * `compose-local-agents.ts`), and a launch in any other state skips it, so a
+ * message written ahead of it on the same stdin always wins.
  */
 const RetireLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.RETIRE),
@@ -611,18 +616,19 @@ export const RUNNER_END = {
    * come due. The turn is over, as a `turn_ended` one is.
    */
   RELEASED: "released",
-  /** A warm launch ended with no turn under way: retired by the service past its window, or past `RUNNER_WARM.IDLE_CAP_MS` on its own. Its turn was already over at its IDLE. */
+  /** A warm launch ended with no turn under way: retired by the service or its host, or past its warm window on its own (`RUNNER_WARM`). Its turn was already over at its IDLE. */
   IDLED: "idled",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
 
 /**
- * How long a warm launch waits on its own. The service retires a warm launch once
- * it idled past its window (`CODER.RUNNER_WARM`), under the runner lease, so
- * no message it writes is lost to the end; this cap is the launch's own
- * bound where the service never does, since the heartbeat keeps its sandbox alive
- * for as long as it runs. A message the service writes in the instant the cap ends
- * the launch stays unaccepted, as one a released wait ends on does.
+ * How long a warm launch waits on its own before it ends itself. The service
+ * hands each warm launch its window (`warmForMs`, from `CODER.RUNNER_WARM`),
+ * and a launch past it is ended here rather than by a sweep: a message the
+ * service sends past the window relaunches rather than writing to it
+ * (`coder-host/runner-sessions.ts`'s `sendHolding`). `IDLE_CAP_MS` is the
+ * bound for a config from a service before `warmForMs`, since the heartbeat
+ * keeps a sandbox alive for as long as its launch runs.
  */
 export const RUNNER_WARM = {
   IDLE_CAP_MS: 60 * 60 * 1_000,

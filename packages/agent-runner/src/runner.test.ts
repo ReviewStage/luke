@@ -42,7 +42,6 @@ import {
   RUNNER_PLACE,
   RUNNER_RELEASE,
   RUNNER_UNANSWERED,
-  RUNNER_WARM,
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
@@ -530,14 +529,15 @@ it.effect(
     }),
 );
 
-it.effect("a warm launch nobody retires ends as idled at its cap", () =>
+it.effect("a warm launch nobody retires ends as idled once the window it was handed passes", () =>
   Effect.gen(function* () {
+    const warmForMs = 5 * 60 * 1_000;
     const service = fakeService();
     const { write, run } = yield* launch(SHORT_TURN, service);
-    yield* write(WARM_CONFIG);
+    yield* write({ ...WARM_CONFIG, warmForMs });
     yield* write(FIRST_MESSAGE);
     yield* untilIdles(service, 1);
-    yield* TestClock.adjust(Duration.millis(RUNNER_WARM.IDLE_CAP_MS - 1));
+    yield* TestClock.adjust(Duration.millis(warmForMs - 1));
     assert.equal(run.pollUnsafe(), undefined);
 
     yield* TestClock.adjust(Duration.millis(1));

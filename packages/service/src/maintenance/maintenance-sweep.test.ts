@@ -24,14 +24,12 @@ function sweepRequest(
 
 /** The instant each sweep was handed, recorded for the test to read back. */
 interface Recorded {
-  deviceWarmRunners: number[];
   wakeups: number[];
   syncLog: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
   const recorded: Recorded = {
-    deviceWarmRunners: [],
     wakeups: [],
     syncLog: [],
   };
@@ -39,10 +37,6 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     request: sweepRequest(),
     cronSecret: CRON_SECRET,
     monitor: { run: (sweep) => sweep },
-    sweepDeviceWarmRunners: (now) =>
-      Effect.sync(() => {
-        recorded.deviceWarmRunners.push(now);
-        return { retired: 1, left: 0, busy: 0, failed: 0 };
       }),
     sweepNativeWakeups: (now) =>
       Effect.sync(() => {
@@ -75,7 +69,6 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
     assert.equal(answer.status, 503);
     assert.equal(answer.body.error, HOSTED_API_ERROR.UNAVAILABLE);
     assert.deepEqual(recorded, {
-      deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
     });
@@ -93,12 +86,10 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
     assert.equal(wrongAnswer.body.error, HOSTED_API_ERROR.INVALID_TOKEN);
     assert.equal(missingAnswer.status, 401);
     assert.deepEqual(wrong.recorded, {
-      deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
     });
     assert.deepEqual(missing.recorded, {
-      deviceWarmRunners: [],
       wakeups: [],
       syncLog: [],
     });
@@ -118,7 +109,6 @@ it.effect(
       const [instant] = recorded.deviceWarmRunners;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
-        deviceWarmRunners: [instant],
         wakeups: [instant],
         syncLog: [instant],
       });

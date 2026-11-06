@@ -26,6 +26,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { INPUT_LINE } from "@repo/agent-runner/protocol";
 import type { DeviceAgentClaimedLine, DeviceAgentDevice, DeviceAgentUpdate } from "@repo/features";
 import { CHECKOUT_IDENTITY_SCRIPT } from "@repo/features/checkout-identity";
 import {
@@ -907,7 +908,7 @@ const untilOnDisk = <E, R>(holds: Effect.Effect<boolean, E, R>) =>
   });
 
 it.effect(
-  "a host holding a newer release waits while an agent runs, and switches once it ends: current names the new release, the running one is kept, and older ones go",
+  "a host holding a newer release waits while an agent runs, asking its runner to end where it is warm, and switches once it ends: current names the new release, the running one is kept, and older ones go",
   () =>
     Effect.gen(function* () {
       const { archive, release } = yield* newerTarball;
@@ -926,6 +927,15 @@ it.effect(
       assert.deepEqual(fetched, [hostTarballUrl(NEWER, HOST_TARGET.LINUX_X64)]);
       assert.deepEqual(said.at(-1), { update: HOST_UPDATE.WAITING });
       assert.equal(yield* current, `versions/${RUNNING}`);
+      const stdin = spawned.find((each) => each.program === RUNNER)?.stdin;
+      assert.ok(typeof stdin === "object" && "stream" in stdin && Stream.isStream(stdin.stream));
+      const retire = JSON.stringify({ type: INPUT_LINE.RETIRE });
+      const written = yield* (stdin.stream as Stream.Stream<Uint8Array>).pipe(
+        Stream.decodeText(),
+        Stream.takeUntil((text) => text.includes(retire)),
+        Stream.runCollect,
+      );
+      assert.ok(written.at(-1)?.includes(retire), "the runner is asked to end where it is warm");
 
       service.held.delete(LINE_ID);
       yield* beatsOn(2);
