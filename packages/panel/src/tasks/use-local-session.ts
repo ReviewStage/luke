@@ -374,6 +374,19 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     [connect],
   );
 
+  // The shown shell that ended let go, out of main and the list, and the
+  // next one found in its place, as a key or a new shell asked for opens it.
+  const replaceEnded = useCallback(() => {
+    const held = live.current;
+    const ended = held.shell;
+    held.shell = undefined;
+    if (ended !== undefined) {
+      forget(ended);
+      void act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(() => undefined);
+    }
+    void connect();
+  }, [act, agentId, connect, forget]);
+
   // What is typed goes to the shell while one is attached, and otherwise
   // is the state's own: any key after the shell ended opens a new one in
   // its place, Return runs the bar's action, and nothing while a shell opens.
@@ -381,18 +394,8 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
     (data: string) => {
       const held = live.current;
       switch (held.state.kind) {
-        case TERMINAL_STATE.EXITED: {
-          const ended = held.shell;
-          held.shell = undefined;
-          if (ended !== undefined) {
-            forget(ended);
-            void act(ACT_KIND.MAC_SHELL_CLOSE, { agentId, terminalId: ended }).catch(
-              () => undefined,
-            );
-          }
-          void connect();
-          return;
-        }
+        case TERMINAL_STATE.EXITED:
+          return replaceEnded();
         case TERMINAL_STATE.UNREACHABLE:
           if (data === RETURN) onAction(TERMINAL_ACTION.RETRY);
           return;
@@ -404,7 +407,7 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
           return;
       }
     },
-    [act, agentId, connect, forget, onAction],
+    [onAction, replaceEnded],
   );
 
   const onPortMessage = useCallback(
@@ -533,8 +536,8 @@ export function useLocalSession(agentId: string, shown: boolean): LocalSession {
       void onCreate();
       return;
     }
-    if (state.kind === TERMINAL_STATE.EXITED) void connect();
-  }, [shown, asked, state.kind, setAsked, onCreate, connect]);
+    if (state.kind === TERMINAL_STATE.EXITED) replaceEnded();
+  }, [shown, asked, state.kind, setAsked, onCreate, replaceEnded]);
 
   return {
     state,

@@ -1035,7 +1035,7 @@ test("two new shells asked for at once open two shells, each ask its own", async
   assert.equal(tab.registry.get(localShellsAsked(AGENT.id)), 0);
 });
 
-test("a new shell asked for after the shown shell ended opens it, as a key would", async () => {
+test("a new shell asked for after the shown shell ended lets the ended one go and opens it, as a key would", async () => {
   const tab = await mount();
   main.post(OLDEST).say({ type: "state", state: "exited", code: 0 });
   const before = main.sent.length;
@@ -1043,8 +1043,17 @@ test("a new shell asked for after the shown shell ended opens it, as a key would
     tab.registry.update(localShellsAsked(AGENT.id), (asked) => asked + 1);
   });
   await settle();
-  assert.deepEqual(tab.kinds(before), ["macShell.mirror", "macShell.open", "macShell.attach"]);
+  assert.deepEqual(tab.kinds(before), [
+    "macShell.close",
+    "macShell.mirror",
+    "macShell.open",
+    "macShell.attach",
+  ]);
   assert.equal(tab.registry.get(localShellsAsked(AGENT.id)), 0);
+  assert.deepEqual(
+    tab.rows().map((row) => row.name),
+    ["dev server", "Terminal 1"],
+  );
 });
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
