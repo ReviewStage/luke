@@ -774,7 +774,10 @@ test("a sign-in canceled on Vercel Connect's own page says so plainly, with Retr
   );
   // The service names a failure once; the next read leaves the line as it stood.
   await readMoves();
-  assert.equal(granolaRow(page).line, "You canceled connecting Granola.");
+  assert.deepEqual(granolaRow(page), {
+    line: "You canceled connecting Granola.",
+    buttons: ["Retry"],
+  });
 });
 
 test("a sign-in Connect refused says so, then Connect's own line quoted under it, with Retry", async () => {
