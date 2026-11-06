@@ -12,13 +12,15 @@ import {
   type PortActResult,
 } from "@repo/host/contract";
 import { Effect, Result, Schema } from "effect";
+import { onTestFinished } from "vitest";
 import { askAct } from "../act.js";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { handState, stateWith } from "../testing/app-state.js";
+import { testQueryClientNow, writeAppState } from "../testing/copy-feedback.js";
 import { appStateFirstRead } from "../use-app-state.js";
 import { agentActAnswer, FIXTURE_AGENT_ID } from "./agent-fixture.js";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
-import { loadTasksFixture } from "./tasks-fixture-loader.js";
+import { handFixtureClient, loadTasksFixture } from "./tasks-fixture-loader.js";
 
 /**
  * agent-fixture.test.ts -- a fixture run's agent profiles answer the reads
@@ -172,7 +174,9 @@ it.effect(
         {},
         { run: { ...run, fixtureMode: true, profile: RUN_PROFILE.AGENT_PULL_REQUEST } },
       );
-      yield* appStateFirstRead;
+      // The document is written into the test's client and that client handed to the fixture, as the window's subscription does.
+      writeAppState(yield* appStateFirstRead);
+      onTestFinished(handFixtureClient(testQueryClientNow()));
       // The window is drawn once the synthetic tasks have landed (`App`).
       yield* Effect.promise(loadTasksFixture);
       const sent: PortActKind[] = [];
