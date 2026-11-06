@@ -505,7 +505,10 @@ export function taskRowFit(rows: readonly TaskRowWords[]): CSSProperties {
   const pullRequests = rows.map((row) => row.pullRequests ?? []);
   return cssCustomProperties({
     "--ui-task-row-key-chars": mostChars(rows.map((row) => row.key)),
-    "--ui-task-row-pull-requests": Math.max(0, ...pullRequests.map((each) => each.length)),
+    "--ui-task-row-pull-requests": pullRequests.reduce(
+      (most, each) => Math.max(most, each.length),
+      0,
+    ),
     "--ui-task-row-pull-request-chars": mostChars(pullRequests.flat()),
     "--ui-task-row-sub-task-chars": withMarks(
       mostChars(rows.map((row) => row.subTasks)),
