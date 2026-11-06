@@ -201,6 +201,7 @@ export function FileTab({
     ...taskFileQueryOptions(place, { path: file.path, ...FIRST_LINE }),
     enabled: pinned === undefined,
   });
+  const headRead = head.data !== undefined && "file" in head.data;
   const headCommit =
     head.data !== undefined && "file" in head.data ? head.data.file.commit : undefined;
   const commitAsked = pinned ?? headCommit;
@@ -211,7 +212,8 @@ export function FileTab({
       raw: true,
       ...(commitAsked === undefined ? undefined : { ref: commitAsked }),
     }),
-    enabled: pinned !== undefined || head.isSuccess,
+    // Note that a head that answered no file, a refusal, ends the read there, as the tab draws it.
+    enabled: pinned !== undefined || headRead,
   });
   // Note that the read is drawn from what each result says rather than the result itself, which is a new object every render.
   const { status: headStatus, isFetching: headFetching, data: headData } = head;
@@ -225,7 +227,8 @@ export function FileTab({
       ),
     [pinned, headStatus, headFetching, headData, wholeStatus, wholeFetching, wholeData],
   );
-  const readAgain = () => void (pinned === undefined && !head.isSuccess ? head : whole).refetch();
+  // Retry reads again the read that stopped the tab: the head's where it named no file, else the whole text.
+  const readAgain = () => void (pinned === undefined && !headRead ? head : whole).refetch();
   const told = useRef(onRead);
   told.current = onRead;
   useEffect(() => {
