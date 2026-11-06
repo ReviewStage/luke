@@ -275,7 +275,7 @@ function AppWindow(): React.JSX.Element {
   // The editor and markdown-parser prefetches start once the renderer is idle, not beside the first interactions; so does session replay, below.
   usePrefetchBundles();
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  // The shell hears the ask too, and whether a plan holds words not saved, which no page's ask
+  // The shell hears the ask too, and whether a description holds words not saved, which no page's ask
   // covers, so its own ways out of the page and the app ask first.
   const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
   const descriptionWordsUnsaved = useDescriptionWordsUnsaved();
@@ -472,7 +472,7 @@ function AppWindow(): React.JSX.Element {
   // (`link-route.ts`).
   const adminOn = useAdminAccess();
   const adminPending = useAdminAccessPending();
-  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open plan among them, holds while the window is drawn again.
+  // Note that the door stands across draws, so every part that reads it (`useOpenLink`), each section of the open description among them, holds while the window is drawn again.
   const openAppLink = useSteadyDoor((link: ReadLink) => {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
@@ -559,7 +559,7 @@ function AppWindow(): React.JSX.Element {
         return;
       }
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
+      // time: Settings, a description's version history, an agent's or a person's page, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the page it was opened from. A menu and the
       // settings search answer their own Escapes and keep them — the search

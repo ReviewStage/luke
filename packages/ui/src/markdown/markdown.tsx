@@ -1,5 +1,5 @@
 /**
- * markdown.tsx -- the one Markdown renderer every surface draws words with: a note's (the plan, its versions, a comment, a file's note), a transcript's as it streams, and a site document's, all on Streamdown.
+ * markdown.tsx -- the one Markdown renderer every surface draws words with: a note's (the description, its versions, a comment, a file's note), a transcript's as it streams, and a site document's, all on Streamdown.
  *
  * Streamdown is react-markdown's own pipeline (remark, remark-rehype, and
  * hast to JSX) with a streaming reader in front of it, so one engine serves
@@ -312,7 +312,7 @@ export interface MarkdownProps {
   urlTransform?: UrlTransform | undefined;
   /** Whether a transcript's HTML blocks lose their indent before they are read. */
   normalizeHtmlIndentation?: boolean | undefined;
-  /** Ticks or clears a note's task item pressed, as a plan the developer can edit does; every checkbox is read-only without it. */
+  /** Ticks or clears a note's task item pressed, as a description the developer can edit does; every checkbox is read-only without it. */
   onTask?: MarkdownTaskToggler | undefined;
 }
 
@@ -370,7 +370,7 @@ function WholeWords({
 /**
  * Words drawn as the Markdown they were written in. A note and a document
  * are drawn again only when what they are handed changes, since the words
- * are parsed afresh on every draw, and a plan redrawn on a save would parse
+ * are parsed afresh on every draw, and a description redrawn on a save would parse
  * every section; a place hands its components and steps memoised for the
  * same reason.
  */

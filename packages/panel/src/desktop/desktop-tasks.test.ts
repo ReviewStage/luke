@@ -89,7 +89,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The side panel shown on the plan's comments beside it. */
+/** The side panel shown on the description's comments beside it. */
 /** A File tab of the task, which the panel draws in these tests. */
 const NOTES = { file: "docs/notes.md" };
 
@@ -554,7 +554,7 @@ function _heldAnswer(): HeldAnswer {
   };
 }
 
-test("a plan's document, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
+test("a description, its way back to the agents pinned in its card, opens on its path, its repository as plain words, then its title, with who created it and when it was last edited under the title", () => {
   const home = {
     id: TASK.workspaceId,
     name: "Personal",
@@ -741,7 +741,7 @@ test("opening another task draws only its own title and sub-tasks, none of the t
   container.remove();
 });
 
-test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
+test("a chip in the description naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
   const agent: AgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: TASK.id,
@@ -908,7 +908,7 @@ function panelPage(
   };
 }
 
-test("the plan stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
+test("the description stays drawn, hidden, while an agent's tab of the column is shown, so an edit not yet saved outlives the switch", () => {
   const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const column = (tab: MainTab): Partial<TasksControl> => ({
     mainTabs: {
@@ -920,11 +920,15 @@ test("the plan stays drawn, hidden, while an agent's tab of the column is shown,
   });
   const page = panelPage(NOTES, column(MAIN_TAB.OVERVIEW));
   const document = page.container.querySelector(".desktop-document");
-  assert.ok(document, "the plan is drawn on Overview");
+  assert.ok(document, "the description is drawn on Overview");
   assert.equal(document.hasAttribute("hidden"), false);
 
   page.draw(NOTES, column({ agent: agentId }));
-  assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
+  assert.equal(
+    page.container.querySelector(".desktop-document"),
+    document,
+    "the same description stands",
+  );
   assert.equal(document.hasAttribute("hidden"), true);
 
   page.draw(NOTES, column(MAIN_TAB.OVERVIEW));

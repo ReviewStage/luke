@@ -19,7 +19,7 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * format-toolbar.tsx -- the toolbar over selected words: the plan's, with
+ * format-toolbar.tsx -- the toolbar over selected words: the description's, with
  * Turn into naming the block and Comment, whose marks toggle as they are
  * pressed; one over words spanning several kinds of block; a composer's,
  * marks alone; and the Turn into menu it drops, the current block checked.
@@ -35,7 +35,7 @@ function useMarks(initial: readonly WritingMark[]) {
   return [marks, toggle] as const;
 }
 
-/** The plan's toolbar over words in a heading, bold and linked. */
+/** The description's toolbar over words in a heading, bold and linked. */
 function DescriptionToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.BOLD, WRITING_MARK.LINK]);
   const [block, setBlock] = useState<WritingBlock>(WRITING_BLOCK.HEADING_2);
@@ -49,7 +49,7 @@ function DescriptionToolbar(): React.JSX.Element {
   );
 }
 
-/** The plan's toolbar over words spanning a paragraph and a list. */
+/** The description's toolbar over words spanning a paragraph and a list. */
 function SpanningToolbar(): React.JSX.Element {
   const [marks, toggle] = useMarks([WRITING_MARK.ITALIC]);
   return (

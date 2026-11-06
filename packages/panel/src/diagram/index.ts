@@ -9,7 +9,7 @@ import mermaid, { type MermaidConfig } from "mermaid";
 import { diagramThemeVariables } from "./diagram-theme.js";
 
 /**
- * index.ts -- the diagram bundle: Mermaid drawing a plan's fence as a picture the panel's policy admits, imported by the panel (`@repo/ui/diagram-contract`).
+ * index.ts -- the diagram bundle: Mermaid drawing a description's fence as a picture the panel's policy admits, imported by the panel (`@repo/ui/diagram-contract`).
  *
  * The panel's policy is `style-src 'self'` (the desktop's
  * `renderer/index.html` and the web's `vercel.json`), and Mermaid's SVG
@@ -42,7 +42,7 @@ import { diagramThemeVariables } from "./diagram-theme.js";
 /** The window's own type, as `styles/base.css` sets it, so a label reads as the words around it. */
 const FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif';
 
-/** A label's size, as the plan's words around a diagram are set. */
+/** A label's size, as the description's words around a diagram are set. */
 const FONT_SIZE = "14px";
 
 /** What a refused fence answers. */

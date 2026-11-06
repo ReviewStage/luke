@@ -16,7 +16,7 @@ import { mountDescriptionEditor } from "./description-editor.js";
  * redo; and all of it counted in a text saved with Windows line endings as
  * it was given. Threads opened and closed while the editor stands mark and
  * unmark their words with no remount, and a thread whose words were deleted
- * here stays carried while it is open. Synthetic plan.
+ * here stays carried while it is open. Synthetic description.
  */
 
 const THREAD = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
@@ -49,7 +49,7 @@ function mounted(text = TEXT, marked = true) {
     markdown: text,
     placement: undefined,
     focus: true,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: (markdown, anchors) => drafts.push({ markdown, anchors }),
     onFinish: () => undefined,

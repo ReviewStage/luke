@@ -12,7 +12,7 @@ import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * writing-chords.test.ts -- the plan editor's writing chords against the
+ * writing-chords.test.ts -- the description editor's writing chords against the
  * window's own: a chord the editor answers while it has the caret is the
  * editor's alone, and a chord it no longer answers reaches the window as
  * before. Synthetic text.
@@ -44,12 +44,12 @@ afterEach(() => {
 function KeyedWindow({ ran }: { ran: string[] }): ReactElement | null {
   useAppKeymap(true);
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, () => ran.push("toggle sidebar"));
-  useAppCommand(APP_COMMAND.COPY_CONTENT, () => ran.push("copy plan"));
+  useAppCommand(APP_COMMAND.COPY_CONTENT, () => ran.push("copy description"));
   useAppCommand(APP_COMMAND.TOGGLE_FULL_SCREEN, () => ran.push("toggle full screen"));
   return null;
 }
 
-/** The window's keymap answering, with the plan editor open on `markdown` and every word of its first line selected. */
+/** The window's keymap answering, with the description editor open on `markdown` and every word of its first line selected. */
 function mount(markdown: string) {
   const ran: string[] = [];
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -60,7 +60,7 @@ function mount(markdown: string) {
     markdown,
     placement: undefined,
     focus: true,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: () => undefined,
     onFinish: () => undefined,
@@ -108,7 +108,7 @@ function press(
   });
 }
 
-test("⌘B in the plan bolds its words and leaves the sidebar alone, and toggles the sidebar with the caret in no text", () => {
+test("⌘B in the description bolds its words and leaves the sidebar alone, and toggles the sidebar with the caret in no text", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
   press(element, "b");
   assert.equal(handle.markdown().trim(), "**Ship the invite flow.**");
@@ -118,18 +118,18 @@ test("⌘B in the plan bolds its words and leaves the sidebar alone, and toggles
   assert.deepEqual(ran, ["toggle sidebar"]);
 });
 
-test("⇧⌘X strikes the plan's words", () => {
+test("⇧⌘X strikes the description's words", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
   press(element, "x", { shift: true });
   assert.equal(handle.markdown().trim(), "~~Ship the invite flow.~~");
   assert.deepEqual(ran, []);
 });
 
-test("⌥⌘C leaves the plan's line as words and copies the plan", () => {
+test("⌥⌘C leaves the description's line as words and copies the description", () => {
   const { ran, handle, element } = mount("Ship the invite flow.\n");
   press(element, "c", { option: true });
   assert.equal(handle.markdown().trim(), "Ship the invite flow.");
-  assert.deepEqual(ran, ["copy plan"]);
+  assert.deepEqual(ran, ["copy description"]);
 });
 
 test("⌘E sets code, ⌥⌘2 a second heading, and ⇧⌘8 a bulleted list, none of them reaching the window", () => {
@@ -174,7 +174,7 @@ test("a block's chord in a table's cell does nothing, reaching neither the cell 
   assert.ok(handle.markdown().includes("| **Anyone** |"), "a mark is still laid on in a cell");
 });
 
-test("a block's chord over words that run through a table, from a line before it to one after, leaves the plan as it was", () => {
+test("a block's chord over words that run through a table, from a line before it to one after, leaves the description as it was", () => {
   const { handle, element } = mount("Intro\n\n| A |\n| --- |\n| value |\n\nOutro\n");
   const editor = element.editor ?? assert.fail("the editor is running");
   const before = handle.markdown();

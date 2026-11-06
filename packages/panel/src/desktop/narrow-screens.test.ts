@@ -45,7 +45,7 @@ import { useSidebarCollapse } from "./sidebar-collapse.js";
 
 /**
  * narrow-screens.test.ts -- on a stage as narrow as a phone's, Settings and a
- * plan's version history each show their list or the item chosen
+ * description's version history each show their list or the item chosen
  * in it, one at a time and the whole width: each opens on its list, a row
  * pressed stands its item alone under a way back to the list, and a link to
  * an item opens on it with the same way back. The focus goes with each swap:
@@ -109,7 +109,7 @@ const UNDER_SPLIT = 800;
 /** The screens that take the whole window, and so are as wide as the stage they fill. */
 const WHOLE_WINDOW_SCREENS = ["app-stage", "desktop-settings", "desktop-version-history"];
 
-/** A revision of the plan by the notetaker. */
+/** A revision of the description by the notetaker. */
 function line(seq: number) {
   return {
     seq,
@@ -119,14 +119,14 @@ function line(seq: number) {
   };
 }
 
-/** The plan's history as main holds it for the version history: two revisions, each the plan as it stands. */
+/** The description's history as main holds it for the version history: two revisions, each the description as it stands. */
 const HELD_HISTORY = {
   rows: { revisions: [line(3), line(2)] },
   status: HOST_READ_STATUS.READY,
   retry: () => Promise.resolve(),
 };
 
-/** Each version as the service answers it, the plan as it stands. */
+/** Each version as the service answers it, the description as it stands. */
 const HISTORY: DescriptionHistorySource = {
   readPage: () => Promise.resolve({ revisions: [] }),
   readRevision: (_taskId, seq) =>
@@ -233,7 +233,7 @@ function SettingsWindow({ link }: { link: SettingsLink | undefined }): React.JSX
 /** The version history the last window drew, which the window's history moves as it goes back and forth. */
 let standingVersions: ReturnType<typeof useDescriptionHistory> | undefined;
 
-/** The plan's version history over the window, opened on the plan as it stands or where `returnTo` says. */
+/** The description's version history over the window, opened on the description as it stands or where `returnTo` says. */
 function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): React.JSX.Element {
   const versions = useDescriptionHistory({
     source: HISTORY,

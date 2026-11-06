@@ -6,7 +6,7 @@ import type { EditorAnchor, EditorAnchors } from "./contract.js";
 /**
  * comment-anchors.ts -- the words a comment thread is on, carried in the open editor as a mark, so they move with their words and come back with them on undo.
  *
- * The service keeps a thread's anchor as offsets into the plan's Markdown
+ * The service keeps a thread's anchor as offsets into the description's Markdown
  * (`@repo/features/description-comment-anchor`); the editor holds its words as a
  * mark naming the thread, laid on as the editor opens, or as a thread opens
  * or closes while it stands, outside the developer's undo, so no undo takes

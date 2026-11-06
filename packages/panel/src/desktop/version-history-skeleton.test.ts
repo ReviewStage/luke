@@ -16,9 +16,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * version-history-skeleton.test.ts -- while a plan's versions are read, the
+ * version-history-skeleton.test.ts -- while a description's versions are read, the
  * list stands its blocks in a version's own row and the page in its own
- * bar, so both land where their blocks stood. Synthetic plan.
+ * bar, so both land where their blocks stood. Synthetic description.
  */
 
 const ignore = (): void => undefined;
@@ -37,7 +37,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its list as `list` says. */
+/** The description's version history over the window, its list as `list` says. */
 function drawn(
   list: DescriptionHistoryControl["list"],
   room: ShellRoom = SHELL_ROOM.WIDE,

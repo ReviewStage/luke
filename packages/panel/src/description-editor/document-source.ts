@@ -6,10 +6,10 @@ import { diffArrays } from "diff";
 import { withMentions } from "./mention-node.js";
 
 /**
- * document-source.ts -- a plan's whole Markdown document as the editor's top-level blocks, each keeping its exact source, and back.
+ * document-source.ts -- a description's whole Markdown document as the editor's top-level blocks, each keeping its exact source, and back.
  *
  * TipTap re-prints Markdown in its own style (`*` bullets as `-`, a soft wrap
- * as a hard break, `_em_` as `*em*`). Over a whole plan, one typed word
+ * as a hard break, `_em_` as `*em*`). Over a whole description, one typed word
  * re-printed everywhere would be a change on every line: a false conflict
  * with the app in every section, every section said to be edited by the
  * developer, and a noisy history. So the document is split by the same

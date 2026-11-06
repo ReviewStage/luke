@@ -92,10 +92,10 @@ function repositoryScope(workspace: string): { readonly workspaceId?: string } {
   return workspace === EVERY_WORKSPACE ? {} : { workspaceId: workspace };
 }
 
-/** Whose comments a surface reads: a task's plan's own, or one of its pages', by the task and the page. */
+/** Whose comments a surface reads: a task's description's own, or one of its pages', by the task and the page. */
 export type CommentSubject = TasksCommentsFollow;
 
-/** The comments a surface holds, as the act names them, with no page key where it reads the plan's. */
+/** The comments a surface holds, as the act names them, with no page key where it reads the description's. */
 function commentsFollowOf({ taskId, pageId }: CommentSubject): TasksCommentsFollow {
   return pageId === undefined ? { taskId } : { taskId, pageId };
 }
@@ -254,8 +254,8 @@ function pullRequestPartRead(part: PullRequestPart) {
  * memories, which Settings › Memory holds; the skills the account sees in
  * one workspace, which Settings › Skills holds; one workspace's
  * automations, one workspace's runs, or one automation's runs, by its id;
- * one plan's comments, or one page's, which the open task's plan and a
- * page's tab each hold; one task's plan history, which its version history
+ * one description's comments, or one page's, which the open task's description and a
+ * page's tab each hold; one task's description history, which its version history
  * holds while it shows; the run that started one agent, which its page
  * holds; one workspace's people, its members and who its work names but
  * left, which every surface naming them holds; one workspace's token
@@ -266,7 +266,7 @@ function pullRequestPartRead(part: PullRequestPart) {
  * automation's editor hold; the channels of one workspace's Slack team,
  * which an owner's or an admin's Settings › Workspace holds; each listed
  * workspace's photo, which the host fetches as its version moves and holds
- * for the session; and one task's plan, which the window's open task holds.
+ * for the session; and one task's description, which the window's open task holds.
  * Pages and Browser tabs offer no Try again,
  * because the host reads those that did not answer again on its own, and
  * those it was refused, a plan's or an agent's the reader cannot reach,
@@ -600,7 +600,7 @@ export function useHostRead<Read extends HostReadName>(
 /**
  * What `read` holds at `key` as the host holds it now, without holding it:
  * what a surface beside the one that holds a read draws from it, as a
- * section's chip names a heading in a plan the window holds; none until it
+ * section's chip names a heading in a description the window holds; none until it
  * is read, or where no surface holds it.
  */
 export function useHeldRows<Read extends HostReadName>(

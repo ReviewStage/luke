@@ -58,7 +58,7 @@ import { editorFormatting, formatReports } from "./writing-format.js";
 import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
- * description-editor.ts -- a Markdown document's text, a plan's or another's, edited in place on TipTap, drawn exactly as the document draws it.
+ * description-editor.ts -- a Markdown document's text, a description's or another's, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every Markdown rule for writing it, is
  * TipTap's own: StarterKit, `@tiptap/markdown`, task lists, tables, and
@@ -79,7 +79,7 @@ import { blockRulesOutOfCells, withoutTipTapChords, writingKeys } from "./writin
  * A document's own `/` blocks lay in the Markdown they name. Esc and the
  * send finish, naming the section the caret stood in, the send ⌘↩ in a
  * document and Enter in a message box's text (`sendsOnEnter`); ↑ on the text's first line
- * goes to the title above it, where one stands. What a plan alone takes
+ * goes to the title above it, where one stands. What a description alone takes
  * (mentions, pictures, comment threads, a diagram's preview, and the title
  * above) is each left out where the document takes none, which leaves a
  * Markdown editor that keeps every untouched block's source.
@@ -330,16 +330,16 @@ export function markdownExtensions(
 
 /**
  * What the empty block under the caret says: a heading its level's name,
- * the empty text `plan`'s words, and a line, where the menu stands over the
+ * the empty text `description`'s words, and a line, where the menu stands over the
  * text, how to open it; nothing in code. Note that only a top-level block
  * is asked, as TipTap asks only the block under the caret, so a list's or a
  * table's empty line says nothing.
  */
-function placeholderOf(plan: string, offersBlocks: boolean) {
+function placeholderOf(description: string, offersBlocks: boolean) {
   return ({ editor, node }: { editor: Editor; node: PmNode }): string => {
     if (node.type.name === "heading")
       return HEADING_PLACEHOLDERS.get(Number(node.attrs.level)) ?? "";
-    if (editor.isEmpty) return plan;
+    if (editor.isEmpty) return description;
     return offersBlocks && node.type.name === "paragraph" ? LINE_PLACEHOLDER : "";
   };
 }

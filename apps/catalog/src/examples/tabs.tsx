@@ -47,7 +47,7 @@ interface SampleTab {
 }
 
 const SAMPLE_TABS: readonly SampleTab[] = [
-  { id: "plan", icon: <DocumentIcon />, label: "Description" },
+  { id: "description", icon: <DocumentIcon />, label: "Description" },
   {
     id: "inbox",
     icon: <FolderIcon />,
@@ -70,7 +70,7 @@ const FRAME_TABS: readonly SampleTab[] = [
     label: "Refresh tokens before they expire",
     anchored: true,
   },
-  ...SAMPLE_TABS.filter((tab) => tab.id !== "plan"),
+  ...SAMPLE_TABS.filter((tab) => tab.id !== "description"),
 ];
 
 /** The tabs in their order now, the one at `from` taken to `to`, counted after the anchored tabs, which never move. */

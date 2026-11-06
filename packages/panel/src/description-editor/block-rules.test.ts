@@ -8,10 +8,10 @@ import type { DescriptionEditorHandle } from "./contract.js";
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * block-rules.test.ts -- the plan editor's Markdown rules that make a block,
+ * block-rules.test.ts -- the description editor's Markdown rules that make a block,
  * typed at the start of a line: each makes its block on a line of the text,
  * and does nothing in a table's cell, which holds one line of words, while
- * a mark's rule still marks words there. Synthetic plan.
+ * a mark's rule still marks words there. Synthetic description.
  */
 
 const TABLE = "| Role | Invites |\n| --- | --- |\n| Admin | Anyone |\n";
@@ -41,7 +41,7 @@ function mounted(markdown: string): { editor: Editor; handle: DescriptionEditorH
     markdown,
     placement: undefined,
     focus: true,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: () => undefined,
     onFinish: () => undefined,

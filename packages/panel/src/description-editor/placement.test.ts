@@ -11,7 +11,7 @@ import {
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * placement.test.ts -- where the plan editor's caret stands as it opens and
+ * placement.test.ts -- where the description editor's caret stands as it opens and
  * as a press on its text's room moves it: the end of the text, or the end
  * of a section, read back as the section Esc names. And what an empty text
  * says until a word is typed. Synthetic text.
@@ -41,7 +41,7 @@ function mount(
     markdown,
     placement,
     focus: true,
-    label: "Plan",
+    label: "Description",
     placeholder,
     className: "markdown description-unit",
     onDraft: () => undefined,
@@ -70,16 +70,16 @@ test("an editor opened at the text's end stands its caret in the last section, a
   assert.equal(document.activeElement, element, "the editor keeps the keyboard");
 });
 
-test("an empty text says the placeholder it was given, and the plan's own without one", () => {
+test("an empty text says the placeholder it was given, and the description's own without one", () => {
   const given = mount("", PLACEMENT_END, "Add a description…");
-  const plan = mount("", undefined);
+  const description = mount("", undefined);
 
   assert.equal(
     given.element.querySelector("p")?.getAttribute("data-placeholder"),
     "Add a description…",
   );
   assert.equal(
-    plan.element.querySelector("p")?.getAttribute("data-placeholder"),
+    description.element.querySelector("p")?.getAttribute("data-placeholder"),
     "Write the description",
   );
 });

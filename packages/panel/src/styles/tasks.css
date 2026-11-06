@@ -37,7 +37,7 @@
   );
 }
 
-/* A plan's task item the developer can tick from the drawn plan says so. */
+/* A description's task item the developer can tick from the drawn description says so. */
 .description-unit li.task-list-item input[type="checkbox"]:enabled {
   cursor: var(--ui-cursor-press);
 }
@@ -157,7 +157,7 @@
 }
 
 /* What the empty block under the caret says, drawn before its words: the
-   empty plan's own words, an empty line how to open the `/` menu, an empty
+   empty description's own words, an empty line how to open the `/` menu, an empty
    heading its level's name (`description-editor.ts`'s `placeholderOf`). */
 .description-document-text > .is-empty::before {
   float: left;
@@ -429,7 +429,7 @@
 /* The threads open by an element stand no taller than the room their side
    of it leaves (`--ui-popover-room`, which their float measures), so a
    card's entries scroll inside it with its reply field in view under them,
-   as an open card over the plan does, and several scroll together. */
+   as an open card over the description does, and several scroll together. */
 .page-comment-threads {
   display: flex;
   max-height: var(--ui-popover-room);
@@ -2443,7 +2443,7 @@ svg.lucide {
   object-position: top;
 }
 
-/* A picture in the plan's editor (`editor-pictures.tsx`): the read view's
+/* A picture in the description's editor (`editor-pictures.tsx`): the read view's
    block, ringed while selected, its tools hung above it from its left edge.
    The block's top margin is the wrapper's, so the wrapper's top is the
    picture's own and the tools are measured from it. */
@@ -2503,7 +2503,7 @@ svg.lucide {
   outline-offset: 2px;
 }
 
-/* Comments on the plan (`description-comments.tsx`) -------------------------------- */
+/* Comments on the description (`description-comments.tsx`) -------------------------------- */
 
 /* The words a thread is on, a block's whole or a few of them alike: a wash
    under them and an edge beneath, stronger while its thread is open or the
@@ -2631,7 +2631,7 @@ svg.lucide {
   flex-direction: column;
 }
 
-/* The plan's comments listed in the margin's place (`DescriptionCommentList`): the
+/* The description's comments listed in the margin's place (`DescriptionCommentList`): the
    choice of open or resolved over the threads, each a step from the next. */
 .comment-list {
   display: flex;
@@ -2654,7 +2654,7 @@ svg.lucide {
   gap: var(--ui-tight-gap);
 }
 
-/* An open card over the plan stands no taller than the scroller it opens
+/* An open card over the description stands no taller than the scroller it opens
    in (`--comment-card-room`, which the layer measures), so its entries
    scroll inside it and the field that answers them stays in view under
    them. */

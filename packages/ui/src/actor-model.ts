@@ -33,9 +33,9 @@ import { TAB_WORDS } from "./tab-strip-model.js";
  * picture, email, and role, so the wire's every person field needs no
  * picture of its own; a member the read no longer lists has left.
  *
- * A plan's edit is named by its actor (`editActor`), and the app's also by
+ * A description's edit is named by its actor (`editActor`), and the app's also by
  * whose call it wrote it on (`editCallOwner`). A person's or the app's card
- * says what they last did in the plan, read off who last changed each of
+ * says what they last did in the description, read off who last changed each of
  * its sections (`latestActivity`), which the window already holds.
  */
 
@@ -126,7 +126,7 @@ export interface GitHubActor {
   readonly bot: boolean;
 }
 
-/** What an activity calls the words a plan holds before its first heading, as the version history does. */
+/** What an activity calls the words a description holds before its first heading, as the version history does. */
 const OPENING_SECTION = "Opening";
 
 /** A member's role in their workspace, in the words a row and a card say it. */
@@ -422,7 +422,7 @@ export function originActor(
 }
 
 /**
- * Who reads a plan's edits, as each is named for them: the workspace's
+ * Who reads a description's edits, as each is named for them: the workspace's
  * members as read, and the reader's own account id.
  */
 export interface EditReader {
@@ -473,7 +473,7 @@ export function editActor(
   }
 }
 
-/** What an actor last did in a plan: the sections whose last change is theirs, in the plan's order, and the newest of those changes. */
+/** What an actor last did in a description: the sections whose last change is theirs, in the description's order, and the newest of those changes. */
 export interface ActorActivity {
   readonly sections: readonly string[];
   readonly at: number;
@@ -499,7 +499,7 @@ function changedBy(edit: DescriptionLastEdit, actor: Actor): boolean {
 }
 
 /**
- * What an actor last did in a plan, read off who last changed each of its
+ * What an actor last did in a description, read off who last changed each of its
  * sections: none where no section's last change is theirs, and none for an
  * automation or someone the window cannot name, whom no section names.
  */

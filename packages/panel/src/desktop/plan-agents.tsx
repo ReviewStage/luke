@@ -32,7 +32,7 @@ import { agentEntries } from "./main-tabs.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
 /**
- * plan-agents.tsx -- the open task's agents at the head of its plan, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
+ * plan-agents.tsx -- the open task's agents at the head of its description, as a group: one dense row each, its tab's glyph and name, where it runs, its failure where it failed, and its pull request.
  *
  * The agents stand under a group head, Agents and how many, which folds
  * them, folded where the page asks, the same shape every group of
@@ -193,7 +193,7 @@ function PlanAgentRow({
 }
 
 /**
- * The task's agents at the head of its plan, under their group's head,
+ * The task's agents at the head of its description, under their group's head,
  * those waiting on the developer first, then those at work, then the
  * newest, and what `starts` offers after them; nothing for a task with
  * neither. A row's press is handed to `onOpenAgent` by its agent's id, and

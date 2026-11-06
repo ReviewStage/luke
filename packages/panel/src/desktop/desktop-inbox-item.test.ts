@@ -128,9 +128,9 @@ import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { viewerPlace } from "../testing/viewer-place.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
-// Note that each case starts with the document handing Plans on, whatever an earlier case handed.
+// Note that each case starts with the document handing Descriptions on, whatever an earlier case handed.
 beforeEach(() => handState(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 // Landed before any box renders, as the panel lands it after its first paint.
@@ -145,14 +145,14 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   const WITHDRAWN: InboxItem = {
     ...EXPIRY,
     status: INBOX_STATUS.CLOSED,
-    closedReason: "The plan now says 7 days.",
+    closedReason: "The description now says 7 days.",
     thread: [
       {
         ...asking,
         ask: {
           ...asking.ask,
           status: INBOX_ASK_STATUS.WITHDRAWN,
-          withdrawnReason: "The plan now says 7 days.",
+          withdrawnReason: "The description now says 7 days.",
         },
       },
     ],
@@ -1198,7 +1198,7 @@ test("in the window's Inbox an @ in an item's box offers its plan's repository's
   );
 });
 
-test("in the window's Inbox an @ in the box of a task's item offers that plan's sections, read as last saved", async () => {
+test("in the window's Inbox an @ in the box of a task's item offers that description's sections, read as last saved", async () => {
   const previous = fakeActsAnswer();
   fakeActs({
     ...appBridge(),
@@ -2065,13 +2065,13 @@ test.each([
       [
         askingMessage(EXPIRY_ASK, {
           status: INBOX_ASK_STATUS.WITHDRAWN,
-          withdrawnReason: "The plan settled it.",
+          withdrawnReason: "The description settled it.",
         }),
       ],
       { status: INBOX_STATUS.CLOSED, settledAt: 2_000 },
     ),
     within: '[data-inbox-comment="withdrawn"] [data-inbox-withdrawn-why]',
-    quoted: "The plan settled it.",
+    quoted: "The description settled it.",
   },
   {
     words: "the item's title",

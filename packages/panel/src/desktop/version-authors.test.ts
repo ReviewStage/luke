@@ -22,9 +22,9 @@ import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-his
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /**
- * Who wrote a plan's version, as its history names them: a member who left
+ * Who wrote a description's version, as its history names them: a member who left
  * is drawn by their own face, grayed, which a screen reader cannot see, so
- * their name says they left. Synthetic plan and people.
+ * their name says they left. Synthetic description and people.
  */
 
 const ignore = (): void => undefined;
@@ -39,7 +39,7 @@ const ACME = {
 
 const LEE = { userId: "user-lee", name: "Lee Park" };
 
-/** A revision of the plan by Lee, who has since left. */
+/** A revision of the description by Lee, who has since left. */
 function line(seq: number) {
   return {
     seq,
@@ -65,7 +65,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's version history over the window, its versions by Lee read, and the sections of version 3 open. */
+/** The description's version history over the window, its versions by Lee read, and the sections of version 3 open. */
 function drawn(): HTMLElement {
   const base = tasksControl();
   const tasks = tasksControl({

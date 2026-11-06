@@ -10,11 +10,11 @@ import type {
 import { mountDescriptionEditor } from "./description-editor.js";
 
 /**
- * A plan's pictures in its editor: a file pasted or chosen is laid in as a
+ * A description's pictures in its editor: a file pasted or chosen is laid in as a
  * picture after the caret's block, handed to the panel under its upload,
  * and writes nothing until the panel kept it, then its line; Remove takes
- * one still being kept out; and a picture of another plan pasted in is kept
- * again on this one. Synthetic plan and pictures.
+ * one still being kept out; and a picture of another description pasted in is kept
+ * again on this one. Synthetic description and pictures.
  */
 
 const TASK_ID = "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13";
@@ -44,7 +44,7 @@ function opened(markdown = TEXT) {
     markdown,
     placement: { section: 0 },
     focus: false,
-    label: "Plan",
+    label: "Description",
     className: "markdown description-unit",
     onDraft: () => undefined,
     onFinish: () => undefined,
@@ -100,7 +100,7 @@ test("image files pasted are laid in as pictures, and a pasted screenshot is cal
   assert.ok(handle.markdown().includes(`![Screenshot](${KEPT})`));
 });
 
-test("a picture of another plan pasted in is kept again on this one, and one of this plan's is pasted as it is", () => {
+test("a picture of another description pasted in is kept again on this one, and one of this description's is pasted as it is", () => {
   const { handle, taken, host } = opened();
   const editable = host.querySelector(".ProseMirror") ?? assert.fail("the editor stands");
   const paste = new Event("paste", { bubbles: true, cancelable: true });

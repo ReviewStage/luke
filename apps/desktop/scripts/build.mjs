@@ -205,7 +205,7 @@ const WINDOW_ENTRIES = {
 // The bundles too large for any window's entry, each reached through a
 // dynamic `import()` of its own entry (`@repo/panel`'s `bundle-loader.ts`), so no
 // window parses one before it is needed: the editors (TipTap), a File tab's
-// tree (Pierre's tree), a Terminal tab's screen (xterm.js), a plan's diagrams
+// tree (Pierre's tree), a Terminal tab's screen (xterm.js), a description's diagrams
 // (Mermaid), a Files changed diff (Pierre's diffs and Shiki), and session
 // replay's recorder (rrweb). Each is an entry rather than a chunk, so
 // it keeps a name of its own; what each reaches

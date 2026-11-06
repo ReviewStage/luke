@@ -1,7 +1,7 @@
 /**
  * navigation-history.ts -- the window's back and forward: the places it has stood on, and the moves between them.
  *
- * A place is a task's page, a plan's version history, the home page,
+ * A place is a task's page, a description's version history, the home page,
  * the Inbox, or Settings, and the history is the one a browser keeps: the places behind,
  * the one standing, and the places ahead, which a new visit clears. It is
  * written by watching where the window is rather than by each door that
@@ -25,7 +25,7 @@
  * Settings is one step however many of its pages are turned: entering it is
  * a visit, and choosing another of its pages turns the page that visit holds
  * in place, so Back from any page of it returns to wherever it was opened
- * from, and Forward brings it back on the page last open. A plan's version
+ * from, and Forward brings it back on the page last open. A description's version
  * history is one step the same way, whichever version is chosen in it or
  * whichever revision's sections are open, and going back to it opens it on
  * that version with those sections. Whatever is opened from it — a version's
@@ -407,7 +407,7 @@ function samePanelTab(one: PanelStep | undefined, other: PanelStep | undefined):
   return sameTab(one.tab, other.tab);
 }
 
-/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same plan's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or Settings on any page. */
+/** Whether two places are one page, whichever of its narrow sub-steps each stands on: the same plan, the same description's version history, the home page, the Inbox on any plan, the same agent's or person's page, the same Automations page, the same workspace's Board, or Settings on any page. */
 function samePage(one: Place, other: Place): boolean {
   if (one.kind !== other.kind) return false;
   if (one.kind === PLACE_KIND.ADMIN && other.kind === PLACE_KIND.ADMIN) {
@@ -947,7 +947,7 @@ function sameReading(one: HistoryReading, other: HistoryReading): boolean {
   );
 }
 
-/** The window's history, with the way a restore leaves a plan's version history and a page's way out. */
+/** The window's history, with the way a restore leaves a description's version history and a page's way out. */
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the version history for its task: a step back where the task is the step behind, else a visit. */
   onLeaveVersionHistory: () => void;
@@ -1492,7 +1492,7 @@ function awayStep(
 /**
  * The window's history: Tasks on the task it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or on that plan's version history, or the Inbox, or Settings on its page. A task the
+ * or on that description's version history, or the Inbox, or Settings on its page. A task the
  * account's list once held and holds no more is passed over, unless the list
  * itself could not be read, or it is the task the window is bound for. Note that a
  * task no list has held yet is still a place, because the list may not have
@@ -1728,7 +1728,7 @@ export function useWindowHistory(input: {
     }
     // A Settings page an experiment holds, such as Memory, stands only while the account has it on.
     if (to.kind === PLACE_KIND.SETTINGS) return settingsPageExperimentStands(to.view, experiments);
-    // A task's version history is the plan's, which stands only while the account has Plans on.
+    // A task's version history is the description's, which stands only while the account has Descriptions on.
     if (
       to.kind === PLACE_KIND.VERSION_HISTORY &&
       !experimentOn(experiments, EXPERIMENT.DESCRIPTIONS)

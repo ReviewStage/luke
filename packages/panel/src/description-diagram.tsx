@@ -21,7 +21,7 @@ import { ShellRoomContext } from "./stage-room.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
 
 /**
- * description-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram, in the figure the read view and the editor's preview draw it in.
+ * description-diagram.tsx -- a description's ```` ```mermaid ```` fence drawn as its diagram, in the figure the read view and the editor's preview draw it in.
  *
  * Mermaid is the diagram bundle's (`diagram/`), loaded once per window the
  * first time a fence is drawn, so the bundle every window parses carries

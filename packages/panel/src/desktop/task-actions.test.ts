@@ -43,7 +43,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { SidebarTask, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
-// Note that the plan's document, comments, and history stand only while the account has Plans on.
+// Note that the description, its comments, and its history stand only while the account has Descriptions on.
 beforeAll(() => readExperiments(experimentsOn(EXPERIMENT.DESCRIPTIONS)));
 
 const TASK: Task = {
@@ -320,7 +320,7 @@ test("a question asked of one task does not outlive it: the delete the Plan tab'
   assert.equal(asking(), false, "the question went with the task it was asked of");
 });
 
-test("⌘K's Change repository shows Overview where an agent's tab hides the plan, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
+test("⌘K's Change repository shows Overview where an agent's tab hides the description, and the plan's path, its repository plain words, has its menu opened under it for the ask once, not again on a later draw", () => {
   const told: string[] = [];
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
   const asked = (overview: boolean): TasksControl => ({
@@ -349,7 +349,7 @@ test("⌘K's Change repository shows Overview where an agent's tab hides the pla
       ),
     );
   draw(asked(false));
-  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the plan first");
+  assert.deepEqual(told, [`choose "${MAIN_TAB.OVERVIEW}"`], "the ask shows the description first");
 
   draw(asked(true));
   const head = () => container.querySelector(".plan-task-path");
@@ -989,7 +989,7 @@ test("the Plan tab's ⋯ prints the chords that act on the open task, leaves Sta
   );
 });
 
-test("while Plans is off the Plan tab's ⋯ offers no Copy plan or Version history, and neither chord answers", () => {
+test("while Descriptions is off the Plan tab's ⋯ offers no Copy description or Version history, and neither chord answers", () => {
   const { tasks } = openTab({ [TASK.id]: "acme/app" });
 
   openTaskMenu(mountDescriptionTab(tasks, registryWith({})));

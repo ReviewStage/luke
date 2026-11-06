@@ -34,14 +34,14 @@ import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
  * in its versions draws as the picture the diagram bundle answered, its code
  * a press away; a fence the bundle refuses says so over its code; a fence
  * whose code a version changed is drawn as its code with the changes marked;
- * and every other fence, and every fence where the words are not a plan's,
+ * and every other fence, and every fence where the words are not a description's,
  * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
  * its one boundary, the bundle's importer, answering a picture named by the
  * code and the appearance it was asked in. On a finger's device, or in a
  * phone's narrow room, a tap on a diagram opens it over the window, which
  * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing,
  * while the keyboard's press on the picture opens it in any room.
- * Synthetic plan.
+ * Synthetic description.
  */
 
 /** The code the stand-in refuses, as Mermaid refuses code it cannot parse. */
@@ -123,7 +123,7 @@ async function drawn(node: ReactElement): Promise<HTMLElement> {
   return container;
 }
 
-/** A plan whose text holds `fence` under a heading. */
+/** A description whose text holds `fence` under a heading. */
 function taskWith(fence: string): Task {
   return { ...DOCUMENT_TASK, document: { body: `## Flow\n\n${fence}\n`, assumptions: [] } };
 }
@@ -155,7 +155,7 @@ function toggle(container: HTMLElement): HTMLButtonElement {
   );
 }
 
-/** A version of the plan drawn against the one before it, as the version history draws it. */
+/** A version of the description drawn against the one before it, as the version history draws it. */
 function Version({ previous, now }: { previous: string; now: string }): ReactNode {
   const restore = { busy: false, onRestore: () => undefined };
   return createElement(VersionView, {
@@ -318,7 +318,7 @@ test("the diagram is drawn again in the window's new appearance when it flips", 
   assert.deepEqual(pictures(page), [pictureOf(code, DIAGRAM_APPEARANCE.DARK)]);
 });
 
-test("a fence in another language, and a Mermaid fence where the words are not a plan's, stay code", async () => {
+test("a fence in another language, and a Mermaid fence where the words are not a description's, stay code", async () => {
   const code = "flowchart LR\n  Caption --> Code";
   const shell = "```sh\npnpm install\n```";
 

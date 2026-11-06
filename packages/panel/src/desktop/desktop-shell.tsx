@@ -683,7 +683,7 @@ function KeptPage({
  * keeps its page list whatever the sidebar's collapse says, and hands the
  * tasks back folded or not as it found them. The side panel's toggle is the
  * mirror of the sidebar's, at the window's top right on a task's page, so
- * neither pane carries the button that moves it. A plan's version history
+ * neither pane carries the button that moves it. A description's version history
  * takes the whole window as Settings does, its versions listed where the
  * sidebar was, and leaves the same way; the Inbox stands in the task's
  * place beside the sidebar (`desktop-inbox.tsx`); it is still a stay on the task, so
@@ -945,13 +945,13 @@ export function DesktopShell({
       </div>
     );
   }
-  // A plan's version history takes the whole window too, its versions listed
+  // A description's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
     const exitHistory = history.canGoBack ? history.onBack : tasks.history.onClose;
     return (
       <div className="desktop-shell" data-room={room}>
-        {/* A chip in a version's words hangs the cards the plan's own words do. */}
+        {/* A chip in a version's words hangs the cards the description's own words do. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
             <Suspense

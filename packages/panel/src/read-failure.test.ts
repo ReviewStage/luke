@@ -331,7 +331,7 @@ const REVISION: DescriptionRevisionLine = {
   changes: 2,
 };
 
-/** The plan's version history whose chosen version could not be read, its sections open where `sections` says. */
+/** The description's version history whose chosen version could not be read, its sections open where `sections` says. */
 async function versionNotRead(sections: boolean, onRetryVersion: () => void): Promise<HTMLElement> {
   const base = tasksControl();
   const history = {

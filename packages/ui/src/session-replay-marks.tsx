@@ -56,7 +56,7 @@
  * A stylesheet's rules: the recorder copies the rules of every sheet a
  * document or a shadow root adopts, and every rewrite of one, as they
  * stand, and no masking reaches CSS. Most sheets are the panel's own, but
- * one built from a person's words carries them in its selectors: a plan
+ * one built from a person's words carries them in its selectors: a description
  * diagram's measuring sheet names its classes, and the open comment
  * thread's names the thread. Such a sheet is written through
  * `writeWithheldSheet` and nothing else, which opens it with a rule that

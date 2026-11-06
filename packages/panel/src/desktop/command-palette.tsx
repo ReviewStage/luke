@@ -1270,8 +1270,8 @@ function commandLabel(command: AppCommand, experiments: ExperimentChoices): stri
 /**
  * What a command's row says: a place as "Go to" it, and else the words its
  * shortcut says for the account's experiments, which its menu item says too
- * (`panelCommandOf`) but where an experiment renames it, as Copy plan or
- * transcript is Copy transcript while Plans is off.
+ * (`panelCommandOf`) but where an experiment renames it, as Copy description or
+ * transcript is Copy transcript while Descriptions is off.
  */
 function actionLabel(command: AppCommand, experiments: ExperimentChoices): string {
   const label = commandLabel(command, experiments);
@@ -1499,7 +1499,7 @@ function agentPinRows(
 /**
  * The plan on screen's own commands, as its ⋯ menu offers them
  * (`task-actions.tsx`'s `taskActionGroups`): Rename where its page offers
- * the door its ⋯ asks, Version history while Plans is on, New sub-task, Add task relation, which
+ * the door its ⋯ asks, Version history while Descriptions is on, New sub-task, Add task relation, which
  * opens the head's add menu as S opens the status menu, Remove parent on a
  * task with a parent, Cancel task on a task not already canceled, and
  * Change repository; each runs what its menu item runs, Version history

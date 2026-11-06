@@ -125,7 +125,7 @@ function said(activity: ActorActivity | undefined): string | undefined {
   return activity === undefined ? undefined : activityWords(activity);
 }
 
-test("a plan's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
+test("a description's edit is named by who wrote it: a member as the members read them, Vespin, an agent by its name, and nobody before history", () => {
   const byApp = { actor: DESCRIPTION_ACTOR.NOTETAKER, by: DANA_REF, at: 0, duringCall: false };
   const byAgent = {
     actor: DESCRIPTION_ACTOR.AGENT,
@@ -153,7 +153,7 @@ test("a plan's edit is named by who wrote it: a member as the members read them,
   );
 });
 
-test("what someone last did in a plan is the sections whose last change is theirs, the newest change's moment, and a few named before the rest are counted", () => {
+test("what someone last did in a description is the sections whose last change is theirs, the newest change's moment, and a few named before the rest are counted", () => {
   const edit = (section: string, at: number, by = DANA_REF): DescriptionSectionEdit => ({
     section,
     actor: DESCRIPTION_ACTOR.DEVELOPER,

@@ -36,7 +36,7 @@ import { type RelatedTaskRow, RelatedTasks } from "./related-tasks.js";
 import { chipSubmenu } from "./standing-submenus.js";
 
 /**
- * plan-relations.tsx -- the open task's sub-tasks and the tasks related to it at the head of its plan, each a group of the Tasks list's own rows.
+ * plan-relations.tsx -- the open task's sub-tasks and the tasks related to it at the head of its description, each a group of the Tasks list's own rows.
  *
  * Two groups stand under the byline, ahead of the Agents, each the shape
  * every group of the head takes, a `GroupHeader` over a list
@@ -287,7 +287,7 @@ function blockTasks(
 }
 
 /**
- * The open task's Sub-tasks and Task relations groups at the head of its plan,
+ * The open task's Sub-tasks and Task relations groups at the head of its description,
  * each only while it holds a row; nothing for a task with neither. Its
  * relations change through the task list's doors, and each group's + adds
  * one through the add menu's `door`.
@@ -301,7 +301,7 @@ export function PlanRelations({
   task: Task;
   tasks: TasksControl;
   door: TaskRelationDoor;
-  /** Opens a row's task, as the plan's head opens a task. */
+  /** Opens a row's task, as the description's head opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element | null {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
