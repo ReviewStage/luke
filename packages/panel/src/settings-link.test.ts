@@ -10,6 +10,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { WorkspacePage } from "./settings/workspace-page.js";
 import { type SettingsRoute, useSettingsRoute } from "./settings-link.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
+import { withQueryClient } from "./testing/copy-feedback.js";
 import { windowRouter } from "./testing/window-router.js";
 
 /**
@@ -70,16 +71,18 @@ test("an old link's GitHub repositories section lands on the Workspace page's co
   roots.push(root);
   act(() =>
     root.render(
-      createElement(WorkspacePage, {
-        readerId: undefined,
-        control: {
-          workspaces: [ACME],
-          workspaceId: ACME.id,
-          listFailed: false,
-          onRetryList: () => undefined,
-          onLeft: () => undefined,
-        },
-      }),
+      withQueryClient(
+        createElement(WorkspacePage, {
+          readerId: undefined,
+          control: {
+            workspaces: [ACME],
+            workspaceId: ACME.id,
+            listFailed: false,
+            onRetryList: () => undefined,
+            onLeft: () => undefined,
+          },
+        }),
+      ),
     ),
   );
   const landed = document.querySelector(

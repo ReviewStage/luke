@@ -13,21 +13,28 @@ import {
   PLAN_COMMENT_STATUS,
   type PlanCommentThread,
 } from "@repo/features/plan-comment-wire";
-import { type CodeLines, TASK_CALL_FAILURE } from "@repo/features/tasks-view";
+import {
+  type CodeLines,
+  TASK_CALL_FAILURE,
+  type TasksPageSourceAnswer,
+} from "@repo/features/tasks-view";
+import { ACT_KIND } from "@repo/host/acts";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import type { PlanCommentsControl } from "@repo/ui/plan-comments";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { HandTabActionsContext, type TabActionGroups } from "../desktop/strip-tabs.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
-import { withQueryClient } from "../testing/copy-feedback.js";
+import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
-import { PagePane, type ReadPageSource } from "./page-pane.js";
+import { PagePane } from "./page-pane.js";
 
 /**
  * A page's tab as the developer meets it: the page drawn in a frame that
@@ -64,7 +71,15 @@ function sourceOf(version: number): CodeLines {
   ];
 }
 
+/** Reads one version's source, as the service answers it. */
+type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
+
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
+
+/** Answers the pane's source reads through `read`, over the act port its window reads through. */
+function answerSources(read: ReadPageSource): void {
+  fakeActPort({ [ACT_KIND.TASKS_PAGE_SOURCE]: (payload) => read(payload.version) });
+}
 
 /** Mounts the pane over the page as the task lists it, its links written under `acme`, answering what it draws and a way to list it again. */
 function mount(
@@ -74,6 +89,7 @@ function mount(
   place: PagePlace = { taskId: TASK },
   comments?: Parameters<typeof PagePane>[0]["comments"],
 ) {
+  answerSources(read);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -89,7 +105,8 @@ function mount(
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        withQueryClient(
+        onRegistry(
+          AtomRegistry.make(),
           createElement(
             LinkWorkspaceProvider,
             { value: "acme" },
@@ -103,7 +120,6 @@ function mount(
               createElement(PagePane, {
                 place,
                 page: listed,
-                readSource: read,
                 findActive,
                 comments,
               }),
@@ -284,9 +300,11 @@ test("a source the service did not answer says so in its place, and Retry reads 
 
   await press("View source");
 
-  assert.match(
-    container.querySelector("[role='alert']")?.textContent ?? "",
-    /source could not be read/,
+  await vi.waitFor(() =>
+    assert.match(
+      container.querySelector("[role='alert']")?.textContent ?? "",
+      /source could not be read/,
+    ),
   );
 
   answered = true;
@@ -449,18 +467,18 @@ test("a source read before a Reload that answers after it does not replace the f
 });
 
 test("on a phone the page draws no bar, and the task's header's ⋯ offers every control of it, the version said under its steps", async () => {
+  answerSources(readSource);
   const { element, handed } = onPhone(
     createElement(PagePane, {
       place: { taskId: TASK },
       page: FUNNEL,
-      readSource,
       findActive: true,
     }),
   );
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(withQueryClient(element)));
+  act(() => root.render(onRegistry(AtomRegistry.make(), element)));
 
   assert.equal(container.querySelector(".file-view-bar"), null);
   assert.equal(container.querySelectorAll("button").length, 0, "nothing over the page presses");

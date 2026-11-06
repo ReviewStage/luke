@@ -58,7 +58,12 @@ import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton, type ComposerModel } from "../tasks/agent-tab-skeleton.js";
 import { startCloudDraft, useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { keyedItem, waitingByAgent } from "../tasks/inbox-model.js";
-import { PlanBody, type SectionLinks, type TitleRename } from "../tasks/plan-body.js";
+import {
+  PlanBody,
+  type PlanRoom,
+  type SectionLinks,
+  type TitleRename,
+} from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { peopleOf } from "../tasks/pull-request-card.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -950,11 +955,17 @@ function PlanDocument({
   // The task's sub-tasks and relations stand over its agents, the head keyed once by the task,
   // so another task's groups start folded rather than as this one's were left. Note that the
   // key is the head's alone, because two siblings under one key leave the old task's drawn.
-  const planHead = useMemo(
-    () => (
+  const planHead = useCallback(
+    (room: PlanRoom) => (
       <Fragment key={openedId}>
         {opened === undefined ? null : (
-          <PlanRelations task={opened} tasks={tasks} door={relations} onOpenTask={openTask} />
+          <PlanRelations
+            task={opened}
+            tasks={tasks}
+            door={relations}
+            room={room}
+            onOpenTask={openTask}
+          />
         )}
         {planAgents}
       </Fragment>

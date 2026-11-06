@@ -22,6 +22,7 @@ import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { subTaskCount, subTasksOf, taskFinished } from "@repo/ui/task-list-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
 import { useId, useRef, useState } from "react";
+import type { PlanRoom } from "../tasks/plan-body.js";
 import { RelationKindPill } from "../tasks/relation-kind-pill.js";
 import {
   TASK_RELATION_ORDER,
@@ -296,11 +297,14 @@ export function PlanRelations({
   task,
   tasks,
   door,
+  room,
   onOpenTask,
 }: {
   task: Task;
   tasks: TasksControl;
   door: TaskRelationDoor;
+  /** Where the plan's head stands, whose scroller its lists draw only the rows near the view of. */
+  room: PlanRoom;
   /** Opens a row's task, as the plan's head opens a task. */
   onOpenTask: (taskId: string) => void;
 }): React.JSX.Element | null {
@@ -329,6 +333,7 @@ export function PlanRelations({
       const doors = doorsOf(other, kind);
       return {
         task: other,
+        relationWords: TASK_RELATION_WORDS[kind],
         relation: (
           <ReplayUnmask>
             <RelationKindPill
@@ -381,6 +386,7 @@ export function PlanRelations({
               tasks={tasks}
               label={GROUP_WORDS.SUB_TASKS}
               rows={subTasks}
+              room={room}
               onOpenTask={onOpenTask}
             />
           </GroupHeader>
@@ -404,6 +410,7 @@ export function PlanRelations({
               tasks={tasks}
               label={GROUP_WORDS.RELATIONS}
               rows={relations}
+              room={room}
               onOpenTask={onOpenTask}
             />
           </GroupHeader>

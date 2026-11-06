@@ -27,7 +27,7 @@ import { BUTTON_SIZE } from "../button/button.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { withContextMenu } from "../menu/menu.js";
-import { reachedKey, rovingItem, rovingItemIn, useRovingKeys } from "../roving-keys/roving-keys.js";
+import { rovingItem, useRovingKeys } from "../roving-keys/roving-keys.js";
 import { type ListRowMenu, useRowMenu } from "../row-menu/row-menu.js";
 import {
   holdRun,
@@ -38,7 +38,7 @@ import {
   useListSelection,
 } from "../selection/list-selection.js";
 import {
-  VIRTUAL_ROW_KEY_ATTRIBUTE,
+  reachInRun,
   VIRTUAL_ROWS_ANCHOR,
   type VirtualRowPlace,
   VirtualRows,
@@ -479,6 +479,10 @@ export interface ListRun {
   readonly keys: readonly string[];
   /** The height a row is taken to have before it is measured, in pixels. */
   readonly estimate: number;
+  /** The room between two rows, in pixels: none unless said. */
+  readonly gap?: number | undefined;
+  /** How many rows past each edge of the view are drawn, every row while a find bar stands open. */
+  readonly overscan?: number | undefined;
   /** What the caller asks of the run, such as bringing a row in. */
   readonly handle?: RefObject<VirtualRowsHandle | null> | undefined;
   /** Draws the row at an index, a `ListRow` wearing `place`. */
@@ -555,29 +559,9 @@ export function List({
     (key: string, then: () => void) => handle.current?.bringIn(key, then) ?? false,
     [handle],
   );
+  // Note that a key reaching past the rows drawn goes on to the row it reaches, brought in where it is not drawn.
   const roving = useRovingKeys<HTMLElement>({
-    reach:
-      keys === undefined
-        ? undefined
-        : (from, to) => {
-            const inHand = from?.closest(`[${VIRTUAL_ROW_KEY_ATTRIBUTE}]`);
-            const key = reachedKey(
-              keys,
-              inHand?.getAttribute(VIRTUAL_ROW_KEY_ATTRIBUTE) ?? undefined,
-              to,
-            );
-            if (key === undefined) return false;
-            const drawn = handle.current?.rowElement(key);
-            const item = drawn === undefined ? undefined : rovingItemIn(drawn);
-            if (item !== undefined) {
-              item.focus();
-              return true;
-            }
-            return bringIn(key, () => {
-              const row = handle.current?.rowElement(key);
-              if (row !== undefined) rovingItemIn(row)?.focus();
-            });
-          },
+    reach: keys === undefined ? undefined : reachInRun(handle),
   });
   const order = useMemo(() => (keys === undefined ? undefined : [keys]), [keys]);
   const chooser = useListSelection(selection, order, keys === undefined ? undefined : bringIn);
@@ -600,6 +584,8 @@ export function List({
         shiftedBy={run.shiftedBy}
         keys={run.keys}
         estimate={run.estimate}
+        gap={run.gap ?? 0}
+        overscan={run.overscan}
         anchor={VIRTUAL_ROWS_ANCHOR.START}
         listItems
         moves={moves}

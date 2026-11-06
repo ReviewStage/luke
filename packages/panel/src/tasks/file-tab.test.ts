@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { TaskFileRequest } from "@repo/features/task-wire";
+import { TASK_FILE_REFUSAL, type TaskFileRequest } from "@repo/features/task-wire";
 import type { TasksFileAnswer } from "@repo/features/tasks-view";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -10,6 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
+import { fakeActPort, readingFiles } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -20,7 +21,7 @@ import {
   wholeFileLines,
   wholeFileRoot,
 } from "../testing/whole-file.js";
-import { FileTab, type ReadFileWindow } from "./file-tab.js";
+import { FileTab } from "./file-tab.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -74,6 +75,9 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/** Reads one window of a file, or its whole text raw, as the service answers it. */
+type ReadFileWindow = (request: TaskFileRequest) => Promise<TasksFileAnswer>;
+
 /** The service, as the tab reads through it: the file's first line at the head's commit, and its whole text raw; every read written down. */
 function service(asked: TaskFileRequest[]): ReadFileWindow {
   return (request) => {
@@ -96,8 +100,9 @@ function service(asked: TaskFileRequest[]): ReadFileWindow {
   };
 }
 
-/** A File tab opened on `file`, in a find's scope, drawn once its file is. */
-async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
+/** A File tab opened on `file`, in a find's scope, as it first draws. */
+function drawTab(file: OpenFile, read: ReadFileWindow): HTMLElement {
+  fakeActPort(readingFiles(read));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -108,11 +113,17 @@ async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
         createElement(
           FindScope,
           { active: true, subject: { task: "task-1", tab: { file: PATH } } },
-          createElement(FileTab, { file, readFile: read, onRead: () => undefined }),
+          createElement(FileTab, { place: { taskId: "task-1" }, file, onRead: () => undefined }),
         ),
       ),
     ),
   );
+  return container;
+}
+
+/** A File tab opened on `file`, in a find's scope, drawn once its file is. */
+async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
+  const container = drawTab(file, read);
   await wholeFileDrawn(container);
   return container;
 }
@@ -151,6 +162,56 @@ test("a File tab pinned to a commit reads the whole text there in one read", asy
   );
 
   assert.deepEqual(asked, [{ path: PATH, firstLine: 1, lastLine: 1, raw: true, ref: PINNED }]);
+});
+
+test("a File tab whose first read the service refused reads no whole text, and Retry asks for the first line again", async () => {
+  const asked: TaskFileRequest[] = [];
+  const read = service(asked);
+  let refusing = true;
+  const container = drawTab({ path: PATH, range: undefined, opened: 1 }, (request) => {
+    if (!refusing) return read(request);
+    asked.push(request);
+    return Promise.resolve({ refusal: TASK_FILE_REFUSAL.UNAVAILABLE, branch: "main" });
+  });
+  const retry = () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry");
+  await vi.waitFor(() => assert.equal(retry() === undefined, false));
+
+  assert.deepEqual(asked, [{ path: PATH, firstLine: 1, lastLine: 1 }]);
+
+  refusing = false;
+  act(() => retry()?.click());
+  await wholeFileDrawn(container);
+  assert.deepEqual(asked, [
+    { path: PATH, firstLine: 1, lastLine: 1 },
+    { path: PATH, firstLine: 1, lastLine: 1 },
+    { path: PATH, firstLine: 1, lastLine: 1, raw: true, ref: HEAD },
+  ]);
+});
+
+test("a File tab opened again whose head read then fails asks for the head again on Retry", async () => {
+  const asked: TaskFileRequest[] = [];
+  const read = service(asked);
+  const file = { path: PATH, range: undefined, opened: 1 };
+  await tab(file, read);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+
+  let failing = true;
+  const container = drawTab(file, (request) => {
+    if (!failing || request.raw === true) return read(request);
+    asked.push(request);
+    return Promise.reject(new Error("the host went away"));
+  });
+  const retry = () =>
+    [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry");
+  await vi.waitFor(() => assert.equal(retry() === undefined, false));
+  failing = false;
+  act(() => retry()?.click());
+  await wholeFileDrawn(container);
+
+  const heads = asked.filter((request) => request.raw !== true);
+  assert.equal(heads.length, 3, "the head is read on opening, on opening again, and on Retry");
 });
 
 test("the lines a File tab was opened on are lit", async () => {

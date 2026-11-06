@@ -57,7 +57,7 @@ import {
   type InboxChoice,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   DESKTOP_CAPABILITIES,
@@ -154,8 +154,12 @@ function openPalette(
       capabilities,
       onViewChange: (view) => sent.views.push(view),
     },
-    readFiles,
     page,
+  });
+  // The repository's files are read whole through the act port, by the plan they stand on.
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.TASKS_TREE]: (payload) => readFiles("planId" in payload ? payload.planId : ""),
   });
   act(() =>
     root.render(registry === undefined ? withQueryClient(palette) : onRegistry(registry, palette)),
@@ -204,7 +208,6 @@ function paletteOverTask(): (looked: typeof DOCUMENT_TASK | undefined) => void {
                 capabilities: DESKTOP_CAPABILITIES,
                 onViewChange: () => undefined,
               },
-              readFiles: () => Promise.reject(new Error("no repository is open")),
             }),
           ),
         ),
@@ -935,7 +938,6 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
         capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
-      readFiles: () => Promise.reject(new Error("no repository is open")),
     });
     act(() =>
       root.render(
@@ -1222,8 +1224,7 @@ test("a file found wears its type's look, hangs the file's card, and opens throu
     }),
   );
   chooseFilter("Files");
-  await act(async () => undefined);
-  assert.deepEqual(rows(), ["accept.ts · src/invites"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["accept.ts · src/invites"]));
 
   const row = document.querySelector<HTMLElement>('[role="option"]');
   assert.equal(
@@ -2157,7 +2158,7 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     }),
   );
-  assert.deepEqual(rows(), ["zqx.ts · src"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["zqx.ts · src"]));
 
   type("nothing-at-all");
   assert.equal(emptyLine(), "No results match", "once every source answered, it says so");
@@ -2197,17 +2198,17 @@ test("Files says a failed read with a Retry that reads the repository's files ag
   await settle();
   chooseFilter("Files");
   await settle();
+  await vi.waitFor(() => assert.equal(failures.length, 1));
   await act(async () => failures[0]?.(new Error("the host went away")));
-  await settle();
-  assert.match(emptyLine() ?? "", /The files could not be read\./u);
+  await vi.waitFor(() => assert.match(emptyLine() ?? "", /The files could not be read\./u));
 
   const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
     (each) => each.textContent === "Retry",
   );
   assert.ok(retry, "Retry is offered");
   act(() => retry.click());
-  await settle();
-  assert.equal(emptyLine(), "Reading the repository's files");
+  await vi.waitFor(() => assert.equal(emptyLine(), "Reading the repository's files"));
+  await vi.waitFor(() => assert.equal(answers.length, 2));
   await act(async () =>
     answers[1]?.({
       folder: {
@@ -2219,8 +2220,7 @@ test("Files says a failed read with a Retry that reads the repository's files ag
       },
     }),
   );
-  await settle();
-  assert.deepEqual(rows(), ["relay.ts · src"]);
+  await vi.waitFor(() => assert.deepEqual(rows(), ["relay.ts · src"]));
 });
 
 test("People says the members are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
@@ -2467,7 +2467,6 @@ function PinnableTask(): React.JSX.Element {
         capabilities: DESKTOP_CAPABILITIES,
         onViewChange: () => undefined,
       },
-      readFiles: () => Promise.reject(new Error("no repository is open")),
     }),
   );
 }
@@ -2540,7 +2539,6 @@ async function paletteUnderState(tasks: TasksControl): Promise<void> {
             capabilities: DESKTOP_CAPABILITIES,
             onViewChange: () => undefined,
           },
-          readFiles: () => Promise.reject(new Error("no repository is open")),
         }),
       ),
     ),
@@ -2668,7 +2666,6 @@ test("with a task on screen, ⌘K offers its Version history, Cancel task, and C
               capabilities: DESKTOP_CAPABILITIES,
               onViewChange: () => undefined,
             },
-            readFiles: () => Promise.reject(new Error("no repository is open")),
           }),
         ),
       ),
@@ -2739,7 +2736,6 @@ function paletteBesideTask(room: ShellRoom): HTMLElement {
               capabilities: DESKTOP_CAPABILITIES,
               onViewChange: () => undefined,
             },
-            readFiles: () => Promise.reject(new Error("no repository is open")),
           }),
         ),
       ),
@@ -3252,14 +3248,15 @@ test("with files open and nothing typed, Files lists them first, in the strip's 
     }),
   );
   chooseFilter("Files");
-  await act(async () => undefined);
 
-  assert.deepEqual(rows(), [
-    "remove.ts · src/members",
-    "invite.ts · src/members",
-    "README.md",
-    "package.json",
-    "index.ts · src",
-    "accept.ts · src/invites",
-  ]);
+  await vi.waitFor(() =>
+    assert.deepEqual(rows(), [
+      "remove.ts · src/members",
+      "invite.ts · src/members",
+      "README.md",
+      "package.json",
+      "index.ts · src",
+      "accept.ts · src/invites",
+    ]),
+  );
 });

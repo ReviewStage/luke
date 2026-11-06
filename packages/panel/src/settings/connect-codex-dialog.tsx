@@ -28,8 +28,9 @@ import {
   WaitingLine,
 } from "@repo/ui";
 import { ReplayMask } from "@repo/ui/session-replay-marks";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { copyThroughShell } from "../copy-feedback.js";
 import { refusedShown } from "../failure-report.js";
 import { linkPressOf, useOpenLink } from "../tasks/use-open-link.js";
@@ -99,7 +100,15 @@ function useDeviceLogin(
   open: boolean,
   onConnected: () => void,
 ): { standing: Standing; retry: () => void } {
-  const { act, tell } = useAct();
+  const { mutateAsync: sendChatgptDeviceStart } = useMutation(
+    actMutation(ACT_KIND.CHATGPT_DEVICE_START),
+  );
+  const { mutateAsync: sendChatgptDeviceWait } = useMutation(
+    actMutation(ACT_KIND.CHATGPT_DEVICE_WAIT),
+  );
+  const { mutate: sendChatgptDeviceCancel } = useMutation(
+    actMutation(ACT_KIND.CHATGPT_DEVICE_CANCEL),
+  );
   const [standing, setStanding] = useState<Standing>(STARTING);
   // Note that a ref counts the starts, because a start's answer reads it as it lands, which no render stands between.
   const starts = useRef(0);
@@ -110,12 +119,12 @@ function useDeviceLogin(
     starts.current += 1;
     const mine = starts.current;
     setStanding(STARTING);
-    void act(ACT_KIND.CHATGPT_DEVICE_START)
+    void sendChatgptDeviceStart()
       .catch(() => UNANSWERED)
       .then((answer) => {
         if (mine !== starts.current) {
           if (!("failure" in answer)) {
-            tell(ACT_KIND.CHATGPT_DEVICE_CANCEL, { loginId: answer.loginId });
+            sendChatgptDeviceCancel({ loginId: answer.loginId });
           }
           return;
         }
@@ -125,7 +134,7 @@ function useDeviceLogin(
             : { kind: STANDING.WAITING, login: answer },
         );
       });
-  }, [act, tell]);
+  }, [sendChatgptDeviceStart, sendChatgptDeviceCancel]);
 
   useEffect(() => {
     if (!open) return;
@@ -142,7 +151,7 @@ function useDeviceLogin(
     if (login === undefined) return;
     const { loginId, intervalSeconds } = login;
     let waiting = true;
-    void act(ACT_KIND.CHATGPT_DEVICE_WAIT, { loginId, intervalSeconds })
+    void sendChatgptDeviceWait({ loginId, intervalSeconds })
       .catch(() => UNANSWERED)
       .then((answer) => {
         if (!waiting) return;
@@ -166,9 +175,9 @@ function useDeviceLogin(
     return () => {
       if (!waiting) return;
       waiting = false;
-      tell(ACT_KIND.CHATGPT_DEVICE_CANCEL, { loginId });
+      sendChatgptDeviceCancel({ loginId });
     };
-  }, [login, act, tell]);
+  }, [login, sendChatgptDeviceWait, sendChatgptDeviceCancel]);
 
   return { standing, retry: start };
 }

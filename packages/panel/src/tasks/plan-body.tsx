@@ -37,7 +37,16 @@ import { commentSpansIn, usePlanCommentsControl } from "@repo/ui/plan-comments";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { useQuery } from "@tanstack/react-query";
 import { diffArrays } from "diff";
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  memo,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { KEPT, type Kept, notKept } from "../act.js";
 import { ActorStack } from "../actor-ref.js";
 import { usePrefetchEditorBundle } from "../bundle-loader.js";
@@ -972,6 +981,12 @@ function PlanBodyColumn({
   );
 }
 
+/** Where the plan's head stands: the document's scroller, and its column, whose resizing moves what stands in it below what grew (`VirtualRows`' `shiftedBy`). */
+export interface PlanRoom {
+  readonly scroller: RefObject<HTMLElement | null>;
+  readonly column: RefObject<HTMLElement | null>;
+}
+
 /**
  * The open task's one rename door as its title reads it (`desktop-tasks.tsx`):
  * how many times Rename was asked for, each putting the caret in the title,
@@ -1039,8 +1054,8 @@ export const PlanBody = memo(function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws at the head of its text, under its byline, as its agents; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
-  head?: React.ReactNode;
+  /** What the task's own page draws at the head of its text, under its byline, as its agents, in the room the document gives it; nothing elsewhere. A key on it is its own, so the page may key it by the task. */
+  head?: ((room: PlanRoom) => React.ReactNode) | undefined;
   /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
   titleActions?: boolean;
   /** Whether the plan is the tab its column shows, rather than kept hidden behind another; shown unless said. */
@@ -1080,6 +1095,7 @@ export const PlanBody = memo(function PlanBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const room = useMemo((): PlanRoom => ({ scroller, column: body }), []);
   // A link in the plan's words being edited opens, from its right-click, where the plan stands.
   const editedLinks = useEditedLinksHost();
   const bodyHost = useCallback(
@@ -1373,7 +1389,7 @@ export const PlanBody = memo(function PlanBody({
             comments={documented && commentsHere}
           />
           {documented ? <ChangedLine looks={looks} marks={marks} /> : null}
-          <Fragment key={HEAD_KEY}>{head}</Fragment>
+          <Fragment key={HEAD_KEY}>{head?.(room)}</Fragment>
           {!documented ? null : editing.editor === undefined ? (
             editable && views.length === 0 ? (
               <EmptyPlanLine onOpen={() => editing.open(PLACEMENT_END)} />
