@@ -42,8 +42,9 @@ import { ToolRows } from "./setup-tools.js";
  * and each offers a quiet Sign out, since setup stands with no sidebar.
  * An account invited into a team's workspace starts on Connect an agent
  * alone. An agent is required: its step goes on only once Claude or Codex
- * is connected. The team's workspace and GitHub may be skipped, and the
- * tools need nothing done. Finish
+ * is connected. A team's workspace is required too, once With my team is
+ * chosen, since Back leads to Just me for anyone who changed their mind.
+ * GitHub may be skipped, and the tools need nothing done. Finish
  * lets the app in and keeps, on the
  * account (`APP_SETTING_SCHEMA.setupFinished`), that it finished setup, so it
  * stands once on every machine.
@@ -264,7 +265,6 @@ function SetupStep({ tasks, accountId, onFinish }: SetupStepsProps): React.JSX.E
               at={at + 1}
               total={steps.length}
               onBack={back}
-              onSkip={teamForm.busy ? undefined : forward}
               next={{
                 label: "Create",
                 onPress: teamForm.create,
