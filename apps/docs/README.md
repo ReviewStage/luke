@@ -1,8 +1,11 @@
 # Vespin docs
 
-The source of [docs.vespin.dev](https://docs.vespin.dev), built by
+The source of [vespin.dev/docs](https://vespin.dev/docs), built by
 [Mintlify](https://mintlify.com) from `docs.json` and the `.mdx` pages
-beside it. Mintlify deploys `main` on every push that changes this folder.
+beside it. Mintlify deploys `main` on every push that changes this folder,
+and vespin.dev passes `/docs` on to it through routes in the root
+`vercel.json` (Mintlify's custom domain is vespin.dev at the base path
+`docs`).
 
 Preview locally with Mintlify's CLI:
 
