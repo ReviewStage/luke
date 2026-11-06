@@ -23,13 +23,14 @@ import { Effect, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import { AgentBrowser, agentBrowserLayer } from "../agents/browser/agent-browser.js";
 import { connectRestoring } from "../agents/browser/restore-tabs.js";
+import type { AgentImage } from "../agents/coder-host/agent-image.js";
 import { sandboxPtyLayer } from "../agents/sandbox-pty.js";
 import { keepSessionSandboxAlive } from "../agents/session-sandboxes.js";
 import { recordServerEventIn, SERVER_EVENT } from "../events/server-events.js";
 import type { BrowserLiveDependencies } from "./relay.js";
 
-/** What the live view's dependencies answer over. */
-export type BrowserLiveServices = DatabaseServices | HttpClient.HttpClient;
+/** What the live view's dependencies answer over: the agents' image among it, which a sandbox is made again from. */
+export type BrowserLiveServices = DatabaseServices | HttpClient.HttpClient | AgentImage;
 
 /** The live view's dependencies over the services the runtime holds now. */
 export const browserLiveDependencies: Effect.Effect<

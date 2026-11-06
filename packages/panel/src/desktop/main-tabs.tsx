@@ -16,17 +16,23 @@ import {
   InlineEdit,
   PlusIcon,
   RetryButton,
-  STATUS_TONE,
   TABS_GROUND,
   TOOLBAR_INSET,
   TOOLBAR_LOOK,
   Toolbar,
   Tooltip,
   useMenu,
-  VisuallyHidden,
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  draftTab,
+  inTaskOrder,
+  isDraftTab,
+  type StripTab,
+  sameTab,
+  tabKey,
+} from "@repo/ui/tab-strip-model";
 import type { InlineRename } from "@repo/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
 import { FOCUSED_OFFER, useAppCommand } from "../app-commands.js";
@@ -42,7 +48,6 @@ import { DraftAgentTab } from "../tasks/draft-agent-tab.js";
 import { useFailedAgents } from "../tasks/failed-lines.js";
 import { agentForkDoors, ForkProvider } from "../tasks/fork-action.js";
 import type { AgentFork } from "../tasks/fork-model.js";
-import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { AgentThreads } from "../tasks/threads-dock.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
@@ -73,6 +78,7 @@ import {
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
+import { WaitingCount } from "./task-row-parts.js";
 
 /**
  * main-tabs.tsx -- the task's topbar and its column's tabs: the topbar naming the task, its name opening its details, and the task's ⋯, each agent's tab and the draft agent's under it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -123,14 +129,6 @@ import { TabStrip } from "./tab-strip.js";
  * tabs are closed, and those archived, stand behind History at the bar's
  * end (`agent-history.tsx`), which opens them again.
  */
-
-/**
- * A count at a summary row's end, or a tab's, in the quiet count a folded
- * sidebar group shows after its name; the Inbox's, of what needs the reader,
- * in the tone its `data-tone` names.
- */
-export const ROW_COUNT =
-  "inbox-row-count flex-none text-caption-inline text-muted-foreground tabular-nums data-[tone]:text-tone-ink";
 
 /** The section the task's agents stand under where they are listed among other things, as ⌘K lists them, and the details' way back names. */
 export const AGENTS_SECTION = "Agents";
@@ -305,13 +303,14 @@ function agentTabs(input: {
   });
   const open = (agents.agents ?? []).filter((agent) => main.openAgents?.includes(agent.id));
   const own = open.map((agent) => {
-    const tab = { agent: agent.id };
+    const tab = agentTab(agent.id);
     const label = agentName(agent, agents.models);
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     // A message to it that did not go wears the failed mark in the pencil's place.
     const placeMark = chosen(tab)
       ? undefined
       : (leftMark(failed.includes(agent.id), drafted.includes(agent.id)) ?? undefined);
+    const waits = waiting?.get(agent.id)?.length ?? 0;
     return {
       tab,
       agent,
@@ -319,7 +318,7 @@ function agentTabs(input: {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
         // A count of threads waiting on the developer leads, as the task's Inbox row counts them.
         endMark:
-          waitingMark(waiting?.get(agent.id)?.length ?? 0) ??
+          (waits === 0 ? undefined : <WaitingCount count={waits} />) ??
           agentEndMark(agent, false) ??
           placeMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
@@ -329,7 +328,7 @@ function agentTabs(input: {
   });
   // A Start still making its agent stands as that agent's tab under the press's key, which nothing closes but its answer.
   const pending = agents.start.pending;
-  const startingTab = pending === undefined ? undefined : { agent: pending.key };
+  const startingTab = pending === undefined ? undefined : agentTab(pending.key);
   const starting =
     startingTab === undefined || main.openAgents?.includes(startingTab.agent) !== true
       ? []
@@ -356,17 +355,14 @@ function agentTabs(input: {
       ? []
       : [
           {
-            tab: { draft },
-            look: look(
-              { draft },
-              {
-                ...tabLook({ kind: TAB_KIND.DRAFT }),
-                labelReplayUnmasked: true,
-                endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
-              },
-            ),
+            tab: draftTab(draft),
+            look: look(draftTab(draft), {
+              ...tabLook({ kind: TAB_KIND.DRAFT }),
+              labelReplayUnmasked: true,
+              endMark: draftHolds && !chosen(draftTab(draft)) ? <DraftMark /> : undefined,
+            }),
             close: () => {
-              main.onClose({ draft });
+              main.onClose(draftTab(draft));
               agents.onDiscardDraft(draft);
             },
           },
@@ -389,7 +385,7 @@ export function agentEntries(
 ): AddEntry[] {
   return (agents.agents ?? []).map((agent) => {
     const label = agentName(agent, agents.models);
-    const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
+    const chosen = main.tab !== undefined && sameTab(agentTab(agent.id), main.tab);
     return {
       row: {
         id: agent.id,
@@ -407,42 +403,37 @@ export function agentEntries(
             read={agentCardReading(agent, label, held, chosen, agents)}
           />
         ),
-      onPick: () => main.onChoose({ agent: agent.id }),
+      onPick: () => main.onChoose(agentTab(agent.id)),
       agent,
     };
   });
 }
 
 /** The task's Inbox as a row, its tray and its name, which picking opens through `onPick`. */
-function inboxEntry(onPick: () => void): AddEntry {
-  return { row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) }, onPick };
-}
-
-/** What waits on the developer counted at a row's or a tab's end in the attention tone the Inbox's rows wear; nothing at none. */
-function waitingMark(waiting: number): React.JSX.Element | undefined {
-  return waiting === 0 ? undefined : (
-    <span className={ROW_COUNT} data-tone={STATUS_TONE.ATTENTION}>
-      {waiting}
-      <VisuallyHidden> {waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}</VisuallyHidden>
-    </span>
-  );
+function inboxEntry(waiting: number, onPick: () => void): AddEntry {
+  return {
+    row: { id: INBOX_ROW, ...tabLook({ kind: TAB_KIND.INBOX }) },
+    endMark: waiting === 0 ? undefined : <WaitingCount count={waiting} />,
+    onPick,
+  };
 }
 
 /**
  * The task's Inbox as ⌘K offers it, by itself rather than among the task's
  * agents, though only they post to it; none on a task with no agent and
- * nothing main says waits on it (`waiting`), which holds the Inbox while its
- * agents are unread. Picking it opens the window's Inbox narrowed to the
- * task, through `onPick`.
+ * nothing main says waits on it (`waiting`, how many), which holds the Inbox
+ * while its agents are unread and is counted at its end as the task's Inbox
+ * row counts it. Picking it opens the window's Inbox narrowed to the task,
+ * through `onPick`.
  */
 export function inboxEntries(
   agents: AgentsControl,
-  waiting: boolean,
+  waiting: number,
   onPick: () => void,
 ): AddEntry[] {
   // An archived agent's items still stand, so the row stands while the task holds any agent.
-  if ((agents.heldIds?.length ?? 0) === 0 && !waiting) return [];
-  return [inboxEntry(onPick)];
+  if ((agents.heldIds?.length ?? 0) === 0 && waiting === 0) return [];
+  return [inboxEntry(waiting, onPick)];
 }
 
 /**
@@ -459,7 +450,7 @@ export function newAgentStarts(main: MainTabsControl, agents: AgentsControl): Me
       label: tabLook({ kind: TAB_KIND.DRAFT }).label,
       detail: reason,
       disabled: reason !== undefined,
-      onSelect: () => main.onChoose({ draft: agents.onNewDraft() }),
+      onSelect: () => main.onChoose(draftTab(agents.onNewDraft())),
     },
   ];
 }

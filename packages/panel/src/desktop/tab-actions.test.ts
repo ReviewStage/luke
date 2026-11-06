@@ -13,6 +13,15 @@ import { pageFrameUrl } from "@repo/features/page-frame";
 import type { Task } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
+import {
+  agentTab,
+  changesTab,
+  draftTab,
+  fileTab,
+  pageTab,
+  subagentTab,
+  terminalTab,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -73,6 +82,9 @@ const AGENT: AgentSummary = {
   turnId: null,
 };
 
+/** The agent's cloud terminal tab. */
+const CLOUD = terminalTab(AGENT.id, "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", "Cloud 1");
+
 const PAGE_ID = "5d2b7c1e-9a3f-4e6d-8c2b-1f0e9d8c7b6a";
 
 const roots: Root[] = [];
@@ -89,7 +101,7 @@ afterEach(() => {
 });
 
 /** The agent's delegated worker, whose tab the side panel holds. */
-const SUBAGENT = { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } };
+const SUBAGENT = subagentTab("call-1", { agent: AGENT.id, task: "Audit retries" });
 
 /** What a right-click offers on a tab itself rather than on what it shows. */
 const TAB_KEEPING = new Set([
@@ -127,7 +139,7 @@ async function mountEveryTab(
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: AGENT.id }, { draft: "draft-1" }],
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(AGENT.id), draftTab("draft-1")],
       tab: chosen.main,
       openAgents: [AGENT.id],
     },
@@ -136,9 +148,9 @@ async function mountEveryTab(
       open: true,
       subagents: [SUBAGENT],
       files: [{ path: "src/invite.ts", range: undefined, opened: 1, browsedOn: TASK.id }],
-      changes: [{ changes: AGENT.id }],
-      terminals: [{ terminal: AGENT.id }],
-      pages: [{ page: PAGE_ID }],
+      changes: [changesTab(AGENT.id)],
+      terminals: [CLOUD],
+      pages: [pageTab(PAGE_ID)],
       tab: chosen.side,
     },
     pages: [{ id: PAGE_ID, title: "Invite flow", version: 1, at: 1 }],
@@ -246,7 +258,7 @@ function moreButtons(bar: HTMLElement): (string | null)[] {
 }
 
 test("a subagent's tab's right-click leads with the tab's keeping and then what it offers on what it shows, and an agent's tab in the column's bar with the agent's one menu", async () => {
-  const container = await mountEveryTab({ main: { agent: AGENT.id }, side: SUBAGENT });
+  const container = await mountEveryTab({ main: agentTab(AGENT.id), side: SUBAGENT });
   const { main, side } = bars(container);
   const fromRightClick = rightClickChosen(side);
   assert.deepEqual(contentOf(fromRightClick), ["Copy link", "Copy transcript"]);
@@ -271,7 +283,7 @@ test("a subagent's tab's right-click leads with the tab's keeping and then what 
 });
 
 test("no bar of the task's page draws a ⋯, over an agent's tab or the draft's: every menu there is a right-click", async () => {
-  for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
+  for (const main of [agentTab(AGENT.id), draftTab("draft-1")] as const) {
     const container = await mountEveryTab({ main, side: SUBAGENT });
     const { task, main: agentsBar, side } = bars(container);
     for (const bar of [task, agentsBar, side]) {
@@ -304,7 +316,7 @@ test("the task's name's right-click is the task's own document menu, which pins 
   act(() => roots.pop()?.unmount());
   details.remove();
 
-  const agent = await mountEveryTab({ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX });
+  const agent = await mountEveryTab({ main: agentTab(AGENT.id), side: SIDE_PANEL_TAB.INBOX });
   assert.deepEqual(taskMenu(agent), fromDetails, "the same menu over an agent's tab");
   const agentItems = rightClickChosen(bars(agent).main);
   assert.ok(
@@ -315,8 +327,8 @@ test("the task's name's right-click is the task's own document menu, which pins 
 
 test("a tab with nothing to offer on what it shows still answers a right-click with its own keeping, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
-    { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
-    { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
+    { main: draftTab("draft-1"), side: fileTab("src/invite.ts") },
+    { main: draftTab("draft-1"), side: CLOUD },
   ];
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);
@@ -354,7 +366,7 @@ test("the Pull request tab's right-click offers Copy link first, then Copy GitHu
   });
   const published = new Map([[AGENT.id, PULL_REQUEST]]);
   const container = await mountEveryTab(
-    { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
+    { main: draftTab("draft-1"), side: changesTab(AGENT.id) },
     published,
   );
   const { side } = bars(container);
@@ -380,8 +392,8 @@ test("the Pull request tab's right-click offers Copy link first, then Copy GitHu
   act(() => roots.pop()?.unmount());
   container.remove();
 
-  for (const other of [SUBAGENT, { page: PAGE_ID }] as const) {
-    const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
+  for (const other of [SUBAGENT, pageTab(PAGE_ID)] as const) {
+    const each = await mountEveryTab({ main: draftTab("draft-1"), side: other }, published);
     const items = rightClickChosen(bars(each).side);
     assert.ok(
       !items.includes("Open on GitHub") && !items.includes("Refresh"),
@@ -404,10 +416,10 @@ test("each tab whose thing has a link offers Copy link in its right-click and it
   const task = `https://vespin.dev/workspace-personal/task/${TASK.id}`;
   const agent = `https://vespin.dev/workspace-personal/agent/${AGENT.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, keyof Bars, string][] = [
-    [{ main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.INBOX }, "main", agent],
-    [{ main: { draft: "draft-1" }, side: SUBAGENT }, "side", `${agent}/worker/call-1`],
-    [{ main: { draft: "draft-1" }, side: { changes: AGENT.id } }, "side", `${agent}/changes`],
-    [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
+    [{ main: agentTab(AGENT.id), side: SIDE_PANEL_TAB.INBOX }, "main", agent],
+    [{ main: draftTab("draft-1"), side: SUBAGENT }, "side", `${agent}/worker/call-1`],
+    [{ main: draftTab("draft-1"), side: changesTab(AGENT.id) }, "side", `${agent}/changes`],
+    [{ main: draftTab("draft-1"), side: pageTab(PAGE_ID) }, "side", `${task}/page/${PAGE_ID}`],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);

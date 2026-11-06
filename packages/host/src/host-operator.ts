@@ -25,6 +25,8 @@ import {
   type AgentInboxAttachmentParams,
   type AgentInboxAttachmentView,
   type AgentInboxCloseParams,
+  type AgentInboxCloseReleasedView,
+  type AgentInboxCloseReleaseParams,
   type AgentInboxItemHomeParams,
   type AgentInboxItemHomeView,
   type AgentInboxMessagedView,
@@ -71,6 +73,7 @@ import {
   agentGitHubImageViewSchema,
   agentInboxAnsweredViewSchema,
   agentInboxAttachmentViewSchema,
+  agentInboxCloseReleasedViewSchema,
   agentInboxItemHomeViewSchema,
   agentInboxMessagedViewSchema,
   agentInboxReadAllViewSchema,
@@ -924,6 +927,10 @@ export interface HostOperator {
   agentInboxAnswer(params: AgentInboxAnswerParams): Effect.Effect<AgentInboxAnsweredView>;
   /** One open item of a task's inbox closed without an answer; the item as it then stands and whether the close was taken, or why there is no answer. */
   agentInboxClose(params: AgentInboxCloseParams): Effect.Effect<AgentInboxAnsweredView>;
+  /** A held close let go by its key, sent or taken back as its Undo asks; whether it was still held, or not where there is no answer. */
+  agentInboxCloseRelease(
+    params: AgentInboxCloseReleaseParams,
+  ): Effect.Effect<AgentInboxCloseReleasedView>;
   /** One message on an item's thread, open or settled; the item as it then stands, its thread with the message on it, or why there is no answer. */
   agentInboxMessage(params: AgentInboxMessageParams): Effect.Effect<AgentInboxMessagedView>;
   /** A thread started with one agent, its subject and first message; the thread as it then stands, its message on it, or why there is no answer. */
@@ -2465,8 +2472,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           clientKey: params.clientKey,
           ...(params.text === undefined ? undefined : { text: params.text }),
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
+          ...(params.held === undefined ? undefined : { held: params.held }),
         }),
         answerOf(agentInboxAnsweredViewSchema, AGENT_UNANSWERED),
+      ),
+    agentInboxCloseRelease: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.AGENTS_INBOX_CLOSE_RELEASE, {
+          clientKey: params.clientKey,
+          send: params.send,
+        }),
+        answerOf(agentInboxCloseReleasedViewSchema, { held: false }),
       ),
     agentInboxMessage: (params) =>
       Effect.map(

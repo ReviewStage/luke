@@ -12,7 +12,14 @@ import type { PageLine } from "@repo/features/page-wire";
 import { TASK_STATUS, type Task, type TaskSummary } from "@repo/features/task-wire";
 import { EXPERIMENT } from "@repo/settings";
 import { experimentsOn } from "@repo/settings/testing";
-import { TAB_WORDS } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  changesTab,
+  draftTab,
+  pageTab,
+  TAB_WORDS,
+  terminalTab,
+} from "@repo/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@repo/ui/tasks-model";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -147,17 +154,17 @@ async function mount(
     },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.OVERVIEW, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: shown.main ?? { agent: WORKING.id },
+      tabs: [MAIN_TAB.OVERVIEW, agentTab(WORKING.id), draftTab(DRAFT)],
+      tab: shown.main ?? agentTab(WORKING.id),
       openAgents: [WORKING.id],
     },
     sidePanel: {
       ...base.sidePanel,
       open: true,
       tab: shown.tab ?? SIDE_PANEL_TAB.COMMENTS,
-      changes: [{ changes: DONE.id }],
-      terminals: [{ terminal: WORKING.id }],
-      pages: [{ page: FUNNEL.id }],
+      changes: [changesTab(DONE.id)],
+      terminals: [terminalTab(WORKING.id, "2f6e0c1a-5b3d-4c8e-9a1f-7d2b4e6a8c10", "Cloud 1")],
+      pages: [pageTab(FUNNEL.id)],
     },
     pages: [FUNNEL],
     agents: agentsControl({
@@ -255,7 +262,7 @@ test("the task's topbar names the task, as the list names it now, over a strip o
   // Note that the list renamed the task before its document was read again, so the topbar follows the list.
   const container = await mount({
     listed: { ...SUMMARY, name: "Expire invites after a week" },
-    main: { agent: WORKING.id },
+    main: agentTab(WORKING.id),
   });
   const topbar = container.querySelector(".task-topbar .ui-toolbar");
   assert.ok(topbar, "the task's topbar");
@@ -308,14 +315,18 @@ test("a link to an agent's pull request in the plan hangs the card its Pull requ
   assert.deepEqual(cardOf(files), own, "a link to its files hangs it too");
 });
 
-test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
+test("a cloud terminal tab wears the still terminal glyph though its agent works, says its name with the agent's beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
-    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Terminal",
+    (each) => each.querySelector(".ui-tab-label")?.firstChild?.textContent === "Cloud 1",
   );
-  assert.ok(tab, "the strip has a Terminal tab");
+  assert.ok(tab, "the strip has a cloud terminal tab");
   assert.equal(tab.querySelector(".ui-tab-detail")?.textContent, WORKING.title);
-  assert.match(tab.querySelector(".ui-tab-icon")?.innerHTML ?? "", /data-state="working"/u);
+  assert.doesNotMatch(
+    tab.querySelector(".ui-tab-icon")?.innerHTML ?? "",
+    /data-state=/u,
+    "no agent's working glyph",
+  );
   restOn(tab);
   const card = document.querySelector(".ui-tooltip-card [data-agent-card]");
   assert.ok(card, "the agent's card is hung");

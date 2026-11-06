@@ -257,12 +257,12 @@ function StateRows(): React.JSX.Element {
           </SettingsRowMark>
         }
         description={
-          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} wrap>
-            The key expired · Reconnect
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
+            The key expired
           </SettingsRowStateLine>
         }
       >
-        {() => null}
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Reconnect</Button>}
       </SettingsRow>
       <SettingsRow
         label="Voice"

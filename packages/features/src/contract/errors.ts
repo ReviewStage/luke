@@ -32,17 +32,11 @@ import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
 
 /**
  * What a repository out of reach carries beside its slug: why, which the
- * desktop reads for the failure's remedy. The client reads a refusal's
- * fields with this as it stands (`hosted-link.ts`); the map below declares
- * it flipped.
+ * desktop reads for the failure's remedy.
  */
-export const repositoryNotReachableDataSchema = EffectSchema.Struct({
+const repositoryNotReachableDataSchema = EffectSchema.Struct({
   unreached: EffectSchema.optionalKey(repositoryUnreachedSchema),
 });
-
-const repositoryNotReachableData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(repositoryNotReachableDataSchema),
-);
 
 /**
  * What an upstream that refused carries beside its slug: the status it
@@ -52,27 +46,18 @@ const upstreamErrorDataSchema = EffectSchema.Struct({
   upstreamStatus: EffectSchema.optionalKey(EffectSchema.Int),
 });
 
-const upstreamErrorData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(upstreamErrorDataSchema),
-);
-
 /**
  * What a plan's reached limit carries beside its slug: when it resets, in
  * epoch milliseconds, where the provider said, which the refusal's words
- * name. The client reads it with this as it stands (`hosted-link.ts`).
+ * name.
  */
 export const planLimitReachedDataSchema = EffectSchema.Struct({
   resetsAt: EffectSchema.optionalKey(EffectSchema.Number),
 });
 
-const planLimitReachedData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(planLimitReachedDataSchema),
-);
-
 /**
  * What a missing credential carries beside its slug: the provider whose
- * subscription or API key would pay, which the refusal's words name. The
- * client reads it with this as it stands (`hosted-link.ts`).
+ * subscription or API key would pay, which the refusal's words name.
  */
 export const credentialMissingDataSchema = EffectSchema.Struct({
   provider: EffectSchema.optionalKey(modelProviderSchema),
@@ -84,56 +69,70 @@ export const localAgentRefusedDataSchema = EffectSchema.Struct({
   refusedDevice: EffectSchema.optionalKey(refusedDeviceSchema),
 });
 
-const localAgentRefusedData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(localAgentRefusedDataSchema),
-);
-
 /** What a refused Start naming repositories beside its agent's own carries beside its slug: why, and the repository where one is why. */
 export const extraRepositoryRefusedDataSchema = EffectSchema.Struct({
   extraRepositoryRefusal: EffectSchema.optionalKey(extraRepositoryRefusalSchema),
   refusedRepository: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-const extraRepositoryRefusedData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(extraRepositoryRefusedDataSchema),
-);
+/**
+ * The fields each refusal that carries more than its slug carries beside
+ * it, as the wire spells them: a refused bearer that was a device secret no
+ * standing host holds (which the host reads as removed), an upstream's
+ * status, a repository's reach, a plan's reset, a missing credential's
+ * provider, a refused skill, a refused local agent or extra repository, the
+ * daemon version the service takes, and when a held pairing's guesses are
+ * taken again. The client reads a refusal's fields with these as they stand
+ * (`hosted-link.ts`); the map below declares each flipped.
+ */
+export const HOSTED_REFUSAL_DATA = {
+  [HOSTED_API_ERROR.INVALID_TOKEN]: hostRemovedDataSchema,
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: upstreamErrorDataSchema,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: repositoryNotReachableDataSchema,
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: planLimitReachedDataSchema,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: credentialMissingDataSchema,
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: installedSkillRefusedDataSchema,
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: installedSkillRefusedDataSchema,
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: localAgentRefusedDataSchema,
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: extraRepositoryRefusedDataSchema,
+  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: hostUpgradeNeededDataSchema,
+  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: hostPairingHeldDataSchema,
+} as const satisfies Partial<
+  Record<HostedApiError, EffectSchema.Struct<EffectSchema.Struct.Fields>>
+>;
 
-const credentialMissingData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(credentialMissingDataSchema),
-);
+/** Whether a refusal carries fields beside its slug. */
+export function refusalCarriesData(
+  refusal: HostedApiError,
+): refusal is keyof typeof HOSTED_REFUSAL_DATA {
+  return Object.hasOwn(HOSTED_REFUSAL_DATA, refusal);
+}
 
-/** What a refused bearer carries beside its slug where it was a device secret no standing host holds, which the host reads as removed. */
-const hostRemovedData = EffectSchema.toStandardSchemaV1(EffectSchema.flip(hostRemovedDataSchema));
-
-/** What an upgrade-needed refusal carries beside its slug: the lowest daemon version the service takes, which the daemon prints. */
-const hostUpgradeNeededData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(hostUpgradeNeededDataSchema),
-);
-
-/** What a held pairing guess carries beside its slug: when the account's guesses are taken again, which the panel names. */
-const hostPairingHeldData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(hostPairingHeldDataSchema),
-);
-
-/** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
-const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
-  EffectSchema.flip(installedSkillRefusedDataSchema),
-);
+/** A refusal's fields as its declared error's `data`: the wire schema flipped, so oRPC's decode of it is the wire's encode. */
+function declaredData<Type, Encoded>(schema: EffectSchema.Codec<Type, Encoded>) {
+  return { data: EffectSchema.toStandardSchemaV1(EffectSchema.flip(schema)) };
+}
 
 /** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
-  [HOSTED_API_ERROR.INVALID_TOKEN]: { data: hostRemovedData },
+  [HOSTED_API_ERROR.INVALID_TOKEN]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.INVALID_TOKEN],
+  ),
   [HOSTED_API_ERROR.INVALID_REQUEST]: {},
   [HOSTED_API_ERROR.QUOTA_EXHAUSTED]: {},
   [HOSTED_API_ERROR.UNAVAILABLE]: {},
-  [HOSTED_API_ERROR.UPSTREAM_ERROR]: { data: upstreamErrorData },
+  [HOSTED_API_ERROR.UPSTREAM_ERROR]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.UPSTREAM_ERROR],
+  ),
   [HOSTED_API_ERROR.UPSTREAM_THROTTLED]: {},
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: {},
   [HOSTED_API_ERROR.PROMPT_TOO_LARGE]: {},
   [HOSTED_API_ERROR.UNKNOWN_TOOL]: {},
   [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: {},
   [HOSTED_API_ERROR.NOT_FOUND]: {},
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: { data: repositoryNotReachableData },
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE],
+  ),
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: {},
   [HOSTED_API_ERROR.NO_REPOSITORY]: {},
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND]: {},
@@ -146,28 +145,44 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.OPENAI_KEY_UNFUNDED]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: {},
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: {},
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: { data: planLimitReachedData },
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED],
+  ),
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: {},
-  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: { data: credentialMissingData },
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING],
+  ),
   [HOSTED_API_ERROR.AGENT_API_KEY_UNREADABLE]: {},
   [HOSTED_API_ERROR.NOT_PERMITTED]: {},
   [HOSTED_API_ERROR.ALREADY_INVITED]: {},
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: {},
   [HOSTED_API_ERROR.SANDBOX_SNAPSHOT_GONE]: {},
-  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
-  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.SKILL_NAME_TAKEN],
+  ),
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.SKILL_FILES_REFUSED],
+  ),
   [HOSTED_API_ERROR.WORKSPACE_SLUG_MALFORMED]: {},
   [HOSTED_API_ERROR.WORKSPACE_SLUG_RESERVED]: {},
   [HOSTED_API_ERROR.WORKSPACE_SLUG_TAKEN]: {},
-  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: { data: localAgentRefusedData },
-  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: { data: extraRepositoryRefusedData },
-  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: { data: hostUpgradeNeededData },
+  [HOSTED_API_ERROR.LOCAL_AGENT_REFUSED]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.LOCAL_AGENT_REFUSED],
+  ),
+  [HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.EXTRA_REPOSITORY_REFUSED],
+  ),
+  [HOSTED_API_ERROR.HOST_UPGRADE_NEEDED]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.HOST_UPGRADE_NEEDED],
+  ),
   [HOSTED_API_ERROR.DEVICE_REMOVED]: {},
   [HOSTED_API_ERROR.CHILD_REPOSITORY_LOCKED]: {},
   [HOSTED_API_ERROR.TASK_BLOCK_CYCLE]: {},
   [HOSTED_API_ERROR.TASK_PARENT_CYCLE]: {},
   [HOSTED_API_ERROR.TASK_PARENT_HELD]: {},
-  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: { data: hostPairingHeldData },
+  [HOSTED_API_ERROR.HOST_PAIRING_HELD]: declaredData(
+    HOSTED_REFUSAL_DATA[HOSTED_API_ERROR.HOST_PAIRING_HELD],
+  ),
   [HOSTED_API_ERROR.ALREADY_WRITTEN]: {},
   [HOSTED_API_ERROR.MEMORY_OFF]: {},
   [HOSTED_API_ERROR.MEMORY_CREDENTIAL]: {},

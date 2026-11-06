@@ -19,6 +19,7 @@ import { ACT_KIND } from "@repo/host/acts";
 import { EXPERIMENT } from "@repo/settings";
 import { COMMAND_KEY } from "@repo/settings/shortcuts";
 import { experimentsOn } from "@repo/settings/testing";
+import { cloudBrowserTab } from "@repo/ui/tab-strip-model";
 import type { WireBoundaryInput } from "@repo/wire";
 import { useQuery } from "@tanstack/react-query";
 import { Clock, Context, Duration, Effect } from "effect";
@@ -128,16 +129,16 @@ test("a listed cloud Browser tab stands in the strip only once opened in this wi
   const panel = draw(createElement(Probe, { listed: [TAB, OTHER_TAB] }));
   assert.deepEqual(browsers(), [], "an agent's browser adds no tab by itself");
 
-  act(() => current().onChoose({ cloudBrowser: TAB }));
-  assert.deepEqual(browsers(), [{ cloudBrowser: TAB }]);
+  act(() => current().onChoose(cloudBrowserTab(TAB)));
+  assert.deepEqual(browsers(), [cloudBrowserTab(TAB)]);
   panel.rerender(createElement(Probe, { listed: undefined }));
-  assert.deepEqual(current().tab, { cloudBrowser: TAB }, "kept while the list is read again");
+  assert.deepEqual(current().tab, cloudBrowserTab(TAB), "kept while the list is read again");
 
   panel.rerender(createElement(Probe, { listed: [TAB, OTHER_TAB] }));
-  act(() => current().onChoose({ cloudBrowser: OTHER_TAB }));
-  act(() => current().onClose({ cloudBrowser: TAB }));
-  assert.deepEqual(browsers(), [{ cloudBrowser: OTHER_TAB }]);
-  assert.notDeepEqual(current().tab, { cloudBrowser: TAB });
+  act(() => current().onChoose(cloudBrowserTab(OTHER_TAB)));
+  act(() => current().onClose(cloudBrowserTab(TAB)));
+  assert.deepEqual(browsers(), [cloudBrowserTab(OTHER_TAB)]);
+  assert.notDeepEqual(current().tab, cloudBrowserTab(TAB));
 
   panel.rerender(createElement(Probe, { listed: [] }));
   assert.equal(current().tab, undefined, "a tab the service no longer lists gives way");

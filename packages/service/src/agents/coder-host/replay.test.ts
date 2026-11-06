@@ -264,3 +264,16 @@ it("a native harness's calls replay named as eve's are, its edits by the files t
     ],
   );
 });
+
+it("a source whose transcript is carried is told it goes on from that transcript, with no steps replayed, and its session kept", () => {
+  const from = startFrom(0);
+  const carried = replayOf(
+    { ...from, told: { ...from.told, transcript: "6f1c2a4e-0d3b-4c55-9a8e-2f7d1b9c0e11" } },
+    [],
+    undefined,
+  );
+
+  assert.match(carried.replay.preamble, /you go on from its transcript as it stood/u);
+  assert.doesNotMatch(carried.replay.preamble, /Its steps follow/u);
+  assert.equal(carried.startedFrom.session, "6f1c2a4e-0d3b-4c55-9a8e-2f7d1b9c0e11");
+});

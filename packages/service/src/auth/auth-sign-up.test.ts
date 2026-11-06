@@ -15,6 +15,7 @@ import { Clock, ConfigProvider, Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { onboardingEventsFromEnvironment } from "../accounts/onboarding-events.js";
 import { WELCOME_MAIL_ENVIRONMENT, welcomeMailFromEnvironment } from "../accounts/welcome-mail.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { authApp } from "./auth-app.js";
@@ -26,10 +27,10 @@ import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "./auth-policy.js";
  * A new account, signed up through the auth route over Better Auth's own
  * hooks and organization plugin as `auth.ts` configures them, on a migrated
  * PGlite: it comes away owning its personal workspace, with nothing else
- * asked of the service, and is sent one welcome email, which signing in again
- * does not repeat. Email and password sign-up stands in for the Google
- * or GitHub sign-in, whose provider this test cannot be. Synthetic account
- * throughout.
+ * asked of the service, and is sent one welcome email and started on the
+ * onboarding emails, which signing in again does not repeat. Email and
+ * password sign-up stands in for the Google or GitHub sign-in, whose provider
+ * this test cannot be. Synthetic account throughout.
  */
 
 const BASE_URL = "http://127.0.0.1";
@@ -64,24 +65,23 @@ it.effect(
       });
       yield* Effect.gen(function* () {
         const resend = recordingHttpClient(() => jsonResponse({ id: "email-1" }));
-        const welcomeMail = welcomeMailFromEnvironment.pipe(
-          Layer.provide(
-            Layer.merge(
-              resend.layer,
-              ConfigProvider.layer(
-                ConfigProvider.fromUnknown({
-                  [WELCOME_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
-                  [WELCOME_MAIL_ENVIRONMENT.FROM]: WELCOME_FROM,
-                }),
-              ),
-            ),
+        const resendServices = Layer.merge(
+          resend.layer,
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              [WELCOME_MAIL_ENVIRONMENT.RESEND_API_KEY]: "re_test",
+              [WELCOME_MAIL_ENVIRONMENT.FROM]: WELCOME_FROM,
+            }),
           ),
         );
+        const welcomeMail = welcomeMailFromEnvironment.pipe(Layer.provide(resendServices));
+        const onboarding = onboardingEventsFromEnvironment.pipe(Layer.provide(resendServices));
         const services = Layer.mergeAll(
           Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
           Layer.succeed(Database, yield* Database),
           Layer.succeed(Clock.Clock, yield* Clock.Clock),
           welcomeMail,
+          onboarding,
         );
         const { handler, dispose } = HttpRouter.toWebHandler(
           authApp((request) => auth.handler(request), workspaceSeams(auth.api)).pipe(
@@ -106,15 +106,25 @@ it.effect(
         assert.equal(signedIn.status, HOSTED_HTTP_STATUS.OK);
         yield* Effect.promise(() => dispose());
 
-        const emails = resend.requests.map(
-          (request) =>
-            JSON.parse(request.body ?? "{}") as {
-              from: string;
-              to: string[];
-              scheduled_at: string;
-              template: { id: string; variables: { GREETING: string } };
-            },
-        );
+        const sentTo = (pathname: string) =>
+          resend.requests
+            .filter((request) => request.pathname === pathname)
+            .map((request) => JSON.parse(request.body ?? "{}") as unknown);
+        assert.deepEqual(sentTo("/contacts"), [{ email: ADA.email }]);
+        assert.deepEqual(sentTo("/events/send"), [
+          { event: "vespin.signed_up", email: ADA.email, payload: { greeting: "Hey Ada," } },
+        ]);
+        const emails = resend.requests
+          .filter((request) => request.pathname === "/emails")
+          .map(
+            (request) =>
+              JSON.parse(request.body ?? "{}") as {
+                from: string;
+                to: string[];
+                scheduled_at: string;
+                template: { id: string; variables: { GREETING: string } };
+              },
+          );
         assert.equal(emails.length, 1);
         assert.equal(emails[0]?.from, WELCOME_FROM);
         assert.deepEqual(emails[0]?.to, [ADA.email]);

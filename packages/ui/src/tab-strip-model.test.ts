@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { followedAgent, stampedViewed } from "./tab-strip-model.js";
+import { agentTab, changesTab, fileTab, followedAgent, stampedViewed } from "./tab-strip-model.js";
 
 /**
  * tab-strip-model.test.ts -- the agent whose tab follows its run is the one
@@ -10,7 +10,7 @@ import { followedAgent, stampedViewed } from "./tab-strip-model.js";
  */
 
 test("an agent's tab follows its run only while the plan's column shows it on screen", () => {
-  const agent = { agent: "agent-1" };
+  const agent = agentTab("agent-1");
   assert.equal(followedAgent(agent, { shown: true, covered: false }), "agent-1");
   assert.equal(
     followedAgent(agent, { shown: true, covered: true }),
@@ -23,15 +23,15 @@ test("an agent's tab follows its run only while the plan's column shows it on sc
     "the plan's page is not shown",
   );
   assert.equal(
-    followedAgent({ changes: "agent-1" }, { shown: true, covered: false }),
+    followedAgent(changesTab("agent-1"), { shown: true, covered: false }),
     undefined,
     "another tab is shown",
   );
 });
 
 test("a tab standing in its strip keeps its stamp past the bound, so stamping the strip again changes nothing and the tab still grows old", () => {
-  const strip = Array.from({ length: 51 }, (_, at) => ({ file: `file-${at}` }));
-  const gone = { file: "closed-elsewhere" };
+  const strip = Array.from({ length: 51 }, (_, at) => fileTab(`file-${at}`));
+  const gone = fileTab("closed-elsewhere");
   const first = stampedViewed([{ tab: gone, at: 0 }], [], strip, 1, 50);
   assert.deepEqual(
     first,

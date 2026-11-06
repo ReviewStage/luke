@@ -7,8 +7,15 @@
    width it steps under is a literal here. */
 
 @layer components {
+  /* The frame is at least the window's height, and a page's content takes
+     the room a short page leaves, so the rails run to the window's foot and
+     the wordmark's cut edge stands on it rather than above a band of
+     ground. */
   .ui-landing-page {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
     container-type: inline-size;
     overflow-x: clip;
     background: var(--ui-color-ground);
@@ -194,6 +201,7 @@
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-landing-leading);
     letter-spacing: var(--ui-display-landing-tracking);
+    text-wrap: balance;
   }
 
   .ui-landing-hero-lead,
@@ -243,6 +251,7 @@
     font-weight: var(--ui-display-landing-weight);
     line-height: var(--ui-display-feature-leading);
     letter-spacing: var(--ui-display-landing-tracking);
+    text-wrap: balance;
   }
 
   /* A stage: a box of drifting dots holding the feature's screen, which
@@ -329,6 +338,57 @@
     padding: 0 var(--ui-landing-gutter) 40px;
   }
 
+  /* The foot's facts and links in one row parted by dots (`site-foot.tsx`).
+     Each item's dot stands in the gap before it and the row clips what
+     stands past its start, so a line the row wraps onto opens on words, not
+     a dot. The row's inset, taken back by its margin, keeps a focused
+     link's ring inside the clip. */
+  .ui-landing-foot-row {
+    --ui-landing-foot-gap: calc(2 * var(--ui-space-8) + 1ch);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8) var(--ui-landing-foot-gap);
+    margin: calc(-1 * var(--ui-space-4));
+    padding: var(--ui-space-4);
+    overflow: clip;
+  }
+
+  .ui-landing-foot-facts,
+  .ui-landing-foot-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-8) var(--ui-landing-foot-gap);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ui-landing-foot-item {
+    position: relative;
+  }
+
+  .ui-landing-foot-item::before {
+    position: absolute;
+    right: 100%;
+    width: var(--ui-landing-foot-gap);
+    text-align: center;
+    content: "·";
+  }
+
+  /* The dot is the gap's, not the item's words, so where the engine takes
+     alternative text a reader hears none. */
+  @supports (content: "·" / "") {
+    .ui-landing-foot-item::before {
+      content: "·" / "";
+    }
+  }
+
+  .ui-landing-foot-notice {
+    margin-top: var(--ui-space-32);
+    padding-top: var(--ui-space-24);
+    border-top: 1px solid var(--ui-color-border);
+  }
+
   /* The wordmark's foot keeps one shape at every width, so a phone draws
      the word as densely as a desktop, only smaller. It stands between the
      rails, as every section does, so the word never runs past them. */
@@ -343,6 +403,7 @@
      page's room under the bar and over the foot's rule. */
   .ui-landing-lost {
     display: flex;
+    flex-grow: 1;
     flex-direction: column;
     align-items: center;
     padding: 64px var(--ui-landing-gutter) 96px;
@@ -1145,6 +1206,34 @@
       flex-direction: column;
       align-items: stretch;
       padding: 72px var(--ui-landing-gutter) 48px;
+    }
+
+    /* The foot's facts keep their line, and its links stand in two columns
+       of rows a control tall with no dots, each a finger's target across
+       its column. */
+    .ui-landing-foot-row {
+      display: block;
+    }
+
+    .ui-landing-foot-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: var(--ui-space-16);
+      margin-top: var(--ui-space-8);
+    }
+
+    .ui-landing-foot-list > .ui-landing-foot-item::before {
+      content: none;
+    }
+
+    .ui-landing-foot-list a {
+      display: flex;
+      align-items: center;
+      min-height: var(--ui-control-height);
+    }
+
+    .ui-landing-foot-notice {
+      margin-top: var(--ui-space-16);
     }
   }
 }

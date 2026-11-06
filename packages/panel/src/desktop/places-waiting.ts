@@ -10,20 +10,19 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
  * (`desktop-sidebar.tsx`), a phone's places bar (`mobile-bar.tsx`), and
  * each task's badge on the Tasks page's List and Board. The Inbox's row
  * counts the open threads that wait on the developer, a question or an
- * update not yet opened, the threads its Needs you lists (`inbox-model.ts`'s
+ * update not yet opened, as the Inbox's own marks do (`inbox-model.ts`'s
  * `needsYou`), while a task's badge counts its questions alone, as main
- * counts them.
+ * counts them, and as the Inbox's Needs you scope lists them.
  */
 
 const NO_COUNTS: ReadonlyMap<string, number> = new Map();
 
 /**
  * How many questions wait on the developer on each task main lists, every
- * workspace's, since ⌘K's rows name another workspace's tasks: main's count
+ * workspace's: main's count
  * of each task's (`toDo`), which the host lowers the moment the reader
  * answers one (`@repo/host`'s `account-inbox-follow.ts`). A notice, a
- * teammate's question, and a settled item never count, read or not, as the
- * Dock's badge counts them. Where main carries no count of a task's to do,
+ * teammate's question, and a settled item never count, read or not. Where main carries no count of a task's to do,
  * from a service before it, its open items are counted, as before. A task
  * where none waits is left out.
  */
@@ -76,8 +75,8 @@ export function useTasksWaiting(tasks: TasksControl): ReadonlyMap<string, number
 }
 
 /**
- * How many threads wait on the developer in the Inbox, as many as Needs you
- * lists, the number that reaches zero once each question is answered and
+ * How many threads wait on the developer in the Inbox, a question or an
+ * update not yet opened, the number that reaches zero once each question is answered and
  * each update opened (`waitingThreads`); a teammate's is listed in the
  * Inbox, and waits on the teammate. None while signed out.
  */

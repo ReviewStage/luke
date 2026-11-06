@@ -77,7 +77,7 @@ import {
 } from "@repo/ui";
 import { FolderPlusIcon, HouseIcon, ListTodoIcon, ShieldUserIcon, ZapIcon } from "@repo/ui/icons";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
+import { agentTab, isAgentTab, sameTab } from "@repo/ui/tab-strip-model";
 import {
   ASSIGNED_TO,
   type AssignedTo,
@@ -595,7 +595,7 @@ function accountPinOf(
 function agentPinOf(pin: TaskAgentPin, agent: AgentSummary, tasks: TasksControl): AgentPin {
   const drawn = {
     task: pin.taskId,
-    tab: { agent: agent.id },
+    tab: agentTab(agent.id),
     label: agentName(agent, tasks.agents.models),
     at: pin.pinnedAt,
     model: agent.model,
@@ -1874,7 +1874,6 @@ function SidebarColumn({
     inAdmin ||
     (onTasks && tasks.agentView.agentId !== undefined);
   const waiting = useInboxWaiting(tasks);
-  // The Inbox's row marks its threads read from its right-click.
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing; a task's row goes back to work
   // on it, on the agent waiting on the developer where one does (`onResume`).

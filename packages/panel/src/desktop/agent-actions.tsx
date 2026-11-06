@@ -24,6 +24,7 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { useMoveToEntry } from "../tasks/move-agent.js";
 import { markReadItem, type ReadMark } from "../tasks/task-menu-items.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
+import { TERMINAL_KIND } from "../tasks/terminal-session.js";
 import {
   agentTranscript,
   readWholeTranscript,
@@ -31,8 +32,8 @@ import {
   type TranscriptCopy,
 } from "../tasks/transcript-copy.js";
 import type { AgentsControl } from "../tasks/use-agents.js";
-import { useOpenLocal } from "../tasks/use-local-session.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
+import { useOpenTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import type { MenuAction, MenuEntry } from "./action-menu.js";
 import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
@@ -304,7 +305,7 @@ export function agentTranscriptRead(
  * (`onShown`).
  */
 export function useAgentTerminalDoors(
-  sidePanel: Pick<SidePanelControl, "onChoose" | "locals" | "viewedAt">,
+  sidePanel: Pick<SidePanelControl, "onChoose" | "terminals" | "locals" | "viewedAt">,
   onShown: () => void,
 ): AgentTerminalDoors {
   const terminals =
@@ -314,7 +315,7 @@ export function useAgentTerminalDoors(
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.LOCAL_TERMINALS) })
       .data === true;
   const openTerminal = useOpenTerminal(sidePanel, onShown);
-  const openLocal = useOpenLocal(sidePanel, onShown);
+  const openLocal = useOpenTerminalTab(TERMINAL_KIND.LOCAL, sidePanel, onShown);
   return {
     terminals,
     onOpenTerminal: terminals ? (agentId) => openTerminal(agentId, TERMINAL_ASK.SHOW) : undefined,

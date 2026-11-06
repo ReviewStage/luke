@@ -15,6 +15,7 @@ import {
   taskNumberOf,
   withTaskId,
 } from "@repo/features/link-grammar";
+import { LIVE_READ } from "@repo/features/live-wire";
 import { type DescriptionMention, MENTION_KIND } from "@repo/features/mention-link";
 import type { CatalogModel, MacOffer, ModelChoice } from "@repo/features/models-wire";
 import type { PageLine } from "@repo/features/page-wire";
@@ -63,6 +64,9 @@ import { APP_SETTING_DEFAULTS, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@repo/settings/settings-views";
 import { STATUS_TONE } from "@repo/ui";
 import {
+  agentTab,
+  changesTab,
+  draftTab,
   isAgentTab,
   isChangesTab,
   isCloudBrowserTab,
@@ -73,9 +77,11 @@ import {
   isSubagentTab,
   isTerminalTab,
   isTranscriptTab,
+  pageTab,
   pullRequestLabelOf,
   type StripTab,
   sameTab,
+  subagentTab,
 } from "@repo/ui/tab-strip-model";
 import { NO_TASK_SECTIONS, SECTION_WRITE_FAILED_NOTE } from "@repo/ui/task-sections-model";
 import {
@@ -151,8 +157,13 @@ import { ADDRESS, HERE, type OverviewPlace, ROUTE, route } from "../route.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { TOAST_HOLD, undoToast, useToast } from "../toast.js";
-import { pressRows, ROW_WRITE, type RowDoors } from "../undo-stack.js";
-import { appStateQuery, selectAppSettingsView, selectExperimentChoices } from "../use-app-state.js";
+import { pressRows, ROW_WRITE, type RowDoors, type TaskRows } from "../undo-stack.js";
+import {
+  appStateIn,
+  appStateQuery,
+  selectAppSettingsView,
+  selectExperimentChoices,
+} from "../use-app-state.js";
 import type { VersionHistoryRoute } from "../version-history-route.js";
 import type { BoardRoute, PersonRoute } from "../workspace-routes.js";
 import {
@@ -203,7 +214,6 @@ import {
 } from "./use-description-history.js";
 import { useIdleTabs } from "./use-idle-tabs.js";
 import { useInboxTaskAgents } from "./use-inbox-task-agents.js";
-import { useEndLocal } from "./use-local-session.js";
 import {
   isOverviewTab,
   MAIN_TAB,
@@ -216,7 +226,6 @@ import {
   DRAWN_KINDS,
   drawsChanges,
   drawsSubagent,
-  drawsTerminal,
   isPinnable,
   SIDE_PANEL_TAB,
   type SidebarPin,
@@ -225,7 +234,7 @@ import {
   type TaskHolds,
   useSidePanel,
 } from "./use-side-panel.js";
-import { useEndTerminal } from "./use-terminal-session.js";
+import { useEndTerminalTab } from "./use-terminal-session.js";
 import { sayRestored } from "./version-view.js";
 
 /**
@@ -269,7 +278,7 @@ export type InboxChoice =
     // An item a link named by its id alone that the account may not read, which the Inbox says is missing.
     | { readonly itemId: string }
   ) & {
-    /** Whether a link, a notification, or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
+    /** Whether a link or New thread asked for the item, rather than a row's choice: one no read holds then says it is missing. */
     readonly opened?: true;
   };
 
@@ -1193,7 +1202,7 @@ interface TaskRenameAsk {
  */
 export function taskRenameMutation(
   send: (asked: TaskRenameAsk) => Promise<boolean>,
-  doors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
+  doors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> | undefined,
 ) {
   return mutationOptions({
     mutationKey: [ROW_WRITE.TASK_RENAME.kind],
@@ -1711,8 +1720,8 @@ export function useTasksTab(input: {
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
-    onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
-    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, { draft: draftId }),
+    onStarted: (agentId) => mainRef.current?.onChoose(agentTab(agentId)),
+    onDraftRestored: (on, draftId) => mainRef.current?.onShow(on, draftTab(draftId)),
     keywords: dictationWords,
   });
   // The agents with no plan are listed by the same workspace as the plans, standing and archived apart as the plans are,
@@ -2297,20 +2306,23 @@ export function useTasksTab(input: {
   // mutation, which ⌘Z reads a press's rows and sends its writes through (`undo-stack.ts`).
   const drawnTasks = useRef(tasks);
   drawnTasks.current = tasks;
-  const drawnRows = () => drawnTasks.current;
-  const renameDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_RENAME.kind> = {
+  const drawnRows = (): TaskRows => ({
+    tasks: drawnTasks.current,
+    held: appStateIn(queryClient)?.[LIVE_READ.DESCRIPTION_DOCUMENT],
+  });
+  const renameDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_RENAME.kind> = {
     rows: drawnRows,
     send: sendTaskRename,
   };
-  const taskPinDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_PIN.kind> = {
+  const taskPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_PIN.kind> = {
     rows: drawnRows,
     send: sendTaskPin,
   };
-  const agentPinDoors: RowDoors<TasksView, typeof ROW_WRITE.AGENT_PIN.kind> = {
+  const agentPinDoors: RowDoors<TaskRows, typeof ROW_WRITE.AGENT_PIN.kind> = {
     rows: drawnRows,
     send: sendAgentPin,
   };
-  const standingDoors: RowDoors<TasksView, typeof ROW_WRITE.TASK_STANDING.kind> = {
+  const standingDoors: RowDoors<TaskRows, typeof ROW_WRITE.TASK_STANDING.kind> = {
     rows: drawnRows,
     send: sendStandingRow,
   };
@@ -2609,7 +2621,7 @@ export function useTasksTab(input: {
 
   // An agent that ended unseen marks its tab unread; main clears it once the
   // tab is shown.
-  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => ({ agent }));
+  const unreadTabs: readonly StripTab[] = input.unseenAgents.map((agent) => agentTab(agent));
 
   // A fixture's repositories are read from nowhere, as its tasks are. The
   // chip lists the repositories of the workspace its task is in: the open
@@ -2931,7 +2943,7 @@ export function useTasksTab(input: {
     const narrow = input.room === SHELL_ROOM.NARROW;
     if (narrow) sidePanel.onSetOpen(false);
     const agentId = resumingAgentOf(taskId, tasksNow, input.inboxWaiting);
-    if (agentId !== undefined) mainTabs.onShow(taskId, { agent: agentId });
+    if (agentId !== undefined) mainTabs.onShow(taskId, agentTab(agentId));
     else if (narrow) mainTabs.onShow(taskId, MAIN_TAB.OVERVIEW);
   };
   // A task pressed anywhere opens on its agents, as one gone back to does; in a narrow room on
@@ -3152,7 +3164,7 @@ export function useTasksTab(input: {
         attachments: handed.attachments,
         sentAt,
       });
-      mainTabs.onShow(planId, { agent: started.agent.id });
+      mainTabs.onShow(planId, agentTab(started.agent.id));
       return;
     }
     // Note that the refusal keeps the answer that said it, so the draft's tab reports the service's word for it.
@@ -3160,7 +3172,7 @@ export function useTasksTab(input: {
     const refused = { ...agentStartFailureNote(answer, planId, device), cause: answer };
     const { idempotencyKey: id, ...words } = handed;
     agents.onHandDraft(planId, { id, ...words, refused });
-    mainTabs.onShow(planId, { draft: id });
+    mainTabs.onShow(planId, draftTab(id));
   };
 
   // Note that New task's start is a steady door, so the dialog handed it holds while nothing it draws moves.
@@ -3323,7 +3335,7 @@ export function useTasksTab(input: {
 
   // A version's Open lands where its writer wrote it: an agent's tab.
   const showSource = (taskId: string, source: RevisionSource) => {
-    showColumnTab(taskId, { agent: source.agentId });
+    showColumnTab(taskId, agentTab(source.agentId));
   };
 
   // A task named anywhere, by a chip, a link, an Inbox crumb, or a call's row, opens on its
@@ -3444,28 +3456,28 @@ export function useTasksTab(input: {
   const showOnTask = (planId: string, place: AgentPlace) => {
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         linkPanelTab(
           { ...place, planId },
-          { subagent: place.callId, delegation: { agent: place.agentId, task: "" } },
+          subagentTab(place.callId, { agent: place.agentId, task: "" }),
         );
         return;
       case LINK_PLACE.CHANGES:
-        linkPanelTab({ ...place, planId }, { changes: sharedChangesAgent(planId, place.agentId) });
+        linkPanelTab({ ...place, planId }, changesTab(sharedChangesAgent(planId, place.agentId)));
         return;
       // A review thread opens its agent's Pull request tab on the view the link names.
       case LINK_PLACE.PULL_REQUEST_THREAD: {
         const changes = sharedChangesAgent(planId, place.agentId);
-        sidePanel.onPullRequestView({ changes }, place.view);
-        linkPanelTab({ ...place, planId }, { changes });
+        sidePanel.onPullRequestView(changesTab(changes), place.view);
+        linkPanelTab({ ...place, planId }, changesTab(changes));
         revealThread(changes, place);
         return;
       }
       case LINK_PLACE.AGENT:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         return;
       case LINK_PLACE.MESSAGE:
-        showColumnTab(planId, { agent: place.agentId });
+        showColumnTab(planId, agentTab(place.agentId));
         revealMessage(place);
         return;
     }
@@ -3477,17 +3489,14 @@ export function useTasksTab(input: {
     standInFor({ kind: STAND_IN.AGENT, agentId });
     switch (place.kind) {
       case LINK_PLACE.WORKER:
-        sidePanel.onShow(agentId, {
-          subagent: place.callId,
-          delegation: { agent: agentId, task: "" },
-        });
+        sidePanel.onShow(agentId, subagentTab(place.callId, { agent: agentId, task: "" }));
         return;
       case LINK_PLACE.CHANGES:
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onShow(agentId, changesTab(agentId));
         return;
       case LINK_PLACE.PULL_REQUEST_THREAD:
-        sidePanel.onPullRequestView({ changes: agentId }, place.view);
-        sidePanel.onShow(agentId, { changes: agentId });
+        sidePanel.onPullRequestView(changesTab(agentId), place.view);
+        sidePanel.onShow(agentId, changesTab(agentId));
         revealThread(agentId, place);
         return;
       case LINK_PLACE.AGENT:
@@ -3737,10 +3746,10 @@ export function useTasksTab(input: {
         // A page of an agent on no task opens on that agent's page, in its panel.
         if ("agentId" in place) {
           standInFor({ kind: STAND_IN.AGENT, agentId: place.agentId });
-          sidePanel.onShow(place.agentId, { page: place.pageId });
+          sidePanel.onShow(place.agentId, pageTab(place.pageId));
           return;
         }
-        linkPanelTab(place, { page: place.pageId });
+        linkPanelTab(place, pageTab(place.pageId));
         return;
       case LINK_PLACE.WORKER:
       case LINK_PLACE.CHANGES:
@@ -3847,18 +3856,16 @@ export function useTasksTab(input: {
     [keepColumnClosed, closeMainTab, dozeMainTab],
   );
   const { strip: panelStrip, files: panelFiles, onClose: closePanelTab } = sidePanel;
-  const endLocal = useEndLocal();
-  const endTerminal = useEndTerminal();
-  // Note that a Local tab's terminal ends as its tab closes, whichever way it closes, since the tab
+  const endTerminal = useEndTerminalTab();
+  // Note that a terminal tab's shell ends as its tab closes, whichever way it closes, since the tab
   // is the only place it stands, so the tab goes on no stack of closed tabs: nothing opens it again.
-  // A Terminal tab's screens end with it too, its shells running on in the sandbox for it to open again.
   const closeSidePanelTab = useCallback(
     (tab: SidePanelTab) => {
-      if (isLocalTab(tab)) endLocal(tab);
-      if (isTerminalTab(tab)) endTerminal(tab.terminal);
+      const terminal = isTerminalTab(tab) || isLocalTab(tab);
+      if (terminal) endTerminal(tab);
       const at = panelStrip.findIndex((each) => sameTab(each, tab));
       const task = viewed.activeTaskId;
-      if (task !== undefined && at >= 0 && !isLocalTab(tab)) {
+      if (task !== undefined && at >= 0 && !terminal) {
         const file = isFileTab(tab) ? panelFiles.find((each) => each.path === tab.file) : undefined;
         const closed = { strip: CLOSED_TAB_STRIP.SIDE_PANEL, task, tab, at, file };
         setClosedTabs(withClosedTab(latestClosedTabs(), closed));
@@ -3872,14 +3879,13 @@ export function useTasksTab(input: {
       viewed.activeTaskId,
       setClosedTabs,
       latestClosedTabs,
-      endLocal,
       endTerminal,
     ],
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, never the Inbox, which the panel
   // draws no more, a Changes tab while its agent is the task's, archived or not,
-  // and a subagent's, a Terminal tab, or a page's on the strip's own
+  // and a subagent's or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   // A fixed kind of the side panel draws on every task or on none, so whether it draws again is
@@ -3900,7 +3906,6 @@ export function useTasksTab(input: {
     if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     // Note that a task's pages not read yet pass over no tab, and once read, a page gone since is passed over.
     if (isPageTab(tab)) return taskPages === undefined || pages.includes(tab.page);
-    if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     return true;
   };
   const reopenable = withUndrawnPassed(closedTabs, tasks.activeTaskId, drawsAgain, drawsOnAnyTask);
@@ -3908,8 +3913,8 @@ export function useTasksTab(input: {
   // A tab not viewed for a day closes itself onto the same stack (`use-idle-tabs.ts`), unless it is
   // pinned, its agent works, waits on the developer, or ended unseen, or nothing could open it again:
   // a draft's, which lets the draft go, a Browser tab's, which takes its
-  // page with it, a cloud Browser tab's, which only the "+" opens again, and a Local tab's,
-  // whose terminal ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
+  // page with it, a cloud Browser tab's, which only the "+" opens again, and a terminal tab's,
+  // whose shell ends as it closes. The side panel's fixed kinds, the only tabs it names by a word, are its own and close only by hand.
   const workingAgents = useMemo(
     () =>
       (agents.agents ?? []).flatMap((agent) => (agentStillWriting(agent.status) ? [agent.id] : [])),
@@ -3964,6 +3969,7 @@ export function useTasksTab(input: {
             keeps: (tab) =>
               typeof tab === "string" ||
               isCloudBrowserTab(tab) ||
+              isTerminalTab(tab) ||
               isLocalTab(tab) ||
               pinnedHere(tab),
           },

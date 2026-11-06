@@ -13,7 +13,16 @@ import { backToWords, readFailedWords } from "@repo/features/words";
 import { HOST_CAPABILITY } from "@repo/settings";
 import { APP_COMMAND } from "@repo/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, Toolbar } from "@repo/ui";
-import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@repo/ui/tab-strip-model";
+import {
+  agentTab,
+  changesTab,
+  isAgentTab,
+  isTranscriptTab,
+  pageTab,
+  type StripTab,
+  sameTab,
+  transcriptTab,
+} from "@repo/ui/tab-strip-model";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
@@ -73,6 +82,7 @@ import {
 } from "../tasks/use-side-panel.js";
 import { type HeldTaskInboxControl, useInboxCardDrafts } from "../tasks/use-task-inbox.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useCloudTerminalTab } from "../tasks/use-terminal-session.js";
 import { appStateQuery, selectCapability } from "../use-app-state.js";
 import { AgentPane } from "./main-tabs.js";
 import {
@@ -96,17 +106,14 @@ import { taskCardOf } from "./task-card.js";
  * It stands in the task's place beside the sidebar, whose Inbox row is
  * marked while it does, the way a mail app's mailbox stands beside its
  * folders. The list (`inbox-list.tsx`) holds the items of each task of the
- * workspace the sidebar lists that main says holds one (the switcher counts
- * what waits in the others), needing the developer or settled, each task read whole
- * as main says it changed (`use-holder-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the oldest
- * first, Needs you, the questions alone that wait on their answer, Needs
- * you, the open threads that wait on them, or All,
- * everything, of everyone's, theirs, or one teammate's, as the developer
- * last chose; Needs
- * you is the Inbox's one name for an item not yet answered
- * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. A task's status never hides its items: the Inbox is a feed
+ * workspace the sidebar lists that main says holds one, needing the
+ * developer or settled, each task read whole as main says it changed
+ * (`use-holder-inbox-items.ts`), in one run, the latest changed first, in
+ * the scope the developer last chose: Needs you, the questions alone that
+ * wait on their answer; Open, what is not done; All, everything; or
+ * Reminders, of everyone's, theirs, or one teammate's. The sidebar's Inbox
+ * row counts the open threads that wait on the developer, a question or an
+ * update not yet opened (`places-waiting.ts`). A task's status never hides its items: the Inbox is a feed
  * of what the agents got done, so an item of a task done or canceled is
  * listed and counted as any other until it is read or answered, its row
  * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
@@ -231,7 +238,7 @@ export const DesktopInbox = memo(function DesktopInbox({
     reading,
     choose,
     clear,
-    closeItem,
+    resolveItems,
     onRetry,
   } = useInboxListing(tasks, narrowedTask);
   const unread = useMemo(() => anyUnread(standing), [standing]);
@@ -348,13 +355,13 @@ export const DesktopInbox = memo(function DesktopInbox({
       case THING.PAGE:
         // A page an agent showed since the pages were read stands as its change lands, since they are followed as they move;
         // another task's, a subtask's among them, opens here too, read on that task, so the reader stays on the item.
-        sidePanel.onPreview({ page: thing.pageId }, thing.place);
+        sidePanel.onPreview(pageTab(thing.pageId), thing.place);
         return true;
       case THING.CHANGES:
-        sidePanel.onPreview({ changes: thing.agentId });
+        sidePanel.onPreview(changesTab(thing.agentId));
         return true;
       case THING.TRANSCRIPT:
-        sidePanel.onPreview({ transcript: thing.agentId });
+        sidePanel.onPreview(transcriptTab(thing.agentId));
         // A message is brought into view as the transcript beside the item lands, as its tab on the task brings it.
         if (thing.messageId !== undefined) {
           tasks.onRevealMessage({
@@ -534,7 +541,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   openPlace: openPlaceHere,
                 }),
                 onMark: markItem,
-                onClose: closeItem,
+                onClose: resolveItems,
                 onRemind: marks.onRemind,
               }}
             />
@@ -605,7 +612,8 @@ export const DesktopInbox = memo(function DesktopInbox({
                   columns={columns.shown}
                   rows={columns.rows}
                   head={{
-                    shown: tasks.shown,
+                    // Note that a panel filling the window covers the list, so H and E stand down under it.
+                    shown: tasks.shown && !sidePanel.fullScreen,
                     // Note that a task's items are listed whole, so its Inbox offers no view's menu.
                     view: narrowedTask === undefined ? choices : undefined,
                     search,
@@ -649,7 +657,7 @@ export const DesktopInbox = memo(function DesktopInbox({
                   }
                   onChoose={open}
                   onMark={(listed, unread, saying) => markItem(listed.item, unread, saying)}
-                  onClose={closeItem}
+                  onClose={resolveItems}
                   onRemind={marks.onRemind}
                   onPointing={onPointing}
                 />
@@ -844,6 +852,7 @@ function InboxSidePanel({
   phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
+  const cloudTerminalTab = useCloudTerminalTab();
   const terminals =
     useQuery({ ...appStateQuery, select: selectCapability(HOST_CAPABILITY.TERMINALS) }).data ===
     true;
@@ -852,7 +861,7 @@ function InboxSidePanel({
   const openTarget = (target: ToolTarget) => {
     switch (target.kind) {
       case TOOL_TARGET.PAGE:
-        return panel.onPreview({ page: target.page });
+        return panel.onPreview(pageTab(target.page));
       case TOOL_TARGET.TASK:
         return openPlace(placeOfTaskTarget(target), () =>
           target.agent === undefined
@@ -905,7 +914,7 @@ function InboxSidePanel({
       <AgentPane
         label={agent === undefined ? undefined : agentName(agent, agents.models)}
         tabbed={false}
-        tab={{ agent: agentId }}
+        tab={agentTab(agentId)}
         agents={agents}
         shown={tasks.shown}
         views={views}
@@ -949,7 +958,7 @@ function InboxSidePanel({
                 // Note that an agent's terminal never stands beside the Inbox, so it opens on the agent's task.
                 onOpenInTask: (agentId) => tasks.onShowAgent(taskId, agentId),
                 onOpenTerminal: terminals
-                  ? (agentId) => tasks.onShowPanelTab(taskId, { terminal: agentId })
+                  ? (agentId) => tasks.onShowPanelTab(taskId, cloudTerminalTab(agentId))
                   : undefined,
               }
         }

@@ -62,15 +62,14 @@ import { plainWords } from "./tool-call-model.js";
  * inbox-model.ts -- the Inbox as pure decisions: which items it lists and how, what an item's answer is, and how a settled one reads.
  *
  * The list holds every item of every plan it is handed, the latest changed
- * first, under its plan, under the person it waits on, or in one
- * run with no groups, the items its tab takes: what needs the reader, what
+ * first, in one run with no groups, the items its tab takes: what needs the reader, what
  * they are not done with, everything, or what they set a reminder on, each tab
  * counting its own.
  * An item is the reader's where it waits on them: they are its task's
  * assignee, or, on a task nobody is assigned or an agent's with no task,
  * they started the agent that asks it; or where the service does not say, as main counts what waits on
  * the account (`agent-notices.ts`), and only the reader's open items need
- * them: Needs you lists only those, though the steps through any tab keep the
+ * them: Questions lists only those, though the steps through any tab keep the
  * item chosen, while a teammate's open item stands in the list as waiting
  * on them. An item is its title and its thread, each answer a member's
  * message under the ask it answers, and a settled one says how it ended.
@@ -103,8 +102,6 @@ export interface InboxDraft {
   readonly attachments: readonly AgentAttachment[];
   readonly steps?: readonly number[] | undefined;
   readonly press?: InboxReplyKind | undefined;
-  /** Whether the card's × staged resolving the item without an answer, which Send then does, the words and files going with the close as its note. */
-  readonly resolving?: true | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
@@ -203,22 +200,23 @@ export function inboxCommentFiles(
 /** The board as the tab draws it. */
 export interface InboxBoardView {
   readonly open: readonly InboxItem[];
-  /** The open items that wait on the reader (`readersItem`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate. */
+  /** The open items that wait on the reader at `now` (`waitsOnReaderNow`), in the order of `open`: what the task's Inbox counts, since a teammate's open item waits on the teammate and one the reader set a reminder on waits on nobody until it comes due. */
   readonly waiting: readonly InboxItem[];
   readonly settled: readonly InboxItem[];
 }
 
-/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` says which of what waits waits on the reader. */
+/** The task's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first; `readerId` and `now` say which of what waits waits on the reader. */
 export function inboxBoard(
   items: readonly InboxItem[],
   readerId: string | undefined,
+  now: number,
 ): InboxBoardView {
   const open = items
     .filter((item) => item.status === INBOX_STATUS.OPEN)
     .toSorted((a, b) => a.postedAt - b.postedAt);
   return {
     open,
-    waiting: open.filter((item) => readersItem(item, readerId)),
+    waiting: open.filter((item) => waitsOnReaderNow(item, readerId, now)),
     settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
@@ -912,26 +910,21 @@ export function inboxPreviewHeard(
   return previewOf(line, nameOf, ticked, line.heard);
 }
 
-/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
+/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, a member's resolve, or words alone. */
 export const INBOX_LINE = {
   DECIDE: "decide",
   DO: "do",
   ANSWER: "answer",
   SETTLED: "settled",
+  RESOLVED: "resolved",
   SAID: "said",
 } as const;
 
 export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
 
-/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
+/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, Resolve's where a member resolved it, or none. */
 export function inboxLineKind(item: InboxItem): InboxLineKind {
   return itemLine(item).kind;
-}
-
-/** What an item's hover card reads of its thread: the agent's latest words, plain. */
-export function inboxCardWords(item: InboxItem): string {
-  const said = (item.thread ?? []).findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
-  return said === undefined ? "" : plainWords(said.text);
 }
 
 /**
@@ -1084,8 +1077,20 @@ function itemLine(item: InboxItem): ItemLine {
   const thread = item.thread ?? [];
   const asking = openAskOf(thread);
   const last = thread.at(-1);
-  const line =
-    asking !== undefined && knownAsk(asking.ask)
+  // Note that a member's resolve says so in its own word, rather than the agent's last words, which would read as still waiting.
+  const resolved =
+    item.status === INBOX_STATUS.CLOSED &&
+    inboxSettledStanding(item) === INBOX_SETTLED_STANDING.RESOLVED;
+  const line: ItemLine = resolved
+    ? {
+        kind: INBOX_LINE.RESOLVED,
+        ask: undefined,
+        words: INBOX_SETTLED_STANDING.RESOLVED,
+        heard: INBOX_SETTLED_STANDING.RESOLVED,
+        byAgent: true,
+        member: undefined,
+      }
+    : asking !== undefined && knownAsk(asking.ask)
       ? {
           kind: ASK_LINE[asking.ask.type],
           ask: asking.ask,
@@ -1393,7 +1398,7 @@ export function agentGroups(
 }
 
 /**
- * Which items an Inbox lists, as its view's menu chooses: Needs you, the
+ * Which items an Inbox lists, as its view's menu chooses: Questions, the
  * questions whose ask waits on the reader's answer (`threadNeedsReader`),
  * which Addressed to never narrows; Open, every
  * thread the reader is not done with, a question not yet answered, a notice
@@ -1525,8 +1530,8 @@ export function waitsOnReader(
 
 /**
  * Whether an open item main lists holds an ask open rather than being a
- * notice: what the Inbox's number and the Dock's badge count. One from a
- * service before it, which says nothing, counts as asking, as every item did.
+ * notice. One from a service before it, which says nothing, counts as
+ * asking, as every item did.
  */
 export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
   return item.asking !== false;
@@ -1535,6 +1540,20 @@ export function holdsAsk(item: Pick<AppInboxWaitingItem, "asking">): boolean {
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/**
+ * Whether an item waits on the reader at `now`: it needs them (`needsReader`)
+ * and holds no reminder still ahead (`remindsLater`), what Open lists for them
+ * and every count of what needs them counts, the sidebar's Inbox row's among
+ * them (`places-waiting.ts`'s `waitingThreads`).
+ */
+export function waitsOnReaderNow(
+  item: InboxItem,
+  readerId: string | undefined,
+  now: number,
+): boolean {
+  return needsReader(item, readerId) && !remindsLater(item, now);
 }
 
 /**
@@ -1607,7 +1626,7 @@ function whoseItem(whose: InboxWhose, item: InboxItem, readerId: string | undefi
   }
 }
 
-/** Whether Addressed to narrows a scope: every scope but Needs you, which names the reader already. */
+/** Whether Addressed to narrows a scope: every scope but Questions, which names the reader already. */
 export function narrowedByWhose(show: InboxShow): boolean {
   return show !== INBOX_SHOW.NEEDS_ME;
 }
@@ -1693,6 +1712,11 @@ export function hasReminder(item: InboxItem): boolean {
   return item.remindAt !== undefined;
 }
 
+/** Whether the reader's reminder on the item is still ahead at `now`, which leaves it out of every count until it comes due. */
+function remindsLater(item: Pick<InboxItem, "remindAt">, now: number): boolean {
+  return item.remindAt !== undefined && item.remindAt > now;
+}
+
 /**
  * An item as it stands for the reader at `now`: put away while its reminder is
  * ahead, read or unread alike; and back where it has passed, as changed
@@ -1738,9 +1762,9 @@ export function isDone(item: InboxItem): boolean {
 }
 
 /**
- * Whether a scope lists the item: Needs you every question whose ask waits
- * on the reader (`threadNeedsReader`), what main's to-do count and the
- * Dock's badge count but for those with a reminder, a notice never; Open every
+ * Whether a scope lists the item: Questions every question whose ask waits
+ * on the reader (`threadNeedsReader`) but for those with a reminder, a
+ * notice never; Open every
  * thread the reader is not done with (`isDone`), one still open, one
  * answered since they last read it, or one closed without an answer that
  * they marked unread or that was written on since it closed, as a mail

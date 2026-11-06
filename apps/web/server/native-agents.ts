@@ -21,7 +21,10 @@ import { nativeAgentSessionsLayer } from "@repo/service/agents/coder-host/native
 import { Layer } from "effect";
 import { runWeb } from "./runtime.js";
 
-/** The harnesses over the web runtime, the image's reference read beside this function's entry. */
+/** The agents' image's reference, read beside this function's entry, which the harnesses and every other opener of a sandbox in the function are handed. */
+export const agentImage = agentImageFromDirectory(dirname(fileURLToPath(import.meta.url)));
+
+/** The harnesses over the web runtime and the agents' image. */
 export const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
-  Layer.provide(agentImageFromDirectory(dirname(fileURLToPath(import.meta.url)))),
+  Layer.provide(agentImage),
 );
