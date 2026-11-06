@@ -322,13 +322,6 @@ export function runnerSandboxApi() {
       return Response.json(sandboxFound(listed(sandbox)));
     }
     if (method === "GET" && path === "/api/v2/sandboxes") {
-      const prefix = parsed.searchParams.get("namePrefix");
-      if (prefix !== null) {
-        const named = sandboxes
-          .filter((each) => !each.deleted && each.name.startsWith(prefix))
-          .sort((left, right) => left.name.localeCompare(right.name));
-        return Response.json(sandboxesListed(named.map(listed)));
-      }
       const refused = sandboxListRefusal(parsed);
       if (refused !== undefined) return refused;
       const [key, value] = (parsed.searchParams.get("tags") ?? "").split(":");

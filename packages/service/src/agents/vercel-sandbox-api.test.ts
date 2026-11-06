@@ -12,7 +12,6 @@ import {
   sandboxesListed,
   sandboxFetchOver,
   sandboxFound,
-  snapshotOf,
 } from "../testing/vercel-sandbox-fake.js";
 import {
   COMMAND_GONE,
@@ -60,9 +59,7 @@ const CALLS: readonly {
   { call: SANDBOX_CALL.CREATE, ask: (api) => api.create(createAsk(NAME_TAKEN.REFUSE)) },
   { call: SANDBOX_CALL.TAGS, ask: (api) => api.updateTags(NAME, { sessionId: "s" }) },
   { call: SANDBOX_CALL.GET, ask: (api) => api.getNamed(NAME) },
-  { call: SANDBOX_CALL.LIST, ask: (api) => api.listNamed("luke-native-") },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listTagged("session_fixture") },
-  { call: SANDBOX_CALL.SNAPSHOT_LOOKUP, ask: (api) => api.snapshotExists("snap_fixture") },
 ];
 
 type Responder = (url: string, init: RequestInit) => Response | Promise<Response>;
@@ -78,10 +75,6 @@ function apiOver(
 /** A page of the sandboxes named, as Vercel's list answers it. */
 const listed = (...names: readonly string[]) =>
   Response.json(sandboxesListed(names.map((name) => ({ ...RUNNING_SANDBOX, name }))));
-
-/** A snapshot as Vercel's lookup answers it, at the status given. */
-const snapshotAt = (status: string) =>
-  Response.json({ snapshot: snapshotOf({ id: "snap_fixture", status }) });
 
 const refusedWith = (status: number) => () => Response.json({ error: REFUSAL }, { status });
 
@@ -195,7 +188,7 @@ it.effect(
 );
 
 it.effect(
-  "each list asks the query Vercel takes: the running sandboxes by creation, in the order asked, and a name prefix by name",
+  "the list of running sandboxes asks the query Vercel takes: running ones alone, by creation, in the order asked",
   () =>
     Effect.gen(function* () {
       const queries: URLSearchParams[] = [];
@@ -205,37 +198,24 @@ it.effect(
       });
 
       const running = yield* api.listRunning(undefined, "desc");
-      const named = yield* api.listNamed("luke-native-");
 
-      const [runningQuery, namedQuery] = queries;
+      const [runningQuery] = queries;
       assert.equal(runningQuery?.get("status"), "running");
       assert.equal(runningQuery?.get("sortBy"), "createdAt");
       assert.equal(runningQuery?.get("sortOrder"), "desc");
-      assert.equal(namedQuery?.get("namePrefix"), "luke-native-");
-      assert.equal(namedQuery?.get("sortBy"), "name");
       assert.deepEqual(
-        [...running.sandboxes, ...named].map((each) => each.name),
-        ["luke-native-a", "luke-native-a"],
+        running.sandboxes.map((each) => each.name),
+        ["luke-native-a"],
       );
     }),
 );
 
-it.effect(
-  "a sandbox Vercel no longer holds is none, and a snapshot gone or deleted stands no more",
-  () =>
-    Effect.gen(function* () {
-      let answer: () => Response = refusedWith(404);
-      const api = yield* apiOver(() => answer());
+it.effect("a sandbox Vercel no longer holds is none", () =>
+  Effect.gen(function* () {
+    const api = yield* apiOver(refusedWith(404));
 
-      assert.equal(yield* api.getNamed(NAME), undefined);
-      assert.equal(yield* api.snapshotExists("snap_fixture"), false);
-      answer = refusedWith(410);
-      assert.equal(yield* api.snapshotExists("snap_fixture"), false);
-      answer = () => snapshotAt("deleted");
-      assert.equal(yield* api.snapshotExists("snap_fixture"), false);
-      answer = () => snapshotAt("created");
-      assert.equal(yield* api.snapshotExists("snap_fixture"), true);
-    }),
+    assert.equal(yield* api.getNamed(NAME), undefined);
+  }),
 );
 
 it.effect(

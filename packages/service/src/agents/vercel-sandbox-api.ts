@@ -15,8 +15,8 @@
  * Vercel's `Retry-After` up to 20 seconds), so nothing here tries again.
  *
  * Every call goes under the token we read and the `fetch` `SandboxFetch`
- * names: a call on a sandbox by name, a list, a create, and a snapshot's
- * lookup through the SDK's statics, and the calls on a running session, and
+ * names: a call on a sandbox by name, a list, a create, and a drive's
+ * through the SDK's statics, and the calls on a running session, and
  * on a command in it, through the session the documented way reaches it
  * (`Sandbox.get` by the sandbox's name, without resuming it, then
  * `currentSession`), looked up once and held for one operation's calls and
@@ -40,7 +40,6 @@ import {
   Sandbox,
   type NetworkPolicy as SdkNetworkPolicy,
   type Session,
-  Snapshot,
   StreamError,
 } from "@vercel/sandbox";
 import { Context, Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
@@ -139,7 +138,6 @@ export const SANDBOX_CALL = {
   LOGS: "logs",
   KILL: "kill",
   TAGS: "tags",
-  TIMEOUT: "timeout",
   GET: "get",
   LIST: "list",
   DELETE: "delete",
@@ -149,9 +147,6 @@ export const SANDBOX_CALL = {
   NETWORK_POLICY: "network-policy",
   INTERACTIVE: "interactive",
   SNAPSHOT: "snapshot",
-  SNAPSHOT_LOOKUP: "snapshot-lookup",
-  SNAPSHOT_LIST: "snapshot-list",
-  RETENTION: "retention",
   DRIVE_GET: "drive-get",
   DRIVE_CREATE: "drive-create",
   DRIVE_DELETE: "drive-delete",
@@ -234,16 +229,10 @@ export interface OpenedSandbox extends ListedSandbox {
  * `count` kept, each for `expiration` milliseconds, and the rest deleted
  * at once where `deleteEvicted`, which Vercel defaults to true.
  */
-export interface SnapshotRetention {
+interface SnapshotRetention {
   readonly count: number;
   readonly expiration?: number | undefined;
   readonly deleteEvicted?: boolean | undefined;
-}
-
-/** A snapshot as a list of them names it: its id, and whether a sandbox can still open from it. */
-interface ListedSnapshot {
-  readonly id: string;
-  readonly usable: boolean;
 }
 
 /** A command the sandbox ran to its end: its exit code and what it printed on stdout and stderr. */
@@ -493,39 +482,6 @@ export interface VercelSandboxApi {
   ) => Effect.Effect<string, SandboxUnavailable>;
   /** The sandbox of that name, as it stands, without resuming it; none where there is no such sandbox. */
   readonly getNamed: (name: string) => Effect.Effect<ListedSandbox | undefined, SandboxUnavailable>;
-  /** The project's sandboxes whose names start with the prefix, the first page of them. */
-  readonly listNamed: (
-    prefix: string,
-  ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
-  /** One page of the project's sandboxes whose names start with the prefix, by name, from the cursor a page before answered. */
-  readonly listNamedPage: (
-    prefix: string,
-    cursor: string | undefined,
-  ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
-  /**
-   * Whether the snapshot named still stands: false where Vercel answers it
-   * not found (404) or gone (410), or names it deleted or failed.
-   */
-  readonly snapshotExists: (snapshotId: string) => Effect.Effect<boolean, SandboxUnavailable>;
-  /** Sets the timeout the named sandbox's next sessions open with; a running session it would lengthen is lengthened with it, one it would shorten keeps its own. */
-  readonly updateTimeout: (
-    name: string,
-    timeoutMs: number,
-  ) => Effect.Effect<void, SandboxUnavailable>;
-  /**
-   * Sets the snapshot retention of the named sandbox. Note that Vercel
-   * applies it at once to the snapshots the sandbox holds, evicting all but
-   * the newest `count` by when they were made, whichever the sandbox resumes
-   * from, and leaves the expiry of each one it keeps as it was.
-   */
-  readonly updateRetention: (
-    name: string,
-    retention: SnapshotRetention,
-  ) => Effect.Effect<void, SandboxUnavailable>;
-  /** The newest snapshot the named sandbox made, deleted or not; none where it made none. */
-  readonly newestSnapshot: (
-    name: string,
-  ) => Effect.Effect<ListedSnapshot | undefined, SandboxUnavailable>;
   /** The drive under the name; none where there is none. */
   readonly getDrive: (name: string) => Effect.Effect<ListedDrive | undefined, SandboxUnavailable>;
   /** The drive under the name, created in the sandboxes' region where there is none. */
@@ -560,9 +516,6 @@ const ErrorAnswerSchema = Schema.Struct({
     message: Schema.optional(Schema.String),
   }),
 });
-
-/** The statuses Vercel names a snapshot by once nothing can open from it. */
-const SNAPSHOT_UNUSABLE: ReadonlySet<string> = new Set(["deleted", "failed"]);
 
 /** Where a sandbox's own PTY server is served: Vercel's sandbox domain, as it addresses a sandbox's routes, on a secure socket. */
 const SANDBOX_SHELL_ADDRESS = {
@@ -1158,71 +1111,6 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
         found(SANDBOX_CALL.GET, name).pipe(
           Effect.map((sandbox): ListedSandbox | undefined => openedOf(sandbox)),
           Effect.catchIf(isGone, () => Effect.succeed(undefined)),
-        ),
-      listNamedPage: (prefix, cursor) =>
-        Effect.map(
-          asked(SANDBOX_CALL.LIST, (signal, under) =>
-            Sandbox.list({
-              ...under,
-              limit: SANDBOX_API.PAGE,
-              // Note that the API takes a name prefix only under a sort by name, and refuses it with a 400 otherwise.
-              sortBy: "name",
-              namePrefix: prefix,
-              ...(cursor === undefined ? undefined : { cursor }),
-              signal,
-            }),
-          ),
-          (page) => ({
-            sandboxes: page.sandboxes.map(listedOf),
-            next: page.pagination.next ?? undefined,
-          }),
-        ),
-      listNamed: (prefix) =>
-        Effect.map(
-          asked(SANDBOX_CALL.LIST, (signal, under) =>
-            Sandbox.list({
-              ...under,
-              limit: SANDBOX_API.PAGE,
-              // Note that the API takes a name prefix only under a sort by name, and refuses it with a 400 otherwise.
-              sortBy: "name",
-              namePrefix: prefix,
-              signal,
-            }),
-          ),
-          (page) => page.sandboxes.map(listedOf),
-        ),
-      snapshotExists: (snapshotId) =>
-        asked(SANDBOX_CALL.SNAPSHOT_LOOKUP, (signal, under) =>
-          Snapshot.get({ ...under, snapshotId, signal }),
-        ).pipe(
-          Effect.map((snapshot) => !SNAPSHOT_UNUSABLE.has(snapshot.status)),
-          Effect.catchIf(
-            (failure) => isGone(failure) || failure.status === SNAPSHOT_GONE_STATUS,
-            () => Effect.succeed(false),
-          ),
-        ),
-      updateTimeout: (name, timeoutMs) =>
-        updated(SANDBOX_CALL.TIMEOUT, name, { timeout: timeoutMs }),
-      updateRetention: (name, { count, expiration, deleteEvicted }) =>
-        updated(SANDBOX_CALL.RETENTION, name, {
-          keepLastSnapshots: {
-            count,
-            ...(expiration === undefined ? undefined : { expiration }),
-            ...(deleteEvicted === undefined ? undefined : { deleteEvicted }),
-          },
-        }),
-      newestSnapshot: (name) =>
-        Effect.map(
-          // Vercel's documented "List snapshots": one sandbox's by its name, by creation, newest first.
-          asked(SANDBOX_CALL.SNAPSHOT_LIST, (signal, under) =>
-            Snapshot.list({ ...under, name, limit: 1, sortOrder: LIST_ORDER.NEWEST_FIRST, signal }),
-          ),
-          (page) => {
-            const [newest] = page.snapshots;
-            return newest === undefined
-              ? undefined
-              : { id: newest.id, usable: !SNAPSHOT_UNUSABLE.has(newest.status) };
-          },
         ),
       updateTags: (name, tags) => updated(SANDBOX_CALL.TAGS, name, { tags: { ...tags } }),
       getDrive: (name) =>
