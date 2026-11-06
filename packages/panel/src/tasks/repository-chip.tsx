@@ -295,6 +295,8 @@ export interface SeveralPicks {
   readonly onToggle: (repository: string) => void;
   /** Why the primary is held, its row drawn checked and disabled with these words, so it is neither unchecked nor replaced; none where it may be. */
   readonly held?: string | undefined;
+  /** Whether `value` is the opener's own choice, standing in until the first pick replaces it, so no row is yet refused beside it. */
+  readonly standIn?: boolean | undefined;
 }
 
 /** What the repository's menu is handed, whatever opens it: the chip, or the plan's repository crumb. */
@@ -416,6 +418,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const isPicked = (name: string) => picked.some((each) => sameName(each, name));
   const listing = (name: string) => reached?.find((each) => sameName(each.fullName, name));
   const primary = several === undefined || value === null ? undefined : value;
+  // Note that a stand-in is replaced by the first pick, so nothing is refused beside it.
+  const judgedBeside = several?.standIn === true ? undefined : primary;
   // Note that the primary is marked only beside another pick, since a lone pick is simply the task's.
   const rows = repositoryRows(
     recent,
@@ -427,13 +431,13 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     .map((row) => {
       // Once a primary is picked, a row the service would refuse beside it says why before the pick.
       const why =
-        primary === undefined
+        judgedBeside === undefined
           ? undefined
-          : sameName(row.id, primary)
+          : sameName(row.id, judgedBeside)
             ? several?.held
             : isPicked(row.id)
               ? undefined
-              : extraRefusal(listing(row.id), listing(primary), picked.length - 1);
+              : extraRefusal(listing(row.id), listing(judgedBeside), picked.length - 1);
       return why === undefined ? row : { ...row, disabled: why };
     });
   // Note that no repository is a choice of its own where the opener lets one go, so it is not said as a pick still owed.

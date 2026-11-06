@@ -740,7 +740,12 @@ export function NewTaskComposer({
       held={tree && !offersAlso ? REPOSITORY_HELD : undefined}
       several={
         offersAlso
-          ? { also, onToggle: togglePick, held: tree ? REPOSITORY_HELD : undefined }
+          ? {
+              also,
+              onToggle: togglePick,
+              held: tree ? REPOSITORY_HELD : undefined,
+              standIn: !tree && !pickedByHand,
+            }
           : undefined
       }
     />

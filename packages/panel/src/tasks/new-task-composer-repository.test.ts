@@ -334,6 +334,8 @@ test("the first pick replaces the repository the card chose, later ones check be
     assert.fail("the card draws the repository chip");
   act(() => chip.click());
   await settle();
+  // The default stands in, so a row the service would refuse beside it may still replace it.
+  assert.equal(row("tools").getAttribute("aria-disabled"), null);
   act(() => row("web").click());
   await settle();
   act(() => row("api").click());

@@ -305,6 +305,8 @@ export function TokenRepositoryPicker({
   const opener = useRef<HTMLElement | null>(null);
   // Note that a press's check is held here, keyed as no case spells the name, until the service answers it.
   const [pending, setPending] = useState<ReadonlyMap<string, boolean>>(new Map());
+  // Note that each row's latest press is numbered, so an earlier press's answer, landing after a later one, neither clears the later check nor says its refusal.
+  const presses = useRef({ count: 0, latest: new Map<string, number>() });
   const listed = new Map(repositories.listed.map((one) => [one.fullName.toLowerCase(), one]));
   const isOn = (fullName: string) =>
     pending.get(fullName.toLowerCase()) ?? listed.has(fullName.toLowerCase());
@@ -332,14 +334,21 @@ export function TokenRepositoryPicker({
   const toggle = (fullName: string) => {
     const key = fullName.toLowerCase();
     const added = !isOn(fullName);
+    presses.current.count += 1;
+    const press = presses.current.count;
+    presses.current.latest.set(key, press);
+    const latest = () => presses.current.latest.get(key) === press;
     setPending((was) => new Map(was).set(key, added));
     onRefused(undefined);
     repositories.change(fullName, added).then(
       (refusal) => {
+        if (!latest()) return;
         settle(key);
         onRefused(refusal);
       },
-      () => settle(key),
+      () => {
+        if (latest()) settle(key);
+      },
     );
   };
   const close = () => {
