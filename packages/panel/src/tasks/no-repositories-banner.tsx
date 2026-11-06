@@ -41,11 +41,11 @@ import {
  * GitHub removed or suspended the App, or Choose repositories where the App
  * reaches none; a member is told whom to ask to do the same, each owner and
  * admin named by their person chip (`ActorRef`), whose card and page open
- * from it, and offered adding one with their own GitHub token. A press opens Settings on the
- * workspace's GitHub repositories, where all of it is done, but a member's
- * with no token saved, which opens the token's row on Account instead, since
- * the workspace's Add repository stands only once a token is saved
- * (`AddTokenRepository`). Nothing stands until a workspace is chosen, nor
+ * from it, and offered adding one with their own GitHub token. A press opens
+ * Settings on the workspace's GitHub repositories, where all of it is done,
+ * but a member's with no token known to be saved, which opens the token's
+ * row on Account instead, since the workspace's Add repository stands only
+ * once a token is saved (`AddTokenRepository`). Nothing stands until a workspace is chosen, nor
  * while the listing is still read or could not be, which the chip says.
  */
 
@@ -133,9 +133,9 @@ export function NoRepositoriesBanner({
   const { scope } = chooser;
   if (scope === undefined || listed === undefined || listed.repositories.length > 0) return null;
   const state = gitHubState(listed.installed, chooser.connected === true);
-  // A member known to have no token saved saves one first, on Account, since the workspace's Add repository waits on it.
+  // Note that a member with no token known to be saved, its read still out or refused among them, saves one first, on Account, since the workspace's Add repository waits on it.
   const destination: SettingsLink =
-    chooser.manages || token !== null
+    chooser.manages || (token !== undefined && token !== null)
       ? {
           page: SETTINGS_VIEW.WORKSPACE,
           section: SETTINGS_SECTION.GITHUB_REPOSITORIES,
