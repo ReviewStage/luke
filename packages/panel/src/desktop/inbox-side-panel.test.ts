@@ -580,4 +580,9 @@ test("an element of a page beside the Inbox opens its comment in the item's box'
     true,
     "no plain field stands in the editor's place",
   );
+  // The editor mounts once its bundle lands, and draws the words picked as the boxes' quote block.
+  const quote = await vi.waitFor(
+    () => started.querySelector(".composer-quote") ?? assert.fail("the quote stands as a block"),
+  );
+  assert.equal(quote.textContent, "Totals");
 });
