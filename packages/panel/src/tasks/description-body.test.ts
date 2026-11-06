@@ -295,7 +295,8 @@ test("while Descriptions is off the task's title stands with who created it and 
 });
 
 test("a description last edited before its workspace turned Task descriptions back on says it has not been updated since, and one edited after says when", async () => {
-  const before = Date.UTC(2026, 9, 3, 12);
+  // Note that the instant is the local noon, so the day the byline names is Oct 3 in every time zone.
+  const before = new Date(2026, 9, 3, 12).getTime();
   const edit = { actor: DESCRIPTION_ACTOR.DEVELOPER, duringCall: false, by: DEAN };
 
   const stale = await draw(editedAs(edit, before), { descriptionsOnSince: before + 1 });

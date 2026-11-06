@@ -30,7 +30,7 @@ const openAccount = Effect.gen(function* () {
 
 it.layer(getTestDB())("a workspace's experiments", (it) => {
   it.effect(
-    "stand off until turned on, belong to their workspace alone, and keep the last change's author until that account goes",
+    "stand off until turned on, belong to their workspace alone, and keep the last real change's author, through a write that changes nothing, until that account goes",
     () =>
       Effect.gen(function* () {
         const [ada, bob] = [yield* openAccount, yield* openAccount];
@@ -54,6 +54,12 @@ it.layer(getTestDB())("a workspace's experiments", (it) => {
           organizationId: acme,
           experiment: EXPERIMENT.DESCRIPTIONS,
           on: false,
+          by: bob,
+        });
+        yield* setWorkspaceExperiment({
+          organizationId: acme,
+          experiment: EXPERIMENT.PILOT,
+          on: true,
           by: bob,
         });
         const read = {

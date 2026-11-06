@@ -4,7 +4,7 @@ import {
   WORKSPACE_EXPERIMENT_LIST,
   type WorkspaceExperiment,
 } from "@repo/settings";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
@@ -110,6 +110,8 @@ const upsertStanding = SqlSchema.findAll({
         .onConflictDoUpdate({
           target: [workspaceExperiment.organizationId, workspaceExperiment.experiment],
           set: { on: write.on, changedBy: write.by, changedAt: write.now },
+          // A write that leaves it as it stands, a retry or a second press, keeps who turned it so and when.
+          setWhere: ne(workspaceExperiment.on, write.on),
         })
         .returning({ txid: sql<string>`pg_current_xact_id()::text` }),
     ),
@@ -142,7 +144,9 @@ export function workspaceExperimentOn(
 /**
  * The experiment turned on or off for the workspace by the account named,
  * now, answered with the transaction it was written in so a follower can
- * wait for its live read to catch up.
+ * wait for its live read to catch up. Asking for the state it already
+ * stands in writes nothing, so who changed it and when stay the last real
+ * change's, and no transaction is answered.
  */
 export function setWorkspaceExperiment(
   change: WorkspaceExperimentChange,
