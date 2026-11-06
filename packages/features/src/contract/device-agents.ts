@@ -7,7 +7,19 @@
  * sign-in (`enrollOwn`), and calls every other procedure on that secret,
  * `leave` among them, which removes the host from its account.
  * Every procedure names the Mac's device id, in the query of a held read
- * and in the body of every other call. The outputs are the wire schemas
+ * and in the body of every other call.
+ *
+ * Each declares the refusals its handler and caller middleware answer
+ * beyond any procedure's (`packages/service/src/agents/device-agents-procedures.ts`,
+ * `packages/service/src/orpc/base.ts`). A host's every call is refused as
+ * needing an upgrade where its daemon is below the floor
+ * (`auth/device-secret.ts`), the enroll and the pairing's included. A call
+ * on the device secret is refused as not found where it names another
+ * device or one the account no longer holds, and its refused bearer
+ * carries `hostRemoved` where no standing host holds the secret
+ * (`invalid-token`'s fields, which any procedure declares). The enroll is
+ * refused as not found for an id it may not convert, and the pairing's
+ * start is braked per address (`quota-exhausted`). The outputs are the wire schemas
  * flipped, so oRPC's output check encodes the handler's value into the
  * bytes the wire carries (`packages/service/src/orpc/base.ts`).
  */
@@ -40,7 +52,8 @@ import {
   ownDeviceEnrollRequestSchema,
 } from "../host-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+import { HOSTED_API_ERROR } from "../service-wire.js";
+import { bodyCap, declaredProcedure, exactInput, refuses } from "./base.js";
 
 /** A register's, a beat's, a claim's, or a settle's body: a few ids and paths, and room to spare. */
 const SMALL_BODY_BYTES = 4 * 1_024;
@@ -49,70 +62,78 @@ const SMALL_BODY_BYTES = 4 * 1_024;
 const ANSWER_BODY_BYTES =
   Math.ceil((DEVICE_AGENT_BOUNDS.MAX_ANSWER_BYTES * 2 * 4) / 3) + 64 * 1_024;
 
+/** A call on the device secret: refused below the floor, and not found for a device it may not act for or one gone. */
+const deviceProcedure = declaredProcedure.errors(
+  refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.NOT_FOUND),
+);
+
 export const deviceAgentsContract = {
-  startPairing: hostedProcedure
+  startPairing: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.QUOTA_EXHAUSTED))
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_START }))
     .input(exactInput(hostPairingStartRequestSchema))
     .output(EffectSchema.flip(hostPairingStartAnswerSchema)),
-  pollPairing: hostedProcedure
+  pollPairing: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.HOST_PAIRING_POLL }))
     .output(EffectSchema.flip(hostPairingPollAnswerSchema)),
-  enrollOwn: hostedProcedure
+  enrollOwn: declaredProcedure
+    .errors(refuses(HOSTED_API_ERROR.HOST_UPGRADE_NEEDED, HOSTED_API_ERROR.NOT_FOUND))
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_ENROLL_OWN }))
     .input(exactInput(ownDeviceEnrollRequestSchema))
     .output(EffectSchema.flip(hostEnrollAnswerSchema)),
-  leave: hostedProcedure
+  leave: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LEAVE }))
     .input(exactInput(deviceAgentDeviceRequestSchema))
     .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
-  register: hostedProcedure
+  register: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_DEVICES }))
     .input(exactInput(deviceAgentRegisterRequestSchema))
     .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
-  beat: hostedProcedure
+  beat: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_PRESENCE }))
     .input(exactInput(deviceAgentBeatRequestSchema))
     .output(EffectSchema.flip(deviceAgentBeatAnswerSchema)),
-  liveAgents: hostedProcedure
+  liveAgents: deviceProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LIVE_AGENTS }))
     .input(deviceAgentDeviceRequestSchema)
     .output(EffectSchema.flip(deviceAgentLiveAgentsAnswerSchema)),
-  lines: hostedProcedure
+  lines: deviceProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES }))
     .input(deviceAgentDeviceRequestSchema)
     .output(EffectSchema.flip(deviceAgentLinesAnswerSchema)),
-  claimLine: hostedProcedure
+  claimLine: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_CLAIM }))
     .input(exactInput(deviceAgentClaimRequestSchema))
     .output(EffectSchema.flip(deviceAgentLineClaimAnswerSchema)),
-  lineStep: hostedProcedure
+  lineStep: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINE_STEP }))
     .input(exactInput(deviceAgentStepRequestSchema))
     .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
-  settleLine: hostedProcedure
+  settleLine: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_LINES }))
     .input(exactInput(deviceAgentSettleRequestSchema))
     .output(EffectSchema.flip(deviceAgentDoneAnswerSchema)),
-  requests: hostedProcedure
+  requests: deviceProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS }))
     .input(deviceAgentDeviceRequestSchema)
     .output(EffectSchema.flip(deviceAgentRequestsAnswerSchema)),
-  claimRequest: hostedProcedure
+  claimRequest: deviceProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUEST_CLAIM }),
     )
     .input(exactInput(deviceAgentClaimRequestSchema))
     .output(EffectSchema.flip(deviceAgentRequestClaimAnswerSchema)),
-  answerRequest: hostedProcedure
+  answerRequest: deviceProcedure
     .meta(bodyCap(ANSWER_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.DEVICE_AGENT_REQUESTS }))
     .input(exactInput(deviceAgentAnswerRequestSchema))

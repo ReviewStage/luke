@@ -1,4 +1,4 @@
-import { type HostedDeviceAgentClient, OWN_ENROLL_OUTCOME } from "@repo/features";
+import { type HostedDeviceAgentClient, OWN_ENROLL_FAILURE } from "@repo/features";
 import { AGENT_CALL_FAILURE, thisMacHostSetParamsSchema } from "@repo/features/agent-view";
 import { HOST_RELEASE } from "@repo/features/host-release";
 import { HOST_WIRE } from "@repo/features/host-wire";
@@ -217,8 +217,10 @@ export function composeThisMacHost(
               HttpClient.mapRequest(HttpClientRequest.setHeader(HOST_WIRE.VERSION_HEADER, version)),
             ),
           );
-        if (outcome.outcome === OWN_ENROLL_OUTCOME.NOT_FOUND) return false;
-        if (outcome.outcome !== OWN_ENROLL_OUTCOME.ENROLLED) return yield* Effect.fail("enroll it");
+        if ("failure" in outcome) {
+          if (outcome.failure === OWN_ENROLL_FAILURE.NOT_FOUND) return false;
+          return yield* Effect.fail("enroll it");
+        }
         yield* writeHostDevice(host.stateRoot, {
           deviceId,
           deviceSecret: outcome.deviceSecret,
