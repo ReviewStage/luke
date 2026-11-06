@@ -31,9 +31,10 @@ import {
 } from "@repo/ui";
 import { useSettingWrite } from "@repo/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useAgentDefault, useOfferedModels } from "../account-choices.js";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { refusalShown, unreadShown } from "../failure-report.js";
 import { HarnessMark } from "../harness-marks.js";
 import { OPEN_SETTINGS_LABEL } from "../open-settings.js";
@@ -391,7 +392,9 @@ function AgentsSection({
   /** How each provider the account holds a key of its own for last answered it, as the API keys group holds them; nothing until they are read. */
   ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus> | undefined;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendAgentsDefaultWrite } = useMutation(
+    actMutation(ACT_KIND.AGENTS_DEFAULT_WRITE),
+  );
   const drawn = useAgentDefault();
   const offered = useOfferedModels(signedIn);
   const models = offered.rows?.models;
@@ -406,12 +409,12 @@ function AgentsSection({
 
   const write = useCallback(
     (next: ModelChoice): Promise<ActionResult> =>
-      act(ACT_KIND.AGENTS_DEFAULT_WRITE, next)
+      sendAgentsDefaultWrite(next)
         .catch(() => undefined)
         .then((answer) =>
           answer === undefined || "failure" in answer ? WRITE_REFUSED : WRITE_ACCEPTED,
         ),
-    [act],
+    [sendAgentsDefaultWrite],
   );
 
   return (

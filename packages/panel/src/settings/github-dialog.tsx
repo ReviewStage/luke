@@ -38,8 +38,9 @@ import {
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { type ReactNode, useRef, useState } from "react";
-import { useAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
@@ -257,12 +258,15 @@ export function GitHubTokenDialog({
   onClose: () => void;
   onExited: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendGithubTokenSave } = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
+  const { mutateAsync: sendGithubTokenRemove } = useMutation(
+    actMutation(ACT_KIND.GITHUB_TOKEN_REMOVE),
+  );
   const openLink = useOpenLink();
   const field = useRef<HTMLInputElement | null>(null);
 
   const save = (pasted: string): Promise<ReactNode> =>
-    act(ACT_KIND.GITHUB_TOKEN_SAVE, { token: pasted })
+    sendGithubTokenSave({ token: pasted })
       .catch(() => undefined)
       .then((answer) => {
         if (answer === undefined || "failure" in answer) return LINE.SAVE_FAILED;
@@ -270,7 +274,7 @@ export function GitHubTokenDialog({
       });
 
   const remove = (): Promise<ActionResult> =>
-    act(ACT_KIND.GITHUB_TOKEN_REMOVE)
+    sendGithubTokenRemove()
       .catch(() => undefined)
       .then((answer): ActionResult => {
         if (answer === undefined || "failure" in answer) {

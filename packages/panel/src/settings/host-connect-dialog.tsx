@@ -28,10 +28,11 @@ import {
   Text,
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
-import { queryOptions, type UseQueryResult, useQuery } from "@tanstack/react-query";
+import { queryOptions, type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useState } from "react";
-import { askAct, useAct } from "../act.js";
+import { askAct } from "../act.js";
+import { actMutation } from "../act-mutations.js";
 import { DEVICE_PLATFORM_NAME } from "../device-platform.js";
 import { unreadShown } from "../failure-report.js";
 import { QUERY_ROOT } from "../query-keys.js";
@@ -342,7 +343,12 @@ export function HostConnectDialog({
   code: string;
   onClose: () => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { mutateAsync: sendHostsPairingApprove } = useMutation(
+    actMutation(ACT_KIND.HOSTS_PAIRING_APPROVE),
+  );
+  const { mutateAsync: sendHostsPairingDeny } = useMutation(
+    actMutation(ACT_KIND.HOSTS_PAIRING_DENY),
+  );
   // The dialog opening reads the pairing the code names, so the member sees whose box it is before anything is pressed.
   const pairing = useQuery(hostPairingQueryOptions(code));
   // Note that a press is the code's own, so a dialog handed another code reads that one afresh.
@@ -357,8 +363,8 @@ export function HostConnectDialog({
       setAfterPress({ code, standing: { kind: STANDING.ASKING, box, sending: pressed } });
       const sent =
         pressed === ANSWER.CONNECT
-          ? act(ACT_KIND.HOSTS_PAIRING_APPROVE, { code })
-          : act(ACT_KIND.HOSTS_PAIRING_DENY, { code });
+          ? sendHostsPairingApprove({ code })
+          : sendHostsPairingDeny({ code });
       sent
         .catch(() => UNANSWERED)
         .then((answered) => {
@@ -371,7 +377,7 @@ export function HostConnectDialog({
           });
         });
     },
-    [act, code],
+    [sendHostsPairingApprove, sendHostsPairingDeny, code],
   );
 
   switch (standing.kind) {
