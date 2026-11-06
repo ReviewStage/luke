@@ -22,6 +22,7 @@ import {
 } from "@repo/ui";
 import { ReplayMask, ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
+import { useMutation } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useState } from "react";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -167,9 +168,10 @@ export function useAgentArchive(
     surface: FAILURE_SURFACE.AGENT_ARCHIVE,
     about: { agentId: agent.id },
   });
+  const archiving = useMutation(agents.archiveAgent);
   const confirm = useConfirmDialog(
     { subject: true, surfaceOpen: shown },
-    () => agents.onArchive(agent.id, true, { asked: true }).then(heard),
+    () => archiving.mutateAsync({ agentId: agent.id, archived: true, asked: true }).then(heard),
     confirmFailure(FAILURE_SURFACE.AGENT_ARCHIVE, { agentId: agent.id }),
   );
   const [reading, setReading] = useState(false);

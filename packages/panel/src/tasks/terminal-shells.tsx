@@ -216,9 +216,10 @@ function ShellRow({
   shown: boolean;
   /** Whether the tab the list stands in is on screen, which the end's question goes with. */
   surfaceOpen: boolean;
-  session: Pick<TerminalSession, "onChoose" | "rename" | "onKill">;
+  session: Pick<TerminalSession, "onChoose" | "rename" | "kill">;
 }): React.JSX.Element {
   const renameMutation = useMutation(session.rename.options);
+  const killing = useMutation(session.kill);
   const rename = useInlineRename(shell.id, renameWrite(renameMutation, session.rename));
   const renaming = rename.editing;
   const coarse = useCoarsePointer();
@@ -226,7 +227,7 @@ function ShellRow({
   // Ending a shell ends what runs in it, which nothing brings back, so it asks first.
   const ending = useConfirmDialog(
     { subject: true, surfaceOpen },
-    () => session.onKill(shell.id),
+    () => killing.mutateAsync(shell.id),
     confirmFailure(FAILURE_SURFACE.TERMINAL_STOP),
   );
   return (

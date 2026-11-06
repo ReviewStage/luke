@@ -228,6 +228,7 @@ export interface TaskRowTab
     | "taskSections"
     | "renameTask"
     | "onDeleteTask"
+    | "deleteTask"
     | "onSettleTasks"
     | "onMarkTask"
     | "onSetTaskStanding"
@@ -237,6 +238,7 @@ export interface TaskRowTab
     | "onRemoveTaskParent"
     | "onChangeRepository"
     | "onMoveTask"
+    | "moveTask"
     | "onWriteSections"
   > {
   /** The tab's tasks as they stand when read. */
@@ -263,6 +265,7 @@ export function taskRowTab(
     taskSections: tasks.taskSections,
     renameTask: tasks.renameTask,
     onDeleteTask: tasks.onDeleteTask,
+    deleteTask: tasks.deleteTask,
     onSettleTasks: tasks.onSettleTasks,
     onMarkTask: tasks.onMarkTask,
     onSetTaskStanding: tasks.onSetTaskStanding,
@@ -272,6 +275,7 @@ export function taskRowTab(
     onRemoveTaskParent: tasks.onRemoveTaskParent,
     onChangeRepository: tasks.onChangeRepository,
     onMoveTask: tasks.onMoveTask,
+    moveTask: tasks.moveTask,
     onWriteSections: tasks.onWriteSections,
     tasksNow,
     onCopyPlan: tasks.copy.onPress,
@@ -830,9 +834,10 @@ export function useTaskMenuItems(
     surface: FAILURE_SURFACE.TASK_DELETE,
     about: { taskId },
   });
+  const deleting = useMutation(tasks.deleteTask);
   const deletion = useConfirmDialog(
     { subject: task !== undefined, surfaceOpen: tasks.shown },
-    () => tasks.onDeleteTask(taskId).then(heard),
+    () => deleting.mutateAsync(taskId).then(heard),
     confirmFailure(FAILURE_SURFACE.TASK_DELETE, { taskId }),
   );
   // Mark done as the chord runs it: on a task not already done, and nothing otherwise.

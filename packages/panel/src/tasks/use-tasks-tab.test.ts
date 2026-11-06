@@ -2710,9 +2710,10 @@ test("a workspace chosen while a move is out, even the first chosen after the wo
   );
 
   const moved = tab.control().onMoveTask("billing", ACME.id);
+  // Note that the move is sent a step after the press, as its mutation sends it, and the workspaces land and one is chosen while it is out.
+  await vi.waitFor(() => assert.equal(answers.length, 1));
   tab.stand({ tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));
-  await vi.waitFor(() => assert.equal(answers.length, 1));
   answers[0]?.({ workspaceId: ACME.id });
   await settle();
 

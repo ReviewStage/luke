@@ -38,8 +38,9 @@ import {
 } from "@repo/ui";
 import { ReplayUnmask } from "@repo/ui/session-replay-marks";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@repo/wire";
-import { useMutation } from "@tanstack/react-query";
+import { mutationOptions, useMutation } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { sendAct } from "../act.js";
 import { actMutation } from "../act-mutations.js";
 import { confirmFailure, refusedShown } from "../failure-report.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
@@ -143,17 +144,26 @@ export function TokenFacts({ token }: { token: GitHubTokenSummary }): React.JSX.
   );
 }
 
+/** The saved token's removal, as Disconnect's question holds its own mutation over it, answered as that question reads it. */
+const TOKEN_REMOVE_MUTATION = mutationOptions({
+  mutationKey: [ACT_KIND.GITHUB_TOKEN_REMOVE],
+  mutationFn: (): Promise<ActionResult> =>
+    sendAct(ACT_KIND.GITHUB_TOKEN_REMOVE, undefined)
+      .catch(() => undefined)
+      .then((answer): ActionResult => {
+        if (answer === undefined || "failure" in answer) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: LINE.REMOVE_FAILED };
+        }
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      }),
+});
+
 /** A saved token with Disconnect, which asks first, as every connection in Settings ends. */
-function SavedToken({
-  token,
-  onRemove,
-}: {
-  token: GitHubTokenSummary;
-  onRemove: () => Promise<ActionResult>;
-}): React.JSX.Element {
+function SavedToken({ token }: { token: GitHubTokenSummary }): React.JSX.Element {
+  const removing = useMutation(TOKEN_REMOVE_MUTATION);
   const removal = useConfirmDialog(
     { subject: true, surfaceOpen: true },
-    onRemove,
+    () => removing.mutateAsync(),
     confirmFailure(FAILURE_SURFACE.GITHUB_TOKEN_REMOVE),
   );
   return (
@@ -259,9 +269,6 @@ export function GitHubTokenDialog({
   onExited: () => void;
 }): React.JSX.Element {
   const { mutateAsync: sendGithubTokenSave } = useMutation(actMutation(ACT_KIND.GITHUB_TOKEN_SAVE));
-  const { mutateAsync: sendGithubTokenRemove } = useMutation(
-    actMutation(ACT_KIND.GITHUB_TOKEN_REMOVE),
-  );
   const openLink = useOpenLink();
   const field = useRef<HTMLInputElement | null>(null);
   // Note that a token leaving while the card stands puts focus in the form it brings back, since its read can land after Disconnect's question handed focus back.
@@ -278,16 +285,6 @@ export function GitHubTokenDialog({
       .then((answer) => {
         if (answer === undefined || "failure" in answer) return LINE.SAVE_FAILED;
         return answer.rejected === undefined ? undefined : rejectionLabel(answer.rejected);
-      });
-
-  const remove = (): Promise<ActionResult> =>
-    sendGithubTokenRemove()
-      .catch(() => undefined)
-      .then((answer): ActionResult => {
-        if (answer === undefined || "failure" in answer) {
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: LINE.REMOVE_FAILED };
-        }
-        return { status: ACTION_RESULT_STATUS.ACCEPTED };
       });
 
   return (
@@ -315,11 +312,7 @@ export function GitHubTokenDialog({
       actions={<DialogActions onDone={onClose} />}
     >
       <div className={NO_CAPTURE}>
-        {token === null ? (
-          <TokenForm field={field} onSave={save} />
-        ) : (
-          <SavedToken token={token} onRemove={remove} />
-        )}
+        {token === null ? <TokenForm field={field} onSave={save} /> : <SavedToken token={token} />}
       </div>
     </Dialog>
   );

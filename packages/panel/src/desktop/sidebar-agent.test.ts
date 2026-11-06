@@ -22,6 +22,7 @@ import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js"
 import {
   AGENT_RENAME_SHAPE,
   type AgentsControl,
+  agentDeleteMutation,
   agentRenameMutation,
 } from "../tasks/use-agents.js";
 import {
@@ -145,10 +146,10 @@ function mount(
         return Promise.resolve(answer);
       }),
     },
-    onDelete: (agentId) => {
+    deleteAgent: agentDeleteMutation((agentId) => {
       deletes.push(agentId);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+      return Promise.resolve({ deleted: true } as const);
+    }),
   });
   const container = document.createElement("div");
   document.body.append(container);
