@@ -63,7 +63,13 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import { fitReplay } from "./replay-summary.js";
+import {
+  type FittedSteps,
+  fitReplay,
+  replayBudgetBytes,
+  replayTokens,
+  withinWindow,
+} from "./replay-summary.js";
 import type { SnapshotOutcome } from "./snapshot.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";
@@ -1185,12 +1191,23 @@ function restartPreamble(kept: number, total: number): string {
   );
 }
 
+/** What a replay of an agent's own steps is fitted to: its model's window, the instructions told beside it, and the bytes the rest of the first message it rides in comes to. */
+export interface RestartFit {
+  readonly windowTokens: number;
+  readonly instructionsTokens: number;
+  readonly besideBytes: number;
+}
+
 /**
  * What an agent is handed where its harness's session is opened afresh on
  * its own conversation, its checkout as it left it, as the replay's block
  * ahead of its next turn's words: its own steps, those its own replay carried
- * ahead of them, and its note, the newest that fit the bound given, summarized
- * nowhere, since no summary model is at hand where its runner launches.
+ * ahead of them, and its note, the newest that fit, summarized nowhere, since
+ * no summary model is at hand where its runner launches. They are fitted to
+ * the window less the instructions and the rest of the first message (the
+ * turn's words, the developer's, and their files), then told again against
+ * the window once the replay is written, as a Start's replay is
+ * (`withinWindow`).
  * Nothing where it took no step of its own yet, or where its rows cannot be
  * read, which then opens the session on its next turn's words alone. Note
  * that a line in no turn yet, as the one being sent and any waiting for the
@@ -1200,7 +1217,7 @@ function restartPreamble(kept: number, total: number): string {
  */
 export const restartReplayOf = (
   agent: Agent,
-  budgetBytes: number,
+  fit: RestartFit,
 ): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {
     const read = yield* recordsOf(agent, undefined);
@@ -1220,14 +1237,27 @@ export const restartReplayOf = (
     const mine = handed?.note === undefined ? own : [handed.note, ...own];
     const steps = [...(handed?.carried?.steps ?? []), ...mine];
     const totalSteps = (handed?.carried?.totalSteps ?? 0) + mine.length;
-    const fitted = yield* fitReplay(steps, handed?.carried?.summary, budgetBytes, () =>
-      Effect.succeed(Option.none()),
+    const { windowTokens, instructionsTokens, besideBytes } = fit;
+    const fitted = yield* fitReplay(
+      steps,
+      handed?.carried?.summary,
+      replayBudgetBytes(windowTokens, instructionsTokens, besideBytes),
+      () => Effect.succeed(Option.none()),
     );
-    return replayText({
-      agentId: agent.id,
-      preamble: restartPreamble(fitted.kept.length, totalSteps),
-      ...(fitted.summary === undefined ? undefined : { summary: fitted.summary }),
-      steps: fitted.kept,
-      totalSteps,
-    });
+    const textOf = (held: FittedSteps) =>
+      replayText({
+        agentId: agent.id,
+        preamble: restartPreamble(held.kept.length, totalSteps),
+        ...(held.summary === undefined ? undefined : { summary: held.summary }),
+        steps: held.kept,
+        totalSteps,
+      });
+    const held = withinWindow(
+      fitted,
+      (each) =>
+        instructionsTokens +
+        replayTokens(new TextEncoder().encode(textOf(each)).byteLength + besideBytes),
+      windowTokens,
+    );
+    return textOf(held);
   });
