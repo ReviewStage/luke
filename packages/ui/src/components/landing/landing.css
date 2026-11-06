@@ -252,7 +252,12 @@
     color: var(--ui-color-text);
   }
 
+  /* Note that an ask arriving fades in over as long as the rows under it
+     take to make room, rather than the quick fade a list's row arrives on,
+     so it never stands over a row still on its way out of its place. */
   .ui-landing-hero-inbox {
+    --ui-duration-quick: var(--ui-duration-shape);
+
     display: grid;
     grid-template-rows: 50px minmax(0, 1fr);
     padding: 0 8px;

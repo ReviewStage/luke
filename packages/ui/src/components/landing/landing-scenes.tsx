@@ -108,7 +108,7 @@ import { MINUTE, STORY_NOW, still, useStory } from "./landing-story.js";
  */
 
 /** How long each scene holds a step, in milliseconds. */
-const BEAT = { HERO: 2400, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
+const BEAT = { HERO: 800, INBOX: 1900, AGENTS: 1800, RUNS: 1700, KEYS: 1500 } as const;
 
 /** The scenes the landing plays, by the feature each shows. */
 export const LANDING_SCENE = {
@@ -1236,17 +1236,24 @@ const HERO_LISTED = 6;
 const HERO_SPACING = 9;
 
 /**
- * The hero's Inbox at `step`: the newest ask arriving unread on top, the one
- * before it opened, and every older one answered, each carried down by the
- * next until it runs off the panel's foot. An ask's place in the story is
- * its age alone, so the last step leads into the first with nothing reset.
+ * The hero's Inbox at `step`, two steps to each ask's arrival: on the first
+ * the newest ask arrives unread on top and the rest make room for it as they
+ * stood, and on the second they settle, the one before it read and every
+ * older one answered, each carried down by the next until it runs off the
+ * panel's foot. Note that an arrival changes nothing but the list's order,
+ * because a row that glides as its words change reads as a jolt. An ask's
+ * place in the story is its age alone, so the last step leads into the first
+ * with nothing reset.
  */
 function heroItems(step: number): readonly InboxItem[] {
   const count = HERO_ASKS.length;
+  const arrival = Math.floor(step / 2);
+  const settled = step % 2 === 1;
   return Array.from({ length: HERO_LISTED }, (_, age) => {
-    const ask = HERO_ASKS[(step - age + count) % count];
+    const ask = HERO_ASKS[(arrival - age + count) % count];
     if (ask === undefined) throw new Error("heroItems: an ask out of range");
-    const answered = age >= 2;
+    const shown = settled ? age : Math.max(age - 1, 0);
+    const answered = shown >= 2;
     return {
       id: ask.id,
       task: ask.task,
@@ -1254,16 +1261,15 @@ function heroItems(step: number): readonly InboxItem[] {
       title: ask.title,
       line: answered ? ask.answer : ask.open,
       kind: answered ? LINE.SETTLED : ask.kind,
-      ago: 1 + age * HERO_SPACING,
-      unread: age === 0,
-      current: age === 1,
+      ago: 1 + shown * HERO_SPACING,
+      unread: shown === 0,
     };
   });
 }
 
 /** The hero's moving screen: the Inbox's column alone, agents' asks arriving on top as older ones are answered and carried off its foot. */
 export function LandingHeroScene(): React.JSX.Element {
-  const [ref, step] = useStory(HERO_ASKS.length, BEAT.HERO);
+  const [ref, step] = useStory(HERO_ASKS.length * 2, BEAT.HERO);
   const rows = useRef<HTMLDivElement>(null);
   return (
     <div ref={ref} className="ui-landing-scene">
