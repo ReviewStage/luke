@@ -474,7 +474,9 @@ function deviceMachineOver(
 
     // A local agent's place never stops, so it runs where it stands, and a runner that ended is launched again.
     resume: (found) =>
-      found.running === undefined ? Effect.fail(unavailable()) : Effect.succeed(found.running),
+      found.running === undefined
+        ? Effect.fail(unavailable())
+        : Effect.succeed({ place: found.running, created: false }),
 
     stop: () => Effect.void,
 
