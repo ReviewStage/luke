@@ -96,7 +96,7 @@ import {
   type PullRequestPartAnswers,
 } from "../testing/app-state.js";
 import { installEditorLayout } from "../testing/composer.js";
-import { onRegistry } from "../testing/copy-feedback.js";
+import { onRegistry, testQueryClientNow } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { peopleRead, withPeopleRead } from "../testing/people-read.js";
@@ -3024,27 +3024,34 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     await vi.waitFor(() => assert.deepEqual(mergeShown(tab), expected, name));
     act(() => root?.unmount());
     root = undefined;
+    // Note that each case is a window of its own, so none reads the last one's pull request while its own read lands.
+    testQueryClientNow().clear();
   }
 });
 
 test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
-  const chevron =
-    first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
-    assert.fail("the chevron chooses the method");
+  // Note that the merge control stands once the pull request's merge read reaches its query.
+  const chevron = await vi.waitFor(
+    () =>
+      first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
+      assert.fail("the chevron chooses the method"),
+  );
   act(() => chevron.click());
   assert.deepEqual(menuItems(), [
     { label: "Squash and merge", checked: "true" },
     { label: "Rebase and merge", checked: "false" },
   ]);
   await pressItem("Rebase and merge");
-  assert.equal(mergeShown(first)?.press, "Rebase and merge");
+  await vi.waitFor(() => assert.equal(mergeShown(first)?.press, "Rebase and merge"));
   assert.deepEqual(changes, [], "choosing a method merges nothing");
   act(() => root?.unmount());
   root = undefined;
 
   const again = await draw(merging(MERGE_STATE.CLEAN));
-  assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept");
+  await vi.waitFor(() =>
+    assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept"),
+  );
   await pressBox(again, "Rebase and merge");
   assert.equal(
     document.querySelector('[role="dialog"], [role="alertdialog"]') === null,
