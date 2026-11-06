@@ -4,7 +4,6 @@ import {
   type GitHubRepositoriesAnswer,
   type GitHubRepository,
 } from "@repo/features/github-repositories-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { countWords, readFailedWords, readingWords, TERM } from "@repo/features/words";
 import type { WorkspaceGithubInstallation } from "@repo/features/workspace-wire";
@@ -22,12 +21,17 @@ import {
 } from "@repo/ui";
 import { githubAccountPictureUrl } from "@repo/ui/tasks-model";
 import type { VirtualRowPlace } from "@repo/ui/virtual-rows";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import type { MenuAction } from "../desktop/action-menu.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { unreadShown } from "../failure-report.js";
+import {
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+} from "../live-reads.js";
 import { useAnnounceShown } from "../use-announce-shown.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -211,9 +215,10 @@ function ListedAccountRows({
   workspaceId: string;
   connections: readonly ShownConnection[];
 }): React.JSX.Element {
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, workspaceId);
-  const answer = list.rows;
-  const failed = answer === undefined && list.status === HOST_READ_STATUS.FAILED;
+  const list = useQuery(repositoryListsQuery(workspaceId));
+  const retry = useMutation(repositoryListsRetryMutation());
+  const answer = list.data;
+  const failed = answer === undefined && list.isError;
   const reading = answer === undefined && !failed;
   useAnnounceShown(ANNOUNCE.POLITE, reading ? WORDS.READING : "");
   const byOwner = answer === undefined ? undefined : repositoriesByOwner(answer.repositories);
@@ -251,7 +256,7 @@ function ListedAccountRows({
         <SettingsLine>
           <ErrorState
             failure={unreadShown(FAILURE_SURFACE.WORKSPACE_REPOSITORIES_READ)}
-            onRetry={list.retry}
+            onRetry={() => retry.mutate(repositoryScope(workspaceId))}
           >
             {WORDS.NOT_READ}
           </ErrorState>

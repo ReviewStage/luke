@@ -1,7 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@repo/credentials/snapshot";
 import type { AgentSummary } from "@repo/features/agent-wire";
 import { LINK_PLACE, linkOf } from "@repo/features/link-grammar";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { sectionAnchors } from "@repo/features/mention-link";
 import { planSections } from "@repo/features/plan-document";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
@@ -54,7 +53,7 @@ import {
   VirtualRows,
   type VirtualRowsHandle,
 } from "@repo/ui/virtual-rows";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { type RefObject, useEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -64,6 +63,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import { copyLinkItem, useChordLinks } from "../copy-link-item.js";
 import { unreadShown } from "../failure-report.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { workspaceMembersQuery } from "../live-reads.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { centerWithin } from "../scroll-within.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -96,7 +96,6 @@ import {
   type VersionRestore,
   VersionView,
 } from "../tasks/version-view.js";
-import { useHostRead } from "../use-host-read.js";
 import { type MenuAction, rowMenu } from "./action-menu.js";
 import { backPlaceOf } from "./back-place.js";
 import { HistoryButtons } from "./desktop-sidebar.js";
@@ -794,7 +793,7 @@ export function DesktopVersionHistory({
   });
   const { opened } = versions.spot ?? {};
   const edge = useListEdge(sidebar);
-  const people = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, subject.workspace?.id).rows;
+  const people = useQuery(workspaceMembersQuery(subject.workspace?.id)).data;
   // A version of a plan has a link of its own, its plan's under its revision; another history's has none.
   const copy = useCopyToast();
   const chord = useChordLinks();

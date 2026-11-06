@@ -19,13 +19,13 @@ import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { tabCard } from "../desktop/tab-card.js";
-import { MemberDirectory } from "../member-directory.js";
 import { TAB_KIND } from "../tasks/tab-look.js";
 import { answeringChanges, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handMembers } from "../testing/app-state.js";
 import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
+import { peopleRead, withPeopleRead } from "../testing/people-read.js";
 import { agentsControl } from "../testing/tasks-control.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { useChangesPeople } from "./changes-people.js";
@@ -114,17 +114,14 @@ async function draw(element: ReactElement): Promise<HTMLElement> {
     root?.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(MemberDirectory, {
-          workspace: WORKSPACE,
-          readerId: "user-dana",
-          children: element,
-        }),
+        withPeopleRead({ workspace: WORKSPACE, readerId: "user-dana" }, element),
       ),
     ),
   );
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });
+  await peopleRead();
   return container;
 }
 
@@ -221,6 +218,8 @@ test("a pull request's card says who opened it and lists its reviewers by where 
 
 test("who opened the pull request is named alone, whoever the agent wrote as", async () => {
   const opener = async (people: AgentChangesPeople) => {
+    // Note that each draw's window holds the members anew, so the host lays them for it.
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const drawn = await draw(card(people));
     const row = drawn.querySelector(".ui-hover-card-row");
     const named = [
@@ -261,6 +260,7 @@ test("a pull request's tab card says who opened it and its reviewers once its ta
 test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
   const names = async (readChanges: () => Promise<AgentChangesAnswerView>) => {
     fakeActPort(answeringChanges(readChanges));
+    handMembers(() => ({ rows: { members: [CHARLES] } }));
     const tab = await draw(
       createElement(ChangesTabReading, {
         agentId: AGENT.id,

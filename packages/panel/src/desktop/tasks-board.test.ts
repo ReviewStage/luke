@@ -611,6 +611,15 @@ test("in a narrow room grouped by assignee, a card keeps its Assignee chip, whic
   );
 
   act(() => chipOf(board, "t-40", "Assignee").click());
+  // Note that the members are offered once their read reaches its query.
+  await vi.waitFor(() =>
+    assert.equal(
+      [...document.querySelectorAll(".ui-menu-item-label")].some(
+        (label) => label.textContent === "Charles Pan",
+      ),
+      true,
+    ),
+  );
   pick("Charles Pan");
 
   assert.deepEqual(sent, [["t-40", { assigneeId: CHARLES }]]);
@@ -620,9 +629,11 @@ test("a card's Assignee chip drops No assignee and the members, the reader first
   const board = await mountBoard([charles("t-39"), ...TASKS.filter((each) => each.id !== "t-39")]);
 
   act(() => chipOf(board, "t-40", "Assignee").click());
-  assert.deepEqual(
-    [...document.querySelectorAll(".ui-menu-item-label")].map((label) => label.textContent),
-    ["No assignee", "Dean Stratakos", "Charles Pan"],
+  await vi.waitFor(() =>
+    assert.deepEqual(
+      [...document.querySelectorAll(".ui-menu-item-label")].map((label) => label.textContent),
+      ["No assignee", "Dean Stratakos", "Charles Pan"],
+    ),
   );
   pick("Charles Pan");
   act(() => chipOf(board, "t-39", "Assignee").click());

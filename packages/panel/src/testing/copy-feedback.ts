@@ -159,3 +159,14 @@ export async function settleQueries(between?: () => Promise<void>): Promise<void
     await between?.();
   }
 }
+
+/**
+ * Starts the test's Query client afresh partway through a test, as each
+ * test's own starts: for a case that draws several worlds in turn, each of
+ * which must read only the reads its own world laid, never one the last
+ * world's surface left cached.
+ */
+export function startQueriesAfresh(): void {
+  testQueryClient.clear();
+  testQueryClient = freshQueryClient();
+}

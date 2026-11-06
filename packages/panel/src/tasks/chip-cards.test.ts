@@ -712,6 +712,10 @@ test("an Inbox item's chip whose feed could not be read keeps the card main's br
 
 test("a member's chip hangs their card", async () => {
   const container = await drawn(`Ask [Sam](${HOME}/person/${SAM}).`);
+  // Note that the chip names the member once the workspace's members reach their query.
+  await vi.waitFor(() =>
+    assert.equal(chipsOf(container)[0]?.textContent?.includes("Sam Okafor"), true),
+  );
 
   const member = await cardOf(chipsOf(container)[0]);
 

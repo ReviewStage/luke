@@ -1,11 +1,11 @@
 import { ACCOUNT_STATUS } from "@repo/credentials/snapshot";
-import { LIVE_READ } from "@repo/features/live-wire";
 import type { TaskSummary } from "@repo/features/task-wire";
 import type { FormerMember, Workspace, WorkspaceMember } from "@repo/features/workspace-wire";
 import { type Actor, accountActor, creatorActor, personActor } from "@repo/ui/actor-model";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createContext, type ReactNode, useCallback, useContext, useMemo } from "react";
+import { workspaceMembersQuery, workspaceMembersRetryMutation } from "./live-reads.js";
 import { APP_SLICE, useAppSlice } from "./use-app-state.js";
-import { HOST_READ_STATUS, useHostRead } from "./use-host-read.js";
 
 /**
  * member-directory.tsx -- the members of the workspace the open task lives in, read once for everything in the task that names a person.
@@ -65,12 +65,17 @@ export function MemberDirectory({
   children: ReactNode;
 }): React.JSX.Element {
   const workspaceId = workspace?.id;
-  const { rows, status, retry } = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId);
+  const read = useQuery(workspaceMembersQuery(workspaceId));
+  const { mutate } = useMutation(workspaceMembersRetryMutation());
+  const retry = useCallback(() => {
+    if (workspaceId !== undefined) mutate({ workspaceId });
+  }, [mutate, workspaceId]);
+  const rows = read.data;
   const members = rows?.members;
   // Note that who left stands unread as long as the members do, and as nobody once a read names nobody.
   const former = rows === undefined ? undefined : (rows.former ?? NOBODY_LEFT);
-  const reading = workspaceId !== undefined && status === HOST_READ_STATUS.LOADING;
-  const refused = workspaceId !== undefined && status === HOST_READ_STATUS.FAILED;
+  const reading = workspaceId !== undefined && rows === undefined && !read.isError;
+  const refused = workspaceId !== undefined && read.isError;
   // Note that the directory is the same across draws while none of it moves, because every
   // face and name inside it is drawn again for a new one.
   const memberCount = workspace?.memberCount;

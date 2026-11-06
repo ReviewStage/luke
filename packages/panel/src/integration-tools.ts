@@ -2,11 +2,13 @@ import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationToolsView,
 } from "@repo/features/integration-view";
-import { integrationConnectionOf } from "@repo/features/integration-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
-import { useCallback, useMemo } from "react";
-import { useSteadyDoors } from "./steady-door.js";
-import { HOST_READ_STATUS, type IntegrationServer, useHostReads } from "./use-host-read.js";
+import { useMutation, useQueries } from "@tanstack/react-query";
+import { useCallback } from "react";
+import {
+  integrationServerOf,
+  integrationToolsQuery,
+  integrationToolsRetryMutation,
+} from "./live-reads.js";
 
 /**
  * integration-tools.ts -- what each connected integration's server answered when asked for its tools, held for as long as a surface that draws it is drawn.
@@ -36,18 +38,6 @@ export interface IntegrationToolReads {
   readonly retry: (server: string) => void;
 }
 
-/** The server a connection's name stands for, as its read is held; none for a name this build cannot read. */
-function serverOf(name: string): IntegrationServer | undefined {
-  const provider = integrationConnectionOf(name)?.provider;
-  if (provider === undefined) return undefined;
-  return name === provider ? { provider } : { provider, connection: name };
-}
-
-/** The name a server's read stands under, its account's where it names one, else its provider's. */
-function nameOf(server: IntegrationServer): string {
-  return server.connection ?? server.provider;
-}
-
 /** The tools read of every server in `connected` (an account by its connection name, or a provider), held while the caller is drawn. */
 export function useIntegrationTools(connected: readonly string[]): IntegrationToolsReads {
   return useIntegrationToolReads(connected).reads;
@@ -55,31 +45,27 @@ export function useIntegrationTools(connected: readonly string[]): IntegrationTo
 
 /** `useIntegrationTools`, with the Retry a surface that says a read failed offers beside it. */
 export function useIntegrationToolReads(connected: readonly string[]): IntegrationToolReads {
-  // Note that the servers are handed on as one array while they name the same accounts, so a draw that changed none holds none anew.
-  const servers = useSteadyDoors(
-    connected.flatMap((name) => {
-      const server = serverOf(name);
-      return server === undefined ? [] : [server];
-    }),
-  );
-  const { readOf, retry } = useHostReads(LIVE_READ.INTEGRATION_TOOLS, servers);
-  const reads = useMemo(
-    () =>
+  // Note that a server's read stands under its connection's name, its provider's for the provider's first account.
+  const names = connected.filter((name) => integrationServerOf(name) !== undefined);
+  const reads = useQueries({
+    queries: names.map((name) => integrationToolsQuery(name)),
+    combine: (results) =>
       Object.fromEntries(
-        servers.flatMap((server): [string, IntegrationToolsView][] => {
-          const { rows, status } = readOf(server);
-          if (rows !== undefined) return [[nameOf(server), rows]];
-          return status === HOST_READ_STATUS.FAILED ? [[nameOf(server), UNANSWERED]] : [];
+        results.flatMap((result, at): [string, IntegrationToolsView][] => {
+          const name = names[at];
+          if (name === undefined) return [];
+          if (result.data !== undefined) return [[name, result.data]];
+          return result.isError ? [[name, UNANSWERED]] : [];
         }),
       ),
-    [servers, readOf],
-  );
-  const retryServer = useCallback(
+  });
+  const { mutate } = useMutation(integrationToolsRetryMutation());
+  const retry = useCallback(
     (name: string) => {
-      const server = servers.find((each) => nameOf(each) === name);
-      if (server !== undefined) retry(server);
+      const server = integrationServerOf(name);
+      if (server !== undefined) mutate(server);
     },
-    [servers, retry],
+    [mutate],
   );
-  return { reads, retry: retryServer };
+  return { reads, retry };
 }

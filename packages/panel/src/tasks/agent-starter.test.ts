@@ -168,9 +168,11 @@ test("a teammate's agent's card says it was started by them, their disc and name
     /^Started by Charles Pan · /u,
   );
   assert.equal(starter.querySelector(".ui-inline-ref-label")?.textContent, "Charles Pan");
-  assert.equal(
-    row.querySelector(".ui-hover-card-row-glyph img")?.getAttribute("src"),
-    CHARLES_PICTURE,
+  await vi.waitFor(() =>
+    assert.equal(
+      row.querySelector(".ui-hover-card-row-glyph img")?.getAttribute("src"),
+      CHARLES_PICTURE,
+    ),
   );
   act(() => root?.unmount());
   document.body.innerHTML = "";
@@ -196,7 +198,9 @@ test("the starter's name on an agent's card hangs their own card over it, read o
   assert.ok(standing[0]?.querySelector("[data-agent-card]"), "the agent's card still stands");
   const person = standing[1]?.querySelector("[data-actor-card='person']");
   assert.ok(person, "the starter's own card hangs");
-  assert.match(person.textContent ?? "", /Charles Pan.*charles@example\.com.*Member/u);
+  await vi.waitFor(() =>
+    assert.match(person.textContent ?? "", /Charles Pan.*charles@example\.com.*Member/u),
+  );
   assert.equal(person.querySelector("button"), null);
 });
 

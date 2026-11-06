@@ -1,6 +1,5 @@
 import type { GitHubRepository } from "@repo/features";
 import { GITHUB_ACCESS } from "@repo/features/github-repositories-wire";
-import { LIVE_READ } from "@repo/features/live-wire";
 import { FAILURE_SURFACE } from "@repo/features/shown-failure";
 import { TASK_CALL_FAILURE } from "@repo/features/tasks-view";
 import { countWords, orList, readingWords } from "@repo/features/words";
@@ -33,10 +32,16 @@ import { GLYPH } from "@repo/ui/icons";
 import { NO_REPOSITORY } from "@repo/ui/task-list-model";
 import { repositoryFailureNote } from "@repo/ui/tasks-model";
 import { useDisclosure } from "@repo/ui/use-disclosure";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { failureShown } from "../failure-report.js";
+import {
+  repositoryListsQuery,
+  repositoryListsRetryMutation,
+  repositoryScope,
+  workspaceMembersQuery,
+} from "../live-reads.js";
 import { useOpenSettings } from "../open-settings.js";
-import { HOST_READ_STATUS, useHostRead } from "../use-host-read.js";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -156,7 +161,7 @@ function AskOwnersRow({
   workspaceId: string | undefined;
   ask: DeadEnd["ask"];
 }): React.JSX.Element {
-  const members = useHostRead(LIVE_READ.WORKSPACE_MEMBERS, workspaceId).rows?.members;
+  const members = useQuery(workspaceMembersQuery(workspaceId)).data?.members;
   const owners = (members ?? [])
     .filter((each) => each.role === WORKSPACE_ROLE.OWNER || each.role === WORKSPACE_ROLE.ADMIN)
     .map((each) => each.name);
@@ -261,7 +266,9 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
   const [open, setOpen] = useState(false);
   const drawn = useDisclosure(open);
   // Note that the host asks the list again as a window comes forward, which is how a developer returns from installing the App in the browser.
-  const list = useHostRead(LIVE_READ.REPOSITORY_LISTS, chooser.scope ?? EVERY_WORKSPACE);
+  const scope = chooser.scope ?? EVERY_WORKSPACE;
+  const list = useQuery(repositoryListsQuery(scope));
+  const retry = useMutation(repositoryListsRetryMutation());
   const menuId = useId();
   const room = useRef<HTMLDivElement>(null);
   /** What held focus as the menu opened, which closing hands it back to. */
@@ -288,9 +295,8 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     pick();
   };
 
-  const listed = list.rows;
-  const failure =
-    list.status === HOST_READ_STATUS.FAILED ? TASK_CALL_FAILURE.UNANSWERED : undefined;
+  const listed = list.data;
+  const failure = list.isError ? TASK_CALL_FAILURE.UNANSWERED : undefined;
   // A pick the read does not list is handed back, so nothing out of reach stands chosen.
   const unreached = value !== null && listed !== undefined && !listedIn(listed.repositories, value);
   useEffect(() => {
@@ -344,7 +350,7 @@ export function useRepositoryMenu(props: RepositoryMenuProps): RepositoryMenu {
     failure !== undefined ? (
       <ErrorState
         failure={failureShown({ surface: FAILURE_SURFACE.REPOSITORIES_READ, cause: failure })}
-        onRetry={list.retry}
+        onRetry={() => retry.mutate(repositoryScope(scope))}
       >
         {repositoryFailureNote(failure)}
       </ErrorState>
