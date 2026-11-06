@@ -30,6 +30,7 @@ import { CODER } from "./coder-host/bounds.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 import {
   cloneRepository,
+  GROUP_WRITES,
   REPOSITORY_REFUSAL,
   RepositoryRefusal,
   type RepositorySandbox,
@@ -60,10 +61,12 @@ const INSTALL_ERROR_TAIL_CHARS = 500;
 /**
  * The dependencies installed in the checkout: with pnpm where its lockfile
  * is pnpm's, with npm where it has a `package.json` and no such lockfile,
- * and nothing in a repository that has neither, which has none to install.
+ * and nothing in a repository that has neither, which has none to install;
+ * written group-writable, as the clone is (`GROUP_WRITES`).
  */
 const INSTALL_SCRIPT = [
   "set -e",
+  GROUP_WRITES,
   "if [ -f pnpm-lock.yaml ]; then pnpm install; elif [ -f package.json ]; then npm install; fi",
 ].join("\n");
 

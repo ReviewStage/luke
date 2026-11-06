@@ -578,7 +578,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(api.runs.some((run) => run.args.slice(-2).join(" ") === "700 /home/agent"));
         assert.ok(
           api.runs.some(
-            (run) => run.args[0] === "-n" && (run.args.at(-1) ?? "").includes("chmod -R g+rwX"),
+            (run) =>
+              run.args[0] === "-n" && (run.args.at(-1) ?? "").includes("core.sharedRepository"),
           ),
         );
         const [command] = api.commands;
@@ -2629,13 +2630,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         // The repository is cloned whole, in one fetch, before the runner starts, so no fetch runs
-        // beside the agent's own git and none deepens it after.
+        // beside the agent's own git.
         const clone = api.runs.findIndex(isClone);
         assert.ok(clone >= 0 && clone < (runsAtStart[0] ?? -1));
-        assert.equal(
-          Object.hasOwn(api.runs[clone]?.env ?? {}, REPOSITORY_SANDBOX_CONTRACT.VARIABLE.DEPTH),
-          false,
-        );
         const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
         assert.equal(api.commands.length, 1);

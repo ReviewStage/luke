@@ -14,13 +14,14 @@
  * kept as the agent left it where an earlier sandbox of the session made it;
  * on a fork of its workspace's repository's base drive, fetched up to the
  * default branch and installed again, which fills in only what landed since;
- * or cloned onto an empty drive on eve's terms (`../coder-host/checkout.ts`,
- * the same token at the firewall, but cloned whole, since the history is
- * deepened before the runner starts anyway), the base drive filled past the
- * answer where none was. A create Vercel answers `image_not_ready` is asked
- * again once the registry has had time to prepare the image, as Vercel's
- * docs say. The deepen is left to the launch (`finishCheckout`), which runs
- * it beside its own steps. Nothing is deleted where the setup or the
+ * or cloned whole onto an empty drive (`../coder-host/checkout.ts`, the
+ * token at the firewall for the clone alone), the base drive filled past the
+ * answer where none was. Every write the checkout makes is the group's
+ * (`../repository-shell.ts`'s `GROUP_WRITES`), so the `agent` user writes
+ * it too. A create Vercel answers `image_not_ready` is asked again once the
+ * registry has had time to prepare the image, as Vercel's docs say. The
+ * write token and the commit identity are left to the launch
+ * (`finishCheckout`), which sets them beside its own steps. Nothing is deleted where the setup or the
  * caller's use fails: the sandbox stands under the session's name, where the
  * next message finds it.
  *
@@ -101,15 +102,14 @@ import { CODER, sandboxVcpus } from "../coder-host/bounds.js";
 import {
   type AgentExtraRead,
   type AgentRepositoryRead,
-  agentDeepenPlan,
+  agentCheckoutPlan,
   agentExtraReads,
   agentFirewallSources,
   agentRepositoryRead,
-  CHECKOUT_DEPTH,
   CheckoutRefused,
   cloneAgentExtras,
   cloneAgentRepository,
-  deepenCheckoutWith,
+  finishCheckoutWith,
   openWorkingFolder,
   refreshAgentCheckout,
 } from "../coder-host/checkout.js";
@@ -241,13 +241,18 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
  */
 const LINK_TOOLS_DIRECTORY = `if [ -d ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ] && [ ! -e ${SANDBOX_TOOLS_DIRECTORY} ] && [ ! -L ${SANDBOX_TOOLS_DIRECTORY} ]; then ln -s ${SANDBOX_TOOLS_DIRECTORY_BEFORE_RENAME} ${SANDBOX_TOOLS_DIRECTORY}; fi`;
 
-/** A checkout marked safe for git and shared with `agent`'s group, as the launch marks each: the agent's own and every repository it works in beside it. */
+/**
+ * A checkout marked safe for git in the sandbox and its repository shared
+ * with `agent`'s group, as the launch marks each: the agent's own and every
+ * repository it works in beside it. Note that nothing of the checkout's
+ * files is changed, because every write the checkout makes is already the
+ * group's (`../repository-shell.ts`'s `GROUP_WRITES`); the repository's
+ * sharing is set here for a checkout cloned before its clone set it.
+ */
 function sharedCheckout(path: string): readonly string[] {
   return [
     `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${path} || git config --system --add safe.directory ${path}`,
     `if [ -d ${path}/.git ] && ! git -C ${path} config --get core.sharedRepository | grep -Fxq group; then git -C ${path} config core.sharedRepository group; fi`,
-    `chmod -R g+rwX ${path}`,
-    `find ${path} -type d -exec chmod g+s {} +`,
   ];
 }
 
@@ -261,7 +266,7 @@ function sharedCheckoutsScript(paths: readonly string[]): string {
   return ["set -euo pipefail", ...paths.flatMap(sharedCheckout)].join("\n");
 }
 
-/** How long the marking of checkouts cloned under a running runner is waited on: `chmod -R` over a whole repository. */
+/** How long the marking of checkouts cloned under a running runner is waited on. */
 const SHARE_WAIT = Duration.minutes(2);
 
 /** Why checkouts cloned under a running runner were not shared with its user. */
@@ -700,7 +705,7 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
     Effect.gen(function* () {
       if (from === AGENT_DRIVE_FROM.KEPT) return;
       if (from === AGENT_DRIVE_FROM.EMPTY) {
-        return yield* cloneAgentRepository(agent, sandbox, read, CHECKOUT_DEPTH.WHOLE);
+        return yield* cloneAgentRepository(agent, sandbox, read);
       }
       yield* refreshAgentCheckout(agent, sandbox, read);
       yield* installDependencies(sandbox).pipe(
@@ -837,21 +842,20 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
 
     layout: () => Effect.succeed(SANDBOX_LAYOUT),
 
-    // What the deepen reads of GitHub (`agentDeepenPlan`) is read beside the sandbox's opening and
-    // the caller's own reads, and kept as it ended, so a read that failed fails the launch only
-    // once the sandbox stands, and never cuts its opening short. Note that a sandbox just opened
-    // holds no deepen's record, so none is looked for, and that a use that fails leaves the
-    // sandbox standing under the session's name, where the next message finds it.
+    // What the checkout's finish reads of GitHub (`agentCheckoutPlan`) is read beside the sandbox's
+    // opening and the caller's own reads, and kept as it ended, so a read that failed fails the
+    // launch only once the sandbox stands, and never cuts its opening short. Note that a use that
+    // fails leaves the sandbox standing under the session's name, where the next message finds it.
     open: (ask, use) =>
       Effect.gen(function* () {
-        const [{ name, running }, [deepen, beside]] = yield* Effect.all(
+        const [{ name, running }, [plan, beside]] = yield* Effect.all(
           [
             openedCheckout(ask.target, ask.agent, ask.session),
             Effect.all(
               [
                 Effect.exit(
                   hasRepository(ask.agent)
-                    ? agentDeepenPlan(ask.target, ask.agent)
+                    ? agentCheckoutPlan(ask.target, ask.agent)
                     : Effect.succeed(undefined),
                 ),
                 ask.beside,
@@ -862,10 +866,10 @@ export function vercelMachine(api: VercelSandboxApi, run: SandboxRunner): AgentM
           { concurrency: "unbounded" },
         );
         const repositorySandbox = yield* checkoutIn({ name, running }, ask.agent.userId);
-        const finishCheckout = Effect.flatMap(deepen, (plan) =>
-          plan === undefined
+        const finishCheckout = Effect.flatMap(plan, (read) =>
+          read === undefined
             ? openWorkingFolder(repositorySandbox)
-            : deepenCheckoutWith(repositorySandbox, plan),
+            : finishCheckoutWith(repositorySandbox, read),
         );
         return yield* use(
           {

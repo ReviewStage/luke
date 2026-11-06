@@ -823,7 +823,7 @@ export const runnerSessions = <
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
         const runnerBearer = heldBearer(bearer, agent, serviceHost);
         const swaps = launchSwaps(credential, runnerBearer);
-        // Kept before any write of this launch's, so the deepen's and the launch's own each send them.
+        // Kept before any write of this launch's, so the checkout's finish and the launch's own each send them.
         if (swaps.size > 0) {
           yield* machine.firewall.keepLaunch(place.running, agent.userId, {
             agentId: agent.id,
@@ -1075,12 +1075,12 @@ export const runnerSessions = <
 
     /**
      * A new place opened under the session given on the agent's machine, the
-     * agent's repository checked out in it, then at once its deepen
-     * (`deepenCheckoutWith`, the machine's `finishCheckout`): the
+     * agent's repository checked out in it, then at once its finish
+     * (`finishCheckoutWith`, the machine's `finishCheckout`): the
      * write token at the firewall and the commit identity, since the
      * harness's own shell has no hook for a first write; and the runner
      * launched on the first line. The member's installed skills are read
-     * beside the opening, and the deepen and the skills' upload run beside
+     * beside the opening, and the finish and the skills' upload run beside
      * the launch's own uploads. A place whose launch failed is left standing
      * for the session's next message. `sandboxOpened` runs once the place
      * stands, before the launch.
