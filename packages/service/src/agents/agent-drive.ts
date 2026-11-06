@@ -2,7 +2,7 @@
  * agent-drive.ts -- the drive an agent's work stands on: its session's own, mounted at the workspace of each sandbox the session opens, forked from its repository's base drive where that is filled.
  *
  * A persistent sandbox keeps its files in its own snapshots, which lapse
- * three days after its last use (`CODER.SANDBOX_SNAPSHOTS`), and whatever
+ * seven days after its last use (`CODER.SANDBOX_SNAPSHOTS`), and whatever
  * the agent never pushed lapses with them. A drive persists until it is
  * deleted (https://vercel.com/docs/sandbox/concepts/drives), so a session's
  * checkout stands on a drive of its own, mounted read-write at the

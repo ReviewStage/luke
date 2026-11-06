@@ -1081,10 +1081,9 @@ export const runnerSessions = <
      * harness's own shell has no hook for a first write; and the runner
      * launched on the first line. The member's installed skills are read
      * beside the opening, and the deepen and the skills' upload run beside
-     * the launch's own uploads. A place whose launch failed is thrown away
-     * again by the machine, since no conversation records the session that
-     * would find it. `sandboxOpened` runs once the place stands, before the
-     * launch.
+     * the launch's own uploads. A place whose launch failed is left standing
+     * for the session's next message. `sandboxOpened` runs once the place
+     * stands, before the launch. Answers the place's lifecycle name.
      */
     const openedPlace = (
       agent: Agent,
@@ -1097,7 +1096,7 @@ export const runnerSessions = <
     ) =>
       Effect.gen(function* () {
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-        yield* machine.open(
+        return yield* machine.open(
           {
             session: sessionId,
             target,
@@ -1126,7 +1125,7 @@ export const runnerSessions = <
                 }),
                 queuedFirst,
               ),
-            ).pipe(Effect.annotateLogs(runningLogId(opened.place.running))),
+            ).pipe(Effect.as(opened.name), Effect.annotateLogs(runningLogId(opened.place.running))),
         );
       });
 
@@ -1359,22 +1358,31 @@ export const runnerSessions = <
         }).pipe(Effect.retry({ times: 1, while: sessionEnding }));
         if (resumed === PLACE_RESUME.GONE) {
           // Note that the snapshot expired (`CODER.SANDBOX_SNAPSHOTS`), so the sandbox can never resume:
-          // the session goes on in a fresh one, a clean checkout of the repository under the
-          // session's tag. The harness's own session files went with the old filesystem, so none is
-          // resumed. The expired sandbox is deleted only once the fresh one runs, so a launch
-          // that fails (a clone refused, say) leaves the session standing
-          // for the next message to try again rather than retired; a delete that fails leaves
-          // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedPlace(agent, sessionId, layout, sent, yield* harness.launch(agent));
-          yield* machine
-            .discard(found.value)
-            .pipe(
-              Effect.catch((failure) =>
-                Effect.logWarning(
-                  `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+          // the session goes on in a fresh one under the session's tag, on the session's drive. The
+          // harness's own session files went with the old filesystem, so none is resumed. The
+          // expired sandbox is deleted only once the fresh one runs, so a launch that fails (a
+          // clone refused, say) leaves the session standing for the next message to try again
+          // rather than retired; a delete that fails leaves the expired one beside the fresh one,
+          // which `listTagged` lists after it as the older. A fresh one opened under the expired
+          // one's own name took its place there (`getOrCreate`), so nothing is left to delete.
+          const opened = yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            sent,
+            yield* harness.launch(agent),
+          );
+          if (opened !== found.value.name) {
+            yield* machine
+              .discard(found.value)
+              .pipe(
+                Effect.catch((failure) =>
+                  Effect.logWarning(
+                    `An expired ${harness.name} sandbox was not deleted: ${failure.message}`,
+                  ),
                 ),
-              ),
-            );
+              );
+          }
           yield* handed(SERVER_HANDOFF_PATH.FRESH);
           return accepted;
         }
@@ -1568,8 +1576,14 @@ export const runnerSessions = <
           return place;
         }).pipe(Effect.retry(RESUME_WHILE_ENDING));
         if (resumed === PLACE_RESUME.GONE) {
-          yield* openedPlace(agent, sessionId, layout, undefined, yield* harness.launch(agent));
-          yield* Effect.ignore(machine.discard(found.value));
+          const opened = yield* openedPlace(
+            agent,
+            sessionId,
+            layout,
+            undefined,
+            yield* harness.launch(agent),
+          );
+          if (opened !== found.value.name) yield* Effect.ignore(machine.discard(found.value));
           return SERVER_HANDOFF_PATH.FRESH;
         }
         return wasUp ? SERVER_HANDOFF_PATH.RELAUNCHED : SERVER_HANDOFF_PATH.RESUMED;
@@ -1799,7 +1813,17 @@ export const runnerSessions = <
                   agent,
                   sessionId,
                   (sandboxOpened) =>
-                    openedPlace(agent, sessionId, layout, first, credential, opened, sandboxOpened),
+                    Effect.asVoid(
+                      openedPlace(
+                        agent,
+                        sessionId,
+                        layout,
+                        first,
+                        credential,
+                        opened,
+                        sandboxOpened,
+                      ),
+                    ),
                   withdrawn,
                 ),
               ).pipe(Effect.onError(() => withdrawn));

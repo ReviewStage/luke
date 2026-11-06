@@ -6,8 +6,8 @@
  * outside an eve tool — a retired session's sandboxes deleted, a sandbox no
  * terminal holds stopped, a developer's resume, a short command for a
  * terminal's list, a terminal's PTY, the GitHub credential at its firewall,
- * a native harness's sandbox opened from the agents' image on its drive,
- * its harness's user made and its runner started as that user, a
+ * a native harness's sandbox got or created from the agents' image on its
+ * drive, its harness's user made and its runner started as that user, a
  * repository's base drive and the sandbox that fills it, an agent's drive
  * forked from it — it asks here, of the SDK at the version the
  * catalog pins, which loads in a function's bundle. The SDK tries a 429, a
@@ -132,6 +132,7 @@ export type CommandExit = number | null | typeof COMMAND_GONE;
 /** Which of the API's calls was made, as a failure names it. */
 export const SANDBOX_CALL = {
   CREATE: "create",
+  GET_OR_CREATE: "get-or-create",
   FS_WRITE: "fs/write",
   CMD: "cmd",
   STDIN: "stdin",
@@ -155,11 +156,6 @@ export const SANDBOX_CALL = {
 } as const;
 
 export type SandboxCall = (typeof SANDBOX_CALL)[keyof typeof SANDBOX_CALL];
-
-/** What a create does where its name is already taken: joins the sandbox holding it, or refuses with Vercel's 409. */
-export const NAME_TAKEN = { JOIN: "join", REFUSE: "refuse" } as const;
-
-export type NameTaken = (typeof NAME_TAKEN)[keyof typeof NAME_TAKEN];
 
 /**
  * Vercel could not be asked, or did not confirm what was asked: the call
@@ -304,8 +300,8 @@ interface DetachedCommandAsk extends CommandAsk {
 
 /**
  * A sandbox opened from an image: its name, the image in the project's
- * registry, its tags, how long it may run and how large, how many of its
- * snapshots Vercel keeps, and what a name another sandbox already holds does.
+ * registry, its tags, how long it may run and how large, and how many of its
+ * snapshots Vercel keeps.
  */
 interface SandboxCreate {
   readonly name: string;
@@ -320,7 +316,6 @@ interface SandboxCreate {
     readonly deleteEvicted: boolean;
   };
   readonly env: Readonly<Record<string, string>>;
-  readonly whenNameTaken: NameTaken;
   /** The drives mounted read-write, each by its name at the absolute path it is keyed by. */
   readonly mounts?: Readonly<Record<string, string>>;
   /** Whether its filesystem is restored at its next session, and snapshotted at each stop for that; so where unsaid. */
@@ -450,10 +445,23 @@ export interface VercelSandboxApi {
   /**
    * Opens a sandbox from the image named, persistent unless it
    * says not, on the open internet; answers it with the session it runs.
-   * Where the name is taken, `whenNameTaken` joins the sandbox holding it,
-   * resumed, or refuses with Vercel's 409, which is what makes a name a lock.
+   * A name another sandbox holds is refused with Vercel's 409, which is what
+   * makes a name a lock.
    */
   readonly create: (ask: SandboxCreate) => Effect.Effect<OpenedSandbox, SandboxUnavailable>;
+  /**
+   * The sandbox under the name as `Sandbox.getOrCreate` opens it
+   * (https://vercel.com/docs/sandbox/concepts/persistent-sandboxes): the one
+   * standing, resumed where it was stopped; else one created as `create`
+   * opens it; and where the one standing can never resume, its snapshot
+   * gone, that one deleted and another created under the same name. A
+   * sandbox it created is handed to `onCreate` before it answers, and a
+   * rejection of it fails the call.
+   */
+  readonly getOrCreate: (
+    ask: SandboxCreate,
+    onCreate: (created: OpenedSandbox) => Promise<void>,
+  ) => Effect.Effect<OpenedSandbox, SandboxUnavailable>;
   /**
    * Makes the user in the named sandbox as the SDK does (`createUser`), in
    * the group of the sandbox's default user, who writes what the API writes,
@@ -712,6 +720,22 @@ function driveMounts(mounts: Readonly<Record<string, string>>) {
   return Object.fromEntries(
     Object.entries(mounts).map(([path, drive]) => [path, { drive, mode: "read-write" as const }]),
   );
+}
+
+/** A create as `@vercel/sandbox` takes it: persistent unless the ask says not, on the open internet. */
+function createParams(ask: SandboxCreate) {
+  return {
+    image: ask.image,
+    name: ask.name,
+    persistent: ask.persistent ?? true,
+    ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
+    tags: { ...ask.tags },
+    timeout: ask.timeoutMs,
+    resources: { vcpus: ask.vcpus },
+    keepLastSnapshots: { ...ask.keepLastSnapshots },
+    env: { ...ask.env },
+    networkPolicy: sdkPolicyOf(OPEN_INTERNET_POLICY),
+  };
 }
 
 /** A drive as a lookup answers it. */
@@ -1061,28 +1085,30 @@ export function vercelSandboxApi(readToken: OidcTokenRead): Effect.Effect<Vercel
           Effect.map(sessionCallsOf),
         ),
       create: (ask) =>
-        asked(SANDBOX_CALL.CREATE, (signal, under) =>
-          Sandbox.create({
+        Effect.map(
+          asked(SANDBOX_CALL.CREATE, (signal, under) =>
+            Sandbox.create({ ...under, ...createParams(ask), signal }),
+          ),
+          openedOf,
+        ),
+      getOrCreate: (ask, onCreate) =>
+        asked(SANDBOX_CALL.GET_OR_CREATE, (signal, under) =>
+          Sandbox.getOrCreate({
             ...under,
-            image: ask.image,
-            name: ask.name,
-            persistent: ask.persistent ?? true,
-            ...(ask.mounts === undefined ? undefined : { mounts: driveMounts(ask.mounts) }),
-            tags: { ...ask.tags },
-            timeout: ask.timeoutMs,
-            resources: { vcpus: ask.vcpus },
-            keepLastSnapshots: { ...ask.keepLastSnapshots },
-            env: { ...ask.env },
-            networkPolicy: sdkPolicyOf(OPEN_INTERNET_POLICY),
+            ...createParams(ask),
+            resume: true,
             signal,
+            onCreate: (created) => onCreate(openedOf(created)),
           }),
         ).pipe(
           Effect.map(openedOf),
-          // Note that a joining create meets its name taken where the SDK tried again a create whose first answer was lost, so the sandbox holding it is the one this opened.
+          // Note that the name is taken where the SDK tried again a create whose first answer was lost, so the sandbox holding it is the one this call created, which `onCreate` never saw.
           Effect.catchIf(
-            (failure) =>
-              ask.whenNameTaken === NAME_TAKEN.JOIN && failure.status === NAME_TAKEN_STATUS,
-            () => resume(ask.name),
+            (failure) => failure.status === NAME_TAKEN_STATUS,
+            () =>
+              Effect.tap(resume(ask.name), (joined) =>
+                sdkCall(SANDBOX_CALL.GET_OR_CREATE, () => onCreate(joined)),
+              ),
           ),
         ),
       createUser: (name, username, homeFolders) =>

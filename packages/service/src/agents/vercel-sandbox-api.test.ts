@@ -1,5 +1,5 @@
 /**
- * vercel-sandbox-api.test.ts -- what a call of Vercel Sandbox through `@vercel/sandbox` says of a failure, against a scripted fake of Vercel behind the SDK's `fetch`: the call, its status, and Vercel's error or the cause's, every token-shaped run redacted; and what this module decides beside the SDK: a joining create meets its name taken with the sandbox holding it and a refusing one with the 409, each list asks the query Vercel takes, and a sandbox or a snapshot already gone reads as gone.
+ * vercel-sandbox-api.test.ts -- what a call of Vercel Sandbox through `@vercel/sandbox` says of a failure, against a scripted fake of Vercel behind the SDK's `fetch`: the call, its status, and Vercel's error or the cause's, every token-shaped run redacted; and what this module decides beside the SDK: a get-or-create hands a sandbox it created to its setup, and meets its name taken with the sandbox holding it, a create refuses it with the 409, each list asks the query Vercel takes, and a sandbox or a snapshot already gone reads as gone.
  */
 
 import assert from "node:assert/strict";
@@ -15,8 +15,6 @@ import {
 } from "../testing/vercel-sandbox-fake.js";
 import {
   COMMAND_GONE,
-  NAME_TAKEN,
-  type NameTaken,
   SANDBOX_CALL,
   type SandboxCall,
   type SandboxUnavailable,
@@ -39,8 +37,8 @@ const RUNNING_SANDBOX = {
   createdAt: CREATED_AT,
 } as const;
 
-/** A create of the fixture's sandbox, with a secret in its environment, and what a taken name does. */
-const createAsk = (whenNameTaken: NameTaken) => ({
+/** A create of the fixture's sandbox, with a secret in its environment. */
+const CREATE_ASK = {
   name: NAME,
   image: "agent-image:fixture",
   tags: {},
@@ -48,15 +46,14 @@ const createAsk = (whenNameTaken: NameTaken) => ({
   vcpus: 2,
   keepLastSnapshots: { count: 1, expiration: 0, deleteEvicted: true },
   env: { SECRET: SECRET_ENV },
-  whenNameTaken,
-});
+} as const;
 
 /** Each call made through the SDK's statics, as a caller asks it. */
 const CALLS: readonly {
   readonly call: SandboxCall;
   readonly ask: (api: VercelSandboxApi) => Effect.Effect<unknown, SandboxUnavailable>;
 }[] = [
-  { call: SANDBOX_CALL.CREATE, ask: (api) => api.create(createAsk(NAME_TAKEN.REFUSE)) },
+  { call: SANDBOX_CALL.CREATE, ask: (api) => api.create(CREATE_ASK) },
   { call: SANDBOX_CALL.TAGS, ask: (api) => api.updateTags(NAME, { sessionId: "s" }) },
   { call: SANDBOX_CALL.GET, ask: (api) => api.getNamed(NAME) },
   { call: SANDBOX_CALL.LIST, ask: (api) => api.listTagged("session_fixture") },
@@ -122,7 +119,7 @@ it.effect("a secret Vercel or a cause echoes back is redacted from the detail", 
       throw Object.assign(new Error(echoed), { name: "AbortError" });
     });
     for (const api of [refusing, throwing]) {
-      const failure = yield* Effect.flip(api.create(createAsk(NAME_TAKEN.REFUSE)));
+      const failure = yield* Effect.flip(api.create(CREATE_ASK));
       assert.match(failure.detail ?? "", /env SECRET=\[redacted\] under Bearer \[redacted\]/u);
       assert.equal(failure.message.includes(SECRET_ENV), false);
       assert.equal(failure.message.includes(fixtureToken()), false);
@@ -161,27 +158,46 @@ it.effect("a token that could not be read names the call and why", () =>
 );
 
 it.effect(
-  "a joining create meets its name taken with the sandbox holding it, resumed, and a refusing one with Vercel's 409",
+  "a get-or-create resumes the sandbox standing, hands one it created to onCreate before it answers, and meets its name taken on its create with the sandbox holding it, handed to onCreate too; a create refuses that name with Vercel's 409",
   () =>
     Effect.gen(function* () {
-      const resumes: (string | null)[] = [];
+      const gets: (string | null)[] = [];
+      let standing = true;
+      let taken = false;
       const api = yield* apiOver((url, init) => {
         if (init.method === "POST") {
-          return Response.json(
-            { error: { code: "sandbox_already_exists", message: "the name is taken" } },
-            { status: 409 },
-          );
+          if (taken) {
+            standing = true;
+            return Response.json(
+              { error: { code: "sandbox_already_exists", message: "the name is taken" } },
+              { status: 409 },
+            );
+          }
+          return Response.json(sandboxFound(RUNNING_SANDBOX));
         }
-        resumes.push(new URL(url).searchParams.get("resume"));
-        return Response.json(sandboxFound(RUNNING_SANDBOX));
+        gets.push(new URL(url).searchParams.get("resume"));
+        return standing ? Response.json(sandboxFound(RUNNING_SANDBOX)) : refusedWith(404)();
       });
+      const setUp: string[] = [];
+      const onCreate = async (created: { readonly currentSessionId: string }) => {
+        setUp.push(created.currentSessionId);
+      };
 
-      const joined = yield* api.create(createAsk(NAME_TAKEN.JOIN));
-      const refused = yield* Effect.flip(api.create(createAsk(NAME_TAKEN.REFUSE)));
+      const found = yield* api.getOrCreate(CREATE_ASK, onCreate);
+      const setUpOnFound = setUp.length;
+      standing = false;
+      const created = yield* api.getOrCreate(CREATE_ASK, onCreate);
+      taken = true;
+      const joined = yield* api.getOrCreate(CREATE_ASK, onCreate);
+      const refused = yield* Effect.flip(api.create(CREATE_ASK));
 
-      assert.equal(joined.name, NAME);
-      assert.equal(joined.currentSessionId, SESSION);
-      assert.deepEqual(resumes, ["true"]);
+      assert.deepEqual(
+        [found, created, joined].map((each) => each.currentSessionId),
+        [SESSION, SESSION, SESSION],
+      );
+      assert.equal(setUpOnFound, 0);
+      assert.deepEqual(setUp, [SESSION, SESSION]);
+      assert.deepEqual(gets, ["true", "true", "true", "true"]);
       assert.equal(refused.call, SANDBOX_CALL.CREATE);
       assert.equal(refused.status, 409);
     }),
@@ -224,7 +240,7 @@ it.effect(
     Effect.gen(function* () {
       let error: object = { code: "snapshot_not_found", message: "the snapshot is gone" };
       const api = yield* apiOver(() => Response.json({ error }, { status: 410 }));
-      const refusal = () => Effect.flip(api.create(createAsk(NAME_TAKEN.REFUSE)));
+      const refusal = () => Effect.flip(api.create(CREATE_ASK));
 
       const lost = yield* refusal();
       error = { code: "sandbox_stopped", message: "the sandbox is stopped" };
@@ -281,7 +297,7 @@ it.effect(
 const commandStarted = Effect.gen(function* () {
   const fake = runnerSandboxApi();
   const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(fake.layer));
-  const opened = yield* api.create({ ...createAsk(NAME_TAKEN.REFUSE), env: {} });
+  const opened = yield* api.create({ ...CREATE_ASK, env: {} });
   const ref = { name: opened.name, sessionId: opened.currentSessionId };
   const session = yield* api.session(ref);
   const commandId = yield* session.start({ command: "node", args: ["runner.js"], sudo: false });
